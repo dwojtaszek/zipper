@@ -65,7 +65,7 @@ public static class PlaceholderFiles
 
     private static byte[] CreateTiff()
     {
-        using (var image = new Image<L8>(1, 1))
+        using (var image = new Image<L8>(10, 10))
         {
             image[0, 0] = new L8(0); // Black pixel
 
