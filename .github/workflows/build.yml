@@ -59,6 +59,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@v3
 
