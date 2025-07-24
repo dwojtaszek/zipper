@@ -5,6 +5,7 @@ Zipper is a .NET command-line tool for generating large zip files containing pla
 ## Features
 
 -   Generates a single `.zip` archive with a specified number of files.
+-   Includes a new cosmetic change for testing purposes.
 -   Creates a corresponding `.dat` load file compatible with Relativity One.
 -   Uses minimal, valid placeholder files for maximum compression.
 -   Streams data directly to the archive to handle very large datasets efficiently.
