@@ -80,6 +80,5 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          artifacts/zipper-win-x64/zipper.exe
-          artifacts/zipper-linux-x64/zipper
-          artifacts/zipper-osx-arm64/zipper
+          artifacts/**/zipper.exe
+          artifacts/**/zipper
