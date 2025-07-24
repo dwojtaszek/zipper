@@ -23,7 +23,7 @@ jobs:
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
         rm publish/win-x64/*.pdb
-        mv publish/win-x64/Zipper.exe publish/win-x64/zipper.exe
+        mv publish/win-x64/Zipper.exe publish/win-x64/zipper-win-x64.exe
 
     - name: Upload Windows x64 artifact
       uses: actions/upload-artifact@v4
@@ -35,7 +35,7 @@ jobs:
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
         rm publish/linux-x64/*.pdb
-        mv publish/linux-x64/Zipper publish/linux-x64/zipper
+        mv publish/linux-x64/Zipper publish/linux-x64/zipper-linux-x64
 
     - name: Upload Linux x64 artifact
       uses: actions/upload-artifact@v4
@@ -47,7 +47,7 @@ jobs:
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64
         rm publish/osx-arm64/*.pdb
-        mv publish/osx-arm64/Zipper publish/osx-arm64/zipper
+        mv publish/osx-arm64/Zipper publish/osx-arm64/zipper-osx-arm64
 
     - name: Upload macOS ARM64 artifact
       uses: actions/upload-artifact@v4
@@ -80,5 +80,6 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          artifacts/**/zipper.exe
-          artifacts/**/zipper
+          artifacts/zipper-win-x64/zipper-win-x64.exe
+          artifacts/zipper-linux-x64/zipper-linux-x64
+          artifacts/zipper-osx-arm64/zipper-osx-arm64
