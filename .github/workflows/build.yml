@@ -23,7 +23,7 @@ jobs:
       run: dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
 
     - name: Upload Windows x64 artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zipper-win-x64
         path: publish/win-x64
@@ -32,7 +32,7 @@ jobs:
       run: dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
 
     - name: Upload Linux x64 artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zipper-linux-x64
         path: publish/linux-x64
@@ -41,7 +41,7 @@ jobs:
       run: dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64
 
     - name: Upload macOS ARM64 artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: zipper-osx-arm64
         path: publish/osx-arm64
