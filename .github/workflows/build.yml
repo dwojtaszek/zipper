@@ -20,7 +20,10 @@ jobs:
       run: dotnet restore Zipper/Zipper.csproj
 
     - name: Build for Windows x64
-      run: dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
+      run: |
+        dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
+        rm publish/win-x64/*.pdb
+        mv publish/win-x64/Zipper.exe publish/win-x64/zipper.exe
 
     - name: Upload Windows x64 artifact
       uses: actions/upload-artifact@v4
@@ -29,7 +32,10 @@ jobs:
         path: publish/win-x64
 
     - name: Build for Linux x64
-      run: dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
+      run: |
+        dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
+        rm publish/linux-x64/*.pdb
+        mv publish/linux-x64/Zipper publish/linux-x64/zipper
 
     - name: Upload Linux x64 artifact
       uses: actions/upload-artifact@v4
@@ -38,10 +44,40 @@ jobs:
         path: publish/linux-x64
 
     - name: Build for macOS ARM64
-      run: dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64
+      run: |
+        dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64
+        rm publish/osx-arm64/*.pdb
+        mv publish/osx-arm64/Zipper publish/osx-arm64/zipper
 
     - name: Upload macOS ARM64 artifact
       uses: actions/upload-artifact@v4
       with:
         name: zipper-osx-arm64
         path: publish/osx-arm64
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        name: Release ${{ github.run_number }}
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/zipper-win-x64/zipper.exe
+          artifacts/zipper-linux-x64/zipper
+          artifacts/zipper-osx-arm64/zipper
