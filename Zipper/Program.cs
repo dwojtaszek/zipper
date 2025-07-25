@@ -4,8 +4,10 @@ using System.IO.Compression;
 using System.Text;
 using System.Threading.Tasks;
 
-class Program
+namespace Zipper
 {
+    class Program
+    {
     static async Task<int> Main(string[] args)
     {
         string? fileType = null;
@@ -13,6 +15,7 @@ class Program
         DirectoryInfo? outputPath = null;
         int folders = 1;
         string encodingName = "UTF-8";
+        string distributionName = "proportional";
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -33,13 +36,16 @@ class Program
                 case "--encoding":
                     if (i + 1 < args.Length) encodingName = args[++i];
                     break;
+                case "--distribution":
+                    if (i + 1 < args.Length) distributionName = args[++i];
+                    break;
             }
         }
 
         if (fileType is null || count is null || outputPath is null)
         {
             Console.Error.WriteLine("Error: Missing required arguments.");
-            Console.Error.WriteLine("Usage: dotnet run -- --type <pdf|jpg|tiff> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>]");
+            Console.Error.WriteLine("Usage: dotnet run -- --type <pdf|jpg|tiff> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>]");
             return 1;
         }
 
@@ -56,8 +62,26 @@ class Program
             return 1;
         }
 
-        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding);
+        DistributionType? distributionType = GetDistributionFromName(distributionName);
+        if (distributionType is null)
+        {
+            Console.Error.WriteLine($"Error: Invalid distribution '{distributionName}'. Supported values are proportional, gaussian, exponential.");
+            return 1;
+        }
+
+        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value);
         return 0;
+    }
+
+    static DistributionType? GetDistributionFromName(string name)
+    {
+        return name.ToUpperInvariant() switch
+        {
+            "PROPORTIONAL" => DistributionType.Proportional,
+            "GAUSSIAN" => DistributionType.Gaussian,
+            "EXPONENTIAL" => DistributionType.Exponential,
+            _ => null
+        };
     }
 
     static Encoding? GetEncodingFromName(string name)
@@ -71,7 +95,7 @@ class Program
         };
     }
 
-    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding)
+    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType)
     {
         Console.WriteLine("Starting file generation...");
         Console.WriteLine($"  File Type: {fileType}");
@@ -79,6 +103,7 @@ class Program
         Console.WriteLine($"  Output Path: {outputDir.FullName}");
         Console.WriteLine($"  Folders: {numFolders}");
         Console.WriteLine($"  Encoding: {encoding.EncodingName}");
+        Console.WriteLine($"  Distribution: {distributionType}");
 
         var lowerFileType = fileType.ToLower();
         if (lowerFileType is not ("pdf" or "jpg" or "tiff"))
@@ -114,7 +139,7 @@ class Program
 
             for (long i = 1; i <= count; i++)
             {
-                var folderNumber = (i % numFolders) + 1;
+                var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
                 var folderName = $"folder_{folderNumber:D3}";
                 
                 var docId = $"DOC{i:D8}";
@@ -145,4 +170,5 @@ class Program
         Console.WriteLine($"  Archive created: {zipFilePath}");
         Console.WriteLine($"  Load file created: {loadFilePath}");
     }
+}
 }
