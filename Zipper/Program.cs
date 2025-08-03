@@ -16,6 +16,7 @@ namespace Zipper
         int folders = 1;
         string encodingName = "UTF-8";
         string distributionName = "proportional";
+        bool withMetadata = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -38,6 +39,9 @@ namespace Zipper
                     break;
                 case "--distribution":
                     if (i + 1 < args.Length) distributionName = args[++i];
+                    break;
+                case "--with-metadata":
+                    withMetadata = true;
                     break;
             }
         }
@@ -69,7 +73,7 @@ namespace Zipper
             return 1;
         }
 
-        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value);
+        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata);
         return 0;
     }
 
@@ -95,7 +99,7 @@ namespace Zipper
         };
     }
 
-    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType)
+    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata)
     {
         Console.WriteLine("Starting file generation...");
         Console.WriteLine($"  File Type: {fileType}");
@@ -104,6 +108,7 @@ namespace Zipper
         Console.WriteLine($"  Folders: {numFolders}");
         Console.WriteLine($"  Encoding: {encoding.EncodingName}");
         Console.WriteLine($"  Distribution: {distributionType}");
+        if (withMetadata) Console.WriteLine("  Metadata: Enabled");
 
         var lowerFileType = fileType.ToLower();
         if (lowerFileType is not ("pdf" or "jpg" or "tiff"))
@@ -135,7 +140,13 @@ namespace Zipper
             
             const char colDelim = (char)20;
             const char quote = (char)254;
-            await loadFileWriter.WriteLineAsync($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
+            
+            var header = $"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}";
+            if (withMetadata)
+            {
+                header += $"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}";
+            }
+            await loadFileWriter.WriteLineAsync(header);
 
             for (long i = 1; i <= count; i++)
             {
@@ -152,7 +163,16 @@ namespace Zipper
                     await entryStream.WriteAsync(placeholderContent, 0, placeholderContent.Length);
                 }
 
-                await loadFileWriter.WriteLineAsync($"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}");
+                var line = $"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}";
+                if (withMetadata)
+                {
+                    var custodian = numFolders > 1 ? $"Custodian {folderNumber}" : "Custodian 1";
+                    var dateSent = GetRandomDate(DateTime.Now.AddYears(-5), DateTime.Now).ToString("yyyy-MM-dd");
+                    var author = GetRandomAuthor();
+                    var fileSize = placeholderContent.Length;
+                    line += $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
+                }
+                await loadFileWriter.WriteLineAsync(line);
 
                 if (i % 1000 == 0)
                 {
@@ -169,6 +189,20 @@ namespace Zipper
         Console.WriteLine($"\n\nGeneration complete.");
         Console.WriteLine($"  Archive created: {zipFilePath}");
         Console.WriteLine($"  Load file created: {loadFilePath}");
+    }
+
+    static readonly Random Rng = new Random();
+    static readonly string[] Authors = { "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank" };
+
+    static DateTime GetRandomDate(DateTime start, DateTime end)
+    {
+        int range = (end - start).Days;
+        return start.AddDays(Rng.Next(range));
+    }
+
+    static string GetRandomAuthor()
+    {
+        return Authors[Rng.Next(Authors.Length)];
     }
 }
 }
