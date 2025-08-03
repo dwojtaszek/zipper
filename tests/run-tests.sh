@@ -59,7 +59,7 @@ function verify_output() {
 
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
-    dat_content_cmd="iconv -f UTF-16 -t UTF-8"
+    dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
   elif [ "$encoding" = "ANSI" ]; then
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
