@@ -60,5 +60,6 @@ A test suite is provided to ensure that all command-line options function correc
 
 -   **Cross-Platform Compatibility**: The test suite must be runnable on Windows, macOS, and Linux.
 -   **Test Coverage**: The test suite must cover all "sunny day" scenarios for each command-line switch.
+-   **Output Verification**: Tests must not only execute the command but also verify the integrity and correctness of the output files (e.g., checking file counts, load file headers, and content structure).
 -   **Pre-Commit Check**: The test suite must be run and pass before any code is committed to the repository.
 -   **CI/CD Integration**: The test suite will be automatically run by a GitHub Actions workflow on every push and pull request to the `master` branch.

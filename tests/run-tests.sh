@@ -23,6 +23,73 @@ function print_info() {
   echo -e "\e[44m[ INFO ]\e[0m $1"
 }
 
+# Prints a message with a red background and exits.
+function print_error() {
+  echo -e "\e[41m[ ERROR ]\e[0m $1"
+  exit 1
+}
+
+# Verifies the output of a test case.
+# Arguments:
+# $1: Test case directory
+# $2: Expected file count
+# $3: Expected header columns (comma-separated)
+# $4: File type (e.g., "pdf")
+# $5: Check for text files (true/false)
+function verify_output() {
+  local test_dir="$1"
+  local expected_count="$2"
+  local expected_header="$3"
+  local file_type="$4"
+  local check_text="$5"
+
+  print_info "Verifying output in $test_dir"
+
+  local zip_file=$(find "$test_dir" -name "*.zip")
+  local dat_file=$(find "$test_dir" -name "*.dat")
+
+  if [ -z "$zip_file" ]; then
+    print_error "No .zip file found in $test_dir"
+  fi
+  if [ -z "$dat_file" ]; then
+    print_error "No .dat file found in $test_dir"
+  fi
+
+  # Verify line count in .dat file (+1 for header)
+  local line_count=$(wc -l < "$dat_file")
+  local expected_line_count=$((expected_count + 1))
+  if [ "$line_count" -ne "$expected_line_count" ]; then
+    print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
+  fi
+  print_info ".dat file line count is correct ($line_count)."
+
+  # Verify header
+  local header=$(head -n 1 "$dat_file")
+  IFS=',' read -ra cols <<< "$expected_header"
+  for col in "${cols[@]}"; do
+    if ! echo "$header" | grep -q "$col"; then
+      print_error "Header validation failed. Expected to find '$col' in '$header'."
+    fi
+  done
+  print_info ".dat file header is correct."
+
+  # Verify file count in zip
+  local zip_file_count=$(unzip -l "$zip_file" | grep -c "\.$file_type")
+  if [ "$zip_file_count" -ne "$expected_count" ]; then
+    print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
+  fi
+  print_info ".zip file count for .$file_type is correct ($zip_file_count)."
+
+  # Verify text file count if required
+  if [ "$check_text" = "true" ]; then
+    local txt_count=$(unzip -l "$zip_file" | grep -c "\.txt")
+    if [ "$txt_count" -ne "$expected_count" ]; then
+      print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
+    fi
+    print_info ".zip file count for .txt is correct ($txt_count)."
+  fi
+}
+
 # --- Test Cases ---
 
 print_info "Starting test suite..."
@@ -34,46 +101,55 @@ mkdir -p "$TEST_OUTPUT_DIR"
 # Test Case 1: Basic PDF generation
 print_info "Running Test Case 1: Basic PDF generation"
 dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_basic"
+verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "Control Number,File Path" "pdf" "false"
 print_success "Test Case 1 passed."
 
 # Test Case 2: JPG generation with different encoding
 print_info "Running Test Case 2: JPG generation with UTF-16 encoding"
 dotnet run --project "$PROJECT" -- --type jpg --count 10 --output-path "$TEST_OUTPUT_DIR/jpg_encoding" --encoding UTF-16
+verify_output "$TEST_OUTPUT_DIR/jpg_encoding" 10 "Control Number,File Path" "jpg" "false"
 print_success "Test Case 2 passed."
 
 # Test Case 3: TIFF generation with multiple folders and proportional distribution
 print_info "Running Test Case 3: TIFF generation with multiple folders and proportional distribution"
 dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 5 --distribution proportional
+verify_output "$TEST_OUTPUT_DIR/tiff_folders" 100 "Control Number,File Path" "tiff" "false"
 print_success "Test Case 3 passed."
 
 # Test Case 4: PDF generation with Gaussian distribution
 print_info "Running Test Case 4: PDF generation with Gaussian distribution"
 dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_gaussian" --folders 10 --distribution gaussian
+verify_output "$TEST_OUTPUT_DIR/pdf_gaussian" 100 "Control Number,File Path" "pdf" "false"
 print_success "Test Case 4 passed."
 
 # Test Case 5: JPG generation with Exponential distribution
 print_info "Running Test Case 5: JPG generation with Exponential distribution"
 dotnet run --project "$PROJECT" -- --type jpg --count 100 --output-path "$TEST_OUTPUT_DIR/jpg_exponential" --folders 10 --distribution exponential
+verify_output "$TEST_OUTPUT_DIR/jpg_exponential" 100 "Control Number,File Path" "jpg" "false"
 print_success "Test Case 5 passed."
 
 # Test Case 6: PDF generation with metadata
 print_info "Running Test Case 6: PDF generation with metadata"
 dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_metadata" --with-metadata
+verify_output "$TEST_OUTPUT_DIR/pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false"
 print_success "Test Case 6 passed."
 
 # Test Case 7: All options combined
 print_info "Running Test Case 7: All options combined"
 dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
+verify_output "$TEST_OUTPUT_DIR/all_options" 100 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false"
 print_success "Test Case 7 passed."
 
 # Test Case 8: With text
 print_info "Running Test Case 8: With text"
 dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text" --with-text
+verify_output "$TEST_OUTPUT_DIR/pdf_with_text" 10 "Control Number,File Path,Extracted Text" "pdf" "true"
 print_success "Test Case 8 passed."
 
 # Test Case 9: With text and metadata
 print_info "Running Test Case 9: With text and metadata"
 dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
+verify_output "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true"
 print_success "Test Case 9 passed."
 
 # --- Cleanup ---
