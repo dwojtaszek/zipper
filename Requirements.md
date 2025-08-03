@@ -47,6 +47,13 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 -   **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
 -   **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
 
+### FR-001: Integrated Extracted Text
+
+-   **REQ-004**: A new optional command-line argument `--with-text` shall be introduced.
+-   **REQ-005**: When specified, the tool will generate a matching `.txt` file for every document within the zip archive.
+-   **REQ-006**: The content for each `.txt` file will be a fixed, non-configurable, standard block of internal placeholder text to ensure maximum compressibility.
+-   **REQ-007**: The `.dat` load file must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
+
 ## 6. Testing
 
 A test suite is provided to ensure that all command-line options function correctly. The following requirements apply to the test suite:

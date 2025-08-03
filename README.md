@@ -32,7 +32,7 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text]
 ```
 
 ### Arguments
@@ -47,6 +47,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
     - `gaussian`: Bell curve distribution with most files in middle folders
     - `exponential`: Exponential decay with most files in first folders
 -   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
+-   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file.
 
 ### Distribution Patterns
 
@@ -77,6 +78,9 @@ zipper --type jpg --count 25000 --output-path ./test --folders 20 --distribution
 
 # Exponential distribution - most files in first few folders
 zipper --type tiff --count 5000 --output-path ./test --folders 10 --distribution exponential
+
+# With extracted text
+zipper --type tiff --count 25000 --output-path ./test_data --with-text
 ```
 
 This will produce two files in the `test_data` directory:
