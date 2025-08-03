@@ -22,7 +22,7 @@ You can run the application using the `dotnet run` command from the project dire
 ### Syntax
 
 ```bash
-dotnet run -- --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>]
+dotnet run -- --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata]
 ```
 
 ### Arguments
@@ -36,6 +36,7 @@ dotnet run -- --type <filetype> --count <number> --output-path <directory> [--fo
     - `proportional`: Even distribution across all folders (round-robin)
     - `gaussian`: Bell curve distribution with most files in middle folders
     - `exponential`: Exponential decay with most files in first folders
+-   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
 
 ### Distribution Patterns
 

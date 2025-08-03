@@ -14,6 +14,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
     - It will use standard delimiters (e.g., ASCII 020 for columns).
     - It must be saved with a user-specifiable encoding (defaulting to UTF-8).
     - It will contain at least two columns: a unique `Control Number` for each document and the `Native File Path` pointing to the file's location within the zip archive.
+- **Metadata Generation**: An optional `--with-metadata` flag can be used to include additional metadata columns in the load file: `Custodian`, `Date Sent`, `Author`, and `File Size`.
 - **Path Structure**: File paths within the load file should be relative to the zip archive's root.
 - **Folder Distribution**: Files can be distributed across a specified number of folders within the archive using different distribution patterns. The default is 1 folder, with a maximum of 100. Three distribution patterns are supported:
     - **Proportional**: Even distribution across all folders (round-robin assignment)
@@ -35,3 +36,4 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--folders <number>`: (Optional) The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the load file. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
+- `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
