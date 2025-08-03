@@ -6,3 +6,4 @@
 - Use conventional commit messages (e.g., `feat(scope):`, `fix(scope):`, `docs(scope):`).
 - Before committing, run the test suite using the appropriate script (`tests/run-tests.sh` or `tests/run-tests.bat`) to ensure all tests pass.
 - When writing tests, ensure they include verification steps to confirm the correctness of the output, not just the successful execution of the command.
+- When adding a new feature, always update `README.md` and `Requirements.md` to reflect the changes.
