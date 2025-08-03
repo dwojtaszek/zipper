@@ -37,3 +37,12 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the load file. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
 - `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
+
+## 5. Detailed Requirements
+
+### FR-000: Automatic Metadata Generation
+
+-   **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
+-   **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
+-   **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
+-   **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
