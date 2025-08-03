@@ -27,4 +27,5 @@ jobs:
 
     - name: Run tests on Windows
       if: runner.os == 'Windows'
-      run: call .\tests\run-tests.bat
+      run: .\tests\run-tests.bat
+      shell: cmd
