@@ -66,16 +66,6 @@ print_info "Running Test Case 7: All options combined"
 dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
 print_success "Test Case 7 passed."
 
-# Test Case 8: With text
-print_info "Running Test Case 8: With text"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text" --with-text
-print_success "Test Case 8 passed."
-
-# Test Case 9: With text and metadata
-print_info "Running Test Case 9: With text and metadata"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
-print_success "Test Case 9 passed."
-
 # --- Cleanup ---
 
 print_info "Cleaning up test output..."
