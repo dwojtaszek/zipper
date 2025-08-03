@@ -15,14 +15,24 @@ Zipper is a .NET command-line tool for generating large zip files containing pla
 
 -   .NET 8.0 SDK (or newer)
 
+## Building
+
+To build a release version of the executable, run the following command from the root of the project:
+
+```bash
+dotnet publish -c Release
+```
+
+This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `Zipper/bin/Release/net8.0/<platform-specific-folder>/publish/` directory.
+
 ## Usage
 
-You can run the application using the `dotnet run` command from the project directory.
+After building the project, you can run the executable directly. The examples below assume the executable is in your system's PATH. Alternatively, you can still use `dotnet run` from the project directory.
 
 ### Syntax
 
 ```bash
-dotnet run -- --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata]
 ```
 
 ### Arguments
@@ -53,20 +63,20 @@ The following chart illustrates how files are distributed across folders using d
 To generate a zip file containing 50,000 PDF files distributed across 10 folders using a gaussian distribution pattern, with an ANSI-encoded load file, and save it to a directory named `test_data`:
 
 ```bash
-dotnet run -- --type pdf --count 50000 --output-path ./test_data --folders 10 --encoding ANSI --distribution gaussian
+zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --encoding ANSI --distribution gaussian
 ```
 
 #### Additional Examples
 
 ```bash
 # Proportional distribution (default) - files evenly distributed
-dotnet run -- --type pdf --count 10000 --output-path ./test --folders 5 --distribution proportional
+zipper --type pdf --count 10000 --output-path ./test --folders 5 --distribution proportional
 
 # Gaussian distribution - bell curve with most files in middle folders
-dotnet run -- --type jpg --count 25000 --output-path ./test --folders 20 --distribution gaussian
+zipper --type jpg --count 25000 --output-path ./test --folders 20 --distribution gaussian
 
 # Exponential distribution - most files in first few folders
-dotnet run -- --type tiff --count 5000 --output-path ./test --folders 10 --distribution exponential
+zipper --type tiff --count 5000 --output-path ./test --folders 10 --distribution exponential
 ```
 
 This will produce two files in the `test_data` directory:
