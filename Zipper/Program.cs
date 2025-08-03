@@ -17,6 +17,7 @@ namespace Zipper
         string encodingName = "UTF-8";
         string distributionName = "proportional";
         bool withMetadata = false;
+        bool withText = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -42,6 +43,9 @@ namespace Zipper
                     break;
                 case "--with-metadata":
                     withMetadata = true;
+                    break;
+                case "--with-text":
+                    withText = true;
                     break;
             }
         }
@@ -73,7 +77,7 @@ namespace Zipper
             return 1;
         }
 
-        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata);
+        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText);
         return 0;
     }
 
@@ -99,7 +103,7 @@ namespace Zipper
         };
     }
 
-    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata)
+    static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText)
     {
         Console.WriteLine("Starting file generation...");
         Console.WriteLine($"  File Type: {fileType}");
@@ -109,6 +113,7 @@ namespace Zipper
         Console.WriteLine($"  Encoding: {encoding.EncodingName}");
         Console.WriteLine($"  Distribution: {distributionType}");
         if (withMetadata) Console.WriteLine("  Metadata: Enabled");
+        if (withText) Console.WriteLine("  Extracted Text: Enabled");
 
         var lowerFileType = fileType.ToLower();
         if (lowerFileType is not ("pdf" or "jpg" or "tiff"))
@@ -146,6 +151,10 @@ namespace Zipper
             {
                 header += $"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}";
             }
+            if (withText)
+            {
+                header += $"{colDelim}{quote}Extracted Text{quote}";
+            }
             await loadFileWriter.WriteLineAsync(header);
 
             for (long i = 1; i <= count; i++)
@@ -172,6 +181,19 @@ namespace Zipper
                     var fileSize = placeholderContent.Length;
                     line += $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
                 }
+
+                if (withText)
+                {
+                    var textFileName = $"{i:D8}.txt";
+                    var textFilePathInZip = $"{folderName}/{textFileName}";
+                    var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
+                    using (var entryStream = textEntry.Open())
+                    {
+                        await entryStream.WriteAsync(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
+                    }
+                    line += $"{colDelim}{quote}{textFilePathInZip}{quote}";
+                }
+
                 await loadFileWriter.WriteLineAsync(line);
 
                 if (i % 1000 == 0)

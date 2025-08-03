@@ -58,6 +58,8 @@ public static class PlaceholderFiles
         { "pdf", Pdf }
     };
 
+    public static readonly byte[] ExtractedText = System.Text.Encoding.UTF8.GetBytes("This is a placeholder for extracted text.");
+
     public static byte[] GetContent(string fileType)
     {
         return FileContentMap.TryGetValue(fileType, out var content) ? content : Array.Empty<byte>();
