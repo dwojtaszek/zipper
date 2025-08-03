@@ -41,16 +41,18 @@ REM --- Helper Functions ---
         call :print_error "No .dat file found in %test_dir%"
     )
 
-    REM Verify line count in .dat file (+1 for header)
-    for /f %%C in ('type "%dat_file%" ^| find /c /v ""') do set line_count=%%C
+    REM Verify line count in .dat file (+1 for header) using PowerShell
+    powershell -Command "(Get-Content -Path '%dat_file%').Count" > "%temp%\line_count.txt"
+    set /p line_count=<"%temp%\line_count.txt"
     set /a expected_line_count=%expected_count% + 1
     if "%line_count%" neq "%expected_line_count%" (
         call :print_error "Incorrect line count in .dat file. Expected %expected_line_count%, found %line_count%."
     )
     call :print_info ".dat file line count is correct (%line_count%)."
 
-    REM Verify header
-    set /p header=<"%dat_file%"
+    REM Verify header using PowerShell
+    powershell -Command "(Get-Content -Path '%dat_file%' -TotalCount 1)" > "%temp%\header.txt"
+    set /p header=<"%temp%\header.txt"
     for %%H in (%expected_header_str%) do (
         echo "%header%" | findstr /c:"%%H" >nul
         if errorlevel 1 (
