@@ -59,33 +59,39 @@ The following chart illustrates how files are distributed across folders using d
 - **Gaussian**: Files follow a bell curve distribution, with most files concentrated in the middle folders  
 - **Exponential**: Files follow an exponential decay pattern, with the highest concentration in the first folders
 
-### Example
+### Examples
 
-To generate a zip file containing 50,000 PDF files distributed across 10 folders using a gaussian distribution pattern, with an ANSI-encoded load file, and save it to a directory named `test_data`:
+To generate a zip file containing 50,000 PDF files distributed across 10 folders using a gaussian distribution pattern:
 
 ```bash
-zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --encoding ANSI --distribution gaussian
+zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --distribution gaussian
 ```
 
-#### Additional Examples
+This command will produce two files in the `test_data` directory:
+-   `archive_YYYYMMDD_HHMMSS.zip`: A zip file containing 50,000 PDFs distributed across 10 folders.
+-   `archive_YYYYMMDD_HHMMSS.dat`: The load file pointing to the documents within the archive.
+
+#### Additional Use Cases
 
 ```bash
-# Proportional distribution (default) - files evenly distributed
-zipper --type pdf --count 10000 --output-path ./test --folders 5 --distribution proportional
+# Generate 10,000 PDFs with default proportional distribution
+zipper --type pdf --count 10000 --output-path ./test --folders 5
 
-# Gaussian distribution - bell curve with most files in middle folders
+# Generate 25,000 JPGs with a Gaussian (bell curve) distribution
 zipper --type jpg --count 25000 --output-path ./test --folders 20 --distribution gaussian
 
-# Exponential distribution - most files in first few folders
+# Generate 5,000 TIFFs with an exponential decay distribution
 zipper --type tiff --count 5000 --output-path ./test --folders 10 --distribution exponential
 
-# With extracted text
-zipper --type tiff --count 25000 --output-path ./test_data --with-text
-```
+# Generate a load file with additional metadata columns
+zipper --type pdf --count 1000 --output-path ./test --with-metadata
 
-This will produce two files in the `test_data` directory:
--   `archive_YYYYMMDD_HHMMSS.zip`: A zip file containing 50,000 PDFs distributed across 10 folders.
--   `archive_YYYYMMDD_HHMMSS.dat`: The  load file pointing to the documents within the archive.
+# Generate a load file with extracted text placeholders
+zipper --type tiff --count 25000 --output-path ./test_data --with-text
+
+# Combine all options: 100k TIFFs with metadata and text, distributed across 50 folders
+zipper --type tiff --count 100000 --output-path ./test_data --folders 50 --distribution gaussian --with-metadata --with-text
+```
 
 ## Testing
 
