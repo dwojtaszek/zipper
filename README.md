@@ -32,12 +32,12 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>]
 ```
 
 ### Arguments
 
--   `--type <pdf|jpg|tiff>`: **(Required)** The type of file to generate.
+-   `--type <pdf|jpg|tiff|eml>`: **(Required)** The type of file to generate.
 -   `--count <number>`: **(Required)** The total number of files to generate.
 -   `--output-path <directory>`: **(Required)** The directory where the output `.zip` and `.dat` files will be saved. The directory will be created if it doesn't exist.
 -   `--folders <number>`: **(Optional)** The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
@@ -48,6 +48,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
     - `exponential`: Exponential decay with most files in first folders
 -   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
 -   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file.
+-   `--attachment-rate <number>`: **(Optional)** When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 
 ### Distribution Patterns
 
@@ -91,6 +92,9 @@ zipper --type tiff --count 25000 --output-path ./test_data --with-text
 
 # Combine all options: 100k TIFFs with metadata and text, distributed across 50 folders
 zipper --type tiff --count 100000 --output-path ./test_data --folders 50 --distribution gaussian --with-metadata --with-text
+
+# Generate 5,000 emails with a 20% chance of having an attachment
+zipper --type eml --count 5000 --output-path ./email_test --attachment-rate 20
 ```
 
 ## Testing

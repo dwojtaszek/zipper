@@ -38,6 +38,12 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-006**: The content for each `.txt` file will be a fixed, non-configurable, standard block of internal placeholder text to ensure maximum compressibility.
 - **REQ-007**: The `.dat` load file must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
 
+### FR-002: Basic Email Generation
+- **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
+- **REQ-009**: When `--type eml` is specified, the tool will generate `.eml` files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
+- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data.
+- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated emails have one of the placeholder documents included as a random attachment. Defaults to 0.
+
 ### FR_E-005: File Distribution Patterns
 - **REQ_E-022**: A new optional command-line argument `--distribution` shall be introduced.
 - **REQ_E-023**: The tool shall support three distribution patterns: `proportional`, `gaussian`, and `exponential`.
@@ -56,7 +62,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ## 4. Command-Line Arguments
 
-- `--type <pdf|jpg|tiff>`: (Required) The type of file to generate.
+- `--type <pdf|jpg|tiff|eml>`: (Required) The type of file to generate.
 - `--count <number>`: (Required) The total number of files to generate.
 - `--output-path <directory>`: (Required) The directory where the output `.zip` and `.dat` files will be saved.
 - `--folders <number>`: (Optional) The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
@@ -64,6 +70,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
 - `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
 - `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
+- `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 
 ## 5. Testing
 
