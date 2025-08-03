@@ -74,7 +74,7 @@ function verify_output() {
   print_info ".dat file header is correct."
 
   # Verify file count in zip
-  local zip_file_count=$(unzip -l "$zip_file" | grep -c "\.$file_type")
+  local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
   if [ "$zip_file_count" -ne "$expected_count" ]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
   fi
@@ -82,7 +82,7 @@ function verify_output() {
 
   # Verify text file count if required
   if [ "$check_text" = "true" ]; then
-    local txt_count=$(unzip -l "$zip_file" | grep -c "\.txt")
+    local txt_count=$(unzip -l "$zip_file" | strings | grep -c "\.txt")
     if [ "$txt_count" -ne "$expected_count" ]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
     fi
