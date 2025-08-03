@@ -65,6 +65,17 @@ public static class PlaceholderFiles
         return FileContentMap.TryGetValue(fileType, out var content) ? content : Array.Empty<byte>();
     }
 
+    public static (string filename, byte[] content)? GetRandomAttachment()
+    {
+        var random = new Random();
+        var fileTypes = new List<string>(FileContentMap.Keys);
+        if (fileTypes.Count == 0) return null;
+
+        var randomFileType = fileTypes[random.Next(fileTypes.Count)];
+        var content = FileContentMap[randomFileType];
+        return ($"attachment.{randomFileType}", content);
+    }
+
     private static byte[] CreateTiff()
     {
         using (var image = new Image<L8>(10, 10))

@@ -18,6 +18,7 @@ namespace Zipper
         string distributionName = "proportional";
         bool withMetadata = false;
         bool withText = false;
+        int attachmentRate = 0;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -47,19 +48,28 @@ namespace Zipper
                 case "--with-text":
                     withText = true;
                     break;
+                case "--attachment-rate":
+                    if (i + 1 < args.Length && int.TryParse(args[++i], out var ar)) attachmentRate = ar;
+                    break;
             }
         }
 
         if (fileType is null || count is null || outputPath is null)
         {
             Console.Error.WriteLine("Error: Missing required arguments.");
-            Console.Error.WriteLine("Usage: dotnet run -- --type <pdf|jpg|tiff> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>]");
+            Console.Error.WriteLine("Usage: dotnet run -- --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>]");
             return 1;
         }
 
         if (folders < 1 || folders > 100)
         {
             Console.Error.WriteLine("Error: Number of folders must be between 1 and 100.");
+            return 1;
+        }
+
+        if (attachmentRate < 0 || attachmentRate > 100)
+        {
+            Console.Error.WriteLine("Error: Attachment rate must be between 0 and 100.");
             return 1;
         }
 
@@ -77,7 +87,14 @@ namespace Zipper
             return 1;
         }
 
-        await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText);
+        if (fileType.ToLower() == "eml")
+        {
+            await GenerateEmlFiles(count.Value, outputPath, folders, encoding, distributionType.Value, attachmentRate);
+        }
+        else
+        {
+            await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText);
+        }
         return 0;
     }
 
@@ -116,11 +133,6 @@ namespace Zipper
         if (withText) Console.WriteLine("  Extracted Text: Enabled");
 
         var lowerFileType = fileType.ToLower();
-        if (lowerFileType is not ("pdf" or "jpg" or "tiff"))
-        {
-            Console.Error.WriteLine("Error: Invalid file type. Must be 'pdf', 'jpg', or 'tiff'.");
-            return;
-        }
 
         outputDir.Create();
 
@@ -194,6 +206,90 @@ namespace Zipper
                     line += $"{colDelim}{quote}{textFilePathInZip}{quote}";
                 }
 
+                await loadFileWriter.WriteLineAsync(line);
+
+                if (i % 1000 == 0)
+                {
+                    Console.Write($"\rProgress: {i:N0} / {count:N0} files created...");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"\nAn error occurred: {ex.Message}");
+            return;
+        }
+
+        Console.WriteLine($"\n\nGeneration complete.");
+        Console.WriteLine($"  Archive created: {zipFilePath}");
+        Console.WriteLine($"  Load file created: {loadFilePath}");
+    }
+
+    static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate)
+    {
+        Console.WriteLine("Starting EML file generation...");
+        Console.WriteLine($"  Count: {count:N0}");
+        Console.WriteLine($"  Output Path: {outputDir.FullName}");
+        Console.WriteLine($"  Folders: {numFolders}");
+        Console.WriteLine($"  Encoding: {encoding.EncodingName}");
+        Console.WriteLine($"  Distribution: {distributionType}");
+        Console.WriteLine($"  Attachment Rate: {attachmentRate}%");
+
+        outputDir.Create();
+
+        var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var zipFilePath = Path.Combine(outputDir.FullName, $"{baseFileName}.zip");
+        var loadFilePath = Path.Combine(outputDir.FullName, $"{baseFileName}.dat");
+
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        try
+        {
+            using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
+            using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+            using var loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
+
+            const char colDelim = (char)20;
+            const char quote = (char)254;
+
+            var header = $"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}";
+            await loadFileWriter.WriteLineAsync(header);
+
+            for (long i = 1; i <= count; i++)
+            {
+                var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
+                var folderName = $"folder_{{folderNumber:D3}}";
+
+                var docId = $"DOC{i:D8}";
+                var fileName = $"{i:D8}.eml";
+                var filePathInZip = $"{folderName}/{fileName}";
+
+                var to = $"recipient{i}@example.com";
+                var from = GetRandomAuthor() + "@example.com";
+                var subject = $"Test Email {i}";
+                var sentDate = GetRandomDate(DateTime.Now.AddYears(-1), DateTime.Now);
+                var body = $"This is the body of test email {i}.";
+
+                (string filename, byte[] content)? attachment = null;
+                string attachmentName = "";
+                if (Rng.Next(100) < attachmentRate)
+                {
+                    attachment = PlaceholderFiles.GetRandomAttachment();
+                    if (attachment.HasValue)
+                    {
+                        attachmentName = attachment.Value.filename;
+                    }
+                }
+
+                var emlContent = EmlFile.CreateEmlContent(to, from, subject, sentDate, body, attachment);
+
+                var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
+                using (var entryStream = entry.Open())
+                {
+                    await entryStream.WriteAsync(emlContent, 0, emlContent.Length);
+                }
+
+                var line = $"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate:yyyy-MM-dd HH:mm:ss}{quote}{colDelim}{quote}{attachmentName}{quote}";
                 await loadFileWriter.WriteLineAsync(line);
 
                 if (i % 1000 == 0)

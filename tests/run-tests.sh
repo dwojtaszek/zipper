@@ -100,6 +100,42 @@ function verify_output() {
   fi
 }
 
+# Verifies the output of an EML test case.
+# Arguments:
+# $1: Test case directory
+# $2: Expected file count
+# $3: Expected header columns (comma-separated)
+# $4: File type (e.g., "eml")
+# $5: Check for text files (true/false)
+# $6: Encoding of the .dat file (e.g., "UTF-8", "UTF-16", "ANSI")
+function verify_eml_output() {
+  local test_dir="$1"
+  local expected_count="$2"
+  local expected_header="$3"
+  local file_type="$4"
+  local check_text="$5"
+  local encoding="$6"
+
+  verify_output "$@"
+
+  local dat_file=$(find "$test_dir" -name "*.dat")
+  local dat_content_cmd="cat"
+  if [ "$encoding" = "UTF-16" ]; then
+    dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
+  elif [ "$encoding" = "ANSI" ]; then
+    dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
+  fi
+
+  # Verify that some attachments are listed in the .dat file
+  # We check for more than 2 because the header has "Attachment"
+  local attachment_count=$($dat_content_cmd < "$dat_file" | grep -c "attachment")
+  if [ "$attachment_count" -lt 2 ]; then
+    print_error "No attachments found in .dat file, but they were expected."
+  fi
+  print_info "Found attachments in .dat file."
+}
+
+
 # --- Test Cases ---
 
 print_info "Starting test suite..."
@@ -161,6 +197,12 @@ print_info "Running Test Case 9: With text and metadata"
 dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
 verify_output "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true" "UTF-8"
 print_success "Test Case 9 passed."
+
+# Test Case 10: EML generation with attachments
+print_info "Running Test Case 10: EML generation with attachments"
+dotnet run --project "$PROJECT" -- --type eml --count 20 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 50
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
+print_success "Test Case 10 passed."
 
 # --- Cleanup ---
 
