@@ -4,22 +4,48 @@
 
 The `zipper` application is a .NET Core command-line tool designed to generate large, highly compressed `.zip` files containing a specified number of placeholder files. It also generates a corresponding load file compatible with import specifications.
 
-## 2. Functional Requirements
+## 2. Features
 
-- **File Generation**: The application must generate a user-specified number of files (up to 100 million) of a single type (`pdf`, `jpg`, or `tiff`) for each run.
-- **Internal File Content**: The content for the generated files must be minimal, valid, and identical for every file within the archive to ensure maximum compression. The application will provide these file contents internally; the user does not need to supply template files.
-- **Archive Format**: The output must be a **single `.zip` file**. The compression level should be equivalent to the standard "best compression" (DEFLATE) method used by Windows and macOS. The system must be capable of handling archives exceeding the standard 4GB/65k file limits (Zip64).
-- **Load File**: The application must generate a **single load file** (`.dat`) corresponding to the zip archive.
-    - The load file format must adhere to specifications.
-    - It will use standard delimiters (e.g., ASCII 020 for columns).
-    - It must be saved with a user-specifiable encoding (defaulting to UTF-8).
-    - It will contain at least two columns: a unique `Control Number` for each document and the `Native File Path` pointing to the file's location within the zip archive.
-- **Metadata Generation**: An optional `--with-metadata` flag can be used to include additional metadata columns in the load file: `Custodian`, `Date Sent`, `Author`, and `File Size`.
-- **Path Structure**: File paths within the load file should be relative to the zip archive's root.
-- **Folder Distribution**: Files can be distributed across a specified number of folders within the archive using different distribution patterns. The default is 1 folder, with a maximum of 100. Three distribution patterns are supported:
-    - **Proportional**: Even distribution across all folders (round-robin assignment)
-    - **Gaussian**: Bell curve distribution with most files concentrated in middle folders
-    - **Exponential**: Exponential decay distribution with most files concentrated in the first few folders
+### FR_E-002: Core File Generation
+- **REQ_E-008**: The application must generate a user-specified number of files.
+- **REQ_E-009**: The application must support generating up to 100 million files.
+- **REQ_E-010**: The application must support generating files of type `pdf`, `jpg`, or `tiff`.
+- **REQ_E-011**: The content for the generated files must be a minimal, valid, and identical placeholder to ensure maximum compression.
+- **REQ_E-012**: The application will provide placeholder content internally, without requiring user-supplied template files.
+
+### FR_E-003: Archive Creation
+- **REQ_E-013**: The application must output a single `.zip` archive.
+- **REQ_E-014**: The compression level must be equivalent to the standard "best compression" (DEFLATE).
+- **REQ_E-015**: The system must support archives exceeding 4GB and 65,535 files (Zip64).
+
+### FR_E-004: Load File Generation
+- **REQ_E-016**: The application must generate a single `.dat` load file corresponding to the zip archive.
+- **REQ_E-017**: The load file must use ASCII character 20 as the column delimiter.
+- **REQ_E-018**: The load file must use ASCII character 254 as the quote/text qualifier.
+- **REQ_E-019**: The load file must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`.
+- **REQ_E-020**: The load file must contain a unique `Control Number` column for each document.
+- **REQ_E-021**: The load file must contain a `File Path` column pointing to the file's relative location within the zip archive.
+
+### FR-000: Automatic Metadata Generation
+- **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
+- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
+- **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
+- **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
+
+### FR-001: Integrated Extracted Text
+- **REQ-004**: A new optional command-line argument `--with-text` shall be introduced.
+- **REQ-005**: When specified, the tool will generate a matching `.txt` file for every document within the zip archive.
+- **REQ-006**: The content for each `.txt` file will be a fixed, non-configurable, standard block of internal placeholder text to ensure maximum compressibility.
+- **REQ-007**: The `.dat` load file must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
+
+### FR_E-005: File Distribution Patterns
+- **REQ_E-022**: A new optional command-line argument `--distribution` shall be introduced.
+- **REQ_E-023**: The tool shall support three distribution patterns: `proportional`, `gaussian`, and `exponential`.
+- **REQ_E-024**: `proportional` shall be the default distribution pattern.
+- **REQ_E-025**: `proportional` distribution shall assign files to folders in a round-robin fashion.
+- **REQ_E-026**: `gaussian` distribution shall assign files in a bell-curve pattern, with most files concentrated in the middle folders.
+- **REQ_E-027**: `exponential` distribution shall assign files in an exponential decay pattern, with most files concentrated in the first few folders.
+- **REQ_E-028**: The application must support distributing files into a user-specified number of folders (from 1 to 100), defaulting to 1.
 
 ## 3. Technical Requirements
 
@@ -37,24 +63,9 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the load file. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
 - `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
+- `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
 
-## 5. Detailed Requirements
-
-### FR-000: Automatic Metadata Generation
-
--   **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
--   **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
--   **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
--   **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
-
-### FR-001: Integrated Extracted Text
-
--   **REQ-004**: A new optional command-line argument `--with-text` shall be introduced.
--   **REQ-005**: When specified, the tool will generate a matching `.txt` file for every document within the zip archive.
--   **REQ-006**: The content for each `.txt` file will be a fixed, non-configurable, standard block of internal placeholder text to ensure maximum compressibility.
--   **REQ-007**: The `.dat` load file must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
-
-## 6. Testing
+## 5. Testing
 
 A test suite is provided to ensure that all command-line options function correctly. The following requirements apply to the test suite:
 
