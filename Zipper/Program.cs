@@ -96,9 +96,9 @@ namespace Zipper
     {
         return name.ToUpperInvariant() switch
         {
-            "UTF-8" => Encoding.UTF8,
+            "UTF-8" => new UTF8Encoding(false),
             "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
-            "UTF-16" => Encoding.Unicode,
+            "UTF-16" => new UnicodeEncoding(false, false),
             _ => null
         };
     }
