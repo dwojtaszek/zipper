@@ -46,3 +46,12 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 -   **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
 -   **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
 -   **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
+
+## 6. Testing
+
+A test suite is provided to ensure that all command-line options function correctly. The following requirements apply to the test suite:
+
+-   **Cross-Platform Compatibility**: The test suite must be runnable on Windows, macOS, and Linux.
+-   **Test Coverage**: The test suite must cover all "sunny day" scenarios for each command-line switch.
+-   **Pre-Commit Check**: The test suite must be run and pass before any code is committed to the repository.
+-   **CI/CD Integration**: The test suite will be automatically run by a GitHub Actions workflow on every push and pull request to the `master` branch.

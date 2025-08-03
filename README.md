@@ -1,4 +1,4 @@
-# Zipper: A Test Data Generation Tool for Relativity
+# Zipper: A Test Data Generation Tool 
 
 Zipper is a .NET command-line tool for generating large zip files containing placeholder documents (`.pdf`, `.jpg`, or `.tiff`) and a corresponding Relativity One load file. It's designed for performance testing and can generate archives with up to 100 million files.
 
@@ -71,4 +71,22 @@ dotnet run -- --type tiff --count 5000 --output-path ./test --folders 10 --distr
 
 This will produce two files in the `test_data` directory:
 -   `archive_YYYYMMDD_HHMMSS.zip`: A zip file containing 50,000 PDFs distributed across 10 folders.
--   `archive_YYYYMMDD_HHMMSS.dat`: The Relativity load file pointing to the documents within the archive.
+-   `archive_YYYYMMDD_HHMMSS.dat`: The  load file pointing to the documents within the archive.
+
+## Testing
+
+The project includes a test suite that covers all command-line options. The test suite is designed to be run on Windows, macOS, and Linux.
+
+### Running the Tests
+
+To run the tests, execute the appropriate script for your operating system:
+
+-   **Windows**: `tests\run-tests.bat`
+-   **macOS and Linux**: `./tests/run-tests.sh`
+
+### Pre-Commit Hook
+
+The project includes scripts to set up a pre-commit hook that will run the test suite automatically before each commit. To set up the hook, run the appropriate script for your operating system:
+
+-   **Windows**: `setup-hook.bat`
+-   **macOS and Linux**: `setup-hook.sh`

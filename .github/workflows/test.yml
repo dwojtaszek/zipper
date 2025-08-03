@@ -1,0 +1,30 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Run tests on Linux and macOS
+      if: runner.os != 'Windows'
+      run: chmod +x ./tests/run-tests.sh && ./tests/run-tests.sh
+
+    - name: Run tests on Windows
+      if: runner.os == 'Windows'
+      run: call .\tests\run-tests.bat
