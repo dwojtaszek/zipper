@@ -1,12 +1,12 @@
 # Zipper: A Test Data Generation Tool 
 
-Zipper is a .NET command-line tool for generating large zip files containing placeholder documents (`.pdf`, `.jpg`, or `.tiff`) and a corresponding Relativity One load file. It's designed for performance testing and can generate archives with up to 100 million files.
+Zipper is a .NET command-line tool for generating large zip files containing placeholder documents (`.pdf`, `.jpg`, or `.tiff`) and a corresponding load file. It's designed for performance testing and can generate archives with up to 100 million files.
 
 ## Features
 
 -   Generates a single `.zip` archive with a specified number of files.
 -   Supports multiple file distribution patterns: proportional, gaussian, and exponential.
--   Creates a corresponding `.dat` load file compatible with Relativity One.
+-   Creates a corresponding `.dat` load file compatible with standard import tools.
 -   Uses minimal, valid placeholder files for maximum compression.
 -   Streams data directly to the archive to handle very large datasets efficiently.
 -   Provides progress indication during generation.
