@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -61,8 +62,9 @@ namespace Zipper
 
             if (fileType is null || count is null || outputPath is null)
             {
+                var exeName = Process.GetCurrentProcess().ProcessName;
                 Console.Error.WriteLine("Error: Missing required arguments.");
-                Console.Error.WriteLine("Usage: dotnet run -- --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>]");
+                Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>]");
                 return 1;
             }
             
