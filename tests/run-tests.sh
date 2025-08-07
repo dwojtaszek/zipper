@@ -135,6 +135,32 @@ function verify_eml_output() {
   print_info "Found attachments in .dat file."
 }
 
+# Verifies the size of the generated zip file.
+# Arguments:
+# $1: Test case directory
+# $2: Target size in MB
+function verify_zip_size() {
+    local test_dir="$1"
+    local target_size_mb="$2"
+    local target_size_bytes=$((target_size_mb * 1024 * 1024))
+    local tolerance_bytes=$((target_size_bytes / 10)) # 10%
+
+    local zip_file=$(find "$test_dir" -name "*.zip")
+    if [ -z "$zip_file" ]; then
+        print_error "No .zip file found in $test_dir"
+    fi
+
+    local actual_size_bytes=$(stat -c%s "$zip_file")
+    local min_size=$((target_size_bytes - tolerance_bytes))
+    local max_size=$((target_size_bytes + tolerance_bytes))
+
+    if [ "$actual_size_bytes" -lt "$min_size" ] || [ "$actual_size_bytes" -gt "$max_size" ]; then
+        print_error "Zip file size is out of tolerance. Expected around ${target_size_mb}MB, found $(($actual_size_bytes / 1024 / 1024))MB."
+    fi
+
+    print_info "Zip file size is within the expected range."
+}
+
 
 # --- Test Cases ---
 
@@ -203,6 +229,12 @@ print_info "Running Test Case 10: EML generation with attachments"
 dotnet run --project "$PROJECT" -- --type eml --count 20 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 50
 verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
 print_success "Test Case 10 passed."
+
+# Test Case 11: Target zip size
+print_info "Running Test Case 11: Target zip size"
+dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
+verify_zip_size "$TEST_OUTPUT_DIR/pdf_target_size" 1
+print_success "Test Case 11 passed."
 
 # --- Cleanup ---
 

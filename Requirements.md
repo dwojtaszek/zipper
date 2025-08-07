@@ -53,6 +53,14 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ_E-027**: `exponential` distribution shall assign files in an exponential decay pattern, with most files concentrated in the first few folders.
 - **REQ_E-028**: The application must support distributing files into a user-specified number of folders (from 1 to 100), defaulting to 1.
 
+### FR-005: Target Zip Size via In-File Padding
+- **REQ-021**: A new optional command-line argument `--target-zip-size <size>` shall be introduced.
+- **REQ-022**: The application must exit with a validation error if `--target-zip-size` is specified without the `--count` argument.
+- **REQ-023**: When both `--target-zip-size` and `--count` are used, the tool must calculate the amount of uncompressible padding needed for each file to meet the final compressed --target-zip-size.
+- **REQ-024**: The tool must append the calculated amount of random (non-compressible) data to each of the count placeholder files' content before they are added to the archive for compression.
+- **REQ-025**: The final generated zip file size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation.
+- **REQ-026**: The application must perform a pre-check to estimate the minimum possible compressed size of the requested files. If this estimated minimum size already exceeds the --target-zip-size, the tool must exit immediately with a clear error message to prevent an impossible task from running.
+
 ## 3. Technical Requirements
 
 - **Framework**: .NET 8.
@@ -71,6 +79,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
 - `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
+- `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final zip file (e.g., 500MB, 10GB).
 
 ## 5. Testing
 
@@ -81,3 +90,10 @@ A test suite is provided to ensure that all command-line options function correc
 -   **Output Verification**: Tests must not only execute the command but also verify the integrity and correctness of the output files (e.g., checking file counts, load file headers, and content structure).
 -   **Pre-Commit Check**: The test suite must be run and pass before any code is committed to the repository.
 -   **CI/CD Integration**: The test suite will be automatically run by a GitHub Actions workflow on every push and pull request to the `master` branch.
+
+## 6. Pre-Commit Hook
+
+To enforce the pre-commit testing requirement, the repository will include a script to set up a pre-commit hook.
+
+-   **Setup Script**: The repository must include a script (`setup-hook.sh` for Linux/macOS, `setup-hook.bat` for Windows) that installs the pre-commit hook.
+-   **Hook Logic**: The pre-commit hook will execute the test suite and abort the commit if any tests fail.

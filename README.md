@@ -10,6 +10,7 @@ Zipper is a .NET command-line tool for generating large zip files containing pla
 -   Uses minimal, valid placeholder files for maximum compression.
 -   Streams data directly to the archive to handle very large datasets efficiently.
 -   Provides progress indication during generation.
+-   Can target a specific zip file size by padding files with non-compressible data.
 
 ## Requirements
 
@@ -32,7 +33,7 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>]
 ```
 
 ### Arguments
@@ -49,6 +50,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 -   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
 -   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file.
 -   `--attachment-rate <number>`: **(Optional)** When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
+-   `--target-zip-size <size>`: **(Optional, Requires --count)** Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. This mode overrides the `--variable-sizes` flag.
 
 ### Distribution Patterns
 
@@ -95,6 +97,10 @@ zipper --type tiff --count 100000 --output-path ./test_data --folders 50 --distr
 
 # Generate 5,000 emails with a 20% chance of having an attachment
 zipper --type eml --count 5000 --output-path ./email_test --attachment-rate 20
+
+# Generates exactly 100,000 PDF files and pads each one with uncompressible
+# data so that the final compressed zip archive is approximately 1GB in size.
+zipper --type pdf --count 100000 --target-zip-size 1GB --output-path ./test_padded_files
 ```
 
 ## Testing
