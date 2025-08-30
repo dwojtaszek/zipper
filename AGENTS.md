@@ -58,7 +58,7 @@ Use the provided test scripts in the `/tests` directory:
 - Windows: `run-tests.bat`
 - Linux/macOS: `run-tests.sh`
 
-Tests should be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command.
+Tests have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command.
 
 ## Project Conventions
 
@@ -88,3 +88,4 @@ Tests should be run before any commit. They must verify the correctness of the o
 ## Agent-Specific Behavioral Instructions
 - When asked to commit, draft the commit message using the conventional commit format and commit directly without asking for confirmation.
 - When writing tests, ensure they include verification steps to confirm the correctness of the output, not just successful execution.
+- Update README.md and Requirements.md for new features. Keep the documentation in sync with implementation changes.
