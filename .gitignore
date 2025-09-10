@@ -5,3 +5,6 @@ archive_*.dat
 archive_*.zip
 grot.sh
 in-memoria.db
+
+.gemini/
+gha-creds-*.json
