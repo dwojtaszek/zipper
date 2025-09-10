@@ -6,5 +6,8 @@ archive_*.zip
 grot.sh
 in-memoria.db
 
+# gemini-cli settings
 .gemini/
+
+# GitHub App credentials
 gha-creds-*.json
