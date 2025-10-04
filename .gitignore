@@ -12,6 +12,3 @@ in-memoria.db
 # GitHub App credentials
 gha-creds-*.jsonspec-kit/
 
-# Spec-kit
-.specify/*
-.gemini/*
