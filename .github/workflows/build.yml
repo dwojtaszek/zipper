@@ -22,13 +22,7 @@ jobs:
       uses: actions/setup-dotnet@v3
       with:
         dotnet-version: 8.0.x
-
-    - name: Cache NuGet packages
-      uses: actions/cache@v3
-      with:
-        key: ${{ runner.os }}-nuget-${{ hashFiles('Zipper/Zipper.csproj') }}
-        restore-keys: |
-          ${{ runner.os }}-nuget-
+        cache: true
 
     - name: Restore dependencies
       run: dotnet restore Zipper/Zipper.csproj
