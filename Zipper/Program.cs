@@ -240,8 +240,8 @@ namespace Zipper
 
                 using (loadFileWriter)
                 {
-                    const char colDelim = (char)20;
-                    const char quote = (char)254;
+                    const char colDelim = (char)20; // TODO: Use a named constant
+                    const char quote = (char)254;    // TODO: Use a named constant
 
                     var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}", quote, colDelim);
                     if (withMetadata)
