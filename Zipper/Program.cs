@@ -301,7 +301,7 @@ namespace Zipper
             // If the total count is small, just use the actual count for estimation.
             long sampleCount = Math.Min(count, 100);
             if (sampleCount == 0)
-            const long sampleCount = Math.Min(count, 100);
+            {
                 return 0;
             }
 
