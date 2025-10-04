@@ -298,21 +298,44 @@ namespace Zipper
 
         static long EstimateCompressedSize(byte[] content, long count, bool withText)
         {
-            using var ms = new MemoryStream();
-            using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, true))
+            // If the total count is small, just use the actual count for estimation.
+            long sampleCount = Math.Min(count, 100);
+            if (sampleCount == 0)
             {
-                var entry = archive.CreateEntry("temp." + "txt");
-                using var entryStream = entry.Open();
-                entryStream.Write(content, 0, content.Length);
-
-                if (withText)
-                {
-                    var textEntry = archive.CreateEntry("temp.txt");
-                    using var textEntryStream = textEntry.Open();
-                    textEntryStream.Write(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
-                }
+                return 0;
             }
-            return ms.Length * count;
+
+            long sampleSize;
+            using (var ms = new MemoryStream())
+            {
+                using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, true))
+                {
+                    for (int i = 0; i < sampleCount; i++)
+                    {
+                        var entry = archive.CreateEntry($"file_{i}.bin");
+                        using (var entryStream = entry.Open())
+                        {
+                            entryStream.Write(content, 0, content.Length);
+                        }
+
+                        if (withText)
+                        {
+                            var textEntry = archive.CreateEntry($"file_{i}.txt");
+                            using (var textEntryStream = textEntry.Open())
+                            {
+                                textEntryStream.Write(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
+                            }
+                        }
+                    }
+                }
+                sampleSize = ms.Length;
+            }
+
+            // Calculate the average size per file from the sample.
+            double averageSizePerFile = (double)sampleSize / sampleCount;
+
+            // Extrapolate to the total count.
+            return (long)(averageSizePerFile * count);
         }
 
         static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate)
@@ -364,7 +387,7 @@ namespace Zipper
                     string attachmentName = "";
                     if (Rng.Next(100) < attachmentRate)
                     {
-                        attachment = PlaceholderFiles.GetRandomAttachment();
+                        attachment = PlaceholderFiles.GetRandomAttachment(Rng);
                         if (attachment.HasValue)
                         {
                             attachmentName = attachment.Value.filename;
