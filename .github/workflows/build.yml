@@ -15,7 +15,7 @@ jobs:
 
     - name: Set Version
       id: version
-      run: echo "VERSION=$(cat .version).${{ github.run_number }}" >> $GITHUB_OUTPUT
+      run: echo "VERSION=$(cat .version | tr -d '[:space:]').${{ github.run_number }}" >> $GITHUB_OUTPUT
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
