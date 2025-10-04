@@ -74,9 +74,9 @@ To generate a zip file containing 50,000 PDF files distributed across 10 folders
 zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --distribution gaussian
 ```
 
-This command will produce two files in the `test_data` directory:
--   `archive_YYYYMMDD_HHMMSS.zip`: A zip file containing 50,000 PDFs distributed across 10 folders.
--   `archive_YYYYMMDD_HHMMSS.dat`: The load file pointing to the documents within the archive.
+This command will produce two files in the `test_data` directory, with filenames based on the current date and time (e.g., `archive_YYYYMMDD_HHMMSS.zip` and `archive_YYYYMMDD_HHMMSS.dat`):
+-   A zip file containing 50,000 PDFs distributed across 10 folders.
+-   The load file pointing to the documents within the archive.
 
 #### Additional Use Cases
 
