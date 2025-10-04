@@ -1,8 +1,8 @@
 <!--
 Sync Impact Report:
-- Version change: 1.1.0 → 1.1.1
-- Modified principles: III. Rigorous, Integration-Focused Testing
-- Added sections: None
+- Version change: 1.2.0 → 1.3.0
+- Modified principles: None
+- Added sections: VIII. Pragmatic Simplicity
 - Removed sections: None
 - Templates requiring updates:
   - ✅ .specify/templates/plan-template.md
@@ -31,8 +31,14 @@ The project relies on CI/CD automation for builds, tests, and releases. All comm
 ### VI. Cross-Platform Compatibility
 The application MUST be fully functional on Windows, Linux, and macOS. All new features and tests MUST be designed and implemented to run correctly on these platforms.
 
+### VII. Technology Stack
+The project is a .NET 8.x command-line application. All code MUST adhere to modern .NET conventions, including the use of implicit usings and nullable reference types as configured in the project.
+
+### VIII. Pragmatic Simplicity
+Code MUST adhere to low complexity and avoid unnecessarily complex expressions or concepts. Abstractions should be introduced pragmatically; code should only be commonized when duplication appears in at least three similar use cases (Rule of Three).
+
 ## Governance
 
 All development practices and code contributions must adhere to the principles outlined in this constitution. Amendments to this constitution require a pull request, review, and approval from the project maintainers.
 
-**Version**: 1.1.1 | **Ratified**: 2025-10-04 | **Last Amended**: 2025-10-04
+**Version**: 1.3.0 | **Ratified**: 2025-10-04 | **Last Amended**: 2025-10-04

@@ -52,7 +52,7 @@
 - **Rigorous, Integration-Focused Testing**: Are there clear plans for end-to-end testing to verify the final output?
 - **Formal Requirements as Source of Truth**: Is the feature traceable to a requirement in `Requirements.md`?
 - **Automated and Consistent Development Workflow**: Does the plan account for CI/CD and versioning conventions?
-- **Cross-Platform Compatibility**: Will the feature be tested and confirmed to work on Windows, Linux, and macOS?
+- **Pragmatic Simplicity**: Does the design favor simplicity and avoid premature abstraction?
 
 ## Project Structure
 
