@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,10 @@ namespace Zipper
     {
         static async Task<int> Main(string[] args)
         {
+            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+            Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
+            Console.WriteLine();
+
             string? fileType = null;
             long? count = null;
             DirectoryInfo? outputPath = null;

@@ -10,8 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
     - uses: actions/checkout@v3
+
+    - name: Set Version
+      id: version
+      run: echo "VERSION=$(cat .version | tr -d '[:space:]').${{ github.run_number }}" >> $GITHUB_OUTPUT
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
@@ -41,7 +46,7 @@ jobs:
     - name: Build for Windows x64
       if: steps.cache-win-build.outputs.cache-hit != 'true'
       run: |
-        dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
+        dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/win-x64/*.pdb
         mv publish/win-x64/Zipper.exe publish/win-x64/zipper-win-x64.exe
 
@@ -63,7 +68,7 @@ jobs:
     - name: Build for Linux x64
       if: steps.cache-linux-build.outputs.cache-hit != 'true'
       run: |
-        dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64
+        dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/linux-x64/*.pdb
         mv publish/linux-x64/Zipper publish/linux-x64/zipper-linux-x64
 
@@ -85,7 +90,7 @@ jobs:
     - name: Build for macOS ARM64
       if: steps.cache-osx-build.outputs.cache-hit != 'true'
       run: |
-        dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64
+        dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/osx-arm64/*.pdb
         mv publish/osx-arm64/Zipper publish/osx-arm64/zipper-osx-arm64
 
@@ -125,12 +130,12 @@ jobs:
 
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: v${{ github.run_number }}
-        name: Release ${{ github.run_number }}
+        tag_name: v${{ needs.build.outputs.version }}
+        name: Release ${{ needs.build.outputs.version }}
         draft: false
         prerelease: false
         files: |
