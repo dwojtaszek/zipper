@@ -39,3 +39,4 @@ The current command-line argument parsing in `Program.cs` is done manually, whic
 *   The application must exit with a clear error message if the `--attachment-rate` argument is used with any file type other than `eml`.
 *   The application must exit with a clear error message if the `--type` argument is not one of the supported values (`pdf`, `jpg`, `tiff`, `eml`).
 *   All existing command-line arguments and their behaviors must be preserved.
+*   The application must exit with a clear error message if `--target-zip-size` is used without `--count`.
