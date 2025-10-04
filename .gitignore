@@ -10,4 +10,8 @@ in-memoria.db
 .gemini/
 
 # GitHub App credentials
-gha-creds-*.json
+gha-creds-*.jsonspec-kit/
+
+# Spec-kit
+.specify/*
+.gemini/*
