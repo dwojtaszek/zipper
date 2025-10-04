@@ -9,6 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
+      build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
       version: ${{ steps.version.outputs.VERSION }}
     steps:
     - uses: actions/checkout@v3
@@ -22,10 +23,28 @@ jobs:
       with:
         dotnet-version: 8.0.x
 
+    - name: Cache NuGet packages
+      uses: actions/cache@v3
+      with:
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+        key: ${{ runner.os }}-nuget-${{ hashFiles('Zipper/Zipper.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
     - name: Restore dependencies
       run: dotnet restore Zipper/Zipper.csproj
 
+    - name: Cache Windows build
+      id: cache-win-build
+      uses: actions/cache@v3
+      with:
+        path: publish/win-x64
+        key: ${{ runner.os }}-build-win-x64-${{ hashFiles('**/*.cs', '**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-build-win-x64-
+
     - name: Build for Windows x64
+      if: steps.cache-win-build.outputs.cache-hit != 'true'
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/win-x64/*.pdb
@@ -37,7 +56,17 @@ jobs:
         name: zipper-win-x64
         path: publish/win-x64
 
+    - name: Cache Linux build
+      id: cache-linux-build
+      uses: actions/cache@v3
+      with:
+        path: publish/linux-x64
+        key: ${{ runner.os }}-build-linux-x64-${{ hashFiles('**/*.cs', '**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-build-linux-x64-
+
     - name: Build for Linux x64
+      if: steps.cache-linux-build.outputs.cache-hit != 'true'
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/linux-x64/*.pdb
@@ -49,7 +78,17 @@ jobs:
         name: zipper-linux-x64
         path: publish/linux-x64
 
+    - name: Cache macOS build
+      id: cache-osx-build
+      uses: actions/cache@v3
+      with:
+        path: publish/osx-arm64
+        key: ${{ runner.os }}-build-osx-arm64-${{ hashFiles('**/*.cs', '**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-build-osx-arm64-
+
     - name: Build for macOS ARM64
+      if: steps.cache-osx-build.outputs.cache-hit != 'true'
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r osx-arm64 --self-contained true -o publish/osx-arm64 /p:InformationalVersion=${{ steps.version.outputs.VERSION }}
         rm publish/osx-arm64/*.pdb
@@ -61,10 +100,21 @@ jobs:
         name: zipper-osx-arm64
         path: publish/osx-arm64
 
+    - name: Check build status
+      id: check_build_status
+      run: |
+        if [[ "${{ steps.cache-win-build.outputs.cache-hit }}" == "true" && \
+              "${{ steps.cache-linux-build.outputs.cache-hit }}" == "true" && \
+              "${{ steps.cache-osx-build.outputs.cache-hit }}" == "true" ]]; then
+          echo "any_build_run=false" >> $GITHUB_OUTPUT
+        else
+          echo "any_build_run=true" >> $GITHUB_OUTPUT
+        fi
+
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' && needs.build.outputs.build_executed == 'true'
     permissions:
       contents: write
     steps:
