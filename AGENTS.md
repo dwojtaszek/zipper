@@ -70,6 +70,20 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 
 ## Project Conventions
 
+### C# and .NET Conventions
+
+- **Implicit Usings and Nullable Reference Types**: The project uses implicit usings and nullable reference types, which are enabled in the `.csproj` file. All new code should adhere to these conventions.
+- **Top-Level Statements**: While not extensively used, the project is open to the use of top-level statements for simple programs.
+- **File-Scoped Namespaces**: All C# files should use file-scoped namespaces (e.g., `namespace Zipper;`).
+
+#### Code Style and Formatting
+
+- Use `var` where the type is obvious.
+- Prefer expression-bodied members for simple methods and properties.
+- Use `_` to discard unused variables.
+
+**Note on Linting:** To automate the enforcement of these rules, consider using a linter like `.editorconfig` or a Roslyn analyzer.
+
 ### Distribution Implementations
 - Distribution algorithms must be O(1) per file.
 - Pre-calculate parameters where possible.
