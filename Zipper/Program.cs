@@ -22,6 +22,7 @@ namespace Zipper
             bool withText = false;
             int attachmentRate = 0;
             string? targetZipSize = null;
+            bool includeLoadFile = false;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -57,6 +58,9 @@ namespace Zipper
                     case "--target-zip-size":
                         if (i + 1 < args.Length) targetZipSize = args[++i];
                         break;
+                    case "--include-load-file":
+                        includeLoadFile = true;
+                        break;
                 }
             }
 
@@ -64,7 +68,7 @@ namespace Zipper
             {
                 var exeName = Process.GetCurrentProcess().ProcessName;
                 Console.Error.WriteLine("Error: Missing required arguments.");
-                Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>]");
+                Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>] [--include-load-file]");
                 return 1;
             }
             
@@ -113,11 +117,11 @@ namespace Zipper
 
             if (fileType.ToLower() == "eml")
             {
-                await GenerateEmlFiles(count.Value, outputPath, folders, encoding, distributionType.Value, attachmentRate);
+                await GenerateEmlFiles(count.Value, outputPath, folders, encoding, distributionType.Value, attachmentRate, includeLoadFile);
             }
             else
             {
-                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes);
+                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile);
             }
             return 0;
         }
@@ -172,7 +176,7 @@ namespace Zipper
             };
         }
 
-        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize)
+        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile)
         {
             Console.WriteLine("Starting file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", fileType));
@@ -184,6 +188,7 @@ namespace Zipper
             if (withMetadata) Console.WriteLine("  Metadata: Enabled");
             if (withText) Console.WriteLine("  Extracted Text: Enabled");
             if (targetZipSize.HasValue) Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", targetZipSize.Value / (1024 * 1024)));
+            if (includeLoadFile) Console.WriteLine("  Load File: Will be included in the zip archive.");
 
             var lowerFileType = fileType.ToLower();
 
@@ -191,7 +196,8 @@ namespace Zipper
 
             var baseFileName = string.Format("archive_{0:yyyyMMdd_HHmmss}", DateTime.Now);
             var zipFilePath = Path.Combine(outputDir.FullName, string.Format("{0}.zip", baseFileName));
-            var loadFilePath = Path.Combine(outputDir.FullName, string.Format("{0}.dat", baseFileName));
+            var loadFileName = string.Format("{0}.dat", baseFileName);
+            var loadFilePath = Path.Combine(outputDir.FullName, loadFileName);
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -218,71 +224,97 @@ namespace Zipper
             {
                 using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
                 using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
-                using var loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
 
-                const char colDelim = (char)20;
-                const char quote = (char)254;
+                MemoryStream? loadFileMemoryStream = null;
+                StreamWriter loadFileWriter;
 
-                var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}", quote, colDelim);
-                if (withMetadata)
+                if (includeLoadFile)
                 {
-                    header += string.Format("{1}{0}Custodian{0}{1}{0}Date Sent{0}{1}{0}Author{0}{1}{0}File Size{0}", quote, colDelim);
+                    loadFileMemoryStream = new MemoryStream();
+                    loadFileWriter = new StreamWriter(loadFileMemoryStream, encoding, -1, true);
                 }
-                if (withText)
+                else
                 {
-                    header += string.Format("{1}{0}Extracted Text{0}", quote, colDelim);
+                    loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
                 }
-                await loadFileWriter.WriteLineAsync(header);
 
-                for (long i = 1; i <= count; i++)
+                using (loadFileWriter)
                 {
-                    var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
-                    var folderName = string.Format("folder_{0:D3}", folderNumber);
-                    
-                    var docId = string.Format("DOC{0:D8}", i);
-                    var fileName = string.Format("{0:D8}.{1}", i, lowerFileType);
-                    var filePathInZip = string.Format("{0}/{1}", folderName, fileName);
+                    const char colDelim = (char)20; // TODO: Use a named constant
+                    const char quote = (char)254;    // TODO: Use a named constant
 
-                    var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
-                    using (var entryStream = entry.Open())
-                    {
-                        await entryStream.WriteAsync(placeholderContent, 0, placeholderContent.Length);
-                        if (paddingPerFile > 0)
-                        {
-                            var padding = new byte[paddingPerFile];
-                            RandomNumberGenerator.Fill(padding);
-                            await entryStream.WriteAsync(padding, 0, padding.Length);
-                        }
-                    }
-
-                    var line = string.Format("{0}{1}{0}{2}{0}{3}{0}", quote, docId, colDelim, filePathInZip);
+                    var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}", quote, colDelim);
                     if (withMetadata)
                     {
-                        var custodian = numFolders > 1 ? string.Format("Custodian {0}", folderNumber) : "Custodian 1";
-                        var dateSent = GetRandomDate(DateTime.Now.AddYears(-5), DateTime.Now).ToString("yyyy-MM-dd");
-                        var author = GetRandomAuthor();
-                        var fileSize = placeholderContent.Length + paddingPerFile;
-                        line += string.Format("{5}{0}{1}{0}{5}{0}{2}{0}{5}{0}{3}{0}{5}{0}{4}{0}", quote, custodian, dateSent, author, fileSize, colDelim);
+                        header += string.Format("{1}{0}Custodian{0}{1}{0}Date Sent{0}{1}{0}Author{0}{1}{0}File Size{0}", quote, colDelim);
                     }
-
                     if (withText)
                     {
-                        var textFileName = string.Format("{0:D8}.txt", i);
-                        var textFilePathInZip = string.Format("{0}/{1}", folderName, textFileName);
-                        var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
-                        using (var entryStream = textEntry.Open())
-                        {
-                            await entryStream.WriteAsync(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
-                        }
-                        line += string.Format("{1}{0}{2}{0}", quote, colDelim, textFilePathInZip);
+                        header += string.Format("{1}{0}Extracted Text{0}", quote, colDelim);
                     }
+                    await loadFileWriter.WriteLineAsync(header);
 
-                    await loadFileWriter.WriteLineAsync(line);
-
-                    if (i % 1000 == 0)
+                    for (long i = 1; i <= count; i++)
                     {
-                        Console.Write(string.Format("\rProgress: {0:N0} / {1:N0} files created...", i, count));
+                        var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
+                        var folderName = string.Format("folder_{0:D3}", folderNumber);
+
+                        var docId = string.Format("DOC{0:D8}", i);
+                        var fileName = string.Format("{0:D8}.{1}", i, lowerFileType);
+                        var filePathInZip = string.Format("{0}/{1}", folderName, fileName);
+
+                        var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
+                        using (var entryStream = entry.Open())
+                        {
+                            await entryStream.WriteAsync(placeholderContent, 0, placeholderContent.Length);
+                            if (paddingPerFile > 0)
+                            {
+                                var padding = new byte[paddingPerFile];
+                                RandomNumberGenerator.Fill(padding);
+                                await entryStream.WriteAsync(padding, 0, padding.Length);
+                            }
+                        }
+
+                        var line = string.Format("{0}{1}{0}{2}{0}{3}{0}", quote, docId, colDelim, filePathInZip);
+                        if (withMetadata)
+                        {
+                            var custodian = numFolders > 1 ? string.Format("Custodian {0}", folderNumber) : "Custodian 1";
+                            var dateSent = GetRandomDate(DateTime.Now.AddYears(-5), DateTime.Now).ToString("yyyy-MM-dd");
+                            var author = GetRandomAuthor();
+                            var fileSize = placeholderContent.Length + paddingPerFile;
+                            line += string.Format("{5}{0}{1}{0}{5}{0}{2}{0}{5}{0}{3}{0}{5}{0}{4}{0}", quote, custodian, dateSent, author, fileSize, colDelim);
+                        }
+
+                        if (withText)
+                        {
+                            var textFileName = string.Format("{0:D8}.txt", i);
+                            var textFilePathInZip = string.Format("{0}/{1}", folderName, textFileName);
+                            var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
+                            using (var entryStream = textEntry.Open())
+                            {
+                                await entryStream.WriteAsync(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
+                            }
+                            line += string.Format("{1}{0}{2}{0}", quote, colDelim, textFilePathInZip);
+                        }
+
+                        await loadFileWriter.WriteLineAsync(line);
+
+                        if (i % 1000 == 0)
+                        {
+                            Console.Write(string.Format("\rProgress: {0:N0} / {1:N0} files created...", i, count));
+                        }
                     }
+                }
+
+                if (includeLoadFile && loadFileMemoryStream != null)
+                {
+                    loadFileMemoryStream.Seek(0, SeekOrigin.Begin);
+                    var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
+                    using (var entryStream = loadFileEntry.Open())
+                    {
+                        await loadFileMemoryStream.CopyToAsync(entryStream);
+                    }
+                    loadFileMemoryStream.Dispose();
                 }
             }
             catch (Exception ex)
@@ -293,7 +325,10 @@ namespace Zipper
 
             Console.WriteLine(string.Format("\n\nGeneration complete."));
             Console.WriteLine(string.Format("  Archive created: {0}", zipFilePath));
-            Console.WriteLine(string.Format("  Load file created: {0}", loadFilePath));
+            if (!includeLoadFile)
+            {
+                Console.WriteLine(string.Format("  Load file created: {0}", loadFilePath));
+            }
         }
 
         static long EstimateCompressedSize(byte[] content, long count, bool withText)
@@ -315,7 +350,7 @@ namespace Zipper
             return ms.Length * count;
         }
 
-        static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate)
+        static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate, bool includeLoadFile)
         {
             Console.WriteLine("Starting EML file generation...");
             Console.WriteLine(string.Format("  Count: {0:N0}", count));
@@ -324,12 +359,14 @@ namespace Zipper
             Console.WriteLine(string.Format("  Encoding: {0}", encoding.EncodingName));
             Console.WriteLine(string.Format("  Distribution: {0}", distributionType));
             Console.WriteLine(string.Format("  Attachment Rate: {0}%", attachmentRate));
+            if (includeLoadFile) Console.WriteLine("  Load File: Will be included in the zip archive.");
 
             outputDir.Create();
 
             var baseFileName = string.Format("archive_{0:yyyyMMdd_HHmmss}", DateTime.Now);
             var zipFilePath = Path.Combine(outputDir.FullName, string.Format("{0}.zip", baseFileName));
-            var loadFilePath = Path.Combine(outputDir.FullName, string.Format("{0}.dat", baseFileName));
+            var loadFileName = string.Format("{0}.dat", baseFileName);
+            var loadFilePath = Path.Combine(outputDir.FullName, loadFileName);
 
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -337,55 +374,81 @@ namespace Zipper
             {
                 using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
                 using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
-                using var loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
 
-                const char colDelim = (char)20;
-                const char quote = (char)254;
+                MemoryStream? loadFileMemoryStream = null;
+                StreamWriter loadFileWriter;
 
-                var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}{1}{0}To{0}{1}{0}From{0}{1}{0}Subject{0}{1}{0}Sent Date{0}{1}{0}Attachment{0}", quote, colDelim);
-                await loadFileWriter.WriteLineAsync(header);
-
-                for (long i = 1; i <= count; i++)
+                if (includeLoadFile)
                 {
-                    var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
-                    var folderName = string.Format("folder_{0:D3}", folderNumber);
+                    loadFileMemoryStream = new MemoryStream();
+                    loadFileWriter = new StreamWriter(loadFileMemoryStream, encoding, -1, true);
+                }
+                else
+                {
+                    loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
+                }
 
-                    var docId = string.Format("DOC{0:D8}", i);
-                    var fileName = string.Format("{0:D8}.eml", i);
-                    var filePathInZip = string.Format("{0}/{1}", folderName, fileName);
+                using (loadFileWriter)
+                {
+                    const char colDelim = (char)20;
+                    const char quote = (char)254;
 
-                    var to = string.Format("recipient{0}@example.com", i);
-                    var from = GetRandomAuthor() + "@example.com";
-                    var subject = string.Format("Test Email {0}", i);
-                    var sentDate = GetRandomDate(DateTime.Now.AddYears(-1), DateTime.Now);
-                    var body = string.Format("This is the body of test email {0}.", i);
+                    var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}{1}{0}To{0}{1}{0}From{0}{1}{0}Subject{0}{1}{0}Sent Date{0}{1}{0}Attachment{0}", quote, colDelim);
+                    await loadFileWriter.WriteLineAsync(header);
 
-                    (string filename, byte[] content)? attachment = null;
-                    string attachmentName = "";
-                    if (Rng.Next(100) < attachmentRate)
+                    for (long i = 1; i <= count; i++)
                     {
-                        attachment = PlaceholderFiles.GetRandomAttachment();
-                        if (attachment.HasValue)
+                        var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
+                        var folderName = string.Format("folder_{0:D3}", folderNumber);
+
+                        var docId = string.Format("DOC{0:D8}", i);
+                        var fileName = string.Format("{0:D8}.eml", i);
+                        var filePathInZip = string.Format("{0}/{1}", folderName, fileName);
+
+                        var to = string.Format("recipient{0}@example.com", i);
+                        var from = GetRandomAuthor() + "@example.com";
+                        var subject = string.Format("Test Email {0}", i);
+                        var sentDate = GetRandomDate(DateTime.Now.AddYears(-1), DateTime.Now);
+                        var body = string.Format("This is the body of test email {0}.", i);
+
+                        (string filename, byte[] content)? attachment = null;
+                        string attachmentName = "";
+                        if (Rng.Next(100) < attachmentRate)
                         {
-                            attachmentName = attachment.Value.filename;
+                            attachment = PlaceholderFiles.GetRandomAttachment();
+                            if (attachment.HasValue)
+                            {
+                                attachmentName = attachment.Value.filename;
+                            }
+                        }
+
+                        var emlContent = EmlFile.CreateEmlContent(to, from, subject, sentDate, body, attachment);
+
+                        var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
+                        using (var entryStream = entry.Open())
+                        {
+                            await entryStream.WriteAsync(emlContent, 0, emlContent.Length);
+                        }
+
+                        var line = string.Format("{0}{1}{0}{2}{0}{3}{0}{2}{0}{4}{0}{2}{0}{5}{0}{2}{0}{6:yyyy-MM-dd HH:mm:ss}{0}{2}{0}{7}{0}", quote, docId, colDelim, to, from, subject, sentDate, attachmentName);
+                        await loadFileWriter.WriteLineAsync(line);
+
+                        if (i % 1000 == 0)
+                        {
+                            Console.Write(string.Format("\rProgress: {0:N0} / {1:N0} files created...", i, count));
                         }
                     }
+                }
 
-                    var emlContent = EmlFile.CreateEmlContent(to, from, subject, sentDate, body, attachment);
-
-                    var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
-                    using (var entryStream = entry.Open())
+                if (includeLoadFile && loadFileMemoryStream != null)
+                {
+                    loadFileMemoryStream.Seek(0, SeekOrigin.Begin);
+                    var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
+                    using (var entryStream = loadFileEntry.Open())
                     {
-                        await entryStream.WriteAsync(emlContent, 0, emlContent.Length);
+                        await loadFileMemoryStream.CopyToAsync(entryStream);
                     }
-
-                    var line = string.Format("{0}{1}{0}{2}{0}{3}{0}{2}{0}{4}{0}{2}{0}{5}{0}{2}{0}{6:yyyy-MM-dd HH:mm:ss}{0}{2}{0}{7}{0}", quote, docId, colDelim, to, from, subject, sentDate, attachmentName);
-                    await loadFileWriter.WriteLineAsync(line);
-
-                    if (i % 1000 == 0)
-                    {
-                        Console.Write(string.Format("\rProgress: {0:N0} / {1:N0} files created...", i, count));
-                    }
+                    loadFileMemoryStream.Dispose();
                 }
             }
             catch (Exception ex)
@@ -396,7 +459,10 @@ namespace Zipper
 
             Console.WriteLine(string.Format("\n\nGeneration complete."));
             Console.WriteLine(string.Format("  Archive created: {0}", zipFilePath));
-            Console.WriteLine(string.Format("  Load file created: {0}", loadFilePath));
+            if (!includeLoadFile)
+            {
+                Console.WriteLine(string.Format("  Load file created: {0}", loadFilePath));
+            }
         }
 
         static readonly Random Rng = new Random();

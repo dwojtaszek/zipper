@@ -33,7 +33,7 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file]
 ```
 
 ### Arguments
@@ -51,6 +51,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 -   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file.
 -   `--attachment-rate <number>`: **(Optional)** When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 -   `--target-zip-size <size>`: **(Optional, Requires --count)** Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. This mode overrides the `--variable-sizes` flag.
+-   `--include-load-file`: **(Optional)** Includes the generated `.dat` load file in the root of the output `.zip` archive instead of as a separate file.
 
 ### Distribution Patterns
 
@@ -101,6 +102,9 @@ zipper --type eml --count 5000 --output-path ./email_test --attachment-rate 20
 # Generates exactly 100,000 PDF files and pads each one with uncompressible
 # data so that the final compressed zip archive is approximately 1GB in size.
 zipper --type pdf --count 100000 --target-zip-size 1GB --output-path ./test_padded_files
+
+# Generate 1,000 PDFs and include the load file inside the zip archive
+zipper --type pdf --count 1000 --output-path ./test_inclusive --include-load-file
 ```
 
 ## Testing

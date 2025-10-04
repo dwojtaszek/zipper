@@ -61,6 +61,11 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-025**: The final generated zip file size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation.
 - **REQ-026**: The application must perform a pre-check to estimate the minimum possible compressed size of the requested files. If this estimated minimum size already exceeds the --target-zip-size, the tool must exit immediately with a clear error message to prevent an impossible task from running.
 
+### FR-006: Inclusive Load File
+- **REQ-027**: A new optional command-line argument `--include-load-file` shall be introduced.
+- **REQ-028**: When this flag is specified, the generated `.dat` load file must be included in the root of the output `.zip` archive.
+- **REQ-029**: When this flag is specified, the `.dat` load file must not be created as a separate file in the output directory.
+
 ## 3. Technical Requirements
 
 - **Framework**: .NET 8.
@@ -80,6 +85,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final zip file (e.g., 500MB, 10GB).
+- `--include-load-file`: (Optional) Includes the generated `.dat` load file in the root of the output `.zip` archive.
 
 ## 5. Testing
 
