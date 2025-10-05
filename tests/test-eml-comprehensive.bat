@@ -58,19 +58,13 @@ if %RESULT% EQU 0 (
 
             echo   - Header: %ACTUAL_HEADER%
 
-            REM Count columns by counting delimiters (char 20)
-            set /a COLUMN_COUNT=0
-            for /f "delims=" %%j in ("%ACTUAL_HEADER%") do (
-                setlocal enabledelayedexpansion
-                set TEMP_LINE=%%j
-                :count_loop
-                if "!TEMP_LINE!"=="" goto :count_done
-                set /a COLUMN_COUNT+=1
-                for /f "tokens=1* delims=" %%k in ("!TEMP_LINE!") do set TEMP_LINE=%%k
-                goto :count_loop
-                :count_done
-                endlocal & set COLUMN_COUNT=!COLUMN_COUNT!
-            )
+            REM Count columns by counting the field delimiter character (ASCII 20)
+            REM Note: This approach works for current placeholder data. For production CSV parsing,
+            REM a more robust method that respects quoted fields would be needed.
+            REM Use PowerShell to count the delimiter character (ASCII 20)
+            powershell -Command "$header = Get-Content 'archive_*.dat' | Select-Object -First 1; $delimiters = [regex]::Matches($header, [char]20).Count; $columns = $delimiters + 1; Write-Output $columns" > temp_column_count.txt
+            set /p COLUMN_COUNT=<temp_column_count.txt
+            del temp_column_count.txt
 
             echo   - Column count: %COLUMN_COUNT%
 
@@ -144,7 +138,6 @@ echo Test Results Summary
 echo ========================================
 echo Total Tests: %TEST_COUNT%
 echo Passed: %PASSED_COUNT%
-echo Failed: %TEST_COUNT%
 
 set /a FAILED_COUNT=%TEST_COUNT%-%PASSED_COUNT%
 echo Failed: %FAILED_COUNT%

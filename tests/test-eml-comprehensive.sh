@@ -70,6 +70,8 @@ run_test() {
                 HEADER_LINE=$(head -n 1 archive_*.dat)
 
                 # Count columns by counting the field delimiter character (ASCII 20 = \024 in octal)
+                # Note: This approach works for current placeholder data. For production CSV parsing,
+                # a more robust method that respects quoted fields would be needed.
                 COLUMN_COUNT=$(echo "$HEADER_LINE" | od -c | grep -o '\ 024' | wc -l)
                 ((COLUMN_COUNT++))  # Add 1 for the first column
 
