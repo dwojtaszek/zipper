@@ -60,6 +60,8 @@ public static class PlaceholderFiles
 
     public static readonly byte[] ExtractedText = System.Text.Encoding.UTF8.GetBytes("This is a placeholder for extracted text.");
 
+    public static readonly byte[] EmlExtractedText = System.Text.Encoding.UTF8.GetBytes("This is extracted text from email body.");
+
     public static byte[] GetContent(string fileType)
     {
         return FileContentMap.TryGetValue(fileType, out var content) ? content : Array.Empty<byte>();
