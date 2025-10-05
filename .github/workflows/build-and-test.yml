@@ -18,32 +18,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Check .editorconfig exists
-      run: |
-        if [ -f ".editorconfig" ]; then
-          echo ".editorconfig found"
-        else
-          echo "WARNING: .editorconfig not found, skipping linting"
-          echo "::warning::.editorconfig file not found"
-        fi
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
 
     - name: Lint code style
       if: hashFiles('.editorconfig') != ''
       run: |
-        echo "Checking code style with .editorconfig"
-        # Check for common C# style violations
-        if grep -r "  $" . --include="*.cs" --exclude-dir=bin --exclude-dir=obj; then
-          echo "ERROR: Trailing whitespace found"
-          exit 1
-        fi
-
-        if grep -r $'\t' . --include="*.cs" --exclude-dir=bin --exclude-dir=obj; then
-          echo "ERROR: Tab characters found"
-          exit 1
-        fi
-
-        echo "Linting passed - no style violations found"
-
+        dotnet tool install -g dotnet-format
+        dotnet format --verify-no-changes
   build:
     needs: lint
     runs-on: ${{ matrix.os }}
@@ -94,7 +78,7 @@ jobs:
       if: steps.cache-build.outputs.cache-hit != 'true'
       run: |
         dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:InformationalVersion=${{ steps.version.outputs.VERSION }}
-        rm publish/${{ matrix.platform }}/*.pdb
+        rm -f publish/${{ matrix.platform }}/*.pdb
 
         # Rename executable to platform-specific name
         if [ "${{ matrix.platform }}" = "win-x64" ]; then
