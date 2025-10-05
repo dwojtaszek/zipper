@@ -52,7 +52,7 @@ jobs:
 
     - name: Set Version
       id: version
-      run: echo "VERSION=$(cat .version | tr -d '[:space:]').$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
+      run: echo "VERSION=$(cat .version)" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Setup .NET
@@ -153,15 +153,14 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
+      with:
+        persist-credentials: true
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
-
     - name: List downloaded artifacts
       run: ls -R artifacts
-
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v2
@@ -176,3 +175,18 @@ jobs:
           artifacts/zipper-win-x64/zipper-win-x64.exe
           artifacts/zipper-linux-x64/zipper-linux-x64
           artifacts/zipper-osx-arm64/zipper-osx-arm64
+    - name: Bump version
+      if: success()
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        version=$(cat .version)
+        major=$(echo $version | cut -d. -f1)
+        minor=$(echo $version | cut -d. -f2)
+        build=$(echo $version | cut -d. -f3)
+        new_build=$((build + 1))
+        new_version="$major.$minor.$new_build"
+        echo $new_version > .version
+        git add .version
+        git commit -m "chore(release): bump version to $new_version [skip ci]"
+        git push
