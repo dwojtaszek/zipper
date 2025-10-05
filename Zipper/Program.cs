@@ -126,7 +126,7 @@ namespace Zipper
             }
             else
             {
-                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetZipSize, includeLoadFile);
+                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile);
             }
             return 0;
         }
