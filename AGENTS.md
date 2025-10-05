@@ -103,7 +103,7 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 
 ## CI/CD & Automation
 - The repository uses GitHub Actions to automate tasks.
-- **`build.yml`**: Builds the application.
+- **`build-and-test.yml`**: Unifies the build, test, and release process. It includes linting, parallel builds for multiple platforms, and testing of the built artifacts.
 - **`code-review.yml`**: Performs automated code reviews.
 - **`gemini-cli.yml`**: Handles general requests, code changes, and issue resolution. You are invoked via `@gemini-cli` comments.
 - **`gemini-dispatch.yml`**: Dispatches Gemini commands.
@@ -113,7 +113,6 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 - **`gemini-review.yml`**: Performs automated pull request reviews.
 - **`gemini-scheduled-triage.yml`**: Schedules triage.
 - **`gemini-triage.yml`**: Triage for issues.
-- **`test.yml`**: Runs the test suite.
 
 ### GitHub CLI Commands for PR Management
 - **Get PR comments with file locations and line numbers**:
@@ -197,3 +196,9 @@ All these commands use the GraphQL API since review threads are only available v
 - Stream-based processing is essential for large-scale data generation.
 - Avoid storing intermediate files on disk whenever possible.
 - Memory efficiency should be maintained for handling millions of files.
+
+## Code Style
+GitHub Actions YAML v2.0: Follow standard conventions
+
+## Recent Changes
+- 002-task-5-improve: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2

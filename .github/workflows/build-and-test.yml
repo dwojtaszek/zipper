@@ -1,0 +1,178 @@
+name: Build and Test
+# Unified workflow replacing separate build.yml and test.yml workflows
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Lint code style
+      if: hashFiles('.editorconfig') != ''
+      run: |
+        dotnet tool install -g dotnet-format
+        dotnet format --verify-no-changes
+  build:
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    outputs:
+      build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
+      version: ${{ steps.version.outputs.VERSION }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win-x64
+          - os: macos-latest
+            platform: osx-arm64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set Version
+      id: version
+      run: echo "VERSION=$(cat .version | tr -d '[:space:]').${{ github.run_number }}" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+        cache: true
+        cache-dependency-path: Zipper/packages.lock.json
+
+    - name: Restore dependencies
+      run: dotnet restore Zipper/Zipper.csproj
+
+    - name: Cache ${{ matrix.platform }} build
+      id: cache-build
+      uses: actions/cache@v3
+      with:
+        path: publish/${{ matrix.platform }}
+        key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.cs', '**/*.csproj') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ matrix.platform }}-
+
+    - name: Build for ${{ matrix.platform }}
+      if: steps.cache-build.outputs.cache-hit != 'true'
+      run: |
+        dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:InformationalVersion=${{ steps.version.outputs.VERSION }}
+        rm -f publish/${{ matrix.platform }}/*.pdb
+
+        # Rename executable to platform-specific name
+        if [ "${{ matrix.platform }}" = "win-x64" ]; then
+          mv publish/${{ matrix.platform }}/Zipper.exe publish/${{ matrix.platform }}/zipper-win-x64.exe
+        elif [ "${{ matrix.platform }}" = "linux-x64" ]; then
+          mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-linux-x64
+        elif [ "${{ matrix.platform }}" = "osx-arm64" ]; then
+          mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-osx-arm64
+        fi
+      shell: bash
+
+    - name: Upload ${{ matrix.platform }} artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: zipper-${{ matrix.platform }}
+        path: publish/${{ matrix.platform }}
+        retention-days: 7
+
+    - name: Check build status
+      id: check_build_status
+      run: |
+        echo "Build completed for ${{ matrix.platform }}"
+
+  test:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win-x64
+          - os: macos-latest
+            platform: osx-arm64
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Download ${{ matrix.platform }} build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: zipper-${{ matrix.platform }}
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: ls -R artifacts
+
+    - name: Run tests on Linux and macOS
+      if: runner.os != 'Windows'
+      run: chmod +x ./tests/run-tests.sh && ./tests/run-tests.sh
+
+    - name: Run tests on Windows
+      if: runner.os == 'Windows'
+      run: .\tests\run-tests.bat
+      shell: cmd
+
+  release:
+    needs: [lint, build, test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: ls -R artifacts
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.build.outputs.version }}
+        name: Release ${{ needs.build.outputs.version }}
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/zipper-win-x64/zipper-win-x64.exe
+          artifacts/zipper-linux-x64/zipper-linux-x64
+          artifacts/zipper-osx-arm64/zipper-osx-arm64

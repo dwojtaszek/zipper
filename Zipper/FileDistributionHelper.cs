@@ -16,10 +16,10 @@ namespace Zipper
             // Input validation
             if (fileIndex < 1 || fileIndex > totalFiles)
                 throw new ArgumentOutOfRangeException(nameof(fileIndex), "File index must be between 1 and total files");
-            
+
             if (totalFolders < 1 || totalFolders > 100)
                 throw new ArgumentOutOfRangeException(nameof(totalFolders), "Total folders must be between 1 and 100");
-            
+
             if (totalFiles < 1)
                 throw new ArgumentOutOfRangeException(nameof(totalFiles), "Total files must be at least 1");
 
@@ -53,7 +53,7 @@ namespace Zipper
             // Use Box-Muller transformation to convert uniform to normal distribution
             // For simplicity, use inverse normal CDF approximation
             double z = InverseNormalCDF(normalizedPosition);
-            
+
             // Map to folder number
             double folderDouble = mean + stdDev * z;
             int folder = (int)Math.Round(folderDouble);
