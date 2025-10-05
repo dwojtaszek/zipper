@@ -153,6 +153,34 @@ if errorlevel 1 exit /b 1
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true"
 call :print_success "Test Case 9 passed."
 
+REM Test Case 10: EML generation with attachments
+call :print_info "Running Test Case 10: EML generation with attachments"
+dotnet run --project "%PROJECT%" -- --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50
+if errorlevel 1 exit /b 1
+call :verify_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false"
+call :print_success "Test Case 10 passed."
+
+REM Test Case 11: EML generation with metadata
+call :print_info "Running Test Case 11: EML generation with metadata"
+dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata" --with-metadata
+if errorlevel 1 exit /b 1
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false"
+call :print_success "Test Case 11 passed."
+
+REM Test Case 12: EML generation with text
+call :print_info "Running Test Case 12: EML generation with text"
+dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_text" --with-text
+if errorlevel 1 exit /b 1
+call :verify_output "%TEST_OUTPUT_DIR%\eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true"
+call :print_success "Test Case 12 passed."
+
+REM Test Case 13: EML generation with metadata and text
+call :print_info "Running Test Case 13: EML generation with metadata and text"
+dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata_text" --with-metadata --with-text
+if errorlevel 1 exit /b 1
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true"
+call :print_success "Test Case 13 passed."
+
 REM --- Cleanup ---
 
 call :print_info "Cleaning up test output..."

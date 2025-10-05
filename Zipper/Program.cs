@@ -122,7 +122,7 @@ namespace Zipper
 
             if (fileType.ToLower() == "eml")
             {
-                await GenerateEmlFiles(count.Value, outputPath, folders, encoding, distributionType.Value, attachmentRate, includeLoadFile);
+                await GenerateEmlFiles(count.Value, outputPath, folders, encoding, distributionType.Value, attachmentRate, withMetadata, withText, includeLoadFile);
             }
             else
             {
@@ -355,7 +355,7 @@ namespace Zipper
             return ms.Length * count;
         }
 
-        static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate, bool includeLoadFile)
+        static async Task GenerateEmlFiles(long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, int attachmentRate, bool withMetadata, bool withText, bool includeLoadFile)
         {
             Console.WriteLine("Starting EML file generation...");
             Console.WriteLine(string.Format("  Count: {0:N0}", count));
@@ -364,6 +364,8 @@ namespace Zipper
             Console.WriteLine(string.Format("  Encoding: {0}", encoding.EncodingName));
             Console.WriteLine(string.Format("  Distribution: {0}", distributionType));
             Console.WriteLine(string.Format("  Attachment Rate: {0}%", attachmentRate));
+            if (withMetadata) Console.WriteLine("  Metadata: Will be included in load file.");
+            if (withText) Console.WriteLine("  Text Files: Will be generated and included in load file.");
             if (includeLoadFile) Console.WriteLine("  Load File: Will be included in the zip archive.");
 
             outputDir.Create();
@@ -398,7 +400,20 @@ namespace Zipper
                     const char colDelim = (char)20;
                     const char quote = (char)254;
 
-                    var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}{1}{0}To{0}{1}{0}From{0}{1}{0}Subject{0}{1}{0}Sent Date{0}{1}{0}Attachment{0}", quote, colDelim);
+                    var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}{1}{0}To{0}{1}{0}From{0}{1}{0}Subject{0}", quote, colDelim);
+                    if (withMetadata)
+                    {
+                        header += string.Format("{1}{0}Custodian{0}{1}{0}Author{0}{1}{0}Sent Date{0}{1}{0}Date Sent{0}{1}{0}File Size{0}", quote, colDelim);
+                    }
+                    else
+                    {
+                        header += string.Format("{1}{0}Sent Date{0}", quote, colDelim);
+                    }
+                    header += string.Format("{1}{0}Attachment{0}", quote, colDelim);
+                    if (withText)
+                    {
+                        header += string.Format("{1}{0}Extracted Text{0}", quote, colDelim);
+                    }
                     await loadFileWriter.WriteLineAsync(header);
 
                     for (long i = 1; i <= count; i++)
@@ -435,7 +450,36 @@ namespace Zipper
                             await entryStream.WriteAsync(emlContent, 0, emlContent.Length);
                         }
 
-                        var line = string.Format("{0}{1}{0}{2}{0}{3}{0}{2}{0}{4}{0}{2}{0}{5}{0}{2}{0}{6:yyyy-MM-dd HH:mm:ss}{0}{2}{0}{7}{0}", quote, docId, colDelim, to, from, subject, sentDate, attachmentName);
+                        var fileSize = emlContent.Length;
+
+                        var line = string.Format("{0}{1}{0}{2}{0}{3}{0}{2}{0}{4}{0}{2}{0}{5}{0}", quote, docId, colDelim, to, from, subject);
+
+                        if (withMetadata)
+                        {
+                            var custodian = numFolders > 1 ? string.Format("Custodian {0}", folderNumber) : "Custodian 1";
+                            var author = GetRandomAuthor();
+                            var dateSent = GetRandomDate(DateTime.Now.AddYears(-5), DateTime.Now).ToString("yyyy-MM-dd");
+                            line += string.Format("{2}{0}{1}{0}{2}{0}{3}{0}{2}{0}{4:yyyy-MM-dd HH:mm:ss}{0}{2}{0}{5}{0}", quote, custodian, colDelim, author, sentDate, fileSize);
+                        }
+                        else
+                        {
+                            line += string.Format("{2}{0}{1:yyyy-MM-dd HH:mm:ss}{0}", quote, sentDate, colDelim);
+                        }
+
+                        line += string.Format("{2}{0}{1}{0}", quote, attachmentName, colDelim);
+
+                        if (withText)
+                        {
+                            var textFileName = string.Format("{0:D8}.txt", i);
+                            var textFilePathInZip = string.Format("{0}/{1}", folderName, textFileName);
+                            var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
+                            using (var entryStream = textEntry.Open())
+                            {
+                                await entryStream.WriteAsync(PlaceholderFiles.EmlExtractedText, 0, PlaceholderFiles.EmlExtractedText.Length);
+                            }
+                            line += string.Format("{2}{0}{1}{0}", quote, textFilePathInZip, colDelim);
+                        }
+
                         await loadFileWriter.WriteLineAsync(line);
 
                         if (i % 1000 == 0)

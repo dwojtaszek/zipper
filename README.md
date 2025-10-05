@@ -50,8 +50,8 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
     - `proportional`: Even distribution across all folders (round-robin)
     - `gaussian`: Bell curve distribution with most files in middle folders
     - `exponential`: Exponential decay with most files in first folders
--   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). **Note: This option is currently not supported for `--type eml`**.
--   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file. **Note: This option is currently not supported for `--type eml`**.
+-   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`.
+-   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file. Supported for all file types including `eml`.
 -   `--attachment-rate <number>`: **(Optional)** When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 -   `--target-zip-size <size>`: **(Optional, Requires --count)** Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios.
 -   `--include-load-file`: **(Optional)** Includes the generated `.dat` load file in the root of the output `.zip` archive instead of as a separate file.
@@ -101,6 +101,18 @@ zipper --type tiff --count 100000 --output-path ./test_data --folders 50 --distr
 
 # Generate 5,000 emails with a 20% chance of having an attachment
 zipper --type eml --count 5000 --output-path ./email_test --attachment-rate 20
+
+# Generate emails with metadata (Custodian, Author, Date Sent, File Size)
+zipper --type eml --count 1000 --output-path ./email_metadata --with-metadata
+
+# Generate emails with extracted text files
+zipper --type eml --count 2500 --output-path ./email_text --with-text
+
+# Generate emails with both metadata and extracted text
+zipper --type eml --count 3000 --output-path ./email_full --with-metadata --with-text
+
+# Generate emails with attachments, metadata, and text
+zipper --type eml --count 2000 --output-path ./email_complete --with-metadata --with-text --attachment-rate 30
 
 # Generates exactly 100,000 PDF files and pads each one with uncompressible
 # data so that the final compressed zip archive is approximately 1GB in size.

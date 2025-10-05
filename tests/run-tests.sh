@@ -230,11 +230,29 @@ dotnet run --project "$PROJECT" -- --type eml --count 20 --output-path "$TEST_OU
 verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
 print_success "Test Case 10 passed."
 
-# Test Case 11: Target zip size
-print_info "Running Test Case 11: Target zip size"
+# Test Case 11: EML generation with metadata
+print_info "Running Test Case 11: EML generation with metadata"
+dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata" --with-metadata
+verify_output "$TEST_OUTPUT_DIR/eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false" "UTF-8"
+print_success "Test Case 11 passed."
+
+# Test Case 12: EML generation with text
+print_info "Running Test Case 12: EML generation with text"
+dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_text" --with-text
+verify_output "$TEST_OUTPUT_DIR/eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true" "UTF-8"
+print_success "Test Case 12 passed."
+
+# Test Case 13: EML generation with metadata and text
+print_info "Running Test Case 13: EML generation with metadata and text"
+dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata_text" --with-metadata --with-text
+verify_output "$TEST_OUTPUT_DIR/eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+print_success "Test Case 13 passed."
+
+# Test Case 14: Target zip size
+print_info "Running Test Case 14: Target zip size"
 dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
 verify_zip_size "$TEST_OUTPUT_DIR/pdf_target_size" 1
-print_success "Test Case 11 passed."
+print_success "Test Case 14 passed."
 
 # --- Cleanup ---
 
