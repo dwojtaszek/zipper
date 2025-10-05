@@ -197,3 +197,9 @@ All these commands use the GraphQL API since review threads are only available v
 - Stream-based processing is essential for large-scale data generation.
 - Avoid storing intermediate files on disk whenever possible.
 - Memory efficiency should be maintained for handling millions of files.
+
+## Code Style
+GitHub Actions YAML v2.0: Follow standard conventions
+
+## Recent Changes
+- 002-task-5-improve: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2

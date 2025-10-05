@@ -42,4 +42,4 @@ Code MUST adhere to low complexity and avoid unnecessarily complex expressions o
 
 All development practices and code contributions must adhere to the principles outlined in this constitution. Amendments to this constitution require a pull request, review, and approval from the project maintainers.
 
-**Version**: 1.4.0 | **Ratified**: 2025-10-04 | **Last Amended**: 2024-12-19
+**Version**: 1.4.0 | **Ratified**: 2025-10-04 | **Last Amended**: 2025-10-04
