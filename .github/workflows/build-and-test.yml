@@ -99,6 +99,7 @@ jobs:
         elif [ "${{ matrix.platform }}" = "osx-arm64" ]; then
           mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-osx-arm64
         fi
+      shell: bash
 
     - name: Upload ${{ matrix.platform }} artifact
       uses: actions/upload-artifact@v4
