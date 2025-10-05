@@ -21,8 +21,8 @@ The application is configured via the following command-line arguments:
 - **`--folders <int>`**: The number of folders to distribute files into within the zip archive. (Default: `1`, Max: `100`).
 - **`--distribution <string>`**: The algorithm for file distribution. Supported values: `proportional`, `gaussian`, `exponential`. (Default: `proportional`).
 - **`--encoding <string>`**: The text encoding for the output `.dat` load file. Supported values: `UTF-8`, `UTF-16`, `ANSI`. (Default: `UTF-8`).
-- **`--with-metadata`**: If present, adds metadata columns (Custodian, Date Sent, etc.) to the `.dat` file for `pdf`, `jpg`, and `tiff` types. **Note: This option is currently not supported for `--type eml`**.
-- **`--with-text`**: If present, generates a corresponding `.txt` file for each document and links it in the `Extracted Text` field of the `.dat` file. **Note: This option is currently not supported for `--type eml`**.
+- **`--with-metadata`**: If present, adds metadata columns (Custodian, Date Sent, Author, File Size) to the `.dat` file for all file types including `eml`.
+- **`--with-text`**: If present, generates a corresponding `.txt` file for each document and links it in the `Extracted Text` field of the `.dat` file for all file types including `eml`.
 - **`--attachment-rate <int>`**: For `--type eml` only. An integer percentage (0-100) representing the chance an email will have an attachment. (Default: `0`).
 - **`--target-zip-size <size>`**: If specified, pads each file with random, non-compressible data to make the final zip archive approach the target size (e.g., `500MB`, `10GB`). Requires `--count`.
 - **`--include-load-file`**: If present, includes the generated `.dat` load file in the root of the output `.zip` archive.
@@ -114,6 +114,25 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 - **`gemini-scheduled-triage.yml`**: Schedules triage.
 - **`gemini-triage.yml`**: Triage for issues.
 - **`test.yml`**: Runs the test suite.
+
+### GitHub CLI Commands for PR Management
+- **Get PR comments with file locations and line numbers**:
+  ```bash
+  gh api repos/:owner/:repo/pulls/45/comments --jq '.[] | {path, line, body}'
+  ```
+  Replace `:owner/:repo` with actual repository (e.g., `dwojtaszek/zipper`) and `45` with the PR number. This command extracts inline comments with their context, making it easier to address specific feedback.
+
+- **Get PR reviews and comments**:
+  ```bash
+  gh pr view 13 --json comments,reviews --jq '.reviews[].body'
+  ```
+  Gets all review comments for PR #13.
+
+- **Get inline review comments with file context**:
+  ```bash
+  gh api repos/dwojtaszek/zipper/pulls/13/comments --jq '.[] | {path, line, body}'
+  ```
+  Example: Gets inline comments from PR #13 with file paths and line numbers for targeted fixes.
 
 ## Agent-Specific Behavioral Instructions
 
