@@ -134,6 +134,43 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
   ```
   Example: Gets inline comments from PR #13 with file paths and line numbers for targeted fixes.
 
+- **Resolve all unresolved review threads in a PR**:
+  ```bash
+  owner=ORG repo=REPO pr=123
+
+  gh api graphql -f query='
+  query($owner:String!,$repo:String!,$pr:Int!){
+    repository(owner:$owner, name:$repo){
+      pullRequest(number:$pr){
+        reviewThreads(first:100){
+          nodes{ id }
+        }
+      }
+    }
+  }' -F owner="$owner" -F repo="$repo" -F pr="$pr" \
+    --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' \
+  | xargs -I {} gh api graphql -f query='
+  mutation($id:ID!){
+    resolveReviewThread(input:{threadId:$id}) { thread { id isResolved } }
+  }' -F id="{}"
+  ```
+  This powerful command resolves all review threads in a PR using GraphQL. Note: The `states` filter is not available in the GraphQL API, so it resolves all threads. Replace `ORG`, `REPO`, and `123` with actual values.
+
+- **Verify review thread resolution status**:
+  ```bash
+  gh api graphql -f query='
+  query($owner:String!,$repo:String!,$pr:Int!){
+    repository(owner:$owner, name:$repo){
+      pullRequest(number:$pr){
+        reviewThreads(first:100){
+          nodes{ id isResolved }
+        }
+      }
+    }
+  }' -F owner=ORG -F repo=REPO -F pr=123
+  ```
+  Check which review threads are resolved/unresolved in a PR.
+
 ## Agent-Specific Behavioral Instructions
 
 ### Commit Practices
