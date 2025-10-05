@@ -134,42 +134,31 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
   ```
   Example: Gets inline comments from PR #13 with file paths and line numbers for targeted fixes.
 
-- **Resolve all unresolved review threads in a PR**:
+- **Resolve all review threads in a PR (Simple)**:
   ```bash
-  owner=ORG repo=REPO pr=123
+  # Just change these three values
+  owner="dwojtaszek"
+  repo="zipper"
+  pr=123
 
-  gh api graphql -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){
-    repository(owner:$owner, name:$repo){
-      pullRequest(number:$pr){
-        reviewThreads(first:100){
-          nodes{ id }
-        }
-      }
-    }
-  }' -F owner="$owner" -F repo="$repo" -F pr="$pr" \
-    --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' \
-  | xargs -I {} gh api graphql -f query='
-  mutation($id:ID!){
-    resolveReviewThread(input:{threadId:$id}) { thread { id isResolved } }
-  }' -F id="{}"
+  # Get and resolve all review threads
+  gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){reviewThreads(first:100){nodes{id}}}}}' -F owner="$owner" -F repo="$repo" -F pr="$pr" --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' | xargs -I {} gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -F id={}
   ```
-  This powerful command resolves all review threads in a PR using GraphQL. Note: The `states` filter is not available in the GraphQL API, so it resolves all threads. Replace `ORG`, `REPO`, and `123` with actual values.
 
-- **Verify review thread resolution status**:
+- **Quick check review threads status**:
   ```bash
-  gh api graphql -f query='
-  query($owner:String!,$repo:String!,$pr:Int!){
-    repository(owner:$owner, name:$repo){
-      pullRequest(number:$pr){
-        reviewThreads(first:100){
-          nodes{ id isResolved }
-        }
-      }
-    }
-  }' -F owner=ORG -F repo=REPO -F pr=123
+  # Replace values and run
+  owner="dwojtaszek" repo="zipper" pr=123
+  gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){reviewThreads(first:100){nodes{id isResolved}}}}}' -F owner="$owner" -F repo="$repo" -F pr="$pr" --jq '.data.repository.pullRequest.reviewThreads.nodes[]'
   ```
-  Check which review threads are resolved/unresolved in a PR.
+
+- **Simple one-liner for current repo**:
+  ```bash
+  # For dwojtaszek/zipper repo, just change PR number
+  pr=123 && gh api graphql -f query='query($pr:Int!){repository(owner:"dwojtaszek",name:"zipper"){pullRequest(number:$pr){reviewThreads(first:100){nodes{id}}}}}' -F pr=$pr --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' | xargs -I {} gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -F id={}
+  ```
+
+All these commands use the GraphQL API since review threads are only available via GraphQL. Replace the example values with your actual repository owner, repo name, and PR number.
 
 ## Agent-Specific Behavioral Instructions
 
