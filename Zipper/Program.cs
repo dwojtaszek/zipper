@@ -76,7 +76,7 @@ namespace Zipper
                 Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>] [--include-load-file]");
                 return 1;
             }
-            
+
             if (!string.IsNullOrEmpty(targetZipSize) && count is null)
             {
                 Console.Error.WriteLine("Error: --target-zip-size requires --count to be specified.");
