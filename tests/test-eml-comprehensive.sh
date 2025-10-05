@@ -12,7 +12,8 @@ echo
 
 # Set test environment
 TEST_DIR="/tmp/zipper-eml-test-$$"
-ZIPPER_CMD="dotnet run --project Zipper/Zipper.csproj --"
+REPO_ROOT="$(pwd)"
+ZIPPER_CMD="dotnet run --project $REPO_ROOT/Zipper/Zipper.csproj --"
 
 # Clean up function
 cleanup() {
@@ -68,8 +69,8 @@ run_test() {
                 # Count columns in header (first line)
                 HEADER_LINE=$(head -n 1 archive_*.dat)
 
-                # Count columns by counting the field delimiter character 20
-                COLUMN_COUNT=$(echo "$HEADER_LINE" | od -c | grep -o '\ 020' | wc -l)
+                # Count columns by counting the field delimiter character (ASCII 20 = \024 in octal)
+                COLUMN_COUNT=$(echo "$HEADER_LINE" | od -c | grep -o '\ 024' | wc -l)
                 ((COLUMN_COUNT++))  # Add 1 for the first column
 
                 echo "  - Header: $HEADER_LINE"
