@@ -1,7 +1,11 @@
 name: Build and Test
+# Unified workflow replacing separate build.yml and test.yml workflows
 
 on:
   push:
+    branches:
+      - master
+  pull_request:
     branches:
       - master
 
