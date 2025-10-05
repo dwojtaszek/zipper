@@ -49,9 +49,10 @@
 
 - **CLI-First Interface**: Does the proposed feature expose all functionality via the CLI?
 - **Efficient, Stream-Based Processing**: Does the design adhere to stream-based processing without intermediate files?
-- **Rigorous, Integration-Focused Testing**: Are there clear plans for end-to-end testing to verify the final output?
+- **Rigorous, Integration-Focused Testing**: Are there clear plans for end-to-end testing to verify the final output? **CRITICAL**: Do all tests have both .bat and .sh implementations?
 - **Formal Requirements as Source of Truth**: Is the feature traceable to a requirement in `Requirements.md`?
 - **Automated and Consistent Development Workflow**: Does the plan account for CI/CD and versioning conventions?
+- **Cross-Platform Compatibility**: Are all features and tests designed to work on Windows, Linux, and macOS?
 - **Pragmatic Simplicity**: Does the design favor simplicity and avoid premature abstraction?
 
 ## Project Structure

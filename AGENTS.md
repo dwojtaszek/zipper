@@ -59,7 +59,7 @@ Use the provided test scripts in the `/tests` directory:
 - Windows: `run-tests.bat`
 - Linux/macOS: `run-tests.sh`
 
-Tests have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command.
+**CRITICAL CONSTITUTIONAL REQUIREMENT**: Tests have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
 
 ## Versioning
 
@@ -116,6 +116,39 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 - **`test.yml`**: Runs the test suite.
 
 ## Agent-Specific Behavioral Instructions
-- When asked to commit, draft the commit message using the conventional commit format and commit directly without asking for confirmation.
-- When writing tests, ensure they include verification steps to confirm the correctness of the output, not just successful execution.
-- Update README.md and Requirements.md for new features. Keep the documentation in sync with implementation changes.
+
+### Commit Practices
+- When asked to commit, draft the commit message using simple conventional commit format (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`) and commit directly without asking for confirmation.
+- Use descriptive commit messages that clearly indicate what was changed and why.
+
+### Testing Requirements
+- **CRITICAL**: All tests MUST include verification steps to confirm the correctness of the output, not just successful execution.
+- **MANDATORY Dual Platform Testing**: Create both Windows (.bat) and Unix (.sh) versions of every test script.
+- **Test Validation**: Both test versions MUST produce identical validation results and MUST pass on their respective platforms.
+- **No feature is considered complete** until tests pass on both Windows and Linux/macOS environments.
+- **Test Coverage**: Tests must verify actual output (file counts, header content, zip integrity, etc.) not just command execution success.
+
+### Documentation Synchronization
+- **Always update** README.md and Requirements.md after implementing new features or making breaking changes.
+- Keep CLI argument documentation in sync with implementation changes.
+- Update examples in README.md when adding new functionality or changing behavior.
+- Document any new requirements in Requirements.md with proper requirement numbers.
+- **Documentation is the source of truth** - maintain accuracy at all times.
+
+### Error Handling Patterns
+- **CLI Validation Errors**: Exit with code 1 and display helpful usage text with specific error details.
+- **Runtime Errors**: Throw descriptive exceptions with clear error messages and suggested resolutions.
+- **Input Validation**: Validate all required arguments before processing, provide clear error messages for missing or invalid values.
+- **File System Errors**: Handle file/directory creation failures gracefully with informative messages.
+- **Progress Indicators**: Display console progress for long-running operations that exceed 5 seconds.
+
+### Cross-Platform Compliance
+- **Mandatory Testing Requirement**: Every test script MUST have both a Windows batch (.bat) implementation and a Unix shell (.sh) implementation.
+- **Identical Validation**: Both test versions must produce identical validation results.
+- **CI/CD Integration**: Ensure tests pass on both Windows and Linux CI agents before considering any task complete.
+- **Path Handling**: Use appropriate path separators and handling for each platform in test scripts.
+
+### Performance Considerations
+- Stream-based processing is essential for large-scale data generation.
+- Avoid storing intermediate files on disk whenever possible.
+- Memory efficiency should be maintained for handling millions of files.
