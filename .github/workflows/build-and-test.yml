@@ -14,15 +14,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
+      should_skip: ${{ steps.check_commit.outputs.should_skip }}
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Check commit message
+      id: check_commit
+      run: |
+        if [[ $(git log -1 --pretty=format:%s) == *"[skip ci]"* ]]; then
+          echo "should_skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_skip=false" >> $GITHUB_OUTPUT
+        fi
     - name: Set Version
       id: version
+      if: steps.check_commit.outputs.should_skip == 'false'
       run: echo "VERSION=$(cat .version)" >> $GITHUB_OUTPUT
       shell: bash
 
   lint:
     needs: prepare
+    if: needs.prepare.outputs.should_skip == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,6 +56,7 @@ jobs:
 
   build:
     needs: [prepare, lint]
+    if: needs.prepare.outputs.should_skip == 'false'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -109,8 +123,9 @@ jobs:
       run: |
         echo "Build completed for ${{ matrix.platform }}"
 
-  test:
+test:
     needs: build
+    if: needs.prepare.outputs.should_skip == 'false'
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -153,8 +168,7 @@ jobs:
 
   release:
     needs: [prepare, lint, build, test]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: needs.prepare.outputs.should_skip == 'false' && github.ref == 'refs/heads/master'
     permissions:
       contents: write
     steps:
