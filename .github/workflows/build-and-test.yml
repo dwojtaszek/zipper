@@ -52,7 +52,7 @@ jobs:
 
     - name: Set Version
       id: version
-      run: echo "VERSION=$(cat .version | tr -d '[:space:]').${{ github.run_number }}" >> $GITHUB_OUTPUT
+      run: echo "VERSION=$(cat .version | tr -d '[:space:]').$(git rev-list --count HEAD)" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Setup .NET
