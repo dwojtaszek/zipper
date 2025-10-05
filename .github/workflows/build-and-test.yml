@@ -152,7 +152,7 @@ jobs:
       shell: cmd
 
   release:
-    needs: [lint, build, test]
+    needs: [prepare, lint, build, test]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     permissions:
