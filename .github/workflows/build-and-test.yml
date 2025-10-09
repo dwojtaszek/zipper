@@ -12,6 +12,8 @@ on:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
       should_skip: ${{ steps.check_commit.outputs.should_skip }}
