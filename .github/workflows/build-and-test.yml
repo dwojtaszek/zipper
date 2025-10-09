@@ -9,6 +9,9 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -24,8 +27,6 @@ jobs:
   lint:
     needs: prepare
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
@@ -44,8 +45,6 @@ jobs:
   build:
     needs: [prepare, lint]
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
     outputs:
       build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
     strategy:
@@ -112,8 +111,6 @@ jobs:
   test:
     needs: build
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
     strategy:
       matrix:
         include:
