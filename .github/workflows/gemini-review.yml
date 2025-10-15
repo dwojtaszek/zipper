@@ -26,6 +26,9 @@ jobs:
       issues: 'write'
       pull-requests: 'write'
     steps:
+      - name: 'Set Gemini API Key'
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
       - name: 'Mint identity token'
         id: 'mint_identity_token'
         if: |-
