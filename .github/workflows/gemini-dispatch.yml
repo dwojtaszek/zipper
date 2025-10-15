@@ -69,6 +69,9 @@ jobs:
       additional_context: '${{ steps.extract_command.outputs.additional_context }}'
       issue_number: '${{ github.event.pull_request.number || github.event.issue.number }}'
     steps:
+      - name: 'Set Gemini API Key'
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
       - name: 'Mint identity token'
         id: 'mint_identity_token'
         if: |-
@@ -179,6 +182,9 @@ jobs:
       issues: 'write'
       pull-requests: 'write'
     steps:
+      - name: 'Set Gemini API Key'
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
       - name: 'Mint identity token'
         id: 'mint_identity_token'
         if: |-
