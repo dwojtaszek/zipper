@@ -139,6 +139,7 @@ jobs:
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
+    continue-on-error: true
 
   triage:
     needs: 'dispatch'
@@ -153,6 +154,7 @@ jobs:
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
+    continue-on-error: true
 
   invoke:
     needs: 'dispatch'
@@ -167,6 +169,7 @@ jobs:
     with:
       additional_context: '${{ needs.dispatch.outputs.additional_context }}'
     secrets: 'inherit'
+    continue-on-error: true
 
   fallthrough:
     needs:
