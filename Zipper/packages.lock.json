@@ -16,33 +16,33 @@
       },
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[9.0.9, )",
-        "resolved": "9.0.9",
-        "contentHash": "5D+YO1AmHOPmslqlt+QT4zkR9vQRt46OXHRihqN1v0PLKeFe7KO1YuCJeUE4uNiPGJi0T1Y2fC9GHqhwvfkHDA=="
+        "requested": "[9.0.10, )",
+        "resolved": "9.0.10",
+        "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
       }
     },
     "net8.0/linux-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[9.0.9, )",
-        "resolved": "9.0.9",
-        "contentHash": "5D+YO1AmHOPmslqlt+QT4zkR9vQRt46OXHRihqN1v0PLKeFe7KO1YuCJeUE4uNiPGJi0T1Y2fC9GHqhwvfkHDA=="
+        "requested": "[9.0.10, )",
+        "resolved": "9.0.10",
+        "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
       }
     },
     "net8.0/osx-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[9.0.9, )",
-        "resolved": "9.0.9",
-        "contentHash": "5D+YO1AmHOPmslqlt+QT4zkR9vQRt46OXHRihqN1v0PLKeFe7KO1YuCJeUE4uNiPGJi0T1Y2fC9GHqhwvfkHDA=="
+        "requested": "[9.0.10, )",
+        "resolved": "9.0.10",
+        "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
       }
     },
     "net8.0/win-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[9.0.9, )",
-        "resolved": "9.0.9",
-        "contentHash": "5D+YO1AmHOPmslqlt+QT4zkR9vQRt46OXHRihqN1v0PLKeFe7KO1YuCJeUE4uNiPGJi0T1Y2fC9GHqhwvfkHDA=="
+        "requested": "[9.0.10, )",
+        "resolved": "9.0.10",
+        "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
       }
     }
   }
