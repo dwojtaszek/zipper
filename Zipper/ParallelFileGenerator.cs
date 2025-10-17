@@ -18,6 +18,7 @@ namespace Zipper
     public class ParallelFileGenerator : IDisposable
     {
         private readonly MemoryPoolManager _memoryPoolManager;
+        private readonly PerformanceMonitor _performanceMonitor = new PerformanceMonitor();
 
         public ParallelFileGenerator()
         {
@@ -26,61 +27,68 @@ namespace Zipper
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
-            var startTime = DateTime.UtcNow;
+            _performanceMonitor.Start(request.FileCount);
 
-            // Validate inputs
-            if (request.FileCount <= 0)
-                throw new ArgumentException("File count must be positive", nameof(request.FileCount));
-
-            if (request.Concurrency <= 0)
-                request.Concurrency = PerformanceConstants.DefaultConcurrency;
-
-            Directory.CreateDirectory(request.OutputPath);
-
-            var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
-            var zipFilePath = Path.Combine(request.OutputPath, $"{baseFileName}.zip");
-            var loadFileName = $"{baseFileName}.dat";
-            var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
-
-            var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
-            if (placeholderContent.Length == 0)
-                throw new InvalidOperationException($"Unknown file type: {request.FileType}");
-
-            long paddingPerFile = 0;
-            if (request.TargetZipSize.HasValue)
+            try
             {
-                paddingPerFile = CalculatePaddingPerFile(request.TargetZipSize.Value, placeholderContent.Length, request.FileCount, request.WithText);
+                // Validate inputs
+                if (request.FileCount <= 0)
+                    throw new ArgumentException("File count must be positive", nameof(request.FileCount));
+
+                if (request.Concurrency <= 0)
+                    request.Concurrency = PerformanceConstants.DefaultConcurrency;
+
+                Directory.CreateDirectory(request.OutputPath);
+
+                var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
+                var zipFilePath = Path.Combine(request.OutputPath, $"{baseFileName}.zip");
+                var loadFileName = $"{baseFileName}.dat";
+                var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
+
+                var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
+                if (placeholderContent.Length == 0)
+                    throw new InvalidOperationException($"Unknown file type: {request.FileType}");
+
+                long paddingPerFile = 0;
+                if (request.TargetZipSize.HasValue)
+                {
+                    paddingPerFile = CalculatePaddingPerFile(request.TargetZipSize.Value, placeholderContent.Length, request.FileCount, request.WithText);
+                }
+
+                // Create channels for work distribution
+                var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution);
+                var resultChannel = Channel.CreateUnbounded<FileData>();
+
+                // Generate files in parallel
+                using var semaphore = new SemaphoreSlim(request.Concurrency);
+                var tasks = Enumerable.Range(0, request.Concurrency)
+                    .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer));
+
+                var fileGenerationTasks = Task.WhenAll(tasks);
+
+                // Wait for all file generation to complete
+                await fileGenerationTasks;
+                resultChannel.Writer.Complete();
+
+                // Process results and write to archive
+                await WriteArchiveAsync(zipFilePath, loadFileName, request, resultChannel.Reader);
+
+                var performanceMetrics = _performanceMonitor.Stop();
+                Console.WriteLine(); // New line after progress
+
+                return new FileGenerationResult
+                {
+                    ZipFilePath = zipFilePath,
+                    LoadFilePath = loadFilePath,
+                    FilesGenerated = request.FileCount,
+                    GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
+                    FilesPerSecond = performanceMetrics.FilesPerSecond
+                };
             }
-
-            // Create channels for work distribution
-            var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution);
-            var resultChannel = Channel.CreateUnbounded<FileData>();
-
-            // Generate files in parallel
-            using var semaphore = new SemaphoreSlim(request.Concurrency);
-            var tasks = Enumerable.Range(0, request.Concurrency)
-                .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer));
-
-            var fileGenerationTasks = Task.WhenAll(tasks);
-
-            // Wait for all file generation to complete
-            await fileGenerationTasks;
-            resultChannel.Writer.Complete();
-
-            // Process results and write to archive
-            await WriteArchiveAsync(zipFilePath, loadFileName, request, resultChannel.Reader);
-
-            var generationTime = DateTime.UtcNow - startTime;
-            var rate = generationTime.TotalSeconds > 0 ? request.FileCount / generationTime.TotalSeconds : 0;
-
-            return new FileGenerationResult
+            finally
             {
-                ZipFilePath = zipFilePath,
-                LoadFilePath = loadFilePath,
-                FilesGenerated = request.FileCount,
-                GenerationTime = generationTime,
-                FilesPerSecond = rate
-            };
+                _performanceMonitor.Stop();
+            }
         }
 
         private Channel<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution)
@@ -110,6 +118,8 @@ namespace Zipper
 
         private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer)
         {
+            long filesProcessed = 0;
+
             await foreach (var workItem in reader.ReadAllAsync())
             {
                 await semaphore.WaitAsync();
@@ -117,11 +127,23 @@ namespace Zipper
                 {
                     var fileData = GenerateFileData(workItem, placeholderContent, paddingPerFile);
                     await writer.WriteAsync(fileData);
+
+                    filesProcessed++;
+                    if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
+                    {
+                        _performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
+                    }
                 }
                 finally
                 {
                     semaphore.Release();
                 }
+            }
+
+            // Report any remaining files
+            if (filesProcessed % PerformanceConstants.ProgressBatchSize != 0)
+            {
+                _performanceMonitor.ReportFilesCompleted(filesProcessed % PerformanceConstants.ProgressBatchSize);
             }
         }
 
