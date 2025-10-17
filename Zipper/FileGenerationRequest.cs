@@ -12,6 +12,8 @@ namespace Zipper
         public long? TargetZipSize { get; set; }
         public bool IncludeLoadFile { get; set; }
         public DistributionType Distribution { get; set; } = DistributionType.Proportional;
+        public string Encoding { get; set; } = "UTF-8";
+        public int AttachmentRate { get; set; } = 0;
     }
 
     public class FileGenerationResult

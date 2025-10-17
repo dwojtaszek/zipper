@@ -56,7 +56,7 @@ namespace Zipper
                 }
 
                 // Create channels for work distribution
-                var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution);
+                var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
                 var resultChannel = Channel.CreateUnbounded<FileData>();
 
                 // Generate files in parallel
@@ -71,7 +71,7 @@ namespace Zipper
                 resultChannel.Writer.Complete();
 
                 // Process results and write to archive
-                await WriteArchiveAsync(zipFilePath, loadFileName, request, resultChannel.Reader);
+                await WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
 
                 var performanceMetrics = _performanceMonitor.Stop();
                 Console.WriteLine(); // New line after progress
@@ -91,7 +91,7 @@ namespace Zipper
             }
         }
 
-        private Channel<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution)
+        private Channel<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType)
         {
             var channel = Channel.CreateUnbounded<FileWorkItem>();
 
@@ -99,7 +99,7 @@ namespace Zipper
             {
                 var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
                 var folderName = $"folder_{folderNumber:D3}";
-                var fileName = $"{i:D8}.pdf"; // Assuming PDF for now
+                var fileName = $"{i:D8}.{fileType}";
                 var filePathInZip = $"{folderName}/{fileName}";
 
                 channel.Writer.WriteAsync(new FileWorkItem
@@ -185,7 +185,7 @@ namespace Zipper
             };
         }
 
-        private async Task WriteArchiveAsync(string zipFilePath, string loadFileName, FileGenerationRequest request, ChannelReader<FileData> resultReader)
+        private async Task WriteArchiveAsync(string zipFilePath, string loadFileName, string loadFilePath, FileGenerationRequest request, ChannelReader<FileData> resultReader)
         {
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
@@ -193,29 +193,84 @@ namespace Zipper
             // Process generated files and write to archive
             await foreach (var fileData in resultReader.ReadAllAsync())
             {
+                // Write main file
                 var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
-                using var entryStream = entry.Open();
-                await entryStream.WriteAsync(fileData.Data);
+                using (var entryStream = entry.Open())
+                {
+                    await entryStream.WriteAsync(fileData.Data);
+                }
+
+                // Write extracted text file if requested
+                if (request.WithText)
+                {
+                    var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
+                    var textFilePathInZip = $"{fileData.WorkItem.FolderName}/{textFileName}";
+                    var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
+                    using (var textEntryStream = textEntry.Open())
+                    {
+                        var textContent = GetExtractedTextContent(request.FileType);
+                        await textEntryStream.WriteAsync(textContent);
+                    }
+                }
 
                 fileData.MemoryOwner?.Dispose();
             }
 
             // Write load file
-            await WriteLoadFileAsync(archive, loadFileName, request);
+            if (request.IncludeLoadFile)
+            {
+                await WriteLoadFileToArchiveAsync(archive, loadFileName, request);
+            }
+            else
+            {
+                await WriteLoadFileToDiskAsync(loadFilePath, request);
+            }
         }
 
-        private async Task WriteLoadFileAsync(ZipArchive archive, string loadFileName, FileGenerationRequest request)
+        private async Task WriteLoadFileToArchiveAsync(ZipArchive archive, string loadFileName, FileGenerationRequest request)
         {
             var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
             using var loadFileStream = loadFileEntry.Open();
             using var writer = new StreamWriter(loadFileStream, Encoding.UTF8);
 
+            await WriteLoadFileContent(writer, request);
+        }
+
+        private async Task WriteLoadFileToDiskAsync(string loadFilePath, FileGenerationRequest request)
+        {
+            using var fileStream = new FileStream(loadFilePath, FileMode.Create);
+            using var writer = new StreamWriter(fileStream, GetEncoding(request.Encoding));
+
+            await WriteLoadFileContent(writer, request);
+        }
+
+        private async Task WriteLoadFileContent(StreamWriter writer, FileGenerationRequest request)
+        {
             const char colDelim = (char)20;
             const char quote = (char)254;
 
-            var header = $"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}";
-            await writer.WriteLineAsync(header);
+            // Build header based on options
+            var headerBuilder = new System.Text.StringBuilder();
+            headerBuilder.Append($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
 
+            if (request.WithMetadata || request.FileType.ToLower() == "eml")
+            {
+                headerBuilder.Append($"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}");
+            }
+
+            if (request.FileType.ToLower() == "eml")
+            {
+                headerBuilder.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
+            }
+
+            if (request.WithText)
+            {
+                headerBuilder.Append($"{colDelim}{quote}Extracted Text{quote}");
+            }
+
+            await writer.WriteLineAsync(headerBuilder.ToString());
+
+            // Write file records
             for (long i = 1; i <= request.FileCount; i++)
             {
                 var folderNumber = FileDistributionHelper.GetFolderNumber(i, request.FileCount, request.Folders, request.Distribution);
@@ -224,9 +279,61 @@ namespace Zipper
                 var filePathInZip = $"{folderName}/{fileName}";
                 var docId = $"DOC{i:D8}";
 
-                var line = $"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}";
-                await writer.WriteLineAsync(line);
+                var lineBuilder = new System.Text.StringBuilder();
+                lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}");
+
+                if (request.WithMetadata || request.FileType.ToLower() == "eml")
+                {
+                    var custodian = $"Custodian {folderNumber}";
+                    var dateSent = DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
+                    var author = $"Author {Random.Shared.Next(1, 100):D3}";
+                    var fileSize = 1024 + Random.Shared.Next(0, 2048); // Simulated file size
+
+                    lineBuilder.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
+                }
+
+                if (request.FileType.ToLower() == "eml")
+                {
+                    var to = $"recipient{i}@example.com";
+                    var from = $"sender{i}@example.com";
+                    var subject = $"Email Subject {i}";
+                    var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+                    var hasAttachment = Random.Shared.NextDouble() < (request.AttachmentRate / 100.0);
+                    var attachment = hasAttachment ? $"attachment{i:D8}.pdf" : "";
+
+                    lineBuilder.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
+                }
+
+                if (request.WithText)
+                {
+                    var textFilePath = filePathInZip.Replace($".{request.FileType}", ".txt");
+                    lineBuilder.Append($"{colDelim}{quote}{textFilePath}{quote}");
+                }
+
+                await writer.WriteLineAsync(lineBuilder.ToString());
             }
+        }
+
+        private Encoding GetEncoding(string encodingName)
+        {
+            return encodingName?.ToUpperInvariant() switch
+            {
+                "UTF-8" => new UTF8Encoding(false),
+                "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252) ?? new UTF8Encoding(false),
+                "UTF-16" => new UnicodeEncoding(false, false),
+                "UNICODE" => new UnicodeEncoding(false, false), // Handle .NET's EncodingName for UTF-16
+                "WESTERN EUROPEAN (WINDOWS)" => CodePagesEncodingProvider.Instance.GetEncoding(1252) ?? new UTF8Encoding(false), // Handle .NET's EncodingName for ANSI
+                _ => new UTF8Encoding(false)
+            };
+        }
+
+        private byte[] GetExtractedTextContent(string fileType)
+        {
+            return fileType.ToLower() switch
+            {
+                "eml" => PlaceholderFiles.EmlExtractedText,
+                _ => PlaceholderFiles.ExtractedText
+            };
         }
 
         private long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)

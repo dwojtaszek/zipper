@@ -75,7 +75,7 @@ namespace Zipper
             Console.WriteLine();
         }
 
-        private static async Task BenchmarkMemoryPooling()
+        private static Task BenchmarkMemoryPooling()
         {
             Console.WriteLine("2. Memory Pool Performance");
             Console.WriteLine("===========================");
@@ -133,6 +133,8 @@ namespace Zipper
             Console.WriteLine($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
 
             Console.WriteLine();
+
+            return Task.CompletedTask;
         }
 
         private static async Task BenchmarkScalability()

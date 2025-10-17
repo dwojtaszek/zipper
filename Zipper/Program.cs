@@ -127,7 +127,7 @@ namespace Zipper
             }
             else
             {
-                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile);
+                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile, attachmentRate);
             }
             return 0;
         }
@@ -182,7 +182,7 @@ namespace Zipper
             };
         }
 
-        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile)
+        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile, int attachmentRate = 0)
         {
             Console.WriteLine("Starting parallel file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", fileType));
@@ -212,7 +212,9 @@ namespace Zipper
                     WithText = withText,
                     TargetZipSize = targetZipSize,
                     IncludeLoadFile = includeLoadFile,
-                    Distribution = distributionType
+                    Distribution = distributionType,
+                    Encoding = encoding.EncodingName,
+                    AttachmentRate = attachmentRate
                 };
 
                 var result = await generator.GenerateFilesAsync(request);

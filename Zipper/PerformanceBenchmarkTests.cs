@@ -58,7 +58,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task MemoryPool_ShouldReduceMemoryAllocations()
+        public void MemoryPool_ShouldReduceMemoryAllocations()
         {
             // Arrange
             const int iterations = 100;
@@ -220,7 +220,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task PerformanceMonitor_ShouldHaveMinimalOverhead()
+        public void PerformanceMonitor_ShouldHaveMinimalOverhead()
         {
             // Arrange
             const int iterations = 10000;
