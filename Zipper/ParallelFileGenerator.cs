@@ -15,7 +15,7 @@ namespace Zipper
     /// <summary>
     /// Generates files in parallel with controlled concurrency and memory pooling
     /// </summary>
-    public class ParallelFileGenerator
+    public class ParallelFileGenerator : IDisposable
     {
         private readonly MemoryPoolManager _memoryPoolManager;
 
