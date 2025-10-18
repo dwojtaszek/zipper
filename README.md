@@ -197,4 +197,4 @@ To run the tests, execute the appropriate script for your operating system:
 The project includes scripts to set up a pre-commit hook that will run the test suite automatically before each commit. To set up the hook, run the appropriate script for your operating system:
 
 -   **Windows**: `setup-hook.bat`
--   **macOS and Linux**: `setup-hook.sh`
+-   **macOS and Linux**: `setup-hook.sh`# Updated: Sat Oct 18 02:11:42 PM CEST 2025
