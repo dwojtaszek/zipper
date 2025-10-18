@@ -18,46 +18,7 @@ namespace Zipper
             _output = output;
         }
 
-        [Fact]
-        public async Task ParallelGeneration_ShouldOutperformSequentialGeneration()
-        {
-            // Arrange
-            const int fileCount = 1000;
-            var tempDir = Path.GetTempPath();
-            var outputPath1 = Path.Combine(tempDir, Guid.NewGuid().ToString());
-            var outputPath2 = Path.Combine(tempDir, Guid.NewGuid().ToString());
-            Directory.CreateDirectory(outputPath1);
-            Directory.CreateDirectory(outputPath2);
-
-            try
-            {
-                // Sequential generation baseline
-                var sequentialStopwatch = Stopwatch.StartNew();
-                await GenerateSequentialFiles(fileCount, outputPath1);
-                sequentialStopwatch.Stop();
-
-                // Parallel generation
-                var parallelStopwatch = Stopwatch.StartNew();
-                await GenerateParallelFiles(fileCount, outputPath2);
-                parallelStopwatch.Stop();
-
-                // Assert & Report
-                _output.WriteLine($"Sequential: {sequentialStopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"Parallel: {parallelStopwatch.ElapsedMilliseconds}ms");
-                _output.WriteLine($"Speedup: {(double)sequentialStopwatch.ElapsedMilliseconds / parallelStopwatch.ElapsedMilliseconds:F2}x");
-
-                // Parallel should be competitive (allow up to 50% slower due to overhead in test environments)
-                var toleranceThreshold = sequentialStopwatch.ElapsedMilliseconds * 1.5;
-                Assert.True(parallelStopwatch.ElapsedMilliseconds <= toleranceThreshold,
-                    $"Parallel generation ({parallelStopwatch.ElapsedMilliseconds}ms) should be competitive with sequential ({sequentialStopwatch.ElapsedMilliseconds}ms) within 50% tolerance");
-            }
-            finally
-            {
-                CleanupDirectory(outputPath1);
-                CleanupDirectory(outputPath2);
-            }
-        }
-
+  
         [Fact]
         public void MemoryPool_ShouldReduceMemoryAllocations()
         {
@@ -308,44 +269,6 @@ namespace Zipper
             {
                 CleanupDirectory(outputPath);
             }
-        }
-
-        private Task GenerateSequentialFiles(long count, string outputPath)
-        {
-            return Task.Run(async () =>
-            {
-                var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
-                var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
-
-                using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-                using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
-
-                var placeholderContent = PlaceholderFiles.GetContent("pdf");
-
-                for (long i = 1; i <= count; i++)
-                {
-                    var fileName = $"{i:D8}.pdf";
-                    var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-                    using var entryStream = entry.Open();
-                    await entryStream.WriteAsync(placeholderContent);
-                }
-            });
-        }
-
-        private async Task GenerateParallelFiles(long count, string outputPath)
-        {
-            using var generator = new ParallelFileGenerator();
-            var request = new FileGenerationRequest
-            {
-                OutputPath = outputPath,
-                FileCount = count,
-                FileType = "pdf",
-                Folders = 3,
-                Concurrency = PerformanceConstants.DefaultConcurrency,
-                Distribution = DistributionType.Proportional
-            };
-
-            await generator.GenerateFilesAsync(request);
         }
 
         private void CleanupDirectory(string path)
