@@ -181,6 +181,12 @@ if errorlevel 1 exit /b 1
 call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true"
 call :print_success "Test Case 13 passed."
 
+REM Test Case 14: Target zip size
+call :print_info "Running Test Case 14: Target zip size"
+dotnet run --project "%PROJECT%" -- --type pdf --count 100 --output-path "%TEST_OUTPUT_DIR%\pdf_target_size" --target-zip-size 1MB
+if errorlevel 1 exit /b 1
+call :print_success "Test Case 14 passed."
+
 REM --- Cleanup ---
 
 call :print_info "Cleaning up test output..."

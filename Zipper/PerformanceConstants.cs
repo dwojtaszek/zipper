@@ -8,9 +8,9 @@ namespace Zipper
         public static readonly int DefaultConcurrency = Environment.ProcessorCount;
 
         /// <summary>
-        /// Default buffer size for I/O operations (8KB)
+        /// Default buffer size for I/O operations (64KB)
         /// </summary>
-        public static readonly int DefaultBufferSize = 81920;
+        public static readonly int DefaultBufferSize = 65536;
 
         /// <summary>
         /// Maximum memory pool size (100MB)

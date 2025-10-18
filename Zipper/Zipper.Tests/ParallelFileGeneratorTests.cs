@@ -31,7 +31,7 @@ namespace Zipper
 
                 // Verify zip contains correct number of files
                 using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
-                Assert.Equal(10, archive.Entries.Count - 1); // -1 for load file
+                Assert.Equal(10, archive.Entries.Count); // Count should match requested files
             }
             finally
             {
