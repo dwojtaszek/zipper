@@ -193,11 +193,17 @@ namespace Zipper
             {
                 var stopwatch = Stopwatch.StartNew();
 
-                await using var fileStream = new FileStream(testFile, FileMode.Create);
+                using var fileStream = new FileStream(testFile, FileMode.Create);
                 await using var writer = new BufferedStreamWriter(fileStream);
                 await writer.WriteAsync(data);
 
+                // Force disposal by ending the using block
+                await writer.FlushAsync();
+
                 stopwatch.Stop();
+
+                // Add small delay to ensure file handles are released (Windows file locking)
+                await Task.Delay(100);
 
                 // Verify file was written correctly
                 Assert.True(File.Exists(testFile));
