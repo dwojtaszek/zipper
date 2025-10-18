@@ -145,6 +145,9 @@ jobs:
     - name: Restore test dependencies
       run: dotnet restore Zipper/Zipper.Tests/Zipper.Tests.csproj
 
+    - name: Build test project
+      run: dotnet build Zipper/Zipper.Tests/Zipper.Tests.csproj -c Debug
+
     - name: Run unit tests
       run: dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
 
