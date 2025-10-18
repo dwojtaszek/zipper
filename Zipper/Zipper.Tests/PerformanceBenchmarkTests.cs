@@ -210,7 +210,13 @@ namespace Zipper
                 Assert.Equal(dataSize, new FileInfo(testFile).Length);
 
                 // Verify content integrity
-                var writtenData = await File.ReadAllBytesAsync(testFile);
+                byte[] writtenData;
+                using (var readStream = new FileStream(testFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    using var memoryStream = new MemoryStream();
+                    await readStream.CopyToAsync(memoryStream);
+                    writtenData = memoryStream.ToArray();
+                }
                 Assert.Equal(data, writtenData);
 
                 _output.WriteLine($"Buffered write: {dataSize:N0} bytes in {stopwatch.ElapsedMilliseconds}ms");
