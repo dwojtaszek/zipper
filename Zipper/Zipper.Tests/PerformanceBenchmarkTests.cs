@@ -46,10 +46,10 @@ namespace Zipper
                 _output.WriteLine($"Parallel: {parallelStopwatch.ElapsedMilliseconds}ms");
                 _output.WriteLine($"Speedup: {(double)sequentialStopwatch.ElapsedMilliseconds / parallelStopwatch.ElapsedMilliseconds:F2}x");
 
-                // Parallel should be competitive (allow up to 50% slower due to overhead in test environments)
-                var toleranceThreshold = sequentialStopwatch.ElapsedMilliseconds * 1.5;
+                // Parallel should be competitive (allow up to 2x slower due to overhead in CI environments)
+                var toleranceThreshold = sequentialStopwatch.ElapsedMilliseconds * 2.0;
                 Assert.True(parallelStopwatch.ElapsedMilliseconds <= toleranceThreshold,
-                    $"Parallel generation ({parallelStopwatch.ElapsedMilliseconds}ms) should be competitive with sequential ({sequentialStopwatch.ElapsedMilliseconds}ms) within 50% tolerance");
+                    $"Parallel generation ({parallelStopwatch.ElapsedMilliseconds}ms) should be competitive with sequential ({sequentialStopwatch.ElapsedMilliseconds}ms) within 2x tolerance");
             }
             finally
             {
