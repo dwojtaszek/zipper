@@ -72,6 +72,9 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **Interface**: Command-line application.
 - **Dependencies**: `System.Text.Encoding.CodePages`.
 - **Performance**: The application must be designed to stream data directly to the archive without storing intermediate files on disk, minimizing memory and disk space usage.
+- **Parallel Processing**: The application must support parallel file generation with configurable worker pools to optimize performance on multi-core systems.
+- **Memory Management**: The application must implement object pooling and buffered I/O to reduce garbage collection pressure and improve throughput.
+- **Performance Monitoring**: The application must provide real-time progress tracking, performance metrics, and ETA calculations during file generation.
 
 ## 4. Command-Line Arguments
 

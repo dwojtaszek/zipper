@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 
 namespace Zipper
 {
-    class Program
+    public class Program
     {
-        static async Task<int> Main(string[] args)
+        public static async Task<int> Main(string[] args)
         {
             var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
@@ -127,7 +127,7 @@ namespace Zipper
             }
             else
             {
-                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile);
+                await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile, attachmentRate);
             }
             return 0;
         }
@@ -182,9 +182,9 @@ namespace Zipper
             };
         }
 
-        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile)
+        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile, int attachmentRate = 0)
         {
-            Console.WriteLine("Starting file generation...");
+            Console.WriteLine("Starting parallel file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", fileType));
             Console.WriteLine(string.Format("  Count: {0:N0}", count));
             Console.WriteLine(string.Format("  Output Path: {0}", outputDir.FullName));
@@ -196,144 +196,41 @@ namespace Zipper
             if (targetZipSize.HasValue) Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", targetZipSize.Value / (1024 * 1024)));
             if (includeLoadFile) Console.WriteLine("  Load File: Will be included in the zip archive.");
 
-            var lowerFileType = fileType.ToLower();
-
-            outputDir.Create();
-
-            var baseFileName = string.Format("archive_{0:yyyyMMdd_HHmmss}", DateTime.Now);
-            var zipFilePath = Path.Combine(outputDir.FullName, string.Format("{0}.zip", baseFileName));
-            var loadFileName = string.Format("{0}.dat", baseFileName);
-            var loadFilePath = Path.Combine(outputDir.FullName, loadFileName);
-
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
-            var placeholderContent = PlaceholderFiles.GetContent(lowerFileType);
-            if (placeholderContent.Length == 0)
-            {
-                Console.Error.WriteLine("Error: Could not retrieve placeholder content.");
-                return;
-            }
-
-            long paddingPerFile = 0;
-            if (targetZipSize.HasValue)
-            {
-                long estimatedBaseSize = EstimateCompressedSize(placeholderContent, count, withText);
-                if (estimatedBaseSize >= targetZipSize.Value)
-                {
-                    Console.Error.WriteLine(string.Format("Error: Estimated minimum size ({0} MB) already exceeds the target size ({1} MB).", estimatedBaseSize / (1024 * 1024), targetZipSize.Value / (1024 * 1024)));
-                    return;
-                }
-                paddingPerFile = (targetZipSize.Value - estimatedBaseSize) / count;
-            }
-
             try
             {
-                using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-                using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+                // Use parallel file generator for improved performance
+                using var generator = new ParallelFileGenerator();
 
-                MemoryStream? loadFileMemoryStream = null;
-                StreamWriter loadFileWriter;
-
-                if (includeLoadFile)
+                var request = new FileGenerationRequest
                 {
-                    loadFileMemoryStream = new MemoryStream();
-                    loadFileWriter = new StreamWriter(loadFileMemoryStream, encoding, -1, true);
-                }
-                else
+                    OutputPath = outputDir.FullName,
+                    FileCount = count,
+                    FileType = fileType.ToLower(),
+                    Folders = numFolders,
+                    Concurrency = PerformanceConstants.DefaultConcurrency,
+                    WithMetadata = withMetadata,
+                    WithText = withText,
+                    TargetZipSize = targetZipSize,
+                    IncludeLoadFile = includeLoadFile,
+                    Distribution = distributionType,
+                    Encoding = encoding.EncodingName,
+                    AttachmentRate = attachmentRate
+                };
+
+                var result = await generator.GenerateFilesAsync(request);
+
+                Console.WriteLine(string.Format("\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
+                Console.WriteLine(string.Format("  Archive created: {0}", result.ZipFilePath));
+                Console.WriteLine(string.Format("  Performance: {0:F1} files/second", result.FilesPerSecond));
+                if (!includeLoadFile)
                 {
-                    loadFileWriter = new StreamWriter(loadFilePath, false, encoding);
-                }
-
-                using (loadFileWriter)
-                {
-                    const char colDelim = (char)20; // TODO: Use a named constant
-                    const char quote = (char)254;    // TODO: Use a named constant
-
-                    var header = string.Format("{0}Control Number{0}{1}{0}File Path{0}", quote, colDelim);
-                    if (withMetadata)
-                    {
-                        header += string.Format("{1}{0}Custodian{0}{1}{0}Date Sent{0}{1}{0}Author{0}{1}{0}File Size{0}", quote, colDelim);
-                    }
-                    if (withText)
-                    {
-                        header += string.Format("{1}{0}Extracted Text{0}", quote, colDelim);
-                    }
-                    await loadFileWriter.WriteLineAsync(header);
-
-                    for (long i = 1; i <= count; i++)
-                    {
-                        var folderNumber = FileDistributionHelper.GetFolderNumber(i, count, numFolders, distributionType);
-                        var folderName = string.Format("folder_{0:D3}", folderNumber);
-
-                        var docId = string.Format("DOC{0:D8}", i);
-                        var fileName = string.Format("{0:D8}.{1}", i, lowerFileType);
-                        var filePathInZip = string.Format("{0}/{1}", folderName, fileName);
-
-                        var entry = archive.CreateEntry(filePathInZip, CompressionLevel.Optimal);
-                        using (var entryStream = entry.Open())
-                        {
-                            await entryStream.WriteAsync(placeholderContent, 0, placeholderContent.Length);
-                            if (paddingPerFile > 0)
-                            {
-                                var padding = new byte[paddingPerFile];
-                                RandomNumberGenerator.Fill(padding);
-                                await entryStream.WriteAsync(padding, 0, padding.Length);
-                            }
-                        }
-
-                        var line = string.Format("{0}{1}{0}{2}{0}{3}{0}", quote, docId, colDelim, filePathInZip);
-                        if (withMetadata)
-                        {
-                            var custodian = numFolders > 1 ? string.Format("Custodian {0}", folderNumber) : "Custodian 1";
-                            var dateSent = GetRandomDate(DateTime.Now.AddYears(-5), DateTime.Now).ToString("yyyy-MM-dd");
-                            var author = GetRandomAuthor();
-                            var fileSize = placeholderContent.Length + paddingPerFile;
-                            line += string.Format("{5}{0}{1}{0}{5}{0}{2}{0}{5}{0}{3}{0}{5}{0}{4}{0}", quote, custodian, dateSent, author, fileSize, colDelim);
-                        }
-
-                        if (withText)
-                        {
-                            var textFileName = string.Format("{0:D8}.txt", i);
-                            var textFilePathInZip = string.Format("{0}/{1}", folderName, textFileName);
-                            var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
-                            using (var entryStream = textEntry.Open())
-                            {
-                                await entryStream.WriteAsync(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
-                            }
-                            line += string.Format("{1}{0}{2}{0}", quote, colDelim, textFilePathInZip);
-                        }
-
-                        await loadFileWriter.WriteLineAsync(line);
-
-                        if (i % 1000 == 0)
-                        {
-                            Console.Write(string.Format("\rProgress: {0:N0} / {1:N0} files created...", i, count));
-                        }
-                    }
-                }
-
-                if (includeLoadFile && loadFileMemoryStream != null)
-                {
-                    loadFileMemoryStream.Seek(0, SeekOrigin.Begin);
-                    var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
-                    using (var entryStream = loadFileEntry.Open())
-                    {
-                        await loadFileMemoryStream.CopyToAsync(entryStream);
-                    }
-                    loadFileMemoryStream.Dispose();
+                    Console.WriteLine(string.Format("  Load file created: {0}", result.LoadFilePath));
                 }
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(string.Format("\nAn error occurred: {0}", ex.Message));
                 return;
-            }
-
-            Console.WriteLine(string.Format("\n\nGeneration complete."));
-            Console.WriteLine(string.Format("  Archive created: {0}", zipFilePath));
-            if (!includeLoadFile)
-            {
-                Console.WriteLine(string.Format("  Load file created: {0}", loadFilePath));
             }
         }
 
