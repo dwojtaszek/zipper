@@ -55,11 +55,28 @@ dotnet run --project Zipper/Zipper.csproj -- --type pdf --count 1000 --output-pa
 ```
 
 ### Testing
-Use the provided test scripts in the `/tests` directory:
-- Windows: `run-tests.bat`
-- Linux/macOS: `run-tests.sh`
 
-**CRITICAL CONSTITUTIONAL REQUIREMENT**: Tests have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
+There are two primary types of tests in this project: Unit Tests and End-to-End (E2E) Tests.
+
+#### Unit Tests
+Unit tests are designed to test individual components and classes in isolation. They are fast and are located in the `Zipper.Tests` project.
+
+To run all unit tests, execute the following command from the root of the repository:
+```bash
+dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj
+```
+
+#### End-to-End (E2E) Tests
+E2E tests run the compiled command-line application with various arguments and verify the entire workflow, from input to the final generated output (`.zip` and `.dat` files). These are located in the `/tests` directory.
+
+- **Windows**: `run-tests.bat`
+- **Linux/macOS**: `run-tests.sh`
+
+A more comprehensive EML-specific test suite is also available:
+- **Windows**: `tests/test-eml-comprehensive.bat`
+- **Linux/macOS**: `tests/test-eml-comprehensive.sh`
+
+**CRITICAL CONSTITUTIONAL REQUIREMENT**: All tests (Unit and E2E) have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW E2E TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
 
 ## Versioning
 

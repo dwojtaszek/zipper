@@ -46,7 +46,7 @@ namespace Zipper
                 var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
 
                 var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
-                if (placeholderContent.Length == 0)
+                if (placeholderContent.Length == 0 && request.FileType.ToLower() != "eml")
                     throw new InvalidOperationException($"Unknown file type: {request.FileType}");
 
                 long paddingPerFile = 0;
@@ -68,7 +68,7 @@ namespace Zipper
                 // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer));
+                    .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
 
                 // Wait for all producers to complete
                 await Task.WhenAll(producerTasks);
@@ -122,7 +122,7 @@ namespace Zipper
             return channel;
         }
 
-        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer)
+        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request)
         {
             long filesProcessed = 0;
 
@@ -131,7 +131,7 @@ namespace Zipper
                 await semaphore.WaitAsync();
                 try
                 {
-                    var fileData = GenerateFileData(workItem, placeholderContent, paddingPerFile);
+                    var fileData = GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
                     await writer.WriteAsync(fileData);
 
                     filesProcessed++;
@@ -153,33 +153,54 @@ namespace Zipper
             }
         }
 
-        private FileData GenerateFileData(FileWorkItem workItem, byte[] placeholderContent, long paddingPerFile)
+        private FileData GenerateFileData(FileWorkItem workItem, byte[] placeholderContent, long paddingPerFile, FileGenerationRequest request)
         {
-            var totalSize = placeholderContent.Length + paddingPerFile;
+            byte[] fileContent;
+            (string filename, byte[] content)? attachment = null;
+
+            if (request.FileType.ToLower() == "eml")
+            {
+                var to = $"recipient{workItem.Index}@example.com";
+                var from = $"sender{workItem.Index}@example.com";
+                var subject = $"Email Subject {workItem.Index}";
+                var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30));
+                var body = $"This is the body of test email {workItem.Index}.";
+                if (Random.Shared.Next(100) < request.AttachmentRate)
+                {
+                    attachment = PlaceholderFiles.GetRandomAttachment();
+                }
+                fileContent = EmlGenerator.CreateEmlContent(to, from, subject, sentDate, body, attachment);
+            }
+            else
+            {
+                fileContent = placeholderContent;
+            }
+
+            var totalSize = fileContent.Length + paddingPerFile;
 
             var memoryOwner = _memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
             if (memoryOwner == null)
             {
                 // Fallback to direct allocation for very large files
                 var data = new byte[totalSize];
-                Buffer.BlockCopy(placeholderContent, 0, data, 0, placeholderContent.Length);
+                Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
 
                 if (paddingPerFile > 0)
                 {
                     var padding = new byte[paddingPerFile];
                     RandomNumberGenerator.Fill(padding);
-                    Buffer.BlockCopy(padding, 0, data, placeholderContent.Length, padding.Length);
+                    Buffer.BlockCopy(padding, 0, data, fileContent.Length, padding.Length);
                 }
 
-                return new FileData { WorkItem = workItem, Data = data };
+                return new FileData { WorkItem = workItem, Data = data, Attachment = attachment };
             }
 
             // Use pooled memory
-            placeholderContent.CopyTo(memoryOwner.Memory.Span);
+            fileContent.CopyTo(memoryOwner.Memory.Span);
 
             if (paddingPerFile > 0)
             {
-                var paddingSpan = memoryOwner.Memory.Span.Slice(placeholderContent.Length, (int)paddingPerFile);
+                var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)paddingPerFile);
                 RandomNumberGenerator.Fill(paddingSpan);
             }
 
@@ -187,7 +208,8 @@ namespace Zipper
             {
                 WorkItem = workItem,
                 Data = memoryOwner.Memory[..(int)totalSize].ToArray(),
-                MemoryOwner = memoryOwner
+                MemoryOwner = memoryOwner,
+                Attachment = attachment
             };
         }
 
@@ -195,15 +217,38 @@ namespace Zipper
         {
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+            var processedFiles = new ConcurrentBag<FileData>();
 
             // Process generated files and write to archive
             await foreach (var fileData in resultReader.ReadAllAsync())
             {
+                processedFiles.Add(fileData);
+
                 // Write main file
                 var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
                 using (var entryStream = entry.Open())
                 {
                     await entryStream.WriteAsync(fileData.Data);
+                }
+
+                // Write attachment if it exists (for EML)
+                if (fileData.Attachment.HasValue)
+                {
+                    var attachmentEntry = archive.CreateEntry($"{fileData.WorkItem.FolderName}/{fileData.Attachment.Value.filename}", CompressionLevel.Optimal);
+                    using (var attachmentStream = attachmentEntry.Open())
+                    {
+                        await attachmentStream.WriteAsync(fileData.Attachment.Value.content);
+                    }
+
+                    if (request.WithText)
+                    {
+                        var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
+                        var attachmentTextEntry = archive.CreateEntry($"{fileData.WorkItem.FolderName}/{attachmentTextFileName}", CompressionLevel.Optimal);
+                        using (var attachmentTextStream = attachmentTextEntry.Open())
+                        {
+                            await attachmentTextStream.WriteAsync(PlaceholderFiles.ExtractedText);
+                        }
+                    }
                 }
 
                 // Write extracted text file if requested
@@ -225,32 +270,32 @@ namespace Zipper
             // Write load file
             if (request.IncludeLoadFile)
             {
-                await WriteLoadFileToArchiveAsync(archive, loadFileName, request);
+                await WriteLoadFileToArchiveAsync(archive, loadFileName, request, processedFiles.ToList());
             }
             else
             {
-                await WriteLoadFileToDiskAsync(loadFilePath, request);
+                await WriteLoadFileToDiskAsync(loadFilePath, request, processedFiles.ToList());
             }
         }
 
-        private async Task WriteLoadFileToArchiveAsync(ZipArchive archive, string loadFileName, FileGenerationRequest request)
+        private async Task WriteLoadFileToArchiveAsync(ZipArchive archive, string loadFileName, FileGenerationRequest request, List<FileData> processedFiles)
         {
             var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
             using var loadFileStream = loadFileEntry.Open();
             using var writer = new StreamWriter(loadFileStream, Encoding.UTF8);
 
-            await WriteLoadFileContent(writer, request);
+            await WriteLoadFileContent(writer, request, processedFiles);
         }
 
-        private async Task WriteLoadFileToDiskAsync(string loadFilePath, FileGenerationRequest request)
+        private async Task WriteLoadFileToDiskAsync(string loadFilePath, FileGenerationRequest request, List<FileData> processedFiles)
         {
             using var fileStream = new FileStream(loadFilePath, FileMode.Create);
             using var writer = new StreamWriter(fileStream, GetEncoding(request.Encoding));
 
-            await WriteLoadFileContent(writer, request);
+            await WriteLoadFileContent(writer, request, processedFiles);
         }
 
-        private async Task WriteLoadFileContent(StreamWriter writer, FileGenerationRequest request)
+        private async Task WriteLoadFileContent(StreamWriter writer, FileGenerationRequest request, List<FileData> processedFiles)
         {
             const char colDelim = (char)20;
             const char quote = (char)254;
@@ -277,42 +322,38 @@ namespace Zipper
             await writer.WriteLineAsync(headerBuilder.ToString());
 
             // Write file records
-            for (long i = 1; i <= request.FileCount; i++)
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var folderNumber = FileDistributionHelper.GetFolderNumber(i, request.FileCount, request.Folders, request.Distribution);
-                var folderName = $"folder_{folderNumber:D3}";
-                var fileName = $"{i:D8}.{request.FileType}";
-                var filePathInZip = $"{folderName}/{fileName}";
-                var docId = $"DOC{i:D8}";
+                var workItem = fileData.WorkItem;
+                var docId = $"DOC{workItem.Index:D8}";
 
                 var lineBuilder = new System.Text.StringBuilder();
-                lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePathInZip}{quote}");
+                lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{workItem.FilePathInZip}{quote}");
 
                 if (request.WithMetadata || request.FileType.ToLower() == "eml")
                 {
-                    var custodian = $"Custodian {folderNumber}";
+                    var custodian = $"Custodian {workItem.FolderNumber}";
                     var dateSent = DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
                     var author = $"Author {Random.Shared.Next(1, 100):D3}";
-                    var fileSize = 1024 + Random.Shared.Next(0, 2048); // Simulated file size
+                    var fileSize = fileData.Data.Length;
 
                     lineBuilder.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
                 }
 
                 if (request.FileType.ToLower() == "eml")
                 {
-                    var to = $"recipient{i}@example.com";
-                    var from = $"sender{i}@example.com";
-                    var subject = $"Email Subject {i}";
+                    var to = $"recipient{workItem.Index}@example.com";
+                    var from = $"sender{workItem.Index}@example.com";
+                    var subject = $"Email Subject {workItem.Index}";
                     var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-                    var hasAttachment = Random.Shared.NextDouble() < (request.AttachmentRate / 100.0);
-                    var attachment = hasAttachment ? $"attachment{i:D8}.pdf" : "";
+                    var attachmentName = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : "";
 
-                    lineBuilder.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
+                    lineBuilder.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}");
                 }
 
                 if (request.WithText)
                 {
-                    var textFilePath = filePathInZip.Replace($".{request.FileType}", ".txt");
+                    var textFilePath = workItem.FilePathInZip.Replace($".{request.FileType}", ".txt");
                     lineBuilder.Append($"{colDelim}{quote}{textFilePath}{quote}");
                 }
 
@@ -381,6 +422,7 @@ namespace Zipper
     {
         public FileWorkItem WorkItem { get; init; } = new FileWorkItem();
         public byte[] Data { get; init; } = Array.Empty<byte>();
+        public (string filename, byte[] content)? Attachment { get; init; }
         public IMemoryOwner<byte>? MemoryOwner { get; init; }
     }
 }
