@@ -14,8 +14,8 @@ REM Create the pre-commit hook.
 (
     echo @echo off
     echo.
-    echo REM Run the test suite.
-    echo call tests\run-tests.bat
+    echo REM Run optimized test suite ^(unit tests + one basic E2E test^) for faster pre-commit checks.
+    echo call tests\run-tests-optimized.bat
     echo.
     echo REM If the tests fail, exit with a non-zero status to prevent the commit.
     echo if errorlevel 1 (

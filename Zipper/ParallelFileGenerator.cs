@@ -57,21 +57,27 @@ namespace Zipper
 
                 // Create channels for work distribution
                 var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
-                var resultChannel = Channel.CreateUnbounded<FileData>();
+                var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Concurrency * 2)
+                {
+                    FullMode = BoundedChannelFullMode.Wait
+                });
 
-                // Generate files in parallel
+                // Start the consumer task to write the archive concurrently
+                var consumerTask = WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
+
+                // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
-                var tasks = Enumerable.Range(0, request.Concurrency)
+                var producerTasks = Enumerable.Range(0, request.Concurrency)
                     .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer));
 
-                var fileGenerationTasks = Task.WhenAll(tasks);
+                // Wait for all producers to complete
+                await Task.WhenAll(producerTasks);
 
-                // Wait for all file generation to complete
-                await fileGenerationTasks;
+                // Signal that production is done
                 resultChannel.Writer.Complete();
 
-                // Process results and write to archive
-                await WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
+                // Wait for the consumer to finish writing the archive
+                await consumerTask;
 
                 var performanceMetrics = _performanceMonitor.Stop();
                 Console.WriteLine(); // New line after progress

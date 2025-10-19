@@ -12,8 +12,8 @@ mkdir -p "$HOOK_DIR"
 cat > "$HOOK_FILE" << EOL
 #!/bin/bash
 
-# Run the test suite.
-./tests/run-tests.sh
+# Run optimized test suite (unit tests + one basic E2E test) for faster pre-commit checks.
+./tests/run-tests-optimized.sh
 
 # If the tests fail, exit with a non-zero status to prevent the commit.
 if [ \$? -ne 0 ]; then
