@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Zipper
 {
-    public static class EmlFile
+    public static class EmlGenerator
     {
         public static byte[] CreateEmlContent(string to, string from, string subject, DateTime sentDate, string body, (string filename, byte[] content)? attachment = null)
         {

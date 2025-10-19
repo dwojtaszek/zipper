@@ -1,14 +1,34 @@
 # AI Agent Instructions for Zipper
 
-## Project Overview
-Zipper is a .NET command-line tool for generating large, structured test datasets for performance testing scenarios. It creates zip archives containing placeholder documents (PDF, JPG, TIFF, EML) and corresponding load files (`.dat`). The tool can distribute files across a specified number of folders using various algorithms and can target a specific final zip archive size by padding files with non-compressible random data.
+## Build/Test Commands
+- **Build**: `dotnet publish -c Release` (output: `Zipper/bin/Release/net8.0/<platform>/publish/`)
+- **Run**: `dotnet run --project Zipper/Zipper.csproj -- [args]`
+- **Unit Tests**: `dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj`
+- **Single Test**: `dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~TestName"`
+- **E2E Tests**: `tests/run-tests.sh` (Linux/macOS) or `tests/run-tests.bat` (Windows)
+- **EML Tests**: `tests/test-eml-comprehensive.sh` or `.bat`
+- **Stress Tests**: `tests/stress/run-stress-tests.sh` (manual invocation only)
 
-## Key Architecture Components
+## Architecture Overview
+- **Main Project**: `Zipper/` - .NET 8.0 CLI tool with Program.cs entry point
+- **Test Project**: `Zipper/Zipper.Tests/` - Unit tests for components
+- **Key Components**:
+  - `Program.cs`: CLI parsing, validation, orchestration
+  - `FileDistributionHelper.cs`: File distribution algorithms (Proportional/Gaussian/Exponential)
+  - `PlaceholderFiles.cs`: Binary templates for PDF/JPG/TIFF files
+  - `EmlGenerator.cs`: Email file generation with attachments
+  - `ParallelFileGenerator.cs`: High-performance parallel file generation
+  - `MemoryPoolManager.cs`: Memory management for large datasets
+- **Output**: ZIP archives with `.dat` load files containing metadata
 
-- **`Program.cs`**: The main entry point of the application. It contains all CLI argument parsing logic, validation, and orchestrates the generation process by calling the appropriate helper methods. It has two primary generation flows: `GenerateFiles` for document types and `GenerateEmlFiles` for emails.
-- **`FileDistributionHelper.cs`**: Implements the logic for distributing files across folders. It supports three algorithms: `Proportional` (round-robin), `Gaussian` (normal distribution), and `Exponential`. The choice of algorithm is controlled by the `--distribution` CLI argument.
-- **`PlaceholderFiles.cs`**: Contains the binary templates for minimal, valid placeholder files (JPG, PDF, TIFF). It also provides a static byte array for extracted text content.
-- **`EmlFile.cs`**: Contains the logic for generating `.eml` (email) files, including support for headers, body, and adding random file attachments.
+## Code Style Guidelines
+- **C#**: Implicit usings, nullable reference types, file-scoped namespaces
+- **Formatting**: Use `var` when type obvious, expression-bodied members, discard unused vars with `_`
+- **Naming**: PascalCase for classes/methods, camelCase for locals, UPPER_CASE for constants
+- **Error Handling**: CLI validation → exit code 1 with usage text; runtime → descriptive exceptions
+- **Imports**: Implicit usings enabled, no explicit using statements needed
+- **Conventions**: No databases, stream-based processing, O(1) distribution algorithms
+- **Testing**: Dual platform (.bat/.sh) E2E tests required, verify actual output correctness
 
 ## Core Functionality & Logic
 
@@ -55,11 +75,28 @@ dotnet run --project Zipper/Zipper.csproj -- --type pdf --count 1000 --output-pa
 ```
 
 ### Testing
-Use the provided test scripts in the `/tests` directory:
-- Windows: `run-tests.bat`
-- Linux/macOS: `run-tests.sh`
 
-**CRITICAL CONSTITUTIONAL REQUIREMENT**: Tests have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
+There are two primary types of tests in this project: Unit Tests and End-to-End (E2E) Tests.
+
+#### Unit Tests
+Unit tests are designed to test individual components and classes in isolation. They are fast and are located in the `Zipper.Tests` project.
+
+To run all unit tests, execute the following command from the root of the repository:
+```bash
+dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj
+```
+
+#### End-to-End (E2E) Tests
+E2E tests run the compiled command-line application with various arguments and verify the entire workflow, from input to the final generated output (`.zip` and `.dat` files). These are located in the `/tests` directory.
+
+- **Windows**: `run-tests.bat`
+- **Linux/macOS**: `run-tests.sh`
+
+A more comprehensive EML-specific test suite is also available:
+- **Windows**: `tests/test-eml-comprehensive.bat`
+- **Linux/macOS**: `tests/test-eml-comprehensive.sh`
+
+**CRITICAL CONSTITUTIONAL REQUIREMENT**: All tests (Unit and E2E) have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW E2E TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
 
 ## Versioning
 
