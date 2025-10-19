@@ -5,6 +5,7 @@ archive_*.dat
 archive_*.zip
 grot.sh
 in-memoria.db
+**/results/
 
 # gemini-cli settings
 .gemini/

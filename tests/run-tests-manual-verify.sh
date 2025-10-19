@@ -6,7 +6,7 @@ set -e
 # --- Test Configuration ---
 
 # The directory where test output will be generated.
-TEST_OUTPUT_DIR="./results"
+TEST_OUTPUT_DIR="./test_output"
 
 # The .NET project to run.
 PROJECT="Zipper/Zipper.csproj"
@@ -380,6 +380,6 @@ print_success "Test Case 17 passed."
 # --- Cleanup ---
 
 print_info "Cleaning up test output..."
-rm -rf "$TEST_OUTPUT_DIR"
+# rm -rf "$TEST_OUTPUT_DIR"
 
 print_success "All tests passed successfully!"
