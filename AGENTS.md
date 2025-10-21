@@ -107,19 +107,55 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 
 ## Project Conventions
 
-### C# and .NET Conventions
+### C# and .NET 8.0+ Conventions
 
 - **Implicit Usings and Nullable Reference Types**: The project uses implicit usings and nullable reference types, which are enabled in the `.csproj` file. All new code should adhere to these conventions.
-- **Top-Level Statements**: While not extensively used, the project is open to the use of top-level statements for simple programs.
+- **Top-Level Statements**: Use top-level statements for simple programs and entry points (like Program.cs).
 - **File-Scoped Namespaces**: All C# files should use file-scoped namespaces (e.g., `namespace Zipper;`).
+- **Modern C# Features**: Leverage C# 8.0+ features including:
+  - **Pattern Matching**: Use `switch expressions`, `is patterns`, and property patterns for cleaner code
+  - **Records**: Use for immutable data structures and DTOs
+  - **Async/Aawait**: Use async patterns for I/O operations with proper cancellation tokens
+  - **Span/Memory**: Use for high-performance memory operations without allocations
+  - **Ranges and Indices**: Use for cleaner array/collection manipulation
+  - **Using Declarations**: Prefer `using var resource = new Resource()` over traditional using blocks
+  - **Null Coalescing Assignment**: Use `??=` for null-coalescing assignment patterns
+  - **Target-Typed `new`**: Use `var list = new List<T>()` syntax
 
 #### Code Style and Formatting
 
-- Use `var` where the type is obvious.
-- Prefer expression-bodied members for simple methods and properties.
-- Use `_` to discard unused variables.
+- Use `var` where the type is obvious from the right-hand side
+- Prefer expression-bodied members for simple methods and properties
+- Use `_` to discard unused variables and `_` prefix for tuple discard values
+- **Nullable Reference Types**: Always handle nullable warnings appropriately:
+  - Use `!` (null-forgiving operator) only when absolutely certain
+  - Use `?.` for null-conditional access
+  - Use `??` for null-coalescing
+  - Prefer `string?` for nullable string types
+- **Async/Await Best Practices**:
+  - Always pass `CancellationToken` to async methods when available
+  - Use `ConfigureAwait(false)` in library code
+  - Avoid `async void` except for event handlers
+  - Use `ValueTask<T>` for high-performance scenarios where results may be synchronous
+- **Resource Management**:
+  - Prefer `using` declarations over `using` blocks
+  - Implement `IAsyncDisposable` for async resources
+  - Use `ArrayPool<T>.Shared` for rented arrays
+  - Properly dispose `IDisposable` and `IAsyncDisposable` resources
 
-**Note on Linting:** To automate the enforcement of these rules, consider using a linter like `.editorconfig` or a Roslyn analyzer.
+#### Performance Guidelines
+
+- **Memory Efficiency**: Use `Span<T>` and `Memory<T>` for zero-allocation operations
+- **String Operations**: Use `StringBuilder` for concatenations, `ReadOnlySpan<char>` for parsing
+- **Collections**: Use appropriate collection types:
+  - `Span<T>`/`Memory<T>` for stack-based operations
+  - `ArrayPool<T>` for temporary large arrays
+  - `PooledMemoryStream` or custom pooling for frequent allocations
+- **LINQ**: Be mindful of allocations in hot paths; consider foreach loops instead
+- **Parallel Processing**: Use `Parallel.ForEachAsync` for I/O-bound operations, `Parallel.For` for CPU-bound
+- **Cancellation**: Support cancellation tokens throughout async operations
+
+**Note on Linting:** The project enforces these rules through `.editorconfig` and Roslyn analyzers. Ensure all new code passes static analysis.
 
 ### Distribution Implementations
 - Distribution algorithms must be O(1) per file.
@@ -139,17 +175,50 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 - `System.IO.Compression`: For ZIP archive handling (part of the .NET SDK).
 
 ## CI/CD & Automation
-- The repository uses GitHub Actions to automate tasks.
-- **`build-and-test.yml`**: Unifies the build, test, and release process. It includes linting, parallel builds for multiple platforms, and testing of the built artifacts.
-- **`code-review.yml`**: Performs automated code reviews.
-- **`gemini-cli.yml`**: Handles general requests, code changes, and issue resolution. You are invoked via `@gemini-cli` comments.
-- **`gemini-dispatch.yml`**: Dispatches Gemini commands.
-- **`gemini-invoke.yml`**: Invokes Gemini commands.
-- **`gemini-issue-automated-triage.yml`**: Automatically labels new issues.
-- **`gemini-issue-scheduled-triage.yml`**: Schedules triage for issues.
-- **`gemini-review.yml`**: Performs automated pull request reviews.
-- **`gemini-scheduled-triage.yml`**: Schedules triage.
-- **`gemini-triage.yml`**: Triage for issues.
+
+The repository uses GitHub Actions to automate tasks with modern practices and security considerations.
+
+### Core Workflows
+- **`build-and-test.yml`**: Unifies the build, test, and release process
+  - Multi-platform builds (Windows, Linux, macOS)
+  - Parallel matrix strategy for efficiency
+  - Artifact caching and dependencies
+  - Automated release creation on master
+  - **MSBuild Best Practices**: Uses `--no-restore` flags to avoid socket issues
+- **`code-review.yml`**: Performs automated code reviews
+- **`gemini-review.yml`**: Performs automated pull request reviews with AI analysis
+
+### Gemini AI Assistant Workflows
+- **`gemini-dispatch.yml`**: Dispatches Gemini commands based on triggers
+  - Pull request events, issue comments, and manual dispatch
+  - Command extraction and routing
+  - Authentication and security considerations
+- **`gemini-invoke.yml`**: Invokes Gemini commands with proper context
+- **`gemini-triage.yml`**: Issue triage and labeling automation
+- **`gemini-scheduled-triage.yml`**: Scheduled issue triage (every 3 hours)
+- **`gemini-issue-automated-triage.yml`**: Automated issue labeling on creation
+
+### Security & Best Practices
+- **Authentication**: Uses GitHub App tokens with scoped permissions
+- **Secret Management**: Proper handling of API keys and secrets
+- **Input Validation**: Security-focused input handling in workflows
+- **Concurrency**: Proper concurrency groups to prevent race conditions
+- **Caching**: Dependency and build artifact caching for performance
+- **Error Handling**: Comprehensive error handling and fallback strategies
+
+### Workflow Development Guidelines
+- **Security First**: Never use untrusted inputs directly in run commands
+- **Environment Variables**: Use env: blocks for GitHub expressions
+- **Action Versions**: Pin to specific action versions for reproducibility
+- **Timeouts**: Set appropriate timeouts for long-running operations
+- **Resource Limits**: Configure appropriate runner resources
+- **Testing**: Test workflows with real-world scenarios
+
+### Common Workflow Issues & Solutions
+- **MSBuild Socket Errors**: Use `--no-restore` flags on build/test commands
+- **Authentication Failures**: Ensure proper API key environment setup
+- **Race Conditions**: Use proper concurrency groups and mutexes
+- **Timeout Issues**: Configure appropriate timeouts and retry logic
 
 ### GitHub CLI Commands for PR Management
 - **Get PR comments with file locations and line numbers**:
@@ -196,6 +265,61 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 
 All these commands use the GraphQL API since review threads are only available via GraphQL. Replace the example values with your actual repository owner, repo name, and PR number.
 
+## Code Review Checklist
+
+### 🔴 Critical Security Issues (Must Fix Before Merge)
+- [ ] **Input Validation**: All user inputs are properly validated and sanitized
+- [ ] **Path Traversal**: File paths are properly validated and sandboxed
+- [ ] **Resource Management**: All `IDisposable` and `IAsyncDisposable` resources are properly disposed
+- [ ] **Exception Handling**: No sensitive information leaked in exception messages
+- [ ] **Memory Safety**: No buffer overflows, null reference issues, or unsafe operations
+- [ ] **Injection Attacks**: No SQL injection, command injection, or code injection vulnerabilities
+
+### 🟠 High Priority (Should Fix Before Merge)
+- [ ] **Performance**: No memory leaks, unnecessary allocations, or performance bottlenecks
+- [ ] **Async/Await**: Proper async patterns with cancellation tokens
+- [ ] **Error Handling**: Comprehensive error handling with meaningful error messages
+- [ ] **Thread Safety**: Thread-safe operations where concurrent access is possible
+- [ ] **Resource Limits**: Appropriate limits on file sizes, memory usage, and operation counts
+
+### 🟡 Medium Priority (Consider for Improvement)
+- [ ] **Code Organization**: Proper separation of concerns and single responsibility principle
+- [ ] **API Design**: Clean, intuitive APIs with proper parameter validation
+- [ ] **Documentation**: Code is well-documented with XML comments where needed
+- [ ] **Testing**: Unit tests cover edge cases and error conditions
+- [ ] **Maintainability**: Code is readable and follows established patterns
+
+### 🟢 Low Priority (Nice to Have)
+- [ ] **Style Guidelines**: Consistent formatting and naming conventions
+- [ ] **Optimization**: Micro-optimizations in non-critical paths
+- [ ] **Logging**: Appropriate logging levels and structured logging
+- [ ] **Configuration**: Configuration is externalized and documented
+
+### Modern C# Best Practices Review
+- [ ] **Nullable Reference Types**: All nullable warnings are properly addressed
+- [ ] **Pattern Matching**: Used appropriately instead of if-else chains
+- [ ] **Records**: Used for immutable data structures
+- [ ] **Span/Memory**: Used for zero-allocation operations in performance-critical code
+- [ ] **Async/Await**: Proper usage with cancellation tokens and ConfigureAwait
+- [ ] **Resource Management**: Using declarations and proper disposal patterns
+- [ ] **LINQ**: No allocations in hot paths, appropriate use of methods
+
+### Performance Review Checklist
+- [ ] **Memory Allocations**: No unnecessary allocations in hot paths
+- [ ] **Array Operations**: Use of `Span<T>` and `Memory<T>` where appropriate
+- [ ] **String Operations**: Efficient string handling with `StringBuilder` and spans
+- [ ] **Parallel Processing**: Appropriate use of parallel operations
+- [ ] **Caching**: Proper caching of expensive operations
+- [ ] **Resource Pooling**: Use of object pools for frequently allocated resources
+
+### Testing Review Checklist
+- [ ] **Unit Tests**: All public methods have corresponding unit tests
+- [ ] **Edge Cases**: Tests cover boundary conditions and error scenarios
+- [ ] **Integration Tests**: Tests cover component interactions
+- [ ] **Performance Tests**: Critical paths have performance benchmarks
+- [ ] **E2E Tests**: Complete workflows are tested end-to-end
+- [ ] **Cross-Platform**: Tests run on both Windows and Linux/macOS
+
 ## Agent-Specific Behavioral Instructions
 
 ### Commit Practices
@@ -230,12 +354,59 @@ All these commands use the GraphQL API since review threads are only available v
 - **Path Handling**: Use appropriate path separators and handling for each platform in test scripts.
 
 ### Performance Considerations
-- Stream-based processing is essential for large-scale data generation.
-- Avoid storing intermediate files on disk whenever possible.
-- Memory efficiency should be maintained for handling millions of files.
+
+#### High-Performance File Generation
+- **Stream-based processing** is essential for large-scale data generation
+- **Zero-allocation patterns** using `Span<T>` and `Memory<T>` for critical paths
+- **Memory pooling** with `ArrayPool<T>` for temporary buffers
+- **Asynchronous streaming** for I/O operations with proper cancellation
+- **Parallel processing** with controlled concurrency to avoid resource exhaustion
+
+#### Memory Management Best Practices
+- **Prefer stack allocation** over heap allocation where possible
+- **Use `ArrayPool<T>.Shared`** for temporary large arrays
+- **Implement custom pooling** for frequently allocated objects
+- **Avoid `foreach` on collections** that allocate enumerators in hot paths
+- **Use `ref struct`** for stack-only types in performance-critical code
+- **Dispose resources properly** to prevent memory leaks
+
+#### Performance Monitoring & Profiling
+- **Benchmark critical paths** using `BenchmarkDotNet`
+- **Monitor GC pressure** and allocation rates
+- **Track memory usage** for large-scale operations
+- **Profile async operations** for proper resource utilization
+- **Measure throughput** (files/second, MB/second) for optimization targets
+
+#### Specific Performance Patterns for Zipper
+- **ZIP Streaming**: Write directly to ZIP stream without intermediate files
+- **File Distribution**: Use O(1) distribution algorithms with pre-calculated parameters
+- **Binary Template Handling**: Reuse templates and apply modifications efficiently
+- **Text Generation**: Use `StringBuilder` with pre-allocated capacity
+- **Parallel Generation**: Balance between CPU cores and I/O bandwidth
+
+#### Performance Testing Guidelines
+- **Test with realistic data sizes** (millions of files when applicable)
+- **Measure memory allocations** in hot paths
+- **Profile both Windows and Linux** performance characteristics
+- **Test edge cases** like single files, maximum file counts, and error scenarios
+- **Validate performance regression** with automated benchmarks
+
+#### Common Performance Anti-Patterns to Avoid
+- **String concatenation in loops** - use `StringBuilder` instead
+- **LINQ in hot paths** - use foreach loops instead
+- **Unnecessary allocations** - use spans and memory pools
+- **Blocking async operations** - use `await` properly
+- **Large object allocations** - pool and reuse objects
+- **Improper disposal** - ensure all resources are properly disposed
 
 ## Code Style
 GitHub Actions YAML v2.0: Follow standard conventions
 
 ## Recent Changes
-- 002-task-5-improve: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2
+- **feat/update-agents-md**: Comprehensive enhancement of AGENTS.md with:
+  - Modern C# 8.0+ best practices and patterns
+  - Comprehensive code review checklist with priority levels
+  - Updated GitHub Actions documentation with security best practices
+  - Performance optimization guidelines and anti-patterns
+  - Enhanced testing and documentation requirements
+- **002-task-5-improve**: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2
