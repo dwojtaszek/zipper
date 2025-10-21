@@ -37,6 +37,9 @@ jobs:
           permission-issues: 'write'
           permission-pull-requests: 'write'
 
+      - name: 'Set Gemini API Key'
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
       - name: 'Run Gemini CLI'
         id: 'run_gemini'
         uses: 'google-github-actions/run-gemini-cli@v0' # ratchet:exclude
