@@ -1,5 +1,39 @@
 # AI Agent Instructions for Zipper
 
+## Why AGENTS.md?
+
+This file provides dedicated context for AI coding agents working on the Zipper project. It's separate from README.md to give agents focused, actionable information about code style, build processes, and project-specific conventions without overwhelming end-user documentation.
+
+## Supported Agents
+
+- **Claude Code**: Primary AI coding assistant for this project
+- **GitHub Copilot**: Code completion and suggestion support
+- **Cursor**: AI-powered IDE support
+- **Other AI Agents**: Any AI coding agent that can read markdown files
+
+## How to Use AGENTS.md
+
+1. **Read First**: Always start by reading this file before making changes
+2. **Follow Commands**: Use the exact build/test commands listed below
+3. **Apply Guidelines**: Follow all code style and project conventions
+4. **Test Changes**: Run required tests before committing
+
+## Examples
+
+**Adding a new file type:**
+1. Update `PlaceholderFiles.cs` with binary template
+2. Add file type to CLI argument validation in `Program.cs`
+3. Create unit tests in `Zipper.Tests`
+4. Update documentation in both README.md and AGENTS.md
+5. Run all tests and ensure they pass
+
+**Performance optimization:**
+1. Profile existing code with `BenchmarkDotNet`
+2. Apply patterns from the "Performance Guidelines" section
+3. Use `Span<T>`/`Memory<T>` for zero-allocation operations
+4. Update tests to include performance benchmarks
+5. Verify no regression in functionality
+
 ## Build/Test Commands
 - **Build**: `dotnet publish -c Release` (output: `Zipper/bin/Release/net8.0/<platform>/publish/`)
 - **Run**: `dotnet run --project Zipper/Zipper.csproj -- [args]`
@@ -8,6 +42,11 @@
 - **E2E Tests**: `tests/run-tests.sh` (Linux/macOS) or `tests/run-tests.bat` (Windows)
 - **EML Tests**: `tests/test-eml-comprehensive.sh` or `.bat`
 - **Stress Tests**: `tests/stress/run-stress-tests.sh` (manual invocation only)
+
+**Example Usage:**
+```bash
+dotnet run --project Zipper/Zipper.csproj -- --type pdf --count 1000 --output-path ./output --folders 10 --with-metadata
+```
 
 ## Architecture Overview
 - **Main Project**: `Zipper/` - .NET 8.0 CLI tool with Program.cs entry point
@@ -58,45 +97,30 @@ The application is configured via the following command-line arguments:
 
 ## Development Workflows
 
-### Building and Running
-```bash
-# Build a self-contained release executable
-dotnet publish -c Release
-```
-The output will be in `Zipper/bin/Release/net8.0/<platform>/publish/`.
+### Testing Requirements
 
-For development, run directly using:
-```bash
-dotnet run --project Zipper/Zipper.csproj -- [arguments]
-```
-**Example:**
-```bash
-dotnet run --project Zipper/Zipper.csproj -- --type pdf --count 1000 --output-path ./output --folders 10 --with-metadata
-```
+**CRITICAL CONSTITUTIONAL REQUIREMENT**: All tests (Unit and E2E) have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command.
 
-### Testing
+#### Mandatory Dual-Platform Testing
+**ALL NEW E2E TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
 
-There are two primary types of tests in this project: Unit Tests and End-to-End (E2E) Tests.
+- **Create both versions**: Every test script MUST have both a Windows batch (.bat) implementation and a Unix shell (.sh) implementation
+- **Identical validation**: Both test versions must produce identical validation results
+- **CI/CD integration**: Ensure tests pass on both Windows and Linux CI agents before considering any task complete
+- **Path handling**: Use appropriate path separators and handling for each platform in test scripts
 
 #### Unit Tests
-Unit tests are designed to test individual components and classes in isolation. They are fast and are located in the `Zipper.Tests` project.
+Unit tests test individual components and classes in isolation. Located in the `Zipper.Tests` project.
 
-To run all unit tests, execute the following command from the root of the repository:
 ```bash
 dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj
 ```
 
 #### End-to-End (E2E) Tests
-E2E tests run the compiled command-line application with various arguments and verify the entire workflow, from input to the final generated output (`.zip` and `.dat` files). These are located in the `/tests` directory.
+E2E tests run the compiled CLI application with various arguments and verify the entire workflow. Located in the `/tests` directory.
 
-- **Windows**: `run-tests.bat`
-- **Linux/macOS**: `run-tests.sh`
-
-A more comprehensive EML-specific test suite is also available:
-- **Windows**: `tests/test-eml-comprehensive.bat`
-- **Linux/macOS**: `tests/test-eml-comprehensive.sh`
-
-**CRITICAL CONSTITUTIONAL REQUIREMENT**: All tests (Unit and E2E) have to be run before any commit. They must verify the correctness of the output (e.g., file counts, header content in the `.dat` file), not just the successful execution of the command. **ALL NEW E2E TESTS MUST BE IMPLEMENTED IN BOTH .BAT (WINDOWS) AND .SH (UNIX) FORMATS AND MUST PASS ON BOTH PLATFORMS BEFORE DEPLOYMENT.** This is a non-negotiable requirement per the project constitution.
+- **General tests**: `run-tests.bat` (Windows) or `run-tests.sh` (Linux/macOS)
+- **EML-specific tests**: `test-eml-comprehensive.bat` (Windows) or `test-eml-comprehensive.sh` (Linux/macOS)
 
 ## Versioning
 
@@ -107,19 +131,96 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 
 ## Project Conventions
 
-### C# and .NET Conventions
+### C# and .NET 8.0+ Conventions
 
-- **Implicit Usings and Nullable Reference Types**: The project uses implicit usings and nullable reference types, which are enabled in the `.csproj` file. All new code should adhere to these conventions.
-- **Top-Level Statements**: While not extensively used, the project is open to the use of top-level statements for simple programs.
-- **File-Scoped Namespaces**: All C# files should use file-scoped namespaces (e.g., `namespace Zipper;`).
+#### Language Features
+- **Implicit Usings and Nullable Reference Types**: Project uses implicit usings and nullable reference types (enabled in `.csproj`)
+- **Top-Level Statements**: Use for simple programs and entry points (like Program.cs)
+- **File-Scoped Namespaces**: All C# files should use file-scoped namespaces (e.g., `namespace Zipper;`)
+
+#### Modern C# Features (8.0+)
+- **Pattern Matching**: Use `switch expressions`, `is patterns`, and property patterns for cleaner code
+- **Records**: Use for immutable data structures and DTOs
+- **Async/Await**: Use async patterns for I/O operations with proper cancellation tokens
+- **Span/Memory**: Use for high-performance memory operations without allocations
+- **Ranges and Indices**: Use for cleaner array/collection manipulation
+- **Using Declarations**: Prefer `using var resource = new Resource()` over traditional using blocks
+- **Null Coalescing Assignment**: Use `??=` for null-coalescing assignment patterns
+- **Target-Typed `new`**: Use `var list = new List<T>()` syntax
 
 #### Code Style and Formatting
+- Use `var` where the type is obvious from the right-hand side
+- Prefer expression-bodied members for simple methods and properties
+- Use `_` to discard unused variables and `_` prefix for tuple discard values
 
-- Use `var` where the type is obvious.
-- Prefer expression-bodied members for simple methods and properties.
-- Use `_` to discard unused variables.
+#### Nullable Reference Types
+- Use `!` (null-forgiving operator) only when absolutely certain
+- Use `?.` for null-conditional access
+- Use `??` for null-coalescing
+- Prefer `string?` for nullable string types
 
-**Note on Linting:** To automate the enforcement of these rules, consider using a linter like `.editorconfig` or a Roslyn analyzer.
+#### Async/Await Best Practices
+- Always pass `CancellationToken` to async methods when available
+- Use `ConfigureAwait(false)` in library code
+- Avoid `async void` except for event handlers
+- Use `ValueTask<T>` for high-performance scenarios where results may be synchronous
+
+#### Resource Management
+- Prefer `using` declarations over `using` blocks
+- Implement `IAsyncDisposable` for async resources
+- Use `ArrayPool<T>.Shared` for rented arrays
+- Properly dispose `IDisposable` and `IAsyncDisposable` resources
+
+#### Performance Guidelines
+
+- **Memory Efficiency**: Use `Span<T>` and `Memory<T>` for zero-allocation operations
+- **String Operations**: Use `StringBuilder` for concatenations, `ReadOnlySpan<char>` for parsing
+- **Collections**: Use appropriate collection types:
+  - `Span<T>`/`Memory<T>` for stack-based operations
+  - `ArrayPool<T>` for temporary large arrays
+  - `PooledMemoryStream` or custom pooling for frequent allocations
+- **LINQ**: Be mindful of allocations in hot paths; consider foreach loops instead
+- **Parallel Processing**: Use `Parallel.ForEachAsync` for I/O-bound operations, `Parallel.For` for CPU-bound
+- **Cancellation**: Support cancellation tokens throughout async operations
+
+**High-Performance File Generation**
+- **Stream-based processing** is essential for large-scale data generation
+- **Zero-allocation patterns** using `Span<T>` and `Memory<T>` for critical paths
+- **Memory pooling** with `ArrayPool<T>` for temporary buffers
+- **Asynchronous streaming** for I/O operations with proper cancellation
+- **Parallel processing** with controlled concurrency to avoid resource exhaustion
+
+**Memory Management Best Practices**
+- **Prefer stack allocation** over heap allocation where possible
+- **Use `ArrayPool<T>.Shared`** for temporary large arrays
+- **Implement custom pooling** for frequently allocated objects
+- **Avoid `foreach` on collections** that allocate enumerators in hot paths
+- **Use `ref struct`** for stack-only types in performance-critical code
+- **Dispose resources properly** to prevent memory leaks
+
+**Performance Testing Guidelines**
+- **Test with realistic data sizes** (millions of files when applicable)
+- **Measure memory allocations** in hot paths
+- **Profile both Windows and Linux** performance characteristics
+- **Test edge cases** like single files, maximum file counts, and error scenarios
+- **Validate performance regression** with automated benchmarks
+
+**Common Performance Anti-Patterns to Avoid**
+- **String concatenation in loops** - use `StringBuilder` instead
+- **LINQ in hot paths** - use foreach loops instead
+- **Unnecessary allocations** - use spans and memory pools
+- **Blocking async operations** - use `await` properly
+- **Large object allocations** - pool and reuse objects
+- **Improper disposal** - ensure all resources are properly disposed
+
+**Specific Performance Patterns for Zipper**
+- **ZIP Streaming**: Write directly to ZIP stream without intermediate files
+- **File Distribution**: Use O(1) distribution algorithms with pre-calculated parameters
+- **Binary Template Handling**: Reuse templates and apply modifications efficiently
+- **Text Generation**: Use `StringBuilder` with pre-allocated capacity
+- **Parallel Generation**: Balance between CPU cores and I/O bandwidth
+
+**Note on Linting:** The project enforces these rules through `.editorconfig` and Roslyn analyzers. Ensure all new code passes static analysis.
 
 ### Distribution Implementations
 - Distribution algorithms must be O(1) per file.
@@ -139,62 +240,113 @@ The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`
 - `System.IO.Compression`: For ZIP archive handling (part of the .NET SDK).
 
 ## CI/CD & Automation
-- The repository uses GitHub Actions to automate tasks.
-- **`build-and-test.yml`**: Unifies the build, test, and release process. It includes linting, parallel builds for multiple platforms, and testing of the built artifacts.
-- **`code-review.yml`**: Performs automated code reviews.
-- **`gemini-cli.yml`**: Handles general requests, code changes, and issue resolution. You are invoked via `@gemini-cli` comments.
-- **`gemini-dispatch.yml`**: Dispatches Gemini commands.
-- **`gemini-invoke.yml`**: Invokes Gemini commands.
-- **`gemini-issue-automated-triage.yml`**: Automatically labels new issues.
-- **`gemini-issue-scheduled-triage.yml`**: Schedules triage for issues.
-- **`gemini-review.yml`**: Performs automated pull request reviews.
-- **`gemini-scheduled-triage.yml`**: Schedules triage.
-- **`gemini-triage.yml`**: Triage for issues.
+
+The repository uses GitHub Actions to automate tasks with modern practices and security considerations.
+
+### Core Workflows
+- **`build-and-test.yml`**: Unifies the build, test, and release process
+  - Multi-platform builds (Windows, Linux, macOS)
+  - Parallel matrix strategy for efficiency
+  - Artifact caching and dependencies
+  - Automated release creation on master
+  - **MSBuild Best Practices**: Uses `--no-restore` flags to avoid socket issues
+- **`code-review.yml`**: Performs automated code reviews
+- **`gemini-review.yml`**: Performs automated pull request reviews with AI analysis
+
+### Gemini AI Assistant Workflows
+- **`gemini-dispatch.yml`**: Dispatches Gemini commands based on triggers
+  - Pull request events, issue comments, and manual dispatch
+  - Command extraction and routing
+  - Authentication and security considerations
+- **`gemini-invoke.yml`**: Invokes Gemini commands with proper context
+- **`gemini-triage.yml`**: Issue triage and labeling automation
+- **`gemini-scheduled-triage.yml`**: Scheduled issue triage (every 3 hours)
+- **`gemini-issue-automated-triage.yml`**: Automated issue labeling on creation
+
+### Security & Best Practices
+- **Authentication**: Uses GitHub App tokens with scoped permissions
+- **Secret Management**: Proper handling of API keys and secrets
+- **Input Validation**: Security-focused input handling in workflows
+- **Concurrency**: Proper concurrency groups to prevent race conditions
+- **Caching**: Dependency and build artifact caching for performance
+- **Error Handling**: Comprehensive error handling and fallback strategies
+
+### Workflow Development Guidelines
+- **Security First**: Never use untrusted inputs directly in run commands
+- **Environment Variables**: Use env: blocks for GitHub expressions
+- **Action Versions**: Pin to specific action versions for reproducibility
+- **Timeouts**: Set appropriate timeouts for long-running operations
+- **Resource Limits**: Configure appropriate runner resources
+- **Testing**: Test workflows with real-world scenarios
+
+### Common Workflow Issues & Solutions
+- **MSBuild Socket Errors**: Use `--no-restore` flags on build/test commands
+- **Authentication Failures**: Ensure proper API key environment setup
+- **Race Conditions**: Use proper concurrency groups and mutexes
+- **Timeout Issues**: Configure appropriate timeouts and retry logic
 
 ### GitHub CLI Commands for PR Management
-- **Get PR comments with file locations and line numbers**:
-  ```bash
-  gh api repos/:owner/:repo/pulls/45/comments --jq '.[] | {path, line, body}'
-  ```
-  Replace `:owner/:repo` with actual repository (e.g., `dwojtaszek/zipper`) and `45` with the PR number. This command extracts inline comments with their context, making it easier to address specific feedback.
+For detailed GitHub CLI commands including PR management, review thread handling, and repository operations, see **[GITHUB_CLI_REFERENCE.md](./GITHUB_CLI_REFERENCE.md)**.
 
-- **Get PR reviews and comments**:
-  ```bash
-  gh pr view 13 --json comments,reviews --jq '.reviews[].body'
-  ```
-  Gets all review comments for PR #13.
+**Quick examples:**
+- Get PR comments: `gh api repos/:owner/:repo/pulls/:number/comments`
+- Get PR reviews: `gh pr view :number --json comments,reviews`
+- Manage review threads: See reference document for complete commands
 
-- **Get inline review comments with file context**:
-  ```bash
-  gh api repos/dwojtaszek/zipper/pulls/13/comments --jq '.[] | {path, line, body}'
-  ```
-  Example: Gets inline comments from PR #13 with file paths and line numbers for targeted fixes.
+## Code Review Checklist
 
-- **Resolve all review threads in a PR (Simple)**:
-  ```bash
-  # Just change these three values
-  owner="dwojtaszek"
-  repo="zipper"
-  pr=123
+### 🔴 Critical Security Issues (Must Fix Before Merge)
+- [ ] **Input Validation**: All user inputs are properly validated and sanitized
+- [ ] **Path Traversal**: File paths are properly validated and sandboxed
+- [ ] **Resource Management**: All `IDisposable` and `IAsyncDisposable` resources are properly disposed
+- [ ] **Exception Handling**: No sensitive information leaked in exception messages
+- [ ] **Memory Safety**: No buffer overflows, null reference issues, or unsafe operations
+- [ ] **Injection Attacks**: No SQL injection, command injection, or code injection vulnerabilities
 
-  # Get and resolve all review threads
-  gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){reviewThreads(first:100){nodes{id}}}}}' -F owner="$owner" -F repo="$repo" -F pr="$pr" --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' | xargs -I {} gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -F id={}
-  ```
+### 🟠 High Priority (Should Fix Before Merge)
+- [ ] **Performance**: No memory leaks, unnecessary allocations, or performance bottlenecks
+- [ ] **Async/Await**: Proper async patterns with cancellation tokens
+- [ ] **Error Handling**: Comprehensive error handling with meaningful error messages
+- [ ] **Thread Safety**: Thread-safe operations where concurrent access is possible
+- [ ] **Resource Limits**: Appropriate limits on file sizes, memory usage, and operation counts
 
-- **Quick check review threads status**:
-  ```bash
-  # Replace values and run
-  owner="dwojtaszek" repo="zipper" pr=123
-  gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$pr){reviewThreads(first:100){nodes{id isResolved}}}}}' -F owner="$owner" -F repo="$repo" -F pr="$pr" --jq '.data.repository.pullRequest.reviewThreads.nodes[]'
-  ```
+### 🟡 Medium Priority (Consider for Improvement)
+- [ ] **Code Organization**: Proper separation of concerns and single responsibility principle
+- [ ] **API Design**: Clean, intuitive APIs with proper parameter validation
+- [ ] **Documentation**: Code is well-documented with XML comments where needed
+- [ ] **Testing**: Unit tests cover edge cases and error conditions
+- [ ] **Maintainability**: Code is readable and follows established patterns
 
-- **Simple one-liner for current repo**:
-  ```bash
-  # For dwojtaszek/zipper repo, just change PR number
-  pr=123 && gh api graphql -f query='query($pr:Int!){repository(owner:"dwojtaszek",name:"zipper"){pullRequest(number:$pr){reviewThreads(first:100){nodes{id}}}}}' -F pr=$pr --jq '.data.repository.pullRequest.reviewThreads.nodes[].id' | xargs -I {} gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -F id={}
-  ```
+### 🟢 Low Priority (Nice to Have)
+- [ ] **Style Guidelines**: Consistent formatting and naming conventions
+- [ ] **Optimization**: Micro-optimizations in non-critical paths
+- [ ] **Logging**: Appropriate logging levels and structured logging
+- [ ] **Configuration**: Configuration is externalized and documented
 
-All these commands use the GraphQL API since review threads are only available via GraphQL. Replace the example values with your actual repository owner, repo name, and PR number.
+### Modern C# Best Practices Review
+- [ ] **Nullable Reference Types**: All nullable warnings are properly addressed
+- [ ] **Pattern Matching**: Used appropriately instead of if-else chains
+- [ ] **Records**: Used for immutable data structures
+- [ ] **Span/Memory**: Used for zero-allocation operations in performance-critical code
+- [ ] **Async/Await**: Proper usage with cancellation tokens and ConfigureAwait
+- [ ] **Resource Management**: Using declarations and proper disposal patterns
+- [ ] **LINQ**: No allocations in hot paths, appropriate use of methods
+
+### Performance Review Checklist
+- [ ] **Memory Allocations**: No unnecessary allocations in hot paths
+- [ ] **Array Operations**: Use of `Span<T>` and `Memory<T>` where appropriate
+- [ ] **String Operations**: Efficient string handling with `StringBuilder` and spans
+- [ ] **Parallel Processing**: Appropriate use of parallel operations
+- [ ] **Caching**: Proper caching of expensive operations
+- [ ] **Resource Pooling**: Use of object pools for frequently allocated resources
+
+### Testing Review Checklist
+- [ ] **Unit Tests**: All public methods have corresponding unit tests
+- [ ] **Edge Cases**: Tests cover boundary conditions and error scenarios
+- [ ] **Integration Tests**: Tests cover component interactions
+- [ ] **Performance Tests**: Critical paths have performance benchmarks
+- [ ] **E2E Tests**: Complete workflows are tested end-to-end
+- [ ] **Cross-Platform**: Tests run on both Windows and Linux/macOS
 
 ## Agent-Specific Behavioral Instructions
 
@@ -204,10 +356,9 @@ All these commands use the GraphQL API since review threads are only available v
 
 ### Testing Requirements
 - **CRITICAL**: All tests MUST include verification steps to confirm the correctness of the output, not just successful execution.
-- **MANDATORY Dual Platform Testing**: Create both Windows (.bat) and Unix (.sh) versions of every test script.
-- **Test Validation**: Both test versions MUST produce identical validation results and MUST pass on their respective platforms.
-- **No feature is considered complete** until tests pass on both Windows and Linux/macOS environments.
 - **Test Coverage**: Tests must verify actual output (file counts, header content, zip integrity, etc.) not just command execution success.
+- **No feature is considered complete** until tests pass on both Windows and Linux/macOS environments.
+- *See the comprehensive Testing Requirements section above for detailed dual-platform testing guidelines.*
 
 ### Documentation Synchronization
 - **Always update** README.md and Requirements.md after implementing new features or making breaking changes.
@@ -223,19 +374,46 @@ All these commands use the GraphQL API since review threads are only available v
 - **File System Errors**: Handle file/directory creation failures gracefully with informative messages.
 - **Progress Indicators**: Display console progress for long-running operations that exceed 5 seconds.
 
-### Cross-Platform Compliance
-- **Mandatory Testing Requirement**: Every test script MUST have both a Windows batch (.bat) implementation and a Unix shell (.sh) implementation.
-- **Identical Validation**: Both test versions must produce identical validation results.
-- **CI/CD Integration**: Ensure tests pass on both Windows and Linux CI agents before considering any task complete.
-- **Path Handling**: Use appropriate path separators and handling for each platform in test scripts.
 
-### Performance Considerations
-- Stream-based processing is essential for large-scale data generation.
-- Avoid storing intermediate files on disk whenever possible.
-- Memory efficiency should be maintained for handling millions of files.
+#### Performance Monitoring & Profiling
+- **Benchmark critical paths** using `BenchmarkDotNet`
+- **Monitor GC pressure** and allocation rates
+- **Track memory usage** for large-scale operations
+- **Profile async operations** for proper resource utilization
+- **Measure throughput** (files/second, MB/second) for optimization targets
 
 ## Code Style
 GitHub Actions YAML v2.0: Follow standard conventions
 
+## FAQ
+
+**Q: Can I modify the CLI argument structure?**
+A: Yes, but ensure backward compatibility. Update README.md, AGENTS.md, and all test scripts (.bat/.sh) to reflect changes.
+
+**Q: How do I add a new distribution algorithm?**
+A: Add the enum value to `DistributionType`, implement in `FileDistributionHelper.cs`, update CLI parsing, and add comprehensive tests.
+
+**Q: What's the difference between AGENTS.md and README.md?**
+A: README.md is for end-users, AGENTS.md is for AI agents with technical details, code patterns, and development guidelines.
+
+**Q: Do I need to run tests before every commit?**
+A: Yes, absolutely. The constitutional requirement states: "All tests (Unit and E2E) have to be run before any commit."
+
+**Q: Can I use database persistence?**
+A: No. The project follows stream-based processing with no database dependencies as per project conventions.
+
+**Q: How should I handle large file generation (millions of files)?**
+A: Use the existing memory pooling and streaming patterns. Profile first, then optimize using Span<T>/Memory<T> and parallel processing.
+
+**Q: What if I find a security vulnerability?**
+A: Follow the security review checklist immediately. Fix critical issues before any other work, and ensure proper input validation.
+
 ## Recent Changes
-- 002-task-5-improve: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2
+- **feat/update-agents-md**: Comprehensive enhancement of AGENTS.md with:
+  - Modern C# 8.0+ best practices and patterns
+  - Comprehensive code review checklist with priority levels
+  - Updated GitHub Actions documentation with security best practices
+  - Performance optimization guidelines and anti-patterns
+  - Enhanced testing and documentation requirements
+  - Added agents.md standard compliance (Why AGENTS.md, Supported Agents, Examples, FAQ)
+- **002-task-5-improve**: Added GitHub Actions YAML v2.0 + actions/checkout@v3, actions/setup-dotnet@v3, actions/cache@v3, actions/upload-artifact@v4, actions/download-artifact@v4, softprops/action-gh-release@v2
