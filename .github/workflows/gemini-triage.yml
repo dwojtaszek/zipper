@@ -51,6 +51,9 @@ jobs:
             core.info(`Found ${labelNames.length} labels: ${labelNames.join(', ')}`);
             return labelNames;
 
+      - name: 'Set Gemini API Key'
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+
       - name: 'Run Gemini issue analysis'
         id: 'gemini_analysis'
         if: |-
