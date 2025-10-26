@@ -40,8 +40,15 @@ namespace Zipper
                         if (i + 1 < args.Length && long.TryParse(args[++i], out var c)) count = c;
                         break;
                     case "--output-path":
-                        // TODO: Validate the output path to prevent path traversal vulnerabilities.
-                        if (i + 1 < args.Length) outputPath = new DirectoryInfo(args[++i]);
+                        if (i + 1 < args.Length)
+                        {
+                            string pathArg = args[++i];
+                            outputPath = PathValidator.ValidateAndCreateDirectory(pathArg);
+                            if (outputPath == null)
+                            {
+                                return 1; // Error already displayed by PathValidator
+                            }
+                        }
                         break;
                     case "--folders":
                         if (i + 1 < args.Length && int.TryParse(args[++i], out var f)) folders = f;
