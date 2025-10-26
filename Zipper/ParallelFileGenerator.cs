@@ -28,6 +28,7 @@ namespace Zipper
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
             _performanceMonitor.Start(request.FileCount);
+            ProgressTracker.Initialize(request.FileCount);
 
             try
             {
@@ -80,7 +81,7 @@ namespace Zipper
                 await consumerTask;
 
                 var performanceMetrics = _performanceMonitor.Stop();
-                Console.WriteLine(); // New line after progress
+                ProgressTracker.FinalizeProgress();
 
                 return new FileGenerationResult
                 {
@@ -137,6 +138,7 @@ namespace Zipper
                     filesProcessed++;
                     if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
                     {
+                        ProgressTracker.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                         _performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                     }
                 }
@@ -149,7 +151,9 @@ namespace Zipper
             // Report any remaining files
             if (filesProcessed % PerformanceConstants.ProgressBatchSize != 0)
             {
-                _performanceMonitor.ReportFilesCompleted(filesProcessed % PerformanceConstants.ProgressBatchSize);
+                var remainingFiles = filesProcessed % PerformanceConstants.ProgressBatchSize;
+                ProgressTracker.ReportFilesCompleted(remainingFiles);
+                _performanceMonitor.ReportFilesCompleted(remainingFiles);
             }
         }
 
@@ -160,16 +164,15 @@ namespace Zipper
 
             if (request.FileType.ToLower() == "eml")
             {
-                var to = $"recipient{workItem.Index}@example.com";
-                var from = $"sender{workItem.Index}@example.com";
-                var subject = $"Email Subject {workItem.Index}";
-                var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30));
-                var body = $"This is the body of test email {workItem.Index}.";
+                // Use the new EmailTemplateSystem for realistic email generation
+                var emailTemplate = EmailTemplateSystem.GetRandomTemplate((int)workItem.Index, (int)workItem.Index);
+
                 if (Random.Shared.Next(100) < request.AttachmentRate)
                 {
                     attachment = PlaceholderFiles.GetRandomAttachment();
                 }
-                fileContent = EmlGenerator.CreateEmlContent(to, from, subject, sentDate, body, attachment);
+
+                fileContent = EmailBuilder.BuildEmail(emailTemplate.To, emailTemplate.From, emailTemplate.Subject, emailTemplate.SentDate, emailTemplate.Body, attachment);
             }
             else
             {
@@ -210,6 +213,21 @@ namespace Zipper
                 Data = memoryOwner.Memory[..(int)totalSize].ToArray(),
                 MemoryOwner = memoryOwner,
                 Attachment = attachment
+            };
+        }
+
+        private static string GetContentTypeForExtension(string extension)
+        {
+            return extension.ToLowerInvariant() switch
+            {
+                ".pdf" => "application/pdf",
+                ".doc" or ".docx" => "application/msword",
+                ".xls" or ".xlsx" => "application/vnd.ms-excel",
+                ".txt" => "text/plain",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                _ => "application/octet-stream"
             };
         }
 
