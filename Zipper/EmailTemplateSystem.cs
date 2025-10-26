@@ -298,11 +298,40 @@ namespace Zipper
         };
 
         // Additional template categories can be added here...
-        private static readonly List<EmailTemplateBase> PersonalTemplates = new() { /* Templates */ };
-        private static readonly List<EmailTemplateBase> MarketingTemplates = new() { /* Templates */ };
-        private static readonly List<EmailTemplateBase> LegalTemplates = new() { /* Templates */ };
-        private static readonly List<EmailTemplateBase> FinancialTemplates = new() { /* Templates */ };
-        private static readonly List<EmailTemplateBase> NotificationTemplates = new() { /* Templates */ };
+        private static readonly List<EmailTemplateBase> PersonalTemplates = new()
+        {
+            new("Family Photos", "Hi {recipient},\n\nSharing some family photos from our recent vacation. Hope you enjoy them!\n\nBest wishes,\n{sender}"),
+            new("Weekend Plans", "Hi {recipient},\n\nAre you free this weekend? I was thinking we could catch up at {place}.\n\nLet me know!\n{sender}"),
+            new("Birthday Invitation", "Dear {recipient},\n\nYou're invited to celebrate my birthday on {date} at {venue}.\n\nLooking forward to seeing you there!\n\nBest,\n{sender}")
+        };
+
+        private static readonly List<EmailTemplateBase> MarketingTemplates = new()
+        {
+            new("Special Offer - 50% Off", "Hi {recipient},\n\nLimited time offer! Get 50% off on all products until {deadline}.\n\nUse code: SAVE50\n\nShop now at {website}\n\nBest regards,\n{sender}"),
+            new("Newsletter - {month} Updates", "Dear {recipient},\n\nCheck out our latest updates for {month}:\n\n• New product launches\n• Special promotions\n• Industry insights\n\nRead more on our website.\n\nMarketing Team"),
+            new("Product Launch Invitation", "Hi {recipient},\n\nYou're invited to our product launch event!\n\nDate: {date}\nTime: {meeting}\nLocation: {venue}\n\nRSVP by {deadline}\n\n{sender}")
+        };
+
+        private static readonly List<EmailTemplateBase> LegalTemplates = new()
+        {
+            new("Contract Review Required", "Dear {recipient},\n\nPlease find attached contract {case} for your review and signature.\n\nKey terms:\n• Duration: 12 months\n• Value: {amount}\n• Start date: {deadline}\n\nPlease return signed copy by {date}.\n\nRegards,\n{sender}"),
+            new("Legal Notice - Case {case}", "To: {recipient}\nFrom: {sender}\nSubject: Legal Notice\n\nThis is formal notification regarding case {case}. Please review attached documents and respond within 5 business days.\n\nLegal Department"),
+            new("Confidential Agreement", "CONFIDENTIAL - Privileged & Attorney-Client Communication\n\nDear {recipient},\n\nFollowing up on our discussion regarding {project}. Please find the revised agreement attached.\n\nConfidentiality applies to all contents.\n\n{sender}")
+        };
+
+        private static readonly List<EmailTemplateBase> FinancialTemplates = new()
+        {
+            new("Monthly Statement - {account}", "Dear {recipient},\n\nYour monthly statement for account {account} is now available.\n\n• Balance: {amount}\n• Due date: {deadline}\n• Minimum payment: ${payment}\n\nAccess your full statement online.\n\nFinancial Services"),
+            new("Investment Update - {quarter}", "Hi {recipient},\n\nYour {quarter} investment portfolio update:\n\n• Current value: {amount}\n• Growth: +{growth}%\n• Top performer: {company}\n\nReview detailed reports in your portal.\n\n{sender}"),
+            new("Transaction Alert", "Security Alert: Transaction detected\n\nAmount: {amount}\nMerchant: {company}\nTime: {meeting}\n\nIf this wasn't you, please contact us immediately.\n\nBank Security Team")
+        };
+
+        private static readonly List<EmailTemplateBase> NotificationTemplates = new()
+        {
+            new("System Maintenance Notice", "Hi {recipient},\n\nScheduled maintenance will occur on {date} from {start_time} to {end_time}.\n\nAffected services:\n• Main application\n• API endpoints\n• Dashboard\n\nWe apologize for any inconvenience.\n\n{sender}"),
+            new("Password Reset Request", "Hello {recipient},\n\nA password reset was requested for your account.\n\nIf this was you, click here: {reset_link}\nIf not, please secure your account immediately.\n\nThis link expires in 24 hours.\n\n{sender}"),
+            new("Welcome to {service}", "Welcome to {service}, {recipient}!\n\nYour account has been successfully created.\n\nNext steps:\n1. Verify your email\n2. Complete your profile\n3. Explore our features\n\nIf you have questions, reply to this email.\n\nWelcome,\n{sender}")
+        };
 
         #endregion
     }
