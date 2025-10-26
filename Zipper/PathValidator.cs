@@ -21,13 +21,13 @@ namespace Zipper
                 return null;
             }
 
-            // Check for potentially problematic characters that could cause issues across platforms
-            char[] problematicChars = { '<', '>', ':', '"', '|', '?', '*' };
-            foreach (char problematicChar in problematicChars)
+            // Check for platform-specific invalid path characters
+            char[] invalidChars = Path.GetInvalidPathChars();
+            foreach (char invalidChar in invalidChars)
             {
-                if (path.Contains(problematicChar))
+                if (path.Contains(invalidChar))
                 {
-                    Console.Error.WriteLine($"Error: Invalid character '{problematicChar}' in path. These characters are not allowed in directory names.");
+                    Console.Error.WriteLine($"Error: Invalid character '{invalidChar}' in path.");
                     return null;
                 }
             }
@@ -45,19 +45,10 @@ namespace Zipper
                     return null;
                 }
 
-                // Check for platform-specific invalid path characters
-                char[] invalidChars = Path.GetInvalidPathChars();
-                foreach (char invalidChar in invalidChars)
-                {
-                    if (path.Contains(invalidChar))
-                    {
-                        Console.Error.WriteLine($"Error: Invalid character '{invalidChar}' in path.");
-                        return null;
-                    }
-                }
-
                 // Additional check for absolute path traversal attempts
-                if (path.StartsWith("..") || path.Contains("/../") || path.Contains("\\..\\"))
+                // Only block direct traversal attempts, not allow normal temp paths with GUIDs
+                if (path.StartsWith("../") || path.Contains("/../") || path.Contains("\\..\\") ||
+                    path.StartsWith("../../") || path.Contains("/../../") || path.Contains("\\..\\..\\"))
                 {
                     Console.Error.WriteLine("Error: Path traversal detected. Paths containing '..' sequences are not allowed.");
                     return null;
