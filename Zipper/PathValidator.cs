@@ -21,23 +21,12 @@ namespace Zipper
                 return null;
             }
 
-            // Check for platform-specific invalid path characters
-            char[] invalidChars = Path.GetInvalidPathChars();
-            foreach (char invalidChar in invalidChars)
-            {
-                if (path.Contains(invalidChar))
-                {
-                    Console.Error.WriteLine($"Error: Invalid character '{invalidChar}' in path.");
-                    return null;
-                }
-            }
-
             try
             {
                 // Normalize the path to resolve any ".." or "." components
                 string fullPath = Path.GetFullPath(path);
 
-                // Check for directory traversal patterns
+                // Check for directory traversal patterns in the original path
                 string normalizedPath = path.Replace('\\', '/');
                 if (normalizedPath.Contains(".."))
                 {
@@ -52,6 +41,22 @@ namespace Zipper
                 {
                     Console.Error.WriteLine("Error: Path traversal detected. Paths containing '..' sequences are not allowed.");
                     return null;
+                }
+
+                // Check for invalid characters in the filename portion only
+                // This allows absolute paths with valid drive letters on Windows
+                string fileName = Path.GetFileName(path);
+                if (!string.IsNullOrEmpty(fileName))
+                {
+                    char[] invalidFileNameChars = Path.GetInvalidFileNameChars();
+                    foreach (char invalidChar in invalidFileNameChars)
+                    {
+                        if (fileName.Contains(invalidChar))
+                        {
+                            Console.Error.WriteLine($"Error: Invalid character '{invalidChar}' in directory name.");
+                            return null;
+                        }
+                    }
                 }
 
                 // Create and return the DirectoryInfo
