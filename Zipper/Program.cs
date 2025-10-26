@@ -17,212 +17,42 @@ namespace Zipper
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             Console.WriteLine();
 
-            string? fileType = null;
-            long? count = null;
-            DirectoryInfo? outputPath = null;
-            int folders = 1;
-            string encodingName = "UTF-8";
-            string distributionName = "proportional";
-            bool withMetadata = false;
-            bool withText = false;
-            int attachmentRate = 0;
-            string? targetZipSize = null;
-            bool includeLoadFile = false;
-
-            for (int i = 0; i < args.Length; i++)
+            // Validate and parse command line arguments
+            var request = CommandLineValidator.ValidateAndParseArguments(args);
+            if (request == null)
             {
-                switch (args[i])
-                {
-                    case "--type":
-                        if (i + 1 < args.Length) fileType = args[++i];
-                        break;
-                    case "--count":
-                        if (i + 1 < args.Length && long.TryParse(args[++i], out var c)) count = c;
-                        break;
-                    case "--output-path":
-                        if (i + 1 < args.Length)
-                        {
-                            string pathArg = args[++i];
-                            outputPath = PathValidator.ValidateAndCreateDirectory(pathArg);
-                            if (outputPath == null)
-                            {
-                                return 1; // Error already displayed by PathValidator
-                            }
-                        }
-                        break;
-                    case "--folders":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var f)) folders = f;
-                        break;
-                    case "--encoding":
-                        if (i + 1 < args.Length) encodingName = args[++i];
-                        break;
-                    case "--distribution":
-                        if (i + 1 < args.Length) distributionName = args[++i];
-                        break;
-                    case "--with-metadata":
-                        withMetadata = true;
-                        break;
-                    case "--with-text":
-                        withText = true;
-                        break;
-                    case "--attachment-rate":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var ar)) attachmentRate = ar;
-                        break;
-                    case "--target-zip-size":
-                        if (i + 1 < args.Length) targetZipSize = args[++i];
-                        break;
-                    case "--include-load-file":
-                        includeLoadFile = true;
-                        break;
-                }
+                return 1; // Error already displayed by CommandLineValidator
             }
 
-            if (fileType is null || count is null || outputPath is null)
-            {
-                var exeName = Process.GetCurrentProcess().ProcessName;
-                Console.Error.WriteLine("Error: Missing required arguments.");
-                Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>] [--include-load-file]");
-                return 1;
-            }
-
-            if (!string.IsNullOrEmpty(targetZipSize) && count is null)
-            {
-                Console.Error.WriteLine("Error: --target-zip-size requires --count to be specified.");
-                return 1;
-            }
-
-            if (folders < 1 || folders > 100)
-            {
-                Console.Error.WriteLine("Error: Number of folders must be between 1 and 100.");
-                return 1;
-            }
-
-            if (attachmentRate < 0 || attachmentRate > 100)
-            {
-                Console.Error.WriteLine("Error: Attachment rate must be between 0 and 100.");
-                return 1;
-            }
-
-            Encoding? encoding = GetEncodingFromName(encodingName);
-            if (encoding is null)
-            {
-                Console.Error.WriteLine(string.Format("Error: Invalid encoding '{0}'. Supported values are UTF-8, UTF-16, ANSI.", encodingName));
-                return 1;
-            }
-
-            DistributionType? distributionType = GetDistributionFromName(distributionName);
-            if (distributionType is null)
-            {
-                Console.Error.WriteLine(string.Format("Error: Invalid distribution '{0}'. Supported values are proportional, gaussian, exponential.", distributionName));
-                return 1;
-            }
-
-            long? targetSizeInBytes = null;
-            if (!string.IsNullOrEmpty(targetZipSize))
-            {
-                targetSizeInBytes = ParseSize(targetZipSize);
-                if (targetSizeInBytes is null)
-                {
-                    Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
-                    return 1;
-                }
-            }
-
-            await GenerateFiles(fileType, count.Value, outputPath, folders, encoding, distributionType.Value, withMetadata, withText, targetSizeInBytes, includeLoadFile, attachmentRate);
+            await GenerateFiles(request);
             return 0;
         }
 
-        static long? ParseSize(string size)
-        {
-            size = size.ToUpper().Trim();
-            long multiplier = 1;
-            if (size.EndsWith("KB"))
-            {
-                multiplier = 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-            else if (size.EndsWith("MB"))
-            {
-                multiplier = 1024 * 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-            else if (size.EndsWith("GB"))
-            {
-                multiplier = 1024 * 1024 * 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-
-            if (long.TryParse(size, out long value))
-            {
-                return value * multiplier;
-            }
-
-            return null;
-        }
-
-        static DistributionType? GetDistributionFromName(string name)
-        {
-            return name.ToUpperInvariant() switch
-            {
-                "PROPORTIONAL" => DistributionType.Proportional,
-                "GAUSSIAN" => DistributionType.Gaussian,
-                "EXPONENTIAL" => DistributionType.Exponential,
-                _ => null
-            };
-        }
-
-        static Encoding? GetEncodingFromName(string name)
-        {
-            return name.ToUpperInvariant() switch
-            {
-                "UTF-8" => new UTF8Encoding(false),
-                "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
-                "UTF-16" => new UnicodeEncoding(false, false),
-                _ => null
-            };
-        }
-
-        static async Task GenerateFiles(string fileType, long count, DirectoryInfo outputDir, int numFolders, Encoding encoding, DistributionType distributionType, bool withMetadata, bool withText, long? targetZipSize, bool includeLoadFile, int attachmentRate = 0)
+        static async Task GenerateFiles(FileGenerationRequest request)
         {
             Console.WriteLine("Starting parallel file generation...");
-            Console.WriteLine(string.Format("  File Type: {0}", fileType));
-            Console.WriteLine(string.Format("  Count: {0:N0}", count));
-            Console.WriteLine(string.Format("  Output Path: {0}", outputDir.FullName));
-            Console.WriteLine(string.Format("  Folders: {0}", numFolders));
-            Console.WriteLine(string.Format("  Encoding: {0}", encoding.EncodingName));
-            Console.WriteLine(string.Format("  Distribution: {0}", distributionType));
-            if (withMetadata) Console.WriteLine("  Metadata: Enabled");
-            if (withText) Console.WriteLine("  Extracted Text: Enabled");
-            if (targetZipSize.HasValue) Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", targetZipSize.Value / (1024 * 1024)));
-            if (includeLoadFile) Console.WriteLine("  Load File: Will be included in the zip archive.");
+            Console.WriteLine(string.Format("  File Type: {0}", request.FileType));
+            Console.WriteLine(string.Format("  Count: {0:N0}", request.FileCount));
+            Console.WriteLine(string.Format("  Output Path: {0}", request.OutputPath));
+            Console.WriteLine(string.Format("  Folders: {0}", request.Folders));
+            Console.WriteLine(string.Format("  Encoding: {0}", request.Encoding));
+            Console.WriteLine(string.Format("  Distribution: {0}", request.Distribution));
+            if (request.WithMetadata) Console.WriteLine("  Metadata: Enabled");
+            if (request.WithText) Console.WriteLine("  Extracted Text: Enabled");
+            if (request.TargetZipSize.HasValue) Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", request.TargetZipSize.Value / (1024 * 1024)));
+            if (request.IncludeLoadFile) Console.WriteLine("  Load File: Will be included in zip archive.");
 
             try
             {
                 // Use parallel file generator for improved performance
                 using var generator = new ParallelFileGenerator();
 
-                var request = new FileGenerationRequest
-                {
-                    OutputPath = outputDir.FullName,
-                    FileCount = count,
-                    FileType = fileType.ToLower(),
-                    Folders = numFolders,
-                    Concurrency = PerformanceConstants.DefaultConcurrency,
-                    WithMetadata = withMetadata,
-                    WithText = withText,
-                    TargetZipSize = targetZipSize,
-                    IncludeLoadFile = includeLoadFile,
-                    Distribution = distributionType,
-                    Encoding = encoding.EncodingName,
-                    AttachmentRate = attachmentRate
-                };
-
                 var result = await generator.GenerateFilesAsync(request);
 
                 Console.WriteLine(string.Format("\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
                 Console.WriteLine(string.Format("  Archive created: {0}", result.ZipFilePath));
                 Console.WriteLine(string.Format("  Performance: {0:F1} files/second", result.FilesPerSecond));
-                if (!includeLoadFile)
+                if (!request.IncludeLoadFile)
                 {
                     Console.WriteLine(string.Format("  Load file created: {0}", result.LoadFilePath));
                 }
