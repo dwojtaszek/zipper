@@ -130,7 +130,7 @@ namespace Zipper.Tests.Performance
             for (int i = 0; i < iterations; i++)
             {
                 var memory = manager.Rent(bufferSize);
-                memory.Dispose();
+                memory?.Dispose();
             }
 
             stopwatch.Stop();
@@ -249,7 +249,7 @@ namespace Zipper.Tests.Performance
             for (int i = 0; i < iterations; i++)
             {
                 var memory = manager.Rent(1024);
-                memory.Dispose();
+                memory?.Dispose();
             }
 
             // Progress tracking

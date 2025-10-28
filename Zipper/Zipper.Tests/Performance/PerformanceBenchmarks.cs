@@ -96,7 +96,7 @@ namespace Zipper.Tests.Performance
             for (int i = 0; i < Operations; i++)
             {
                 var memory = manager.Rent(BufferSize);
-                memory.Dispose();
+                memory?.Dispose();
             }
         }
 

@@ -357,11 +357,11 @@ namespace Zipper.Tests.Performance
                     {
                         var memory = manager.Rent(bufferSize);
                         // Simulate some work with the memory
-                        if (memory.Memory.Length > 0)
+                        if (memory?.Memory.Length > 0)
                         {
                             memory.Memory.Span.Fill((byte)(i % 256));
                         }
-                        memory.Dispose();
+                        memory?.Dispose();
                     }
                 });
             }
