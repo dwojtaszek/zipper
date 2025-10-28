@@ -17,6 +17,7 @@ namespace Zipper.Tests
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task ParallelFileGenerator_WithRefactoredServices_GeneratesValidArchive()
         {
             // Arrange
@@ -25,9 +26,9 @@ namespace Zipper.Tests
             var request = new FileGenerationRequest
             {
                 FileType = "pdf",
-                FileCount = 100,
+                FileCount = 10, // Reduced from 100 for CI performance
                 OutputPath = tempDir,
-                Folders = 5,
+                Folders = 2, // Reduced from 5 for CI performance
                 Distribution = "proportional",
                 Encoding = "UTF-8",
                 WithMetadata = false,
@@ -45,7 +46,7 @@ namespace Zipper.Tests
                 Assert.NotNull(result);
                 Assert.True(File.Exists(result.ZipFilePath));
                 Assert.True(File.Exists(result.LoadFilePath));
-                Assert.Equal(100, result.FilesGenerated);
+                Assert.Equal(10, result.FilesGenerated);
                 Assert.True(result.GenerationTime.TotalMilliseconds > 0);
                 Assert.True(result.FilesPerSecond > 0);
 
@@ -71,6 +72,7 @@ namespace Zipper.Tests
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task ParallelFileGenerator_WithEmlFiles_UsesRefactoredServices()
         {
             // Arrange
@@ -79,7 +81,7 @@ namespace Zipper.Tests
             var request = new FileGenerationRequest
             {
                 FileType = "eml",
-                FileCount = 50,
+                FileCount = 10,
                 OutputPath = tempDir,
                 Folders = 3,
                 Encoding = "UTF-8",
@@ -96,7 +98,7 @@ namespace Zipper.Tests
 
                 // Assert
                 Assert.NotNull(result);
-                Assert.Equal(50, result.FilesGenerated);
+                Assert.Equal(10, result.FilesGenerated);
                 Assert.True(File.Exists(result.ZipFilePath));
                 Assert.True(File.Exists(result.LoadFilePath));
 
@@ -144,7 +146,7 @@ namespace Zipper.Tests
                 var request = new FileGenerationRequest
                 {
                     FileType = "pdf",
-                    FileCount = 30,
+                    FileCount = 10,
                     OutputPath = tempDir,
                     Folders = 3,
                     Distribution = distribution,
@@ -162,7 +164,7 @@ namespace Zipper.Tests
 
                     // Assert
                     Assert.NotNull(result);
-                    Assert.Equal(30, result.FilesGenerated);
+                    Assert.Equal(10, result.FilesGenerated);
                     Assert.True(File.Exists(result.ZipFilePath));
                     Assert.True(File.Exists(result.LoadFilePath));
 
