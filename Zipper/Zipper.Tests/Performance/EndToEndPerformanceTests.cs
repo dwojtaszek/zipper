@@ -77,6 +77,7 @@ namespace Zipper.Tests.Performance
                 long memoryUsed = (memoryAfter - memoryBefore) / (1024 * 1024); // MB
 
                 // Verify output
+                Assert.NotNull(result);
                 Assert.True(File.Exists(result.ZipFilePath), "ZIP file should exist");
                 Assert.True(File.Exists(result.LoadFilePath), "Load file should exist");
                 Assert.Equal(fileCount, result.FilesGenerated);
@@ -145,6 +146,7 @@ namespace Zipper.Tests.Performance
                 long memoryUsed = (memoryAfter - memoryBefore) / (1024 * 1024); // MB
 
                 // Verify output
+                Assert.NotNull(result);
                 Assert.True(File.Exists(result.ZipFilePath), "ZIP file should exist");
                 Assert.True(File.Exists(result.LoadFilePath), "Load file should exist");
                 Assert.Equal(fileCount, result.FilesGenerated);
@@ -221,6 +223,7 @@ namespace Zipper.Tests.Performance
                 long memoryUsed = (memoryAfter - memoryBefore) / (1024 * 1024); // MB
 
                 // Verify output
+                Assert.NotNull(result);
                 Assert.True(File.Exists(result.ZipFilePath), "ZIP file should exist");
                 Assert.True(File.Exists(result.LoadFilePath), "Load file should exist");
                 Assert.Equal(fileCount, result.FilesGenerated);
@@ -330,7 +333,7 @@ namespace Zipper.Tests.Performance
 
         [Fact]
         [Trait("Category", "Performance")]
-        public void MemoryPool_PerformanceUnderStress_ShouldMaintainEfficiency()
+        public async Task MemoryPool_PerformanceUnderStress_ShouldMaintainEfficiency()
         {
             // Arrange
             const int operations = 10000;
@@ -354,13 +357,16 @@ namespace Zipper.Tests.Performance
                     {
                         var memory = manager.Rent(bufferSize);
                         // Simulate some work with the memory
-                        memory.Memory.Span.Fill((byte)(i % 256));
+                        if (memory.Memory.Length > 0)
+                        {
+                            memory.Memory.Span.Fill((byte)(i % 256));
+                        }
                         memory.Dispose();
                     }
                 });
             }
 
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
             stopwatch.Stop();
 
             long gen0After = GC.CollectionCount(0);

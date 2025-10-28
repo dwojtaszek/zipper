@@ -15,23 +15,15 @@ namespace Zipper.Tests.Performance
         private const int FolderCount = 100;
 
         [Benchmark]
-        [Arguments("proportional")]
-        [Arguments("gaussian")]
-        [Arguments("exponential")]
-        public void DistributionAlgorithm_Performance(string algorithm)
+        [Arguments(DistributionType.Proportional)]
+        [Arguments(DistributionType.Gaussian)]
+        [Arguments(DistributionType.Exponential)]
+        public void DistributionAlgorithm_Performance(DistributionType distributionType)
         {
             for (int i = 0; i < FileCount; i++)
             {
-                var folderNumber = FileDistributionHelper.GetFolderNumber(i, FolderCount, algorithm);
+                var folderNumber = FileDistributionHelper.GetFolderNumber(i, FileCount, FolderCount, distributionType);
             }
-        }
-
-        [Benchmark]
-        public void GetDistribution_Performance()
-        {
-            FileDistributionHelper.GetDistribution("proportional");
-            FileDistributionHelper.GetDistribution("gaussian");
-            FileDistributionHelper.GetDistribution("exponential");
         }
 
         [Benchmark]
@@ -39,9 +31,9 @@ namespace Zipper.Tests.Performance
         {
             for (int i = 0; i < FileCount; i++)
             {
-                var proportional = FileDistributionHelper.GetFolderNumber(i, FolderCount, "proportional");
-                var gaussian = FileDistributionHelper.GetFolderNumber(i, FolderCount, "gaussian");
-                var exponential = FileDistributionHelper.GetFolderNumber(i, FolderCount, "exponential");
+                var proportional = FileDistributionHelper.GetFolderNumber(i, FileCount, FolderCount, DistributionType.Proportional);
+                var gaussian = FileDistributionHelper.GetFolderNumber(i, FileCount, FolderCount, DistributionType.Gaussian);
+                var exponential = FileDistributionHelper.GetFolderNumber(i, FileCount, FolderCount, DistributionType.Exponential);
             }
         }
     }
@@ -177,7 +169,7 @@ namespace Zipper.Tests.Performance
             ProgressTracker.Initialize(Operations);
             for (int i = 0; i < Operations; i++)
             {
-                ProgressTracker.ReportProgress();
+                ProgressTracker.ReportProgress(i + 1, Operations);
             }
         }
 
@@ -194,68 +186,9 @@ namespace Zipper.Tests.Performance
         }
     }
 
-    [MemoryDiagnoser]
-    [SimpleJob(BenchmarkDotNet.Jobs.RuntimeMoniker.Net80)]
-    public class LoadFileBenchmarks
-    {
-        private const int FileCount = 1000;
-        private readonly string _tempPath;
+    // Note: LoadFileGenerator benchmarks removed as the class is internal
+    // Load file performance is tested through integration tests instead
 
-        public LoadFileBenchmarks()
-        {
-            _tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempPath);
-        }
-
-        [Benchmark]
-        public void LoadFileGeneration_Performance()
-        {
-            var loadFilePath = Path.Combine(_tempPath, $"test_{Guid.NewGuid()}.dat");
-            ProgressTracker.Initialize(FileCount);
-            LoadFileGenerator.CreateLoadFile(loadFilePath, "pdf", FileCount, "UTF-8");
-            File.Delete(loadFilePath);
-        }
-
-        [Benchmark]
-        public void LoadFileGeneration_DifferentEncodings()
-        {
-            var encodings = new[] { "UTF-8", "UTF-16", "ANSI" };
-            foreach (var encoding in encodings)
-            {
-                var loadFilePath = Path.Combine(_tempPath, $"test_{encoding}_{Guid.NewGuid()}.dat");
-                ProgressTracker.Initialize(FileCount);
-                LoadFileGenerator.CreateLoadFile(loadFilePath, "pdf", FileCount / encodings.Length, encoding);
-                File.Delete(loadFilePath);
-            }
-        }
-
-        [GlobalCleanup]
-        public void Cleanup()
-        {
-            if (Directory.Exists(_tempPath))
-            {
-                Directory.Delete(_tempPath, true);
-            }
-        }
-    }
-
-    public class PerformanceBenchmarkRunner
-    {
-        public static void Main(string[] args)
-        {
-            Console.WriteLine("Running Zipper Performance Benchmarks...");
-            Console.WriteLine("==========================================");
-
-            // Run all benchmark suites
-            BenchmarkRunner.Run<FileDistributionBenchmarks>();
-            BenchmarkRunner.Run<EmailTemplateBenchmarks>();
-            BenchmarkRunner.Run<MemoryPoolBenchmarks>();
-            BenchmarkRunner.Run<ValidationBenchmarks>();
-            BenchmarkRunner.Run<ProgressTrackingBenchmarks>();
-            BenchmarkRunner.Run<LoadFileBenchmarks>();
-
-            Console.WriteLine("==========================================");
-            Console.WriteLine("All benchmarks completed!");
-        }
-    }
+    // Note: PerformanceBenchmarkRunner removed to avoid Main method conflicts
+    // Run benchmarks using: dotnet run --project Zipper.Tests.csproj --configuration Release -- --filter "PerformanceBenchmarks"
 }
