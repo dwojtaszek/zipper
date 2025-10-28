@@ -24,6 +24,7 @@ namespace Zipper
                 s_totalFiles = totalFiles;
                 s_filesCompleted = 0;
                 s_lastProgressUpdate = DateTime.UtcNow;
+                s_lastDisplayedPercentage = 0;
             }
         }
 
@@ -59,6 +60,9 @@ namespace Zipper
             }
         }
 
+        private static readonly Random s_random = new Random();
+        private static double s_lastDisplayedPercentage = 0;
+
         /// <summary>
         /// Force immediate progress report
         /// </summary>
@@ -66,12 +70,44 @@ namespace Zipper
         /// <param name="total">Total number of files</param>
         public static void ReportProgress(long completed, long total)
         {
-            var percentage = total > 0 ? (double)completed / total * 100 : 0;
+            var actualPercentage = total > 0 ? (double)completed / total * 100 : 0;
             var elapsed = DateTime.UtcNow - s_lastProgressUpdate;
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;
             var eta = rate > 0 ? TimeSpan.FromSeconds((total - completed) / rate) : TimeSpan.Zero;
 
-            Console.Write($"\rProgress: {completed:N0} / {total:N0} files ({percentage:F1}%) - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}");
+            // Only display progress when there's a meaningful change (up to 5% increments)
+            var displayPercentage = CalculateDisplayPercentage(actualPercentage);
+
+            if (displayPercentage > s_lastDisplayedPercentage || actualPercentage >= 100)
+            {
+                s_lastDisplayedPercentage = displayPercentage;
+                var percentageToDisplay = Math.Min(displayPercentage, 100);
+                Console.Write($"\rProgress: {percentageToDisplay:F1}% - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}                     ");
+            }
+        }
+
+        /// <summary>
+        /// Calculate display percentage with random increments up to 5%
+        /// </summary>
+        /// <param name="actualPercentage">The actual completion percentage</param>
+        /// <returns>Display percentage with randomized increments</returns>
+        private static double CalculateDisplayPercentage(double actualPercentage)
+        {
+            if (actualPercentage >= 100)
+                return 100;
+
+            // Calculate the next display threshold based on last displayed percentage
+            var nextThreshold = Math.Ceiling(s_lastDisplayedPercentage / 5.0) * 5.0;
+
+            // Add random variation within the 5% range (1-5% increments)
+            if (actualPercentage >= nextThreshold)
+            {
+                var maxIncrement = Math.Min(5.0, 100 - nextThreshold);
+                var randomIncrement = s_random.NextDouble() * maxIncrement + 0.5; // 0.5% to 5.5%
+                return Math.Min(nextThreshold + randomIncrement, actualPercentage);
+            }
+
+            return s_lastDisplayedPercentage;
         }
 
         /// <summary>
@@ -93,6 +129,7 @@ namespace Zipper
                 s_filesCompleted = 0;
                 s_totalFiles = 0;
                 s_lastProgressUpdate = DateTime.UtcNow;
+                s_lastDisplayedPercentage = 0;
             }
         }
 
