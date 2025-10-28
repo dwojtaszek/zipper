@@ -229,7 +229,7 @@ namespace Zipper.Tests.Performance
             // File distribution
             for (int i = 0; i < iterations; i++)
             {
-                FileDistributionHelper.GetFolderNumber(i, 100, "proportional");
+                FileDistributionHelper.GetFolderNumber(i, iterations, 100, DistributionType.Proportional);
             }
 
             // Email generation

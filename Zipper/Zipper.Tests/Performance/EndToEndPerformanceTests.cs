@@ -45,7 +45,7 @@ namespace Zipper.Tests.Performance
         public async Task ParallelFileGenerator_SmallDataset_ShouldMeetPerformanceTargets()
         {
             // Arrange
-            const int fileCount = _baseline.SmallDatasetFileCount;
+            var fileCount = _baseline.SmallDatasetFileCount;
             var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             var request = new FileGenerationRequest
             {
@@ -53,7 +53,7 @@ namespace Zipper.Tests.Performance
                 FileCount = fileCount,
                 OutputPath = tempDir,
                 Folders = 5,
-                Distribution = "proportional",
+                Distribution = DistributionType.Proportional,
                 Encoding = "UTF-8",
                 WithMetadata = false,
                 WithText = false,
@@ -114,7 +114,7 @@ namespace Zipper.Tests.Performance
         public async Task ParallelFileGenerator_MediumDataset_ShouldMeetPerformanceTargets()
         {
             // Arrange
-            const int fileCount = _baseline.MediumDatasetFileCount;
+            var fileCount = _baseline.MediumDatasetFileCount;
             var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             var request = new FileGenerationRequest
             {
@@ -122,7 +122,7 @@ namespace Zipper.Tests.Performance
                 FileCount = fileCount,
                 OutputPath = tempDir,
                 Folders = 10,
-                Distribution = "gaussian",
+                Distribution = DistributionType.Gaussian,
                 Encoding = "UTF-8",
                 WithMetadata = true,
                 WithText = false,
@@ -199,7 +199,7 @@ namespace Zipper.Tests.Performance
                 FileCount = fileCount,
                 OutputPath = tempDir,
                 Folders = 8,
-                Distribution = "exponential",
+                Distribution = DistributionType.Exponential,
                 Encoding = "UTF-8",
                 WithMetadata = true,
                 WithText = true,
@@ -276,7 +276,7 @@ namespace Zipper.Tests.Performance
                     FileCount = filesPerType,
                     OutputPath = tempDir,
                     Folders = 5,
-                    Distribution = "proportional",
+                    Distribution = DistributionType.Proportional,
                     Encoding = "UTF-8",
                     WithMetadata = false,
                     WithText = false,
