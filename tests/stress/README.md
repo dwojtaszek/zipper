@@ -14,7 +14,21 @@ These tests consume significant system resources and are designed to push the ap
 
 ## 🎯 Purpose
 
-The stress test suite is designed to test failure modes and edge cases that are not covered in regular E2E tests. Each stress test focuses on specific aspects of the application's performance and stability under extreme conditions.
+The stress test suite is designed to test failure modes and edge cases that are not covered in regular E2E tests or performance regression tests. Each stress test focuses on specific aspects of the application's performance and stability under extreme conditions.
+
+### Relationship to Performance Testing
+
+The Zipper project includes multiple layers of performance testing:
+
+- **Performance Regression Tests** (`../test-performance-regression.sh/.bat`): Automated testing for detecting performance regressions in CI/CD
+- **Unit Benchmarks**: Micro-benchmarks for individual components using BenchmarkDotNet
+- **Stress Tests** (this suite): Manual testing of system limits under extreme conditions
+
+Stress tests complement the automated performance testing by:
+- Testing beyond normal operational limits (multi-million files, multi-gigabyte archives)
+- Validating system behavior under resource exhaustion scenarios
+- Identifying edge cases that don't appear in typical performance tests
+- Providing real-world validation of architectural improvements
 
 ## 🔧 Available Stress Tests
 
