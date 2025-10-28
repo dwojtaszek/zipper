@@ -164,15 +164,13 @@ namespace Zipper
 
             if (request.FileType.ToLower() == "eml")
             {
-                // Use the new EmailTemplateSystem for realistic email generation
-                var emailTemplate = EmailTemplateSystem.GetRandomTemplate((int)workItem.Index, (int)workItem.Index);
+                // Use the new EmlGenerationService for clean separation of concerns
+                var emlResult = EmlGenerationService.GenerateEmlContent(
+                    (int)workItem.Index,
+                    request.AttachmentRate);
 
-                if (Random.Shared.Next(100) < request.AttachmentRate)
-                {
-                    attachment = PlaceholderFiles.GetRandomAttachment();
-                }
-
-                fileContent = EmailBuilder.BuildEmail(emailTemplate.To, emailTemplate.From, emailTemplate.Subject, emailTemplate.SentDate, emailTemplate.Body, attachment);
+                fileContent = emlResult.Content;
+                attachment = emlResult.Attachment;
             }
             else
             {
