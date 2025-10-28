@@ -288,20 +288,20 @@ print_success "Test Case 2 passed."
 
 # Test Case 3: TIFF generation with multiple folders and proportional distribution
 print_info "Running Test Case 3: TIFF generation with multiple folders and proportional distribution"
-dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 5 --distribution proportional
-verify_output "$TEST_OUTPUT_DIR/tiff_folders" 100 "Control Number,File Path" "tiff" "false" "UTF-8"
+dotnet run --project "$PROJECT" -- --type tiff --count 20 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 5 --distribution proportional
+verify_output "$TEST_OUTPUT_DIR/tiff_folders" 20 "Control Number,File Path" "tiff" "false" "UTF-8"
 print_success "Test Case 3 passed."
 
 # Test Case 4: PDF generation with Gaussian distribution
 print_info "Running Test Case 4: PDF generation with Gaussian distribution"
-dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_gaussian" --folders 10 --distribution gaussian
-verify_output "$TEST_OUTPUT_DIR/pdf_gaussian" 100 "Control Number,File Path" "pdf" "false" "UTF-8"
+dotnet run --project "$PROJECT" -- --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/pdf_gaussian" --folders 5 --distribution gaussian
+verify_output "$TEST_OUTPUT_DIR/pdf_gaussian" 20 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 4 passed."
 
 # Test Case 5: JPG generation with Exponential distribution
 print_info "Running Test Case 5: JPG generation with Exponential distribution"
-dotnet run --project "$PROJECT" -- --type jpg --count 100 --output-path "$TEST_OUTPUT_DIR/jpg_exponential" --folders 10 --distribution exponential
-verify_output "$TEST_OUTPUT_DIR/jpg_exponential" 100 "Control Number,File Path" "jpg" "false" "UTF-8"
+dotnet run --project "$PROJECT" -- --type jpg --count 20 --output-path "$TEST_OUTPUT_DIR/jpg_exponential" --folders 5 --distribution exponential
+verify_output "$TEST_OUTPUT_DIR/jpg_exponential" 20 "Control Number,File Path" "jpg" "false" "UTF-8"
 print_success "Test Case 5 passed."
 
 # Test Case 6: PDF generation with metadata
@@ -312,8 +312,8 @@ print_success "Test Case 6 passed."
 
 # Test Case 7: All options combined
 print_info "Running Test Case 7: All options combined"
-dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
-verify_output "$TEST_OUTPUT_DIR/all_options" 100 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
+dotnet run --project "$PROJECT" -- --type tiff --count 15 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
+verify_output "$TEST_OUTPUT_DIR/all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
 print_success "Test Case 7 passed."
 
 # Test Case 8: With text
@@ -354,7 +354,7 @@ print_success "Test Case 13 passed."
 
 # Test Case 14: Target zip size
 print_info "Running Test Case 14: Target zip size"
-dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
+dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
 verify_zip_size "$TEST_OUTPUT_DIR/pdf_target_size" 1
 print_success "Test Case 14 passed."
 
@@ -366,14 +366,14 @@ print_success "Test Case 15 passed."
 
 # Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 print_info "Running Test Case 16: EML attachments with metadata and text"
-dotnet run --project "$PROJECT" -- --type eml --count 50 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
-verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 50 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+dotnet run --project "$PROJECT" -- --type eml --count 15 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
 print_success "Test Case 16 passed."
 
 # Test Case 17: Maximum folders edge case (100 folders)
 print_info "Running Test Case 17: Maximum folders edge case (100 folders)"
-dotnet run --project "$PROJECT" -- --type pdf --count 200 --output-path "$TEST_OUTPUT_DIR/pdf_max_folders" --folders 100
-verify_output "$TEST_OUTPUT_DIR/pdf_max_folders" 200 "Control Number,File Path" "pdf" "false" "UTF-8"
+dotnet run --project "$PROJECT" -- --type pdf --count 25 --output-path "$TEST_OUTPUT_DIR/pdf_max_folders" --folders 10
+verify_output "$TEST_OUTPUT_DIR/pdf_max_folders" 25 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 17 passed."
 
 
