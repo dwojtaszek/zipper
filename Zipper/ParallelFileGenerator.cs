@@ -57,7 +57,7 @@ namespace Zipper
                 }
 
                 // Create channels for work distribution
-                var workChannel = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
+                var workChannelReader = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
                 var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Concurrency * 2)
                 {
                     FullMode = BoundedChannelFullMode.Wait
@@ -69,8 +69,8 @@ namespace Zipper
                 // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => ProcessFileWorkAsync(semaphore, workChannel.Reader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
-
+                    .Select(i => ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
+                
                 // Wait for all producers to complete
                 await Task.WhenAll(producerTasks);
 
@@ -98,29 +98,33 @@ namespace Zipper
             }
         }
 
-        private Channel<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType)
+        private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType)
         {
             var channel = Channel.CreateUnbounded<FileWorkItem>();
+            var writer = channel.Writer;
 
-            for (long i = 1; i <= fileCount; i++)
+            Task.Run(async () =>
             {
-                var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
-                var folderName = $"folder_{folderNumber:D3}";
-                var fileName = $"{i:D8}.{fileType}";
-                var filePathInZip = $"{folderName}/{fileName}";
-
-                channel.Writer.WriteAsync(new FileWorkItem
+                for (long i = 1; i <= fileCount; i++)
                 {
-                    Index = i,
-                    FolderNumber = folderNumber,
-                    FolderName = folderName,
-                    FileName = fileName,
-                    FilePathInZip = filePathInZip
-                });
-            }
+                    var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
+                    var folderName = $"folder_{folderNumber:D3}";
+                    var fileName = $"{i:D8}.{fileType}";
+                    var filePathInZip = $"{folderName}/{fileName}";
 
-            channel.Writer.Complete();
-            return channel;
+                    await writer.WriteAsync(new FileWorkItem
+                    {
+                        Index = i,
+                        FolderNumber = folderNumber,
+                        FolderName = folderName,
+                        FileName = fileName,
+                        FilePathInZip = filePathInZip
+                    });
+                }
+                writer.Complete();
+            });
+
+            return channel.Reader;
         }
 
         private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request)
