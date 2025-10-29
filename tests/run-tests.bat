@@ -101,6 +101,11 @@ mkdir "%TEST_OUTPUT_DIR%"
     call :print_info "END: %test_name% at %DATE% %TIME%"
     goto :eof
 
+REM Test Case 0: Minimal test to check for hangs
+call :run_test_case "Test Case 0: Minimal hang check" --type pdf --count 1 --output-path "%TEST_OUTPUT_DIR%\pdf_minimal"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_minimal" 1 "Control Number,File Path" "pdf" "false"
+call :print_success "Test Case 0 passed."
+
 REM Test Case 1: Basic PDF generation
 call :run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_basic" 10 "Control Number,File Path" "pdf" "false"
