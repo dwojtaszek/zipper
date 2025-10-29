@@ -58,7 +58,7 @@ namespace Zipper.Tests.Performance
             var stopwatch = Stopwatch.StartNew();
             long memoryBefore = GC.GetTotalMemory(true);
 
-            for (int i = 0; i < iterations; i++)
+            for (int i = 1; i <= iterations; i++)
             {
                 var folder1 = FileDistributionHelper.GetFolderNumber(i, iterations, folderCount, DistributionType.Proportional);
                 var folder2 = FileDistributionHelper.GetFolderNumber(i, iterations, folderCount, DistributionType.Gaussian);
@@ -227,7 +227,7 @@ namespace Zipper.Tests.Performance
             long memoryBefore = GC.GetTotalMemory(true);
 
             // File distribution
-            for (int i = 0; i < iterations; i++)
+            for (int i = 1; i <= iterations; i++)
             {
                 FileDistributionHelper.GetFolderNumber(i, iterations, 100, DistributionType.Proportional);
             }
