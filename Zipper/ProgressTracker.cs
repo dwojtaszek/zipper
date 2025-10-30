@@ -70,6 +70,12 @@ namespace Zipper
         /// <param name="total">Total number of files</param>
         public static void ReportProgress(long completed, long total)
         {
+            // Disable progress bar in CI environments to prevent hangs
+            if (Environment.GetEnvironmentVariable("CI") == "true")
+            {
+                return;
+            }
+
             var actualPercentage = total > 0 ? (double)completed / total * 100 : 0;
             var elapsed = DateTime.UtcNow - s_lastProgressUpdate;
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;

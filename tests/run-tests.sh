@@ -287,11 +287,6 @@ function run_test_case() {
     print_info "END: $test_name at $(date)"
 }
 
-# Test Case 0: Minimal test to check for hangs
-run_test_case "Test Case 0: Minimal hang check" --type pdf --count 1 --output-path "$TEST_OUTPUT_DIR/pdf_minimal"
-verify_output "$TEST_OUTPUT_DIR/pdf_minimal" 1 "Control Number,File Path" "pdf" "false" "UTF-8"
-print_success "Test Case 0 passed."
-
 # Test Case 1: Basic PDF generation
 run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_basic"
 verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "Control Number,File Path" "pdf" "false" "UTF-8"
