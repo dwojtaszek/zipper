@@ -35,6 +35,12 @@ namespace Zipper
 
         public void ReportProgress(long completed, long total)
         {
+            // Disable progress bar in CI environments to prevent hangs
+            if (Environment.GetEnvironmentVariable("CI") == "true")
+            {
+                return;
+            }
+
             var percentage = total > 0 ? (double)completed / total * 100 : 0;
             var elapsed = _stopwatch.Elapsed;
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;

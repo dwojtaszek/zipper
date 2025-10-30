@@ -28,7 +28,7 @@ namespace Zipper
         public void Rent_ExceedingMaxSize_ShouldReturnNull()
         {
             var manager = new MemoryPoolManager();
-            var memory = manager.Rent((int)(PerformanceConstants.MaxPoolSize + 1));
+            var memory = manager.Rent((int)PerformanceConstants.MaxPoolSize + 1);
 
             Assert.Null(memory);
         }

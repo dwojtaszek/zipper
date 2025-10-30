@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using Xunit;
 
-namespace Zipper.Tests
+namespace Zipper
 {
     public class CommandLineValidatorTests : IDisposable
     {

@@ -29,6 +29,14 @@
         "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
       }
     },
+    "net8.0/osx-arm64": {
+      "System.Text.Encoding.CodePages": {
+        "type": "Direct",
+        "requested": "[9.0.10, )",
+        "resolved": "9.0.10",
+        "contentHash": "UyurlgWm3k3I8LVDmO67GFiu61t4UPzNrTK5fS6K6DADQgIYcFjDnRJWvVls4/R9UjgSL9R+OxJnDXn05fTCCA=="
+      }
+    },
     "net8.0/osx-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
