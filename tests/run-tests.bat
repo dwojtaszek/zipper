@@ -80,6 +80,38 @@ REM --- Helper Functions ---
     )
     goto :eof
 
+REM Verifies the size of the generated zip file.
+REM Arguments:
+REM %1: Test case directory
+REM %2: Target size in MB
+:verify_zip_size
+    set "test_dir=%~1"
+    set "target_size_mb=%~2"
+    set /a target_size_bytes=target_size_mb * 1024 * 1024
+    set /a tolerance_bytes=target_size_bytes / 10
+
+    REM Find the zip file
+    for %%f in ("%test_dir%\*.zip") do set "zip_file=%%f"
+
+    if not defined zip_file (
+        call :print_error "No .zip file found in %test_dir%"
+    )
+
+    REM Get file size
+    for %%A in ("%zip_file%") do set "actual_size_bytes=%%~zA"
+    set /a min_size=target_size_bytes - tolerance_bytes
+    set /a max_size=target_size_bytes + tolerance_bytes
+
+    if %actual_size_bytes% lss %min_size% (
+        call :print_error "Zip file size is below minimum. Expected around %target_size_mb%MB, found %actual_size_bytes% bytes."
+    )
+    if %actual_size_bytes% gtr %max_size% (
+        call :print_error "Zip file size is above maximum. Expected around %target_size_mb%MB, found %actual_size_bytes% bytes."
+    )
+
+    call :print_info "Zip file size is within the expected range."
+    goto :eof
+
 REM --- Test Cases ---
 
 call :print_info "Starting test suite..."
@@ -167,7 +199,8 @@ call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,Fil
 call :print_success "Test Case 13 passed."
 
 REM Test Case 14: Target zip size
-call :run_test_case "Test Case 14: Target zip size" --type pdf --count 100 --output-path "%TEST_OUTPUT_DIR%\pdf_target_size" --target-zip-size 1MB
+call :run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_target_size" --target-zip-size 1MB
+call :verify_zip_size "%TEST_OUTPUT_DIR%\pdf_target_size" 1
 call :print_success "Test Case 14 passed."
 
 REM --- Cleanup ---

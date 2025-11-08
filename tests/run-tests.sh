@@ -353,7 +353,7 @@ verify_output "$TEST_OUTPUT_DIR/eml_metadata_text" 10 "Control Number,File Path,
 print_success "Test Case 13 passed."
 
 # Test Case 14: Target zip size
-run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_target_,size" --target-zip-size 1MB
+run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
 verify_zip_size "$TEST_OUTPUT_DIR/pdf_target_size" 1
 print_success "Test Case 14 passed."
 
