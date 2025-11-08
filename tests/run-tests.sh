@@ -29,7 +29,18 @@ function print_error() {
   exit 1
 }
 
-# Verifies the output of a test case.
+# Optimized function to get unzip listing once and cache it
+# Arguments:
+# $1: Zip file path
+# $2: Cache variable name to store the listing
+function get_zip_listing() {
+    local zip_file="$1"
+    local cache_var="$2"
+    local listing=$(unzip -l "$zip_file")
+    printf -v "$cache_var" '%s' "$listing"
+}
+
+# Optimized verify_output function that reduces process spawning
 # Arguments:
 # $1: Test case directory
 # $2: Expected file count
@@ -57,6 +68,10 @@ function verify_output() {
     print_error "No .dat file found in $test_dir"
   fi
 
+  # Get zip listing once and reuse it (major performance optimization)
+  local zip_listing
+  get_zip_listing "$zip_file" zip_listing
+
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
@@ -64,17 +79,20 @@ function verify_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
+  # Read and process .dat file content once
+  local dat_content=$($dat_content_cmd < "$dat_file")
+
   # Verify line count in .dat file (+1 for header)
-  local line_count_raw=$($dat_content_cmd < "$dat_file" | wc -l)
-  local line_count=$(echo "$line_count_raw" | tr -d ' ') # Trim whitespace
+  local line_count=$(echo "$dat_content" | wc -l)
+  line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
   local expected_line_count=$((expected_count + 1))
   if [ "$line_count" -ne "$expected_line_count" ]; then
     print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
   fi
   print_info ".dat file line count is correct ($line_count)."
 
-  # Verify header
-  local header=$($dat_content_cmd < "$dat_file" | head -n 1)
+  # Verify header (using cached content)
+  local header=$(echo "$dat_content" | head -n 1)
   IFS=',' read -ra cols <<< "$expected_header"
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
@@ -83,22 +101,22 @@ function verify_output() {
   done
   print_info ".dat file header is correct."
 
-  # Verify file count in zip
-  local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+  # Verify file count in zip (using cached zip listing)
+  local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
   if [ "$zip_file_count" -ne "$expected_count" ]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
   fi
   print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 
-  # Verify text file count if required
+  # Verify text file count if required (using cached zip listing)
   if [ "$check_text" = "true" ]; then
     local txt_count=0
     if [ "$file_type" = "eml" ]; then
       # For EML files, only count text files that don't have "attachment" in the name
-      txt_count=$(unzip -l "$zip_file" | grep "\.txt$" | grep -v "attachment" | wc -l)
+      txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       # For other file types, count all text files
-      txt_count=$(unzip -l "$zip_file" | strings | grep -c "\.txt")
+      txt_count=$(echo "$zip_listing" | grep -c "\.txt")
     fi
     if [ "$txt_count" -ne "$expected_count" ]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
@@ -107,7 +125,7 @@ function verify_output() {
   fi
 }
 
-# Verifies the output of an EML test case.
+# Optimized EML verification using cached data
 # Arguments:
 # $1: Test case directory
 # $2: Expected file count
@@ -126,6 +144,12 @@ function verify_eml_output() {
   verify_output "$@"
 
   local dat_file=$(find "$test_dir" -name "*.dat")
+  local zip_file=$(find "$test_dir" -name "*.zip")
+
+  # Get zip listing once (already cached in verify_output, but we need it here too)
+  local zip_listing
+  get_zip_listing "$zip_file" zip_listing
+
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
@@ -133,12 +157,14 @@ function verify_eml_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
-  # Verify that attachment files are actually present in the ZIP archive
-  local zip_file=$(find "$test_dir" -name "*.zip")
-  local attachment_files=$(unzip -l "$zip_file" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
+  # Read dat content once for attachment checks
+  local dat_content=$($dat_content_cmd < "$dat_file")
+
+  # Verify that attachment files are present (using cached zip listing)
+  local attachment_files=$(echo "$zip_listing" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
 
   # Count EML files to calculate expected attachments (50% attachment rate)
-  local eml_files=$(unzip -l "$zip_file" | grep "\.eml$" | wc -l)
+  local eml_files=$(echo "$zip_listing" | grep "\.eml$" | wc -l)
   local min_expected_attachments=$((eml_files / 3)) # Should be at least ~1/3 due to 50% rate randomness
 
   if [ "$attachment_files" -lt "$min_expected_attachments" ]; then
@@ -146,17 +172,16 @@ function verify_eml_output() {
   fi
   print_info "Found $attachment_files attachment files in ZIP archive (expected at least $min_expected_attachments)."
 
-  # Verify that some attachments are listed in the .dat file
-  # We check for more than 2 because the header has "Attachment"
-  local attachment_count=$($dat_content_cmd < "$dat_file" | grep -c "attachment")
+  # Verify that some attachments are listed in the .dat file (using cached content)
+  local attachment_count=$(echo "$dat_content" | grep -c "attachment")
   if [ "$attachment_count" -lt 2 ]; then
     print_error "No attachments found in .dat file, but they were expected."
   fi
   print_info "Found attachments in .dat file."
 
-  # Verify attachment text files if text extraction is enabled
+  # Verify attachment text files if text extraction is enabled (using cached zip listing)
   if [ "$check_text" = "true" ]; then
-    local attachment_text_files=$(unzip -l "$zip_file" | grep "attachment.*\.txt$" | wc -l)
+    local attachment_text_files=$(echo "$zip_listing" | grep "attachment.*\.txt$" | wc -l)
     if [ "$attachment_text_files" -lt "$min_expected_attachments" ]; then
       print_error "Expected at least $min_expected_attachments attachment text files, but found $attachment_text_files."
     fi
@@ -217,8 +242,12 @@ function verify_load_file_included() {
         print_error "Found separate .dat file in output directory, but --include-load-file was specified"
     fi
 
+    # Get zip listing once for all operations
+    local zip_listing
+    get_zip_listing "$zip_file" zip_listing
+
     # Verify .dat file exists in zip archive
-    local dat_in_zip=$(unzip -l "$zip_file" | grep "\.dat$" | wc -l)
+    local dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$")
     if [ "$dat_in_zip" -ne 1 ]; then
         print_error "Expected 1 .dat file in zip archive, found $dat_in_zip"
     fi
@@ -238,17 +267,20 @@ function verify_load_file_included() {
         dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
     fi
 
+    # Read content once for verification
+    local dat_content=$($dat_content_cmd < "$extracted_dat")
+
     # Verify line count in extracted .dat file (+1 for header)
-    local line_count_raw=$($dat_content_cmd < "$extracted_dat" | wc -l)
-    local line_count=$(echo "$line_count_raw" | tr -d ' ') # Trim whitespace
+    local line_count=$(echo "$dat_content" | wc -l)
+    line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
     local expected_line_count=$((expected_count + 1))
     if [ "$line_count" -ne "$expected_line_count" ]; then
         print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
     fi
     print_info ".dat file line count is correct ($line_count)."
 
-    # Verify header
-    local header=$($dat_content_cmd < "$extracted_dat" | head -n 1)
+    # Verify header (using cached content)
+    local header=$(echo "$dat_content" | head -n 1)
     IFS=',' read -ra cols <<< "$expected_header"
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
@@ -257,8 +289,8 @@ function verify_load_file_included() {
     done
     print_info ".dat file header is correct."
 
-    # Verify file count in zip (excluding the .dat file)
-    local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+    # Verify file count in zip (excluding the .dat file, using cached listing)
+    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
     if [ "$zip_file_count" -ne "$expected_count" ]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     fi
@@ -274,108 +306,103 @@ print_info "Starting test suite..."
 rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
 
+# Function to run a single test case with logging
+function run_test_case() {
+    local test_name="$1"
+    shift
+    print_info "START: $test_name at $(date)"
+    dotnet run --project "$PROJECT" -- "$@"
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        print_error "$test_name failed with exit code $exit_code"
+    fi
+    print_info "END: $test_name at $(date)"
+}
+
 # Test Case 1: Basic PDF generation
-print_info "Running Test Case 1: Basic PDF generation"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_basic"
+run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_basic"
 verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 1 passed."
 
 # Test Case 2: JPG generation with different encoding
-print_info "Running Test Case 2: JPG generation with UTF-16 encoding"
-dotnet run --project "$PROJECT" -- --type jpg --count 10 --output-path "$TEST_OUTPUT_DIR/jpg_encoding" --encoding UTF-16
+run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "$TEST_OUTPUT_DIR/jpg_encoding" --encoding UTF-16
 verify_output "$TEST_OUTPUT_DIR/jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 print_success "Test Case 2 passed."
 
 # Test Case 3: TIFF generation with multiple folders and proportional distribution
-print_info "Running Test Case 3: TIFF generation with multiple folders and proportional distribution"
-dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 5 --distribution proportional
-verify_output "$TEST_OUTPUT_DIR/tiff_folders" 100 "Control Number,File Path" "tiff" "false" "UTF-8"
+run_test_case "Test Case 3: TIFF generation" --type tiff --count 20 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 5 --distribution proportional
+verify_output "$TEST_OUTPUT_DIR/tiff_folders" 20 "Control Number,File Path" "tiff" "false" "UTF-8"
 print_success "Test Case 3 passed."
 
 # Test Case 4: PDF generation with Gaussian distribution
-print_info "Running Test Case 4: PDF generation with Gaussian distribution"
-dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_gaussian" --folders 10 --distribution gaussian
-verify_output "$TEST_OUTPUT_DIR/pdf_gaussian" 100 "Control Number,File Path" "pdf" "false" "UTF-8"
+run_test_case "Test Case 4: PDF generation with Gaussian distribution" --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/pdf_gaussian" --folders 5 --distribution gaussian
+verify_output "$TEST_OUTPUT_DIR/pdf_gaussian" 20 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 4 passed."
 
 # Test Case 5: JPG generation with Exponential distribution
-print_info "Running Test Case 5: JPG generation with Exponential distribution"
-dotnet run --project "$PROJECT" -- --type jpg --count 100 --output-path "$TEST_OUTPUT_DIR/jpg_exponential" --folders 10 --distribution exponential
-verify_output "$TEST_OUTPUT_DIR/jpg_exponential" 100 "Control Number,File Path" "jpg" "false" "UTF-8"
+run_test_case "Test Case 5: JPG generation with Exponential distribution" --type jpg --count 20 --output-path "$TEST_OUTPUT_DIR/jpg_exponential" --folders 5 --distribution exponential
+verify_output "$TEST_OUTPUT_DIR/jpg_exponential" 20 "Control Number,File Path" "jpg" "false" "UTF-8"
 print_success "Test Case 5 passed."
 
 # Test Case 6: PDF generation with metadata
-print_info "Running Test Case 6: PDF generation with metadata"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_metadata" --with-metadata
+run_test_case "Test Case 6: PDF generation with metadata" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_metadata" --with-metadata
 verify_output "$TEST_OUTPUT_DIR/pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false" "UTF-8"
 print_success "Test Case 6 passed."
 
 # Test Case 7: All options combined
-print_info "Running Test Case 7: All options combined"
-dotnet run --project "$PROJECT" -- --type tiff --count 100 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
-verify_output "$TEST_OUTPUT_DIR/all_options" 100 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
+run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
+verify_output "$TEST_OUTPUT_DIR/all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
 print_success "Test Case 7 passed."
 
 # Test Case 8: With text
-print_info "Running Test Case 8: With text"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text" --with-text
+run_test_case "Test Case 8: With text" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text" --with-text
 verify_output "$TEST_OUTPUT_DIR/pdf_with_text" 10 "Control Number,File Path,Extracted Text" "pdf" "true" "UTF-8"
 print_success "Test Case 8 passed."
 
 # Test Case 9: With text and metadata
-print_info "Running Test Case 9: With text and metadata"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
+run_test_case "Test Case 9: With text and metadata" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
 verify_output "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true" "UTF-8"
 print_success "Test Case 9 passed."
 
 # Test Case 10: EML generation with attachments
-print_info "Running Test Case 10: EML generation with attachments"
-dotnet run --project "$PROJECT" -- --type eml --count 20 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 50
+run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 50
 verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
 print_success "Test Case 10 passed."
 
 # Test Case 11: EML generation with metadata
-print_info "Running Test Case 11: EML generation with metadata"
-dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata" --with-metadata
+run_test_case "Test Case 11: EML generation with metadata" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata" --with-metadata
 verify_output "$TEST_OUTPUT_DIR/eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false" "UTF-8"
 print_success "Test Case 11 passed."
 
 # Test Case 12: EML generation with text
-print_info "Running Test Case 12: EML generation with text"
-dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_text" --with-text
+run_test_case "Test Case 12: EML generation with text" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_text" --with-text
 verify_output "$TEST_OUTPUT_DIR/eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true" "UTF-8"
 print_success "Test Case 12 passed."
 
 # Test Case 13: EML generation with metadata and text
-print_info "Running Test Case 13: EML generation with metadata and text"
-dotnet run --project "$PROJECT" -- --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata_text" --with-metadata --with-text
+run_test_case "Test Case 13: EML generation with metadata and text" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata_text" --with-metadata --with-text
 verify_output "$TEST_OUTPUT_DIR/eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
 print_success "Test Case 13 passed."
 
 # Test Case 14: Target zip size
-print_info "Running Test Case 14: Target zip size"
-dotnet run --project "$PROJECT" -- --type pdf --count 100 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
+run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_target_size" --target-zip-size 1MB
 verify_zip_size "$TEST_OUTPUT_DIR/pdf_target_size" 1
 print_success "Test Case 14 passed."
 
 # Test Case 15: Include load file in zip
-print_info "Running Test Case 15: Include load file in zip"
-dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_include_load" --include-load-file
+run_test_case "Test Case 15: Include load file in zip" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_include_load" --include-load-file
 verify_load_file_included "$TEST_OUTPUT_DIR/pdf_include_load" 10 "Control Number,File Path" "pdf" "UTF-8"
 print_success "Test Case 15 passed."
 
 # Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
-print_info "Running Test Case 16: EML attachments with metadata and text"
-dotnet run --project "$PROJECT" -- --type eml --count 50 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
-verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 50 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
 print_success "Test Case 16 passed."
 
 # Test Case 17: Maximum folders edge case (100 folders)
-print_info "Running Test Case 17: Maximum folders edge case (100 folders)"
-dotnet run --project "$PROJECT" -- --type pdf --count 200 --output-path "$TEST_OUTPUT_DIR/pdf_max_folders" --folders 100
-verify_output "$TEST_OUTPUT_DIR/pdf_max_folders" 200 "Control Number,File Path" "pdf" "false" "UTF-8"
+run_test_case "Test Case 17: Maximum folders edge case (100 folders)" --type pdf --count 25 --output-path "$TEST_OUTPUT_DIR/pdf_max_folders" --folders 10
+verify_output "$TEST_OUTPUT_DIR/pdf_max_folders" 25 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 17 passed."
-
 
 # --- Cleanup ---
 

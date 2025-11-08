@@ -80,6 +80,38 @@ REM --- Helper Functions ---
     )
     goto :eof
 
+REM Verifies the size of the generated zip file.
+REM Arguments:
+REM %1: Test case directory
+REM %2: Target size in MB
+:verify_zip_size
+    set "test_dir=%~1"
+    set "target_size_mb=%~2"
+    set /a target_size_bytes=target_size_mb * 1024 * 1024
+    set /a tolerance_bytes=target_size_bytes / 10
+
+    REM Find the zip file
+    for %%f in ("%test_dir%\*.zip") do set "zip_file=%%f"
+
+    if not defined zip_file (
+        call :print_error "No .zip file found in %test_dir%"
+    )
+
+    REM Get file size
+    for %%A in ("%zip_file%") do set "actual_size_bytes=%%~zA"
+    set /a min_size=target_size_bytes - tolerance_bytes
+    set /a max_size=target_size_bytes + tolerance_bytes
+
+    if %actual_size_bytes% lss %min_size% (
+        call :print_error "Zip file size is below minimum. Expected around %target_size_mb%MB, found %actual_size_bytes% bytes."
+    )
+    if %actual_size_bytes% gtr %max_size% (
+        call :print_error "Zip file size is above maximum. Expected around %target_size_mb%MB, found %actual_size_bytes% bytes."
+    )
+
+    call :print_info "Zip file size is within the expected range."
+    goto :eof
+
 REM --- Test Cases ---
 
 call :print_info "Starting test suite..."
@@ -90,102 +122,101 @@ if exist "%TEST_OUTPUT_DIR%" (
 )
 mkdir "%TEST_OUTPUT_DIR%"
 
+:run_test_case
+    set "test_name=%~1"
+    shift
+    call :print_info "START: %test_name% at %DATE% %TIME%"
+    dotnet run --project "%PROJECT%" -- %*
+    if errorlevel 1 (
+        call :print_error "%test_name% failed with exit code %errorlevel%"
+    )
+    call :print_info "END: %test_name% at %DATE% %TIME%"
+    goto :eof
+
 REM Test Case 1: Basic PDF generation
-call :print_info "Running Test Case 1: Basic PDF generation"
-dotnet run --project "%PROJECT%" -- --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_basic" 10 "Control Number,File Path" "pdf" "false"
 call :print_success "Test Case 1 passed."
 
 REM Test Case 2: JPG generation with different encoding
-call :print_info "Running Test Case 2: JPG generation with UTF-16 encoding"
-dotnet run --project "%PROJECT%" -- --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
 call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false"
 call :print_success "Test Case 2 passed."
 
 REM Test Case 3: TIFF generation with multiple folders and proportional distribution
-call :print_info "Running Test Case 3: TIFF generation with multiple folders and proportional distribution"
-dotnet run --project "%PROJECT%" -- --type tiff --count 100 --output-path "%TEST_OUTPUT_DIR%\tiff_folders" --folders 5 --distribution proportional
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 3: TIFF generation" --type tiff --count 100 --output-path "%TEST_OUTPUT_DIR%\tiff_folders" --folders 5 --distribution proportional
 call :verify_output "%TEST_OUTPUT_DIR%\tiff_folders" 100 "Control Number,File Path" "tiff" "false"
 call :print_success "Test Case 3 passed."
 
 REM Test Case 4: PDF generation with Gaussian distribution
-call :print_info "Running Test Case 4: PDF generation with Gaussian distribution"
-dotnet run --project "%PROJECT%" -- --type pdf --count 100 --output-path "%TEST_OUTPUT_DIR%\pdf_gaussian" --folders 10 --distribution gaussian
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 4: PDF generation with Gaussian distribution" --type pdf --count 100 --output-path "%TEST_OUTPUT_DIR%\pdf_gaussian" --folders 10 --distribution gaussian
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_gaussian" 100 "Control Number,File Path" "pdf" "false"
 call :print_success "Test Case 4 passed."
 
 REM Test Case 5: JPG generation with Exponential distribution
-call :print_info "Running Test Case 5: JPG generation with Exponential distribution"
-dotnet run --project "%PROJECT%" -- --type jpg --count 100 --output-path "%TEST_OUTPUT_DIR%\jpg_exponential" --folders 10 --distribution exponential
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 5: JPG generation with Exponential distribution" --type jpg --count 100 --output-path "%TEST_OUTPUT_DIR%\jpg_exponential" --folders 10 --distribution exponential
 call :verify_output "%TEST_OUTPUT_DIR%\jpg_exponential" 100 "Control Number,File Path" "jpg" "false"
 call :print_success "Test Case 5 passed."
 
 REM Test Case 6: PDF generation with metadata
-call :print_info "Running Test Case 6: PDF generation with metadata"
-dotnet run --project "%PROJECT%" -- --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_metadata" --with-metadata
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 6: PDF generation with metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_metadata" --with-metadata
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false"
 call :print_success "Test Case 6 passed."
 
 REM Test Case 7: All options combined
-call :print_info "Running Test Case 7: All options combined"
-dotnet run --project "%PROJECT%" -- --type tiff --count 100 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 7: All options combined" --type tiff --count 100 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 20 --encoding ANSI --distribution gaussian --with-metadata
 call :verify_output "%TEST_OUTPUT_DIR%\all_options" 100 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false"
 call :print_success "Test Case 7 passed."
 
 REM Test Case 8: With text
-call :print_info "Running Test Case 8: With text"
-dotnet run --project "%PROJECT%" -- --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text" --with-text
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 8: With text" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text" --with-text
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text" 10 "Control Number,File Path,Extracted Text" "pdf" "true"
 call :print_success "Test Case 8 passed."
 
 REM Test Case 9: With text and metadata
-call :print_info "Running Test Case 9: With text and metadata"
-dotnet run --project "%PROJECT%" -- --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" --with-text --with-metadata
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 9: With text and metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" --with-text --with-metadata
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true"
 call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
-call :print_info "Running Test Case 10: EML generation with attachments"
-dotnet run --project "%PROJECT%" -- --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50
 call :verify_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false"
 call :print_success "Test Case 10 passed."
 
 REM Test Case 11: EML generation with metadata
-call :print_info "Running Test Case 11: EML generation with metadata"
-dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata" --with-metadata
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 11: EML generation with metadata" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata" --with-metadata
 call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false"
 call :print_success "Test Case 11 passed."
 
 REM Test Case 12: EML generation with text
-call :print_info "Running Test Case 12: EML generation with text"
-dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_text" --with-text
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 12: EML generation with text" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_text" --with-text
 call :verify_output "%TEST_OUTPUT_DIR%\eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true"
 call :print_success "Test Case 12 passed."
 
 REM Test Case 13: EML generation with metadata and text
-call :print_info "Running Test Case 13: EML generation with metadata and text"
-dotnet run --project "%PROJECT%" -- --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata_text" --with-metadata --with-text
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 13: EML generation with metadata and text" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata_text" --with-metadata --with-text
 call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true"
 call :print_success "Test Case 13 passed."
 
 REM Test Case 14: Target zip size
-call :print_info "Running Test Case 14: Target zip size"
-dotnet run --project "%PROJECT%" -- --type pdf --count 100 --output-path "%TEST_OUTPUT_DIR%\pdf_target_size" --target-zip-size 1MB
-if errorlevel 1 exit /b 1
+call :run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_target_size" --target-zip-size 1MB
+call :verify_zip_size "%TEST_OUTPUT_DIR%\pdf_target_size" 1
 call :print_success "Test Case 14 passed."
+
+REM Test Case 15: Include load file in zip
+call :run_test_case "Test Case 15: Include load file in zip" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_include_load" --include-load-file
+call :verify_load_file_included "%TEST_OUTPUT_DIR%\pdf_include_load" 10 "Control Number,File Path" "pdf" "UTF-8"
+call :print_success "Test Case 15 passed."
+
+REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
+call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :print_success "Test Case 16 passed."
+
+REM Test Case 17: Maximum folders edge case (100 folders)
+call :run_test_case "Test Case 17: Maximum folders edge case (100 folders)" --type pdf --count 25 --output-path "%TEST_OUTPUT_DIR%\pdf_max_folders" --folders 10
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_max_folders" 25 "Control Number,File Path" "pdf" "false" "UTF-8"
+call :print_success "Test Case 17 passed."
 
 REM --- Cleanup ---
 

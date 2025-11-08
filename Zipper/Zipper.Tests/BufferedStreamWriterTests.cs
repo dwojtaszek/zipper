@@ -16,7 +16,7 @@ namespace Zipper
             var testData = new byte[100];
             new Random(42).NextBytes(testData);
 
-            await writer.WriteAsync(testData);
+            await writer.WriteAsync(testData.AsMemory());
             await writer.FlushAsync();
 
             Assert.Equal(testData.Length, outputStream.Length);
@@ -34,8 +34,8 @@ namespace Zipper
             new Random(42).NextBytes(data1);
             new Random(123).NextBytes(data2);
 
-            await writer.WriteAsync(data1);
-            await writer.WriteAsync(data2);
+            await writer.WriteAsync(data1.AsMemory());
+            await writer.WriteAsync(data2.AsMemory());
             await writer.FlushAsync();
 
             Assert.Equal(64, outputStream.Length);
