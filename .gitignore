@@ -13,3 +13,7 @@ in-memoria.db
 # GitHub App credentials
 gha-creds-*.jsonspec-kit/
 
+# TODO files
+*-todo.md
+TODO.md
+
