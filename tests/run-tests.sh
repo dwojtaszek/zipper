@@ -29,7 +29,18 @@ function print_error() {
   exit 1
 }
 
-# Verifies the output of a test case.
+# Optimized function to get unzip listing once and cache it
+# Arguments:
+# $1: Zip file path
+# $2: Cache variable name to store the listing
+function get_zip_listing() {
+    local zip_file="$1"
+    local cache_var="$2"
+    local listing=$(unzip -l "$zip_file")
+    printf -v "$cache_var" '%s' "$listing"
+}
+
+# Optimized verify_output function that reduces process spawning
 # Arguments:
 # $1: Test case directory
 # $2: Expected file count
@@ -57,6 +68,10 @@ function verify_output() {
     print_error "No .dat file found in $test_dir"
   fi
 
+  # Get zip listing once and reuse it (major performance optimization)
+  local zip_listing
+  get_zip_listing "$zip_file" zip_listing
+
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
@@ -64,17 +79,20 @@ function verify_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
+  # Read and process .dat file content once
+  local dat_content=$($dat_content_cmd < "$dat_file")
+
   # Verify line count in .dat file (+1 for header)
-  local line_count_raw=$($dat_content_cmd < "$dat_file" | wc -l)
-  local line_count=$(echo "$line_count_raw" | tr -d ' ') # Trim whitespace
+  local line_count=$(echo "$dat_content" | wc -l)
+  line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
   local expected_line_count=$((expected_count + 1))
   if [ "$line_count" -ne "$expected_line_count" ]; then
     print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
   fi
   print_info ".dat file line count is correct ($line_count)."
 
-  # Verify header
-  local header=$($dat_content_cmd < "$dat_file" | head -n 1)
+  # Verify header (using cached content)
+  local header=$(echo "$dat_content" | head -n 1)
   IFS=',' read -ra cols <<< "$expected_header"
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
@@ -83,22 +101,22 @@ function verify_output() {
   done
   print_info ".dat file header is correct."
 
-  # Verify file count in zip
-  local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+  # Verify file count in zip (using cached zip listing)
+  local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
   if [ "$zip_file_count" -ne "$expected_count" ]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
   fi
   print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 
-  # Verify text file count if required
+  # Verify text file count if required (using cached zip listing)
   if [ "$check_text" = "true" ]; then
     local txt_count=0
     if [ "$file_type" = "eml" ]; then
       # For EML files, only count text files that don't have "attachment" in the name
-      txt_count=$(unzip -l "$zip_file" | grep "\.txt$" | grep -v "attachment" | wc -l)
+      txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       # For other file types, count all text files
-      txt_count=$(unzip -l "$zip_file" | strings | grep -c "\.txt")
+      txt_count=$(echo "$zip_listing" | grep -c "\.txt")
     fi
     if [ "$txt_count" -ne "$expected_count" ]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
@@ -107,7 +125,7 @@ function verify_output() {
   fi
 }
 
-# Verifies the output of an EML test case.
+# Optimized EML verification using cached data
 # Arguments:
 # $1: Test case directory
 # $2: Expected file count
@@ -126,6 +144,12 @@ function verify_eml_output() {
   verify_output "$@"
 
   local dat_file=$(find "$test_dir" -name "*.dat")
+  local zip_file=$(find "$test_dir" -name "*.zip")
+
+  # Get zip listing once (already cached in verify_output, but we need it here too)
+  local zip_listing
+  get_zip_listing "$zip_file" zip_listing
+
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
@@ -133,12 +157,14 @@ function verify_eml_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
-  # Verify that attachment files are actually present in the ZIP archive
-  local zip_file=$(find "$test_dir" -name "*.zip")
-  local attachment_files=$(unzip -l "$zip_file" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
+  # Read dat content once for attachment checks
+  local dat_content=$($dat_content_cmd < "$dat_file")
+
+  # Verify that attachment files are present (using cached zip listing)
+  local attachment_files=$(echo "$zip_listing" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
 
   # Count EML files to calculate expected attachments (50% attachment rate)
-  local eml_files=$(unzip -l "$zip_file" | grep "\.eml$" | wc -l)
+  local eml_files=$(echo "$zip_listing" | grep "\.eml$" | wc -l)
   local min_expected_attachments=$((eml_files / 3)) # Should be at least ~1/3 due to 50% rate randomness
 
   if [ "$attachment_files" -lt "$min_expected_attachments" ]; then
@@ -146,17 +172,16 @@ function verify_eml_output() {
   fi
   print_info "Found $attachment_files attachment files in ZIP archive (expected at least $min_expected_attachments)."
 
-  # Verify that some attachments are listed in the .dat file
-  # We check for more than 2 because the header has "Attachment"
-  local attachment_count=$($dat_content_cmd < "$dat_file" | grep -c "attachment")
+  # Verify that some attachments are listed in the .dat file (using cached content)
+  local attachment_count=$(echo "$dat_content" | grep -c "attachment")
   if [ "$attachment_count" -lt 2 ]; then
     print_error "No attachments found in .dat file, but they were expected."
   fi
   print_info "Found attachments in .dat file."
 
-  # Verify attachment text files if text extraction is enabled
+  # Verify attachment text files if text extraction is enabled (using cached zip listing)
   if [ "$check_text" = "true" ]; then
-    local attachment_text_files=$(unzip -l "$zip_file" | grep "attachment.*\.txt$" | wc -l)
+    local attachment_text_files=$(echo "$zip_listing" | grep "attachment.*\.txt$" | wc -l)
     if [ "$attachment_text_files" -lt "$min_expected_attachments" ]; then
       print_error "Expected at least $min_expected_attachments attachment text files, but found $attachment_text_files."
     fi
@@ -217,8 +242,12 @@ function verify_load_file_included() {
         print_error "Found separate .dat file in output directory, but --include-load-file was specified"
     fi
 
+    # Get zip listing once for all operations
+    local zip_listing
+    get_zip_listing "$zip_file" zip_listing
+
     # Verify .dat file exists in zip archive
-    local dat_in_zip=$(unzip -l "$zip_file" | grep "\.dat$" | wc -l)
+    local dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$")
     if [ "$dat_in_zip" -ne 1 ]; then
         print_error "Expected 1 .dat file in zip archive, found $dat_in_zip"
     fi
@@ -238,17 +267,20 @@ function verify_load_file_included() {
         dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
     fi
 
+    # Read content once for verification
+    local dat_content=$($dat_content_cmd < "$extracted_dat")
+
     # Verify line count in extracted .dat file (+1 for header)
-    local line_count_raw=$($dat_content_cmd < "$extracted_dat" | wc -l)
-    local line_count=$(echo "$line_count_raw" | tr -d ' ') # Trim whitespace
+    local line_count=$(echo "$dat_content" | wc -l)
+    line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
     local expected_line_count=$((expected_count + 1))
     if [ "$line_count" -ne "$expected_line_count" ]; then
         print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
     fi
     print_info ".dat file line count is correct ($line_count)."
 
-    # Verify header
-    local header=$($dat_content_cmd < "$extracted_dat" | head -n 1)
+    # Verify header (using cached content)
+    local header=$(echo "$dat_content" | head -n 1)
     IFS=',' read -ra cols <<< "$expected_header"
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
@@ -257,8 +289,8 @@ function verify_load_file_included() {
     done
     print_info ".dat file header is correct."
 
-    # Verify file count in zip (excluding the .dat file)
-    local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+    # Verify file count in zip (excluding the .dat file, using cached listing)
+    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
     if [ "$zip_file_count" -ne "$expected_count" ]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     fi

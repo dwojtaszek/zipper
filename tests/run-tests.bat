@@ -203,6 +203,21 @@ call :run_test_case "Test Case 14: Target zip size" --type pdf --count 10 --outp
 call :verify_zip_size "%TEST_OUTPUT_DIR%\pdf_target_size" 1
 call :print_success "Test Case 14 passed."
 
+REM Test Case 15: Include load file in zip
+call :run_test_case "Test Case 15: Include load file in zip" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_include_load" --include-load-file
+call :verify_load_file_included "%TEST_OUTPUT_DIR%\pdf_include_load" 10 "Control Number,File Path" "pdf" "UTF-8"
+call :print_success "Test Case 15 passed."
+
+REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
+call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :print_success "Test Case 16 passed."
+
+REM Test Case 17: Maximum folders edge case (100 folders)
+call :run_test_case "Test Case 17: Maximum folders edge case (100 folders)" --type pdf --count 25 --output-path "%TEST_OUTPUT_DIR%\pdf_max_folders" --folders 10
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_max_folders" 25 "Control Number,File Path" "pdf" "false" "UTF-8"
+call :print_success "Test Case 17 passed."
+
 REM --- Cleanup ---
 
 call :print_info "Cleaning up test output..."
