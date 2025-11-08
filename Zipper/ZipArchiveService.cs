@@ -42,19 +42,27 @@ namespace Zipper
             {
                 processedFiles.Add(fileData);
 
-                // Write main file
-                await WriteFileToArchiveAsync(archive, fileData);
+                // Sequentially create ZIP entries to avoid conflicts.
+                // The order is:
+                // 1. Main file (e.g., .eml)
+                // 2. Main file's extracted text (if requested)
+                // 3. Attachment (if it exists)
+                // 4. Attachment's extracted text (if it exists and text is requested)
+                WriteFileToArchive(archive, fileData);
 
-                // Write attachment if it exists (for EML)
-                if (fileData.Attachment.HasValue)
-                {
-                    await WriteAttachmentToArchiveAsync(archive, fileData, request);
-                }
-
-                // Write extracted text file if requested
                 if (request.WithText)
                 {
-                    await WriteExtractedTextToArchiveAsync(archive, fileData, request);
+                    WriteExtractedTextToArchive(archive, fileData, request);
+                }
+
+                if (fileData.Attachment.HasValue)
+                {
+                    WriteAttachmentToArchive(archive, fileData);
+                }
+
+                if (fileData.Attachment.HasValue && request.WithText)
+                {
+                    WriteAttachmentTextToArchive(archive, fileData);
                 }
 
                 fileData.MemoryOwner?.Dispose();
@@ -72,19 +80,19 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes a single file to the ZIP archive
+        /// Writes a single file to the ZIP archive (synchronous version)
         /// </summary>
-        private static async Task WriteFileToArchiveAsync(ZipArchive archive, FileData fileData)
+        private static void WriteFileToArchive(ZipArchive archive, FileData fileData)
         {
             var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
             using var entryStream = entry.Open();
-            await entryStream.WriteAsync(fileData.Data);
+            entryStream.Write(fileData.Data);
         }
 
         /// <summary>
-        /// Writes an attachment file to the ZIP archive (for EML files)
+        /// Writes an attachment file to the ZIP archive (synchronous version)
         /// </summary>
-        private static async Task WriteAttachmentToArchiveAsync(ZipArchive archive, FileData fileData, FileGenerationRequest request)
+        private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData)
         {
             if (!fileData.Attachment.HasValue) return;
 
@@ -93,25 +101,29 @@ namespace Zipper
                 CompressionLevel.Optimal);
 
             using var attachmentStream = attachmentEntry.Open();
-            await attachmentStream.WriteAsync(fileData.Attachment.Value.content);
-
-            // Write extracted text for attachment if requested
-            if (request.WithText)
-            {
-                var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
-                var attachmentTextEntry = archive.CreateEntry(
-                    $"{fileData.WorkItem.FolderName}/{attachmentTextFileName}",
-                    CompressionLevel.Optimal);
-
-                using var attachmentTextStream = attachmentTextEntry.Open();
-                await attachmentTextStream.WriteAsync(PlaceholderFiles.ExtractedText);
-            }
+            attachmentStream.Write(fileData.Attachment.Value.content);
         }
 
         /// <summary>
-        /// Writes an extracted text version of a file to the ZIP archive
+        /// Writes the extracted text for an attachment to the ZIP archive.
         /// </summary>
-        private static async Task WriteExtractedTextToArchiveAsync(ZipArchive archive, FileData fileData, FileGenerationRequest request)
+        private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData)
+        {
+            if (!fileData.Attachment.HasValue) return;
+
+            var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
+            var attachmentTextEntry = archive.CreateEntry(
+                $"{fileData.WorkItem.FolderName}/{attachmentTextFileName}",
+                CompressionLevel.Optimal);
+
+            using var attachmentTextStream = attachmentTextEntry.Open();
+            attachmentTextStream.Write(PlaceholderFiles.ExtractedText);
+        }
+
+        /// <summary>
+        /// Writes an extracted text version of a file to the ZIP archive (synchronous version)
+        /// </summary>
+        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request)
         {
             if (!request.WithText) return;
 
@@ -122,7 +134,7 @@ namespace Zipper
             using var textEntryStream = textEntry.Open();
 
             var textContent = GetExtractedTextContent(request.FileType);
-            await textEntryStream.WriteAsync(Encoding.UTF8.GetBytes(textContent));
+            textEntryStream.Write(Encoding.UTF8.GetBytes(textContent));
         }
 
         /// <summary>

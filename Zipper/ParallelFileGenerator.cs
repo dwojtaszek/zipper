@@ -39,6 +39,13 @@ namespace Zipper
                 if (request.Concurrency <= 0)
                     request.Concurrency = PerformanceConstants.DefaultConcurrency;
 
+                // For EML files, use sequential processing to avoid ZIP entry creation conflicts
+                // when attachments and text extraction are enabled
+                if (request.FileType.ToLower() == "eml" && (request.WithText || request.AttachmentRate > 0))
+                {
+                    request.Concurrency = 1; // Force sequential processing
+                }
+
                 Directory.CreateDirectory(request.OutputPath);
 
                 var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
