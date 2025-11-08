@@ -18,7 +18,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set Version
       id: version
       run: echo "VERSION=$(cat .version)" >> $GITHUB_OUTPUT
@@ -29,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
@@ -59,10 +59,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
         cache: true
@@ -75,7 +75,7 @@ jobs:
 
     - name: Cache ${{ matrix.platform }} build
       id: cache-build
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: publish/${{ matrix.platform }}
         key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.cs', '**/*.csproj') }}
@@ -126,10 +126,10 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.x
 
@@ -168,7 +168,7 @@ jobs:
       contents: write
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         persist-credentials: true
     - name: Download all build artifacts
