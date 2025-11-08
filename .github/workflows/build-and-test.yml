@@ -194,15 +194,69 @@ jobs:
     - name: Bump version
       if: success()
       run: |
+        # Configure git user
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+        # Pull latest changes to avoid conflicts
+        echo "Pulling latest changes from master..."
+        git pull origin master
+
+        # Read and validate current version
         version=$(cat .version)
+        echo "Current version: $version"
+
+        if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Invalid version format: $version"
+          echo "Expected format: X.Y.Z where X, Y, Z are numbers"
+          exit 1
+        fi
+
+        # Parse version components safely
         major=$(echo $version | cut -d. -f1)
         minor=$(echo $version | cut -d. -f2)
         build=$(echo $version | cut -d. -f3)
+
+        # Increment build number
         new_build=$((build + 1))
         new_version="$major.$minor.$new_build"
+
+        echo "📦 Bumping version from $version to $new_version"
+
+        # Check if version already exists in git tags (prevent duplicates)
+        if git rev-parse "v$new_version" >/dev/null 2>&1; then
+          echo "⚠️ Version $new_version already exists as a tag, skipping bump"
+          exit 0
+        fi
+
+        # Update version file
         echo $new_version > .version
+
+        # Commit the change
         git add .version
         git commit -m "chore(release): bump version to $new_version [skip ci]"
-        git push
+
+        # Push with conflict handling
+        echo "🚀 Pushing version bump to master..."
+
+        # Try direct push first (most common case)
+        if git push origin master; then
+          echo "✅ Version bump pushed successfully"
+        else
+          echo "⚠️ Push failed, attempting to resolve conflicts..."
+
+          # Pull and merge any conflicting changes
+          git pull --no-rebase origin master
+
+          # Try push again after conflict resolution
+          if git push origin master; then
+            echo "✅ Version bump pushed successfully after conflict resolution"
+          else
+            echo "❌ Failed to push version bump after conflict resolution"
+            echo "This usually indicates concurrent version bump attempts"
+            echo "Manual intervention may be required"
+            exit 1
+          fi
+        fi
+
+        echo "🎉 Successfully bumped version to $new_version"
