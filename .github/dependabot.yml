@@ -5,7 +5,32 @@
 
 version: 2
 updates:
-  - package-ecosystem: "nuget" # See documentation for possible values
+  # Update NuGet dependencies
+  - package-ecosystem: "nuget"
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "dwojtaszek"
+    assignees:
+      - "dwojtaszek"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # Update GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/" # Location of workflow files
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "dwojtaszek"
+    assignees:
+      - "dwojtaszek"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
