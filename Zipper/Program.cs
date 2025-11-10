@@ -11,6 +11,12 @@ namespace Zipper
 {
     public class Program
     {
+        /// <summary>
+        /// Entry point for the Zipper CLI application.
+        /// Validates command line arguments and initiates file generation.
+        /// </summary>
+        /// <param name="args">Command line arguments</param>
+        /// <returns>Exit code (0 for success, 1 for error)</returns>
         public static async Task<int> Main(string[] args)
         {
             var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
