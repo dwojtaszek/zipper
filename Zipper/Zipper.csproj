@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.21" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.10" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>
