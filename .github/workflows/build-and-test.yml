@@ -179,7 +179,7 @@ jobs:
       run: ls -R artifacts
     - name: Create Release
       id: create_release
-      uses: softprops/action-gh-release@v2.4.2
+      uses: softprops/action-gh-release@v2.5.0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
