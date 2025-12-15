@@ -100,7 +100,7 @@ jobs:
       shell: bash
 
     - name: Upload ${{ matrix.platform }} artifact
-      uses: actions/upload-artifact@v5
+      uses: actions/upload-artifact@v6
       with:
         name: zipper-${{ matrix.platform }}
         path: publish/${{ matrix.platform }}
