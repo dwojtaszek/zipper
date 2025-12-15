@@ -134,7 +134,7 @@ jobs:
         dotnet-version: 8.0.x
 
     - name: Download ${{ matrix.platform }} build artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: zipper-${{ matrix.platform }}
         path: artifacts
@@ -172,7 +172,7 @@ jobs:
       with:
         persist-credentials: true
     - name: Download all build artifacts
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         path: artifacts
     - name: List downloaded artifacts
