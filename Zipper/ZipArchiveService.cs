@@ -142,14 +142,12 @@ namespace Zipper
         /// </summary>
         private static string GetExtractedTextContent(string fileType)
         {
-            return fileType.ToLowerInvariant() switch
+            var content = fileType.ToLowerInvariant() switch
             {
-                "pdf" => System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText),
-                "jpg" or "jpeg" => System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText),
-                "tiff" => System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText),
-                "eml" => System.Text.Encoding.UTF8.GetString(PlaceholderFiles.EmlExtractedText),
-                _ => System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText)
+                "eml" => PlaceholderFiles.EmlExtractedText,
+                _ => PlaceholderFiles.ExtractedText
             };
+            return System.Text.Encoding.UTF8.GetString(content);
         }
     }
 }

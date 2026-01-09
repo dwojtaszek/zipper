@@ -9,8 +9,6 @@ namespace Zipper
     /// </summary>
     public static class EmailTemplateSystem
     {
-        private static readonly Random _random = new Random();
-
         /// <summary>
         /// Email template categories for variety
         /// </summary>
@@ -41,7 +39,7 @@ namespace Zipper
         {
             var selectedCategory = category ?? GetRandomCategory();
             var templates = GetTemplatesForCategory(selectedCategory);
-            var baseTemplate = templates[_random.Next(templates.Count)];
+            var baseTemplate = templates[Random.Shared.Next(templates.Count)];
 
             return new EmailTemplate
             {
@@ -102,7 +100,7 @@ namespace Zipper
         private static EmailCategory GetRandomCategory()
         {
             var categories = Enum.GetValues<EmailCategory>();
-            return categories[_random.Next(categories.Length)];
+            return categories[Random.Shared.Next(categories.Length)];
         }
 
         private static List<EmailTemplateBase> GetTemplatesForCategory(EmailCategory category)
@@ -140,10 +138,10 @@ namespace Zipper
                 ["{case}"] = $"CASE{recipientIndex:D6}",
                 ["{invoice}"] = $"INV{recipientIndex:D6}",
                 ["{ticket}"] = $"TKT{recipientIndex:D6}",
-                ["{date}"] = DateTime.Now.AddDays(-_random.Next(1, 30)).ToString("MMM dd, yyyy"),
+                ["{date}"] = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("MMM dd, yyyy"),
                 ["{course}"] = $"Course {recipientIndex % 100 + 1}",
                 ["{project}"] = $"Project {recipientIndex % 50 + 1}",
-                ["{quarter}"] = $"Q{(_random.Next(1, 5))}"
+                ["{quarter}"] = $"Q{(Random.Shared.Next(1, 5))}"
             };
 
             var subject = baseSubject;
@@ -164,22 +162,22 @@ namespace Zipper
                 ["{company}"] = $"Company {senderIndex % 100 + 1}",
                 ["{department}"] = GetRandomDepartment(),
                 ["{project}"] = $"Project {recipientIndex % 50 + 1}",
-                ["{amount}"] = $"${(_random.Next(100, 50000)):N2}",
-                ["{deadline}"] = DateTime.Now.AddDays(_random.Next(1, 90)).ToString("MMM dd, yyyy"),
-                ["{meeting}"] = DateTime.Now.AddDays(_random.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
-                ["{date}"] = DateTime.Now.AddDays(-_random.Next(1, 30)).ToString("MMM dd, yyyy"),
+                ["{amount}"] = $"${(Random.Shared.Next(100, 50000)):N2}",
+                ["{deadline}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 90)).ToString("MMM dd, yyyy"),
+                ["{meeting}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
+                ["{date}"] = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("MMM dd, yyyy"),
                 ["{place}"] = GetRandomPlace(),
                 ["{venue}"] = GetRandomVenue(),
                 ["{website}"] = GetRandomWebsite(),
                 ["{service}"] = GetRandomService(),
                 ["{reset_link}"] = $"https://example.com/reset?token={Guid.NewGuid():N}",
-                ["{quarter}"] = $"Q{(_random.Next(1, 5))}",
-                ["{growth}"] = $"{_random.Next(5, 25)}",
-                ["{payment}"] = $"{_random.Next(25, 500):N2}",
-                ["{account}"] = $"ACC{(_random.Next(100000, 999999)):D6}",
-                ["{start_time}"] = $"{_random.Next(0, 12):D2}:00 {(_random.Next(0, 2) == 0 ? "AM" : "PM")}",
-                ["{end_time}"] = $"{_random.Next(13, 23):D2}:00 {(_random.Next(0, 2) == 0 ? "PM" : "AM")}",
-                ["{month}"] = DateTime.Now.AddMonths(-_random.Next(0, 12)).ToString("MMMM")
+                ["{quarter}"] = $"Q{(Random.Shared.Next(1, 5))}",
+                ["{growth}"] = $"{Random.Shared.Next(5, 25)}",
+                ["{payment}"] = $"{Random.Shared.Next(25, 500):N2}",
+                ["{account}"] = $"ACC{(Random.Shared.Next(100000, 999999)):D6}",
+                ["{start_time}"] = $"{Random.Shared.Next(0, 12):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "AM" : "PM")}",
+                ["{end_time}"] = $"{Random.Shared.Next(13, 23):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "PM" : "AM")}",
+                ["{month}"] = DateTime.Now.AddMonths(-Random.Shared.Next(0, 12)).ToString("MMMM")
             };
 
             var body = baseBody;
@@ -195,30 +193,30 @@ namespace Zipper
         {
             var baseDaysAgo = category switch
             {
-                EmailCategory.Notification => _random.Next(1, 7),
-                EmailCategory.Personal => _random.Next(1, 30),
-                EmailCategory.Business => _random.Next(1, 60),
-                EmailCategory.Technical => _random.Next(1, 45),
-                EmailCategory.Marketing => _random.Next(1, 90),
-                EmailCategory.Legal => _random.Next(1, 180),
-                EmailCategory.Financial => _random.Next(1, 45),
-                EmailCategory.Support => _random.Next(1, 14),
-                EmailCategory.Healthcare => _random.Next(1, 90),
-                EmailCategory.Education => _random.Next(1, 120),
-                EmailCategory.Ecommerce => _random.Next(1, 60),
-                EmailCategory.Travel => _random.Next(1, 365),
-                _ => _random.Next(1, 30)
+                EmailCategory.Notification => Random.Shared.Next(1, 7),
+                EmailCategory.Personal => Random.Shared.Next(1, 30),
+                EmailCategory.Business => Random.Shared.Next(1, 60),
+                EmailCategory.Technical => Random.Shared.Next(1, 45),
+                EmailCategory.Marketing => Random.Shared.Next(1, 90),
+                EmailCategory.Legal => Random.Shared.Next(1, 180),
+                EmailCategory.Financial => Random.Shared.Next(1, 45),
+                EmailCategory.Support => Random.Shared.Next(1, 14),
+                EmailCategory.Healthcare => Random.Shared.Next(1, 90),
+                EmailCategory.Education => Random.Shared.Next(1, 120),
+                EmailCategory.Ecommerce => Random.Shared.Next(1, 60),
+                EmailCategory.Travel => Random.Shared.Next(1, 365),
+                _ => Random.Shared.Next(1, 30)
             };
 
-            return DateTime.Now.AddDays(-baseDaysAgo).AddHours(_random.Next(-23, 24)).AddMinutes(_random.Next(-59, 60));
+            return DateTime.Now.AddDays(-baseDaysAgo).AddHours(Random.Shared.Next(-23, 24)).AddMinutes(Random.Shared.Next(-59, 60));
         }
 
         private static string? GenerateCcAddresses(EmailCategory category, int recipientIndex)
         {
-            if (_random.NextDouble() > GetCcProbability(category))
+            if (Random.Shared.NextDouble() > GetCcProbability(category))
                 return null;
 
-            var ccCount = _random.Next(1, 4);
+            var ccCount = Random.Shared.Next(1, 4);
             var ccAddresses = new List<string>();
 
             for (int i = 0; i < ccCount; i++)
@@ -234,11 +232,11 @@ namespace Zipper
         {
             return category switch
             {
-                EmailCategory.Legal => _random.NextDouble() > 0.7,
-                EmailCategory.Financial => _random.NextDouble() > 0.8,
-                EmailCategory.Support => _random.NextDouble() > 0.9,
-                EmailCategory.Technical => _random.NextDouble() > 0.85,
-                _ => _random.NextDouble() > 0.95
+                EmailCategory.Legal => Random.Shared.NextDouble() > 0.7,
+                EmailCategory.Financial => Random.Shared.NextDouble() > 0.8,
+                EmailCategory.Support => Random.Shared.NextDouble() > 0.9,
+                EmailCategory.Technical => Random.Shared.NextDouble() > 0.85,
+                _ => Random.Shared.NextDouble() > 0.95
             };
         }
 
@@ -246,16 +244,16 @@ namespace Zipper
         {
             return category switch
             {
-                EmailCategory.Legal => _random.NextDouble() > 0.3,
-                EmailCategory.Financial => _random.NextDouble() > 0.4,
-                EmailCategory.Business => _random.NextDouble() > 0.7,
-                _ => _random.NextDouble() > 0.9
+                EmailCategory.Legal => Random.Shared.NextDouble() > 0.3,
+                EmailCategory.Financial => Random.Shared.NextDouble() > 0.4,
+                EmailCategory.Business => Random.Shared.NextDouble() > 0.7,
+                _ => Random.Shared.NextDouble() > 0.9
             };
         }
 
         private static string? GenerateReplyToAddress(int senderIndex, EmailCategory category)
         {
-            if (_random.NextDouble() > GetReplyToProbability(category))
+            if (Random.Shared.NextDouble() > GetReplyToProbability(category))
                 return null;
 
             return GenerateEmailAddress(senderIndex, "reply");
@@ -304,7 +302,7 @@ namespace Zipper
                 "Product", "Design", "QA", "Security", "Compliance"
             };
 
-            return departments[_random.Next(departments.Length)];
+            return departments[Random.Shared.Next(departments.Length)];
         }
 
         private static string GetRandomPlace()
@@ -316,7 +314,7 @@ namespace Zipper
                 "University Campus Hall", "Community Center", "Hotel Conference Room", "Beach Resort"
             };
 
-            return places[_random.Next(places.Length)];
+            return places[Random.Shared.Next(places.Length)];
         }
 
         private static string GetRandomVenue()
@@ -328,7 +326,7 @@ namespace Zipper
                 "Community Event Space", "Downtown Theater", "Resort Conference Room", "Stadium Suite"
             };
 
-            return venues[_random.Next(venues.Length)];
+            return venues[Random.Shared.Next(venues.Length)];
         }
 
         private static string GetRandomWebsite()
@@ -340,7 +338,7 @@ namespace Zipper
                 "www.company-portal.com", "www.business-solutions.org", "www.services.net", "www.platform.io"
             };
 
-            return websites[_random.Next(websites.Length)];
+            return websites[Random.Shared.Next(websites.Length)];
         }
 
         private static string GetRandomService()
@@ -352,7 +350,7 @@ namespace Zipper
                 "ProjectManagement Pro", "CustomerPortal Enterprise", "DocumentCloud Plus", "WorkflowOptimizer"
             };
 
-            return services[_random.Next(services.Length)];
+            return services[Random.Shared.Next(services.Length)];
         }
 
         #endregion
@@ -436,7 +434,7 @@ namespace Zipper
         {
             new("Course Enrollment Confirmation - {course}", "Dear {recipient},\n\nCongratulations! You have been successfully enrolled in {course}.\n\nCourse Details:\n• Course Code: {case}\n• Start Date: {date}\n• Instructor: {sender}\n• Format: Online\n• Duration: 12 weeks\n\nNext Steps:\n1. Access your student portal at {website}\n2. Review course materials\n3. Join orientation session on {meeting}\n4. Complete pre-course assessment\n\nWe're excited to have you join our learning community!\n\nBest regards,\n{company} Education Team"),
             new("Assignment Due Reminder - {project}", "Hi {recipient},\n\nThis is a friendly reminder that your assignment for {project} is due soon.\n\nAssignment Details:\n• Course: {course}\n• Assignment Title: {project}\n• Due Date: {deadline}\n• Submission Portal: {website}\n• Maximum Points: 100\n\nLate submissions will incur a 10% penalty per day. Please ensure you submit your work before the deadline.\n\nGood luck with your assignment!\n\n{sender} - Course Instructor"),
-            new("Student Progress Report", "Dear {recipient},\n\nPlease find your student progress report for the {quarter} academic period.\n\nAcademic Performance:\n• Overall GPA: 3.{_random.Next(4, 9)}\n• Courses Completed: {_random.Next(3, 6)}\n• Attendance Rate: {_random.Next(85, 100)}%\n• Credits Earned: {_random.Next(9, 18)}\n\nAreas of Excellence:\n• Class Participation\n• Assignment Quality\n• Collaboration Skills\n\nFor detailed grades and feedback, please visit your student portal.\n\nRegards,\n{company} Academic Advisors"),
+            new("Student Progress Report", "Dear {recipient},\n\nPlease find your student progress report for the {quarter} academic period.\n\nAcademic Performance:\n• Overall GPA: 3.{Random.Shared.Next(4, 9)}\n• Courses Completed: {Random.Shared.Next(3, 6)}\n• Attendance Rate: {Random.Shared.Next(85, 100)}%\n• Credits Earned: {Random.Shared.Next(9, 18)}\n\nAreas of Excellence:\n• Class Participation\n• Assignment Quality\n• Collaboration Skills\n\nFor detailed grades and feedback, please visit your student portal.\n\nRegards,\n{company} Academic Advisors"),
             new("Online Class Invitation", "Hello {recipient},\n\nYou're invited to join our online class session tomorrow.\n\nClass Information:\n• Subject: {course}\n• Topic: {project}\n• Time: {meeting}\n• Platform: {service}\n• Meeting Link: {website}/join/{case}\n\nPlease ensure you have:\n• Stable internet connection\n• Webcam and microphone\n• Course materials downloaded\n\nWe look forward to your active participation!\n\nBest regards,\n{sender} - Education Coordinator"),
             new("Academic Achievement Award", "Congratulations {recipient}!\n\nWe are pleased to inform you that you have been selected for the Academic Excellence Award for {quarter}.\n\nAward Details:\n• Achievement: Outstanding Academic Performance\n• Recognition: Certificate and Scholarship\n• Ceremony Date: {date}\n• Venue: {venue}\n\nYour dedication to academic excellence has not gone unnoticed. This award recognizes your hard work and commitment to learning.\n\nWe hope to see you and your family at the awards ceremony.\n\nWith Pride,\n{company} Academic Committee")
         };
@@ -453,10 +451,10 @@ namespace Zipper
         private static readonly List<EmailTemplateBase> TravelTemplates = new()
         {
             new("Booking Confirmation - {project}", "Dear {recipient},\n\nYour travel booking has been confirmed! Get ready for an amazing experience.\n\nBooking Details:\n• Confirmation Number: {case}\n• Destination: {project}\n• Travel Dates: {date} - {deadline}\n• Total Cost: {amount}\n• Booking Status: Confirmed\n\nWhat's Included:\n• Round-trip airfare\n• Hotel accommodation\n• Daily breakfast\n• Airport transfers\n\nDownload your itinerary: {website}/itinerary/{case}\n\nHave a wonderful trip!\n\n{company} Travel Team"),
-            new("Flight Check-in Reminder", "Hello {recipient},\n\nYour flight check-in is now open! Secure your preferred seat and save time at the airport.\n\nFlight Information:\n• Flight Number: {case}\n• Departure: {date} at {meeting}\n• Gate: A{sender % 20 + 1}\n• Seat: {_random.Next(1, 30)}{(char)('A' + Random.Shared.Next(0, 6))}\n• Destination: {project}\n\nCheck-in Now: {website}/checkin/{case}\n\nPlease arrive at the airport at least 2 hours before departure.\n\nSafe Travels,\n{company} Airlines"),
+            new("Flight Check-in Reminder", "Hello {recipient},\n\nYour flight check-in is now open! Secure your preferred seat and save time at the airport.\n\nFlight Information:\n• Flight Number: {case}\n• Departure: {date} at {meeting}\n• Gate: A{sender % 20 + 1}\n• Seat: {Random.Shared.Next(1, 30)}{(char)('A' + Random.Shared.Next(0, 6))}\n• Destination: {project}\n\nCheck-in Now: {website}/checkin/{case}\n\nPlease arrive at the airport at least 2 hours before departure.\n\nSafe Travels,\n{company} Airlines"),
             new("Hotel Reservation Confirmation", "Dear {recipient},\n\nWelcome to {venue}! Your hotel reservation has been confirmed.\n\nReservation Details:\n• Confirmation Number: {case}\n• Check-in: {date}\n• Check-out: {deadline}\n• Room Type: Deluxe Suite\n• Guests: 2 Adults\n• Rate: {amount}/night\n\nHotel Amenities:\n• Free Wi-Fi\n• Swimming Pool\n• Fitness Center\n• Complimentary Breakfast\n• Spa Services\n\nWe look forward to making your stay memorable!\n\n{company} Hospitality Team"),
             new("Travel Insurance Certificate", "Hi {recipient},\n\nYour travel insurance policy has been issued successfully. You're now covered for your upcoming trip!\n\nPolicy Details:\n• Policy Number: INS{case}\n• Coverage Period: {date} - {deadline}\n• Destination: {project}\n• Coverage Amount: {amount}\n• Premium Paid: {payment}\n\nCoverage Includes:\n• Medical emergencies\n• Trip cancellation\n• Lost baggage\n• Flight delays\n• Emergency evacuation\n\nAccess your policy documents: {website}/policy/{case}\n\nTravel Safe,\n{company} Insurance Services"),
-            new("Car Rental Confirmation", "Hello {recipient},\n\nYour car rental has been confirmed for your upcoming trip to {project}.\n\nRental Details:\n• Confirmation Number: {case}\n• Pickup Date: {date}\n• Pickup Location: {place}\n• Vehicle: Compact Car\n• Daily Rate: {amount}\n• Rental Period: {_random.Next(1, 14)} days\n\nIncluded Features:\n• Unlimited mileage\n• Basic insurance coverage\n• GPS navigation system\n• 24/7 roadside assistance\n\nRemember to bring your valid driver's license and credit card.\n\nEnjoy your journey!\n\n{company} Car Rentals")
+            new("Car Rental Confirmation", "Hello {recipient},\n\nYour car rental has been confirmed for your upcoming trip to {project}.\n\nRental Details:\n• Confirmation Number: {case}\n• Pickup Date: {date}\n• Pickup Location: {place}\n• Vehicle: Compact Car\n• Daily Rate: {amount}\n• Rental Period: {Random.Shared.Next(1, 14)} days\n\nIncluded Features:\n• Unlimited mileage\n• Basic insurance coverage\n• GPS navigation system\n• 24/7 roadside assistance\n\nRemember to bring your valid driver's license and credit card.\n\nEnjoy your journey!\n\n{company} Car Rentals")
         };
 
         #endregion

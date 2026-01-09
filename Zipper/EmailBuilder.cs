@@ -180,19 +180,8 @@ namespace Zipper
             if (!string.IsNullOrEmpty(attachment.ContentType))
                 return attachment.ContentType;
 
-            // Simple content type detection based on file extension
-            var extension = System.IO.Path.GetExtension(attachment.FileName).ToLowerInvariant();
-            return extension switch
-            {
-                ".pdf" => "application/pdf",
-                ".doc" or ".docx" => "application/msword",
-                ".xls" or ".xlsx" => "application/vnd.ms-excel",
-                ".txt" => "text/plain",
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                _ => "application/octet-stream"
-            };
+            var extension = System.IO.Path.GetExtension(attachment.FileName);
+            return ContentTypeHelper.GetContentTypeForExtension(extension);
         }
     }
 }

@@ -174,17 +174,6 @@ namespace Zipper
         /// </summary>
         /// <param name="encodingName">Name of the encoding</param>
         /// <returns>Encoding instance</returns>
-        public static Encoding GetEncoding(string encodingName)
-        {
-            return encodingName?.ToUpperInvariant() switch
-            {
-                "UTF-8" => new UTF8Encoding(false),
-                "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252) ?? new UTF8Encoding(false),
-                "UTF-16" => new UnicodeEncoding(false, false),
-                "UNICODE" => new UnicodeEncoding(false, false), // Handle .NET's EncodingName for UTF-16
-                "WESTERN EUROPEAN (WINDOWS)" => CodePagesEncodingProvider.Instance.GetEncoding(1252) ?? new UTF8Encoding(false), // Handle .NET's EncodingName for ANSI
-                _ => new UTF8Encoding(false)
-            };
-        }
+        public static Encoding GetEncoding(string encodingName) => EncodingHelper.GetEncodingOrDefault(encodingName);
     }
 }
