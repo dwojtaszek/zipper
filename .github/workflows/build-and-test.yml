@@ -45,8 +45,6 @@ jobs:
   build:
     needs: [prepare, lint]
     runs-on: ${{ matrix.os }}
-    outputs:
-      build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
     strategy:
       matrix:
         include:
@@ -106,11 +104,6 @@ jobs:
         path: publish/${{ matrix.platform }}
         retention-days: 7
 
-    - name: Check build status
-      id: check_build_status
-      run: |
-        echo "Build completed for ${{ matrix.platform }}"
-
   test:
     needs: build
     runs-on: ${{ matrix.os }}
@@ -138,9 +131,6 @@ jobs:
       with:
         name: zipper-${{ matrix.platform }}
         path: artifacts
-
-    - name: List downloaded artifacts
-      run: ls -R artifacts
 
     - name: Restore test dependencies
       run: dotnet restore Zipper/Zipper.Tests/Zipper.Tests.csproj
@@ -175,8 +165,7 @@ jobs:
       uses: actions/download-artifact@v7
       with:
         path: artifacts
-    - name: List downloaded artifacts
-      run: ls -R artifacts
+
     - name: Create Release
       id: create_release
       uses: softprops/action-gh-release@v2.5.0
@@ -221,8 +210,6 @@ jobs:
         new_build=$((build + 1))
         new_version="$major.$minor.$new_build"
 
-        echo "📦 Bumping version from $version to $new_version"
-
         # Check if version already exists in git tags (prevent duplicates)
         if git rev-parse "v$new_version" >/dev/null 2>&1; then
           echo "⚠️ Version $new_version already exists as a tag, skipping bump"
@@ -237,21 +224,12 @@ jobs:
         git commit -m "chore(release): bump version to $new_version [skip ci]"
 
         # Push with conflict handling
-        echo "🚀 Pushing version bump to master..."
-
-        # Try direct push first (most common case)
-        if git push origin master; then
-          echo "✅ Version bump pushed successfully"
-        else
-          echo "⚠️ Push failed, attempting to resolve conflicts..."
-
+        if ! git push origin master; then
           # Pull and merge any conflicting changes
           git pull --no-rebase origin master
 
           # Try push again after conflict resolution
-          if git push origin master; then
-            echo "✅ Version bump pushed successfully after conflict resolution"
-          else
+          if ! git push origin master; then
             echo "❌ Failed to push version bump after conflict resolution"
             echo "This usually indicates concurrent version bump attempts"
             echo "Manual intervention may be required"
@@ -259,4 +237,4 @@ jobs:
           fi
         fi
 
-        echo "🎉 Successfully bumped version to $new_version"
+        echo "✅ Successfully bumped version to $new_version"
