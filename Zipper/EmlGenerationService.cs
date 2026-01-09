@@ -51,9 +51,6 @@ namespace Zipper
         /// <returns>EML generation result with content and optional attachment</returns>
         public static EmlGenerationResult GenerateEmlContent(EmlGenerationConfig config)
         {
-            if (config == null)
-                throw new ArgumentNullException(nameof(config));
-
             // Get a realistic email template
             var emailTemplate = EmailTemplateSystem.GetRandomTemplate(
                 config.FileIndex,

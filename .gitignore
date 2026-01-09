@@ -17,3 +17,9 @@ gha-creds-*.jsonspec-kit/
 *-todo.md
 TODO.md
 
+# Claude Code
+.claude/
+
+# Test Results
+**/TestResults/
+

@@ -63,24 +63,5 @@ namespace Zipper
                 return;
             }
         }
-
-        static long EstimateCompressedSize(byte[] content, long count, bool withText)
-        {
-            using var ms = new MemoryStream();
-            using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, true))
-            {
-                var entry = archive.CreateEntry("temp." + "txt");
-                using var entryStream = entry.Open();
-                entryStream.Write(content, 0, content.Length);
-
-                if (withText)
-                {
-                    var textEntry = archive.CreateEntry("temp.txt");
-                    using var textEntryStream = textEntry.Open();
-                    textEntryStream.Write(PlaceholderFiles.ExtractedText, 0, PlaceholderFiles.ExtractedText.Length);
-                }
-            }
-            return ms.Length * count;
-        }
     }
 }

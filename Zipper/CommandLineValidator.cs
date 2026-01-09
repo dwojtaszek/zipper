@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -10,6 +11,13 @@ namespace Zipper
     /// </summary>
     public static class CommandLineValidator
     {
+        private static readonly Dictionary<string, long> SizeMultipliers = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["KB"] = 1024,
+            ["MB"] = 1024 * 1024,
+            ["GB"] = 1024 * 1024 * 1024
+        };
+
         /// <summary>
         /// Validates and parses command line arguments into a FileGenerationRequest.
         /// </summary>
@@ -214,28 +222,15 @@ namespace Zipper
         /// </summary>
         private static long? ParseSize(string size)
         {
-            size = size.ToUpper().Trim();
-            long multiplier = 1;
+            size = size.Trim();
 
-            if (size.EndsWith("KB"))
+            foreach (var (suffix, multiplier) in SizeMultipliers)
             {
-                multiplier = 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-            else if (size.EndsWith("MB"))
-            {
-                multiplier = 1024 * 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-            else if (size.EndsWith("GB"))
-            {
-                multiplier = 1024 * 1024 * 1024;
-                size = size.Substring(0, size.Length - 2);
-            }
-
-            if (long.TryParse(size, out long value))
-            {
-                return value * multiplier;
+                if (size.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var numberPart = size.Substring(0, size.Length - suffix.Length);
+                    return long.TryParse(numberPart, out var value) ? value * multiplier : null;
+                }
             }
 
             return null;
@@ -258,16 +253,7 @@ namespace Zipper
         /// <summary>
         /// Gets Encoding from string name.
         /// </summary>
-        private static Encoding? GetEncodingFromName(string name)
-        {
-            return name.ToUpperInvariant() switch
-            {
-                "UTF-8" => new UTF8Encoding(false),
-                "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
-                "UTF-16" => new UnicodeEncoding(false, false),
-                _ => null
-            };
-        }
+        private static Encoding? GetEncodingFromName(string name) => EncodingHelper.GetEncoding(name);
 
         /// <summary>
         /// Internal class to hold parsed arguments before validation.
