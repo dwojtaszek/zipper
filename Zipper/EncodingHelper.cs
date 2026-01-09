@@ -16,10 +16,10 @@ internal static class EncodingHelper
     {
         return encodingName?.ToUpperInvariant() switch
         {
-            "UTF-8" => new UTF8Encoding(false),
+            "UTF-8" => Encoding.UTF8,
             "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
-            "UTF-16" => new UnicodeEncoding(false, false),
-            "UNICODE" => new UnicodeEncoding(false, false),
+            "UTF-16" => Encoding.Unicode,
+            "UNICODE" => Encoding.Unicode,
             "WESTERN EUROPEAN (WINDOWS)" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
             _ => null
         };
@@ -32,6 +32,6 @@ internal static class EncodingHelper
     /// <returns>Encoding instance (defaults to UTF-8 if not found)</returns>
     public static Encoding GetEncodingOrDefault(string? encodingName)
     {
-        return GetEncoding(encodingName) ?? new UTF8Encoding(false);
+        return GetEncoding(encodingName) ?? Encoding.UTF8;
     }
 }

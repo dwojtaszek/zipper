@@ -12,7 +12,7 @@ internal static class ContentTypeHelper
     /// <returns>MIME content type string</returns>
     public static string GetContentTypeForExtension(string extension)
     {
-        return extension.ToLowerInvariant() switch
+        return (extension ?? string.Empty).ToLowerInvariant() switch
         {
             ".pdf" => "application/pdf",
             ".doc" or ".docx" => "application/msword",

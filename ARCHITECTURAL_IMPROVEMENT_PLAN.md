@@ -27,8 +27,7 @@ This document outlines a comprehensive improvement plan for the Zipper applicati
 
 - [ ] **Add Memory Usage Monitoring**
   - Implement memory threshold checks (8GB limit)
-  - Add early termination for memory exhaustion
-  - Include memory usage in progress reporting
+  - Add early mitigation for memory exhaustion
 
 ### 1.2 Input Validation Enhancement
 - [ ] **Implement Comprehensive Parameter Validation**
@@ -57,16 +56,7 @@ This document outlines a comprehensive improvement plan for the Zipper applicati
   - Enable secret scanning validation
   - Add security gate to pull requests
 
-### 1.4 Documentation Updates
-- [ ] **Document Security Limits**
-  - Update README.md with maximum limits
-  - Add security considerations section
-  - Document resource requirements
 
-- [ ] **Create Security Guidelines**
-  - Document safe usage patterns
-  - Add deployment security checklist
-  - Include monitoring recommendations
 
 ---
 
@@ -122,17 +112,6 @@ This document outlines a comprehensive improvement plan for the Zipper applicati
   - Invalid parameter combinations
   - Resource limit enforcement
 
-### 2.4 Performance Testing
-- [ ] **BenchmarkDotNet Integration**
-  - Benchmark critical paths
-  - Memory allocation tracking
-  - Throughput measurement
-  - Regression detection
-
-- [ ] **Automated Performance Gates**
-  - Set performance baselines
-  - Fail builds on regression
-  - Track trends over time
 
 ### 2.5 Coverage Requirements
 - [ ] **Achieve Coverage Targets**
