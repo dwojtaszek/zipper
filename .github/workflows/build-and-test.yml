@@ -57,15 +57,12 @@ jobs:
             Zipper/packages.lock.json
             Zipper/Zipper.Tests/packages.lock.json
 
-      - name: Restore dependencies
-        run: dotnet restore zipper.sln
-
       - name: Cache build
         id: cache-build
         uses: actions/cache@v5.0.1
         with:
           path: publish/${{ matrix.platform }}
-          key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.cs', '**/*.csproj') }}
+          key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ matrix.platform }}-
 
@@ -160,17 +157,13 @@ jobs:
       - name: Bump version
         if: success()
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-
           git pull origin master
 
           version=$(cat .version)
 
-          if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid version format: $version"
-            exit 1
-          fi
+          # Validate version format
+          chmod +x .github/scripts/validate-version.sh
+          .github/scripts/validate-version.sh "$version"
 
           IFS='.' read -r major minor build <<< "$version"
           new_build=$((build + 1))
@@ -186,6 +179,7 @@ jobs:
           git commit -m "chore(release): bump version to $new_version [skip ci]"
 
           if ! git push origin master; then
+            sleep 5
             git pull --no-rebase origin master
             git push origin master || { echo "Push failed after retry"; exit 1; }
           fi
