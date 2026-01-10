@@ -54,7 +54,10 @@ namespace Zipper
                 var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
 
                 var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
-                if (placeholderContent.Length == 0 && request.FileType.ToLower() != "eml")
+                // Allow Office formats and EML to have empty placeholder content (generated dynamically)
+                if (placeholderContent.Length == 0 &&
+                    request.FileType.ToLower() != "eml" &&
+                    !OfficeFileGenerator.IsOfficeFormat(request.FileType))
                     throw new InvalidOperationException($"Unknown file type: {request.FileType}");
 
                 long paddingPerFile = 0;
@@ -85,7 +88,7 @@ namespace Zipper
                 resultChannel.Writer.Complete();
 
                 // Wait for the consumer to finish writing the archive
-                await consumerTask;
+                var actualLoadFilePath = await consumerTask;
 
                 var performanceMetrics = _performanceMonitor.Stop();
                 ProgressTracker.FinalizeProgress();
@@ -93,7 +96,7 @@ namespace Zipper
                 return new FileGenerationResult
                 {
                     ZipFilePath = zipFilePath,
-                    LoadFilePath = loadFilePath,
+                    LoadFilePath = actualLoadFilePath,
                     FilesGenerated = request.FileCount,
                     GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
                     FilesPerSecond = performanceMetrics.FilesPerSecond
@@ -172,6 +175,7 @@ namespace Zipper
         {
             byte[] fileContent;
             (string filename, byte[] content)? attachment = null;
+            int pageCount = 1;
 
             if (request.FileType.ToLower() == "eml")
             {
@@ -182,6 +186,17 @@ namespace Zipper
 
                 fileContent = emlResult.Content;
                 attachment = emlResult.Attachment;
+            }
+            else if (OfficeFileGenerator.IsOfficeFormat(request.FileType))
+            {
+                // Generate Office format documents
+                fileContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
+            }
+            else if (request.FileType.ToLower() == "tiff" && request.TiffPageRange.HasValue)
+            {
+                // Generate multipage TIFF
+                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, workItem.Index);
+                fileContent = TiffMultiPageGenerator.Generate(pageCount, workItem);
             }
             else
             {
@@ -204,7 +219,13 @@ namespace Zipper
                     Buffer.BlockCopy(padding, 0, data, fileContent.Length, padding.Length);
                 }
 
-                return new FileData { WorkItem = workItem, Data = data, Attachment = attachment };
+                return new FileData
+                {
+                    WorkItem = workItem,
+                    Data = data,
+                    Attachment = attachment,
+                    PageCount = pageCount
+                };
             }
 
             // Use pooled memory
@@ -221,7 +242,8 @@ namespace Zipper
                 WorkItem = workItem,
                 Data = memoryOwner.Memory[..(int)totalSize].ToArray(),
                 MemoryOwner = memoryOwner,
-                Attachment = attachment
+                Attachment = attachment,
+                PageCount = pageCount
             };
         }
 
@@ -240,10 +262,10 @@ namespace Zipper
             };
         }
 
-        private async Task WriteArchiveAsync(string zipFilePath, string loadFileName, string loadFilePath, FileGenerationRequest request, ChannelReader<FileData> resultReader)
+        private async Task<string> WriteArchiveAsync(string zipFilePath, string loadFileName, string loadFilePath, FileGenerationRequest request, ChannelReader<FileData> resultReader)
         {
             // Delegate to new ZipArchiveService for actual ZIP creation
-            await ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultReader);
+            return await ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultReader);
         }
 
     
@@ -288,5 +310,6 @@ namespace Zipper
         public byte[] Data { get; init; } = Array.Empty<byte>();
         public (string filename, byte[] content)? Attachment { get; init; }
         public IMemoryOwner<byte>? MemoryOwner { get; init; }
+        public int PageCount { get; init; } = 1;
     }
 }

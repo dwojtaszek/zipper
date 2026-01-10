@@ -58,7 +58,29 @@ namespace Zipper
         {
             var exeName = Process.GetCurrentProcess().ProcessName;
             Console.Error.WriteLine("Error: Missing required arguments.");
-            Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--attachment-rate <percentage>] [--target-zip-size <size>] [--include-load-file]");
+            Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml|docx|xlsx> --count <number> --output-path <directory> [options]");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Required Arguments:");
+            Console.Error.WriteLine("  --type <string>          File type: pdf, jpg, tiff, eml, docx, xlsx");
+            Console.Error.WriteLine("  --count <number>         Number of files to generate");
+            Console.Error.WriteLine("  --output-path <path>     Output directory path");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Optional Arguments:");
+            Console.Error.WriteLine("  --folders <number>       Number of folders (1-100, default: 1)");
+            Console.Error.WriteLine("  --encoding <string>      Encoding: UTF-8, UTF-16, ANSI (default: UTF-8)");
+            Console.Error.WriteLine("  --distribution <string>  Distribution: proportional, gaussian, exponential");
+            Console.Error.WriteLine("  --with-metadata          Include metadata columns in load file");
+            Console.Error.WriteLine("  --with-text              Generate extracted text files");
+            Console.Error.WriteLine("  --attachment-rate <n>    EML attachment percentage (0-100, default: 0)");
+            Console.Error.WriteLine("  --target-zip-size <size> Target ZIP size (e.g., 500MB, 10GB)");
+            Console.Error.WriteLine("  --include-load-file      Include load file in ZIP archive");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("New Features:");
+            Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, xml, concordance (default: dat)");
+            Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
+            Console.Error.WriteLine("  --bates-start <number>   Bates start number (default: 1)");
+            Console.Error.WriteLine("  --bates-digits <number>  Bates digit count (default: 8)");
+            Console.Error.WriteLine("  --tiff-pages <min-max>   TIFF page range (e.g., 1-20, default: 1-1)");
         }
 
         /// <summary>
@@ -108,6 +130,21 @@ namespace Zipper
                         break;
                     case "--include-load-file":
                         parsed.IncludeLoadFile = true;
+                        break;
+                    case "--load-file-format":
+                        if (i + 1 < args.Length) parsed.LoadFileFormat = args[++i];
+                        break;
+                    case "--bates-prefix":
+                        if (i + 1 < args.Length) parsed.BatesPrefix = args[++i];
+                        break;
+                    case "--bates-start":
+                        if (i + 1 < args.Length && long.TryParse(args[++i], out var batesStart)) parsed.BatesStart = batesStart;
+                        break;
+                    case "--bates-digits":
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var batesDigits)) parsed.BatesDigits = batesDigits;
+                        break;
+                    case "--tiff-pages":
+                        if (i + 1 < args.Length) parsed.TiffPagesRange = args[++i];
                         break;
                 }
             }
@@ -191,6 +228,39 @@ namespace Zipper
                 }
             }
 
+            // Validate load file format
+            if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
+            {
+                if (GetLoadFileFormat(parsed.LoadFileFormat) == null)
+                {
+                    Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, xml, concordance.");
+                    return false;
+                }
+            }
+
+            // Validate Bates number arguments
+            if (parsed.BatesStart.HasValue && parsed.BatesStart.Value < 0)
+            {
+                Console.Error.WriteLine("Error: Bates start number must be non-negative.");
+                return false;
+            }
+
+            if (parsed.BatesDigits.HasValue && (parsed.BatesDigits.Value < 1 || parsed.BatesDigits.Value > 20))
+            {
+                Console.Error.WriteLine("Error: Bates digits must be between 1 and 20.");
+                return false;
+            }
+
+            // Validate TIFF pages range
+            if (!string.IsNullOrEmpty(parsed.TiffPagesRange))
+            {
+                if (TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange) == null)
+                {
+                    Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -213,7 +283,15 @@ namespace Zipper
                 IncludeLoadFile = parsed.IncludeLoadFile,
                 Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
                 Encoding = encoding?.EncodingName ?? "UTF-8",
-                AttachmentRate = parsed.AttachmentRate
+                AttachmentRate = parsed.AttachmentRate,
+                LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
+                BatesConfig = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
+                {
+                    Prefix = parsed.BatesPrefix,
+                    Start = parsed.BatesStart ?? 1,
+                    Digits = parsed.BatesDigits ?? 8
+                } : null,
+                TiffPageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null
             };
         }
 
@@ -256,6 +334,22 @@ namespace Zipper
         private static Encoding? GetEncodingFromName(string name) => EncodingHelper.GetEncoding(name);
 
         /// <summary>
+        /// Gets LoadFileFormat from string name.
+        /// </summary>
+        private static LoadFileFormat? GetLoadFileFormat(string name)
+        {
+            return name.ToUpperInvariant() switch
+            {
+                "DAT" => LoadFileFormat.Dat,
+                "OPT" => LoadFileFormat.Opt,
+                "CSV" => LoadFileFormat.Csv,
+                "XML" => LoadFileFormat.Xml,
+                "CONCORDANCE" => LoadFileFormat.Concordance,
+                _ => null
+            };
+        }
+
+        /// <summary>
         /// Internal class to hold parsed arguments before validation.
         /// </summary>
         private class ParsedArguments
@@ -271,6 +365,11 @@ namespace Zipper
             public int AttachmentRate { get; set; }
             public string? TargetZipSize { get; set; }
             public bool IncludeLoadFile { get; set; }
+            public string? LoadFileFormat { get; set; } = "dat";
+            public string? BatesPrefix { get; set; }
+            public long? BatesStart { get; set; }
+            public int? BatesDigits { get; set; }
+            public string? TiffPagesRange { get; set; }
         }
     }
 }

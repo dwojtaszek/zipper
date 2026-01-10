@@ -357,7 +357,7 @@ namespace Zipper
                 var output = errorOutput.ToString();
                 Assert.Contains("Error: Missing required arguments.", output);
                 Assert.Contains("Usage:", output);
-                Assert.Contains("--type <pdf|jpg|tiff|eml>", output);
+                Assert.Contains("--type <pdf|jpg|tiff|eml|docx|xlsx>", output);
                 Assert.Contains("--count <number>", output);
                 Assert.Contains("--output-path <directory>", output);
             }

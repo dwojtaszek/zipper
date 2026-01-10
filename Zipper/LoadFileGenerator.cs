@@ -30,7 +30,7 @@ namespace Zipper
         {
             var loadFileEntry = archive.CreateEntry(loadFileName, CompressionLevel.Optimal);
             using var loadFileStream = loadFileEntry.Open();
-            using var writer = new StreamWriter(loadFileStream, Encoding.UTF8);
+            using var writer = new StreamWriter(loadFileStream, GetEncoding(request.Encoding));
 
             await WriteLoadFileContent(writer, request, processedFiles);
         }
@@ -82,6 +82,18 @@ namespace Zipper
                 headerBuilder.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
             }
 
+            // Add Bates Number column if configured
+            if (request.BatesConfig != null)
+            {
+                headerBuilder.Append($"{colDelim}{quote}Bates Number{quote}");
+            }
+
+            // Add Page Count column for TIFF with page range
+            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            {
+                headerBuilder.Append($"{colDelim}{quote}Page Count{quote}");
+            }
+
             if (request.WithText)
             {
                 headerBuilder.Append($"{colDelim}{quote}Extracted Text{quote}");
@@ -124,6 +136,19 @@ namespace Zipper
             {
                 var emlColumns = GetEmlColumns(workItem, fileData);
                 lineBuilder.Append(emlColumns);
+            }
+
+            // Add Bates Number column if configured
+            if (request.BatesConfig != null)
+            {
+                var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig, workItem.Index - 1);
+                lineBuilder.Append($"{colDelim}{quote}{batesNumber}{quote}");
+            }
+
+            // Add Page Count column for TIFF with page range
+            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            {
+                lineBuilder.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
             }
 
             // Add extracted text column if requested

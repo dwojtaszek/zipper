@@ -27,8 +27,11 @@ For detailed information about the refactoring process and performance analysis,
 ## Features
 
 -   Generates a single `.zip` archive with a specified number of files.
+-   Supports multiple file types: PDF, JPG, TIFF, EML, DOCX, XLSX.
+-   Supports multiple load file formats: DAT, OPT, CSV, XML, CONCORDANCE.
 -   Supports multiple file distribution patterns: proportional, gaussian, and exponential.
--   Creates a corresponding `.dat` load file compatible with standard import tools.
+-   Supports Bates numbering for legal document identification.
+-   Creates a corresponding load file compatible with standard import tools.
 -   Uses minimal, valid placeholder files for maximum compression.
 -   Streams data directly to the archive to handle very large datasets efficiently.
 -   Provides progress indication during generation with real-time performance metrics.
@@ -40,8 +43,11 @@ For detailed information about the refactoring process and performance analysis,
 
 -   .NET 8.0 SDK (or newer)
 -   The following NuGet packages are also required and are included in the project file:
-    -   `SixLabors.ImageSharp`
-    -   `System.Text.Encoding.CodePages`
+    -   `SixLabors.ImageSharp` - For TIFF image generation
+    -   `ClosedXML` - For XLSX spreadsheet generation
+    -   `DocumentFormat.OpenXml` - For DOCX document generation
+    -   `System.Drawing.Common` - For image processing
+    -   `System.Text.Encoding.CodePages` - For ANSI encoding support
 
 ## Building
 
@@ -60,25 +66,38 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>]
 ```
 
 ### Arguments
 
--   `--type <pdf|jpg|tiff|eml>`: **(Required)** The type of file to generate.
+**Required Arguments:**
+-   `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required)** The type of file to generate.
 -   `--count <number>`: **(Required)** The total number of files to generate.
--   `--output-path <directory>`: **(Required)** The directory where the output `.zip` and `.dat` files will be saved. The directory will be created if it doesn't exist.
--   `--folders <number>`: **(Optional)** The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
--   `--encoding <UTF-8|UTF-16|ANSI>`: **(Optional)** The text encoding for the load file. Defaults to `UTF-8`. `ANSI` uses the Windows-1252 code page.
--   `--distribution <proportional|gaussian|exponential>`: **(Optional)** The distribution pattern for files across folders. Defaults to `proportional`. 
+-   `--output-path <directory>`: **(Required)** The directory where the output `.zip` and load file will be saved. The directory will be created if it doesn't exist.
+
+**Optional Arguments:**
+-   `--folders <number>`: The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
+-   `--encoding <UTF-8|UTF-16|ANSI>`: The text encoding for the load file. Defaults to `UTF-8`. `ANSI` uses the Windows-1252 code page.
+-   `--distribution <proportional|gaussian|exponential>`: The distribution pattern for files across folders. Defaults to `proportional`.
     - `proportional`: Even distribution across all folders (round-robin)
     - `gaussian`: Bell curve distribution with most files in middle folders
     - `exponential`: Exponential decay with most files in first folders
--   `--with-metadata`: **(Optional)** Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`.
--   `--with-text`: **(Optional)** Generates a corresponding extracted text file for each document and adds the path to the load file. Supported for all file types including `eml`.
--   `--attachment-rate <number>`: **(Optional)** When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
--   `--target-zip-size <size>`: **(Optional, Requires --count)** Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios.
--   `--include-load-file`: **(Optional)** Includes the generated `.dat` load file in the root of the output `.zip` archive instead of as a separate file.
+-   `--with-metadata`: Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`.
+-   `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the load file. Supported for all file types including `eml`.
+-   `--attachment-rate <number>`: When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
+-   `--target-zip-size <size>`: Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`.
+-   `--include-load-file`: Includes the generated load file in the root of the output `.zip` archive instead of as a separate file.
+-   `--load-file-format <dat|opt|csv|xml|concordance>`: The format of the load file. Defaults to `dat`. Available formats:
+    - `dat: Standard Concordance DAT format with caret (^) delimiters
+    - `opt`: Opticon format with tab delimiters
+    - `csv`: Comma-separated values format with proper RFC 4180 escaping
+    - `xml`: Structured XML markup format
+    - `concordance`: Concordance database format with ASCII 20 delimiters
+-   `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001").
+-   `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1.
+-   `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8.
+-   `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
 
 ### Distribution Patterns
 
@@ -144,6 +163,24 @@ zipper --type pdf --count 100000 --target-zip-size 1GB --output-path ./test_padd
 
 # Generate 1,000 PDFs and include the load file inside the zip archive
 zipper --type pdf --count 1000 --output-path ./test_inclusive --include-load-file
+
+# Generate DOCX files with Bates numbering
+zipper --type docx --count 500 --output-path ./test_docx --bates-prefix "CLIENT001" --bates-start 1 --bates-digits 8
+
+# Generate XLSX files with custom load file format
+zipper --type xlsx --count 1000 --output-path ./test_xlsx --load-file-format csv
+
+# Generate TIFF files with variable page counts (1-20 pages per file)
+zipper --type tiff --count 5000 --output-path ./test_tiff --tiff-pages "1-20"
+
+# Combine new features: DOCX with Bates numbering, CSV load file, and metadata
+zipper --type docx --count 1000 --output-path ./test_combined --bates-prefix "CASE001" --bates-start 5000 --bates-digits 10 --load-file-format csv --with-metadata
+
+# Generate TIFF files with page count tracking and Bates numbering
+zipper --type tiff --count 2500 --output-path ./test_tiff_bates --tiff-pages "5-50" --bates-prefix "IMG" --bates-digits 8 --with-metadata
+
+# Generate emails with XML load file format
+zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format xml --with-metadata --with-text
 ```
 
 ## Performance

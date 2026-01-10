@@ -14,6 +14,11 @@ namespace Zipper
         public DistributionType Distribution { get; set; } = DistributionType.Proportional;
         public string Encoding { get; set; } = "UTF-8";
         public int AttachmentRate { get; set; } = 0;
+
+        // New properties for 4-feature implementation
+        public LoadFileFormat LoadFileFormat { get; set; } = LoadFileFormat.Dat;
+        public BatesNumberConfig? BatesConfig { get; set; }
+        public (int Min, int Max)? TiffPageRange { get; set; }
     }
 
     public class FileGenerationResult
