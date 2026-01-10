@@ -1,13 +1,10 @@
 name: Build and Test
-# Unified workflow replacing separate build.yml and test.yml workflows
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
   pull_request:
-    branches:
-      - master
+    branches: [master]
 
 permissions:
   contents: read
@@ -16,37 +13,30 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.VERSION }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-    - uses: actions/checkout@v6
-    - name: Set Version
-      id: version
-      run: echo "VERSION=$(cat .version)" >> $GITHUB_OUTPUT
-      shell: bash
+      - uses: actions/checkout@v6
+      - name: Set Version
+        id: version
+        run: echo "version=$(cat .version)" >> $GITHUB_OUTPUT
 
   lint:
     needs: prepare
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 8.0.x
-
-    - name: Lint code style
-      if: hashFiles('.editorconfig') != ''
-      run: |
-        dotnet tool install -g dotnet-format
-        dotnet format --verify-no-changes
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+      - name: Lint code style
+        if: hashFiles('.editorconfig') != ''
+        run: |
+          dotnet tool install -g dotnet-format
+          dotnet format --verify-no-changes
 
   build:
     needs: [prepare, lint]
     runs-on: ${{ matrix.os }}
-    outputs:
-      build_executed: ${{ steps.check_build_status.outputs.any_build_run }}
     strategy:
       matrix:
         include:
@@ -58,58 +48,46 @@ jobs:
             platform: osx-arm64
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: |
+            Zipper/packages.lock.json
+            Zipper/Zipper.Tests/packages.lock.json
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 8.0.x
-        cache: true
-        cache-dependency-path: |
-          Zipper/packages.lock.json
-          Zipper/Zipper.Tests/packages.lock.json
+      - name: Restore dependencies
+        run: dotnet restore zipper.sln
 
-    - name: Restore dependencies
-      run: dotnet restore zipper.sln
+      - name: Cache build
+        id: cache-build
+        uses: actions/cache@v5.0.1
+        with:
+          path: publish/${{ matrix.platform }}
+          key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ matrix.platform }}-
 
-    - name: Cache ${{ matrix.platform }} build
-      id: cache-build
-      uses: actions/cache@v5.0.1
-      with:
-        path: publish/${{ matrix.platform }}
-        key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.cs', '**/*.csproj') }}
-        restore-keys: |
-          ${{ runner.os }}-build-${{ matrix.platform }}-
+      - name: Build and publish
+        if: steps.cache-build.outputs.cache-hit != 'true'
+        run: |
+          dotnet build zipper.sln -c Release --no-restore
+          dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:InformationalVersion=${{ needs.prepare.outputs.version }} --no-restore
+          rm -f publish/${{ matrix.platform }}/*.pdb
 
-    - name: Build for ${{ matrix.platform }}
-      if: steps.cache-build.outputs.cache-hit != 'true'
-      run: |
-        dotnet build zipper.sln -c Release --no-restore
-        dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:InformationalVersion=${{ needs.prepare.outputs.version }} --no-restore
-        rm -f publish/${{ matrix.platform }}/*.pdb
+          case "${{ matrix.platform }}" in
+            win-x64) mv publish/${{ matrix.platform }}/Zipper.exe publish/${{ matrix.platform }}/zipper-win-x64.exe ;;
+            linux-x64) mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-linux-x64 ;;
+            osx-arm64) mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-osx-arm64 ;;
+          esac
+        shell: bash
 
-        # Rename executable to platform-specific name
-        if [ "${{ matrix.platform }}" = "win-x64" ]; then
-          mv publish/${{ matrix.platform }}/Zipper.exe publish/${{ matrix.platform }}/zipper-win-x64.exe
-        elif [ "${{ matrix.platform }}" = "linux-x64" ]; then
-          mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-linux-x64
-        elif [ "${{ matrix.platform }}" = "osx-arm64" ]; then
-          mv publish/${{ matrix.platform }}/Zipper publish/${{ matrix.platform }}/zipper-osx-arm64
-        fi
-      shell: bash
-
-    - name: Upload ${{ matrix.platform }} artifact
-      uses: actions/upload-artifact@v6
-      with:
-        name: zipper-${{ matrix.platform }}
-        path: publish/${{ matrix.platform }}
-        retention-days: 7
-
-    - name: Check build status
-      id: check_build_status
-      run: |
-        echo "Build completed for ${{ matrix.platform }}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: zipper-${{ matrix.platform }}
+          path: publish/${{ matrix.platform }}
+          retention-days: 7
 
   test:
     needs: build
@@ -125,40 +103,33 @@ jobs:
             platform: osx-arm64
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v7
+        with:
+          name: zipper-${{ matrix.platform }}
+          path: artifacts
 
-    - name: Download ${{ matrix.platform }} build artifacts
-      uses: actions/download-artifact@v7
-      with:
-        name: zipper-${{ matrix.platform }}
-        path: artifacts
+      - name: Restore test dependencies
+        run: dotnet restore Zipper/Zipper.Tests/Zipper.Tests.csproj
 
-    - name: List downloaded artifacts
-      run: ls -R artifacts
+      - name: Build test project
+        run: dotnet build Zipper/Zipper.Tests/Zipper.Tests.csproj -c Debug --no-restore
 
-    - name: Restore test dependencies
-      run: dotnet restore Zipper/Zipper.Tests/Zipper.Tests.csproj
+      - name: Run unit tests
+        run: dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
 
-    - name: Build test project
-      run: dotnet build Zipper/Zipper.Tests/Zipper.Tests.csproj -c Debug --no-restore
-
-    - name: Run unit tests
-      run: dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
-
-    - name: Run end-to-end tests
-      if: runner.os != 'Windows'
-      run: chmod +x ./tests/run-tests.sh && ./tests/run-tests.sh
-
-    - name: Run end-to-end tests on Windows
-      if: runner.os == 'Windows'
-      run: .\tests\run-tests.bat
-      shell: cmd
+      - name: Run E2E tests
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            ./tests/run-tests.bat
+          else
+            chmod +x ./tests/run-tests.sh && ./tests/run-tests.sh
+          fi
+        shell: bash
 
   release:
     needs: [prepare, lint, build, test]
@@ -166,97 +137,52 @@ jobs:
     if: github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '[skip ci]')
     permissions:
       contents: write
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-      with:
-        persist-credentials: true
-    - name: Download all build artifacts
-      uses: actions/download-artifact@v7
-      with:
-        path: artifacts
-    - name: List downloaded artifacts
-      run: ls -R artifacts
-    - name: Create Release
-      id: create_release
-      uses: softprops/action-gh-release@v2.5.0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ needs.prepare.outputs.version }}
-        name: Release ${{ needs.prepare.outputs.version }}
-        draft: false
-        prerelease: false
-        files: |
-          artifacts/zipper-win-x64/zipper-win-x64.exe
-          artifacts/zipper-linux-x64/zipper-linux-x64
-          artifacts/zipper-osx-arm64/zipper-osx-arm64
-    - name: Bump version
-      if: success()
-      run: |
-        # Configure git user
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          path: artifacts
 
-        # Pull latest changes to avoid conflicts
-        echo "Pulling latest changes from master..."
-        git pull origin master
+      - uses: softprops/action-gh-release@v2.5.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: Release ${{ needs.prepare.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/zipper-win-x64/zipper-win-x64.exe
+            artifacts/zipper-linux-x64/zipper-linux-x64
+            artifacts/zipper-osx-arm64/zipper-osx-arm64
 
-        # Read and validate current version
-        version=$(cat .version)
-        echo "Current version: $version"
+      - name: Bump version
+        if: success()
+        run: |
+          git pull origin master
 
-        if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid version format: $version"
-          echo "Expected format: X.Y.Z where X, Y, Z are numbers"
-          exit 1
-        fi
+          version=$(cat .version)
 
-        # Parse version components safely
-        major=$(echo $version | cut -d. -f1)
-        minor=$(echo $version | cut -d. -f2)
-        build=$(echo $version | cut -d. -f3)
+          # Validate version format
+          chmod +x .github/scripts/validate-version.sh
+          .github/scripts/validate-version.sh "$version"
 
-        # Increment build number
-        new_build=$((build + 1))
-        new_version="$major.$minor.$new_build"
+          IFS='.' read -r major minor build <<< "$version"
+          new_build=$((build + 1))
+          new_version="$major.$minor.$new_build"
 
-        echo "📦 Bumping version from $version to $new_version"
-
-        # Check if version already exists in git tags (prevent duplicates)
-        if git rev-parse "v$new_version" >/dev/null 2>&1; then
-          echo "⚠️ Version $new_version already exists as a tag, skipping bump"
-          exit 0
-        fi
-
-        # Update version file
-        echo $new_version > .version
-
-        # Commit the change
-        git add .version
-        git commit -m "chore(release): bump version to $new_version [skip ci]"
-
-        # Push with conflict handling
-        echo "🚀 Pushing version bump to master..."
-
-        # Try direct push first (most common case)
-        if git push origin master; then
-          echo "✅ Version bump pushed successfully"
-        else
-          echo "⚠️ Push failed, attempting to resolve conflicts..."
-
-          # Pull and merge any conflicting changes
-          git pull --no-rebase origin master
-
-          # Try push again after conflict resolution
-          if git push origin master; then
-            echo "✅ Version bump pushed successfully after conflict resolution"
-          else
-            echo "❌ Failed to push version bump after conflict resolution"
-            echo "This usually indicates concurrent version bump attempts"
-            echo "Manual intervention may be required"
-            exit 1
+          if git rev-parse "v$new_version" >/dev/null 2>&1; then
+            echo "Version $new_version already exists, skipping"
+            exit 0
           fi
-        fi
 
-        echo "🎉 Successfully bumped version to $new_version"
+          echo $new_version > .version
+          git add .version
+          git commit -m "chore(release): bump version to $new_version [skip ci]"
+
+          if ! git push origin master; then
+            sleep 5
+            git pull --no-rebase origin master
+            git push origin master || { echo "Push failed after retry"; exit 1; }
+          fi
