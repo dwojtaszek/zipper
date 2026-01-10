@@ -61,6 +61,7 @@ jobs:
         run: dotnet restore zipper.sln
 
       - name: Cache build
+        id: cache-build
         uses: actions/cache@v5.0.1
         with:
           path: publish/${{ matrix.platform }}
@@ -186,5 +187,5 @@ jobs:
 
           if ! git push origin master; then
             git pull --no-rebase origin master
-            git push origin master
+            git push origin master || { echo "Push failed after retry"; exit 1; }
           fi
