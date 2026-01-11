@@ -176,8 +176,8 @@ namespace Zipper
             Assert.NotNull(archive);
 
             // XLSX files should contain workbook entries
-            var entryNames = archive.Entries.Select(e => e.FullName).ToList();
-            Assert.True(entryNames.Any(n => n.Contains("xl/")));
+            var xlEntry = archive.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/"));
+            Assert.NotNull(xlEntry);
         }
 
         [Fact]
