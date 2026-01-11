@@ -119,7 +119,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ConcurrentReportFilesCompleted_ThreadSafe()
+        public async Task ConcurrentReportFilesCompleted_ThreadSafe()
         {
             // Arrange
             const long totalFiles = 10000;
@@ -141,7 +141,7 @@ namespace Zipper
                 });
             }
 
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
 
             // Assert
             var completed = ProgressTracker.GetCompletedCount();

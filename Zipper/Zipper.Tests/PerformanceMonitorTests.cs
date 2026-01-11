@@ -132,7 +132,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ReportFilesCompleted_ConcurrentCalls_ThreadSafe()
+        public async Task ReportFilesCompleted_ConcurrentCalls_ThreadSafe()
         {
             // Arrange
             var monitor = new PerformanceMonitor();
@@ -154,7 +154,7 @@ namespace Zipper
                 });
             }
 
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
 
             // Allow monitoring to catch up
             Thread.Sleep(50);
