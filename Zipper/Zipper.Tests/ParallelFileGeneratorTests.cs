@@ -1,6 +1,7 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+// <copyright file="ParallelFileGeneratorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
@@ -23,7 +24,7 @@ namespace Zipper
                     FileCount = 10,
                     FileType = "pdf",
                     Folders = 2,
-                    Concurrency = 2
+                    Concurrency = 2,
                 });
 
                 Assert.Equal(10, result.FilesGenerated);
@@ -36,7 +37,9 @@ namespace Zipper
             finally
             {
                 if (Directory.Exists(outputPath))
+                {
                     Directory.Delete(outputPath, true);
+                }
             }
         }
 
@@ -59,7 +62,7 @@ namespace Zipper
                     FileType = "pdf",
                     Folders = 2,
                     Concurrency = 2,
-                    TargetZipSize = targetSize
+                    TargetZipSize = targetSize,
                 });
 
                 Assert.Equal(10, result.FilesGenerated);
@@ -69,7 +72,8 @@ namespace Zipper
                 // Due to compression variance, exact size isn't possible but files should be padded
                 var actualSize = new FileInfo(result.ZipFilePath).Length;
                 var minimumExpected = targetSize * 0.5; // At least 50% of target
-                Assert.True(actualSize >= minimumExpected,
+                Assert.True(
+                    actualSize >= minimumExpected,
                     $"ZIP size {actualSize} bytes is below minimum expected {minimumExpected} bytes for target {targetSize} bytes");
 
                 // Verify files were created (padding increases file sizes)
@@ -79,14 +83,17 @@ namespace Zipper
                 // Verify entries have non-trivial sizes due to padding
                 foreach (var entry in archive.Entries)
                 {
-                    Assert.True(entry.CompressedLength > 1000,
+                    Assert.True(
+                        entry.CompressedLength > 1000,
                         $"Entry {entry.FullName} has compressed length {entry.CompressedLength}, expected > 1000 bytes due to padding");
                 }
             }
             finally
             {
                 if (Directory.Exists(outputPath))
+                {
                     Directory.Delete(outputPath, true);
+                }
             }
         }
     }

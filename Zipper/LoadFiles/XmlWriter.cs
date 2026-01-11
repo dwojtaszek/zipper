@@ -1,17 +1,19 @@
-using System.IO;
-using System.Linq;
+// <copyright file="XmlWriter.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
-using System.Threading.Tasks;
 using System.Xml.Linq;
 
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes XML format load files - structured markup format
+/// Writes XML format load files - structured markup format.
 /// </summary>
 internal class XmlWriter : LoadFileWriterBase
 {
     public override string FormatName => "XML";
+
     public override string FileExtension => ".xml";
 
     public override async Task WriteAsync(
@@ -30,9 +32,11 @@ internal class XmlWriter : LoadFileWriterBase
 
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
+
         // XDocument.ToString() doesn't include the declaration, so we write it explicitly
         await writer.WriteAsync(document.Declaration?.ToString() ?? string.Empty);
         await writer.WriteAsync(document.ToString());
+
         // Flush to ensure data is written
         await writer.FlushAsync();
     }
@@ -42,14 +46,16 @@ internal class XmlWriter : LoadFileWriterBase
         FileData fileData,
         FileGenerationRequest request)
     {
-        var docElement = new XElement("document",
+        var docElement = new XElement(
+            "document",
             new XElement("controlNumber", GenerateDocumentId(workItem)),
             new XElement("filePath", workItem.FilePathInZip));
 
         if (ShouldIncludeMetadata(request))
         {
             var metadata = GenerateMetadataValues(workItem, fileData);
-            docElement.Add(new XElement("metadata",
+            docElement.Add(new XElement(
+                "metadata",
                 new XElement("custodian", metadata.Custodian),
                 new XElement("dateSent", metadata.DateSent),
                 new XElement("author", metadata.Author),
@@ -59,7 +65,8 @@ internal class XmlWriter : LoadFileWriterBase
         if (ShouldIncludeEmlColumns(request))
         {
             var eml = GenerateEmlValues(workItem, fileData);
-            docElement.Add(new XElement("email",
+            docElement.Add(new XElement(
+                "email",
                 new XElement("to", eml.To),
                 new XElement("from", eml.From),
                 new XElement("subject", eml.Subject),

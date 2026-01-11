@@ -1,5 +1,7 @@
-using System;
-using System.IO;
+// <copyright file="EmailBuilderTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
 using Xunit;
 using Xunit.Abstractions;
@@ -8,11 +10,11 @@ namespace Zipper
 {
     public class EmailBuilderTests
     {
-        private readonly ITestOutputHelper _output;
+        private readonly ITestOutputHelper output;
 
         public EmailBuilderTests(ITestOutputHelper output)
         {
-            _output = output;
+            this.output = output;
         }
 
         [Fact]
@@ -25,7 +27,7 @@ namespace Zipper
                 From = "sender@example.com",
                 Subject = "Test Subject",
                 SentDate = new DateTime(2023, 1, 1, 12, 0, 0),
-                Body = "This is a test email body."
+                Body = "This is a test email body.",
             };
 
             // Act
@@ -52,12 +54,12 @@ namespace Zipper
                 To = "test@example.com",
                 From = "sender@example.com",
                 Subject = "Test with Attachment",
-                Body = "Email with attachment."
+                Body = "Email with attachment.",
             };
             var attachment = new AttachmentInfo
             {
                 FileName = "test.txt",
-                Content = Encoding.UTF8.GetBytes("Test attachment content")
+                Content = Encoding.UTF8.GetBytes("Test attachment content"),
             };
 
             // Act
@@ -84,7 +86,7 @@ namespace Zipper
                 Cc = "cc@example.com",
                 Bcc = "bcc@example.com",
                 Subject = "Test CC/BCC",
-                Body = "Test body"
+                Body = "Test body",
             };
 
             // Act
@@ -106,7 +108,7 @@ namespace Zipper
                 From = "sender@example.com",
                 Subject = "High Priority",
                 Body = "Important email",
-                IsHighPriority = true
+                IsHighPriority = true,
             };
 
             // Act
@@ -128,7 +130,7 @@ namespace Zipper
                 From = "sender@example.com",
                 Subject = "Read Receipt Test",
                 Body = "Please confirm receipt",
-                RequestReadReceipt = true
+                RequestReadReceipt = true,
             };
 
             // Act
@@ -149,7 +151,7 @@ namespace Zipper
                 From = "sender@example.com",
                 ReplyTo = "replyto@example.com",
                 Subject = "Reply To Test",
-                Body = "Please reply to different address"
+                Body = "Please reply to different address",
             };
 
             // Act
@@ -176,12 +178,12 @@ namespace Zipper
                 To = "test@example.com",
                 From = "sender@example.com",
                 Subject = "File Type Test",
-                Body = "Test file type detection"
+                Body = "Test file type detection",
             };
             var attachment = new AttachmentInfo
             {
                 FileName = fileName,
-                Content = new byte[] { 1, 2, 3, 4, 5 }
+                Content = new byte[] { 1, 2, 3, 4, 5 },
             };
 
             // Act
@@ -201,13 +203,13 @@ namespace Zipper
                 To = "test@example.com",
                 From = "sender@example.com",
                 Subject = "Custom Content Type",
-                Body = "Test custom content type"
+                Body = "Test custom content type",
             };
             var attachment = new AttachmentInfo
             {
                 FileName = "custom.test",
                 Content = new byte[] { 1, 2, 3 },
-                ContentType = "application/custom-type"
+                ContentType = "application/custom-type",
             };
 
             // Act
@@ -227,14 +229,14 @@ namespace Zipper
                 To = "test@example.com",
                 From = "sender@example.com",
                 Subject = "Inline Attachment",
-                Body = "Test inline attachment"
+                Body = "Test inline attachment",
             };
             var attachment = new AttachmentInfo
             {
                 FileName = "image.png",
                 Content = new byte[] { 1, 2, 3 },
                 ContentId = "test-image",
-                IsInline = true
+                IsInline = true,
             };
 
             // Act
@@ -266,12 +268,12 @@ namespace Zipper
                 From = from,
                 Subject = subject,
                 SentDate = sentDate,
-                Body = body
+                Body = body,
             };
             var attachmentInfo = new AttachmentInfo
             {
                 FileName = attachment.Item1,
-                Content = attachment.Item2
+                Content = attachment.Item2,
             };
             var newResult = EmailBuilder.BuildEmail(template, attachmentInfo);
 
@@ -314,7 +316,7 @@ namespace Zipper
                 To = "test@example.com",
                 From = "sender@example.com",
                 Subject = "Large Attachment",
-                Body = "Email with large attachment"
+                Body = "Email with large attachment",
             };
             var largeContent = new byte[1024 * 1024]; // 1MB
             new Random().NextBytes(largeContent);
@@ -322,7 +324,7 @@ namespace Zipper
             var attachment = new AttachmentInfo
             {
                 FileName = "large.dat",
-                Content = largeContent
+                Content = largeContent,
             };
 
             // Act
@@ -343,7 +345,7 @@ namespace Zipper
                 To = "tëst@éxample.com",
                 From = "sênder@examplé.com",
                 Subject = "Tëst with spëcial chars: 你好",
-                Body = "Body with special characters: café, naïve"
+                Body = "Body with special characters: café, naïve",
             };
 
             // Act

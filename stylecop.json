@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
+  "settings": {
+    "documentationRules": {
+      "documentExposedElements": false,
+      "documentInternalElements": false,
+      "documentPrivateElements": false,
+      "documentPrivateFields": false,
+      "documentInterfaces": false,
+      "documentPrivateFields": false,
+      "propertyNamingConvention": "pascalCase",
+      "allowedPhrasePlaceholders": []
+    },
+    "orderingRules": {
+      "systemUsingDirectivesFirst": true,
+      "usingDirectivesPlacement": "outsideNamespace"
+    },
+    "namingRules": {
+      "allowCommonHungarianPrefixes": false,
+      "allowIntrinsicFunctionNames": true,
+      "allowedNamespaceComponents": []
+    },
+    "layoutRules": {
+      "newlineAtEndOfFile": "require"
+    },
+    "maintainabilityRules": {
+      "topLevelTypes": ["class", "interface", "struct", "enum", "delegate"]
+    }
+  }
+}

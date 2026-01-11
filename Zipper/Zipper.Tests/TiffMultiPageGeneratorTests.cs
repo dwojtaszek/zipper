@@ -1,3 +1,7 @@
+// <copyright file="TiffMultiPageGeneratorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper

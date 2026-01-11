@@ -1,16 +1,18 @@
-using System.IO;
-using System.Linq;
+// <copyright file="ConcordanceWriter.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes CONCORDANCE format load files - database import format with specific delimiters
+/// Writes CONCORDANCE format load files - database import format with specific delimiters.
 /// </summary>
 internal class ConcordanceWriter : LoadFileWriterBase
 {
     public override string FormatName => "CONCORDANCE";
+
     public override string FileExtension => ".dat";
 
     public override async Task WriteAsync(
@@ -32,6 +34,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char fieldDelim, char quote)
     {
         var header = new StringBuilder();
+
         // Concordance format headers are unquoted, comma-delimited
         header.Append($"BEGATTY{fieldDelim}");
         header.Append($"ENDDATTY{fieldDelim}");
@@ -92,6 +95,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 {
                     return $"\"{value.Replace("\"", "\"\"")}\"";
                 }
+
                 return value;
             }
 

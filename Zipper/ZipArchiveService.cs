@@ -1,31 +1,30 @@
-using System;
+// <copyright file="ZipArchiveService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 using Zipper.LoadFiles;
 
 namespace Zipper
 {
     /// <summary>
     /// Handles ZIP archive creation and file writing operations
-    /// Extracted from ParallelFileGenerator to follow single responsibility principle
+    /// Extracted from ParallelFileGenerator to follow single responsibility principle.
     /// </summary>
     internal static class ZipArchiveService
     {
         /// <summary>
-        /// Creates a ZIP archive containing the generated files and optionally a load file
+        /// Creates a ZIP archive containing the generated files and optionally a load file.
         /// </summary>
-        /// <param name="zipFilePath">Path where the ZIP file should be created</param>
-        /// <param name="loadFileName">Name of the load file (if included)</param>
-        /// <param name="loadFilePath">Path where load file should be saved separately (if not included in ZIP)</param>
-        /// <param name="request">File generation request parameters</param>
-        /// <param name="fileDataReader">Channel reader for receiving generated file data</param>
-        /// <returns>The actual load file path that was created (or original if included in ZIP)</returns>
+        /// <param name="zipFilePath">Path where the ZIP file should be created.</param>
+        /// <param name="loadFileName">Name of the load file (if included).</param>
+        /// <param name="loadFilePath">Path where load file should be saved separately (if not included in ZIP).</param>
+        /// <param name="request">File generation request parameters.</param>
+        /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
+        /// <returns>The actual load file path that was created (or original if included in ZIP).</returns>
         public static async Task<string> CreateArchiveAsync(
             string zipFilePath,
             string loadFileName,
@@ -84,16 +83,20 @@ namespace Zipper
                 var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                 using var loadFileStream = loadFileEntry.Open();
                 await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList());
+
                 // Return path within the ZIP archive when load file is included
                 actualLoadFilePath = actualLoadFileName;
             }
             else
             {
-                actualLoadFilePath = Path.Combine(Path.GetDirectoryName(loadFilePath) ?? "",
+                actualLoadFilePath = Path.Combine(
+                    Path.GetDirectoryName(loadFilePath) ?? string.Empty,
                     baseFileName + loadFileWriter.FileExtension);
                 var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
+
                 // LoadFileWriter.WriteAsync handles flushing but we own the stream here
                 await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
+
                 // Flush and dispose the stream we created
                 await fileStream.FlushAsync();
                 await fileStream.DisposeAsync();
@@ -103,7 +106,7 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes a single file to the ZIP archive (synchronous version)
+        /// Writes a single file to the ZIP archive (synchronous version).
         /// </summary>
         private static void WriteFileToArchive(ZipArchive archive, FileData fileData)
         {
@@ -113,11 +116,14 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes an attachment file to the ZIP archive (synchronous version)
+        /// Writes an attachment file to the ZIP archive (synchronous version).
         /// </summary>
         private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData)
         {
-            if (!fileData.Attachment.HasValue) return;
+            if (!fileData.Attachment.HasValue)
+            {
+                return;
+            }
 
             var attachmentEntry = archive.CreateEntry(
                 $"{fileData.WorkItem.FolderName}/{fileData.Attachment.Value.filename}",
@@ -132,7 +138,10 @@ namespace Zipper
         /// </summary>
         private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData)
         {
-            if (!fileData.Attachment.HasValue) return;
+            if (!fileData.Attachment.HasValue)
+            {
+                return;
+            }
 
             var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
             var attachmentTextEntry = archive.CreateEntry(
@@ -144,11 +153,14 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes an extracted text version of a file to the ZIP archive (synchronous version)
+        /// Writes an extracted text version of a file to the ZIP archive (synchronous version).
         /// </summary>
         private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request)
         {
-            if (!request.WithText) return;
+            if (!request.WithText)
+            {
+                return;
+            }
 
             var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
             var textFilePathInZip = $"{fileData.WorkItem.FolderName}/{textFileName}";
@@ -161,14 +173,14 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Gets the appropriate extracted text content for different file types
+        /// Gets the appropriate extracted text content for different file types.
         /// </summary>
         private static string GetExtractedTextContent(string fileType)
         {
             var content = fileType.ToLowerInvariant() switch
             {
                 "eml" => PlaceholderFiles.EmlExtractedText,
-                _ => PlaceholderFiles.ExtractedText
+                _ => PlaceholderFiles.ExtractedText,
             };
             return System.Text.Encoding.UTF8.GetString(content);
         }

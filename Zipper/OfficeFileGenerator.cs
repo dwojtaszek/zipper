@@ -1,20 +1,23 @@
-using System.IO;
+// <copyright file="OfficeFileGenerator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.IO.Compression;
 
 namespace Zipper;
 
 /// <summary>
 /// Generates Microsoft Office format documents (DOCX, XLSX)
-/// Note: This is a simplified implementation that creates minimal valid Office files
+/// Note: This is a simplified implementation that creates minimal valid Office files.
 /// </summary>
 internal static class OfficeFileGenerator
 {
     /// <summary>
     /// Generates a minimal DOCX document
-    /// DOCX files are ZIP archives containing XML files
+    /// DOCX files are ZIP archives containing XML files.
     /// </summary>
-    /// <param name="workItem">File work item containing index and metadata</param>
-    /// <returns>Byte array containing a valid DOCX document</returns>
+    /// <param name="workItem">File work item containing index and metadata.</param>
+    /// <returns>Byte array containing a valid DOCX document.</returns>
     public static byte[] GenerateDocx(FileWorkItem workItem)
     {
         using var stream = new MemoryStream();
@@ -71,10 +74,10 @@ internal static class OfficeFileGenerator
     }
 
     /// <summary>
-    /// Generates an XLSX spreadsheet with sample data using ClosedXML
+    /// Generates an XLSX spreadsheet with sample data using ClosedXML.
     /// </summary>
-    /// <param name="workItem">File work item containing index and metadata</param>
-    /// <returns>Byte array containing a valid XLSX spreadsheet</returns>
+    /// <param name="workItem">File work item containing index and metadata.</param>
+    /// <returns>Byte array containing a valid XLSX spreadsheet.</returns>
     public static byte[] GenerateXlsx(FileWorkItem workItem)
     {
         using var workbook = new ClosedXML.Excel.XLWorkbook();
@@ -97,12 +100,12 @@ internal static class OfficeFileGenerator
     }
 
     /// <summary>
-    /// Generates Office format content based on the specified file type
+    /// Generates Office format content based on the specified file type.
     /// </summary>
-    /// <param name="fileType">The Office file type (docx or xlsx)</param>
-    /// <param name="workItem">File work item containing index and metadata</param>
-    /// <returns>Byte array containing the generated document</returns>
-    /// <exception cref="System.ArgumentException">Thrown when file type is not a supported Office format</exception>
+    /// <param name="fileType">The Office file type (docx or xlsx).</param>
+    /// <param name="workItem">File work item containing index and metadata.</param>
+    /// <returns>Byte array containing the generated document.</returns>
+    /// <exception cref="System.ArgumentException">Thrown when file type is not a supported Office format.</exception>
     public static byte[] GenerateContent(string fileType, FileWorkItem workItem)
     {
         return fileType.ToLowerInvariant() switch
@@ -110,15 +113,15 @@ internal static class OfficeFileGenerator
             "docx" => GenerateDocx(workItem),
             "xlsx" => GenerateXlsx(workItem),
             "pptx" => throw new System.NotImplementedException("PPTX generation is not yet implemented. Please use DOCX or XLSX formats."),
-            _ => throw new System.ArgumentException($"Unsupported Office format: {fileType}")
+            _ => throw new System.ArgumentException($"Unsupported Office format: {fileType}"),
         };
     }
 
     /// <summary>
-    /// Determines if the specified file type is an Office format
+    /// Determines if the specified file type is an Office format.
     /// </summary>
-    /// <param name="fileType">The file type to check</param>
-    /// <returns>True if the file type is an Office format</returns>
+    /// <param name="fileType">The file type to check.</param>
+    /// <returns>True if the file type is an Office format.</returns>
     public static bool IsOfficeFormat(string fileType)
     {
         return fileType.Equals("docx", System.StringComparison.OrdinalIgnoreCase) ||

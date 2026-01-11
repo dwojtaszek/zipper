@@ -50,7 +50,25 @@ if command -v bd >/dev/null 2>&1; then
 fi
 
 # ──────────────────────────────────────────────────────────
-# 2. Run unit tests (fast, local validation)
+# 2. Run dotnet format (auto-fix formatting)
+# ──────────────────────────────────────────────────────────
+if command -v dotnet >/dev/null 2>&1; then
+    if ! dotnet format --verbosity quiet 2>/dev/null; then
+        echo "Error: dotnet format failed" >&2
+        exit 1
+    fi
+
+    # Fail commit if formatting made changes
+    if ! git diff --exit-code --quiet 2>/dev/null; then
+        echo "Code formatting changes required. Files have been auto-formatted." >&2
+        echo "Please review and commit again." >&2
+        git --no-pager diff --stat
+        exit 1
+    fi
+fi
+
+# ──────────────────────────────────────────────────────────
+# 3. Run unit tests (fast, local validation)
 # ──────────────────────────────────────────────────────────
 if command -v dotnet >/dev/null 2>&1; then
     dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet" --no-build 2>/dev/null || {

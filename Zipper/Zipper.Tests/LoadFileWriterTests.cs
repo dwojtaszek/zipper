@@ -1,42 +1,43 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+// <copyright file="LoadFileWriterTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
-using System.Threading.Tasks;
-using Zipper.LoadFiles;
 using Xunit;
+using Zipper.LoadFiles;
 
 namespace Zipper
 {
     public class LoadFileWriterTests : IDisposable
     {
-        private readonly string _tempDir;
+        private readonly string tempDir;
 
         public LoadFileWriterTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
+            this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(this.tempDir);
         }
 
         public void Dispose()
         {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, true);
+            if (Directory.Exists(this.tempDir))
+            {
+                Directory.Delete(this.tempDir, true);
+            }
         }
 
         private FileGenerationRequest CreateTestRequest(string fileType = "pdf")
         {
             return new FileGenerationRequest
             {
-                OutputPath = _tempDir,
+                OutputPath = this.tempDir,
                 FileCount = 3,
                 FileType = fileType,
                 Folders = 1,
                 Encoding = "Unicode (UTF-8)",
                 WithMetadata = true,
                 WithText = false,
-                LoadFileFormat = LoadFileFormat.Dat
+                LoadFileFormat = LoadFileFormat.Dat,
             };
         }
 
@@ -51,11 +52,12 @@ namespace Zipper
                     {
                         Index = i,
                         FolderNumber = 1,
-                        FilePathInZip = $"folder_001/file_{i:D8}.pdf"
+                        FilePathInZip = $"folder_001/file_{i:D8}.pdf",
                     },
-                    Data = Encoding.UTF8.GetBytes($"Test content {i}")
+                    Data = Encoding.UTF8.GetBytes($"Test content {i}"),
                 });
             }
+
             return fileList;
         }
 
@@ -63,10 +65,10 @@ namespace Zipper
         public async Task DatWriter_ShouldWriteValidDatFormat()
         {
             // Arrange
-            var request = CreateTestRequest();
-            var fileData = CreateTestFileData();
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
             var writer = new DatWriter();
-            var outputPath = Path.Combine(_tempDir, "test.dat");
+            var outputPath = Path.Combine(this.tempDir, "test.dat");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -89,10 +91,10 @@ namespace Zipper
         public async Task OptWriter_ShouldWriteTabDelimitedFormat()
         {
             // Arrange
-            var request = CreateTestRequest();
-            var fileData = CreateTestFileData();
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
-            var outputPath = Path.Combine(_tempDir, "test.opt");
+            var outputPath = Path.Combine(this.tempDir, "test.opt");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -105,6 +107,7 @@ namespace Zipper
 
             // Assert
             Assert.Equal(4, lines.Length);
+
             // OPT format uses tab delimiters
             Assert.Contains('\t', lines[0]);
             Assert.Contains("Control Number", lines[0]);
@@ -114,10 +117,10 @@ namespace Zipper
         public async Task CsvWriter_ShouldWriteCsvFormat()
         {
             // Arrange
-            var request = CreateTestRequest();
-            var fileData = CreateTestFileData();
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
-            var outputPath = Path.Combine(_tempDir, "test.csv");
+            var outputPath = Path.Combine(this.tempDir, "test.csv");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -138,7 +141,7 @@ namespace Zipper
         public async Task CsvWriter_WithSpecialCharacters_ShouldEscapeFields()
         {
             // Arrange
-            var request = CreateTestRequest();
+            var request = this.CreateTestRequest();
             var fileData = new List<FileData>
             {
                 new FileData
@@ -150,10 +153,10 @@ namespace Zipper
                         FilePathInZip = "folder_001/file_with_\"quotes\".pdf"
                     },
                     Data = Array.Empty<byte>()
-                }
+                },
             };
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
-            var outputPath = Path.Combine(_tempDir, "test.csv");
+            var outputPath = Path.Combine(this.tempDir, "test.csv");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -172,10 +175,10 @@ namespace Zipper
         public async Task XmlWriter_ShouldWriteValidXml()
         {
             // Arrange
-            var request = CreateTestRequest();
-            var fileData = CreateTestFileData();
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Xml);
-            var outputPath = Path.Combine(_tempDir, "test.xml");
+            var outputPath = Path.Combine(this.tempDir, "test.xml");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -195,10 +198,10 @@ namespace Zipper
         public async Task ConcordanceWriter_ShouldUseProperDelimiters()
         {
             // Arrange
-            var request = CreateTestRequest();
-            var fileData = CreateTestFileData();
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Concordance);
-            var outputPath = Path.Combine(_tempDir, "test.dat");
+            var outputPath = Path.Combine(this.tempDir, "test.dat");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -211,13 +214,14 @@ namespace Zipper
             // Assert - Concordance uses comma delimiter with CSV escaping
             Assert.Contains(',', content);
             Assert.Contains("CONTROLNUMBER", content);
+
             // Verify format: fields are comma-separated without trailing delimiter
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert.Contains("BEGATTY,ENDDATTY,CONTROLNUMBER,PATH", lines[0]);
         }
 
         [Fact]
-        public async Task WriterFactory_WithAllFormats_ShouldReturnCorrectWriters()
+        public void WriterFactory_WithAllFormats_ShouldReturnCorrectWriters()
         {
             // Act & Assert
             var datWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
@@ -245,21 +249,21 @@ namespace Zipper
         public async Task AllWriters_WithBatesConfig_ShouldIncludeBatesNumber()
         {
             // Arrange
-            var request = CreateTestRequest();
+            var request = this.CreateTestRequest();
             request.BatesConfig = new BatesNumberConfig
             {
                 Prefix = "TEST",
                 Start = 1,
                 Digits = 6,
-                Increment = 1
+                Increment = 1,
             };
-            var fileData = CreateTestFileData();
+            var fileData = this.CreateTestFileData();
 
             foreach (LoadFileFormat format in Enum.GetValues(typeof(LoadFileFormat)))
             {
                 // Arrange
                 var writer = LoadFileWriterFactory.CreateWriter(format);
-                var outputPath = Path.Combine(_tempDir, $"test.{format.ToString().ToLower()}");
+                var outputPath = Path.Combine(this.tempDir, $"test.{format.ToString().ToLower()}");
 
                 // Act
                 await using (var stream = File.OpenWrite(outputPath))
@@ -279,9 +283,9 @@ namespace Zipper
         public async Task AllWriters_WithTiffPageRange_ShouldIncludePageCount()
         {
             // Arrange
-            var request = CreateTestRequest("tiff");
+            var request = this.CreateTestRequest("tiff");
             request.TiffPageRange = (1, 10);
-            var fileData = CreateTestFileData();
+            var fileData = this.CreateTestFileData();
             fileData[0] = fileData[0] with { PageCount = 5 };
             fileData[1] = fileData[1] with { PageCount = 7 };
             fileData[2] = fileData[2] with { PageCount = 3 };
@@ -290,7 +294,7 @@ namespace Zipper
             {
                 // Arrange
                 var writer = LoadFileWriterFactory.CreateWriter(format);
-                var outputPath = Path.Combine(_tempDir, $"test.{format.ToString().ToLower()}");
+                var outputPath = Path.Combine(this.tempDir, $"test.{format.ToString().ToLower()}");
 
                 // Act
                 await using (var stream = File.OpenWrite(outputPath))
@@ -316,11 +320,11 @@ namespace Zipper
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             // Arrange - Test encoding path with non-UTF8 encoding to verify proper encoding handling
-            var request = CreateTestRequest();
+            var request = this.CreateTestRequest();
             request.Encoding = encoding;
-            var fileData = CreateTestFileData();
+            var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
-            var outputPath = Path.Combine(_tempDir, "test.dat");
+            var outputPath = Path.Combine(this.tempDir, "test.dat");
 
             // Act
             await using (var stream = File.OpenWrite(outputPath))
@@ -333,7 +337,7 @@ namespace Zipper
             {
                 "UTF-16" => Encoding.Unicode,
                 "ANSI" => Encoding.GetEncoding("Windows-1252"),
-                _ => Encoding.UTF8
+                _ => Encoding.UTF8,
             };
 
             var content = await File.ReadAllTextAsync(outputPath);

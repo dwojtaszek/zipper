@@ -1,4 +1,7 @@
-using System;
+// <copyright file="MemoryPoolManagerTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper

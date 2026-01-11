@@ -1,6 +1,7 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+// <copyright file="ProgressTrackerTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
