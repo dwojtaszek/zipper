@@ -26,6 +26,9 @@ internal class OptWriter : LoadFileWriterBase
 
         await WriteHeaderAsync(writer, request, tab);
         await WriteRowsAsync(writer, request, processedFiles, tab);
+
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char tab)

@@ -71,7 +71,7 @@ fi
 # 3. Run unit tests (fast, local validation)
 # ──────────────────────────────────────────────────────────
 if command -v dotnet >/dev/null 2>&1; then
-    dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet" --no-build 2>/dev/null || {
+    dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet" 2>/dev/null || {
         echo "Unit tests failed. Run 'dotnet test' for details." >&2
         exit 1
     }

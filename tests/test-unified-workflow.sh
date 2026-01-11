@@ -183,7 +183,7 @@ else
 fi
 
 # Check for version handling
-echo "16. Checking version handling..."
+echo "15. Checking version handling..."
 if grep -q "Set Version" .github/workflows/build-and-test.yml; then
     echo "✓ Has version handling"
 else

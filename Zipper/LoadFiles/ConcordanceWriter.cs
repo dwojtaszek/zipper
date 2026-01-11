@@ -29,6 +29,9 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
         await WriteHeaderAsync(writer, request, fieldDelim, quote);
         await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quote);
+
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char fieldDelim, char quote)

@@ -25,6 +25,9 @@ internal class CsvWriter : LoadFileWriterBase
 
         await WriteHeaderAsync(writer, request);
         await WriteRowsAsync(writer, request, processedFiles);
+
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request)

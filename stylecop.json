@@ -7,7 +7,6 @@
       "documentPrivateElements": false,
       "documentPrivateFields": false,
       "documentInterfaces": false,
-      "documentPrivateFields": false,
       "propertyNamingConvention": "pascalCase",
       "allowedPhrasePlaceholders": []
     },

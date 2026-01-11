@@ -202,7 +202,7 @@ if errorlevel 1 (
 
 REM Check for caching
 echo.
-echo 15. Checking caching configuration...
+echo 14. Checking caching configuration...
 findstr /C:"actions/cache@v" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing caching
@@ -213,7 +213,7 @@ if errorlevel 1 (
 
 REM Check for version handling
 echo.
-echo 16. Checking version handling...
+echo 15. Checking version handling...
 findstr /C:"Set Version" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing version handling
