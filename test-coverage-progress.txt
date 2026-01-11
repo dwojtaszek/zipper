@@ -24,7 +24,15 @@
 - **Coverage result:** All distributions now at 100%, `FileDistributionHelper` at 86.6%
 - **Learnings:** Always verify tests are actually being compiled/run. Exponential CDF formula is `-ln(1-p)/λ`
 
-## Remaining low-coverage files (need 22.9% more to reach 80%):
+## Iteration 4 (2026-01-11)
+**Coverage: 63%** (up from 62.8%)
+- **File tested:** `BatesNumberGenerator.cs`
+- **What was tested:** `GenerateWithoutPrefix` method
+- **User behavior:** Legal professionals can generate Bates numbers without prefixes for numeric-only labels
+- **Coverage result:** `BatesNumberGenerator` now at 100% (was 72.7%)
+- **Learnings:** The method was completely untested despite being a public API
+
+## Remaining low-coverage files (need 17% more to reach 80%):
 - Many 0% files are internal records/types that don't need tests
 - `PathValidator` (44%) - exception handling mostly defensive
 - `LoadFileWriterBase` (59.3%) - helpers covered by concrete implementations
