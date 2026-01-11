@@ -28,7 +28,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ### FR-000: Automatic Metadata Generation
 - **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
-- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
+- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For EML file types, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to email files.
 - **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
 - **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
 
@@ -41,7 +41,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ### FR-002: Basic Email Generation
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
 - **REQ-009**: When `--type eml` is specified, the tool will generate `.eml` files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
-- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data.
+- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data. For EML files, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to email files.
 - **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated emails have one of the placeholder documents included as a random attachment. Defaults to 0.
 
 ### FR_E-005: File Distribution Patterns
