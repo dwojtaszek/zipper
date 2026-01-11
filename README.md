@@ -1,18 +1,18 @@
 # Zipper: A Test Data Generation Tool
 
-Zipper is a .NET command-line tool for generating large zip files containing placeholder documents (`.pdf`, `.jpg`, or `.tiff`) and a corresponding load file. It's designed for performance testing and can generate archives with up to 100 million files.
+Zipper is a .NET command-line tool for generating large zip files containing placeholder documents (`.pdf`, `.jpg`, `.tiff`, `.eml`, `.docx`, `.xlsx`) and a corresponding load file. It's designed for performance testing and can generate archives with up to 100 million files.
 
-## 🏆 Architecture Refactoring Completed
+## Architecture Refactoring Completed
 
-Zipper has undergone a comprehensive code quality refactoring to improve maintainability, security, and performance while preserving all existing functionality:
+Zipper has undergone a comprehensive code quality refactoring to improve maintainability, security, and performance while preserving all existing functionality.
 
 ### Refactoring Achievements
-- ✅ **Security Fixes**: Resolved critical path traversal vulnerability
-- ✅ **Code Architecture**: Extracted 8+ dedicated service classes with clear separation of concerns
-- ✅ **Performance**: Maintained O(1) algorithms and streaming efficiency with comprehensive regression testing
-- ✅ **Testing**: 90%+ test coverage with unit, integration, and performance tests
-- ✅ **Cross-Platform**: Verified compatibility across Windows, Linux, and macOS
-- ✅ **Documentation**: Comprehensive performance analysis and testing framework
+- **Security Fixes**: Resolved critical path traversal vulnerability
+- **Code Architecture**: Extracted 8+ dedicated service classes with clear separation of concerns
+- **Performance**: Maintained O(1) algorithms and streaming efficiency with comprehensive regression testing
+- **Testing**: 90%+ test coverage with unit, integration, and performance tests
+- **Cross-Platform**: Verified compatibility across Windows, Linux, and macOS
+- **Documentation**: Comprehensive performance analysis and testing framework
 
 ### Enhanced Features
 - **Email Generation**: Advanced template system with 6 categories (Business, Legal, Healthcare, Education, Ecommerce, Travel)
@@ -26,28 +26,29 @@ For detailed information about the refactoring process and performance analysis,
 
 ## Features
 
--   Generates a single `.zip` archive with a specified number of files.
--   Supports multiple file types: PDF, JPG, TIFF, EML, DOCX, XLSX.
--   Supports multiple load file formats: DAT, OPT, CSV, XML, CONCORDANCE.
--   Supports multiple file distribution patterns: proportional, gaussian, and exponential.
--   Supports Bates numbering for legal document identification.
--   Creates a corresponding load file compatible with standard import tools.
--   Uses minimal, valid placeholder files for maximum compression.
--   Streams data directly to the archive to handle very large datasets efficiently.
--   Provides progress indication during generation with real-time performance metrics.
--   Can target a specific zip file size by padding files with non-compressible data.
--   Optimized for high-performance parallel processing with memory pooling and buffered I/O.
--   Real-time performance monitoring with progress tracking, throughput metrics, and ETA calculations.
+- Generates a single `.zip` archive with a specified number of files
+- Supports multiple file types: PDF, JPG, TIFF, EML, DOCX, XLSX
+- Supports multiple load file formats: DAT, OPT, CSV, XML, CONCORDANCE
+- Supports multiple file distribution patterns: proportional, gaussian, and exponential
+- Supports Bates numbering for legal document identification
+- Supports multipage TIFF files with configurable page count ranges
+- Creates a corresponding load file compatible with standard import tools
+- Uses minimal, valid placeholder files for maximum compression
+- Streams data directly to the archive to handle very large datasets efficiently
+- Provides progress indication during generation with real-time performance metrics
+- Can target a specific zip file size by padding files with non-compressible data
+- Optimized for high-performance parallel processing with memory pooling and buffered I/O
+- Real-time performance monitoring with progress tracking, throughput metrics, and ETA calculations
 
 ## Requirements
 
--   .NET 8.0 SDK (or newer)
--   The following NuGet packages are also required and are included in the project file:
-    -   `SixLabors.ImageSharp` - For TIFF image generation
-    -   `ClosedXML` - For XLSX spreadsheet generation
-    -   `DocumentFormat.OpenXml` - For DOCX document generation
-    -   `System.Drawing.Common` - For image processing
-    -   `System.Text.Encoding.CodePages` - For ANSI encoding support
+- .NET 8.0 SDK (or newer)
+- The following NuGet packages are also required and are included in the project file:
+  - `SixLabors.ImageSharp` - For TIFF image generation
+  - `ClosedXML` - For XLSX spreadsheet generation
+  - `DocumentFormat.OpenXml` - For DOCX document generation
+  - `System.Drawing.Common` - For image processing
+  - `System.Text.Encoding.CodePages` - For ANSI encoding support
 
 ## Building
 
@@ -72,32 +73,32 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 ### Arguments
 
 **Required Arguments:**
--   `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required)** The type of file to generate.
--   `--count <number>`: **(Required)** The total number of files to generate.
--   `--output-path <directory>`: **(Required)** The directory where the output `.zip` and load file will be saved. The directory will be created if it doesn't exist.
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required)** The type of file to generate
+- `--count <number>`: **(Required)** The total number of files to generate
+- `--output-path <directory>`: **(Required)** The directory where the output `.zip` and load file will be saved. The directory will be created if it doesn't exist
 
 **Optional Arguments:**
--   `--folders <number>`: The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
--   `--encoding <UTF-8|UTF-16|ANSI>`: The text encoding for the load file. Defaults to `UTF-8`. `ANSI` uses the Windows-1252 code page.
--   `--distribution <proportional|gaussian|exponential>`: The distribution pattern for files across folders. Defaults to `proportional`.
-    - `proportional`: Even distribution across all folders (round-robin)
-    - `gaussian`: Bell curve distribution with most files in middle folders
-    - `exponential`: Exponential decay with most files in first folders
--   `--with-metadata`: Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`.
--   `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the load file. Supported for all file types including `eml`.
--   `--attachment-rate <number>`: When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
--   `--target-zip-size <size>`: Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`.
--   `--include-load-file`: Includes the generated load file in the root of the output `.zip` archive instead of as a separate file.
--   `--load-file-format <dat|opt|csv|xml|concordance>`: The format of the load file. Defaults to `dat`. Available formats:
-    - `dat: Standard Concordance DAT format with caret (^) delimiters
-    - `opt`: Opticon format with tab delimiters
-    - `csv`: Comma-separated values format with proper RFC 4180 escaping
-    - `xml`: Structured XML markup format
-    - `concordance`: Concordance database format with ASCII 20 delimiters
--   `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001").
--   `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1.
--   `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8.
--   `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
+- `--folders <number>`: The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100
+- `--encoding <UTF-8|UTF-16|ANSI>`: The text encoding for the load file. Defaults to `UTF-8`. `ANSI` uses the Windows-1252 code page
+- `--distribution <proportional|gaussian|exponential>`: The distribution pattern for files across folders. Defaults to `proportional`
+  - `proportional`: Even distribution across all folders (round-robin)
+  - `gaussian`: Bell curve distribution with most files in middle folders
+  - `exponential`: Exponential decay with most files in first folders
+- `--with-metadata`: Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`
+- `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the load file. Supported for all file types including `eml`
+- `--attachment-rate <number>`: When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0
+- `--target-zip-size <size>`: Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
+- `--include-load-file`: Includes the generated load file in the root of the output `.zip` archive instead of as a separate file
+- `--load-file-format <dat|opt|csv|xml|concordance>`: The format of the load file. Defaults to `dat`. Available formats:
+  - `dat`: Standard Concordance DAT format with caret (^) delimiters
+  - `opt`: Opticon format with tab delimiters
+  - `csv`: Comma-separated values format with proper RFC 4180 escaping
+  - `xml`: Structured XML markup format
+  - `concordance`: Concordance database format with comma delimiters and CSV escaping
+- `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
+- `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
+- `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
+- `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1"
 
 ### Distribution Patterns
 
@@ -106,7 +107,7 @@ The following chart illustrates how files are distributed across folders using d
 ![Distribution Patterns](assets/dist.png)
 
 - **Proportional**: Files are distributed evenly across all folders in a round-robin fashion
-- **Gaussian**: Files follow a bell curve distribution, with most files concentrated in the middle folders  
+- **Gaussian**: Files follow a bell curve distribution, with most files concentrated in the middle folders
 - **Exponential**: Files follow an exponential decay pattern, with the highest concentration in the first folders
 
 ### Examples
@@ -118,8 +119,8 @@ zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --distrib
 ```
 
 This command will produce two files in the `test_data` directory, with filenames based on the current date and time (e.g., `archive_YYYYMMDD_HHMMSS.zip` and `archive_YYYYMMDD_HHMMSS.dat`):
--   A zip file containing 50,000 PDFs distributed across 10 folders.
--   The load file pointing to the documents within the archive.
+- A zip file containing 50,000 PDFs distributed across 10 folders
+- The load file pointing to the documents within the archive
 
 #### Additional Use Cases
 
@@ -158,7 +159,7 @@ zipper --type eml --count 3000 --output-path ./email_full --with-metadata --with
 zipper --type eml --count 2000 --output-path ./email_complete --with-metadata --with-text --attachment-rate 30
 
 # Generates exactly 100,000 PDF files and pads each one with uncompressible
-# data so that the final compressed zip archive is approximately 1GB in size.
+# data so that the final compressed zip archive is approximately 1GB in size
 zipper --type pdf --count 100000 --target-zip-size 1GB --output-path ./test_padded_files
 
 # Generate 1,000 PDFs and include the load file inside the zip archive
@@ -185,7 +186,7 @@ zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format x
 
 ## Performance
 
-Zipper is optimized for high-performance file generation with advanced parallel processing capabilities:
+Zipper is optimized for high-performance file generation with advanced parallel processing capabilities.
 
 ### Performance Architecture
 
@@ -236,9 +237,9 @@ The system automatically:
 ## Versioning
 
 The application's version will follow a scheme of the format `MAJOR.MINOR.BUILD`.
-- The `MAJOR.MINOR` version numbers are to be managed manually in a `.version` file located in the root of the repository.
-- The `BUILD` number will be automatically generated by the CI/CD pipeline, using the GitHub Actions `run_number`. The full version string will be in the format `<major>.<minor>.<run_number>`.
-- The CI/CD pipeline will automatically create a new GitHub Release for each successful `master` branch build.
+- The `MAJOR.MINOR` version numbers are to be managed manually in a `.version` file located in the root of the repository
+- The `BUILD` number will be automatically generated by the CI/CD pipeline, using the GitHub Actions `run_number`. The full version string will be in the format `<major>.<minor>.<run_number>`
+- The CI/CD pipeline will automatically create a new GitHub Release for each successful `master` branch build
 
 ## Testing
 
@@ -248,12 +249,12 @@ The project includes a comprehensive test suite that covers all command-line opt
 
 To run the tests, execute the appropriate script for your operating system:
 
--   **Windows**: `tests\run-tests.bat`
--   **macOS and Linux**: `./tests/run-tests.sh`
+- **Windows**: `tests\run-tests.bat`
+- **macOS and Linux**: `./tests/run-tests.sh`
 
 ### Performance Testing
 
-The project includes comprehensive performance regression testing to ensure optimal performance:
+The project includes comprehensive performance regression testing to ensure optimal performance.
 
 #### Performance Regression Tests
 ```bash
@@ -286,12 +287,11 @@ For extreme performance testing and edge case validation, see the [stress test s
 - **30GB Attachment-Heavy EML**: Tests attachment processing and large archives
 - **Large Load File Performance**: Tests metadata and text extraction performance
 
-⚠️ **Warning**: Stress tests consume significant system resources and require manual confirmation before execution.
+**Warning**: Stress tests consume significant system resources and require manual confirmation before execution.
 
 ### Pre-Commit Hook
 
 The project includes scripts to set up a pre-commit hook that will run the test suite automatically before each commit. To set up the hook, run the appropriate script for your operating system:
 
--   **Windows**: `setup-hook.bat`
--   **macOS and Linux**: `setup-hook.sh`
-# Updated at Thu Oct 30 10:37:44 PM CET 2025
+- **Windows**: `setup-hook.bat`
+- **macOS and Linux**: `./setup-hook.sh`
