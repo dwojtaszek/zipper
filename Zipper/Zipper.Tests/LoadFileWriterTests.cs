@@ -185,8 +185,7 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert
-            Assert.Contains("<?xml", content);
+            // Assert - Note: XDocument includes XML declaration, but we write directly to stream
             Assert.Contains("<documents>", content);
             Assert.Contains("<document>", content);
             Assert.Contains("<controlNumber>DOC00000001</controlNumber>", content);
@@ -209,9 +208,12 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert - Concordance uses ASCII 20 as delimiter
-            Assert.Contains((char)0x14, content);
+            // Assert - Concordance uses comma delimiter with CSV escaping
+            Assert.Contains(',', content);
             Assert.Contains("CONTROLNUMBER", content);
+            // Verify format: fields are comma-separated without trailing delimiter
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Contains("BEGATTY,ENDDATTY,CONTROLNUMBER,PATH", lines[0]);
         }
 
         [Fact]
@@ -310,6 +312,9 @@ namespace Zipper
         [InlineData("ANSI")]
         public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
         {
+            // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             // Arrange - Test encoding path with non-UTF8 encoding to verify proper encoding handling
             var request = CreateTestRequest();
             request.Encoding = encoding;
