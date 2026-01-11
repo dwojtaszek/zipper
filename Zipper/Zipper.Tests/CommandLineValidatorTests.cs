@@ -367,5 +367,98 @@ namespace Zipper
                 errorOutput.Dispose();
             }
         }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly()
+        {
+            // Arrange
+            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", "/tmp/test", "--tiff-pages", "5-20" };
+
+            // Act
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotNull(result.TiffPageRange);
+            Assert.Equal(5, result.TiffPageRange.Value.Min);
+            Assert.Equal(20, result.TiffPageRange.Value.Max);
+        }
+
+        [Theory]
+        [InlineData("invalid")]
+        [InlineData("1-")]
+        [InlineData("-10")]
+        [InlineData("10-5")]  // min > max
+        public void ValidateAndParseArguments_WithInvalidTiffPagesRange_ShouldReturnNull(string range)
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                var args = new[] { "--type", "tiff", "--count", "10", "--output-path", "/tmp/test", "--tiff-pages", range };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.Null(result);
+                var output = errorOutput.ToString();
+                Assert.Contains("Error: Invalid TIFF pages range", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
+        }
+
+        [Theory]
+        [InlineData("dat", LoadFileFormat.Dat)]
+        [InlineData("opt", LoadFileFormat.Opt)]
+        [InlineData("csv", LoadFileFormat.Csv)]
+        [InlineData("xml", LoadFileFormat.Xml)]
+        [InlineData("concordance", LoadFileFormat.Concordance)]
+        public void ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly(string format, LoadFileFormat expected)
+        {
+            // Arrange
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp/test", "--load-file-format", format };
+
+            // Act
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expected, result.LoadFileFormat);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithInvalidLoadFileFormat_ShouldReturnNull()
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp/test", "--load-file-format", "invalid" };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.Null(result);
+                var output = errorOutput.ToString();
+                Assert.Contains("Error: Invalid load file format", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
+        }
     }
 }

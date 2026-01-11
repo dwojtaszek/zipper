@@ -163,5 +163,47 @@ namespace Zipper
             // Assert
             Assert.Equal("DOC00000000", result);
         }
+
+        [Fact]
+        public void GenerateWithoutPrefix_WithDefaultConfig_ShouldGenerateNumberOnly()
+        {
+            // Arrange
+            var config = new BatesNumberConfig
+            {
+                Prefix = "DOC",
+                Start = 1,
+                Digits = 8,
+                Increment = 1
+            };
+
+            // Act
+            var result = BatesNumberGenerator.GenerateWithoutPrefix(config, 0);
+
+            // Assert
+            Assert.Equal("00000001", result);
+        }
+
+        [Fact]
+        public void GenerateWithoutPrefix_WithMultipleIndices_ShouldIncrementCorrectly()
+        {
+            // Arrange
+            var config = new BatesNumberConfig
+            {
+                Prefix = "PREFIX",  // Prefix should be ignored
+                Start = 100,
+                Digits = 6,
+                Increment = 10
+            };
+
+            // Act
+            var result1 = BatesNumberGenerator.GenerateWithoutPrefix(config, 0);
+            var result2 = BatesNumberGenerator.GenerateWithoutPrefix(config, 1);
+            var result3 = BatesNumberGenerator.GenerateWithoutPrefix(config, 2);
+
+            // Assert
+            Assert.Equal("000100", result1);
+            Assert.Equal("000110", result2);
+            Assert.Equal("000120", result3);
+        }
     }
 }

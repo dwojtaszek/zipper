@@ -8,6 +8,17 @@ Use 'bd' for task tracking.
 
 ---
 
+## Important: Unit Tests Location
+
+**ALL unit tests MUST be added to `Zipper/Zipper.Tests/` directory.**
+
+- ✅ **Correct location:** `Zipper/Zipper.Tests/YourFileTests.cs` - This is the actual test project that gets compiled and run.
+- ❌ **Wrong location:** `Zipper.Tests/YourFileTests.cs` - This is an outdated directory that is NOT compiled or run.
+
+The test project is defined in `Zipper/Zipper.Tests/Zipper.Tests.csproj`. Only test files in this directory will be executed by `dotnet test`.
+
+---
+
 ## Quick Reference (Build/Test Commands)
 
 ```bash

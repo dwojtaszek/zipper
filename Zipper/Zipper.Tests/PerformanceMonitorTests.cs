@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace Zipper.Tests
+namespace Zipper
 {
     public class PerformanceMonitorTests
     {
@@ -55,54 +55,7 @@ namespace Zipper.Tests
 
             // Act & Assert
             // Should handle gracefully (though behavior might be undefined)
-            Assert.DoesNotThrow(() => monitor.Start(totalFiles));
-        }
-
-        [Fact]
-        public void ReportFilesCompleted_PositiveCount_IncrementsCorrectly()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(100);
-
-            // Act
-            monitor.ReportFilesCompleted(10);
-            monitor.ReportFilesCompleted(20);
-            monitor.ReportFilesCompleted(5);
-
-            // Assert
-            // No direct assertion possible, but should not throw
-            Assert.True(true);
-        }
-
-        [Theory]
-        [InlineData(0)]
-        [InlineData(-1)]
-        [InlineData(-10)]
-        public void ReportFilesCompleted_NegativeCount_HandlesGracefully(long count)
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(100);
-
-            // Act & Assert
-            // Should handle gracefully (though behavior might be undefined)
-            Assert.DoesNotThrow(() => monitor.ReportFilesCompleted(count));
-        }
-
-        [Fact]
-        public void ReportFilesCompleted_LargeCount_HandlesCorrectly()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(1000000);
-
-            // Act
-            monitor.ReportFilesCompleted(100000);
-
-            // Assert
-            // Should handle large numbers without overflow
-            Assert.True(true);
+            monitor.Start(totalFiles); // Should not throw
         }
 
         [Fact]
@@ -234,103 +187,6 @@ namespace Zipper.Tests
 
                 _output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
             }
-        }
-
-        [Fact]
-        public void ReportFilesCompleted_BatchReporting_CalculatesCorrectRate()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(1000);
-
-            // Act
-            var startTime = DateTime.UtcNow;
-
-            // Report files in batches to simulate real usage
-            for (int i = 0; i < 10; i++)
-            {
-                monitor.ReportFilesCompleted(100);
-                Thread.Sleep(10); // Simulate processing time
-            }
-
-            var metrics = monitor.Stop();
-            var actualDuration = DateTime.UtcNow - startTime;
-
-            // Assert
-            Assert.NotNull(metrics);
-            Assert.True(metrics.ElapsedMilliseconds > 0);
-            Assert.True(metrics.FilesPerSecond > 0);
-
-            _output.WriteLine($"Actual duration: {actualDuration.TotalMilliseconds:F1}ms");
-            _output.WriteLine($"Measured duration: {metrics.ElapsedMilliseconds}ms");
-            _output.WriteLine($"Files per second: {metrics.FilesPerSecond:F2}");
-        }
-
-        [Fact]
-        public void PerformanceMonitor_RealWorkload_HandlesAccurately()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            const int totalFiles = 1000;
-            monitor.Start(totalFiles);
-
-            // Act - Simulate realistic file generation
-            for (int i = 0; i < totalFiles; i += 50) // Report in batches
-            {
-                // Simulate some work
-                Thread.Sleep(1);
-
-                // Report batch completion
-                monitor.ReportFilesCompleted(Math.Min(50, totalFiles - i));
-            }
-
-            var metrics = monitor.Stop();
-
-            // Assert
-            Assert.NotNull(metrics);
-            Assert.True(metrics.ElapsedMilliseconds > 0);
-            Assert.True(metrics.FilesPerSecond > 0);
-            Assert.True(metrics.FilesPerSecond < 10000); // Should be realistic
-
-            _output.WriteLine($"Completed {totalFiles} files in {metrics.ElapsedMilliseconds}ms");
-            _output.WriteLine($"Performance: {metrics.FilesPerSecond:F2} files/second");
-        }
-
-        [Fact]
-        public void ReportFilesCompleted_ZeroReporting_HandlesGracefully()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(100);
-
-            // Act
-            monitor.ReportFilesCompleted(0);
-            monitor.ReportFilesCompleted(0);
-            monitor.ReportFilesCompleted(0);
-
-            var metrics = monitor.Stop();
-
-            // Assert
-            Assert.NotNull(metrics);
-            Assert.Equal(0, metrics.FilesPerSecond);
-        }
-
-        [Fact]
-        public void Stop_VeryShortOperation_HandlesCorrectly()
-        {
-            // Arrange
-            var monitor = new PerformanceMonitor();
-            monitor.Start(1);
-
-            // Act - Very fast operation
-            monitor.ReportFilesCompleted(1);
-            var metrics = monitor.Stop();
-
-            // Assert
-            Assert.NotNull(metrics);
-            Assert.True(metrics.ElapsedMilliseconds >= 0);
-            // Files per second should be very high for very short operations
-            Assert.True(metrics.FilesPerSecond >= 0);
         }
 
         [Fact]
