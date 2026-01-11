@@ -32,7 +32,15 @@
 - **Coverage result:** `BatesNumberGenerator` now at 100% (was 72.7%)
 - **Learnings:** The method was completely untested despite being a public API
 
-## Remaining low-coverage files (need 17% more to reach 80%):
+## Iteration 5 (2026-01-11)
+**Coverage: 63.3%** (up from 63%)
+- **File tested:** `CommandLineValidator.cs`
+- **What was tested:** `--tiff-pages` option validation
+- **User behavior:** Users can specify TIFF page count range (e.g., "5-20") for multipage TIFF generation
+- **Coverage result:** `CommandLineValidator` now at ~87% (was 85.8%)
+- **Learnings:** The `Zipper.Tests/` directory is outdated - only `Zipper/Zipper.Tests/` is compiled/run
+
+## Remaining low-coverage files (need 16.7% more to reach 80%):
 - Many 0% files are internal records/types that don't need tests
 - `PathValidator` (44%) - exception handling mostly defensive
 - `LoadFileWriterBase` (59.3%) - helpers covered by concrete implementations
