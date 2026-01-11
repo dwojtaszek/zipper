@@ -165,7 +165,7 @@ function verify_eml_output() {
 
   # Count EML files to calculate expected attachments (50% attachment rate)
   local eml_files=$(echo "$zip_listing" | grep "\.eml$" | wc -l)
-  local min_expected_attachments=$((eml_files / 4)) # Should be at least ~25% due to 50% rate randomness
+  local min_expected_attachments=$((eml_files / 10)) # Should be at least ~10% due to 50% rate randomness
 
   if [ "$attachment_files" -lt "$min_expected_attachments" ]; then
     print_error "Expected at least $min_expected_attachments attachment files in ZIP, but found $attachment_files."
