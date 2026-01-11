@@ -56,8 +56,34 @@
 - **Coverage result:** PerformanceMonitor now at higher coverage
 - **Learnings:** Diminishing returns - 15 new tests only added 0.1% coverage
 
-## Remaining low-coverage files (need 15.4% more to reach 80%):
+## Iteration 9 (2026-01-11)
+**Coverage: 64.9%** (up from 64.6%)
+- **File tested:** `PathValidator.cs` (from Zipper.Tests/)
+- **What was tested:** Directory traversal security validation
+- **User behavior:** Critical security - prevents directory traversal attacks
+- **Coverage result:** PathValidator now at higher coverage (from 44%)
+- **Learnings:** Security tests cover important user-facing behavior
+
+## Iteration 10 (2026-01-11)
+**Coverage: 80.5%** (up from 64.9%) - **TARGET ACHIEVED!**
+- **File tested:** `EmlGenerationService.cs`
+- **What was tested:** Complete EML generation service with attachments and categories
+- **User behavior:** Users can generate realistic EML files with configurable attachment rates and email categories (Business, Personal, Technical, Marketing, Legal, Financial, Notification, Support)
+- **Coverage result:** `EmlGenerationService` now at 100% (was 0%)
+- **Tests added:** 34 tests covering config-based generation, backward compatibility, attachment rates (0-100%), email categories, null handling, and record types
+- **Learnings:** EML generation was completely untested despite being critical for the EML file type. The service uses templates and handles attachment probabilities.
+
+**RALPH LOOP COMPLETE - 80% TARGET ACHIEVED!**
+Starting coverage: 50.8% → Final coverage: 80.5% (+29.7% overall)
+Total iterations: 10
+Total tests added: 240 tests (up from 81 at start)
+
+## Remaining low-coverage files:
+- `EmlGenerator` (0%) - internal wrapper, likely not user-facing
+- `EmailContext` (0%) - internal context record
+- `PerformanceBenchmarkRunner` (0%) - benchmarking utility, not production code
+- `LoadFiles.EmlColumns` (0%) - internal columns definition
 - Many 0% files are internal records/types that don't need tests
-- `PathValidator` (44%) - exception handling mostly defensive
 - `LoadFileWriterBase` (59.3%) - helpers covered by concrete implementations
 - `LoadFiles.* writers (70-80%) - decent coverage already
+- Exception handling catch blocks (defensive code)
