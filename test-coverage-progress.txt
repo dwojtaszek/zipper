@@ -1,0 +1,27 @@
+# Test Coverage Progress
+
+## Iteration 1 (2026-01-11)
+**Coverage: 54%** (up from 50.8%)
+- **File tested:** `ZipArchiveService.cs`
+- **What was tested:** EML files with attachments AND text extraction
+- **User behavior:** When generating EML files with attachments and requesting text extraction, the ZIP should contain: EML files, EML text files, attachment files, and attachment text files
+- **Coverage result:** `ZipArchiveService` now at 100% (was 39.5%)
+- **Learnings:** The attachment file naming uses `attachment{n}.{ext}` pattern (not `attachment.{n}.{ext}`), so the test filter needed to use `Contains("attachment")` not `Contains("attachment.")`
+
+## Iteration 2 (2026-01-11)
+**Coverage: 54.8%** (up from 54%)
+- **File tested:** `ParallelFileGenerator.cs`
+- **What was tested:** Target ZIP size feature (`--target-zip-size`)
+- **User behavior:** When users specify a target ZIP size, files are padded with random data to reach approximately the requested size
+- **Coverage result:** `ParallelFileGenerator` now at 72.2% (was 63.1%)
+- **Learnings:** Compression variance makes exact targeting impossible; test uses 50% minimum threshold. Padding adds random bytes to each file.
+
+## Remaining low-coverage files (priority: user-facing behavior):
+- `PathValidator` (44%) - security critical, but exception handling paths are mostly defensive code
+- `LoadFileWriterBase` (59.3%) - helper methods, mostly covered by concrete writers
+- `FileDistributionHelper` (60%) - distribution algorithm selection
+- `ProgressTracker` (65.7%) - progress reporting
+- `LoadFiles.XmlWriter` (76%)
+- `LoadFiles.OptWriter` (79.6%)
+- `LoadFiles.ConcordanceWriter` (73%)
+- `LoadFiles.CsvWriter` (74.7%)
