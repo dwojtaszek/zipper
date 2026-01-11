@@ -214,6 +214,14 @@ await writer.FlushAsync();
 - Main: `tests/run-tests.sh` / `tests/run-tests.bat`
 - EML: `tests/test-eml-comprehensive.sh` / `tests/test-eml-comprehensive.bat`
 
+**Testing Best Practices (from coverage improvement journey):**
+
+1. **Verify tests are actually executing**: Always confirm tests are in the correct directory (`Zipper/Zipper.Tests/`) and are being compiled/run. Tests in obsolete locations will silently pass without actually testing anything.
+
+2. **Use flexible thresholds for variable operations**: Tests involving compression, randomness, or file sizes should use percentage-based thresholds (e.g., 50% minimum) rather than exact values, since compression ratios and random distributions have inherent variance.
+
+3. **Test all public API methods**: Public API surfaces can remain completely untested despite being user-facing. Ensure all public methods have coverage, especially those documented in user-facing features.
+
 ---
 
 ## Dependencies
