@@ -8,92 +8,95 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes OPT (Opticon) format load files - tab-separated format used by Relativity
 /// </summary>
-internal class OptWriter : ILoadFileWriter
+internal class OptWriter : LoadFileWriterBase
 {
-    public string FormatName => "OPT";
-    public string FileExtension => ".opt";
+    public override string FormatName => "OPT";
+    public override string FileExtension => ".opt";
 
-    public async Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.List<FileData> processedFiles)
+    public override async Task WriteAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        System.Collections.Generic.List<FileData> processedFiles)
     {
         using var writer = new StreamWriter(stream, Encoding.UTF8);
-
         const char tab = '\t';
 
-        // Write header
-        var headerBuilder = new StringBuilder();
-        headerBuilder.Append($"Control Number{tab}File Path");
+        await WriteHeaderAsync(writer, request, tab);
+        await WriteRowsAsync(writer, request, processedFiles, tab);
+    }
 
-        if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+    private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char tab)
+    {
+        var header = new StringBuilder();
+        header.Append($"Control Number{tab}File Path");
+
+        if (ShouldIncludeMetadata(request))
         {
-            headerBuilder.Append($"{tab}Custodian{tab}Date Sent{tab}Author{tab}File Size");
+            header.Append($"{tab}Custodian{tab}Date Sent{tab}Author{tab}File Size");
         }
 
-        if (request.FileType.ToLowerInvariant() == "eml")
+        if (ShouldIncludeEmlColumns(request))
         {
-            headerBuilder.Append($"{tab}To{tab}From{tab}Subject{tab}Sent Date{tab}Attachment");
+            header.Append($"{tab}To{tab}From{tab}Subject{tab}Sent Date{tab}Attachment");
         }
 
         if (request.BatesConfig != null)
         {
-            headerBuilder.Append($"{tab}Bates Number");
+            header.Append($"{tab}Bates Number");
         }
 
-        if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+        if (ShouldIncludePageCount(request))
         {
-            headerBuilder.Append($"{tab}Page Count");
+            header.Append($"{tab}Page Count");
         }
 
         if (request.WithText)
         {
-            headerBuilder.Append($"{tab}Extracted Text");
+            header.Append($"{tab}Extracted Text");
         }
 
-        await writer.WriteLineAsync(headerBuilder.ToString());
+        return writer.WriteLineAsync(header.ToString());
+    }
 
+    private static async Task WriteRowsAsync(
+        StreamWriter writer,
+        FileGenerationRequest request,
+        System.Collections.Generic.List<FileData> processedFiles,
+        char tab)
+    {
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
-            var docId = $"DOC{workItem.Index:D8}";
-
+            var docId = GenerateDocumentId(workItem);
             var line = new StringBuilder();
+
             line.Append($"{docId}{tab}{workItem.FilePathInZip}");
 
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (ShouldIncludeMetadata(request))
             {
-                var custodian = $"Custodian {workItem.FolderNumber}";
-                var dateSent = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
-                var author = $"Author {Random.Shared.Next(1, 100):D3}";
-                var fileSize = fileData.Data.Length;
-
-                line.Append($"{tab}{custodian}{tab}{dateSent}{tab}{author}{tab}{fileSize}");
+                var metadata = GenerateMetadataValues(workItem, fileData);
+                line.Append($"{tab}{metadata.Custodian}{tab}{metadata.DateSent}{tab}{metadata.Author}{tab}{metadata.FileSize}");
             }
 
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (ShouldIncludeEmlColumns(request))
             {
-                var to = $"recipient{workItem.Index}@example.com";
-                var from = $"sender{workItem.Index}@example.com";
-                var subject = $"Email Subject {workItem.Index}";
-                var sentDate = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-                var attachmentName = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : "";
-
-                line.Append($"{tab}{to}{tab}{from}{tab}{subject}{tab}{sentDate}{tab}{attachmentName}");
+                var eml = GenerateEmlValues(workItem, fileData);
+                line.Append($"{tab}{eml.To}{tab}{eml.From}{tab}{eml.Subject}{tab}{eml.SentDate}{tab}{eml.Attachment}");
             }
 
             if (request.BatesConfig != null)
             {
-                var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig, workItem.Index - 1);
-                line.Append($"{tab}{batesNumber}");
+                line.Append($"{tab}{GenerateBatesNumber(request, workItem)}");
             }
 
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (ShouldIncludePageCount(request))
             {
                 line.Append($"{tab}{fileData.PageCount}");
             }
 
             if (request.WithText)
             {
-                var textFilePath = workItem.FilePathInZip.Replace($".{request.FileType}", ".txt");
-                line.Append($"{tab}{textFilePath}");
+                line.Append($"{tab}{GenerateTextPath(request, workItem)}");
             }
 
             await writer.WriteLineAsync(line.ToString());

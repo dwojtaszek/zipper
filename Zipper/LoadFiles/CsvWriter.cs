@@ -8,23 +8,32 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes CSV format load files - comma-separated values with proper RFC 4180 escaping
 /// </summary>
-internal class CsvWriter : ILoadFileWriter
+internal class CsvWriter : LoadFileWriterBase
 {
-    public string FormatName => "CSV";
-    public string FileExtension => ".csv";
+    public override string FormatName => "CSV";
+    public override string FileExtension => ".csv";
 
-    public async Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.List<FileData> processedFiles)
+    public override async Task WriteAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        System.Collections.Generic.List<FileData> processedFiles)
     {
         using var writer = new StreamWriter(stream, Encoding.UTF8);
 
+        await WriteHeaderAsync(writer, request);
+        await WriteRowsAsync(writer, request, processedFiles);
+    }
+
+    private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request)
+    {
         var headers = new System.Collections.Generic.List<string> { "Control Number", "File Path" };
 
-        if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+        if (ShouldIncludeMetadata(request))
         {
             headers.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
         }
 
-        if (request.FileType.ToLowerInvariant() == "eml")
+        if (ShouldIncludeEmlColumns(request))
         {
             headers.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
         }
@@ -34,7 +43,7 @@ internal class CsvWriter : ILoadFileWriter
             headers.Add("Bates Number");
         }
 
-        if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+        if (ShouldIncludePageCount(request))
         {
             headers.Add("Page Count");
         }
@@ -44,79 +53,79 @@ internal class CsvWriter : ILoadFileWriter
             headers.Add("Extracted Text");
         }
 
-        await writer.WriteLineAsync(string.Join(",", headers));
+        return writer.WriteLineAsync(string.Join(",", headers));
+    }
 
+    private static async Task WriteRowsAsync(
+        StreamWriter writer,
+        FileGenerationRequest request,
+        System.Collections.Generic.List<FileData> processedFiles)
+    {
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
             var values = new System.Collections.Generic.List<string>
             {
-                EscapeCsvField($"DOC{workItem.Index:D8}"),
-                EscapeCsvField(workItem.FilePathInZip)
+                EscapeField(GenerateDocumentId(workItem)),
+                EscapeField(workItem.FilePathInZip)
             };
 
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (ShouldIncludeMetadata(request))
             {
-                var custodian = $"Custodian {workItem.FolderNumber}";
-                var dateSent = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
-                var author = $"Author {Random.Shared.Next(1, 100):D3}";
-                var fileSize = fileData.Data.Length;
-
-                values.AddRange(new[] {
-                    EscapeCsvField(custodian),
-                    EscapeCsvField(dateSent),
-                    EscapeCsvField(author),
-                    fileSize.ToString()
+                var metadata = GenerateMetadataValues(workItem, fileData);
+                values.AddRange(new[]
+                {
+                    EscapeField(metadata.Custodian),
+                    EscapeField(metadata.DateSent),
+                    EscapeField(metadata.Author),
+                    metadata.FileSize.ToString()
                 });
             }
 
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (ShouldIncludeEmlColumns(request))
             {
-                var to = $"recipient{workItem.Index}@example.com";
-                var from = $"sender{workItem.Index}@example.com";
-                var subject = $"Email Subject {workItem.Index}";
-                var sentDate = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-                var attachmentName = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : "";
-
-                values.AddRange(new[] {
-                    EscapeCsvField(to),
-                    EscapeCsvField(from),
-                    EscapeCsvField(subject),
-                    EscapeCsvField(sentDate),
-                    EscapeCsvField(attachmentName)
+                var eml = GenerateEmlValues(workItem, fileData);
+                values.AddRange(new[]
+                {
+                    EscapeField(eml.To),
+                    EscapeField(eml.From),
+                    EscapeField(eml.Subject),
+                    EscapeField(eml.SentDate),
+                    EscapeField(eml.Attachment)
                 });
             }
 
             if (request.BatesConfig != null)
             {
-                var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig, workItem.Index - 1);
-                values.Add(EscapeCsvField(batesNumber));
+                values.Add(EscapeField(GenerateBatesNumber(request, workItem)));
             }
 
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (ShouldIncludePageCount(request))
             {
                 values.Add(fileData.PageCount.ToString());
             }
 
             if (request.WithText)
             {
-                var textFilePath = workItem.FilePathInZip.Replace($".{request.FileType}", ".txt");
-                values.Add(EscapeCsvField(textFilePath));
+                values.Add(EscapeField(GenerateTextPath(request, workItem)));
             }
 
             await writer.WriteLineAsync(string.Join(",", values));
         }
     }
 
-    private static string EscapeCsvField(string field)
+    private static string EscapeField(string field)
     {
         if (string.IsNullOrEmpty(field))
+        {
             return "";
+        }
 
         if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
         {
             return $"\"{field.Replace("\"", "\"\"")}\"";
         }
+
         return field;
     }
 }

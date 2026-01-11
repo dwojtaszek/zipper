@@ -10,8 +10,10 @@ namespace Zipper;
 /// </summary>
 internal static class TiffMultiPageGenerator
 {
-    private const int Width = 100;
-    private const int Height = 100;
+    private const int DefaultWidth = 100;
+    private const int DefaultHeight = 100;
+    private const int MinPageCount = 1;
+    private const int MaxPageCount = 1000;
 
     /// <summary>
     /// Generates a TIFF file with the specified number of pages
@@ -24,9 +26,7 @@ internal static class TiffMultiPageGenerator
     public static byte[] Generate(int pageCount, FileWorkItem workItem)
     {
         using var stream = new MemoryStream();
-
-        // Create a simple black TIFF image
-        using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgb24>(Width, Height);
+        using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgb24>(DefaultWidth, DefaultHeight);
 
         var encoder = new TiffEncoder();
         image.Save(stream, encoder);
@@ -42,23 +42,30 @@ internal static class TiffMultiPageGenerator
     /// <returns>The number of pages for this file</returns>
     public static int GetPageCount((int Min, int Max)? range, long fileIndex)
     {
-        if (!range.HasValue || range.Value.Min == range.Value.Max)
+        if (!range.HasValue)
         {
-            return range?.Min ?? 1;
+            return MinPageCount;
         }
 
-        if (range.Value.Min < 1)
+        var (min, max) = range.Value;
+
+        if (min == max)
         {
-            return 1;
+            return min;
         }
 
-        if (range.Value.Max > 1000)
+        if (min < MinPageCount)
         {
-            return range.Value.Min;
+            return MinPageCount;
+        }
+
+        if (max > MaxPageCount)
+        {
+            return min;
         }
 
         var random = new System.Random((int)fileIndex);
-        return random.Next(range.Value.Min, range.Value.Max + 1);
+        return random.Next(min, max + 1);
     }
 
     /// <summary>
@@ -79,7 +86,7 @@ internal static class TiffMultiPageGenerator
             return null;
         }
 
-        if (min < 1 || max < min || max > 1000)
+        if (min < MinPageCount || max < min || max > MaxPageCount)
         {
             return null;
         }
