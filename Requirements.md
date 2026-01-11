@@ -9,7 +9,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ### FR_E-002: Core File Generation
 - **REQ_E-008**: The application must generate a user-specified number of files.
 - **REQ_E-009**: The application must support generating up to 100 million files.
-- **REQ_E-010**: The application must support generating files of type `pdf`, `jpg`, or `tiff`.
+- **REQ_E-010**: The application must support generating files of type `pdf`, `jpg`, `tiff`, `eml`, `docx`, or `xlsx`.
 - **REQ_E-011**: The content for the generated files must be a minimal, valid, and identical placeholder to ensure maximum compression.
 - **REQ_E-012**: The application will provide placeholder content internally, without requiring user-supplied template files.
 
@@ -28,7 +28,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ### FR-000: Automatic Metadata Generation
 - **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
-- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`.
+- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For EML file types, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to email files.
 - **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
 - **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
 
@@ -41,7 +41,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ### FR-002: Basic Email Generation
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
 - **REQ-009**: When `--type eml` is specified, the tool will generate `.eml` files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
-- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data.
+- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data. For EML files, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to email files.
 - **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated emails have one of the placeholder documents included as a random attachment. Defaults to 0.
 
 ### FR_E-005: File Distribution Patterns
@@ -66,11 +66,42 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-028**: When this flag is specified, the generated `.dat` load file must be included in the root of the output `.zip` archive.
 - **REQ-029**: When this flag is specified, the `.dat` load file must not be created as a separate file in the output directory.
 
+### FR-007: Multiple Load File Formats
+- **REQ-036**: A new optional command-line argument `--load-file-format <format>` shall be introduced.
+- **REQ-037**: The tool shall support multiple load file formats: `dat` (default), `opt`, `csv`, `xml`, and `concordance`.
+- **REQ-038**: Each format shall use appropriate delimiters and escaping:
+  - `dat`: Standard Concordance DAT format with caret (^) delimiters
+  - `opt`: Opticon format with tab delimiters
+  - `csv`: Comma-separated values format with RFC 4180 escaping
+  - `xml`: Structured XML markup format
+  - `concordance`: Concordance database format with comma delimiters and CSV escaping
+
+### FR-008: Bates Numbering System
+- **REQ-039**: New optional command-line arguments for Bates numbering shall be introduced:
+  - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
+  - `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
+  - `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
+- **REQ-040**: When Bates numbering is enabled, the load file must include a `Bates Number` column.
+- **REQ-041**: Bates numbers shall be formatted as `{PREFIX}{PADDED_NUMBER}` where the number is zero-padded to the specified digit count.
+- **REQ-042**: Bates numbers must increment sequentially for each file generated.
+
+### FR-009: Multipage TIFF Support
+- **REQ-043**: A new optional command-line argument `--tiff-pages <min-max>` shall be introduced.
+- **REQ-044**: The argument accepts a range specification (e.g., "1-20") to define the minimum and maximum page count.
+- **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF file shall have a random page count within the specified range.
+- **REQ-046**: The load file must include a `Page Count` column indicating the number of pages in each TIFF file.
+- **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility.
+
 ## 3. Technical Requirements
 
 - **Framework**: .NET 8.
 - **Interface**: Command-line application.
-- **Dependencies**: `System.Text.Encoding.CodePages`.
+- **Dependencies**:
+  - `System.Text.Encoding.CodePages` - For ANSI encoding support
+  - `SixLabors.ImageSharp` - For TIFF image generation
+  - `ClosedXML` - For XLSX spreadsheet generation
+  - `DocumentFormat.OpenXml` - For DOCX document generation
+  - `System.Drawing.Common` - For image processing
 - **Performance**: The application must be designed to stream data directly to the archive without storing intermediate files on disk, minimizing memory and disk space usage.
 - **Parallel Processing**: The application must support parallel file generation with configurable worker pools to optimize performance on multi-core systems.
 - **Memory Management**: The application must implement object pooling and buffered I/O to reduce garbage collection pressure and improve throughput.
@@ -78,9 +109,9 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ## 4. Command-Line Arguments
 
-- `--type <pdf|jpg|tiff|eml>`: (Required) The type of file to generate.
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required) The type of file to generate.
 - `--count <number>`: (Required) The total number of files to generate.
-- `--output-path <directory>`: (Required) The directory where the output `.zip` and `.dat` files will be saved.
+- `--output-path <directory>`: (Required) The directory where the output `.zip` and load file will be saved.
 - `--folders <number>`: (Optional) The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the load file. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
@@ -88,7 +119,12 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final zip file (e.g., 500MB, 10GB).
-- `--include-load-file`: (Optional) Includes the generated `.dat` load file in the root of the output `.zip` archive.
+- `--include-load-file`: (Optional) Includes the generated load file in the root of the output `.zip` archive.
+- `--load-file-format <dat|opt|csv|xml|concordance>`: (Optional) The format of the load file. Defaults to `dat`.
+- `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
+- `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
+- `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
+- `--tiff-pages <min-max>`: (Optional) Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
 
 ## 5. Testing
 

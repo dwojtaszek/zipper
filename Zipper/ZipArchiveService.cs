@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using Zipper.LoadFiles;
 
 namespace Zipper
 {
@@ -24,8 +25,8 @@ namespace Zipper
         /// <param name="loadFilePath">Path where load file should be saved separately (if not included in ZIP)</param>
         /// <param name="request">File generation request parameters</param>
         /// <param name="fileDataReader">Channel reader for receiving generated file data</param>
-        /// <returns>Task representing the archive creation operation</returns>
-        public static async Task CreateArchiveAsync(
+        /// <returns>The actual load file path that was created (or original if included in ZIP)</returns>
+        public static async Task<string> CreateArchiveAsync(
             string zipFilePath,
             string loadFileName,
             string loadFilePath,
@@ -68,15 +69,37 @@ namespace Zipper
                 fileData.MemoryOwner?.Dispose();
             }
 
+            // Get the appropriate load file writer based on format
+            var loadFileWriter = LoadFileWriterFactory.CreateWriter(request.LoadFileFormat);
+
+            // Update load file name with correct extension
+            var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
+            var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
+
+            string actualLoadFilePath;
+
             // Write load file
             if (request.IncludeLoadFile)
             {
-                await LoadFileGenerator.WriteLoadFileToArchiveAsync(archive, loadFileName, request, processedFiles.ToList());
+                var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
+                using var loadFileStream = loadFileEntry.Open();
+                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList());
+                // Return path within the ZIP archive when load file is included
+                actualLoadFilePath = actualLoadFileName;
             }
             else
             {
-                await LoadFileGenerator.WriteLoadFileToDiskAsync(loadFilePath, request, processedFiles.ToList());
+                actualLoadFilePath = Path.Combine(Path.GetDirectoryName(loadFilePath) ?? "",
+                    baseFileName + loadFileWriter.FileExtension);
+                var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
+                // LoadFileWriter.WriteAsync handles flushing but we own the stream here
+                await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
+                // Flush and dispose the stream we created
+                await fileStream.FlushAsync();
+                await fileStream.DisposeAsync();
             }
+
+            return actualLoadFilePath;
         }
 
         /// <summary>

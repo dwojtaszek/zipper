@@ -1,1 +1,7 @@
-always reference  @AGENTS.md
+# CLAUDE.md
+
+
+always reference @AGENTS.md
+
+Use 'bd' for task tracking
+
