@@ -28,9 +28,12 @@ internal class XmlWriter : LoadFileWriterBase
 
         var document = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), root);
 
-        using var writer = new StreamWriter(stream, Encoding.UTF8);
+        // Use leaveOpen: true to avoid disposing the caller's stream
+        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
         // XDocument.ToString() includes the declaration, so we write it directly
         await writer.WriteAsync(document.ToString());
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static XElement CreateDocumentElement(

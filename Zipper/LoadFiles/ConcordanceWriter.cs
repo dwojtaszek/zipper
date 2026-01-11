@@ -18,7 +18,8 @@ internal class ConcordanceWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
     {
-        using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding));
+        // Use leaveOpen: true to avoid disposing the caller's stream
+        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
         // Concordance DAT format uses comma delimiter with CSV escaping
         const char fieldDelim = ',';

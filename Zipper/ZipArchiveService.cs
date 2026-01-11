@@ -91,9 +91,12 @@ namespace Zipper
             {
                 actualLoadFilePath = Path.Combine(Path.GetDirectoryName(loadFilePath) ?? "",
                     baseFileName + loadFileWriter.FileExtension);
-                using var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
-                // Stream is properly disposed by using declaration
+                var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
+                // LoadFileWriter.WriteAsync handles flushing but we own the stream here
                 await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
+                // Flush and dispose the stream we created
+                await fileStream.FlushAsync();
+                await fileStream.DisposeAsync();
             }
 
             return actualLoadFilePath;

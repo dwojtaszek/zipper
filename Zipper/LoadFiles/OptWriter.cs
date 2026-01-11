@@ -18,7 +18,8 @@ internal class OptWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
     {
-        using var writer = new StreamWriter(stream, Encoding.UTF8);
+        // Use leaveOpen: true to avoid disposing the caller's stream
+        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
         const char tab = '\t';
 
         await WriteHeaderAsync(writer, request, tab);

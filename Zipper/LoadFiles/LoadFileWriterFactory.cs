@@ -38,10 +38,10 @@ internal class DatWriter : ILoadFileWriter
         System.Collections.Generic.List<FileData> processedFiles)
     {
         var encoding = Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding);
-        // Note: Stream is owned by caller, StreamWriter will flush but not dispose the stream
-        var writer = new System.IO.StreamWriter(stream, encoding);
+        // Use leaveOpen: true to avoid disposing the caller's stream
+        await using var writer = new System.IO.StreamWriter(stream, encoding, leaveOpen: true);
         await LoadFileGenerator.WriteLoadFileContent(writer, request, processedFiles);
-        // Flush to ensure data is written, but don't dispose (caller owns the stream)
+        // Flush to ensure data is written
         await writer.FlushAsync();
     }
 }
