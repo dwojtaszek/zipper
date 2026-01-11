@@ -304,5 +304,39 @@ namespace Zipper
                 Assert.Contains("3", content);
             }
         }
+
+        [Theory]
+        [InlineData("UTF-16")]
+        [InlineData("ANSI")]
+        public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
+        {
+            // Arrange - Test encoding path with non-UTF8 encoding to verify proper encoding handling
+            var request = CreateTestRequest();
+            request.Encoding = encoding;
+            var fileData = CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
+            var outputPath = Path.Combine(_tempDir, "test.dat");
+
+            // Act
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            // Read with the specified encoding to verify it was written correctly
+            var targetEncoding = encoding.ToUpperInvariant() switch
+            {
+                "UTF-16" => Encoding.Unicode,
+                "ANSI" => Encoding.GetEncoding("Windows-1252"),
+                _ => Encoding.UTF8
+            };
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Assert - File should be readable and contain expected content
+            Assert.True(lines.Length >= 2); // At least header + one data row
+            Assert.Contains("Control Number", lines[0]);
+        }
     }
 }

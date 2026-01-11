@@ -204,6 +204,48 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Verify output
+dir /b /s "%TEST_OUTPUT_DIR%\test6\*.zip" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: No .zip file found
+  exit /b 1
+)
+
+:: Extract the zip to verify it contains valid DOCX structure
+:: DOCX files should contain [Content_Types].xml, _rels/.rels, and word/document.xml
+for %%f in ("%TEST_OUTPUT_DIR%\test6\*.zip") do set ZIP_FILE=%%f
+
+:: Create temp directory for extraction
+set TEMP_DIR=%TEMP%\office_test_verify
+if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%"
+mkdir "%TEMP_DIR%"
+
+:: Extract the zip
+powershell -Command "Expand-Archive -Path '!ZIP_FILE!' -DestinationPath '%TEMP_DIR%' -Force" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Failed to extract ZIP file
+  rmdir /s /q "%TEMP_DIR%" 2>nul
+  exit /b 1
+)
+
+:: Verify required DOCX entries exist
+dir /b /s "%TEMP_DIR%\[Content_Types].xml" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: DOCX missing [Content_Types].xml
+  rmdir /s /q "%TEMP_DIR%" 2>nul
+  exit /b 1
+)
+
+dir /b /s "%TEMP_DIR%\word\document.xml" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: DOCX missing word\document.xml
+  rmdir /s /q "%TEMP_DIR%" 2>nul
+  exit /b 1
+)
+
+:: Clean up
+rmdir /s /q "%TEMP_DIR%" 2>nul
+
 echo [ SUCCESS ] Test Case 6: DOCX file structure verified
 
 :: --- All Tests Passed ---

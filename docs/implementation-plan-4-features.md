@@ -809,7 +809,7 @@ dotnet run --project ../Zipper/Zipper.csproj -- --type pdf --count 10 --output-p
 [ -f "test-csv.csv" ] && echo "PASS: CSV" || echo "FAIL: CSV"
 
 echo "Testing XML format..."
-dotnet run --project ../Zipper/Zipper.csproj -- -- --type pdf --count 10 --output-path ./test-xml --load-file-format xml
+dotnet run --project ../Zipper/Zipper.csproj -- --type pdf --count 10 --output-path ./test-xml --load-file-format xml
 [ -f "test-xml.xml" ] && echo "PASS: XML" || echo "FAIL: XML"
 ```
 
@@ -1095,7 +1095,7 @@ public static class TiffMultiPageGenerator
             {
                 x.BackgroundColor(SixLabors.ImageSharp.Color.Black);
                 // Add variation per page
-                x.DrawText($"Page {i + 1}", System.Drawing.Color.White, new SixLabors.ImageSharp.PointF(10, 10));
+                x.DrawText($"Page {i + 1}", SixLabors.ImageSharp.Color.White, new SixLabors.ImageSharp.PointF(10, 10));
             });
 
             // Add frame to multipage TIFF

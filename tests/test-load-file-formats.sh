@@ -42,10 +42,21 @@ dotnet run --project "$PROJECT" -- \
   --load-file-format opt
 
 # Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
 opt_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.opt")
+
+if [ -z "$zip_file" ]; then
+  print_error "Test 1: No .zip file found"
+fi
 
 if [ -z "$opt_file" ]; then
   print_error "Test 1: No .opt file found"
+fi
+
+# Verify ZIP contains expected PDF files
+pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
+if [ "$pdf_count" -lt 10 ]; then
+  print_error "Test 1: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
 # Check for tab delimiter (OPT uses tabs)
@@ -72,10 +83,21 @@ dotnet run --project "$PROJECT" -- \
   --load-file-format csv
 
 # Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
 csv_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.csv")
+
+if [ -z "$zip_file" ]; then
+  print_error "Test 2: No .zip file found"
+fi
 
 if [ -z "$csv_file" ]; then
   print_error "Test 2: No .csv file found"
+fi
+
+# Verify ZIP contains expected PDF files
+pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
+if [ "$pdf_count" -lt 10 ]; then
+  print_error "Test 2: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
 # Verify header contains expected columns
@@ -103,10 +125,21 @@ dotnet run --project "$PROJECT" -- \
   --load-file-format xml
 
 # Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip")
 xml_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.xml")
+
+if [ -z "$zip_file" ]; then
+  print_error "Test 3: No .zip file found"
+fi
 
 if [ -z "$xml_file" ]; then
   print_error "Test 3: No .xml file found"
+fi
+
+# Verify ZIP contains expected PDF files
+pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
+if [ "$pdf_count" -lt 5 ]; then
+  print_error "Test 3: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
 # Verify XML structure
@@ -139,10 +172,21 @@ dotnet run --project "$PROJECT" -- \
   --load-file-format concordance
 
 # Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip")
 concordance_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
+
+if [ -z "$zip_file" ]; then
+  print_error "Test 4: No .zip file found"
+fi
 
 if [ -z "$concordance_file" ]; then
   print_error "Test 4: No .dat file found"
+fi
+
+# Verify ZIP contains expected PDF files
+pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
+if [ "$pdf_count" -lt 5 ]; then
+  print_error "Test 4: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
 # CONCORDANCE uses ASCII 20 as delimiter - check for CONTROLNUMBER header
@@ -163,10 +207,21 @@ dotnet run --project "$PROJECT" -- \
   --load-file-format dat
 
 # Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.dat")
+
+if [ -z "$zip_file" ]; then
+  print_error "Test 5: No .zip file found"
+fi
 
 if [ -z "$dat_file" ]; then
   print_error "Test 5: No .dat file found"
+fi
+
+# Verify ZIP contains expected PDF files
+pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
+if [ "$pdf_count" -lt 5 ]; then
+  print_error "Test 5: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
 # Verify header contains expected columns

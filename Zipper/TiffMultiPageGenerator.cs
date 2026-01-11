@@ -54,18 +54,21 @@ internal static class TiffMultiPageGenerator
             return min;
         }
 
-        if (min < MinPageCount)
+        // Clamp the range to valid bounds
+        var clampedMin = Math.Max(min, MinPageCount);
+        var clampedMax = Math.Min(max, MaxPageCount);
+
+        // If after clamping we have a single value, return it
+        if (clampedMin >= clampedMax)
         {
-            return MinPageCount;
+            return clampedMin;
         }
 
-        if (max > MaxPageCount)
-        {
-            return min;
-        }
-
-        var random = new System.Random((int)fileIndex);
-        return random.Next(min, max + 1);
+        // Use fileIndex as seed for deterministic but distributed results
+        // Hash the fileIndex to avoid collisions when fileIndex > int.MaxValue
+        var seed = (int)(fileIndex ^ (fileIndex >> 32));
+        var random = new System.Random(seed);
+        return random.Next(clampedMin, clampedMax + 1);
     }
 
     /// <summary>

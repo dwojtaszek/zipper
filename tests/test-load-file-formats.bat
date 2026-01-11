@@ -175,7 +175,7 @@ echo [ SUCCESS ] Test Case 5: Default DAT format passed
 
 echo [ INFO ] Test Case 6: Load file formats with Bates numbering
 
-for %%F in (dat opt csv xml) do (
+for %%F in (dat opt csv xml concordance) do (
   set FORMAT=%%F
   set EXT=%%F
   if "%%F"=="concordance" set EXT=dat
