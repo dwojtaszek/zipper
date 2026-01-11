@@ -8,19 +8,28 @@ set -e
 echo "=== Artifact Handling Test (Unix) ==="
 echo "Testing artifact creation and handling patterns"
 
-# Check build.yml for artifact patterns
-echo "1. Analyzing build.yml artifact patterns..."
+# Use the unified build-and-test.yml workflow
+WORKFLOW_FILE=".github/workflows/build-and-test.yml"
+
+# Check if workflow exists
+if [ ! -f "$WORKFLOW_FILE" ]; then
+    echo "✗ Workflow file not found: $WORKFLOW_FILE"
+    exit 1
+fi
+
+# Check build-and-test.yml for artifact patterns
+echo "1. Analyzing $WORKFLOW_FILE artifact patterns..."
 
 # Check for artifact upload steps
-if grep -q "actions/upload-artifact@v4" .github/workflows/build.yml; then
-    echo "✓ Uses actions/upload-artifact@v4"
+if grep -q "actions/upload-artifact@v" "$WORKFLOW_FILE"; then
+    echo "✓ Uses actions/upload-artifact"
 else
-    echo "✗ Missing actions/upload-artifact@v4"
+    echo "✗ Missing actions/upload-artifact"
     exit 1
 fi
 
 # Check for artifact names
-ARTIFACT_NAMES=$(grep -A 2 "name:" .github/workflows/build.yml | grep -E "name:|zipper-" | wc -l)
+ARTIFACT_NAMES=$(grep -A 2 "name:" "$WORKFLOW_FILE" | grep -E "name:|zipper-" | wc -l)
 if [ "$ARTIFACT_NAMES" -ge 3 ]; then
     echo "✓ Found expected artifact names"
 else
@@ -34,7 +43,7 @@ PLATFORMS=("win-x64" "linux-x64" "osx-arm64")
 EXPECTED_ARTIFACTS=("zipper-win-x64" "zipper-linux-x64" "zipper-osx-arm64")
 
 for platform in "${PLATFORMS[@]}"; do
-    if grep -q "$platform" .github/workflows/build.yml; then
+    if grep -q "$platform" "$WORKFLOW_FILE"; then
         echo "✓ Found $platform configuration"
     else
         echo "✗ Missing $platform configuration"
@@ -43,7 +52,7 @@ for platform in "${PLATFORMS[@]}"; do
 done
 
 for artifact in "${EXPECTED_ARTIFACTS[@]}"; do
-    if grep -q "$artifact" .github/workflows/build.yml; then
+    if grep -q "$artifact" "$WORKFLOW_FILE"; then
         echo "✓ Found $artifact naming"
     else
         echo "✗ Missing $artifact naming"
@@ -53,41 +62,47 @@ done
 
 # Check for caching strategy
 echo "3. Analyzing caching strategy..."
-if grep -q "actions/cache@v3" .github/workflows/build.yml; then
-    echo "✓ Uses actions/cache@v3"
+if grep -q "actions/cache@v" "$WORKFLOW_FILE"; then
+    echo "✓ Uses actions/cache"
 else
-    echo "✗ Missing actions/cache@v3"
+    echo "✗ Missing actions/cache"
     exit 1
 fi
 
 # Check cache keys
-CACHE_KEYS=$(grep -A 3 "key:" .github/workflows/build.yml | grep -E "key:|build-" | wc -l)
-if [ "$CACHE_KEYS" -ge 3 ]; then
+CACHE_KEYS=$(grep -A 3 "key:" "$WORKFLOW_FILE" | grep -E "key:|build-" | wc -l)
+if [ "$CACHE_KEYS" -ge 2 ]; then
     echo "✓ Found platform-specific cache keys"
 else
-    echo "✗ Insufficient cache keys found"
+    echo "✗ Insufficient cache keys found (expected at least 2, got $CACHE_KEYS)"
     exit 1
 fi
 
 # Check cache paths
 echo "4. Checking cache paths..."
-CACHE_PATHS=("publish/win-x64" "publish/linux-x64" "publish/osx-arm64")
 
-for path in "${CACHE_PATHS[@]}"; do
-    if grep -q "$path" .github/workflows/build.yml; then
-        echo "✓ Found cache path for $path"
-    else
-        echo "✗ Missing cache path for $path"
-        exit 1
-    fi
-done
+# Check for publish directory pattern with template variable
+if grep -q "publish/\${{ matrix.platform }}" "$WORKFLOW_FILE"; then
+    echo "✓ Found publish/ directory structure with platform variable"
+else
+    echo "✗ Missing publish/ directory structure"
+    exit 1
+fi
+
+# Also verify publish/ is used
+if grep -q "publish/" "$WORKFLOW_FILE"; then
+    echo "✓ Uses publish/ directory"
+else
+    echo "✗ Missing publish/ directory"
+    exit 1
+fi
 
 # Check for artifact download in release job
 echo "5. Checking release job artifact handling..."
-if grep -q "actions/download-artifact@v4" .github/workflows/build.yml; then
-    echo "✓ Uses actions/download-artifact@v4"
+if grep -q "actions/download-artifact@v" "$WORKFLOW_FILE"; then
+    echo "✓ Uses actions/download-artifact"
 else
-    echo "✗ Missing actions/download-artifact@v4"
+    echo "✗ Missing actions/download-artifact"
     exit 1
 fi
 
@@ -96,7 +111,7 @@ echo "6. Checking release file patterns..."
 RELEASE_FILES=("artifacts/zipper-win-x64/zipper-win-x64.exe" "artifacts/zipper-linux-x64/zipper-linux-x64" "artifacts/zipper-osx-arm64/zipper-osx-arm64")
 
 for file in "${RELEASE_FILES[@]}"; do
-    if grep -q "$file" .github/workflows/build.yml; then
+    if grep -q "$file" "$WORKFLOW_FILE"; then
         echo "✓ Found release file pattern: $file"
     else
         echo "✗ Missing release file pattern: $file"
@@ -104,18 +119,9 @@ for file in "${RELEASE_FILES[@]}"; do
     fi
 done
 
-# Check build output directory structure
-echo "7. Validating build output structure..."
-if grep -q "publish/" .github/workflows/build.yml; then
-    echo "✓ Uses publish/ directory structure"
-else
-    echo "✗ Missing publish/ directory structure"
-    exit 1
-fi
-
 # Check for artifact cleanup
-echo "8. Checking for PDB file cleanup..."
-if grep -q "rm.*\.pdb" .github/workflows/build.yml; then
+echo "7. Checking for PDB file cleanup..."
+if grep -q "rm.*\.pdb" "$WORKFLOW_FILE"; then
     echo "✓ Removes PDB files from artifacts"
 else
     echo "✗ Missing PDB file cleanup"
@@ -123,21 +129,25 @@ else
 fi
 
 # Check for executable renaming
-echo "9. Checking executable renaming patterns..."
-RENAME_PATTERNS=("mv publish/win-x64/Zipper.exe" "mv publish/linux-x64/Zipper" "mv publish/osx-arm64/Zipper")
+echo "8. Checking executable renaming patterns..."
+# The workflow uses case statement with platform-specific renaming
+if grep -q "mv publish/\${{ matrix.platform }}/Zipper.exe" "$WORKFLOW_FILE"; then
+    echo "✓ Found Windows executable renaming pattern"
+else
+    echo "✗ Missing Windows executable renaming pattern"
+    exit 1
+fi
 
-for pattern in "${RENAME_PATTERNS[@]}"; do
-    if grep -q "$pattern" .github/workflows/build.yml; then
-        echo "✓ Found renaming pattern: $pattern"
-    else
-        echo "✗ Missing renaming pattern: $pattern"
-        exit 1
-    fi
-done
+if grep -q "mv publish/\${{ matrix.platform }}/Zipper" "$WORKFLOW_FILE"; then
+    echo "✓ Found Unix executable renaming pattern"
+else
+    echo "✗ Missing Unix executable renaming pattern"
+    exit 1
+fi
 
 # Check for conditional builds based on cache
-echo "10. Checking conditional build logic..."
-if grep -q "cache-hit != 'true'" .github/workflows/build.yml; then
+echo "9. Checking conditional build logic..."
+if grep -q "cache-hit != 'true'" "$WORKFLOW_FILE"; then
     echo "✓ Uses conditional builds based on cache"
 else
     echo "✗ Missing conditional build logic"

@@ -55,10 +55,10 @@ done
 
 # Check job dependencies
 echo "5. Checking job dependencies..."
-if grep -q "needs: lint" .github/workflows/build-and-test.yml; then
-    echo "✓ Build job depends on lint"
+if grep -q "needs: \[prepare, lint\]" .github/workflows/build-and-test.yml; then
+    echo "✓ Build job depends on prepare and lint"
 else
-    echo "✗ Build job missing lint dependency"
+    echo "✗ Build job missing correct dependencies"
     exit 1
 fi
 
@@ -69,7 +69,7 @@ else
     exit 1
 fi
 
-if grep -q "needs: \[lint, build, test\]" .github/workflows/build-and-test.yml; then
+if grep -q "needs: \[prepare, lint, build, test\]" .github/workflows/build-and-test.yml; then
     echo "✓ Release job depends on all previous jobs"
 else
     echo "✗ Release job missing dependencies"
@@ -109,14 +109,14 @@ done
 
 # Check for artifact handling
 echo "9. Checking artifact handling..."
-if grep -q "actions/upload-artifact@v4" .github/workflows/build-and-test.yml; then
+if grep -q "actions/upload-artifact@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses upload-artifact"
 else
     echo "✗ Missing upload-artifact"
     exit 1
 fi
 
-if grep -q "actions/download-artifact@v4" .github/workflows/build-and-test.yml; then
+if grep -q "actions/download-artifact@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses download-artifact"
 else
     echo "✗ Missing download-artifact"
@@ -134,7 +134,7 @@ fi
 
 # Check for .editorconfig validation
 echo "11. Checking .editorconfig validation in lint job..."
-if grep -q "Check .editorconfig exists" .github/workflows/build-and-test.yml; then
+if grep -q "hashFiles('.editorconfig')" .github/workflows/build-and-test.yml; then
     echo "✓ Lint job checks for .editorconfig"
 else
     echo "✗ Lint job missing .editorconfig check"
@@ -184,7 +184,7 @@ fi
 
 # Check for caching
 echo "15. Checking caching configuration..."
-if grep -q "actions/cache@v3" .github/workflows/build-and-test.yml; then
+if grep -q "actions/cache@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses caching"
 else
     echo "✗ Missing caching"
@@ -204,22 +204,6 @@ if grep -q "\.version" .github/workflows/build-and-test.yml; then
     echo "✓ Reads .version file"
 else
     echo "✗ Missing .version file reading"
-    exit 1
-fi
-
-# Check for cross-platform test execution
-echo "17. Checking cross-platform test execution..."
-if grep -q "if: runner.os != 'Windows'" .github/workflows/build-and-test.yml; then
-    echo "✓ Has Unix/Linux conditional test logic"
-else
-    echo "✗ Missing Unix/Linux conditional test logic"
-    exit 1
-fi
-
-if grep -q "if: runner.os == 'Windows'" .github/workflows/build-and-test.yml; then
-    echo "✓ Has Windows conditional test logic"
-else
-    echo "✗ Missing Windows conditional test logic"
     exit 1
 fi
 

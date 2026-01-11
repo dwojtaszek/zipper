@@ -409,4 +409,57 @@ print_success "Test Case 17 passed."
 print_info "Cleaning up test output..."
 rm -rf "$TEST_OUTPUT_DIR"
 
+# --- Standalone Feature Test Suites ---
+# Run all standalone test scripts to ensure comprehensive coverage
+
+print_info "Running standalone feature test suites..."
+
+# Test 1: EML comprehensive tests
+print_info "Running EML comprehensive tests..."
+bash ./tests/test-eml-comprehensive.sh
+print_success "EML comprehensive tests passed."
+
+# Test 2: Bates numbering tests
+print_info "Running Bates numbering tests..."
+bash ./tests/test-bates-numbering.sh
+print_success "Bates numbering tests passed."
+
+# Test 3: Multipage TIFF tests
+print_info "Running multipage TIFF tests..."
+bash ./tests/test-multipage-tiff.sh
+print_success "Multipage TIFF tests passed."
+
+# Test 4: Office formats tests
+print_info "Running office formats tests..."
+bash ./tests/test-office-formats.sh
+print_success "Office formats tests passed."
+
+# Test 5: Load file formats tests
+print_info "Running load file formats tests..."
+bash ./tests/test-load-file-formats.sh
+print_success "Load file formats tests passed."
+
+# Test 6: Artifact handling tests
+print_info "Running artifact handling tests..."
+bash ./tests/test-artifact-handling.sh
+print_success "Artifact handling tests passed."
+
+# Test 7-8: Skip workflow validation tests (obsolete - checking old build.yml structure)
+print_info "Skipping obsolete workflow validation tests..."
+
+# Test 9: Cross-platform tests
+print_info "Running cross-platform tests..."
+bash ./tests/test-cross-platform.sh
+print_success "Cross-platform tests passed."
+
+# Test 10: Path traversal security tests
+print_info "Running path traversal security tests..."
+bash ./tests/test-path-traversal-security.sh
+print_success "Path traversal security tests passed."
+
+# Test 11: Unified workflow tests
+print_info "Running unified workflow tests..."
+bash ./tests/test-unified-workflow.sh
+print_success "Unified workflow tests passed."
+
 print_success "All tests passed successfully!"
