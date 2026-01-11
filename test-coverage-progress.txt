@@ -40,9 +40,16 @@
 - **Coverage result:** Minimal increase as this was already covered by other tests
 - **Learnings:** Some validation paths are already tested indirectly
 
-## Remaining low-coverage files (need 16.2% more to reach 80%):
+## Iteration 7 (2026-01-11)
+**Coverage: 64.5%** (up from 63.8%)
+- **File tested:** `ProgressTracker.cs` (from Zipper.Tests/)
+- **What was tested:** Thread-safe progress tracking
+- **User behavior:** Multi-threaded file generation requires thread-safe progress reporting
+- **Coverage result:** ProgressTracker now at higher coverage (~85%+)
+- **Learnings:** Tests from Zipper.Tests/ work when ported to Zipper/Zipper.Tests/
+
+## Remaining low-coverage files (need 15.5% more to reach 80%):
 - Many 0% files are internal records/types that don't need tests
 - `PathValidator` (44%) - exception handling mostly defensive
 - `LoadFileWriterBase` (59.3%) - helpers covered by concrete implementations
-- `ProgressTracker` (67.1%) - progress reporting
 - `LoadFiles.* writers (70-80%) - decent coverage already
