@@ -30,7 +30,8 @@ internal class XmlWriter : LoadFileWriterBase
 
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
-        // XDocument.ToString() includes the declaration, so we write it directly
+        // XDocument.ToString() doesn't include the declaration, so we write it explicitly
+        await writer.WriteAsync(document.Declaration?.ToString() ?? string.Empty);
         await writer.WriteAsync(document.ToString());
         // Flush to ensure data is written
         await writer.FlushAsync();

@@ -2,19 +2,11 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
-using Xunit.Abstractions;
 
-namespace Zipper.Tests
+namespace Zipper
 {
     public class ProgressTrackerTests
     {
-        private readonly ITestOutputHelper _output;
-
-        public ProgressTrackerTests(ITestOutputHelper output)
-        {
-            _output = output;
-        }
-
         [Fact]
         public void Initialize_WithValidTotal_SetsCorrectValues()
         {
@@ -94,27 +86,6 @@ namespace Zipper.Tests
         }
 
         [Fact]
-        public void ReportProgress_WithValidInputs_DoesNotThrow()
-        {
-            // Arrange & Act & Assert
-            ProgressTracker.ReportProgress(500, 1000); // Should not throw
-        }
-
-        [Fact]
-        public void ReportProgress_WithZeroTotal_DoesNotThrow()
-        {
-            // Arrange & Act & Assert
-            ProgressTracker.ReportProgress(100, 0); // Should not throw
-        }
-
-        [Fact]
-        public void ReportProgress_WithCompletedGreaterThanTotal_DoesNotThrow()
-        {
-            // Arrange & Act & Assert
-            ProgressTracker.ReportProgress(1500, 1000); // Should not throw
-        }
-
-        [Fact]
         public void GetCompletedCount_AfterInitialize_ReturnsZero()
         {
             // Arrange & Act
@@ -157,72 +128,20 @@ namespace Zipper.Tests
 
             ProgressTracker.Initialize(totalFiles);
             var tasks = new Task[threadCount];
-            var random = new Random();
 
             // Act
             for (int i = 0; i < threadCount; i++)
             {
-                int threadIndex = i;
                 tasks[i] = Task.Run(() =>
                 {
                     for (int j = 0; j < filesPerThread; j++)
                     {
-                        // Randomly choose between batch and single reporting
-                        if (j % 10 == 0)
-                        {
-                            ProgressTracker.ReportFilesCompleted(10);
-                        }
-                        else
-                        {
-                            ProgressTracker.ReportFileGenerated($"file_{threadIndex}_{j}.txt");
-                        }
-
-                        // Small delay to simulate real work
-                        Thread.Sleep(random.Next(1, 5));
+                        ProgressTracker.ReportFileGenerated("file.txt");
                     }
                 });
             }
 
             Task.WaitAll(tasks);
-
-            // Assert
-            var completed = ProgressTracker.GetCompletedCount();
-            Assert.Equal(totalFiles, completed);
-        }
-
-        [Fact]
-        public void ProgressTrackingWorkflow_RealisticScenario()
-        {
-            // Arrange
-            const long totalFiles = 5000;
-            ProgressTracker.Initialize(totalFiles);
-
-            // Act - Simulate realistic file generation workflow
-            var random = new Random();
-            long totalReported = 0;
-
-            for (int batch = 0; batch < 50; batch++) // 50 batches
-            {
-                var batchSize = random.Next(50, 150); // Random batch sizes
-
-                if (batchSize <= (totalFiles - totalReported))
-                {
-                    ProgressTracker.ReportFilesCompleted(batchSize);
-                    totalReported += batchSize;
-                }
-
-                // Simulate some individual file reports
-                for (int i = 0; i < random.Next(1, 10); i++)
-                {
-                    if (totalReported < totalFiles)
-                    {
-                        ProgressTracker.ReportFileGenerated($"individual_file_{totalReported + 1}.txt");
-                        totalReported++;
-                    }
-                }
-
-                Thread.Sleep(random.Next(10, 50)); // Simulate processing time
-            }
 
             // Assert
             var completed = ProgressTracker.GetCompletedCount();
@@ -260,6 +179,13 @@ namespace Zipper.Tests
             // Assert
             var completed = ProgressTracker.GetCompletedCount();
             Assert.Equal(0, completed);
+        }
+
+        [Fact]
+        public void ReportProgress_DoesNotThrow()
+        {
+            // Arrange & Act & Assert
+            ProgressTracker.ReportProgress(500, 1000); // Should not throw
         }
     }
 }

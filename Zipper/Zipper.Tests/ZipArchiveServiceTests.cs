@@ -172,7 +172,7 @@ namespace Zipper.Tests
 
             // Should have 2 EML files and 2 attachments
             var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml")).ToList();
-            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment.") && e.FullName.EndsWith(".txt")).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment")).ToList();
 
             Assert.Equal(2, emlEntries.Count);
             Assert.Equal(2, attachmentEntries.Count);
@@ -257,8 +257,57 @@ namespace Zipper.Tests
                 },
                 Data = System.Text.Encoding.UTF8.GetBytes($"Test EML content {index}"),
                 MemoryOwner = null,
-                Attachment = ($"attachment{index}.txt", System.Text.Encoding.UTF8.GetBytes($"Attachment content {index}"))
+                Attachment = ($"attachment{index}.pdf", System.Text.Encoding.UTF8.GetBytes($"Attachment content {index}"))
             };
+        }
+
+        [Fact]
+        public async Task CreateArchiveAsync_WithEmlAttachmentsAndText_IncludesAttachmentTextFiles()
+        {
+            // Arrange
+            var zipPath = Path.GetTempFileName();
+            var loadPath = Path.GetTempFileName();
+            var request = new FileGenerationRequest
+            {
+                FileType = "eml",
+                FileCount = 2,
+                Concurrency = 1,
+                WithText = true
+            };
+
+            var testFiles = new List<FileData>();
+            for (int i = 0; i < 2; i++)
+            {
+                testFiles.Add(CreateTestEmlFileData(i));
+            }
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            var writer = channel.Writer;
+            foreach (var file in testFiles)
+            {
+                await writer.WriteAsync(file);
+            }
+            writer.Complete();
+
+            // Act
+            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+            // Assert
+            Assert.True(File.Exists(zipPath));
+            using var archive = ZipFile.OpenRead(zipPath);
+
+            // Should have: 2 EML files + 2 EML text files + 2 attachments + 2 attachment text files = 8 total
+            Assert.Equal(8, archive.Entries.Count);
+
+            var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml")).ToList();
+            var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt") && !e.FullName.Contains("attachment")).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment") && !e.FullName.EndsWith(".txt")).ToList();
+            var attachmentTextEntries = archive.Entries.Where(e => e.FullName.Contains("attachment") && e.FullName.EndsWith(".txt")).ToList();
+
+            Assert.Equal(2, emlEntries.Count);
+            Assert.Equal(2, emlTextEntries.Count);
+            Assert.Equal(2, attachmentEntries.Count);
+            Assert.Equal(2, attachmentTextEntries.Count);
         }
     }
 }

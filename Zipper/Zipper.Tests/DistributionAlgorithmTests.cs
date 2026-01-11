@@ -196,9 +196,9 @@ namespace Zipper.Tests
         }
 
         [Theory]
-        [InlineData(1.0, 0.5, 1.386)]
-        [InlineData(2.0, 0.5, 0.693)]
-        [InlineData(1.0, 0.9, 2.303)]
+        [InlineData(1.0, 0.5, 0.693)]  // -ln(1-0.5)/1 = -ln(0.5) = 0.693
+        [InlineData(2.0, 0.5, 0.346)]  // -ln(1-0.5)/2 = 0.693/2 = 0.346
+        [InlineData(1.0, 0.9, 2.303)]  // -ln(1-0.9)/1 = -ln(0.1) = 2.303
         public void CalculateExponential_ValidParameters_ReturnsCorrectValue(double lambda, double probability, double expectedApprox)
         {
             // Act
