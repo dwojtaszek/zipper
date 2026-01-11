@@ -132,3 +132,80 @@ dotnet_diagnostic.IDE0055.severity = warning
 
 # SA1200: Using directives should be placed correctly
 dotnet_diagnostic.SA1200.severity = none
+
+# SA1600: Elements should be documented (disabled - codebase doesn't use XML docs)
+dotnet_diagnostic.SA1600.severity = none
+dotnet_diagnostic.SA1601.severity = none
+dotnet_diagnostic.SA1602.severity = none
+dotnet_diagnostic.SA1611.severity = none
+dotnet_diagnostic.SA1612.severity = none
+dotnet_diagnostic.SA1613.severity = none
+dotnet_diagnostic.SA1614.severity = none
+dotnet_diagnostic.SA1615.severity = none
+dotnet_diagnostic.SA1616.severity = none
+dotnet_diagnostic.SA1617.severity = none
+dotnet_diagnostic.SA1618.severity = none
+dotnet_diagnostic.SA1623.severity = none
+dotnet_diagnostic.SA1624.severity = none
+dotnet_diagnostic.SA1625.severity = none
+dotnet_diagnostic.SA1626.severity = none
+dotnet_diagnostic.SA1627.severity = none
+dotnet_diagnostic.SA1628.severity = none
+dotnet_diagnostic.SA1629.severity = none
+dotnet_diagnostic.SA1630.severity = none
+dotnet_diagnostic.SA1631.severity = none
+dotnet_diagnostic.SA1632.severity = none
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1634.severity = none
+dotnet_diagnostic.SA1635.severity = none
+dotnet_diagnostic.SA1636.severity = none
+dotnet_diagnostic.SA1637.severity = none
+dotnet_diagnostic.SA1638.severity = none
+dotnet_diagnostic.SA1639.severity = none
+dotnet_diagnostic.SA1640.severity = none
+dotnet_diagnostic.SA1641.severity = none
+dotnet_diagnostic.SA1642.severity = none
+dotnet_diagnostic.SA1643.severity = none
+dotnet_diagnostic.SA1644.severity = none
+dotnet_diagnostic.SA1645.severity = none
+dotnet_diagnostic.SA1646.severity = none
+dotnet_diagnostic.SA1647.severity = none
+dotnet_diagnostic.SA1648.severity = none
+dotnet_diagnostic.SA1649.severity = none
+dotnet_diagnostic.SA1650.severity = none
+
+# SA1402: File may only contain single type (disabled - multiple types per file is OK)
+dotnet_diagnostic.SA1402.severity = none
+
+# SA1316: Tuple element names should use correct casing (disabled - lower-case tuple names are OK)
+dotnet_diagnostic.SA1316.severity = none
+
+# SA1202: Elements should be ordered by access (disabled - not enforced)
+dotnet_diagnostic.SA1202.severity = none
+
+# SA1201: Elements should appear in correct order (disabled - not enforced)
+dotnet_diagnostic.SA1201.severity = none
+
+# SA1204: Static elements should appear before instance (disabled - not enforced)
+dotnet_diagnostic.SA1204.severity = none
+
+# SA1214: Readonly elements should appear before non-readonly (disabled - not enforced)
+dotnet_diagnostic.SA1214.severity = none
+
+# SA1413: Use trailing comma in multi-line initializers (disabled - not enforced)
+dotnet_diagnostic.SA1413.severity = none
+
+# SA1117: Parameters should be on same line or each on own line (disabled - not enforced)
+dotnet_diagnostic.SA1117.severity = none
+
+# SA1108: Block statements should not contain embedded comments (disabled - not enforced)
+dotnet_diagnostic.SA1108.severity = none
+
+# SA1012: Opening brace should not be followed by space (disabled - not enforced)
+dotnet_diagnostic.SA1012.severity = none
+
+# SA0002: Settings file could not be loaded (info only - we use .editorconfig for configuration)
+dotnet_diagnostic.SA0002.severity = silent
+
+# SA0001: XML comment analysis is disabled (info only)
+dotnet_diagnostic.SA0001.severity = silent

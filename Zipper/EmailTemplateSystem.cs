@@ -140,7 +140,7 @@ namespace Zipper
                 ["{date}"] = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("MMM dd, yyyy"),
                 ["{course}"] = $"Course {(recipientIndex % 100) + 1}",
                 ["{project}"] = $"Project {(recipientIndex % 50) + 1}",
-                ["{quarter}"] = $"Q{ Random.Shared.Next(1, 5)}",
+                ["{quarter}"] = $"Q{Random.Shared.Next(1, 5)}",
             };
 
             var subject = baseSubject;
@@ -161,7 +161,7 @@ namespace Zipper
                 ["{company}"] = $"Company {(senderIndex % 100) + 1}",
                 ["{department}"] = GetRandomDepartment(),
                 ["{project}"] = $"Project {(recipientIndex % 50) + 1}",
-                ["{amount}"] = $"${ Random.Shared.Next(100, 50000):N2}",
+                ["{amount}"] = $"${Random.Shared.Next(100, 50000):N2}",
                 ["{deadline}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 90)).ToString("MMM dd, yyyy"),
                 ["{meeting}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
                 ["{date}"] = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("MMM dd, yyyy"),
@@ -170,10 +170,10 @@ namespace Zipper
                 ["{website}"] = GetRandomWebsite(),
                 ["{service}"] = GetRandomService(),
                 ["{reset_link}"] = $"https://example.com/reset?token={Guid.NewGuid():N}",
-                ["{quarter}"] = $"Q{ Random.Shared.Next(1, 5)}",
+                ["{quarter}"] = $"Q{Random.Shared.Next(1, 5)}",
                 ["{growth}"] = $"{Random.Shared.Next(5, 25)}",
                 ["{payment}"] = $"{Random.Shared.Next(25, 500):N2}",
-                ["{account}"] = $"ACC{ Random.Shared.Next(100000, 999999):D6}",
+                ["{account}"] = $"ACC{Random.Shared.Next(100000, 999999):D6}",
                 ["{start_time}"] = $"{Random.Shared.Next(0, 12):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "AM" : "PM")}",
                 ["{end_time}"] = $"{Random.Shared.Next(13, 23):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "PM" : "AM")}",
                 ["{month}"] = DateTime.Now.AddMonths(-Random.Shared.Next(0, 12)).ToString("MMMM"),
