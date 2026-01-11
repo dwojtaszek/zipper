@@ -59,8 +59,8 @@ if [ "$pdf_count" -lt 10 ]; then
   print_error "Test 1: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
-# Check for tab delimiter (OPT uses tabs)
-if ! grep -P '\t' "$opt_file" > /dev/null; then
+# Check for tab delimiter (OPT uses tabs) - use $'\t' for cross-platform compatibility
+if ! grep $'\t' "$opt_file" > /dev/null; then
   print_error "Test 1: No tab delimiter found in .opt file"
 fi
 

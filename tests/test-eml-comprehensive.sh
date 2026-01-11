@@ -124,7 +124,8 @@ run_test() {
     fi
     if [[ " ${expected_headers[*]} " =~ " --check-attachments " ]]; then
         check_attachments=true
-        attachment_rate=$(echo "$command_args" | grep -oP '(?<=--attachment-rate )\d+')
+        # Use sed instead of grep -P for cross-platform compatibility (macOS doesn't support -P)
+        attachment_rate=$(echo "$command_args" | sed -n 's/.*--attachment-rate \([0-9]*\).*/\1/p')
         expected_headers=("${expected_headers[@]/--check-attachments/}")
     fi
 
