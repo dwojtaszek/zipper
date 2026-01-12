@@ -1,6 +1,7 @@
-using System;
-using System.IO;
-using System.Threading.Tasks;
+// <copyright file="IntegrationTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
@@ -36,7 +37,9 @@ namespace Zipper
             finally
             {
                 if (Directory.Exists(outputPath))
+                {
                     Directory.Delete(outputPath, true);
+                }
             }
         }
     }

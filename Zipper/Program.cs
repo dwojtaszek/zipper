@@ -1,11 +1,8 @@
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.IO.Compression;
+// <copyright file="Program.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Reflection;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Zipper
 {
@@ -28,7 +25,7 @@ namespace Zipper
             return 0;
         }
 
-        static async Task GenerateFiles(FileGenerationRequest request)
+        private static async Task GenerateFiles(FileGenerationRequest request)
         {
             Console.WriteLine("Starting parallel file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", request.FileType));
@@ -37,10 +34,25 @@ namespace Zipper
             Console.WriteLine(string.Format("  Folders: {0}", request.Folders));
             Console.WriteLine(string.Format("  Encoding: {0}", request.Encoding));
             Console.WriteLine(string.Format("  Distribution: {0}", request.Distribution));
-            if (request.WithMetadata) Console.WriteLine("  Metadata: Enabled");
-            if (request.WithText) Console.WriteLine("  Extracted Text: Enabled");
-            if (request.TargetZipSize.HasValue) Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", request.TargetZipSize.Value / (1024 * 1024)));
-            if (request.IncludeLoadFile) Console.WriteLine("  Load File: Will be included in zip archive.");
+            if (request.WithMetadata)
+            {
+                Console.WriteLine("  Metadata: Enabled");
+            }
+
+            if (request.WithText)
+            {
+                Console.WriteLine("  Extracted Text: Enabled");
+            }
+
+            if (request.TargetZipSize.HasValue)
+            {
+                Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", request.TargetZipSize.Value / (1024 * 1024)));
+            }
+
+            if (request.IncludeLoadFile)
+            {
+                Console.WriteLine("  Load File: Will be included in zip archive.");
+            }
 
             try
             {

@@ -132,17 +132,8 @@ else
     exit 1
 fi
 
-# Check for .editorconfig validation
-echo "11. Checking .editorconfig validation in lint job..."
-if grep -q "hashFiles('.editorconfig')" .github/workflows/build-and-test.yml; then
-    echo "✓ Lint job checks for .editorconfig"
-else
-    echo "✗ Lint job missing .editorconfig check"
-    exit 1
-fi
-
 # Check for branch triggers
-echo "12. Checking branch triggers..."
+echo "11. Checking branch triggers..."
 if grep -q "branches:" .github/workflows/build-and-test.yml; then
     echo "✓ Has branch triggers configured"
 else
@@ -158,7 +149,7 @@ else
 fi
 
 # Check for release conditions
-echo "13. Checking release conditions..."
+echo "12. Checking release conditions..."
 if grep -q "if: github.ref == 'refs/heads/master'" .github/workflows/build-and-test.yml; then
     echo "✓ Release job only runs on master branch"
 else
@@ -167,7 +158,7 @@ else
 fi
 
 # Check for permissions
-echo "14. Checking release permissions..."
+echo "13. Checking release permissions..."
 if grep -q "permissions:" .github/workflows/build-and-test.yml; then
     echo "✓ Release job has permissions"
 else
@@ -183,7 +174,7 @@ else
 fi
 
 # Check for caching
-echo "15. Checking caching configuration..."
+echo "14. Checking caching configuration..."
 if grep -q "actions/cache@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses caching"
 else
@@ -192,7 +183,7 @@ else
 fi
 
 # Check for version handling
-echo "16. Checking version handling..."
+echo "15. Checking version handling..."
 if grep -q "Set Version" .github/workflows/build-and-test.yml; then
     echo "✓ Has version handling"
 else

@@ -1,7 +1,8 @@
-using System;
-using System.Collections.Generic;
+// <copyright file="CommandLineValidator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Diagnostics;
-using System.IO;
 using System.Text;
 
 namespace Zipper
@@ -15,14 +16,14 @@ namespace Zipper
         {
             ["KB"] = 1024,
             ["MB"] = 1024 * 1024,
-            ["GB"] = 1024 * 1024 * 1024
+            ["GB"] = 1024 * 1024 * 1024,
         };
 
         /// <summary>
         /// Validates and parses command line arguments into a FileGenerationRequest.
         /// </summary>
-        /// <param name="args">Command line arguments</param>
-        /// <returns>Validated FileGenerationRequest, or null if validation fails</returns>
+        /// <param name="args">Command line arguments.</param>
+        /// <returns>Validated FileGenerationRequest, or null if validation fails.</returns>
         public static FileGenerationRequest? ValidateAndParseArguments(string[] args)
         {
             if (args == null || args.Length == 0)
@@ -95,10 +96,18 @@ namespace Zipper
                 switch (args[i])
                 {
                     case "--type":
-                        if (i + 1 < args.Length) parsed.FileType = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.FileType = args[++i];
+                        }
+
                         break;
                     case "--count":
-                        if (i + 1 < args.Length && long.TryParse(args[++i], out var count)) parsed.Count = count;
+                        if (i + 1 < args.Length && long.TryParse(args[++i], out var count))
+                        {
+                            parsed.Count = count;
+                        }
+
                         break;
                     case "--output-path":
                         if (i + 1 < args.Length)
@@ -106,15 +115,28 @@ namespace Zipper
                             string pathArg = args[++i];
                             parsed.OutputDirectory = PathValidator.ValidateAndCreateDirectory(pathArg);
                         }
+
                         break;
                     case "--folders":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var folders)) parsed.Folders = folders;
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var folders))
+                        {
+                            parsed.Folders = folders;
+                        }
+
                         break;
                     case "--encoding":
-                        if (i + 1 < args.Length) parsed.Encoding = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.Encoding = args[++i];
+                        }
+
                         break;
                     case "--distribution":
-                        if (i + 1 < args.Length) parsed.Distribution = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.Distribution = args[++i];
+                        }
+
                         break;
                     case "--with-metadata":
                         parsed.WithMetadata = true;
@@ -123,28 +145,56 @@ namespace Zipper
                         parsed.WithText = true;
                         break;
                     case "--attachment-rate":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var attachmentRate)) parsed.AttachmentRate = attachmentRate;
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var attachmentRate))
+                        {
+                            parsed.AttachmentRate = attachmentRate;
+                        }
+
                         break;
                     case "--target-zip-size":
-                        if (i + 1 < args.Length) parsed.TargetZipSize = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.TargetZipSize = args[++i];
+                        }
+
                         break;
                     case "--include-load-file":
                         parsed.IncludeLoadFile = true;
                         break;
                     case "--load-file-format":
-                        if (i + 1 < args.Length) parsed.LoadFileFormat = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.LoadFileFormat = args[++i];
+                        }
+
                         break;
                     case "--bates-prefix":
-                        if (i + 1 < args.Length) parsed.BatesPrefix = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.BatesPrefix = args[++i];
+                        }
+
                         break;
                     case "--bates-start":
-                        if (i + 1 < args.Length && long.TryParse(args[++i], out var batesStart)) parsed.BatesStart = batesStart;
+                        if (i + 1 < args.Length && long.TryParse(args[++i], out var batesStart))
+                        {
+                            parsed.BatesStart = batesStart;
+                        }
+
                         break;
                     case "--bates-digits":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var batesDigits)) parsed.BatesDigits = batesDigits;
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var batesDigits))
+                        {
+                            parsed.BatesDigits = batesDigits;
+                        }
+
                         break;
                     case "--tiff-pages":
-                        if (i + 1 < args.Length) parsed.TiffPagesRange = args[++i];
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.TiffPagesRange = args[++i];
+                        }
+
                         break;
                 }
             }
@@ -289,9 +339,10 @@ namespace Zipper
                 {
                     Prefix = parsed.BatesPrefix,
                     Start = parsed.BatesStart ?? 1,
-                    Digits = parsed.BatesDigits ?? 8
-                } : null,
-                TiffPageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null
+                    Digits = parsed.BatesDigits ?? 8,
+                }
+                : null,
+                TiffPageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null,
             };
         }
 
@@ -324,7 +375,7 @@ namespace Zipper
                 "PROPORTIONAL" => DistributionType.Proportional,
                 "GAUSSIAN" => DistributionType.Gaussian,
                 "EXPONENTIAL" => DistributionType.Exponential,
-                _ => null
+                _ => null,
             };
         }
 
@@ -345,7 +396,7 @@ namespace Zipper
                 "CSV" => LoadFileFormat.Csv,
                 "XML" => LoadFileFormat.Xml,
                 "CONCORDANCE" => LoadFileFormat.Concordance,
-                _ => null
+                _ => null,
             };
         }
 
@@ -355,20 +406,35 @@ namespace Zipper
         private class ParsedArguments
         {
             public string? FileType { get; set; }
+
             public long? Count { get; set; }
+
             public DirectoryInfo? OutputDirectory { get; set; }
+
             public int Folders { get; set; } = 1;
+
             public string? Encoding { get; set; } = "UTF-8";
+
             public string? Distribution { get; set; } = "proportional";
+
             public bool WithMetadata { get; set; }
+
             public bool WithText { get; set; }
+
             public int AttachmentRate { get; set; }
+
             public string? TargetZipSize { get; set; }
+
             public bool IncludeLoadFile { get; set; }
+
             public string? LoadFileFormat { get; set; } = "dat";
+
             public string? BatesPrefix { get; set; }
+
             public long? BatesStart { get; set; }
+
             public int? BatesDigits { get; set; }
+
             public string? TiffPagesRange { get; set; }
         }
     }

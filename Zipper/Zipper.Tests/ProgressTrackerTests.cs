@@ -1,6 +1,7 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+// <copyright file="ProgressTrackerTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
@@ -119,7 +120,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ConcurrentReportFilesCompleted_ThreadSafe()
+        public async Task ConcurrentReportFilesCompleted_ThreadSafe()
         {
             // Arrange
             const long totalFiles = 10000;
@@ -141,7 +142,7 @@ namespace Zipper
                 });
             }
 
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
 
             // Assert
             var completed = ProgressTracker.GetCompletedCount();

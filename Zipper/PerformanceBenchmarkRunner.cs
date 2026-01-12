@@ -1,13 +1,14 @@
-using System;
+// <copyright file="PerformanceBenchmarkRunner.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Diagnostics;
-using System.IO;
 using System.IO.Compression;
-using System.Threading.Tasks;
 
 namespace Zipper
 {
     /// <summary>
-    /// Simple performance benchmark runner for quick performance validation
+    /// Simple performance benchmark runner for quick performance validation.
     /// </summary>
     public static class PerformanceBenchmarkRunner
     {
@@ -53,7 +54,7 @@ namespace Zipper
                     FileType = "pdf",
                     Folders = 3,
                     Concurrency = PerformanceConstants.DefaultConcurrency,
-                    Distribution = DistributionType.Proportional
+                    Distribution = DistributionType.Proportional,
                 };
                 await generator.GenerateFilesAsync(request);
                 sw.Stop();
@@ -161,8 +162,8 @@ namespace Zipper
                         FileCount = fileCount,
                         FileType = "pdf",
                         Folders = Math.Max(1, fileCount / 200),
-                        Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, fileCount / 50 + 1),
-                        Distribution = DistributionType.Proportional
+                        Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, (fileCount / 50) + 1),
+                        Distribution = DistributionType.Proportional,
                     };
 
                     var result = await generator.GenerateFilesAsync(request);

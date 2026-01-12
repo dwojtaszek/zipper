@@ -1,12 +1,15 @@
+// <copyright file="TiffMultiPageGenerator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Tiff;
-using System.IO;
 
 namespace Zipper;
 
 /// <summary>
 /// Generates TIFF files for legal document testing
-/// Note: Currently generates single-page TIFF files with page count metadata
+/// Note: Currently generates single-page TIFF files with page count metadata.
 /// </summary>
 internal static class TiffMultiPageGenerator
 {
@@ -18,11 +21,11 @@ internal static class TiffMultiPageGenerator
     /// <summary>
     /// Generates a TIFF file with the specified number of pages
     /// Note: Currently creates single-page TIFF regardless of pageCount
-    /// The pageCount is tracked for metadata purposes only
+    /// The pageCount is tracked for metadata purposes only.
     /// </summary>
-    /// <param name="pageCount">Number of pages (for metadata tracking)</param>
-    /// <param name="workItem">File work item for context</param>
-    /// <returns>Byte array containing a TIFF file</returns>
+    /// <param name="pageCount">Number of pages (for metadata tracking).</param>
+    /// <param name="workItem">File work item for context.</param>
+    /// <returns>Byte array containing a TIFF file.</returns>
     public static byte[] Generate(int pageCount, FileWorkItem workItem)
     {
         using var stream = new MemoryStream();
@@ -35,11 +38,11 @@ internal static class TiffMultiPageGenerator
     }
 
     /// <summary>
-    /// Determines the page count for a given file based on configured range
+    /// Determines the page count for a given file based on configured range.
     /// </summary>
-    /// <param name="range">Optional min-max page range</param>
-    /// <param name="fileIndex">The file index for deterministic randomization</param>
-    /// <returns>The number of pages for this file</returns>
+    /// <param name="range">Optional min-max page range.</param>
+    /// <param name="fileIndex">The file index for deterministic randomization.</param>
+    /// <returns>The number of pages for this file.</returns>
     public static int GetPageCount((int Min, int Max)? range, long fileIndex)
     {
         if (!range.HasValue)
@@ -72,10 +75,10 @@ internal static class TiffMultiPageGenerator
     }
 
     /// <summary>
-    /// Validates a TIFF page range specification
+    /// Validates a TIFF page range specification.
     /// </summary>
-    /// <param name="range">The range string (e.g., "1-20")</param>
-    /// <returns>A tuple of (min, max) or null if invalid</returns>
+    /// <param name="range">The range string (e.g., "1-20").</param>
+    /// <returns>A tuple of (min, max) or null if invalid.</returns>
     public static (int Min, int Max)? ParsePageRange(string range)
     {
         var parts = range.Split('-');

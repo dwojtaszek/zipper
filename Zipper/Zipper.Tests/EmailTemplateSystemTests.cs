@@ -1,5 +1,7 @@
-using System;
-using System.Linq;
+// <copyright file="EmailTemplateSystemTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -7,11 +9,11 @@ namespace Zipper
 {
     public class EmailTemplateSystemTests
     {
-        private readonly ITestOutputHelper _output;
+        private readonly ITestOutputHelper output;
 
         public EmailTemplateSystemTests(ITestOutputHelper output)
         {
-            _output = output;
+            this.output = output;
         }
 
         [Fact]
@@ -60,8 +62,8 @@ namespace Zipper
             Assert.Contains($"recipient{recipientIndex:D3}@", template.To);
             Assert.Contains($"sender{senderIndex:D3}@", template.From);
 
-            _output.WriteLine($"Category: {category}, Subject: {template.Subject}");
-            _output.WriteLine($"Body preview: {template.Body.Substring(0, Math.Min(100, template.Body.Length))}...");
+            this.output.WriteLine($"Category: {category}, Subject: {template.Subject}");
+            this.output.WriteLine($"Body preview: {template.Body.Substring(0, Math.Min(100, template.Body.Length))}...");
         }
 
         [Fact]
@@ -118,7 +120,7 @@ namespace Zipper
                 TemplateIndex = 0,
                 SentDate = new DateTime(2023, 6, 15),
                 IsHighPriority = true,
-                RequestReadReceipt = true
+                RequestReadReceipt = true,
             };
 
             // Act
@@ -182,8 +184,7 @@ namespace Zipper
                 template.Subject.Contains("Budget") ||
                 template.Subject.Contains("Review") ||
                 template.Subject.Contains("Proposal"),
-                $"Expected business-related subject, got: {template.Subject}"
-            );
+                $"Expected business-related subject, got: {template.Subject}");
         }
 
         [Fact]
@@ -205,8 +206,7 @@ namespace Zipper
                 template.Subject.Contains("Prescription") ||
                 template.Subject.Contains("Check-up") ||
                 template.Subject.Contains("Telehealth"),
-                $"Expected healthcare-related subject, got: {template.Subject}"
-            );
+                $"Expected healthcare-related subject, got: {template.Subject}");
         }
 
         [Fact]
@@ -227,8 +227,7 @@ namespace Zipper
                 template.Subject.Contains("Progress") ||
                 template.Subject.Contains("Class") ||
                 template.Subject.Contains("Achievement"),
-                $"Expected education-related subject, got: {template.Subject}"
-            );
+                $"Expected education-related subject, got: {template.Subject}");
         }
 
         [Fact]
@@ -249,8 +248,7 @@ namespace Zipper
                 template.Subject.Contains("Offer") ||
                 template.Subject.Contains("Cart") ||
                 template.Subject.Contains("Review"),
-                $"Expected ecommerce-related subject, got: {template.Subject}"
-            );
+                $"Expected ecommerce-related subject, got: {template.Subject}");
         }
 
         [Fact]
@@ -271,8 +269,7 @@ namespace Zipper
                 template.Subject.Contains("Hotel") ||
                 template.Subject.Contains("Insurance") ||
                 template.Subject.Contains("Rental"),
-                $"Expected travel-related subject, got: {template.Subject}"
-            );
+                $"Expected travel-related subject, got: {template.Subject}");
         }
 
         [Fact]
@@ -284,14 +281,17 @@ namespace Zipper
                 EmailTemplateSystem.EmailCategory.Healthcare,
                 EmailTemplateSystem.EmailCategory.Education,
                 EmailTemplateSystem.EmailCategory.Ecommerce,
-                EmailTemplateSystem.EmailCategory.Travel
+                EmailTemplateSystem.EmailCategory.Travel,
             };
 
             // Placeholders that SHOULD be replaced in body
-            var bodyPlaceholders = new[] { "{recipient}", "{sender}", "{company}", "{department}", "{project}",
+            var bodyPlaceholders = new[]
+            {
+                "{recipient}", "{sender}", "{company}", "{department}", "{project}",
                 "{amount}", "{deadline}", "{meeting}", "{date}", "{place}", "{venue}", "{website}", "{service}",
                 "{reset_link}", "{quarter}", "{growth}", "{payment}", "{account}", "{start_time}", "{end_time}", "{month}",
-                "{gate}", "{seat}", "{rental_period}" };
+                "{gate}", "{seat}", "{rental_period}",
+            };
 
             // Act & Assert
             foreach (var category in categories)
@@ -306,7 +306,7 @@ namespace Zipper
                         Assert.DoesNotContain(placeholder, template.Body);
                     }
 
-                    _output.WriteLine($"Category: {category}, Subject: {template.Subject}");
+                    this.output.WriteLine($"Category: {category}, Subject: {template.Subject}");
                 }
             }
         }
@@ -334,8 +334,8 @@ namespace Zipper
             var travelTime = categoryDates[EmailTemplateSystem.EmailCategory.Travel];
             var supportTime = categoryDates[EmailTemplateSystem.EmailCategory.Support];
 
-            _output.WriteLine($"Travel time difference: {travelTime.TotalDays:F1} days");
-            _output.WriteLine($"Support time difference: {supportTime.TotalDays:F1} days");
+            this.output.WriteLine($"Travel time difference: {travelTime.TotalDays:F1} days");
+            this.output.WriteLine($"Support time difference: {supportTime.TotalDays:F1} days");
         }
 
         [Theory]
@@ -354,15 +354,22 @@ namespace Zipper
             for (int i = 0; i < iterations; i++)
             {
                 var template = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, category);
-                if (!string.IsNullOrEmpty(template.Cc)) templatesWithCc++;
-                if (!string.IsNullOrEmpty(template.ReplyTo)) templatesWithReplyTo++;
+                if (!string.IsNullOrEmpty(template.Cc))
+                {
+                    templatesWithCc++;
+                }
+
+                if (!string.IsNullOrEmpty(template.ReplyTo))
+                {
+                    templatesWithReplyTo++;
+                }
             }
 
             // Assert
             var ccRate = (double)templatesWithCc / iterations;
             var replyToRate = (double)templatesWithReplyTo / iterations;
 
-            _output.WriteLine($"Category: {category}, CC rate: {ccRate:P2}, ReplyTo rate: {replyToRate:P2}");
+            this.output.WriteLine($"Category: {category}, CC rate: {ccRate:P2}, ReplyTo rate: {replyToRate:P2}");
 
             // Should have some variation but not always present
             Assert.InRange(ccRate, 0.0, 1.0);
@@ -383,12 +390,20 @@ namespace Zipper
                 var businessTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailTemplateSystem.EmailCategory.Business);
                 var marketingTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailTemplateSystem.EmailCategory.Marketing);
 
-                if (!string.IsNullOrEmpty(businessTemplate.Cc)) businessCcCount++;
-                if (!string.IsNullOrEmpty(marketingTemplate.Cc)) marketingCcCount++;
+                if (!string.IsNullOrEmpty(businessTemplate.Cc))
+                {
+                    businessCcCount++;
+                }
+
+                if (!string.IsNullOrEmpty(marketingTemplate.Cc))
+                {
+                    marketingCcCount++;
+                }
             }
 
             // Assert
-            Assert.True(marketingCcCount > businessCcCount,
+            Assert.True(
+                marketingCcCount > businessCcCount,
                 $"Expected marketing to have more CC addresses. Marketing: {marketingCcCount}, Business: {businessCcCount}");
         }
 
@@ -401,7 +416,7 @@ namespace Zipper
                 RecipientIndex = 1,
                 SenderIndex = 2,
                 Category = EmailTemplateSystem.EmailCategory.Business,
-                TemplateIndex = 0
+                TemplateIndex = 0,
             };
 
             // Act
@@ -451,8 +466,8 @@ namespace Zipper
                 var hasGreeting = bodyLower.Contains("dear") || bodyLower.Contains("hi") || bodyLower.Contains("hello") || bodyLower.Contains("welcome");
                 var hasClosing = bodyLower.Contains("regards") || bodyLower.Contains("sincerely") || bodyLower.Contains("best") || bodyLower.Contains("thank") || bodyLower.Contains("looking forward");
 
-                _output.WriteLine($"Template {i + 1}: {template.Subject}");
-                _output.WriteLine($"Has greeting: {hasGreeting}, Has closing: {hasClosing}");
+                this.output.WriteLine($"Template {i + 1}: {template.Subject}");
+                this.output.WriteLine($"Has greeting: {hasGreeting}, Has closing: {hasClosing}");
             }
         }
 
@@ -461,10 +476,13 @@ namespace Zipper
         {
             // Arrange
             const int iterations = 50;
+
             // These placeholders are replaced in BOTH subject and body
             var commonPlaceholders = new[] { "{recipient}", "{sender}", "{date}", "{quarter}" };
+
             // These placeholders are replaced only in body (not in subject generation)
             var bodyOnlyPlaceholders = new[] { "{company}", "{department}", "{project}", "{amount}", "{deadline}", "{meeting}", "{place}", "{venue}", "{website}", "{service}", "{reset_link}", "{growth}", "{payment}", "{account}", "{start_time}", "{end_time}", "{month}" };
+
             // These placeholders are replaced only in subject (not in body - this is a known implementation quirk)
             var subjectOnlyPlaceholders = new[] { "{case}", "{invoice}", "{ticket}", "{course}" };
 

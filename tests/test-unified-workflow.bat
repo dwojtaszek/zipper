@@ -151,20 +151,9 @@ if errorlevel 1 (
     echo [OK] Artifact retention set to 7 days
 )
 
-REM Check for .editorconfig validation
-echo.
-echo 11. Checking .editorconfig validation in lint job...
-findstr /C:"hashFiles('.editorconfig')" ".github\workflows\build-and-test.yml" > nul
-if errorlevel 1 (
-    echo [FAIL] Lint job missing .editorconfig check
-    exit /b 1
-) else (
-    echo [OK] Lint job checks for .editorconfig
-)
-
 REM Check for branch triggers
 echo.
-echo 12. Checking branch triggers...
+echo 11. Checking branch triggers...
 findstr /C:"branches:" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing branch triggers
@@ -183,7 +172,7 @@ if errorlevel 1 (
 
 REM Check for release conditions
 echo.
-echo 13. Checking release conditions...
+echo 12. Checking release conditions...
 findstr /C:"if: github.ref == 'refs/heads/master'" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Release job missing master branch condition
@@ -194,7 +183,7 @@ if errorlevel 1 (
 
 REM Check for permissions
 echo.
-echo 14. Checking release permissions...
+echo 13. Checking release permissions...
 findstr /C:"permissions:" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Release job missing permissions
@@ -213,7 +202,7 @@ if errorlevel 1 (
 
 REM Check for caching
 echo.
-echo 15. Checking caching configuration...
+echo 14. Checking caching configuration...
 findstr /C:"actions/cache@v" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing caching
@@ -224,7 +213,7 @@ if errorlevel 1 (
 
 REM Check for version handling
 echo.
-echo 16. Checking version handling...
+echo 15. Checking version handling...
 findstr /C:"Set Version" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing version handling

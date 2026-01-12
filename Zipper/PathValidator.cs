@@ -1,5 +1,6 @@
-using System;
-using System.IO;
+// <copyright file="PathValidator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace Zipper
 {
@@ -11,8 +12,8 @@ namespace Zipper
         /// <summary>
         /// Validates and creates a secure DirectoryInfo, preventing path traversal attacks.
         /// </summary>
-        /// <param name="path">The path to validate and create DirectoryInfo from</param>
-        /// <returns>Validated DirectoryInfo if safe, null if path is invalid</returns>
+        /// <param name="path">The path to validate and create DirectoryInfo from.</param>
+        /// <returns>Validated DirectoryInfo if safe, null if path is invalid.</returns>
         public static DirectoryInfo? ValidateAndCreateDirectory(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
@@ -87,8 +88,8 @@ namespace Zipper
         /// <summary>
         /// Validates if a path is safe (without creating DirectoryInfo).
         /// </summary>
-        /// <param name="path">The path to validate</param>
-        /// <returns>True if path is safe, false otherwise</returns>
+        /// <param name="path">The path to validate.</param>
+        /// <returns>True if path is safe, false otherwise.</returns>
         public static bool IsPathSafe(string path)
         {
             return ValidateAndCreateDirectory(path) != null;

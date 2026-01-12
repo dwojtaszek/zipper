@@ -1,27 +1,26 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
+// <copyright file="LoadFileGenerator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.IO.Compression;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Zipper
 {
     /// <summary>
     /// Handles load file generation operations for file metadata tracking
-    /// Extracted from ParallelFileGenerator to follow single responsibility principle
+    /// Extracted from ParallelFileGenerator to follow single responsibility principle.
     /// </summary>
     internal static class LoadFileGenerator
     {
         /// <summary>
-        /// Writes load file content to a ZIP archive
+        /// Writes load file content to a ZIP archive.
         /// </summary>
-        /// <param name="archive">The ZIP archive to write to</param>
-        /// <param name="loadFileName">Name of the load file in the archive</param>
-        /// <param name="request">File generation request parameters</param>
-        /// <param name="processedFiles">List of processed file data</param>
-        /// <returns>Task representing the load file writing operation</returns>
+        /// <param name="archive">The ZIP archive to write to.</param>
+        /// <param name="loadFileName">Name of the load file in the archive.</param>
+        /// <param name="request">File generation request parameters.</param>
+        /// <param name="processedFiles">List of processed file data.</param>
+        /// <returns>Task representing the load file writing operation.</returns>
         public static async Task WriteLoadFileToArchiveAsync(
             ZipArchive archive,
             string loadFileName,
@@ -36,12 +35,12 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes load file content to disk
+        /// Writes load file content to disk.
         /// </summary>
-        /// <param name="loadFilePath">Path where the load file should be saved</param>
-        /// <param name="request">File generation request parameters</param>
-        /// <param name="processedFiles">List of processed file data</param>
-        /// <returns>Task representing the load file writing operation</returns>
+        /// <param name="loadFilePath">Path where the load file should be saved.</param>
+        /// <param name="request">File generation request parameters.</param>
+        /// <param name="processedFiles">List of processed file data.</param>
+        /// <returns>Task representing the load file writing operation.</returns>
         public static async Task WriteLoadFileToDiskAsync(
             string loadFilePath,
             FileGenerationRequest request,
@@ -54,12 +53,12 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes the load file content with appropriate headers and data
+        /// Writes the load file content with appropriate headers and data.
         /// </summary>
-        /// <param name="writer">Stream writer to output to</param>
-        /// <param name="request">File generation request parameters</param>
-        /// <param name="processedFiles">List of processed file data</param>
-        /// <returns>Task representing the content writing operation</returns>
+        /// <param name="writer">Stream writer to output to.</param>
+        /// <param name="request">File generation request parameters.</param>
+        /// <param name="processedFiles">List of processed file data.</param>
+        /// <returns>Task representing the content writing operation.</returns>
         public static async Task WriteLoadFileContent(
             StreamWriter writer,
             FileGenerationRequest request,
@@ -109,7 +108,7 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Writes a single file record to the load file
+        /// Writes a single file record to the load file.
         /// </summary>
         private static async Task WriteFileRecord(
             StreamWriter writer,
@@ -162,7 +161,7 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Gets metadata columns for file records
+        /// Gets metadata columns for file records.
         /// </summary>
         private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData)
         {
@@ -178,7 +177,7 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Gets EML-specific columns for email file records
+        /// Gets EML-specific columns for email file records.
         /// </summary>
         private static string GetEmlColumns(FileWorkItem workItem, FileData fileData)
         {
@@ -189,16 +188,16 @@ namespace Zipper
             var from = $"sender{workItem.Index}@example.com";
             var subject = $"Email Subject {workItem.Index}";
             var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-            var attachmentName = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : "";
+            var attachmentName = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty;
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";
         }
 
         /// <summary>
-        /// Gets appropriate text encoding for the specified encoding name
+        /// Gets appropriate text encoding for the specified encoding name.
         /// </summary>
-        /// <param name="encodingName">Name of the encoding</param>
-        /// <returns>Encoding instance</returns>
+        /// <param name="encodingName">Name of the encoding.</param>
+        /// <returns>Encoding instance.</returns>
         public static Encoding GetEncoding(string encodingName) => EncodingHelper.GetEncodingOrDefault(encodingName);
     }
 }

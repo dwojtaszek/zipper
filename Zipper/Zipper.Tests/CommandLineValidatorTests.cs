@@ -1,37 +1,41 @@
-using System;
-using System.IO;
+// <copyright file="CommandLineValidatorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
 {
     public class CommandLineValidatorTests : IDisposable
     {
-        private readonly string _tempDir;
+        private readonly string tempDir;
 
         public CommandLineValidatorTests()
         {
-            _tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
+            this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(this.tempDir);
         }
 
         public void Dispose()
         {
-            if (Directory.Exists(_tempDir))
-                Directory.Delete(_tempDir, true);
+            if (Directory.Exists(this.tempDir))
+            {
+                Directory.Delete(this.tempDir, true);
+            }
         }
 
         [Fact]
         public void ValidateAndParseArguments_WithValidRequiredArguments_ShouldReturnValidRequest()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(_tempDir, result!.OutputPath);
+            Assert.Equal(this.tempDir, result!.OutputPath);
             Assert.Equal(100, result.FileCount);
             Assert.Equal("pdf", result.FileType);
             Assert.Equal(1, result.Folders);
@@ -51,7 +55,7 @@ namespace Zipper
             {
                 "--type", "jpg",
                 "--count", "500",
-                "--output-path", _tempDir,
+                "--output-path", this.tempDir,
                 "--folders", "5",
                 "--encoding", "UTF-16",
                 "--distribution", "gaussian",
@@ -59,7 +63,7 @@ namespace Zipper
                 "--with-text",
                 "--attachment-rate", "25",
                 "--target-zip-size", "10MB",
-                "--include-load-file"
+                "--include-load-file",
             };
 
             // Act
@@ -67,7 +71,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(_tempDir, result!.OutputPath);
+            Assert.Equal(this.tempDir, result!.OutputPath);
             Assert.Equal(500, result.FileCount);
             Assert.Equal("jpg", result.FileType);
             Assert.Equal(5, result.Folders);
@@ -107,7 +111,7 @@ namespace Zipper
         public void ValidateAndParseArguments_MissingType_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--count", "100", "--output-path", _tempDir };
+            var args = new[] { "--count", "100", "--output-path", this.tempDir };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -120,7 +124,7 @@ namespace Zipper
         public void ValidateAndParseArguments_MissingCount_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--output-path", _tempDir };
+            var args = new[] { "--type", "pdf", "--output-path", this.tempDir };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -159,7 +163,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidFoldersRange_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--folders", "0" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "0" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -172,7 +176,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithFoldersTooHigh_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--folders", "101" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "101" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -185,7 +189,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidAttachmentRate_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--attachment-rate", "-1" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "-1" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -198,7 +202,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithAttachmentRateTooHigh_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--attachment-rate", "101" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "101" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -211,7 +215,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidEncoding_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--encoding", "INVALID" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", "INVALID" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -224,7 +228,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidDistribution_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--distribution", "INVALID" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", "INVALID" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -237,7 +241,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidTargetZipSize_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--target-zip-size", "INVALID" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", "INVALID" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -250,7 +254,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithTargetZipSizeWithoutCount_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--output-path", _tempDir, "--target-zip-size", "10MB" };
+            var args = new[] { "--type", "pdf", "--output-path", this.tempDir, "--target-zip-size", "10MB" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -269,7 +273,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithValidEncodings_ShouldReturnValidRequest(string inputEncoding, string expectedEncoding)
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--encoding", inputEncoding };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", inputEncoding };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -289,7 +293,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithValidDistributions_ShouldReturnValidRequest(string inputDistribution, DistributionType expectedDistribution)
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--distribution", inputDistribution };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", inputDistribution };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -308,7 +312,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithValidTargetZipSizes_ShouldReturnValidRequest(string inputSize, long expectedBytes)
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", _tempDir, "--target-zip-size", inputSize };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", inputSize };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -330,7 +334,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithValidFileTypes_ShouldReturnValidRequest(string inputType, string expectedType)
         {
             // Arrange
-            var args = new[] { "--type", inputType, "--count", "100", "--output-path", _tempDir };
+            var args = new[] { "--type", inputType, "--count", "100", "--output-path", this.tempDir };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -388,7 +392,7 @@ namespace Zipper
         [InlineData("invalid")]
         [InlineData("1-")]
         [InlineData("-10")]
-        [InlineData("10-5")]  // min > max
+        [InlineData("10-5")] // min > max
         public void ValidateAndParseArguments_WithInvalidTiffPagesRange_ShouldReturnNull(string range)
         {
             // Arrange

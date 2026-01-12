@@ -1,3 +1,7 @@
+// <copyright file="BatesNumberGeneratorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
@@ -13,7 +17,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 1,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -32,7 +36,7 @@ namespace Zipper
                 Prefix = "CLIENT001",
                 Start = 1,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -51,7 +55,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 1,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -74,7 +78,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 100,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -93,7 +97,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 1,
                 Digits = 8,
-                Increment = 5
+                Increment = 5,
             };
 
             // Act
@@ -135,7 +139,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 999999,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -154,7 +158,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 0,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -173,7 +177,7 @@ namespace Zipper
                 Prefix = "DOC",
                 Start = 1,
                 Digits = 8,
-                Increment = 1
+                Increment = 1,
             };
 
             // Act
@@ -192,7 +196,7 @@ namespace Zipper
                 Prefix = "PREFIX",  // Prefix should be ignored
                 Start = 100,
                 Digits = 6,
-                Increment = 10
+                Increment = 10,
             };
 
             // Act

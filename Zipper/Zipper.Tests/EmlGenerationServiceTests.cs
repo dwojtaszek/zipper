@@ -1,5 +1,7 @@
-using System;
-using System.Linq;
+// <copyright file="EmlGenerationServiceTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
 using Xunit;
 using Xunit.Abstractions;
@@ -8,11 +10,11 @@ namespace Zipper
 {
     public class EmlGenerationServiceTests
     {
-        private readonly ITestOutputHelper _output;
+        private readonly ITestOutputHelper output;
 
         public EmlGenerationServiceTests(ITestOutputHelper output)
         {
-            _output = output;
+            this.output = output;
         }
 
         [Fact]
@@ -23,7 +25,7 @@ namespace Zipper
             {
                 FileIndex = 1,
                 AttachmentRate = 0,
-                Category = EmailTemplateSystem.EmailCategory.Business
+                Category = EmailTemplateSystem.EmailCategory.Business,
             };
 
             // Act
@@ -51,7 +53,7 @@ namespace Zipper
             var config = new EmlGenerationConfig
             {
                 FileIndex = 1,
-                AttachmentRate = 100 // Force attachment
+                AttachmentRate = 100, // Force attachment
             };
 
             // Act
@@ -71,10 +73,10 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData(0)]   // Never include attachments
-        [InlineData(25)]  // 25% attachment rate
-        [InlineData(50)]  // 50% attachment rate
-        [InlineData(75)]  // 75% attachment rate
+        [InlineData(0)] // Never include attachments
+        [InlineData(25)] // 25% attachment rate
+        [InlineData(50)] // 50% attachment rate
+        [InlineData(75)] // 75% attachment rate
         [InlineData(100)] // Always include attachments
         public void GenerateEmlContent_WithDifferentAttachmentRates_WorksCorrectly(int attachmentRate)
         {
@@ -82,7 +84,7 @@ namespace Zipper
             var config = new EmlGenerationConfig
             {
                 FileIndex = 1,
-                AttachmentRate = attachmentRate
+                AttachmentRate = attachmentRate,
             };
 
             // Act
@@ -119,7 +121,7 @@ namespace Zipper
             {
                 FileIndex = 1,
                 AttachmentRate = 0,
-                Category = category
+                Category = category,
             };
 
             // Act
@@ -130,7 +132,7 @@ namespace Zipper
             Assert.True(result.Content.Length > 0);
 
             var content = Encoding.UTF8.GetString(result.Content);
-            _output.WriteLine($"Category: {category}, Content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
+            this.output.WriteLine($"Category: {category}, Content preview: {content.Substring(0, Math.Min(200, content.Length))}...");
 
             // Should contain valid email structure
             Assert.Contains("From:", content);
@@ -146,7 +148,7 @@ namespace Zipper
             {
                 FileIndex = 1,
                 AttachmentRate = 0,
-                Category = null
+                Category = null,
             };
 
             // Act
@@ -173,7 +175,7 @@ namespace Zipper
             var config = new EmlGenerationConfig
             {
                 FileIndex = fileIndex,
-                AttachmentRate = 0
+                AttachmentRate = 0,
             };
 
             // Act
@@ -206,7 +208,7 @@ namespace Zipper
                 {
                     FileIndex = fileIndex,
                     AttachmentRate = attachmentRate,
-                    Category = category
+                    Category = category,
                 });
 
             var directResult = EmlGenerationService.GenerateEmlContent(
@@ -240,20 +242,20 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData(-10)]   // Below minimum
-        [InlineData(-1)]    // Below minimum
-        [InlineData(0)]     // Minimum valid
-        [InlineData(50)]    // Middle value
-        [InlineData(100)]   // Maximum valid
-        [InlineData(150)]   // Above maximum
-        [InlineData(1000)]  // Way above maximum
+        [InlineData(-10)] // Below minimum
+        [InlineData(-1)] // Below minimum
+        [InlineData(0)] // Minimum valid
+        [InlineData(50)] // Middle value
+        [InlineData(100)] // Maximum valid
+        [InlineData(150)] // Above maximum
+        [InlineData(1000)] // Way above maximum
         public void GenerateEmlContent_WithExtremeAttachmentRates_ClampsToValidRange(int attachmentRate)
         {
             // Arrange
             var config = new EmlGenerationConfig
             {
                 FileIndex = 1,
-                AttachmentRate = attachmentRate
+                AttachmentRate = attachmentRate,
             };
 
             // Act
@@ -268,6 +270,7 @@ namespace Zipper
             {
                 Assert.Null(result.Attachment);
             }
+
             // For rates >= 100, should always have attachments
             else if (attachmentRate >= 100)
             {
@@ -284,7 +287,7 @@ namespace Zipper
                 {
                     FileIndex = i,
                     AttachmentRate = 50,
-                    Category = (EmailTemplateSystem.EmailCategory)(i % 8)
+                    Category = (EmailTemplateSystem.EmailCategory)(i % 8),
                 })
                 .ToList();
 
@@ -322,7 +325,7 @@ namespace Zipper
             var config = new EmlGenerationConfig
             {
                 FileIndex = 1,
-                AttachmentRate = 0
+                AttachmentRate = 0,
             };
 
             // Act
@@ -343,7 +346,7 @@ namespace Zipper
             var config = new EmlGenerationConfig
             {
                 FileIndex = 1,
-                AttachmentRate = 100
+                AttachmentRate = 100,
             };
 
             // Act
@@ -370,7 +373,7 @@ namespace Zipper
             var result1 = new EmlGenerationResult
             {
                 Content = content,
-                Attachment = ("test.txt", new byte[] { 4, 5, 6 })
+                Attachment = ("test.txt", new byte[] { 4, 5, 6 }),
             };
 
             // Note: Using with-expression on records creates a new instance
@@ -391,7 +394,7 @@ namespace Zipper
             {
                 FileIndex = 42,
                 AttachmentRate = 75,
-                Category = EmailTemplateSystem.EmailCategory.Business
+                Category = EmailTemplateSystem.EmailCategory.Business,
             };
 
             var config2 = config1 with { };

@@ -1,35 +1,37 @@
-using System;
+// <copyright file="PerformanceMonitor.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Diagnostics;
-using System.Threading;
 
 namespace Zipper
 {
     /// <summary>
-    /// Monitors and reports performance metrics during file generation
+    /// Monitors and reports performance metrics during file generation.
     /// </summary>
     public class PerformanceMonitor
     {
-        private readonly Stopwatch _stopwatch = new Stopwatch();
-        private long _filesCompleted;
-        private long _totalFiles;
-        private DateTime _lastProgressUpdate = DateTime.UtcNow;
+        private readonly Stopwatch stopwatch = new Stopwatch();
+        private long filesCompleted;
+        private long totalFiles;
+        private DateTime lastProgressUpdate = DateTime.UtcNow;
 
         public void Start(long totalFiles)
         {
-            _totalFiles = totalFiles;
-            _filesCompleted = 0;
-            _stopwatch.Restart();
+            this.totalFiles = totalFiles;
+            this.filesCompleted = 0;
+            this.stopwatch.Restart();
         }
 
         public void ReportFilesCompleted(long count)
         {
-            Interlocked.Add(ref _filesCompleted, count);
+            Interlocked.Add(ref this.filesCompleted, count);
 
             var now = DateTime.UtcNow;
-            if ((now - _lastProgressUpdate).TotalMilliseconds >= 100) // Update every 100ms
+            if ((now - this.lastProgressUpdate).TotalMilliseconds >= 100) // Update every 100ms
             {
-                ReportProgress(_filesCompleted, _totalFiles);
-                _lastProgressUpdate = now;
+                this.ReportProgress(this.filesCompleted, this.totalFiles);
+                this.lastProgressUpdate = now;
             }
         }
 
@@ -42,7 +44,7 @@ namespace Zipper
             }
 
             var percentage = total > 0 ? (double)completed / total * 100 : 0;
-            var elapsed = _stopwatch.Elapsed;
+            var elapsed = this.stopwatch.Elapsed;
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;
             var eta = rate > 0 ? TimeSpan.FromSeconds((total - completed) / rate) : TimeSpan.Zero;
 
@@ -51,17 +53,17 @@ namespace Zipper
 
         public PerformanceMetrics Stop()
         {
-            _stopwatch.Stop();
+            this.stopwatch.Stop();
 
-            var elapsed = _stopwatch.Elapsed;
-            var rate = elapsed.TotalSeconds > 0 ? _filesCompleted / elapsed.TotalSeconds : 0;
+            var elapsed = this.stopwatch.Elapsed;
+            var rate = elapsed.TotalSeconds > 0 ? this.filesCompleted / elapsed.TotalSeconds : 0;
 
             return new PerformanceMetrics
             {
                 ElapsedMilliseconds = elapsed.TotalMilliseconds,
-                FilesCompleted = _filesCompleted,
+                FilesCompleted = this.filesCompleted,
                 FilesPerSecond = rate,
-                AverageTimePerFile = elapsed.TotalMilliseconds / Math.Max(_filesCompleted, 1)
+                AverageTimePerFile = elapsed.TotalMilliseconds / Math.Max(this.filesCompleted, 1),
             };
         }
     }
@@ -69,8 +71,11 @@ namespace Zipper
     public class PerformanceMetrics
     {
         public double ElapsedMilliseconds { get; set; }
+
         public long FilesCompleted { get; set; }
+
         public double FilesPerSecond { get; set; }
+
         public double AverageTimePerFile { get; set; }
     }
 }

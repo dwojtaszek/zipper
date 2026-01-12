@@ -14,7 +14,30 @@ REM Create the pre-commit hook.
 (
     echo @echo off
     echo.
-    echo REM Run optimized test suite ^(unit tests + one basic E2E test^) for faster pre-commit checks.
+    echo REM ──────────────────────────────────────────────────────────
+    echo REM Run dotnet format ^(auto-fix formatting^)
+    echo REM ──────────────────────────────────────────────────────────
+    echo where dotnet ^>nul 2^>nul
+    echo if %%errorlevel%% equ 0 ^(
+    echo     dotnet format --verbosity quiet 2^>nul
+    echo     if %%errorlevel%% neq 0 ^(
+    echo         echo Error: dotnet format failed 1^>&2
+    echo         exit /b 1
+    echo     ^)
+    echo.
+    echo     REM Check if formatting made changes
+    echo     git diff --exit-code --quiet 2^>nul
+    echo     if %%errorlevel%% neq 0 ^(
+    echo         echo Code formatting changes required. Files have been auto-formatted. 1^>&2
+    echo         echo Please review and commit again. 1^>&2
+    echo         git --no-pager diff --stat
+    echo         exit /b 1
+    echo     ^)
+    echo ^)
+    echo.
+    echo REM ──────────────────────────────────────────────────────────
+    echo REM Run optimized test suite
+    echo REM ──────────────────────────────────────────────────────────
     echo call tests\run-tests-optimized.bat
     echo.
     echo REM If the tests fail, exit with a non-zero status to prevent the commit.

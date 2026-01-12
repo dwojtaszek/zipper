@@ -1,16 +1,18 @@
-using System.IO;
-using System.Linq;
+// <copyright file="OptWriter.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes OPT (Opticon) format load files - tab-separated format used by Relativity
+/// Writes OPT (Opticon) format load files - tab-separated format used by Relativity.
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
     public override string FormatName => "OPT";
+
     public override string FileExtension => ".opt";
 
     public override async Task WriteAsync(
@@ -24,6 +26,9 @@ internal class OptWriter : LoadFileWriterBase
 
         await WriteHeaderAsync(writer, request, tab);
         await WriteRowsAsync(writer, request, processedFiles, tab);
+
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char tab)

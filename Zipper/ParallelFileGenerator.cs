@@ -1,43 +1,43 @@
-using System;
+// <copyright file="ParallelFileGenerator.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Buffers;
-using System.Collections.Concurrent;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace Zipper
 {
     /// <summary>
-    /// Generates files in parallel with controlled concurrency and memory pooling
+    /// Generates files in parallel with controlled concurrency and memory pooling.
     /// </summary>
     public class ParallelFileGenerator : IDisposable
     {
-        private readonly MemoryPoolManager _memoryPoolManager;
-        private readonly PerformanceMonitor _performanceMonitor = new PerformanceMonitor();
+        private readonly MemoryPoolManager memoryPoolManager;
+        private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
 
         public ParallelFileGenerator()
         {
-            _memoryPoolManager = new MemoryPoolManager();
+            this.memoryPoolManager = new MemoryPoolManager();
         }
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
-            _performanceMonitor.Start(request.FileCount);
+            this.performanceMonitor.Start(request.FileCount);
             ProgressTracker.Initialize(request.FileCount);
 
             try
             {
                 // Validate inputs
                 if (request.FileCount <= 0)
+                {
                     throw new ArgumentException("File count must be positive", nameof(request.FileCount));
+                }
 
                 if (request.Concurrency <= 0)
+                {
                     request.Concurrency = PerformanceConstants.DefaultConcurrency;
+                }
 
                 // For EML files, use sequential processing to avoid ZIP entry creation conflicts
                 // when attachments and text extraction are enabled
@@ -54,33 +54,36 @@ namespace Zipper
                 var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
 
                 var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
+
                 // Allow Office formats and EML to have empty placeholder content (generated dynamically)
                 if (placeholderContent.Length == 0 &&
                     request.FileType.ToLower() != "eml" &&
                     !OfficeFileGenerator.IsOfficeFormat(request.FileType))
+                {
                     throw new InvalidOperationException($"Unknown file type: {request.FileType}");
+                }
 
                 long paddingPerFile = 0;
                 if (request.TargetZipSize.HasValue)
                 {
-                    paddingPerFile = CalculatePaddingPerFile(request.TargetZipSize.Value, placeholderContent.Length, request.FileCount, request.WithText);
+                    paddingPerFile = this.CalculatePaddingPerFile(request.TargetZipSize.Value, placeholderContent.Length, request.FileCount, request.WithText);
                 }
 
                 // Create channels for work distribution
                 var workChannelReader = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
                 var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Concurrency * 2)
                 {
-                    FullMode = BoundedChannelFullMode.Wait
+                    FullMode = BoundedChannelFullMode.Wait,
                 });
 
                 // Start the consumer task to write the archive concurrently
-                var consumerTask = WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
+                var consumerTask = this.WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
 
                 // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
-                
+                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
+
                 // Wait for all producers to complete
                 await Task.WhenAll(producerTasks);
 
@@ -90,7 +93,7 @@ namespace Zipper
                 // Wait for the consumer to finish writing the archive
                 var actualLoadFilePath = await consumerTask;
 
-                var performanceMetrics = _performanceMonitor.Stop();
+                var performanceMetrics = this.performanceMonitor.Stop();
                 ProgressTracker.FinalizeProgress();
 
                 return new FileGenerationResult
@@ -99,12 +102,12 @@ namespace Zipper
                     LoadFilePath = actualLoadFilePath,
                     FilesGenerated = request.FileCount,
                     GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
-                    FilesPerSecond = performanceMetrics.FilesPerSecond
+                    FilesPerSecond = performanceMetrics.FilesPerSecond,
                 };
             }
             finally
             {
-                _performanceMonitor.Stop();
+                this.performanceMonitor.Stop();
             }
         }
 
@@ -128,9 +131,10 @@ namespace Zipper
                         FolderNumber = folderNumber,
                         FolderName = folderName,
                         FileName = fileName,
-                        FilePathInZip = filePathInZip
+                        FilePathInZip = filePathInZip,
                     });
                 }
+
                 writer.Complete();
             });
 
@@ -146,14 +150,14 @@ namespace Zipper
                 await semaphore.WaitAsync();
                 try
                 {
-                    var fileData = GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
+                    var fileData = this.GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
                     await writer.WriteAsync(fileData);
 
                     filesProcessed++;
                     if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
                     {
                         ProgressTracker.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
-                        _performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
+                        this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                     }
                 }
                 finally
@@ -167,7 +171,7 @@ namespace Zipper
             {
                 var remainingFiles = filesProcessed % PerformanceConstants.ProgressBatchSize;
                 ProgressTracker.ReportFilesCompleted(remainingFiles);
-                _performanceMonitor.ReportFilesCompleted(remainingFiles);
+                this.performanceMonitor.ReportFilesCompleted(remainingFiles);
             }
         }
 
@@ -205,7 +209,7 @@ namespace Zipper
 
             var totalSize = fileContent.Length + paddingPerFile;
 
-            var memoryOwner = _memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
+            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
             if (memoryOwner == null)
             {
                 // Fallback to direct allocation for very large files
@@ -224,7 +228,7 @@ namespace Zipper
                     WorkItem = workItem,
                     Data = data,
                     Attachment = attachment,
-                    PageCount = pageCount
+                    PageCount = pageCount,
                 };
             }
 
@@ -243,7 +247,7 @@ namespace Zipper
                 Data = memoryOwner.Memory[..(int)totalSize].ToArray(),
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
-                PageCount = pageCount
+                PageCount = pageCount,
             };
         }
 
@@ -258,7 +262,7 @@ namespace Zipper
                 ".jpg" or ".jpeg" => "image/jpeg",
                 ".png" => "image/png",
                 ".gif" => "image/gif",
-                _ => "application/octet-stream"
+                _ => "application/octet-stream",
             };
         }
 
@@ -268,12 +272,13 @@ namespace Zipper
             return await ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultReader);
         }
 
-    
         private long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
         {
-            var estimatedBaseSize = EstimateCompressedSize(baseSize, fileCount, withText);
+            var estimatedBaseSize = this.EstimateCompressedSize(baseSize, fileCount, withText);
             if (estimatedBaseSize >= targetSize)
+            {
                 return 0;
+            }
 
             var padding = (targetSize - estimatedBaseSize) / fileCount;
             return Math.Min(padding, PerformanceConstants.MaxPaddingPerFile);
@@ -284,32 +289,42 @@ namespace Zipper
             // Simple estimation - in reality this would be more complex
             var baseSize = contentSize * 2; // Assume 50% compression
             if (withText)
+            {
                 baseSize += 50; // Text file overhead
+            }
 
             return baseSize * count;
         }
 
         public void Dispose()
         {
-            _memoryPoolManager?.Dispose();
+            this.memoryPoolManager?.Dispose();
         }
     }
 
     internal record FileWorkItem
     {
         public long Index { get; init; }
+
         public int FolderNumber { get; init; }
+
         public string FolderName { get; init; } = string.Empty;
+
         public string FileName { get; init; } = string.Empty;
+
         public string FilePathInZip { get; init; } = string.Empty;
     }
 
     internal record FileData
     {
         public FileWorkItem WorkItem { get; init; } = new FileWorkItem();
+
         public byte[] Data { get; init; } = Array.Empty<byte>();
+
         public (string filename, byte[] content)? Attachment { get; init; }
+
         public IMemoryOwner<byte>? MemoryOwner { get; init; }
+
         public int PageCount { get; init; } = 1;
     }
 }

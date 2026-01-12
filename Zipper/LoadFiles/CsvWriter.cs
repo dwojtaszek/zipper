@@ -1,16 +1,18 @@
-using System.IO;
-using System.Linq;
+// <copyright file="CsvWriter.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes CSV format load files - comma-separated values with proper RFC 4180 escaping
+/// Writes CSV format load files - comma-separated values with proper RFC 4180 escaping.
 /// </summary>
 internal class CsvWriter : LoadFileWriterBase
 {
     public override string FormatName => "CSV";
+
     public override string FileExtension => ".csv";
 
     public override async Task WriteAsync(
@@ -23,6 +25,9 @@ internal class CsvWriter : LoadFileWriterBase
 
         await WriteHeaderAsync(writer, request);
         await WriteRowsAsync(writer, request, processedFiles);
+
+        // Flush to ensure data is written
+        await writer.FlushAsync();
     }
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request)
@@ -68,7 +73,7 @@ internal class CsvWriter : LoadFileWriterBase
             var values = new System.Collections.Generic.List<string>
             {
                 EscapeField(GenerateDocumentId(workItem)),
-                EscapeField(workItem.FilePathInZip)
+                EscapeField(workItem.FilePathInZip),
             };
 
             if (ShouldIncludeMetadata(request))
@@ -79,7 +84,7 @@ internal class CsvWriter : LoadFileWriterBase
                     EscapeField(metadata.Custodian),
                     EscapeField(metadata.DateSent),
                     EscapeField(metadata.Author),
-                    metadata.FileSize.ToString()
+                    metadata.FileSize.ToString(),
                 });
             }
 
@@ -92,7 +97,7 @@ internal class CsvWriter : LoadFileWriterBase
                     EscapeField(eml.From),
                     EscapeField(eml.Subject),
                     EscapeField(eml.SentDate),
-                    EscapeField(eml.Attachment)
+                    EscapeField(eml.Attachment),
                 });
             }
 
@@ -119,7 +124,7 @@ internal class CsvWriter : LoadFileWriterBase
     {
         if (string.IsNullOrEmpty(field))
         {
-            return "";
+            return string.Empty;
         }
 
         if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))

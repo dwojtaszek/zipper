@@ -1,6 +1,7 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+// <copyright file="PerformanceMonitorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 using Xunit.Abstractions;
 
@@ -8,11 +9,11 @@ namespace Zipper
 {
     public class PerformanceMonitorTests
     {
-        private readonly ITestOutputHelper _output;
+        private readonly ITestOutputHelper output;
 
         public PerformanceMonitorTests(ITestOutputHelper output)
         {
-            _output = output;
+            this.output = output;
         }
 
         [Fact]
@@ -132,7 +133,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ReportFilesCompleted_ConcurrentCalls_ThreadSafe()
+        public async Task ReportFilesCompleted_ConcurrentCalls_ThreadSafe()
         {
             // Arrange
             var monitor = new PerformanceMonitor();
@@ -154,7 +155,7 @@ namespace Zipper
                 });
             }
 
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
 
             // Allow monitoring to catch up
             Thread.Sleep(50);
@@ -164,7 +165,7 @@ namespace Zipper
             // Assert
             Assert.NotNull(metrics);
             Assert.True(metrics.FilesPerSecond > 0);
-            _output.WriteLine($"Files per second: {metrics.FilesPerSecond}");
+            this.output.WriteLine($"Files per second: {metrics.FilesPerSecond}");
         }
 
         [Fact]
@@ -185,7 +186,7 @@ namespace Zipper
                 Assert.True(metrics.ElapsedMilliseconds >= 0);
                 Assert.True(metrics.FilesPerSecond >= 0);
 
-                _output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
+                this.output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
             }
         }
 

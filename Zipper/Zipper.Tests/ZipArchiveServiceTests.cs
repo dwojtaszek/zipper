@@ -1,8 +1,9 @@
-using System;
-using System.IO;
+// <copyright file="ZipArchiveServiceTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.IO.Compression;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -10,11 +11,11 @@ namespace Zipper.Tests
 {
     public class ZipArchiveServiceTests
     {
-        private readonly ITestOutputHelper _output;
+        private readonly ITestOutputHelper output;
 
         public ZipArchiveServiceTests(ITestOutputHelper output)
         {
-            _output = output;
+            this.output = output;
         }
 
         [Fact]
@@ -28,13 +29,13 @@ namespace Zipper.Tests
                 FileType = "pdf",
                 FileCount = 5,
                 Concurrency = 1,
-                IncludeLoadFile = false
+                IncludeLoadFile = false,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 5; i++)
             {
-                testFiles.Add(CreateTestFileData(i));
+                testFiles.Add(this.CreateTestFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -43,6 +44,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act
@@ -65,13 +67,13 @@ namespace Zipper.Tests
                 FileType = "pdf",
                 FileCount = 3,
                 Concurrency = 1,
-                IncludeLoadFile = true
+                IncludeLoadFile = true,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 3; i++)
             {
-                testFiles.Add(CreateTestFileData(i));
+                testFiles.Add(this.CreateTestFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -80,6 +82,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act
@@ -105,13 +108,13 @@ namespace Zipper.Tests
                 FileType = "pdf",
                 FileCount = 3,
                 Concurrency = 1,
-                WithText = true
+                WithText = true,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 3; i++)
             {
-                testFiles.Add(CreateTestFileData(i));
+                testFiles.Add(this.CreateTestFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -120,6 +123,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act
@@ -146,13 +150,13 @@ namespace Zipper.Tests
                 FileType = "eml",
                 FileCount = 2,
                 Concurrency = 1,
-                WithText = false
+                WithText = false,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 2; i++)
             {
-                testFiles.Add(CreateTestEmlFileData(i));
+                testFiles.Add(this.CreateTestEmlFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -161,6 +165,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act
@@ -190,13 +195,13 @@ namespace Zipper.Tests
                 FileCount = 2,
                 Concurrency = 1,
                 WithText = true,
-                IncludeLoadFile = true
+                IncludeLoadFile = true,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 2; i++)
             {
-                testFiles.Add(CreateTestFileData(i));
+                testFiles.Add(this.CreateTestFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -205,6 +210,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act
@@ -236,10 +242,10 @@ namespace Zipper.Tests
                     FileName = $"test{index}.pdf",
                     FilePathInZip = $"folder{index % 5}/test{index}.pdf",
                     FolderName = $"folder{index % 5}",
-                    FolderNumber = index % 5
+                    FolderNumber = index % 5,
                 },
                 Data = System.Text.Encoding.UTF8.GetBytes($"Test content {index}"),
-                MemoryOwner = null
+                MemoryOwner = null,
             };
         }
 
@@ -253,11 +259,11 @@ namespace Zipper.Tests
                     FileName = $"test{index}.eml",
                     FilePathInZip = $"folder{index % 3}/test{index}.eml",
                     FolderName = $"folder{index % 3}",
-                    FolderNumber = index % 3
+                    FolderNumber = index % 3,
                 },
                 Data = System.Text.Encoding.UTF8.GetBytes($"Test EML content {index}"),
                 MemoryOwner = null,
-                Attachment = ($"attachment{index}.pdf", System.Text.Encoding.UTF8.GetBytes($"Attachment content {index}"))
+                Attachment = ($"attachment{index}.pdf", System.Text.Encoding.UTF8.GetBytes($"Attachment content {index}")),
             };
         }
 
@@ -272,13 +278,13 @@ namespace Zipper.Tests
                 FileType = "eml",
                 FileCount = 2,
                 Concurrency = 1,
-                WithText = true
+                WithText = true,
             };
 
             var testFiles = new List<FileData>();
             for (int i = 0; i < 2; i++)
             {
-                testFiles.Add(CreateTestEmlFileData(i));
+                testFiles.Add(this.CreateTestEmlFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -287,6 +293,7 @@ namespace Zipper.Tests
             {
                 await writer.WriteAsync(file);
             }
+
             writer.Complete();
 
             // Act

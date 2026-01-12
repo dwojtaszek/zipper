@@ -1,5 +1,7 @@
-using System;
-using System.IO;
+// <copyright file="PathValidatorTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using Xunit;
 
 namespace Zipper
@@ -25,7 +27,7 @@ namespace Zipper
         {
             // Arrange & Act & Assert
             Assert.Null(PathValidator.ValidateAndCreateDirectory(null!));
-            Assert.Null(PathValidator.ValidateAndCreateDirectory(""));
+            Assert.Null(PathValidator.ValidateAndCreateDirectory(string.Empty));
             Assert.Null(PathValidator.ValidateAndCreateDirectory("   "));
         }
 
@@ -33,7 +35,8 @@ namespace Zipper
         public void ValidateAndCreateDirectory_PathWithTraversal_ReturnsNull()
         {
             // Arrange - Test directory traversal which is a security vulnerability
-            string[] traversalPaths = {
+            string[] traversalPaths =
+            {
                 "..",
                 "../",
                 "/../",
@@ -41,7 +44,7 @@ namespace Zipper
                 "folder/../../folder",
                 "..\\",
                 "folder\\..\\folder",
-                "folder\\..\\..\\folder"
+                "folder\\..\\..\\folder",
             };
 
             // Act & Assert
@@ -56,10 +59,11 @@ namespace Zipper
         public void ValidateAndCreateDirectory_RelativePathWithTraversal_ReturnsNull()
         {
             // Arrange - Test relative path traversal attacks
-            string[] relativePaths = {
+            string[] relativePaths =
+            {
                 "./../../../etc",
                 "test/../../../etc/passwd",
-                "folder/subfolder/../../../sensitive"
+                "folder/subfolder/../../../sensitive",
             };
 
             // Act & Assert
@@ -74,10 +78,11 @@ namespace Zipper
         public void ValidateAndCreateDirectory_MixedSlashesWithTraversal_ReturnsNull()
         {
             // Arrange - Test mixed slash traversal
-            string[] mixedPaths = {
+            string[] mixedPaths =
+            {
                 "folder\\..\\..\\etc",
                 "folder/../..\\etc",
-                "folder\\../etc/passwd"
+                "folder\\../etc/passwd",
             };
 
             // Act & Assert
@@ -92,12 +97,13 @@ namespace Zipper
         public void ValidateAndCreateDirectory_DotPaths_Valid()
         {
             // Arrange - These are safe paths (no traversal)
-            string[] dotPaths = {
+            string[] dotPaths =
+            {
                 ".",
                 "./",
                 "./folder",
                 "folder/.",
-                "folder/./subfolder"
+                "folder/./subfolder",
             };
 
             // Act & Assert

@@ -1,24 +1,29 @@
-using System;
+// <copyright file="GaussianDistribution.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace Zipper
 {
     /// <summary>
     /// Gaussian (Normal) distribution calculator using Beasley-Springer-Moro algorithm
-    /// Provides O(1) mathematical operations for file folder distribution
+    /// Provides O(1) mathematical operations for file folder distribution.
     /// </summary>
     public static class GaussianDistribution
     {
         /// <summary>
-        /// Calculates folder number using Gaussian distribution
+        /// Calculates folder number using Gaussian distribution.
         /// </summary>
-        /// <param name="fileIndex">Current file index (1-based)</param>
-        /// <param name="totalFiles">Total number of files</param>
-        /// <param name="totalFolders">Total number of folders (1-100)</param>
-        /// <returns>Folder number (1 to totalFolders)</returns>
+        /// <param name="fileIndex">Current file index (1-based).</param>
+        /// <param name="totalFiles">Total number of files.</param>
+        /// <param name="totalFolders">Total number of folders (1-100).</param>
+        /// <returns>Folder number (1 to totalFolders).</returns>
         public static int CalculateFolder(long fileIndex, long totalFiles, int totalFolders)
         {
             // Handle edge case for single folder
-            if (totalFolders == 1) return 1;
+            if (totalFolders == 1)
+            {
+                return 1;
+            }
 
             // Parameters for normal distribution
             double mean = totalFolders / 2.0;
@@ -32,7 +37,7 @@ namespace Zipper
             double z = InverseNormalCDF(normalizedPosition);
 
             // Map to folder number
-            double folderDouble = mean + stdDev * z;
+            double folderDouble = mean + (stdDev * z);
             int folder = (int)Math.Round(folderDouble);
 
             // Clamp to valid range
@@ -40,10 +45,10 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Approximation of inverse normal CDF using Beasley-Springer-Moro algorithm
+        /// Approximation of inverse normal CDF using Beasley-Springer-Moro algorithm.
         /// </summary>
-        /// <param name="p">Probability (0 to 1)</param>
-        /// <returns>Z-score for the given probability</returns>
+        /// <param name="p">Probability (0 to 1).</param>
+        /// <returns>Z-score for the given probability.</returns>
         public static double InverseNormalCDF(double p)
         {
             // Clamp input to valid range
@@ -83,23 +88,23 @@ namespace Zipper
             {
                 // Rational approximation for lower region
                 double q = Math.Sqrt(-2 * Math.Log(p));
-                return (((((c0 * q + c1) * q + c2) * q + c3) * q + c4) * q + c5) /
-                       ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+                return ((((((((((c0 * q) + c1) * q) + c2) * q) + c3) * q) + c4) * q) + c5) /
+                       ((((((((d1 * q) + d2) * q) + d3) * q) + d4) * q) + 1);
             }
             else if (p <= pHigh)
             {
                 // Rational approximation for central region
                 double q = p - 0.5;
                 double r = q * q;
-                return (((((a0 * r + a1) * r + a2) * r + a3) * r + a4) * r + a5) * q /
-                       (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1);
+                return ((((((((((a0 * r) + a1) * r) + a2) * r) + a3) * r) + a4) * r) + a5) * q /
+                       ((((((((((b1 * r) + b2) * r) + b3) * r) + b4) * r) + b5) * r) + 1);
             }
             else
             {
                 // Rational approximation for upper region
                 double q = Math.Sqrt(-2 * Math.Log(1 - p));
-                return -(((((c0 * q + c1) * q + c2) * q + c3) * q + c4) * q + c5) /
-                        ((((d1 * q + d2) * q + d3) * q + d4) * q + 1);
+                return -((((((((((c0 * q) + c1) * q) + c2) * q) + c3) * q) + c4) * q) + c5) /
+                        ((((((((d1 * q) + d2) * q) + d3) * q) + d4) * q) + 1);
             }
         }
     }

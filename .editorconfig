@@ -1,0 +1,211 @@
+# .editorconfig for Zipper
+# https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/style-rules/editorconfig-options
+
+root = true
+
+[*.cs]
+# Newline settings
+end_of_line = lf
+insert_final_newline = true
+
+# Indentation
+indent_style = space
+indent_size = 4
+
+# Namespace preferences
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_property = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_event = false:silent
+
+# Language keywords vs BCL types preferences
+dotnet_style_predefined_type_for_locals_parameters_members = true:silent
+dotnet_style_predefined_type_for_members = true:silent
+
+# Modifier preferences
+dotnet_style_require_accessibility_modifiers = always:silent
+dotnet_style_readonly_field = true:suggestion
+
+# Parentheses preferences
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:silent
+dotnet_style_parentheses_in_other_operators = never_if_unnecessary:silent
+
+# Null-checking preferences
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
+
+# Parameter preferences
+dotnet_code_quality_unused_parameters = all:silent
+
+# Suppression preferences
+dotnet_remove_unnecessary_suppression_exclusions = none
+
+# Implicit and explicit types
+dotnet_style_prefer_auto_properties = true:silent
+csharp_style_var_for_built_in_types = true:none
+csharp_style_var_when_type_is_apparent = true:silent
+csharp_style_var_elsewhere = true:silent
+
+# Expression-bodied members
+csharp_style_expression_bodied_methods = false:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_expression_bodied_operators = false:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_indexers = true:silent
+csharp_style_expression_bodied_accessors = true:silent
+csharp_style_expression_bodied_lambdas = true:silent
+csharp_style_expression_bodied_local_functions = false:silent
+
+# Pattern matching preferences
+csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
+csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:silent
+csharp_style_prefer_not_pattern = true:suggestion
+csharp_style_prefer_extended_property_pattern = true:suggestion
+
+# Null-checking preferences
+csharp_style_conditional_delegate_call = true:suggestion
+csharp_style_coalesce_expression = true:suggestion
+csharp_style_null_propagation = true:suggestion
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+
+# Preference for using braces
+csharp_prefer_braces = true:silent
+
+# Prefer local 'using' declaration
+csharp_prefer_using_over_directive = true:suggestion
+
+# Prefer tuple names
+dotnet_style_prefer_tuple_swap = true:suggestion
+
+# File headers
+file_header_template = unset
+
+# Code style defaults
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+# Avoid 'this.' and 'Me.' in most cases
+dotnet_style_qualification_for_event = false:silent
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_property = false:silent
+
+# Naming conventions
+dotnet_naming_rule.interface_should_be_begins_with_i.severity = warning
+dotnet_naming_rule.interface_should_be_begins_with_i.symbols = interface
+dotnet_naming_rule.interface_should_be_begins_with_i.style = begins_with_i
+
+dotnet_naming_rule.types_should_be_pascal_case.severity = warning
+dotnet_naming_rule.types_should_be_pascal_case.symbols = types
+dotnet_naming_rule.types_should_be_pascal_case.style = pascal_case
+
+dotnet_naming_symbols.interface.applicable_kinds = interface
+dotnet_naming_symbols.interface.applicable_accessibilities = public, internal, private, protected, protected_internal, private_protected
+
+dotnet_naming_symbols.types.applicable_kinds = class, struct, interface, enum
+dotnet_naming_symbols.types.applicable_accessibilities = public, internal, private, protected, protected_internal, private_protected
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+dotnet_naming_style.begins_with_i.required_prefix = I
+dotnet_naming_style.begins_with_i.capitalization = pascal_case
+
+# Specify all diagnostics severity of the analyzer
+dotnet_diagnostic.category_design.severity = warning
+dotnet_diagnostic.category_documentation.severity = warning
+dotnet_diagnostic.category_naming.severity = warning
+dotnet_diagnostic.category_performance.severity = warning
+
+# IDE0005: Remove unnecessary usings
+dotnet_diagnostic.IDE0005.severity = warning
+
+# CS1591: Missing XML comment
+dotnet_diagnostic.CS1591.severity = none
+
+# IDE0055: Fix formatting
+dotnet_diagnostic.IDE0055.severity = warning
+
+# SA1200: Using directives should be placed correctly
+dotnet_diagnostic.SA1200.severity = none
+
+# SA1600: Elements should be documented (disabled - codebase doesn't use XML docs)
+dotnet_diagnostic.SA1600.severity = none
+dotnet_diagnostic.SA1601.severity = none
+dotnet_diagnostic.SA1602.severity = none
+dotnet_diagnostic.SA1611.severity = none
+dotnet_diagnostic.SA1612.severity = none
+dotnet_diagnostic.SA1613.severity = none
+dotnet_diagnostic.SA1614.severity = none
+dotnet_diagnostic.SA1615.severity = none
+dotnet_diagnostic.SA1616.severity = none
+dotnet_diagnostic.SA1617.severity = none
+dotnet_diagnostic.SA1618.severity = none
+dotnet_diagnostic.SA1623.severity = none
+dotnet_diagnostic.SA1624.severity = none
+dotnet_diagnostic.SA1625.severity = none
+dotnet_diagnostic.SA1626.severity = none
+dotnet_diagnostic.SA1627.severity = none
+dotnet_diagnostic.SA1628.severity = none
+dotnet_diagnostic.SA1629.severity = none
+dotnet_diagnostic.SA1630.severity = none
+dotnet_diagnostic.SA1631.severity = none
+dotnet_diagnostic.SA1632.severity = none
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1634.severity = none
+dotnet_diagnostic.SA1635.severity = none
+dotnet_diagnostic.SA1636.severity = none
+dotnet_diagnostic.SA1637.severity = none
+dotnet_diagnostic.SA1638.severity = none
+dotnet_diagnostic.SA1639.severity = none
+dotnet_diagnostic.SA1640.severity = none
+dotnet_diagnostic.SA1641.severity = none
+dotnet_diagnostic.SA1642.severity = none
+dotnet_diagnostic.SA1643.severity = none
+dotnet_diagnostic.SA1644.severity = none
+dotnet_diagnostic.SA1645.severity = none
+dotnet_diagnostic.SA1646.severity = none
+dotnet_diagnostic.SA1647.severity = none
+dotnet_diagnostic.SA1648.severity = none
+dotnet_diagnostic.SA1649.severity = none
+dotnet_diagnostic.SA1650.severity = none
+
+# SA1402: File may only contain single type (disabled - multiple types per file is OK)
+dotnet_diagnostic.SA1402.severity = none
+
+# SA1316: Tuple element names should use correct casing (disabled - lower-case tuple names are OK)
+dotnet_diagnostic.SA1316.severity = none
+
+# SA1202: Elements should be ordered by access (disabled - not enforced)
+dotnet_diagnostic.SA1202.severity = none
+
+# SA1201: Elements should appear in correct order (disabled - not enforced)
+dotnet_diagnostic.SA1201.severity = none
+
+# SA1204: Static elements should appear before instance (disabled - not enforced)
+dotnet_diagnostic.SA1204.severity = none
+
+# SA1214: Readonly elements should appear before non-readonly (disabled - not enforced)
+dotnet_diagnostic.SA1214.severity = none
+
+# SA1413: Use trailing comma in multi-line initializers (disabled - not enforced)
+dotnet_diagnostic.SA1413.severity = none
+
+# SA1117: Parameters should be on same line or each on own line (disabled - not enforced)
+dotnet_diagnostic.SA1117.severity = none
+
+# SA1108: Block statements should not contain embedded comments (disabled - not enforced)
+dotnet_diagnostic.SA1108.severity = none
+
+# SA1012: Opening brace should not be followed by space (disabled - not enforced)
+dotnet_diagnostic.SA1012.severity = none
+
+# SA0002: Settings file could not be loaded (info only - we use .editorconfig for configuration)
+dotnet_diagnostic.SA0002.severity = silent
+
+# SA0001: XML comment analysis is disabled (info only)
+dotnet_diagnostic.SA0001.severity = silent
