@@ -56,9 +56,9 @@
       },
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "lsaz3vFh4sl7k1UAwZkyDLPFvZRyVPBniqFne98LwUesNkTJta1XXGri25vRho0TxesYBBNHTv06IqpHkzK6Aw=="
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "hovZmFBPhs8l3ZtVXxKqAGs3CKbkuAA7aRUTlDUU0CBmoHj2DERdwmqb52DisjmlamH3yesJEc20dqLb5JMMug=="
       },
       "ClosedXML.Parser": {
         "type": "Transitive",
@@ -107,9 +107,9 @@
     "net8.0/linux-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "lsaz3vFh4sl7k1UAwZkyDLPFvZRyVPBniqFne98LwUesNkTJta1XXGri25vRho0TxesYBBNHTv06IqpHkzK6Aw=="
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "hovZmFBPhs8l3ZtVXxKqAGs3CKbkuAA7aRUTlDUU0CBmoHj2DERdwmqb52DisjmlamH3yesJEc20dqLb5JMMug=="
       },
       "Microsoft.Win32.SystemEvents": {
         "type": "Transitive",
@@ -120,9 +120,9 @@
     "net8.0/osx-arm64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "lsaz3vFh4sl7k1UAwZkyDLPFvZRyVPBniqFne98LwUesNkTJta1XXGri25vRho0TxesYBBNHTv06IqpHkzK6Aw=="
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "hovZmFBPhs8l3ZtVXxKqAGs3CKbkuAA7aRUTlDUU0CBmoHj2DERdwmqb52DisjmlamH3yesJEc20dqLb5JMMug=="
       },
       "Microsoft.Win32.SystemEvents": {
         "type": "Transitive",
@@ -133,9 +133,9 @@
     "net8.0/osx-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "lsaz3vFh4sl7k1UAwZkyDLPFvZRyVPBniqFne98LwUesNkTJta1XXGri25vRho0TxesYBBNHTv06IqpHkzK6Aw=="
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "hovZmFBPhs8l3ZtVXxKqAGs3CKbkuAA7aRUTlDUU0CBmoHj2DERdwmqb52DisjmlamH3yesJEc20dqLb5JMMug=="
       },
       "Microsoft.Win32.SystemEvents": {
         "type": "Transitive",
@@ -146,9 +146,9 @@
     "net8.0/win-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.1, )",
-        "resolved": "10.0.1",
-        "contentHash": "lsaz3vFh4sl7k1UAwZkyDLPFvZRyVPBniqFne98LwUesNkTJta1XXGri25vRho0TxesYBBNHTv06IqpHkzK6Aw=="
+        "requested": "[10.0.2, )",
+        "resolved": "10.0.2",
+        "contentHash": "hovZmFBPhs8l3ZtVXxKqAGs3CKbkuAA7aRUTlDUU0CBmoHj2DERdwmqb52DisjmlamH3yesJEc20dqLb5JMMug=="
       },
       "Microsoft.Win32.SystemEvents": {
         "type": "Transitive",
