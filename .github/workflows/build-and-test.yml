@@ -3,6 +3,7 @@ name: Build and Test
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -18,7 +19,16 @@ jobs:
       - uses: actions/checkout@v6
       - name: Set Version
         id: version
-        run: echo "version=$(cat .version)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "Version from tag: $VERSION"
+          else
+            VERSION="0.0.0-dev"
+            echo "Defaulting to version: $VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   lint:
     needs: prepare
@@ -133,7 +143,7 @@ jobs:
   release:
     needs: [prepare, lint, build, test]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
 
@@ -147,44 +157,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ needs.prepare.outputs.version }}
-          name: Release ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
           files: |
             artifacts/zipper-win-x64/zipper-win-x64.exe
             artifacts/zipper-linux-x64/zipper-linux-x64
             artifacts/zipper-osx-arm64/zipper-osx-arm64
-
-      - name: Bump version
-        if: success()
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-
-          git pull origin main
-
-          version=$(cat .version)
-
-          # Validate version format
-          chmod +x .github/scripts/validate-version.sh
-          .github/scripts/validate-version.sh "$version"
-
-          IFS='.' read -r major minor build <<< "$version"
-          new_build=$((build + 1))
-          new_version="$major.$minor.$new_build"
-
-          if git rev-parse "v$new_version" >/dev/null 2>&1; then
-            echo "Version $new_version already exists, skipping"
-            exit 0
-          fi
-
-          echo $new_version > .version
-          git add .version
-          git commit -m "chore(release): bump version to $new_version [skip ci]"
-
-          if ! git push origin main; then
-            sleep 5
-            git pull --no-rebase origin main
-            git push origin main || { echo "Push failed after retry"; exit 1; }
-          fi
