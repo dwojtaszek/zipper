@@ -150,10 +150,10 @@ fi
 
 # Check for release conditions
 echo "12. Checking release conditions..."
-if grep -q "if: github.ref == 'refs/heads/main'" .github/workflows/build-and-test.yml; then
-    echo "✓ Release job only runs on main branch"
+if grep -q "if: startsWith(github.ref, 'refs/tags/v')" .github/workflows/build-and-test.yml; then
+    echo "✓ Release job runs on tags"
 else
-    echo "✗ Release job missing main branch condition"
+    echo "✗ Release job missing tag condition"
     exit 1
 fi
 
@@ -188,13 +188,6 @@ if grep -q "Set Version" .github/workflows/build-and-test.yml; then
     echo "✓ Has version handling"
 else
     echo "✗ Missing version handling"
-    exit 1
-fi
-
-if grep -q "\.version" .github/workflows/build-and-test.yml; then
-    echo "✓ Reads .version file"
-else
-    echo "✗ Missing .version file reading"
     exit 1
 fi
 
