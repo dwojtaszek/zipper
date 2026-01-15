@@ -104,9 +104,10 @@ namespace Zipper
                     FilesPerSecond = performanceMetrics.FilesPerSecond,
                 };
             }
-            finally
+            catch
             {
                 this.performanceMonitor.Stop();
+                throw;
             }
         }
 
