@@ -241,7 +241,7 @@ await writer.FlushAsync();
 - `MAJOR.MINOR`: Managed manually in `.version` file
 - `BUILD`: Auto-generated from GitHub Actions run_number
 - Full version: `<major>.<minor>.<run_number>`
-- Auto-release on each successful `master` branch build
+- Auto-release on each successful `main` branch build
 
 ---
 

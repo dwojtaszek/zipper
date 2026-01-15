@@ -162,23 +162,23 @@ if errorlevel 1 (
     echo [OK] Has branch triggers configured
 )
 
-findstr /C:"master" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"main" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
-    echo [FAIL] Missing master branch trigger
+    echo [FAIL] Missing main branch trigger
     exit /b 1
 ) else (
-    echo [OK] Master branch trigger found
+    echo [OK] Main branch trigger found
 )
 
 REM Check for release conditions
 echo.
 echo 12. Checking release conditions...
-findstr /C:"if: github.ref == 'refs/heads/master'" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"if: github.ref == 'refs/heads/main'" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
-    echo [FAIL] Release job missing master branch condition
+    echo [FAIL] Release job missing main branch condition
     exit /b 1
 ) else (
-    echo [OK] Release job only runs on master branch
+    echo [OK] Release job only runs on main branch
 )
 
 REM Check for permissions

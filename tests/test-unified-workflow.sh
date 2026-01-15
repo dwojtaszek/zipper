@@ -141,19 +141,19 @@ else
     exit 1
 fi
 
-if grep -q "master" .github/workflows/build-and-test.yml; then
-    echo "✓ Master branch trigger found"
+if grep -q "main" .github/workflows/build-and-test.yml; then
+    echo "✓ Main branch trigger found"
 else
-    echo "✗ Missing master branch trigger"
+    echo "✗ Missing main branch trigger"
     exit 1
 fi
 
 # Check for release conditions
 echo "12. Checking release conditions..."
-if grep -q "if: github.ref == 'refs/heads/master'" .github/workflows/build-and-test.yml; then
-    echo "✓ Release job only runs on master branch"
+if grep -q "if: github.ref == 'refs/heads/main'" .github/workflows/build-and-test.yml; then
+    echo "✓ Release job only runs on main branch"
 else
-    echo "✗ Release job missing master branch condition"
+    echo "✗ Release job missing main branch condition"
     exit 1
 fi
 

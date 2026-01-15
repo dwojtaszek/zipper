@@ -2,9 +2,9 @@ name: Build and Test
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 permissions:
   contents: read
@@ -133,7 +133,7 @@ jobs:
   release:
     needs: [prepare, lint, build, test]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && !contains(github.event.head_commit.message, '[skip ci]')
+    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
     permissions:
       contents: write
 
@@ -162,7 +162,7 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          git pull origin master
+          git pull origin main
 
           version=$(cat .version)
 
@@ -183,8 +183,8 @@ jobs:
           git add .version
           git commit -m "chore(release): bump version to $new_version [skip ci]"
 
-          if ! git push origin master; then
+          if ! git push origin main; then
             sleep 5
-            git pull --no-rebase origin master
-            git push origin master || { echo "Push failed after retry"; exit 1; }
+            git pull --no-rebase origin main
+            git push origin main || { echo "Push failed after retry"; exit 1; }
           fi
