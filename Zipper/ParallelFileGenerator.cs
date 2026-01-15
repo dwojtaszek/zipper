@@ -24,7 +24,6 @@ namespace Zipper
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
             this.performanceMonitor.Start(request.FileCount);
-            ProgressTracker.Initialize(request.FileCount);
 
             try
             {
@@ -93,8 +92,8 @@ namespace Zipper
                 // Wait for the consumer to finish writing the archive
                 var actualLoadFilePath = await consumerTask;
 
+                this.performanceMonitor.FinalizeProgress();
                 var performanceMetrics = this.performanceMonitor.Stop();
-                ProgressTracker.FinalizeProgress();
 
                 return new FileGenerationResult
                 {
@@ -156,7 +155,6 @@ namespace Zipper
                     filesProcessed++;
                     if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
                     {
-                        ProgressTracker.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                         this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                     }
                 }
@@ -170,7 +168,6 @@ namespace Zipper
             if (filesProcessed % PerformanceConstants.ProgressBatchSize != 0)
             {
                 var remainingFiles = filesProcessed % PerformanceConstants.ProgressBatchSize;
-                ProgressTracker.ReportFilesCompleted(remainingFiles);
                 this.performanceMonitor.ReportFilesCompleted(remainingFiles);
             }
         }

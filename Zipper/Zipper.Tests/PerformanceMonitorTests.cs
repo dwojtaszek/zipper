@@ -203,5 +203,47 @@ namespace Zipper
             Assert.Equal(0, metrics.ElapsedMilliseconds);
             Assert.Equal(0, metrics.FilesPerSecond);
         }
+
+        [Fact]
+        public void GetCompletedCount_AfterReporting_ReturnsCorrectCount()
+        {
+            // Arrange
+            var monitor = new PerformanceMonitor();
+            monitor.Start(1000);
+
+            // Act
+            monitor.ReportFilesCompleted(100);
+            monitor.ReportFilesCompleted(200);
+            var completed = monitor.GetCompletedCount();
+
+            // Assert
+            Assert.Equal(300, completed);
+        }
+
+        [Fact]
+        public void GetCompletedCount_AfterStart_ReturnsZero()
+        {
+            // Arrange
+            var monitor = new PerformanceMonitor();
+            monitor.Start(1000);
+
+            // Act
+            var completed = monitor.GetCompletedCount();
+
+            // Assert
+            Assert.Equal(0, completed);
+        }
+
+        [Fact]
+        public void FinalizeProgress_DoesNotThrow()
+        {
+            // Arrange
+            var monitor = new PerformanceMonitor();
+            monitor.Start(100);
+            monitor.ReportFilesCompleted(100);
+
+            // Act & Assert
+            monitor.FinalizeProgress(); // Should not throw
+        }
     }
 }

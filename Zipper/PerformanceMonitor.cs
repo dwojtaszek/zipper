@@ -8,6 +8,7 @@ namespace Zipper
 {
     /// <summary>
     /// Monitors and reports performance metrics during file generation.
+    /// Consolidates progress tracking and performance metrics into a single class.
     /// </summary>
     public class PerformanceMonitor
     {
@@ -15,14 +16,25 @@ namespace Zipper
         private long filesCompleted;
         private long totalFiles;
         private DateTime lastProgressUpdate = DateTime.UtcNow;
+        private double lastDisplayedPercentage;
 
+        /// <summary>
+        /// Starts performance monitoring for a new operation.
+        /// </summary>
+        /// <param name="totalFiles">Total number of files to process.</param>
         public void Start(long totalFiles)
         {
             this.totalFiles = totalFiles;
             this.filesCompleted = 0;
+            this.lastDisplayedPercentage = 0;
+            this.lastProgressUpdate = DateTime.UtcNow;
             this.stopwatch.Restart();
         }
 
+        /// <summary>
+        /// Report completion of a batch of files.
+        /// </summary>
+        /// <param name="count">Number of files completed in this batch.</param>
         public void ReportFilesCompleted(long count)
         {
             Interlocked.Add(ref this.filesCompleted, count);
@@ -35,6 +47,20 @@ namespace Zipper
             }
         }
 
+        /// <summary>
+        /// Get current completion count.
+        /// </summary>
+        /// <returns>Number of files completed so far.</returns>
+        public long GetCompletedCount()
+        {
+            return Interlocked.Read(ref this.filesCompleted);
+        }
+
+        /// <summary>
+        /// Force immediate progress report.
+        /// </summary>
+        /// <param name="completed">Number of files completed.</param>
+        /// <param name="total">Total number of files.</param>
         public void ReportProgress(long completed, long total)
         {
             // Disable progress bar in CI environments to prevent hangs
@@ -48,9 +74,32 @@ namespace Zipper
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;
             var eta = rate > 0 ? TimeSpan.FromSeconds((total - completed) / rate) : TimeSpan.Zero;
 
-            Console.Write($"\rProgress: {completed:N0} / {total:N0} files ({percentage:F1}%) - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}");
+            // Only display progress when there's a meaningful change (at least 1% or completion)
+            if (percentage > this.lastDisplayedPercentage + 1 || percentage >= 100)
+            {
+                this.lastDisplayedPercentage = percentage;
+                Console.Write($"\rProgress: {completed:N0} / {total:N0} files ({percentage:F1}%) - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}          ");
+            }
         }
 
+        /// <summary>
+        /// Write a final newline to clean up progress display.
+        /// </summary>
+        public void FinalizeProgress()
+        {
+            // Disable in CI environments
+            if (Environment.GetEnvironmentVariable("CI") == "true")
+            {
+                return;
+            }
+
+            Console.WriteLine(); // New line after progress
+        }
+
+        /// <summary>
+        /// Stops monitoring and returns performance metrics.
+        /// </summary>
+        /// <returns>Performance metrics for the completed operation.</returns>
         public PerformanceMetrics Stop()
         {
             this.stopwatch.Stop();
@@ -68,14 +117,29 @@ namespace Zipper
         }
     }
 
+    /// <summary>
+    /// Performance metrics captured during file generation.
+    /// </summary>
     public class PerformanceMetrics
     {
+        /// <summary>
+        /// Gets or sets the total elapsed time in milliseconds.
+        /// </summary>
         public double ElapsedMilliseconds { get; set; }
 
+        /// <summary>
+        /// Gets or sets the number of files completed.
+        /// </summary>
         public long FilesCompleted { get; set; }
 
+        /// <summary>
+        /// Gets or sets the files processed per second.
+        /// </summary>
         public double FilesPerSecond { get; set; }
 
+        /// <summary>
+        /// Gets or sets the average time per file in milliseconds.
+        /// </summary>
         public double AverageTimePerFile { get; set; }
     }
 }
