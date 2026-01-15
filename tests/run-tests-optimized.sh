@@ -10,7 +10,7 @@ set -e
 TEST_OUTPUT_DIR="./results"
 
 # The .NET project to run.
-PROJECT="Zipper/Zipper.csproj"
+PROJECT="src/Zipper.csproj"
 
 # --- Helper Functions ---
 

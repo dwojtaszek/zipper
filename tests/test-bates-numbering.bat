@@ -4,7 +4,7 @@ setlocal enabledelayedexpansion
 :: --- Test Configuration ---
 
 set TEST_OUTPUT_DIR=.\results\bates-numbering
-set PROJECT=Zipper\Zipper.csproj
+set PROJECT=src\Zipper.csproj
 
 :: --- Test Setup ---
 

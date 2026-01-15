@@ -63,8 +63,8 @@ jobs:
           dotnet-version: 8.0.x
           cache: true
           cache-dependency-path: |
-            Zipper/packages.lock.json
-            Zipper/Zipper.Tests/packages.lock.json
+            src/packages.lock.json
+            src/Zipper.Tests/packages.lock.json
 
       - name: Restore dependencies
         run: dotnet restore zipper.sln
@@ -74,7 +74,7 @@ jobs:
         uses: actions/cache@v5.0.1
         with:
           path: publish/${{ matrix.platform }}
-          key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ needs.prepare.outputs.version }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ matrix.platform }}-
 
@@ -82,7 +82,7 @@ jobs:
         if: steps.cache-build.outputs.cache-hit != 'true'
         run: |
           dotnet build zipper.sln -c Release --no-restore
-          dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:Version=${{ needs.prepare.outputs.version }} --no-restore
+          dotnet publish src/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:Version=${{ needs.prepare.outputs.version }} --no-restore
           rm -f publish/${{ matrix.platform }}/*.pdb
 
           case "${{ matrix.platform }}" in
@@ -123,13 +123,13 @@ jobs:
           path: artifacts
 
       - name: Restore test dependencies
-        run: dotnet restore Zipper/Zipper.Tests/Zipper.Tests.csproj
+        run: dotnet restore src/Zipper.Tests/Zipper.Tests.csproj
 
       - name: Build test project
-        run: dotnet build Zipper/Zipper.Tests/Zipper.Tests.csproj -c Debug --no-restore
+        run: dotnet build src/Zipper.Tests/Zipper.Tests.csproj -c Debug --no-restore
 
       - name: Run unit tests
-        run: dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
+        run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
 
       - name: Run E2E tests
         run: |

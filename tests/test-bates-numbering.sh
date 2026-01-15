@@ -6,7 +6,7 @@ set -e
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/bates-numbering"
-PROJECT="Zipper/Zipper.csproj"
+PROJECT="src/Zipper.csproj"
 
 # --- Helper Functions ---
 

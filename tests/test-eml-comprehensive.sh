@@ -13,7 +13,7 @@ echo
 # Set test environment
 TEST_DIR="/tmp/zipper-eml-test-$$"
 REPO_ROOT="$(pwd)"
-ZIPPER_CMD="dotnet run --project $REPO_ROOT/Zipper/Zipper.csproj --"
+ZIPPER_CMD="dotnet run --project $REPO_ROOT/src/Zipper.csproj --"
 FILE_COUNT=20 # Use a consistent number of files for most tests
 
 # Clean up function
@@ -29,7 +29,7 @@ trap cleanup EXIT
 
 # Build the project first
 echo "Building Zipper project..."
-if ! dotnet build Zipper/Zipper.csproj > /dev/null 2>&1; then
+if ! dotnet build src/Zipper.csproj > /dev/null 2>&1; then
     echo "✗ Build failed. Exiting."
     exit 1
 fi

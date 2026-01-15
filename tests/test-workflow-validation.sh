@@ -61,16 +61,16 @@ fi
 
 # Check project structure
 echo "5. Checking project structure..."
-if [ -d "Zipper" ]; then
-    echo "✓ Zipper directory exists"
-    if [ -f "Zipper/Zipper.csproj" ]; then
+if [ -d "src" ]; then
+    echo "✓ src directory exists"
+    if [ -f "src/Zipper.csproj" ]; then
         echo "✓ Zipper.csproj exists"
     else
         echo "✗ Zipper.csproj missing"
         exit 1
     fi
 else
-    echo "✗ Zipper directory missing"
+    echo "✗ src directory missing"
     exit 1
 fi
 

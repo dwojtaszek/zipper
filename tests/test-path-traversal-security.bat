@@ -18,14 +18,14 @@ echo.
 
 REM Build the application
 echo Building Zipper...
-dotnet build Zipper\Zipper.csproj --configuration Release > nul 2>&1
+dotnet build src\Zipper.csproj --configuration Release > nul 2>&1
 if errorlevel 1 (
     echo Build failed
     rmdir /s /q "%TEST_DIR%"
     exit /b 1
 )
 
-set ZIPPER_DLL=Zipper\bin\Release\net8.0\Zipper.dll
+set ZIPPER_DLL=src\bin\Release\net8.0\Zipper.dll
 if not exist "%ZIPPER_DLL%" (
     echo Could not find Zipper DLL at %ZIPPER_DLL%
     rmdir /s /q "%TEST_DIR%"

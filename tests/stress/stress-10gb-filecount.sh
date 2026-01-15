@@ -48,7 +48,7 @@ check_required_utilities() {
 # --- Configuration ---
 TEST_NAME="10GB_Maximum_File_Count_Challenge"
 OUTPUT_DIR="results"
-PROJECT="../../Zipper/Zipper.csproj"
+PROJECT="../../src/Zipper.csproj"
 
 # Test parameters
 FILE_COUNT=5000000  # 5 million files

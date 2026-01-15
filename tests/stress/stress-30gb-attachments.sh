@@ -56,7 +56,7 @@ check_required_utilities() {
 # --- Configuration ---
 TEST_NAME="30GB_Attachment-Heavy_EML_Focus"
 OUTPUT_DIR="results"
-PROJECT="../../Zipper/Zipper.csproj"
+PROJECT="../../src/Zipper.csproj"
 
 # Test parameters
 EML_COUNT=1000000         # 1 million EML files

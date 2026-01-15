@@ -7,7 +7,7 @@ REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
 
 REM The .NET project to run.
-set PROJECT=Zipper\Zipper.csproj
+set PROJECT=src\Zipper.csproj
 
 REM --- Helper Functions ---
 
@@ -76,7 +76,7 @@ call :print_info "Running optimized pre-commit test suite..."
 
 REM Step 1: Run Unit Tests
 call :print_info "Running unit tests..."
-dotnet test Zipper\Zipper.Tests\ --verbosity quiet
+dotnet test src\Zipper.Tests\ --verbosity quiet
 if errorlevel 1 (
     call :print_error "Unit tests failed"
 )

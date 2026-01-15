@@ -6,7 +6,7 @@ setlocal enabledelayedexpansion
 
 REM Test configuration
 set TEST_OUTPUT_DIR=.\cross-platform-results
-set PROJECT=Zipper\Zipper.csproj
+set PROJECT=src\Zipper.csproj
 
 REM Helper functions
 :print_success

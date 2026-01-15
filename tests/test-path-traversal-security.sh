@@ -11,7 +11,7 @@ echo "Created test directory: $TEST_DIR"
 
 # Build the application
 echo "Building Zipper..."
-dotnet build Zipper/Zipper.csproj --configuration Release > /dev/null 2>&1
+dotnet build src/Zipper.csproj --configuration Release > /dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo "❌ Build failed"
     rm -rf "$TEST_DIR"
@@ -21,7 +21,7 @@ fi
 # Test 1: Normal path should work
 echo ""
 echo "Test 1: Normal path should work"
-ZIPPER_DLL="Zipper/bin/Release/net8.0/Zipper.dll"
+ZIPPER_DLL="src/bin/Release/net8.0/Zipper.dll"
 if [ ! -f "$ZIPPER_DLL" ]; then
     echo "❌ Could not find Zipper DLL at $ZIPPER_DLL"
     rm -rf "$TEST_DIR"

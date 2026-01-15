@@ -12,7 +12,7 @@ echo.
 REM Set test environment
 set "TEST_DIR=%TEMP%\zipper-eml-test-%RANDOM%"
 set "REPO_ROOT=%~dp0.."
-set "ZIPPER_CMD=dotnet run --project "%REPO_ROOT%\Zipper\Zipper.csproj" --"
+set "ZIPPER_CMD=dotnet run --project "%REPO_ROOT%\src\Zipper.csproj" --"
 set "FILE_COUNT=20"
 
 REM Clean up function
@@ -25,7 +25,7 @@ goto :eof
 
 REM Build the project first
 echo Building Zipper project...
-dotnet build "%REPO_ROOT%\Zipper\Zipper.csproj" > nul 2>&1
+dotnet build "%REPO_ROOT%\src\Zipper.csproj" > nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo ✗ Build failed. Exiting.
     exit /b 1
