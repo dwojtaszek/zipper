@@ -173,12 +173,12 @@ if errorlevel 1 (
 REM Check for release conditions
 echo.
 echo 12. Checking release conditions...
-findstr /C:"if: github.ref == 'refs/heads/main'" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"if: startsWith(github.ref, 'refs/tags/v')" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
-    echo [FAIL] Release job missing main branch condition
+    echo [FAIL] Release job missing tag condition
     exit /b 1
 ) else (
-    echo [OK] Release job only runs on main branch
+    echo [OK] Release job runs on tags
 )
 
 REM Check for permissions
@@ -220,14 +220,6 @@ if errorlevel 1 (
     exit /b 1
 ) else (
     echo [OK] Has version handling
-)
-
-findstr /C:".version" ".github\workflows\build-and-test.yml" > nul
-if errorlevel 1 (
-    echo [FAIL] Missing .version file reading
-    exit /b 1
-) else (
-    echo [OK] Reads .version file
 )
 
 echo.
