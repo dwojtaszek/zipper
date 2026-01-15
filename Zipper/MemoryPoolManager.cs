@@ -23,7 +23,7 @@ namespace Zipper
         /// Rents memory of at least the specified size.
         /// </summary>
         /// <param name="size">Minimum size in bytes.</param>
-        /// <returns>IMemoryOwner.<byte> or null if size exceeds maximum</returns>
+        /// <returns>IMemoryOwner&lt;byte&gt; or null if size exceeds maximum.</returns>
         public IMemoryOwner<byte>? Rent(int size)
         {
             if (size <= 0 || size > PerformanceConstants.MaxPoolSize)
