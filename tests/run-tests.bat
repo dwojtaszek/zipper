@@ -6,7 +6,7 @@ REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
 
 REM The .NET project to run.
-set PROJECT=Zipper\Zipper.csproj
+set PROJECT=src\Zipper.csproj
 
 REM --- Helper Functions ---
 

@@ -91,7 +91,7 @@ check_system_requirements() {
     fi
 
     # Check if application is built
-    if [ ! -f "$PROJECT_ROOT/Zipper/bin/Release/net8.0/Zipper" ] && [ ! -f "$PROJECT_ROOT/Zipper/bin/Debug/net8.0/Zipper" ]; then
+    if [ ! -f "$PROJECT_ROOT/src/bin/Release/net8.0/Zipper" ] && [ ! -f "$PROJECT_ROOT/src/bin/Debug/net8.0/Zipper" ]; then
         print_error "Zipper application not built"
         print_info "Build the application first:"
         echo "  cd $PROJECT_ROOT"

@@ -2,9 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper", "Zipper\Zipper.csproj", "{1474978F-9AD6-5A77-CB20-226C4558AE8A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper", "src\Zipper.csproj", "{1474978F-9AD6-5A77-CB20-226C4558AE8A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper.Tests", "Zipper\Zipper.Tests\Zipper.Tests.csproj", "{B2C3D4E5-F6G7-8901-BCDE-F23456789012}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper.Tests", "src\Zipper.Tests\Zipper.Tests.csproj", "{B2C3D4E5-F6G7-8901-BCDE-F23456789012}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

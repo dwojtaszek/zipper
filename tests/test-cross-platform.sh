@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Test configuration
 TEST_OUTPUT_DIR="./cross-platform-results"
-PROJECT="Zipper/Zipper.csproj"
+PROJECT="src/Zipper.csproj"
 PLATFORM=$(uname -s)
 
 # Helper functions

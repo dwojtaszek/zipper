@@ -47,7 +47,7 @@ check_required_utilities() {
 # --- Configuration ---
 TEST_NAME="Large_Load_File_Performance"
 OUTPUT_DIR="results"
-PROJECT="../../Zipper/Zipper.csproj"
+PROJECT="../../src/Zipper.csproj"
 
 # Test parameters
 FILE_COUNT=10000

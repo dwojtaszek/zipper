@@ -54,16 +54,16 @@ if exist ".version" (
 
 REM Check project structure
 echo 5. Checking project structure...
-if exist "Zipper" (
-    echo ✓ Zipper directory exists
-    if exist "Zipper\Zipper.csproj" (
+if exist "src" (
+    echo ✓ src directory exists
+    if exist "src\Zipper.csproj" (
         echo ✓ Zipper.csproj exists
     ) else (
         echo ✗ Zipper.csproj missing
         exit /b 1
     )
 ) else (
-    echo ✗ Zipper directory missing
+    echo ✗ src directory missing
     exit /b 1
 )
 

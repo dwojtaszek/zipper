@@ -10,12 +10,12 @@ Use 'bd' for task tracking.
 
 ## Important: Unit Tests Location
 
-**ALL unit tests MUST be added to `Zipper/Zipper.Tests/` directory.**
+**ALL unit tests MUST be added to `src/Zipper.Tests/` directory.**
 
-- ✅ **Correct location:** `Zipper/Zipper.Tests/YourFileTests.cs` - This is the actual test project that gets compiled and run.
+- ✅ **Correct location:** `src/Zipper.Tests/YourFileTests.cs` - This is the actual test project that gets compiled and run.
 - ❌ **Wrong location:** `Zipper.Tests/YourFileTests.cs` - This is an outdated directory that is NOT compiled or run.
 
-The test project is defined in `Zipper/Zipper.Tests/Zipper.Tests.csproj`. Only test files in this directory will be executed by `dotnet test`.
+The test project is defined in `src/Zipper.Tests/Zipper.Tests.csproj`. Only test files in this directory will be executed by `dotnet test`.
 
 ---
 
@@ -24,16 +24,16 @@ The test project is defined in `Zipper/Zipper.Tests/Zipper.Tests.csproj`. Only t
 ```bash
 # Build
 dotnet publish -c Release
-# Output: Zipper/bin/Release/net8.0/<platform>/publish/
+# Output: src/bin/Release/net8.0/<platform>/publish/
 
 # Run
-dotnet run --project Zipper/Zipper.csproj -- [args]
+dotnet run --project src/Zipper.csproj -- [args]
 
 # Unit Tests
-dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj
 
 # Single Test
-dotnet test Zipper/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~TestName"
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~TestName"
 
 # E2E Tests (Linux/macOS | Windows)
 ./tests/run-tests.sh | tests/run-tests.bat
@@ -216,7 +216,7 @@ await writer.FlushAsync();
 
 **Testing Best Practices (from coverage improvement journey):**
 
-1. **Verify tests are actually executing**: Always confirm tests are in the correct directory (`Zipper/Zipper.Tests/`) and are being compiled/run. Tests in obsolete locations will silently pass without actually testing anything.
+1. **Verify tests are actually executing**: Always confirm tests are in the correct directory (`src/Zipper.Tests/`) and are being compiled/run. Tests in obsolete locations will silently pass without actually testing anything.
 
 2. **Use flexible thresholds for variable operations**: Tests involving compression, randomness, or file sizes should use percentage-based thresholds (e.g., 50% minimum) rather than exact values, since compression ratios and random distributions have inherent variance.
 

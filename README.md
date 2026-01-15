@@ -36,7 +36,7 @@ To build a release version of the executable, run the following command from the
 dotnet publish -c Release
 ```
 
-This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `Zipper/bin/Release/net8.0/<platform-specific-folder>/publish/` directory.
+This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `src/bin/Release/net8.0/<platform-specific-folder>/publish/` directory.
 
 ## Usage
 
