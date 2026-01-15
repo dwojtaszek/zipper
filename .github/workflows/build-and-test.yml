@@ -82,7 +82,7 @@ jobs:
         if: steps.cache-build.outputs.cache-hit != 'true'
         run: |
           dotnet build zipper.sln -c Release --no-restore
-          dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:InformationalVersion=${{ needs.prepare.outputs.version }} --no-restore
+          dotnet publish Zipper/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }} -p:Version=${{ needs.prepare.outputs.version }} --no-restore
           rm -f publish/${{ matrix.platform }}/*.pdb
 
           case "${{ matrix.platform }}" in
