@@ -90,6 +90,19 @@ internal class DataGenerator
         if (config.Distribution == "weighted" && config.Weights != null && config.Weights.Count > 0)
         {
             var totalWeight = config.Weights.Sum();
+
+            // Guard against zero/negative total weight
+            if (totalWeight <= 0)
+            {
+                // Fallback to uniform distribution
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    indices[i] = this.random.Next(count);
+                }
+
+                return indices;
+            }
+
             for (int i = 0; i < indices.Length; i++)
             {
                 var r = this.random.Next(totalWeight);
@@ -254,6 +267,18 @@ internal class DataGenerator
 
         var min = column.Range?.Min ?? 0;
         var max = column.Range?.Max ?? 1000;
+
+        // Handle invalid range where max < min
+        if (max < min)
+        {
+            return min.ToString();
+        }
+
+        // Handle case where min == max
+        if (max == min)
+        {
+            return min.ToString();
+        }
 
         if (column.Distribution == "exponential")
         {
