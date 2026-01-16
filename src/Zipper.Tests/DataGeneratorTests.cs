@@ -191,6 +191,7 @@ public class DataGeneratorTests
     {
         var profile = BuiltInProfiles.Standard;
         var generator = new DataGenerator(profile, seed: 42);
+        var delimiter = profile.Settings.MultiValueDelimiter;
 
         // Generate multiple rows to find one with multi-value
         for (int i = 1; i <= 100; i++)
@@ -200,11 +201,11 @@ public class DataGeneratorTests
             var row = generator.GenerateRow(workItem, fileData);
 
             var emailToValue = row["EMAILTO"];
-            if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(profile.Settings.MultiValueDelimiter))
+            if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(delimiter))
             {
                 // Found a multi-value - verify it uses the right delimiter
-                Assert.Contains(";", emailToValue);
-                var parts = emailToValue.Split(';');
+                Assert.Contains(delimiter, emailToValue);
+                var parts = emailToValue.Split(delimiter);
                 Assert.True(parts.Length >= 2, "Multi-value should have at least 2 values");
                 return; // Test passed
             }

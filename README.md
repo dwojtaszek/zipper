@@ -6,7 +6,7 @@ Zipper is a .NET command-line tool for generating large zip files containing pla
 
 - Generates a single `.zip` archive with a specified number of files
 - Supports multiple file types: PDF, JPG, TIFF, EML, DOCX, XLSX
-- Supports multiple load file formats: DAT, OPT, CSV, XML, CONCORDANCE
+- Supports multiple load file formats: DAT, OPT, CSV, EDRM-XML
 - Supports multiple file distribution patterns: proportional, gaussian, and exponential
 - Supports Bates numbering for legal document identification
 - Supports multipage TIFF files with configurable page count ranges

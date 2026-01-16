@@ -78,14 +78,35 @@ public static class ColumnProfileLoader
             throw new InvalidOperationException("Column profile must have a name.");
         }
 
-        if (profile.Columns.Count == 0)
+        // Null guards
+        if (profile.Columns == null || profile.Columns.Count == 0)
         {
             throw new InvalidOperationException("Column profile must have at least one column.");
+        }
+
+        if (profile.DataSources == null)
+        {
+            throw new InvalidOperationException("Column profile must have a DataSources dictionary (can be empty).");
         }
 
         if (profile.Columns.Count > MaxColumns)
         {
             throw new InvalidOperationException($"Column profile exceeds maximum of {MaxColumns} columns (has {profile.Columns.Count}).");
+        }
+
+        // Validate unique, non-empty column names
+        var columnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in profile.Columns)
+        {
+            if (string.IsNullOrWhiteSpace(column.Name))
+            {
+                throw new InvalidOperationException("Column profile contains a column with null or empty name.");
+            }
+
+            if (!columnNames.Add(column.Name))
+            {
+                throw new InvalidOperationException($"Duplicate column name '{column.Name}' found in profile.");
+            }
         }
 
         // Validate that at least one identifier column exists

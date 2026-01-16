@@ -256,6 +256,12 @@ internal class DataGenerator
             return Math.Min(value, max).ToString();
         }
 
+        // Guard against overflow when max is int.MaxValue
+        if (max == int.MaxValue)
+        {
+            return (min + (long)(this.random.NextDouble() * ((long)max - min + 1))).ToString();
+        }
+
         return this.random.Next(min, max + 1).ToString();
     }
 
