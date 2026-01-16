@@ -67,16 +67,49 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--attachment-rate <number>`: When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0
 - `--target-zip-size <size>`: Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
 - `--include-load-file`: Includes the generated load file in the root of the output `.zip` archive instead of as a separate file
-- `--load-file-format <dat|opt|csv|xml|concordance>`: The format of the load file. Defaults to `dat`. Available formats:
-  - `dat`: Standard Concordance DAT format with caret (^) delimiters
-  - `opt`: Opticon format with tab delimiters
-  - `csv`: Comma-separated values format with proper RFC 4180 escaping
-  - `xml`: Structured XML markup format
-  - `concordance`: Concordance database format with comma delimiters and CSV escaping
+- `--load-file-format <dat|opt|csv|edrm-xml>`: The format of the load file. Defaults to `dat`. Available formats:
+  - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
+  - `opt`: Opticon format - comma-separated, page-level image references
+  - `csv`: Comma-separated values format with RFC 4180 escaping
+  - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
+- `--load-file-formats <format1,format2,...>`: Generate multiple load file formats simultaneously (e.g., `dat,opt,csv`)
+- `--dat-delimiters <standard|csv>`: DAT delimiter style. `standard` uses ASCII 20/254/174, `csv` uses comma/quote. Defaults to `standard`
 - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
 - `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
 - `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
 - `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1"
+
+**Column Profile Options:**
+- `--column-profile <name|path>`: Column profile for configurable metadata generation. Use built-in profiles (`minimal`, `standard`, `litigation`, `full`) or path to custom JSON file
+- `--seed <number>`: Random seed for reproducible output. Use the same seed to generate identical data
+- `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
+- `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
+- `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENT_DOCID columns)
+
+### Column Profiles
+
+Column profiles allow you to generate rich, configurable metadata with up to 200 columns. Built-in profiles:
+
+| Profile | Columns | Description |
+|---------|---------|-------------|
+| `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
+| `standard` | 24 | Common e-discovery fields including dates, people, classification |
+| `litigation` | 48 | Full litigation support with privilege, responsiveness, hashes |
+| `full` | 120+ | Maximum coverage with custom tags, issues, and notes |
+
+Column types supported:
+- `identifier`: Sequential document IDs (DOC00000001)
+- `text`: Short text values from data sources
+- `longtext`: Lorem ipsum paragraphs for notes/descriptions
+- `date`: Formatted dates within configurable ranges
+- `datetime`: Formatted date/time values
+- `number`: Numeric values with distribution patterns
+- `boolean`: Y/N or True/False values
+- `coded`: Values from predefined lists
+- `email`: Generated email addresses
+
+
 
 ### Distribution Patterns
 
@@ -159,7 +192,25 @@ zipper --type docx --count 1000 --output-path ./test_combined --bates-prefix "CA
 zipper --type tiff --count 2500 --output-path ./test_tiff_bates --tiff-pages "5-50" --bates-prefix "IMG" --bates-digits 8 --with-metadata
 
 # Generate emails with XML load file format
-zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format xml --with-metadata --with-text
+zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format edrm-xml --with-metadata --with-text
+
+# Generate PDFs with the standard column profile (24 metadata columns)
+zipper --type pdf --count 1000 --output-path ./test_profiles --column-profile standard
+
+# Generate with litigation profile (48 columns) for complex e-discovery workflows
+zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation
+
+# Generate reproducible output using a seed
+zipper --type pdf --count 1000 --output-path ./reproducible --column-profile standard --seed 12345
+
+# Generate multiple load file formats simultaneously
+zipper --type pdf --count 1000 --output-path ./multi_format --load-file-formats dat,opt,csv
+
+# Generate with custom date format and empty percentage
+zipper --type pdf --count 1000 --output-path ./custom --column-profile standard --date-format "MM/dd/yyyy" --empty-percentage 25
+
+# Generate family relationships for email attachments
+zipper --type eml --count 2000 --output-path ./families --attachment-rate 30 --with-families
 ```
 
 ## Performance

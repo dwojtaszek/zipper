@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Text;
+using Zipper.Profiles;
 
 namespace Zipper
 {
@@ -76,12 +77,27 @@ namespace Zipper
             Console.Error.WriteLine("  --target-zip-size <size> Target ZIP size (e.g., 500MB, 10GB)");
             Console.Error.WriteLine("  --include-load-file      Include load file in ZIP archive");
             Console.Error.WriteLine();
-            Console.Error.WriteLine("New Features:");
-            Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, xml, concordance (default: dat)");
+            Console.Error.WriteLine("Load File Options:");
+            Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, edrm-xml (default: dat)");
+            Console.Error.WriteLine("  --load-file-formats <f>  Multiple formats comma-separated (e.g., dat,opt,csv)");
+            Console.Error.WriteLine("  --dat-delimiters <type>  DAT delimiter style: standard, csv (default: standard)");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Bates Numbering:");
             Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
             Console.Error.WriteLine("  --bates-start <number>   Bates start number (default: 1)");
             Console.Error.WriteLine("  --bates-digits <number>  Bates digit count (default: 8)");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("TIFF Options:");
             Console.Error.WriteLine("  --tiff-pages <min-max>   TIFF page range (e.g., 1-20, default: 1-1)");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Column Profile Options:");
+            Console.Error.WriteLine("  --column-profile <name>  Built-in profile: minimal, standard, litigation, full");
+            Console.Error.WriteLine("                           Or path to custom JSON profile file");
+            Console.Error.WriteLine("  --seed <number>          Random seed for reproducible output");
+            Console.Error.WriteLine("  --date-format <fmt>      Override date format (e.g., yyyy-MM-dd)");
+            Console.Error.WriteLine("  --empty-percentage <n>   Override empty value percentage (0-100)");
+            Console.Error.WriteLine("  --custodian-count <n>    Override custodian count (max: 1000)");
+            Console.Error.WriteLine("  --with-families          Generate parent-child document relationships");
         }
 
         /// <summary>
@@ -193,6 +209,60 @@ namespace Zipper
                         if (i + 1 < args.Length)
                         {
                             parsed.TiffPagesRange = args[++i];
+                        }
+
+                        break;
+
+                    // New column profile arguments
+                    case "--column-profile":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.ColumnProfile = args[++i];
+                        }
+
+                        break;
+                    case "--seed":
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var seed))
+                        {
+                            parsed.Seed = seed;
+                        }
+
+                        break;
+                    case "--date-format":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.DateFormat = args[++i];
+                        }
+
+                        break;
+                    case "--empty-percentage":
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var emptyPct))
+                        {
+                            parsed.EmptyPercentage = emptyPct;
+                        }
+
+                        break;
+                    case "--custodian-count":
+                        if (i + 1 < args.Length && int.TryParse(args[++i], out var custCount))
+                        {
+                            parsed.CustodianCount = custCount;
+                        }
+
+                        break;
+                    case "--with-families":
+                        parsed.WithFamilies = true;
+                        break;
+                    case "--load-file-formats":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.LoadFileFormats = args[++i];
+                        }
+
+                        break;
+                    case "--dat-delimiters":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.DatDelimiters = args[++i];
                         }
 
                         break;
@@ -311,6 +381,63 @@ namespace Zipper
                 }
             }
 
+            // Validate column profile
+            if (!string.IsNullOrEmpty(parsed.ColumnProfile))
+            {
+                if (!ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile) && !File.Exists(parsed.ColumnProfile))
+                {
+                    Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.");
+                    Console.Error.WriteLine($"       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
+                    return false;
+                }
+            }
+
+            // Validate empty percentage
+            if (parsed.EmptyPercentage.HasValue && (parsed.EmptyPercentage.Value < 0 || parsed.EmptyPercentage.Value > 100))
+            {
+                Console.Error.WriteLine("Error: Empty percentage must be between 0 and 100.");
+                return false;
+            }
+
+            // Validate custodian count
+            if (parsed.CustodianCount.HasValue && (parsed.CustodianCount.Value < 1 || parsed.CustodianCount.Value > 1000))
+            {
+                Console.Error.WriteLine("Error: Custodian count must be between 1 and 1000.");
+                return false;
+            }
+
+            // Validate load file formats (multi)
+            if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
+            {
+                var formats = parsed.LoadFileFormats.Split(',');
+                foreach (var fmt in formats)
+                {
+                    if (GetLoadFileFormat(fmt.Trim()) == null)
+                    {
+                        Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml.");
+                        return false;
+                    }
+                }
+            }
+
+            // Validate DAT delimiters
+            if (!string.IsNullOrEmpty(parsed.DatDelimiters))
+            {
+                var delim = parsed.DatDelimiters.ToLowerInvariant();
+                if (delim != "standard" && delim != "csv")
+                {
+                    Console.Error.WriteLine("Error: DAT delimiters must be 'standard' or 'csv'.");
+                    return false;
+                }
+            }
+
+            // Check for --with-metadata and --column-profile conflict
+            if (parsed.WithMetadata && !string.IsNullOrEmpty(parsed.ColumnProfile))
+            {
+                Console.Error.WriteLine("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.");
+                parsed.WithMetadata = false;
+            }
+
             return true;
         }
 
@@ -320,6 +447,30 @@ namespace Zipper
         private static FileGenerationRequest CreateFileGenerationRequest(ParsedArguments parsed)
         {
             var encoding = GetEncodingFromName(parsed.Encoding ?? "UTF-8");
+
+            // Load column profile if specified
+            ColumnProfile? profile = null;
+            if (!string.IsNullOrEmpty(parsed.ColumnProfile))
+            {
+                profile = ColumnProfileLoader.Load(parsed.ColumnProfile);
+                if (profile == null)
+                {
+                    Console.Error.WriteLine($"Warning: Failed to load column profile '{parsed.ColumnProfile}'.");
+                }
+            }
+
+            // Parse multiple load file formats if specified
+            List<LoadFileFormat>? multiFormats = null;
+            if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
+            {
+                multiFormats = parsed.LoadFileFormats
+                    .Split(',')
+                    .Select(f => GetLoadFileFormat(f.Trim()))
+                    .Where(f => f.HasValue)
+                    .Select(f => f!.Value)
+                    .ToList();
+            }
+
             return new FileGenerationRequest
             {
                 OutputPath = parsed.OutputDirectory!.FullName,
@@ -335,6 +486,8 @@ namespace Zipper
                 Encoding = encoding?.EncodingName ?? "UTF-8",
                 AttachmentRate = parsed.AttachmentRate,
                 LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
+                LoadFileFormats = multiFormats,
+                UseStandardDatDelimiters = string.IsNullOrEmpty(parsed.DatDelimiters) || parsed.DatDelimiters.Equals("standard", StringComparison.OrdinalIgnoreCase),
                 BatesConfig = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
                 {
                     Prefix = parsed.BatesPrefix,
@@ -343,6 +496,12 @@ namespace Zipper
                 }
                 : null,
                 TiffPageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null,
+                ColumnProfile = profile,
+                Seed = parsed.Seed,
+                DateFormatOverride = parsed.DateFormat,
+                EmptyPercentageOverride = parsed.EmptyPercentage,
+                CustodianCountOverride = parsed.CustodianCount,
+                WithFamilies = parsed.WithFamilies,
             };
         }
 
@@ -389,12 +548,13 @@ namespace Zipper
         /// </summary>
         private static LoadFileFormat? GetLoadFileFormat(string name)
         {
-            return name.ToUpperInvariant() switch
+            return name.ToUpperInvariant().Replace("-", string.Empty) switch
             {
                 "DAT" => LoadFileFormat.Dat,
                 "OPT" => LoadFileFormat.Opt,
                 "CSV" => LoadFileFormat.Csv,
                 "XML" => LoadFileFormat.Xml,
+                "EDRMXML" => LoadFileFormat.EdrmXml,
                 "CONCORDANCE" => LoadFileFormat.Concordance,
                 _ => null,
             };
@@ -429,6 +589,10 @@ namespace Zipper
 
             public string? LoadFileFormat { get; set; } = "dat";
 
+            public string? LoadFileFormats { get; set; }
+
+            public string? DatDelimiters { get; set; }
+
             public string? BatesPrefix { get; set; }
 
             public long? BatesStart { get; set; }
@@ -436,6 +600,19 @@ namespace Zipper
             public int? BatesDigits { get; set; }
 
             public string? TiffPagesRange { get; set; }
+
+            // Column profile arguments
+            public string? ColumnProfile { get; set; }
+
+            public int? Seed { get; set; }
+
+            public string? DateFormat { get; set; }
+
+            public int? EmptyPercentage { get; set; }
+
+            public int? CustodianCount { get; set; }
+
+            public bool WithFamilies { get; set; }
         }
     }
 }
