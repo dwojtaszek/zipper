@@ -1,5 +1,8 @@
 # Zipper Application Requirements
 
+> [!CAUTION]
+> **Requirement numbers (REQ-XXX, FR-XXX) are IMMUTABLE.** Once a requirement is assigned a number, that number must NEVER be changed, reassigned, or renumbered. New requirements must use the next available number. If a requirement is deprecated, it should be marked as deprecated but its number must remain reserved.
+
 ## 1. Core Purpose
 
 The `zipper` application is a .NET Core command-line tool designed to generate large, highly compressed `.zip` files containing a specified number of placeholder files. It also generates a corresponding load file compatible with import specifications.

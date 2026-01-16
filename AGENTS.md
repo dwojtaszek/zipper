@@ -6,6 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Use 'bd' for task tracking.
 
+> [!CAUTION]
+> **Requirement numbers in Requirements.md are IMMUTABLE.** Once a REQ-XXX or FR-XXX number is assigned, it must NEVER be changed, reassigned, or renumbered. New requirements use the next available number. Deprecated requirements keep their numbers (marked as deprecated).
+
 ---
 
 ## Important: Unit Tests Location
