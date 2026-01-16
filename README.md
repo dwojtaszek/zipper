@@ -87,6 +87,51 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
 - `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENT_DOCID columns)
 
+### Arguments Quick Reference
+
+| Argument | Default | Range/Values | Description |
+|----------|---------|--------------|-------------|
+| `--type` | **required** | pdf, jpg, tiff, eml, docx, xlsx | File type to generate |
+| `--count` | **required** | positive integer | Number of files |
+| `--output-path` | **required** | directory path | Output directory |
+| `--folders` | 1 | 1-100 | Number of folders |
+| `--encoding` | UTF-8 | UTF-8, UTF-16, ANSI | Load file encoding |
+| `--distribution` | proportional | proportional, gaussian, exponential | File distribution |
+| `--with-metadata` | false | flag | Include metadata columns |
+| `--with-text` | false | flag | Generate text files |
+| `--attachment-rate` | 0 | 0-100 | EML attachment % |
+| `--target-zip-size` | none | KB/MB/GB (e.g., 500MB) | Target ZIP size |
+| `--include-load-file` | false | flag | Load file in ZIP |
+| `--load-file-format` | dat | dat, opt, csv, edrm-xml | Load file format |
+| `--load-file-formats` | none | comma-separated | Multiple formats |
+| `--dat-delimiters` | standard | standard, csv | DAT delimiter style |
+| `--bates-prefix` | none | string | Bates prefix |
+| `--bates-start` | 1 | ≥0 | Bates start number |
+| `--bates-digits` | 8 | 1-20 | Bates digit count |
+| `--tiff-pages` | 1-1 | min-max | TIFF page range |
+| `--column-profile` | none | minimal, standard, litigation, full, or path | Column profile |
+| `--seed` | none | integer | Random seed |
+| `--date-format` | yyyy-MM-dd | format string | Date format override |
+| `--empty-percentage` | 15 | 0-100 | Empty value % override |
+| `--custodian-count` | none | 1-1000 | Custodian count override |
+| `--with-families` | false | flag | Family relationships |
+
+### Argument Interactions
+
+> [!IMPORTANT]
+> Some arguments have dependencies or conflicts. Review these rules when combining options.
+
+| Interaction | Behavior |
+|-------------|----------|
+| `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
+| `--target-zip-size` | Requires `--count` to be specified |
+| `--attachment-rate` | Only meaningful when `--type eml` |
+| `--tiff-pages` | Only meaningful when `--type tiff` |
+| `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
+| `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
+| `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
+| `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
+
 ### Column Profiles
 
 Column profiles allow you to generate rich, configurable metadata with up to 200 columns. Built-in profiles:
@@ -108,7 +153,6 @@ Column types supported:
 - `boolean`: Y/N or True/False values
 - `coded`: Values from predefined lists
 - `email`: Generated email addresses
-
 
 
 ### Distribution Patterns

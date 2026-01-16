@@ -9,6 +9,12 @@ Use 'bd' for task tracking.
 > [!CAUTION]
 > **Requirement numbers in Requirements.md are IMMUTABLE.** Once a REQ-XXX or FR-XXX number is assigned, it must NEVER be changed, reassigned, or renumbered. New requirements use the next available number. Deprecated requirements keep their numbers (marked as deprecated).
 
+> [!IMPORTANT]
+> **CLI Documentation Sync**: When modifying command-line arguments in `CommandLineValidator.cs`, you MUST update:
+> 1. `README.md` - Arguments Quick Reference table and Argument Interactions section
+> 2. `Requirements.md` - Add new requirements for new features
+> 3. This file (`AGENTS.md`) - Command-Line Arguments section below
+
 ---
 
 ## Important: Unit Tests Location
