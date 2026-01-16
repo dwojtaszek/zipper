@@ -152,3 +152,313 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 - **REQ-033**: On every push to the `main` branch, the CI/CD pipeline will build the application, embedding the full version string into the assembly as the `InformationalVersion`.
 - **REQ-034**: The application must display its full version number on startup.
 - **REQ-035**: The CI/CD pipeline will automatically create a new GitHub Release for each successful `main` branch build. The release tag and title will be named according to the full version string (e.g., `v0.17.123`).
+
+---
+
+## 8. Load File Format Standards (E-Discovery Industry Specifications)
+
+This section documents industry-standard load file formats used by major e-discovery platforms. These specifications inform the implementation of the `--load-file-format` feature and ensure broad platform compatibility.
+
+### 8.1 Overview of Load File Types
+
+| Format | Extension | Primary Purpose |
+|--------|-----------|----------------|
+| Concordance DAT | `.dat` | Metadata and document data |
+| Opticon | `.opt` | Image cross-references (page-level) |
+| EDRM XML | `.xml` | Vendor-neutral data interchange |
+
+### 8.2 Concordance DAT Format Specification
+
+The Concordance DAT format is the most widely used load file format in e-discovery. It is a delimited text file containing metadata and document information.
+
+#### Structure
+- **Encoding**: UTF-8 (preferred), UTF-8 without BOM, ASCII (Windows-1252), or UTF-16
+- **Header Row**: First line contains field names (strongly recommended)
+- **Records**: Each subsequent line represents a single document
+- **Text Qualifier**: Used to enclose field values containing delimiters
+
+#### Standard Delimiters (ASCII Characters)
+
+| Purpose | ASCII Code (Decimal) | Character | Symbol |
+|---------|---------------------|-----------|--------|
+| Field Separator | 20 | DC4 | ¶ |
+| Quote/Text Qualifier | 254 | Latin Small Letter Thorn | þ |
+| Newline within field | 174 | Registered Trademark | ® |
+| Multi-Value Separator | 59 | Semicolon | ; |
+| Nested Value Separator | 92 | Backslash | \ |
+
+> [!NOTE]
+> While these are the standard defaults, some platforms allow custom delimiters. When generating DAT files, use the standard delimiters for maximum compatibility.
+
+#### Required Fields
+- **Unique Identifier**: Every load file must have a unique document identifier (e.g., `Control Number`, `DOCID`, `Bates Number`)
+- **File Path**: Relative path to the file within the archive/production
+
+#### Common Metadata Fields
+
+| Field Name | Purpose | Example |
+|------------|---------|---------|
+| `DOCID` | Unique document identifier | `ABC001_00001` |
+| `BEGBATES` or `BegDoc` | Beginning Bates number | `ABC001_00001` |
+| `ENDBATES` or `EndDoc` | Ending Bates number | `ABC001_00005` |
+| `BEGATTACH` | Beginning of attachment range | `ABC001_00001` |
+| `ENDATTACH` | End of attachment range | `ABC001_00010` |
+| `PARENT_DOCID` | Parent document ID (for families) | `ABC001_00001` |
+| `ITEMPATH` or `File Path` | Relative path to native file | `NATIVES\DOC001.pdf` |
+| `TEXTPATH` | Relative path to extracted text | `TEXT\DOC001.txt` |
+| `Custodian` | Document custodian | `John Smith` |
+| `DateSent` | Email sent date | `2024-01-15` |
+| `Author` | Document author | `Jane Doe` |
+| `From` | Email sender | `sender@example.com` |
+| `To` | Email recipients | `recipient@example.com` |
+| `CC` | Email CC recipients | `cc@example.com` |
+| `BCC` | Email BCC recipients | `bcc@example.com` |
+| `Subject` | Email subject | `Re: Project Update` |
+
+#### Platform Compatibility Notes
+
+- Header rows strongly recommended but not always mandatory
+- Field order is generally flexible
+- An identifier field is required for each load
+- Column headers in ALL CAPITAL LETTERS recommended for maximum compatibility
+- `DOCID` column required with unique values
+- Native file path column should be named `ITEMPATH`
+- `PARENT_DOCID` required for family relationships
+- Date formats may need configuration during import
+- Prefer ASCII or UTF-8 encoding
+- All paths should be relative to production root
+
+### 8.3 Opticon (OPT) Format Specification
+
+The Opticon format is a page-level load file that links Bates numbers to image file locations, defining document boundaries.
+
+#### Structure
+- **Encoding**: ANSI/Western European (Windows-1252) — Unicode NOT supported in most platforms
+- **Header Row**: None (no header row)
+- **Delimiter**: Comma (`,`) or Tab
+- **Records**: One line per image page
+
+#### Column Structure (7 Columns)
+
+| Column | Name | Description | Example |
+|--------|------|-------------|---------|
+| 1 | Image Key | Page identifier/Bates number | `ABC001_00001` |
+| 2 | Volume | Volume identifier (often blank) | `VOL001` or empty |
+| 3 | Image Path | Full or relative path to image | `IMAGES\001\ABC001_00001.tif` |
+| 4 | Document Break | "Y" if first page of document | `Y` or empty |
+| 5 | Folder Break | Usually blank | empty |
+| 6 | Box Break | Usually blank | empty |
+| 7 | Page Count | Pages in document (first page only) | `5` or empty |
+
+#### Example OPT File
+```
+ABC001_00001,VOL001,IMAGES\001\ABC001_00001.tif,Y,,,5
+ABC001_00002,VOL001,IMAGES\001\ABC001_00002.tif,,,,
+ABC001_00003,VOL001,IMAGES\001\ABC001_00003.tif,,,,
+ABC001_00004,VOL001,IMAGES\001\ABC001_00004.tif,,,,
+ABC001_00005,VOL001,IMAGES\001\ABC001_00005.tif,,,,
+ABC001_00006,VOL001,IMAGES\001\ABC001_00006.tif,Y,,,1
+```
+
+> [!IMPORTANT]
+> The Document Break marker ("Y" in column 4) is critical for defining document boundaries. Incorrect marking will cause document grouping errors during import.
+
+#### Image Format Requirements
+
+- Single-page Group IV TIFF (most widely supported)
+- Single-page JPG
+- Multi-page PDF (supported by most modern platforms)
+- Single-page TIFF preferred for maximum compatibility
+
+### 8.4 EDRM XML Format Specification
+
+The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral standard for e-discovery data interchange.
+
+#### Structure
+- **Encoding**: UTF-8 (Unicode support)
+- **Format**: XML with defined schema (XSD)
+- **Current Version**: 1.2 (with v2.0 in development)
+
+#### Key Elements
+
+| Element | Purpose |
+|---------|---------|
+| `Root` | Document root element |
+| `Batch` | Container for a batch of documents |
+| `Document` | Individual document record |
+| `File` | File reference with type (Native, Image, Text, Redacted) |
+| `ExternalFile` | Reference to external file with path, size, hash |
+| `InlineContent` | Embedded content within XML |
+| `Fields` | Metadata fields container |
+| `Tag` | Tagging/coding information |
+
+#### Example EDRM XML
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Root>
+  <Batch>
+    <Document DocID="ABC001_00001">
+      <Files>
+        <File FileType="Native">
+          <ExternalFile FilePath="NATIVES\DOC001.pdf" FileSize="125678" Hash="abc123..."/>
+        </File>
+        <File FileType="Text">
+          <ExternalFile FilePath="TEXT\DOC001.txt"/>
+        </File>
+      </Files>
+      <Fields>
+        <Field Name="Custodian">John Smith</Field>
+        <Field Name="Author">Jane Doe</Field>
+        <Field Name="DateCreated">2024-01-15T10:30:00Z</Field>
+      </Fields>
+    </Document>
+  </Batch>
+</Root>
+```
+
+> [!TIP]
+> EDRM XML is self-describing, flexible, and extensible, making it ideal for complex data transfers where maximum interoperability is required.
+
+### 8.5 Format Support Summary
+
+| Feature | Support Level |
+|---------|---------------|
+| DAT Import | Universal |
+| OPT Import | Universal |
+| EDRM XML | Widely supported |
+| UTF-8 DAT | Universal |
+| UTF-8 OPT | Limited (ANSI preferred) |
+| Multi-page TIFF | Limited |
+| Multi-page PDF | Widely supported |
+
+### 8.6 Implementation Requirements for Zipper
+
+Based on the above research, the following requirements apply to the Zipper load file generation feature:
+
+#### FR-010: Extended Load File Format Support
+
+- **REQ-048**: The `--load-file-format` argument shall support the following formats: `dat`, `opt`, `csv`, `edrm-xml`.
+- **REQ-049**: DAT format shall use standard Concordance delimiters (ASCII 20, 254, 174) by default.
+- **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
+- **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
+- **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
+
+#### FR-011: Multi-Format Output
+
+- **REQ-055**: A new argument `--load-file-formats <format1,format2,...>` (plural) shall allow generating multiple load file formats simultaneously.
+- **REQ-056**: When `--load-file-formats` is specified, all requested formats shall be generated to the output directory.
+
+#### FR-012: OPT File Generation
+
+- **REQ-057**: When `--type tiff` or image types are used, an OPT file shall be generated automatically alongside the DAT file.
+- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used).
+- **REQ-059**: OPT files shall use ANSI encoding for maximum platform compatibility.
+
+#### FR-013: Family Relationship Support
+
+- **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
+- **REQ-061**: When `--with-families` is specified, the load file shall include `BEGATTACH`, `ENDATTACH`, and `PARENT_DOCID` columns.
+- **REQ-062**: Email attachments (when using `--attachment-rate`) shall be properly linked as children of their parent email documents.
+
+#### FR-014: Column Profile System
+
+- **REQ-063**: A new argument `--column-profile <name|path>` shall be introduced to specify metadata columns.
+- **REQ-064**: The argument shall accept either a built-in profile name or a path to a custom JSON profile file.
+- **REQ-065**: Column profiles shall be embedded in the application binary as resources.
+- **REQ-066**: The following built-in profiles shall be provided:
+
+| Profile Name | Column Count | Description |
+|-------------|--------------|-------------|
+| `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
+| `standard` | 25 | Common e-discovery fields |
+| `litigation` | 50 | Full litigation support |
+| `full` | 150 | Maximum field coverage |
+
+- **REQ-067**: Custom profile files shall follow a JSON schema with the following structure:
+
+```json
+{
+  "name": "profile-name",
+  "description": "Profile description",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE|PascalCase|lowercase",
+  "settings": {
+    "emptyValuePercentage": 15,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd"
+  },
+  "dataSources": {
+    "custodians": { "count": 25, "distribution": "pareto" },
+    "departments": ["Legal", "Finance", "HR"]
+  },
+  "columns": [
+    {
+      "name": "FIELDNAME",
+      "type": "text|longtext|date|datetime|number|boolean|coded|email|identifier",
+      "required": false,
+      "emptyPercentage": 10,
+      "multiValue": false,
+      "dataSource": "custodians",
+      "range": { "min": 0, "max": 100 },
+      "distribution": "uniform|gaussian|exponential|pareto|weighted"
+    }
+  ]
+}
+```
+
+#### FR-015: Data Generation with Distribution Patterns
+
+- **REQ-068**: The application shall support the following distribution patterns for data generation:
+  - `uniform`: Equal probability for all values
+  - `gaussian`: Bell curve distribution (most values in middle)
+  - `exponential`: Most values at low end, few at high end
+  - `pareto`: 80/20 rule (few values dominate)
+  - `weighted`: Custom weights per value
+
+- **REQ-069**: Data sources (e.g., custodians) shall be pre-generated and reused across documents following the specified distribution pattern.
+- **REQ-070**: A new argument `--seed <number>` shall allow reproducible random data generation.
+- **REQ-071**: Per-column empty value percentages shall control the frequency of null/empty values.
+- **REQ-072**: Multi-value fields shall support configurable value counts with `multiValueCount` range.
+
+#### FR-016: Supported Column Types
+
+- **REQ-073**: The following column types shall be supported:
+
+| Type | Description | Generator |
+|------|-------------|-----------|
+| `identifier` | Unique document ID | Sequential with prefix |
+| `text` | Short text (< 255 chars) | From data source or random |
+| `longtext` | Long text (paragraphs) | Lorem-style generation |
+| `date` | Date only | Random within range |
+| `datetime` | Date and time | Random within range |
+| `number` | Numeric value | Random within range |
+| `boolean` | True/False value | Based on true percentage |
+| `coded` | Value from list | From data source with weights |
+| `email` | Email address | Generated pattern |
+
+- **REQ-074**: Boolean fields shall support format options: `YN`, `TrueFalse`, `10`.
+- **REQ-075**: Date fields shall support configurable format strings (e.g., `yyyy-MM-dd`, `MM/dd/yyyy`).
+
+---
+
+## 9. Updated Command-Line Arguments
+
+The following arguments are added or modified by the load file and column profile features:
+
+### Load File Arguments
+
+- `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) Output format for the load file. Defaults to `dat`.
+- `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple load file formats simultaneously.
+- `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
+
+### Column Profile Arguments
+
+- `--column-profile <name|path>`: (Optional) Built-in profile name or path to custom JSON profile.
+- `--seed <number>`: (Optional) Random seed for reproducible data generation.
+- `--date-format <format>`: (Optional) Override the date format from the profile.
+- `--empty-percentage <0-100>`: (Optional) Override the global empty value percentage.
+- `--custodian-count <number>`: (Optional) Override the number of custodians to generate.
+
+### Family Support Arguments
+
+- `--with-families`: (Optional) Generate parent-child document relationships with appropriate columns.
