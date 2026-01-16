@@ -219,7 +219,9 @@ internal class DataGenerator
         var minDate = DateTime.Parse(column.DateRange?.Min ?? "2020-01-01");
         var maxDate = DateTime.Parse(column.DateRange?.Max ?? "2024-12-31");
         var range = (maxDate - minDate).Days;
-        var date = minDate.AddDays(this.random.Next(range));
+
+        // Handle edge case where min == max (range is 0)
+        var date = range <= 0 ? minDate : minDate.AddDays(this.random.Next(range + 1));
         var format = column.Format ?? this.profile.Settings.DateFormat;
         return date.ToString(format);
     }
@@ -229,7 +231,11 @@ internal class DataGenerator
         var minDate = DateTime.Parse(column.DateRange?.Min ?? "2020-01-01");
         var maxDate = DateTime.Parse(column.DateRange?.Max ?? "2024-12-31");
         var range = (maxDate - minDate).Days;
-        var date = minDate.AddDays(this.random.Next(range)).AddHours(this.random.Next(24)).AddMinutes(this.random.Next(60));
+
+        // Handle edge case where min == max (range is 0)
+        var date = range <= 0
+            ? minDate.AddHours(this.random.Next(24)).AddMinutes(this.random.Next(60))
+            : minDate.AddDays(this.random.Next(range + 1)).AddHours(this.random.Next(24)).AddMinutes(this.random.Next(60));
         var format = column.Format ?? this.profile.Settings.DateTimeFormat;
         return date.ToString(format);
     }

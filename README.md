@@ -85,7 +85,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENT_DOCID columns)
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns)
 
 ### Arguments Quick Reference
 
