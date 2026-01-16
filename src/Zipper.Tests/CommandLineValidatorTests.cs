@@ -464,5 +464,45 @@ namespace Zipper
                 errorOutput.Dispose();
             }
         }
+
+        [Theory]
+        [InlineData("|", "|")]
+        [InlineData("20", "\u0014")] // ASCII 20
+        [InlineData("254", "\u00fe")] // ASCII 254
+        [InlineData("\\t", "\t")] // Tab
+        public void ValidateAndParseArguments_WithDelimiterArguments_ShouldParseCorrectly(string input, string expected)
+        {
+            // Arrange
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--delimiter-column", input };
+
+            // Act
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expected, result.ColumnDelimiter);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithDelimiterOverride_ShouldOverridePreset()
+        {
+            // Arrange
+            var args = new[]
+            {
+                "--type", "pdf",
+                "--count", "10",
+                "--output-path", this.tempDir,
+                "--dat-delimiters", "csv",
+                "--delimiter-column", "|",
+            };
+
+            // Act
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal("|", result.ColumnDelimiter);  // Should override CSV preset
+            Assert.Equal("\"", result.QuoteDelimiter);   // Should use CSV preset
+        }
     }
 }

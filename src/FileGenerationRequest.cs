@@ -82,9 +82,19 @@ namespace Zipper
         public List<LoadFileFormat>? LoadFileFormats { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether to use standard DAT delimiters.
+        /// Gets or sets the column delimiter character for DAT files.
         /// </summary>
-        public bool UseStandardDatDelimiters { get; set; } = true;
+        public string ColumnDelimiter { get; set; } = "\u0014"; // ASCII 20
+
+        /// <summary>
+        /// Gets or sets the quote delimiter character for DAT files.
+        /// </summary>
+        public string QuoteDelimiter { get; set; } = "\u00fe"; // ASCII 254
+
+        /// <summary>
+        /// Gets or sets the newline replacement character for DAT files.
+        /// </summary>
+        public string NewlineDelimiter { get; set; } = "\u00ae"; // ASCII 174
 
         /// <summary>
         /// Gets or sets the Bates number configuration.

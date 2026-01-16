@@ -81,6 +81,9 @@ namespace Zipper
             Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, edrm-xml (default: dat)");
             Console.Error.WriteLine("  --load-file-formats <f>  Multiple formats comma-separated (e.g., dat,opt,csv)");
             Console.Error.WriteLine("  --dat-delimiters <type>  DAT delimiter style: standard, csv (default: standard)");
+            Console.Error.WriteLine("  --delimiter-column <c>   Custom column delimiter (char or ASCII code)");
+            Console.Error.WriteLine("  --delimiter-quote <c>    Custom quote delimiter (char or ASCII code)");
+            Console.Error.WriteLine("  --delimiter-newline <c>  Custom newline replacement (char or ASCII code)");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Bates Numbering:");
             Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
@@ -263,6 +266,27 @@ namespace Zipper
                         if (i + 1 < args.Length)
                         {
                             parsed.DatDelimiters = args[++i];
+                        }
+
+                        break;
+                    case "--delimiter-column":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.DelimiterColumn = args[++i];
+                        }
+
+                        break;
+                    case "--delimiter-quote":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.DelimiterQuote = args[++i];
+                        }
+
+                        break;
+                    case "--delimiter-newline":
+                        if (i + 1 < args.Length)
+                        {
+                            parsed.DelimiterNewline = args[++i];
                         }
 
                         break;
@@ -471,6 +495,40 @@ namespace Zipper
                     .ToList();
             }
 
+            // Parse delimiters with preset and override logic
+            string columnDelim = "\u0014";  // ASCII 20 default
+            string quoteDelim = "\u00fe";   // ASCII 254 default
+            string newlineDelim = "\u00ae"; // ASCII 174 default
+
+            // Apply preset if specified
+            if (!string.IsNullOrEmpty(parsed.DatDelimiters))
+            {
+                if (parsed.DatDelimiters.Equals("csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    columnDelim = ",";
+                    quoteDelim = "\"";
+                    newlineDelim = " "; // CSV typically uses space for newlines
+                }
+
+                // "standard" keeps the defaults
+            }
+
+            // Override with specific flags if provided
+            if (!string.IsNullOrEmpty(parsed.DelimiterColumn))
+            {
+                columnDelim = ParseDelimiterArgument(parsed.DelimiterColumn);
+            }
+
+            if (!string.IsNullOrEmpty(parsed.DelimiterQuote))
+            {
+                quoteDelim = ParseDelimiterArgument(parsed.DelimiterQuote);
+            }
+
+            if (!string.IsNullOrEmpty(parsed.DelimiterNewline))
+            {
+                newlineDelim = ParseDelimiterArgument(parsed.DelimiterNewline);
+            }
+
             return new FileGenerationRequest
             {
                 OutputPath = parsed.OutputDirectory!.FullName,
@@ -487,7 +545,9 @@ namespace Zipper
                 AttachmentRate = parsed.AttachmentRate,
                 LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
                 LoadFileFormats = multiFormats,
-                UseStandardDatDelimiters = string.IsNullOrEmpty(parsed.DatDelimiters) || parsed.DatDelimiters.Equals("standard", StringComparison.OrdinalIgnoreCase),
+                ColumnDelimiter = columnDelim,
+                QuoteDelimiter = quoteDelim,
+                NewlineDelimiter = newlineDelim,
                 BatesConfig = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
                 {
                     Prefix = parsed.BatesPrefix,
@@ -561,6 +621,33 @@ namespace Zipper
         }
 
         /// <summary>
+        /// Parses a delimiter argument from command line.
+        /// </summary>
+        /// <param name="arg">Delimiter argument (single char, ASCII code, or escaped char).</param>
+        /// <returns>Parsed delimiter string.</returns>
+        private static string ParseDelimiterArgument(string arg)
+        {
+            if (string.IsNullOrEmpty(arg))
+            {
+                throw new ArgumentException("Delimiter argument cannot be empty.");
+            }
+
+            // Handle escaped characters
+            arg = arg.Replace("\\t", "\t")
+                     .Replace("\\n", "\n")
+                     .Replace("\\r", "\r");
+
+            // Try parsing as ASCII decimal code
+            if (int.TryParse(arg, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
+            {
+                return ((char)asciiCode).ToString();
+            }
+
+            // Use as-is (single character or already escaped)
+            return arg.Length > 0 ? arg.Substring(0, 1) : arg;
+        }
+
+        /// <summary>
         /// Internal class to hold parsed arguments before validation.
         /// </summary>
         private class ParsedArguments
@@ -592,6 +679,12 @@ namespace Zipper
             public string? LoadFileFormats { get; set; }
 
             public string? DatDelimiters { get; set; }
+
+            public string? DelimiterColumn { get; set; }
+
+            public string? DelimiterQuote { get; set; }
+
+            public string? DelimiterNewline { get; set; }
 
             public string? BatesPrefix { get; set; }
 
