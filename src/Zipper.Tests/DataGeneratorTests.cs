@@ -102,14 +102,16 @@ public class DataGeneratorTests
     [Fact]
     public void GenerateRow_BooleanColumn_GeneratesYOrN()
     {
-        var profile = BuiltInProfiles.Standard;
+        // Use Litigation profile which has actual boolean columns
+        var profile = BuiltInProfiles.Litigation;
         var generator = new DataGenerator(profile, seed: 12345);
         var workItem = new FileWorkItem { Index = 1, FilePathInZip = "Folder001/file001.pdf" };
         var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
 
         var row = generator.GenerateRow(workItem, fileData);
 
-        var responsiveValue = row["RESPONSIVE"];
+        // ISRESPONSIVE is a boolean column with Format = "YN"
+        var responsiveValue = row["ISRESPONSIVE"];
         Assert.True(
             responsiveValue == "Y" || responsiveValue == "N" || string.IsNullOrEmpty(responsiveValue),
             $"Expected Y, N, or empty but got {responsiveValue}");
