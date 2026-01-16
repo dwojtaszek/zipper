@@ -68,13 +68,8 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ### FR-007: Multiple Load File Formats
 - **REQ-036**: A new optional command-line argument `--load-file-format <format>` shall be introduced.
-- **REQ-037**: The tool shall support multiple load file formats: `dat` (default), `opt`, `csv`, `xml`, and `concordance`.
-- **REQ-038**: Each format shall use appropriate delimiters and escaping:
-  - `dat`: Standard Concordance DAT format with caret (^) delimiters
-  - `opt`: Opticon format with tab delimiters
-  - `csv`: Comma-separated values format with RFC 4180 escaping
-  - `xml`: Structured XML markup format
-  - `concordance`: Concordance database format with comma delimiters and CSV escaping
+- **REQ-037**: The tool shall support multiple load file formats as specified in Section 8: `dat` (default), `opt`, `csv`, and `edrm-xml`.
+- **REQ-038**: Each format shall conform to industry-standard specifications defined in Section 8 (Load File Format Standards).
 
 ### FR-008: Bates Numbering System
 - **REQ-039**: New optional command-line arguments for Bates numbering shall be introduced:
@@ -108,6 +103,9 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **Performance Monitoring**: The application must provide real-time progress tracking, performance metrics, and ETA calculations during file generation.
 
 ## 4. Command-Line Arguments
+
+> [!NOTE]
+> Additional arguments for load file formats and column profiles are defined in Section 9.
 
 - `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required) The type of file to generate.
 - `--count <number>`: (Required) The total number of files to generate.
@@ -350,8 +348,8 @@ Based on the above research, the following requirements apply to the Zipper load
 
 #### FR-012: OPT File Generation
 
-- **REQ-057**: When `--type tiff` or image types are used, an OPT file shall be generated automatically alongside the DAT file.
-- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used).
+- **REQ-057**: When `--type tiff` or `--type jpg` is used, an OPT file shall be generated automatically alongside the DAT file. Note: PDF files do NOT trigger automatic OPT generation as they are treated as native files, not page-level images.
+- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`).
 - **REQ-059**: OPT files shall use ANSI encoding for maximum platform compatibility.
 
 #### FR-013: Family Relationship Support
@@ -365,7 +363,12 @@ Based on the above research, the following requirements apply to the Zipper load
 - **REQ-063**: A new argument `--column-profile <name|path>` shall be introduced to specify metadata columns.
 - **REQ-064**: The argument shall accept either a built-in profile name or a path to a custom JSON profile file.
 - **REQ-065**: Column profiles shall be embedded in the application binary as resources.
-- **REQ-066**: The following built-in profiles shall be provided:
+- **REQ-066**: If `--column-profile` is not specified, only base columns (Control Number, File Path) shall be included in the load file. The `--with-metadata` flag adds its columns independently.
+- **REQ-076**: When both `--column-profile` and `--with-metadata` are specified, the profile columns take precedence, and `--with-metadata` is ignored with a warning.
+- **REQ-077**: When `--type eml` is specified, email-intrinsic columns (From, To, CC, Subject, Sent Date) are always included regardless of the column profile or `--with-metadata` flag.
+- **REQ-078**: Custom profiles shall have a maximum of 200 columns. Profiles exceeding this limit shall produce a validation error.
+- **REQ-079**: Custom profile JSON shall be validated on load. Invalid JSON or missing required fields shall produce a descriptive error message.
+- **REQ-080**: The following built-in profiles shall be provided:
 
 | Profile Name | Column Count | Description |
 |-------------|--------------|-------------|
@@ -451,14 +454,32 @@ The following arguments are added or modified by the load file and column profil
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple load file formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 
+> [!NOTE]
+> When `--load-file-formats` is used with `--include-load-file`, only the primary DAT file is included in the archive. Other formats are written to the output directory.
+
 ### Column Profile Arguments
 
 - `--column-profile <name|path>`: (Optional) Built-in profile name or path to custom JSON profile.
 - `--seed <number>`: (Optional) Random seed for reproducible data generation.
 - `--date-format <format>`: (Optional) Override the date format from the profile.
 - `--empty-percentage <0-100>`: (Optional) Override the global empty value percentage.
-- `--custodian-count <number>`: (Optional) Override the number of custodians to generate.
+- `--custodian-count <number>`: (Optional) Override the number of custodians to generate. Maximum: 1000.
 
 ### Family Support Arguments
 
 - `--with-families`: (Optional) Generate parent-child document relationships with appropriate columns.
+
+---
+
+## 10. Argument Interaction Rules
+
+This section clarifies behavior when multiple arguments interact:
+
+| Combination | Behavior |
+|-------------|----------|
+| `--with-metadata` + `--column-profile` | Profile takes precedence; `--with-metadata` ignored with warning |
+| `--type eml` + any profile | Email columns (From, To, CC, Subject, Sent Date) always added |
+| `--load-file-formats` + `--include-load-file` | Only DAT included in archive; other formats written externally |
+| `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls folders, profile controls data values |
+| `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
+
