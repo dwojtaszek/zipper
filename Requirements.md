@@ -252,7 +252,7 @@ The Opticon format is a page-level load file that links Bates numbers to image f
 | 7 | Page Count | Pages in document (first page only) | `5` or empty |
 
 #### Example OPT File
-```
+```text
 ABC001_00001,VOL001,IMAGES\001\ABC001_00001.tif,Y,,,5
 ABC001_00002,VOL001,IMAGES\001\ABC001_00002.tif,,,,
 ABC001_00003,VOL001,IMAGES\001\ABC001_00003.tif,,,,
