@@ -632,10 +632,26 @@ namespace Zipper
                 throw new ArgumentException("Delimiter argument cannot be empty.");
             }
 
-            // Handle escaped characters
-            arg = arg.Replace("\\t", "\t")
-                     .Replace("\\n", "\n")
-                     .Replace("\\r", "\r");
+            // Handle escaped characters - check for specific escape sequences before replacement
+            if (arg == "\\t")
+            {
+                return "\t";
+            }
+
+            if (arg == "\\n")
+            {
+                return "\n";
+            }
+
+            if (arg == "\\r")
+            {
+                return "\r";
+            }
+
+            if (arg == "\\r\\n")
+            {
+                return "\r\n";
+            }
 
             // Try parsing as ASCII decimal code
             if (int.TryParse(arg, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
@@ -643,8 +659,14 @@ namespace Zipper
                 return ((char)asciiCode).ToString();
             }
 
-            // Use as-is (single character or already escaped)
-            return arg.Length > 0 ? arg.Substring(0, 1) : arg;
+            // Validate single-character input
+            if (arg.Length > 1)
+            {
+                Console.Error.WriteLine($"Warning: Delimiter argument '{arg}' is longer than 1 character. Using first character: '{arg[0]}'");
+            }
+
+            // Use first character
+            return arg[0].ToString();
         }
 
         /// <summary>

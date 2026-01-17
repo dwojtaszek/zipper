@@ -64,8 +64,9 @@ namespace Zipper
             FileGenerationRequest request,
             List<FileData> processedFiles)
         {
-            char colDelim = request.ColumnDelimiter[0];
-            char quote = request.QuoteDelimiter[0];
+            // Defensive guards to prevent IndexOutOfRangeException
+            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
+            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
 
             // Build header based on options
             var headerBuilder = new StringBuilder();
@@ -165,8 +166,9 @@ namespace Zipper
         /// </summary>
         private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request)
         {
-            char colDelim = request.ColumnDelimiter[0];
-            char quote = request.QuoteDelimiter[0];
+            // Defensive guards to prevent IndexOutOfRangeException
+            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
+            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
 
             var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
             var dateSent = DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
@@ -181,8 +183,9 @@ namespace Zipper
         /// </summary>
         private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request)
         {
-            char colDelim = request.ColumnDelimiter[0];
-            char quote = request.QuoteDelimiter[0];
+            // Defensive guards to prevent IndexOutOfRangeException
+            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
+            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
 
             var to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
             var from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
