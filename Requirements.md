@@ -448,6 +448,24 @@ Based on the above research, the following requirements apply to the Zipper load
 - **REQ-074**: Boolean fields shall support format options: `YN`, `TrueFalse`, `10`.
 - **REQ-075**: Date fields shall support configurable format strings (e.g., `yyyy-MM-dd`, `MM/dd/yyyy`).
 
+#### FR-017: Flexible DAT Delimiters
+
+- **REQ-081**: New optional command-line arguments for custom DAT delimiters shall be introduced:
+  - `--delimiter-column <char|code>`: Column/field delimiter (default: ASCII 20)
+  - `--delimiter-quote <char|code>`: Quote/text qualifier (default: ASCII 254)
+  - `--delimiter-newline <char|code>`: Newline replacement character (default: ASCII 174)
+- **REQ-082**: Delimiter arguments shall accept:
+  - Single characters (e.g., `,`, `|`, `^`)
+  - ASCII decimal codes (e.g., `20`, `254`, `174`)
+  - Escaped characters (e.g., `\t`, `\n`)
+- **REQ-083**: Custom delimiters shall apply **only** when `--load-file-format dat` is specified.
+- **REQ-084**: Custom delimiter flags shall override the `--dat-delimiters` preset if both are specified.
+- **REQ-085**: Default delimiter values for DAT format are:
+  - Column delimiter: ASCII 20 (Concordance standard)
+  - Quote delimiter: ASCII 254 (Concordance standard)
+  - Newline delimiter: ASCII 174 (Concordance standard)
+- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent load file corruption.
+
 ---
 
 ## 9. Updated Command-Line Arguments
@@ -459,6 +477,9 @@ The following arguments are added or modified by the load file and column profil
 - `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) Output format for the load file. Defaults to `dat`.
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple load file formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
+- `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.
+- `--delimiter-quote <char|code>`: (Optional) Custom quote delimiter for DAT files. Overrides `--dat-delimiters` preset.
+- `--delimiter-newline <char|code>`: (Optional) Custom newline replacement for DAT files. Overrides `--dat-delimiters` preset.
 
 > [!NOTE]
 > When `--load-file-formats` is used with `--include-load-file`, only the primary DAT file is included in the archive. Other formats are written to the output directory.
@@ -488,4 +509,5 @@ This section clarifies behavior when multiple arguments interact:
 | `--load-file-formats` + `--include-load-file` | Only DAT included in archive; other formats written externally |
 | `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls folders, profile controls data values |
 | `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
+| `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
 

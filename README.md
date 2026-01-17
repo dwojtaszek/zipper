@@ -105,6 +105,9 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--load-file-format` | dat | dat, opt, csv, edrm-xml | Load file format |
 | `--load-file-formats` | none | comma-separated | Multiple formats |
 | `--dat-delimiters` | standard | standard, csv | DAT delimiter style |
+| `--delimiter-column` | ASCII 20 | char or ASCII code | Custom column delimiter |
+| `--delimiter-quote` | ASCII 254 | char or ASCII code | Custom quote delimiter |
+| `--delimiter-newline` | ASCII 174 | char or ASCII code | Custom newline replacement |
 | `--bates-prefix` | none | string | Bates prefix |
 | `--bates-start` | 1 | ≥0 | Bates start number |
 | `--bates-digits` | 8 | 1-20 | Bates digit count |
@@ -131,6 +134,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
 | `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
+| `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
 
 ### Column Profiles
 

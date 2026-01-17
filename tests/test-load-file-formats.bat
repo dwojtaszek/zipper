@@ -197,6 +197,112 @@ for %%F in (dat opt csv xml concordance) do (
   echo [ SUCCESS ] Test Case 6: Bates numbering with %%F format passed
 )
 
+:: --- Test Case 7: Custom Delimiters (Pipe and Caret) ---
+
+echo [ INFO ] Test Case 7: Custom delimiters (pipe and caret)
+
+dotnet run --project "%PROJECT%" -- ^
+  --type pdf ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test7" ^
+  --load-file-format dat ^
+  --delimiter-column "|" ^
+  --delimiter-quote "^"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 failed during execution
+  exit /b 1
+)
+
+:: Verify output
+for %%f in ("%TEST_OUTPUT_DIR%\test7\*.dat") do set DAT_FILE=%%f
+if not exist "!DAT_FILE!" (
+  echo [ ERROR ] Test 7: No .dat file found
+  exit /b 1
+)
+
+:: Check for pipe delimiter
+findstr /C:"|" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 7: No pipe delimiter found in .dat file
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 7: Custom delimiters passed
+
+:: --- Test Case 8: ASCII Code Delimiters ---
+
+echo [ INFO ] Test Case 8: ASCII code delimiters (20, 254)
+
+dotnet run --project "%PROJECT%" -- ^
+  --type pdf ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test8" ^
+  --load-file-format dat ^
+  --delimiter-column "20" ^
+  --delimiter-quote "254"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 8 failed during execution
+  exit /b 1
+)
+
+:: Verify output
+for %%f in ("%TEST_OUTPUT_DIR%\test8\*.dat") do set DAT_FILE=%%f
+if not exist "!DAT_FILE!" (
+  echo [ ERROR ] Test 8: No .dat file found
+  exit /b 1
+)
+
+:: Verify file has content
+for %%f in ("!DAT_FILE!") do set FILE_SIZE=%%~zf
+if !FILE_SIZE! LEQ 0 (
+  echo [ ERROR ] Test 8: DAT file is empty
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 8: ASCII code delimiters passed
+
+:: --- Test Case 9: Delimiter Override (CSV preset with pipe override) ---
+
+echo [ INFO ] Test Case 9: Delimiter override (CSV preset with pipe column delimiter)
+
+dotnet run --project "%PROJECT%" -- ^
+  --type pdf ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test9" ^
+  --load-file-format dat ^
+  --dat-delimiters csv ^
+  --delimiter-column "|"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 9 failed during execution
+  exit /b 1
+)
+
+:: Verify output
+for %%f in ("%TEST_OUTPUT_DIR%\test9\*.dat") do set DAT_FILE=%%f
+if not exist "!DAT_FILE!" (
+  echo [ ERROR ] Test 9: No .dat file found
+  exit /b 1
+)
+
+:: Check for pipe delimiter (override)
+findstr /C:"|" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 9: No pipe delimiter found (should override CSV preset)
+  exit /b 1
+)
+
+:: Check for double-quote (from CSV preset)
+findstr /C:"\"" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 9: No double-quote found (should use CSV preset for quote)
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 9: Delimiter override passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Load File Formats E2E tests passed!

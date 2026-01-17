@@ -269,6 +269,101 @@ for format in "dat" "opt" "csv" "xml" "concordance"; do
   print_success "Test Case 6: Bates numbering with $format format passed"
 done
 
+# --- Test Case 7: Custom Delimiters (Pipe and Caret) ---
+
+print_info "Test Case 7: Custom delimiters (pipe and caret)"
+
+dotnet run --project "$PROJECT" -- \
+  --type pdf \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test7" \
+  --load-file-format dat \
+  --delimiter-column "|" \
+  --delimiter-quote "^"
+
+# Verify output
+zip_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.zip")
+dat_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.dat")
+
+if [ -z "$dat_file" ]; then
+  print_error "Test 7: No .dat file found"
+fi
+
+# Check for pipe delimiter
+if ! grep -q "|" "$dat_file"; then
+  print_error "Test 7: No pipe delimiter found in .dat file"
+fi
+
+# Check for caret quote
+if ! grep -q "\^" "$dat_file"; then
+  print_error "Test 7: No caret quote found in .dat file"
+fi
+
+print_success "Test Case 7: Custom delimiters passed"
+
+# --- Test Case 8: ASCII Code Delimiters ---
+
+print_info "Test Case 8: ASCII code delimiters (20, 254)"
+
+dotnet run --project "$PROJECT" -- \
+  --type pdf \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test8" \
+  --load-file-format dat \
+  --delimiter-column "20" \
+  --delimiter-quote "254"
+
+# Verify output
+dat_file=$(find "$TEST_OUTPUT_DIR/test8" -name "*.dat")
+
+if [ -z "$dat_file" ]; then
+  print_error "Test 8: No .dat file found"
+fi
+
+# Verify file was created (ASCII 20 and 254 are non-printable, so we just verify load file exists and has content)
+if [ ! -s "$dat_file" ]; then
+  print_error "Test 8: DAT file is empty"
+fi
+
+# Check that it has the expected number of lines (header + 5 data rows)
+line_count=$(wc -l < "$dat_file")
+if [ "$line_count" -lt 6 ]; then
+  print_error "Test 8: Expected at least 6 lines in .dat file, found $line_count"
+fi
+
+print_success "Test Case 8: ASCII code delimiters passed"
+
+# --- Test Case 9: Delimiter Override (CSV preset with pipe override) ---
+
+print_info "Test Case 9: Delimiter override (CSV preset with pipe column delimiter)"
+
+dotnet run --project "$PROJECT" -- \
+  --type pdf \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test9" \
+  --load-file-format dat \
+  --dat-delimiters csv \
+  --delimiter-column "|"
+
+# Verify output
+dat_file=$(find "$TEST_OUTPUT_DIR/test9" -name "*.dat")
+
+if [ -z "$dat_file" ]; then
+  print_error "Test 9: No .dat file found"
+fi
+
+# Check for pipe delimiter (override)
+if ! grep -q "|" "$dat_file"; then
+  print_error "Test 9: No pipe delimiter found (should override CSV preset)"
+fi
+
+# Check for double-quote (from CSV preset)
+if ! grep -q '"' "$dat_file"; then
+  print_error "Test 9: No double-quote found (should use CSV preset for quote)"
+fi
+
+print_success "Test Case 9: Delimiter override passed"
+
 # --- All Tests Passed ---
 
 print_success "All Load File Formats E2E tests passed!"
