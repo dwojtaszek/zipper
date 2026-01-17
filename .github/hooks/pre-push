@@ -1,0 +1,57 @@
+#!/bin/bash
+# Pre-push git hook to check code coverage before pushing
+# Installs to: .git/hooks/pre-push
+
+echo "Running code coverage check..."
+
+# Run tests with coverage
+dotnet test --configuration Release --collect:"XPlat Code Coverage" --results-directory ./TestResults > /dev/null 2>&1
+
+# Check if reportgenerator is installed
+if ! command -v reportgenerator &> /dev/null; then
+    echo "Installing dotnet-reportgenerator-globaltool..."
+    dotnet tool install --global dotnet-reportgenerator-globaltool
+fi
+
+# Generate coverage report
+export PATH="$PATH:$HOME/.dotnet/tools"
+reportgenerator \
+    -reports:TestResults/*/coverage.cobertura.xml \
+    -targetdir:TestResults/coverage-report \
+    -reporttypes:"TextSummary" > /dev/null 2>&1
+
+# Extract coverage percentage and check threshold using awk for cross-platform compatibility
+COVERAGE_RESULT=$(awk '/Line coverage:/ { 
+    # Extract percentage value (e.g., "Line coverage: 80.4%")
+    match($0, /[0-9]+(\.[0-9]+)?/)
+    val = substr($0, RSTART, RLENGTH)
+    
+    # Check if value was found
+    if (val == "") val = 0
+    
+    # Compare with threshold (80%)
+    if (val < 80) {
+        print "FAIL " val
+    } else {
+        print "PASS " val
+    }
+}' TestResults/coverage-report/Summary.txt)
+
+# Parse result
+STATUS=$(echo "$COVERAGE_RESULT" | cut -d' ' -f1)
+VALUE=$(echo "$COVERAGE_RESULT" | cut -d' ' -f2)
+
+if [ "$STATUS" = "FAIL" ]; then
+    echo "❌ ERROR: Code coverage is below 80% (current: ${VALUE}%)"
+    echo "Please add more tests before pushing."
+    echo ""
+    echo "To bypass this check (not recommended), use: git push --no-verify"
+    exit 1
+else
+    echo "✅ Coverage check passed: ${VALUE}% >= 80%"
+fi
+
+# Clean up
+rm -rf TestResults
+
+exit 0
