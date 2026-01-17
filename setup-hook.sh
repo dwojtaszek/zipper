@@ -83,4 +83,18 @@ EOL
 # Make the hook executable.
 chmod +x "$HOOK_FILE"
 
-echo "Pre-commit hook created successfully (unit tests only, E2E on push)."
+echo "✅ Pre-commit hook created successfully (unit tests only, E2E on push)."
+
+# ────────────────────────────────────────────────────────
+# Setup pre-push hook for coverage checking
+# ────────────────────────────────────────────────────────
+PUSH_HOOK_FILE="$HOOK_DIR/pre-push"
+PUSH_HOOK_TEMPLATE=".github/hooks/pre-push"
+
+if [ -f "$PUSH_HOOK_TEMPLATE" ]; then
+    cp "$PUSH_HOOK_TEMPLATE" "$PUSH_HOOK_FILE"
+    chmod +x "$PUSH_HOOK_FILE"
+    echo "✅ Pre-push hook installed (coverage >= 80% required)."
+else
+    echo "⚠️  Pre-push hook template not found at $PUSH_HOOK_TEMPLATE"
+fi

@@ -1,0 +1,42 @@
+#!/bin/bash
+# Pre-push git hook to check code coverage before pushing
+# Installs to: .git/hooks/pre-push
+
+echo "Running code coverage check..."
+
+# Run tests with coverage
+dotnet test --configuration Release --collect:"XPlat Code Coverage" --results-directory ./TestResults > /dev/null 2>&1
+
+# Check if reportgenerator is installed
+if ! command -v reportgenerator &> /dev/null; then
+    echo "Installing dotnet-reportgenerator-globaltool..."
+    dotnet tool install --global dotnet-reportgenerator-globaltool
+fi
+
+# Generate coverage report
+export PATH="$PATH:$HOME/.dotnet/tools"
+reportgenerator \
+    -reports:TestResults/*/coverage.cobertura.xml \
+    -targetdir:TestResults/coverage-report \
+    -reporttypes:"TextSummary" > /dev/null 2>&1
+
+# Extract coverage percentage
+COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+
+echo "Current code coverage: $COVERAGE%"
+
+# Check if coverage is >= 80%
+if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+    echo "❌ ERROR: Code coverage is below 80% (current: $COVERAGE%)"
+    echo "Please add more tests before pushing."
+    echo ""
+    echo "To bypass this check (not recommended), use: git push --no-verify"
+    exit 1
+else
+    echo "✅ Coverage check passed: $COVERAGE% >= 80%"
+fi
+
+# Clean up
+rm -rf TestResults
+
+exit 0

@@ -131,6 +131,44 @@ jobs:
       - name: Run unit tests
         run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
 
+      - name: Run unit tests with coverage (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+            --configuration Debug \
+            --no-build \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults
+
+      - name: Generate and validate coverage report (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          # Install report generator
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          
+          # Generate reports
+          reportgenerator \
+            -reports:TestResults/*/coverage.cobertura.xml \
+            -targetdir:TestResults/coverage-report \
+            -reporttypes:"Html;TextSummary"
+          
+          # Display summary
+          cat TestResults/coverage-report/Summary.txt
+          
+          # Extract line coverage percentage
+          COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+          echo "Current coverage: $COVERAGE%"
+          
+          # Check if coverage is >= 80%
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ ERROR: Code coverage is below 80% (current: $COVERAGE%)"
+            echo "Please add more tests to increase coverage."
+            exit 1
+          else
+            echo "✅ Coverage check passed: $COVERAGE% >= 80%"
+          fi
+
       - name: Run E2E tests
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
