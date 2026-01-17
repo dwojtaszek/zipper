@@ -9,7 +9,7 @@ namespace Zipper
     public class ProgramTests
     {
         [Fact]
-        public async Task Main_WithHelpFlag_ReturnsZero()
+        public async Task Main_WithHelpFlag_ReturnsOne()
         {
             // Arrange
             string[] args = { "--help" };

@@ -158,8 +158,10 @@ namespace Zipper
             {
                 var result = PathValidator.ValidateAndCreateDirectory(path);
 
-                // Test passes if no exception is thrown (result can be null or not null depending on platform)
-                Assert.True(result == null || result != null);
+                // Test passes if no exception is thrown
+                // Result checking is platform specific, but execution should be safe
+                var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(path));
+                Assert.Null(exception);
             }
         }
 
@@ -175,7 +177,9 @@ namespace Zipper
             // Assert
             // On some systems this may succeed, on others it will fail
             // The important thing is it doesn't throw an unhandled exception
-            Assert.True(result == null || result != null);
+            // The important thing is it doesn't throw an unhandled exception
+            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(longPath));
+            Assert.Null(exception);
         }
 
         [Fact]

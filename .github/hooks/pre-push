@@ -20,20 +20,35 @@ reportgenerator \
     -targetdir:TestResults/coverage-report \
     -reporttypes:"TextSummary" > /dev/null 2>&1
 
-# Extract coverage percentage
-COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+# Extract coverage percentage and check threshold using awk for cross-platform compatibility
+COVERAGE_RESULT=$(awk '/Line coverage:/ { 
+    # Extract percentage value (e.g., "Line coverage: 80.4%")
+    match($0, /[0-9]+(\.[0-9]+)?/)
+    val = substr($0, RSTART, RLENGTH)
+    
+    # Check if value was found
+    if (val == "") val = 0
+    
+    # Compare with threshold (80%)
+    if (val < 80) {
+        print "FAIL " val
+    } else {
+        print "PASS " val
+    }
+}' TestResults/coverage-report/Summary.txt)
 
-echo "Current code coverage: $COVERAGE%"
+# Parse result
+STATUS=$(echo "$COVERAGE_RESULT" | cut -d' ' -f1)
+VALUE=$(echo "$COVERAGE_RESULT" | cut -d' ' -f2)
 
-# Check if coverage is >= 80%
-if (( $(echo "$COVERAGE < 80" | bc -l) )); then
-    echo "❌ ERROR: Code coverage is below 80% (current: $COVERAGE%)"
+if [ "$STATUS" = "FAIL" ]; then
+    echo "❌ ERROR: Code coverage is below 80% (current: ${VALUE}%)"
     echo "Please add more tests before pushing."
     echo ""
     echo "To bypass this check (not recommended), use: git push --no-verify"
     exit 1
 else
-    echo "✅ Coverage check passed: $COVERAGE% >= 80%"
+    echo "✅ Coverage check passed: ${VALUE}% >= 80%"
 fi
 
 # Clean up
