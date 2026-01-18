@@ -1,7 +1,5 @@
 # CLAUDE.md
 
+See [AGENTS.md](AGENTS.md) for AI coding assistant instructions.
 
-always reference @AGENTS.md
-
-Use 'bd' for task tracking
-
+Use 'bd' for task tracking.
