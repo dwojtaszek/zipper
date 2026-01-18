@@ -143,9 +143,9 @@ Column profiles allow you to generate rich, configurable metadata with up to 200
 | Profile | Columns | Description |
 |---------|---------|-------------|
 | `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
-| `standard` | 24 | Common e-discovery fields including dates, people, classification |
-| `litigation` | 48 | Full litigation support with privilege, responsiveness, hashes |
-| `full` | 120+ | Maximum coverage with custom tags, issues, and notes |
+| `standard` | 25 | Common e-discovery fields including dates, people, classification |
+| `litigation` | 50 | Full litigation support with privilege, responsiveness, hashes |
+| `full` | 127 | Maximum coverage with custom tags, issues, and notes |
 
 Column types supported:
 - `identifier`: Sequential document IDs (DOC00000001)
