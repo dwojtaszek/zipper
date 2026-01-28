@@ -399,26 +399,15 @@ internal class DataGenerator
     {
         const string chars = "0123456789abcdef";
 
-        if (length <= 256)
+        // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
+        // so we can safely use stackalloc for efficiency.
+        Span<char> buffer = stackalloc char[length];
+        for (int i = 0; i < length; i++)
         {
-            Span<char> buffer = stackalloc char[length];
-            for (int i = 0; i < length; i++)
-            {
-                buffer[i] = chars[this.random.Next(chars.Length)];
-            }
-
-            return new string(buffer);
+            buffer[i] = chars[this.random.Next(chars.Length)];
         }
-        else
-        {
-            var buffer = new char[length];
-            for (int i = 0; i < length; i++)
-            {
-                buffer[i] = chars[this.random.Next(chars.Length)];
-            }
 
-            return new string(buffer);
-        }
+        return new string(buffer);
     }
 }
 
