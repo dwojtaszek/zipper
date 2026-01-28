@@ -112,7 +112,7 @@ namespace Zipper
         {
             var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
             using var entryStream = entry.Open();
-            entryStream.Write(fileData.Data);
+            entryStream.Write(fileData.Data.Span);
         }
 
         /// <summary>
