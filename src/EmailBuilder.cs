@@ -182,7 +182,51 @@ namespace Zipper
             }
 
             sb.AppendLine();
-            sb.AppendLine(Convert.ToBase64String(attachment.Content, Base64FormattingOptions.InsertLineBreaks));
+
+            // Optimization: Process base64 conversion in chunks to avoid allocating a massive string.
+            // We use a chunk size that is a multiple of 57 bytes (which produces 76 chars)
+            // so that we can maintain proper line breaking behavior (76 chars per line).
+            const int ChunkSize = 57 * 1024;
+            int offset = 0;
+            int totalLength = attachment.Content.Length;
+
+            // Buffer for base64 chars + newlines.
+            // Max expansion: (ChunkSize / 3) * 4 chars + 2 chars per 76 chars (newlines).
+            // (58368 / 3) * 4 = 77824 chars.
+            // 77824 / 76 * 2 = 2048 chars for newlines.
+            // Total ~ 80000.
+            char[] charBuffer = new char[80000];
+
+            while (offset < totalLength)
+            {
+                int count = Math.Min(ChunkSize, totalLength - offset);
+
+                // Use TryToBase64Chars to avoid allocating intermediate strings
+                if (Convert.TryToBase64Chars(
+                    new ReadOnlySpan<byte>(attachment.Content, offset, count),
+                    charBuffer,
+                    out int charsWritten,
+                    Base64FormattingOptions.InsertLineBreaks))
+                {
+                    sb.Append(charBuffer, 0, charsWritten);
+                }
+                else
+                {
+                    // Fallback should never happen with sufficient buffer
+                    sb.Append(Convert.ToBase64String(attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks));
+                }
+
+                offset += count;
+
+                // If there are more chunks, we need a newline separator because
+                // InsertLineBreaks only inserts breaks inside the chunk.
+                if (offset < totalLength)
+                {
+                    sb.Append("\r\n");
+                }
+            }
+
+            sb.AppendLine();
             sb.AppendLine($"--{boundary}--");
         }
 
