@@ -65,7 +65,8 @@ namespace Zipper
                     WriteAttachmentTextToArchive(archive, fileData);
                 }
 
-                fileData.MemoryOwner?.Dispose();
+                // Do not dispose memory owner here as it may be needed for load file generation
+                // fileData.MemoryOwner?.Dispose();
             }
 
             // Get the appropriate load file writer based on format
@@ -100,6 +101,12 @@ namespace Zipper
                 // Flush and dispose the stream we created
                 await fileStream.FlushAsync();
                 await fileStream.DisposeAsync();
+            }
+
+            // Dispose all memory owners after processing is complete
+            foreach (var fileData in processedFiles)
+            {
+                fileData.MemoryOwner?.Dispose();
             }
 
             return actualLoadFilePath;
