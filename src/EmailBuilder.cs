@@ -2,6 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.Buffers;
 using System.Text;
 
 namespace Zipper
@@ -190,40 +191,55 @@ namespace Zipper
             int offset = 0;
             int totalLength = attachment.Content.Length;
 
-            // Buffer for base64 chars + newlines.
-            // Max expansion: (ChunkSize / 3) * 4 chars + 2 chars per 76 chars (newlines).
-            // (58368 / 3) * 4 = 77824 chars.
-            // 77824 / 76 * 2 = 2048 chars for newlines.
-            // Total ~ 80000.
-            char[] charBuffer = new char[80000];
+            // Buffer for base64 chars + newlines. Derive size from ChunkSize.
+            // Max expansion: ((ChunkSize + 2) / 3) * 4 chars + (maxBase64Chars / 76) * 2 chars for newlines.
+            int maxBase64Chars = ((ChunkSize + 2) / 3) * 4;
+            int maxLineBreaks = maxBase64Chars / 76;
+            int bufferSize = maxBase64Chars + (maxLineBreaks * 2);
+            char[] charBuffer = ArrayPool<char>.Shared.Rent(bufferSize);
 
-            while (offset < totalLength)
+            try
             {
-                int count = Math.Min(ChunkSize, totalLength - offset);
-
-                // Use TryToBase64Chars to avoid allocating intermediate strings
-                if (Convert.TryToBase64Chars(
-                    new ReadOnlySpan<byte>(attachment.Content, offset, count),
-                    charBuffer,
-                    out int charsWritten,
-                    Base64FormattingOptions.InsertLineBreaks))
+                while (offset < totalLength)
                 {
-                    sb.Append(charBuffer, 0, charsWritten);
-                }
-                else
-                {
-                    // Fallback should never happen with sufficient buffer
-                    sb.Append(Convert.ToBase64String(attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks));
-                }
+                    int count = Math.Min(ChunkSize, totalLength - offset);
+                    bool endsWithCrlf;
 
-                offset += count;
+                    // Use TryToBase64Chars to avoid allocating intermediate strings
+                    if (Convert.TryToBase64Chars(
+                        new ReadOnlySpan<byte>(attachment.Content, offset, count),
+                        charBuffer,
+                        out int charsWritten,
+                        Base64FormattingOptions.InsertLineBreaks))
+                    {
+                        sb.Append(charBuffer, 0, charsWritten);
+                        endsWithCrlf = charsWritten >= 2 &&
+                            charBuffer[charsWritten - 2] == '\r' &&
+                            charBuffer[charsWritten - 1] == '\n';
+                    }
+                    else
+                    {
+                        // Fallback should never happen with sufficient buffer
+                        var base64 = Convert.ToBase64String(
+                            attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks);
+                        sb.Append(base64);
+                        endsWithCrlf = base64.EndsWith("\r\n", StringComparison.Ordinal);
+                    }
 
-                // If there are more chunks, we need a newline separator because
-                // InsertLineBreaks only inserts breaks inside the chunk.
-                if (offset < totalLength)
-                {
-                    sb.Append("\r\n");
+                    offset += count;
+
+                    // If there are more chunks, we need a newline separator because
+                    // InsertLineBreaks only inserts breaks inside the chunk.
+                    // Only add if the chunk doesn't already end with CRLF to avoid duplicates.
+                    if (offset < totalLength && !endsWithCrlf)
+                    {
+                        sb.Append("\r\n");
+                    }
                 }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
             }
 
             sb.AppendLine();
