@@ -1,4 +1,4 @@
-// <copyright file="XmlWriter.cs" company="PlaceholderCompany">
+// <copyright file="XmlLoadFileWriter.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -30,31 +30,22 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             CloseOutput = false,
         };
 
-        var writer = System.Xml.XmlWriter.Create(stream, settings);
+        await using var writer = System.Xml.XmlWriter.Create(stream, settings);
 
-        try
+        // Match the original XDeclaration("1.0", "UTF-8", "yes")
+        await writer.WriteStartDocumentAsync(standalone: true);
+        await writer.WriteStartElementAsync(null, "documents", null);
+
+        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            // Match the original XDeclaration("1.0", "UTF-8", "yes")
-            await writer.WriteStartDocumentAsync(standalone: true);
-            await writer.WriteStartElementAsync(null, "documents", null);
-
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
-            {
-                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
-                await element.WriteToAsync(writer, CancellationToken.None);
-            }
-
-            await writer.WriteEndElementAsync(); // </documents>
-            await writer.WriteEndDocumentAsync();
-
-            await writer.FlushAsync();
+            var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+            await element.WriteToAsync(writer, CancellationToken.None);
         }
-        catch (Exception ex)
-        {
-            // Log or handle the error as per coding guidelines
-            Console.WriteLine($"Error writing XML load file: {ex.Message}");
-            throw;
-        }
+
+        await writer.WriteEndElementAsync(); // </documents>
+        await writer.WriteEndDocumentAsync();
+
+        await writer.FlushAsync();
     }
 
     private static XElement CreateDocumentElement(
