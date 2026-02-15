@@ -3,6 +3,7 @@
 // </copyright>
 
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Zipper.LoadFiles;
@@ -21,23 +22,29 @@ internal class XmlWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
     {
-        var root = new XElement("documents");
+        var settings = new XmlWriterSettings
+        {
+            Async = true,
+            Indent = true,
+            Encoding = Encoding.UTF8,
+            CloseOutput = false,
+        };
+
+        await using var writer = System.Xml.XmlWriter.Create(stream, settings);
+
+        // Match the original XDeclaration("1.0", "UTF-8", "yes")
+        await writer.WriteStartDocumentAsync(standalone: true);
+        await writer.WriteStartElementAsync(null, "documents", null);
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            root.Add(CreateDocumentElement(fileData.WorkItem, fileData, request));
+            var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+            await element.WriteToAsync(writer, CancellationToken.None);
         }
 
-        var document = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), root);
+        await writer.WriteEndElementAsync(); // </documents>
+        await writer.WriteEndDocumentAsync();
 
-        // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
-
-        // XDocument.ToString() doesn't include the declaration, so we write it explicitly
-        await writer.WriteAsync(document.Declaration?.ToString() ?? string.Empty);
-        await writer.WriteAsync(document.ToString());
-
-        // Flush to ensure data is written
         await writer.FlushAsync();
     }
 
