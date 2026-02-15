@@ -11,7 +11,7 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes XML format load files - structured markup format.
 /// </summary>
-internal class XmlWriter : LoadFileWriterBase
+internal class XmlLoadFileWriter : LoadFileWriterBase
 {
     public override string FormatName => "XML";
 
@@ -30,22 +30,31 @@ internal class XmlWriter : LoadFileWriterBase
             CloseOutput = false,
         };
 
-        await using var writer = System.Xml.XmlWriter.Create(stream, settings);
+        var writer = System.Xml.XmlWriter.Create(stream, settings);
 
-        // Match the original XDeclaration("1.0", "UTF-8", "yes")
-        await writer.WriteStartDocumentAsync(standalone: true);
-        await writer.WriteStartElementAsync(null, "documents", null);
-
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        try
         {
-            var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
-            await element.WriteToAsync(writer, CancellationToken.None);
+            // Match the original XDeclaration("1.0", "UTF-8", "yes")
+            await writer.WriteStartDocumentAsync(standalone: true);
+            await writer.WriteStartElementAsync(null, "documents", null);
+
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            {
+                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+                await element.WriteToAsync(writer, CancellationToken.None);
+            }
+
+            await writer.WriteEndElementAsync(); // </documents>
+            await writer.WriteEndDocumentAsync();
+
+            await writer.FlushAsync();
         }
-
-        await writer.WriteEndElementAsync(); // </documents>
-        await writer.WriteEndDocumentAsync();
-
-        await writer.FlushAsync();
+        catch (Exception ex)
+        {
+            // Log or handle the error as per coding guidelines
+            Console.WriteLine($"Error writing XML load file: {ex.Message}");
+            throw;
+        }
     }
 
     private static XElement CreateDocumentElement(
