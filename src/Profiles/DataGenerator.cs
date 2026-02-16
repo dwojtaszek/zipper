@@ -464,7 +464,7 @@ internal static class Names
     /// <summary>
     /// Lowercased first names for generation.
     /// </summary>
-    public static readonly string[] FirstNamesLower;
+    internal static readonly string[] FirstNamesLower;
 
     /// <summary>
     /// Last names for generation.
@@ -480,7 +480,7 @@ internal static class Names
     /// <summary>
     /// Lowercased last names for generation.
     /// </summary>
-    public static readonly string[] LastNamesLower;
+    internal static readonly string[] LastNamesLower;
 
     /// <summary>
     /// Initializes static members of the <see cref="Names"/> class.
