@@ -1,7 +1,3 @@
-// <copyright file="EmailTemplateSystem.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Zipper
 {
     /// <summary>
@@ -82,15 +78,15 @@ namespace Zipper
         /// Generates email addresses with realistic domains.
         /// </summary>
         /// <returns></returns>
+        private static readonly string[] EmailDomains = new[]
+        {
+            "example.com", "test.org", "sample.net", "demo.co", "mock.io",
+            "acme.com", "techcorp.net", "business.org", "service.co", "platform.io",
+        };
+
         public static string GenerateEmailAddress(int index, string type)
         {
-            var domains = new[]
-            {
-                "example.com", "test.org", "sample.net", "demo.co", "mock.io",
-                "acme.com", "techcorp.net", "business.org", "service.co", "platform.io",
-            };
-
-            var domain = domains[index % domains.Length];
+            var domain = EmailDomains[index % EmailDomains.Length];
             var userType = type.ToLowerInvariant();
 
             return $"{userType}{index:D3}@{domain}";
@@ -307,64 +303,64 @@ namespace Zipper
             };
         }
 
+        private static readonly string[] Departments = new[]
+        {
+            "Engineering", "Sales", "Marketing", "HR", "Finance",
+            "Legal", "Operations", "IT", "Customer Support", "R&D",
+            "Product", "Design", "QA", "Security", "Compliance",
+        };
+
         private static string GetRandomDepartment()
         {
-            var departments = new[]
-            {
-                "Engineering", "Sales", "Marketing", "HR", "Finance",
-                "Legal", "Operations", "IT", "Customer Support", "R&D",
-                "Product", "Design", "QA", "Security", "Compliance",
-            };
-
-            return departments[Random.Shared.Next(departments.Length)];
+            return Departments[Random.Shared.Next(Departments.Length)];
         }
+
+        private static readonly string[] Places = new[]
+        {
+            "Central Park Coffee Shop", "Downtown Conference Center", "Riverside Restaurant",
+            "Tech Hub Meeting Room", "City Library Study Area", "Airport Business Lounge",
+            "University Campus Hall", "Community Center", "Hotel Conference Room", "Beach Resort",
+        };
 
         private static string GetRandomPlace()
         {
-            var places = new[]
-            {
-                "Central Park Coffee Shop", "Downtown Conference Center", "Riverside Restaurant",
-                "Tech Hub Meeting Room", "City Library Study Area", "Airport Business Lounge",
-                "University Campus Hall", "Community Center", "Hotel Conference Room", "Beach Resort",
-            };
-
-            return places[Random.Shared.Next(places.Length)];
+            return Places[Random.Shared.Next(Places.Length)];
         }
+
+        private static readonly string[] Venues = new[]
+        {
+            "Grand Ballroom Hotel", "Convention Center Hall A", "Tech Campus Auditorium",
+            "City Conference Center", "Business Plaza Meeting Room", "University Lecture Hall",
+            "Community Event Space", "Downtown Theater", "Resort Conference Room", "Stadium Suite",
+        };
 
         private static string GetRandomVenue()
         {
-            var venues = new[]
-            {
-                "Grand Ballroom Hotel", "Convention Center Hall A", "Tech Campus Auditorium",
-                "City Conference Center", "Business Plaza Meeting Room", "University Lecture Hall",
-                "Community Event Space", "Downtown Theater", "Resort Conference Room", "Stadium Suite",
-            };
-
-            return venues[Random.Shared.Next(venues.Length)];
+            return Venues[Random.Shared.Next(Venues.Length)];
         }
+
+        private static readonly string[] Websites = new[]
+        {
+            "www.techcorp.com", "www.businesshub.org", "www.serviceplatform.net",
+            "www.example-site.com", "www.demoservice.io", "www.testplatform.co",
+            "www.company-portal.com", "www.business-solutions.org", "www.services.net", "www.platform.io",
+        };
 
         private static string GetRandomWebsite()
         {
-            var websites = new[]
-            {
-                "www.techcorp.com", "www.businesshub.org", "www.serviceplatform.net",
-                "www.example-site.com", "www.demoservice.io", "www.testplatform.co",
-                "www.company-portal.com", "www.business-solutions.org", "www.services.net", "www.platform.io",
-            };
-
-            return websites[Random.Shared.Next(websites.Length)];
+            return Websites[Random.Shared.Next(Websites.Length)];
         }
+
+        private static readonly string[] Services = new[]
+        {
+            "CloudStorage Pro", "EmailPlatform Plus", "BusinessSuite Enterprise",
+            "DataAnalytics Cloud", "SecurityShield Advanced", "CollaborationHub Premium",
+            "ProjectManagement Pro", "CustomerPortal Enterprise", "DocumentCloud Plus", "WorkflowOptimizer",
+        };
 
         private static string GetRandomService()
         {
-            var services = new[]
-            {
-                "CloudStorage Pro", "EmailPlatform Plus", "BusinessSuite Enterprise",
-                "DataAnalytics Cloud", "SecurityShield Advanced", "CollaborationHub Premium",
-                "ProjectManagement Pro", "CustomerPortal Enterprise", "DocumentCloud Plus", "WorkflowOptimizer",
-            };
-
-            return services[Random.Shared.Next(services.Length)];
+            return Services[Random.Shared.Next(Services.Length)];
         }
 
         private record EmailTemplateBase(string Subject, string Body);
