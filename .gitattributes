@@ -3,3 +3,6 @@
 
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
+
+# Treat PNG files as binary
+*.png binary
