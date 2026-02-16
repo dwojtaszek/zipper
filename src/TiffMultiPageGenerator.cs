@@ -1,6 +1,3 @@
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Tiff;
-
 namespace Zipper;
 
 /// <summary>

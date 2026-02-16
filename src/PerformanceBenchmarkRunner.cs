@@ -38,7 +38,7 @@ namespace Zipper
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
 
-                var allocatedBefore = GC.GetTotalAllocatedBytes();
+                var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
 
                 using var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
@@ -53,7 +53,7 @@ namespace Zipper
 
                 await generator.GenerateFilesAsync(request);
 
-                var allocatedAfter = GC.GetTotalAllocatedBytes();
+                var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
                 var totalAllocated = allocatedAfter - allocatedBefore;
                 var bytesPerFile = totalAllocated / fileCount;
 

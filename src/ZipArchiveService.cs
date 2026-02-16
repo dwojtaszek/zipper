@@ -32,6 +32,13 @@ namespace Zipper
 
             var processedFiles = new ConcurrentBag<FileData>();
 
+            // Pre-compute the extracted text content selection once, outside the loop
+            var extractedTextContent = request.WithText
+                ? (request.FileType.ToLowerInvariant() == "eml"
+                    ? PlaceholderFiles.EmlExtractedText
+                    : PlaceholderFiles.ExtractedText)
+                : null;
+
             // Process generated files and write to archive
             await foreach (var fileData in fileDataReader.ReadAllAsync())
             {
@@ -47,7 +54,7 @@ namespace Zipper
 
                 if (request.WithText)
                 {
-                    WriteExtractedTextToArchive(archive, fileData, request);
+                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!);
                 }
 
                 if (fileData.Attachment.HasValue)
@@ -157,7 +164,7 @@ namespace Zipper
         /// <summary>
         /// Writes an extracted text version of a file to the ZIP archive (synchronous version).
         /// </summary>
-        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request)
+        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent)
         {
             if (!request.WithText)
             {
@@ -171,9 +178,6 @@ namespace Zipper
             using var textEntryStream = textEntry.Open();
 
             // O(1): write pre-computed byte[] directly, no string round-trip
-            var textContent = request.FileType.ToLowerInvariant() == "eml"
-                ? PlaceholderFiles.EmlExtractedText
-                : PlaceholderFiles.ExtractedText;
             textEntryStream.Write(textContent);
         }
     }

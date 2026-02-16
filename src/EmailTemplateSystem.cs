@@ -75,9 +75,8 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Generates email addresses with realistic domains.
+        /// Realistic email domains for address generation.
         /// </summary>
-        /// <returns></returns>
         private static readonly string[] EmailDomains = new[]
         {
             "example.com", "test.org", "sample.net", "demo.co", "mock.io",
