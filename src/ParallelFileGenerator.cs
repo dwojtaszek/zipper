@@ -1,7 +1,3 @@
-// <copyright file="ParallelFileGenerator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Threading.Channels;

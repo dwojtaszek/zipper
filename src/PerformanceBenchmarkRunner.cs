@@ -1,7 +1,3 @@
-// <copyright file="PerformanceBenchmarkRunner.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Diagnostics;
 using System.IO.Compression;
 

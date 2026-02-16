@@ -1,7 +1,3 @@
-// <copyright file="LoadFileGenerator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.IO.Compression;
 using System.Text;
 
