@@ -465,7 +465,7 @@ internal static class LoremIpsum
             var word = Words[random.Next(Words.Length)];
             if (i == 0)
             {
-                sb.Append(char.ToUpper(word[0]));
+                sb.Append(char.ToUpperInvariant(word[0]));
                 if (word.Length > 1)
                 {
                     sb.Append(word, 1, word.Length - 1);
