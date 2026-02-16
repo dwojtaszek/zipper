@@ -1,7 +1,3 @@
-// <copyright file="ZipArchiveService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Threading.Channels;
@@ -64,7 +60,8 @@ namespace Zipper
                     WriteAttachmentTextToArchive(archive, fileData);
                 }
 
-                fileData.MemoryOwner?.Dispose();
+                // Do not dispose memory owner here as it may be needed for load file generation
+                // fileData.MemoryOwner?.Dispose();
             }
 
             // Get the appropriate load file writer based on format
@@ -101,6 +98,12 @@ namespace Zipper
                 await fileStream.DisposeAsync();
             }
 
+            // Dispose all memory owners after processing is complete
+            foreach (var fileData in processedFiles)
+            {
+                fileData.MemoryOwner?.Dispose();
+            }
+
             return actualLoadFilePath;
         }
 
@@ -111,7 +114,7 @@ namespace Zipper
         {
             var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
             using var entryStream = entry.Open();
-            entryStream.Write(fileData.Data);
+            entryStream.Write(fileData.Data.Span);
         }
 
         /// <summary>
@@ -167,20 +170,11 @@ namespace Zipper
             var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
             using var textEntryStream = textEntry.Open();
 
-            var textContent = GetExtractedTextContentBytes(request.FileType);
+            // O(1): write pre-computed byte[] directly, no string round-trip
+            var textContent = request.FileType.ToLowerInvariant() == "eml"
+                ? PlaceholderFiles.EmlExtractedText
+                : PlaceholderFiles.ExtractedText;
             textEntryStream.Write(textContent);
-        }
-
-        /// <summary>
-        /// Gets the appropriate extracted text content for different file types.
-        /// </summary>
-        private static byte[] GetExtractedTextContentBytes(string fileType)
-        {
-            return fileType.ToLowerInvariant() switch
-            {
-                "eml" => PlaceholderFiles.EmlExtractedText,
-                _ => PlaceholderFiles.ExtractedText,
-            };
         }
     }
 }

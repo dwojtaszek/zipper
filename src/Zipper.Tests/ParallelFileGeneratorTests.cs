@@ -1,7 +1,3 @@
-// <copyright file="ParallelFileGeneratorTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using Xunit;
 
 namespace Zipper

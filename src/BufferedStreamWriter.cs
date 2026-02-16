@@ -1,7 +1,3 @@
-// <copyright file="BufferedStreamWriter.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Buffers;
 
 namespace Zipper

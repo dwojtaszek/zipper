@@ -1,7 +1,3 @@
-// <copyright file="Program.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Reflection;
 
 namespace Zipper
@@ -13,6 +9,12 @@ namespace Zipper
             var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             Console.WriteLine();
+
+            if (args.Contains("--benchmark"))
+            {
+                await PerformanceBenchmarkRunner.RunBenchmarks();
+                return 0;
+            }
 
             // Validate and parse command line arguments
             var request = CommandLineValidator.ValidateAndParseArguments(args);

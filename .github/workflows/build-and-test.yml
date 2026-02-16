@@ -71,7 +71,7 @@ jobs:
 
       - name: Cache build
         id: cache-build
-        uses: actions/cache@v5.0.1
+        uses: actions/cache@v5.0.3
         with:
           path: publish/${{ matrix.platform }}
           key: ${{ runner.os }}-build-${{ matrix.platform }}-${{ needs.prepare.outputs.version }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}

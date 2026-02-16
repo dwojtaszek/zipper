@@ -1,7 +1,3 @@
-// <copyright file="PerformanceBenchmarkRunner.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Diagnostics;
 using System.IO.Compression;
 
@@ -20,8 +16,57 @@ namespace Zipper
             await BenchmarkParallelVsSequential();
             await BenchmarkMemoryPooling();
             await BenchmarkScalability();
+            await BenchmarkAllocation();
 
             Console.WriteLine("=== Benchmark Suite Complete ===");
+        }
+
+        private static async Task BenchmarkAllocation()
+        {
+            Console.WriteLine("4. Allocation Impact");
+            Console.WriteLine("===================");
+
+            const int fileCount = 1000;
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, $"bench_alloc_{Guid.NewGuid()}");
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                // Force full GC before starting
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                var allocatedBefore = GC.GetTotalAllocatedBytes();
+
+                using var generator = new ParallelFileGenerator();
+                var request = new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = fileCount,
+                    FileType = "pdf", // Uses placeholder content, good for testing structural overhead
+                    Folders = 10,
+                    Concurrency = PerformanceConstants.DefaultConcurrency,
+                    Distribution = DistributionType.Proportional,
+                };
+
+                await generator.GenerateFilesAsync(request);
+
+                var allocatedAfter = GC.GetTotalAllocatedBytes();
+                var totalAllocated = allocatedAfter - allocatedBefore;
+                var bytesPerFile = totalAllocated / fileCount;
+
+                Console.WriteLine($"  Files Generated: {fileCount}");
+                Console.WriteLine($"  Total Allocated: {totalAllocated:N0} bytes");
+                Console.WriteLine($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
+            }
+            finally
+            {
+                CleanupDirectory(outputPath);
+            }
+
+            Console.WriteLine();
         }
 
         private static async Task BenchmarkParallelVsSequential()
