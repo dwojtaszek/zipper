@@ -10,11 +10,23 @@ namespace Zipper
             // Arrange
             string[] args = { "--help" };
 
-            // Act
-            int exitCode = await Program.Main(args);
+            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            try
+            {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+                int exitCode = await Program.Main(args);
 
-            // Assert
-            Assert.Equal(1, exitCode); // Help shows usage and returns 1
+                // Assert
+                Assert.Equal(1, exitCode); // Help shows usage and returns 1
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
         }
 
         [Fact]
@@ -23,11 +35,23 @@ namespace Zipper
             // Arrange - Missing required arguments
             string[] args = { };
 
-            // Act
-            int exitCode = await Program.Main(args);
+            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            try
+            {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+                int exitCode = await Program.Main(args);
 
-            // Assert
-            Assert.Equal(1, exitCode); // Should return error code for invalid args
+                // Assert
+                Assert.Equal(1, exitCode); // Should return error code for invalid args
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
         }
 
         [Fact]
@@ -36,11 +60,23 @@ namespace Zipper
             // Arrange - Missing required --output argument
             string[] args = { "--count", "10", "--type", "pdf" };
 
-            // Act
-            int exitCode = await Program.Main(args);
+            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            try
+            {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+                int exitCode = await Program.Main(args);
 
-            // Assert
-            Assert.Equal(1, exitCode); // Should return error code
+                // Assert
+                Assert.Equal(1, exitCode); // Should return error code
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
         }
 
         [Fact]
@@ -55,8 +91,13 @@ namespace Zipper
                 "--type", "invalid_type",
             };
 
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
             try
             {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+
                 // Act
                 int exitCode = await Program.Main(args);
 
@@ -65,6 +106,9 @@ namespace Zipper
             }
             finally
             {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+
                 // Cleanup
                 if (Directory.Exists(tempPath))
                 {
@@ -85,8 +129,13 @@ namespace Zipper
                 "--type", "pdf",
             };
 
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
             try
             {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+
                 // Act
                 int exitCode = await Program.Main(args);
 
@@ -95,11 +144,40 @@ namespace Zipper
             }
             finally
             {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+
                 // Cleanup
                 if (Directory.Exists(tempPath))
                 {
                     Directory.Delete(tempPath, true);
                 }
+            }
+        }
+
+        [Fact]
+        public async Task Main_WithBenchmarkFlag_ReturnsZero()
+        {
+            // Arrange
+            string[] args = { "--benchmark" };
+
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            try
+            {
+                Console.SetOut(new StringWriter());
+                Console.SetError(new StringWriter());
+
+                // Act
+                int exitCode = await Program.Main(args);
+
+                // Assert
+                Assert.Equal(0, exitCode);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
             }
         }
     }
