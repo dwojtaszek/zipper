@@ -28,20 +28,28 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         await using var writer = System.Xml.XmlWriter.Create(stream, settings);
 
-        // Match the original XDeclaration("1.0", "UTF-8", "yes")
-        await writer.WriteStartDocumentAsync(standalone: true);
-        await writer.WriteStartElementAsync(null, "documents", null);
-
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        try
         {
-            var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
-            await element.WriteToAsync(writer, CancellationToken.None);
+            // Match the original XDeclaration("1.0", "UTF-8", "yes")
+            await writer.WriteStartDocumentAsync(standalone: true);
+            await writer.WriteStartElementAsync(null, "documents", null);
+
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            {
+                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+                await element.WriteToAsync(writer, CancellationToken.None);
+            }
+
+            await writer.WriteEndElementAsync(); // </documents>
+            await writer.WriteEndDocumentAsync();
+
+            await writer.FlushAsync();
         }
-
-        await writer.WriteEndElementAsync(); // </documents>
-        await writer.WriteEndDocumentAsync();
-
-        await writer.FlushAsync();
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to write XML load file: {ex.Message}", ex);
+        }
     }
 
     private static XElement CreateDocumentElement(
