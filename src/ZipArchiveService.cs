@@ -4,7 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.IO.Compression;
-using System.Text;
 using System.Threading.Channels;
 using Zipper.LoadFiles;
 
@@ -168,21 +167,20 @@ namespace Zipper
             var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
             using var textEntryStream = textEntry.Open();
 
-            var textContent = GetExtractedTextContent(request.FileType);
-            textEntryStream.Write(Encoding.UTF8.GetBytes(textContent));
+            var textContent = GetExtractedTextContentBytes(request.FileType);
+            textEntryStream.Write(textContent);
         }
 
         /// <summary>
         /// Gets the appropriate extracted text content for different file types.
         /// </summary>
-        private static string GetExtractedTextContent(string fileType)
+        private static byte[] GetExtractedTextContentBytes(string fileType)
         {
-            var content = fileType.ToLowerInvariant() switch
+            return fileType.ToLowerInvariant() switch
             {
                 "eml" => PlaceholderFiles.EmlExtractedText,
                 _ => PlaceholderFiles.ExtractedText,
             };
-            return System.Text.Encoding.UTF8.GetString(content);
         }
     }
 }
