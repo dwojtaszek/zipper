@@ -1,7 +1,3 @@
-// <copyright file="ZipArchiveService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Text;

@@ -1,7 +1,3 @@
-// <copyright file="EmailTemplateSystemTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using Xunit;
 using Xunit.Abstractions;
 

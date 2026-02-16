@@ -1,7 +1,3 @@
-// <copyright file="TiffMultiPageGenerator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Tiff;
 

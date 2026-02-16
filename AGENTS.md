@@ -84,3 +84,5 @@ await writer.FlushAsync();  // NOT: await writer.DisposeAsync();
 **Performance:** Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths.
 
 **Style:** C# 8.0+, file-scoped namespaces, nullable reference types, switch expressions, pattern matching.
+
+**No Copyright Headers:** Do NOT add copyright, license, or file header comments (e.g. `// <copyright ...>`) to any files. This project does not use file-level copyright headers.

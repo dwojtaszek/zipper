@@ -1,7 +1,3 @@
-// <copyright file="XmlWriter.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Text;
 using System.Xml.Linq;
 

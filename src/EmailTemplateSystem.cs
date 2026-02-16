@@ -1,7 +1,3 @@
-// <copyright file="EmailTemplateSystem.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Zipper
 {
     /// <summary>
