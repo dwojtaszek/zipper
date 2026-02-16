@@ -67,8 +67,7 @@ namespace Zipper
                     WriteAttachmentTextToArchive(archive, fileData);
                 }
 
-                // Do not dispose memory owner here as it may be needed for load file generation
-                // fileData.MemoryOwner?.Dispose();
+                // Memory owners are disposed after load file generation (see below).
             }
 
             // Get the appropriate load file writer based on format
@@ -95,14 +94,9 @@ namespace Zipper
                 actualLoadFilePath = Path.Combine(
                     Path.GetDirectoryName(loadFilePath) ?? string.Empty,
                     baseFileName + loadFileWriter.FileExtension);
-                var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
-
-                // LoadFileWriter.WriteAsync handles flushing but we own the stream here
+                await using var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
                 await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
-
-                // Flush and dispose the stream we created
                 await fileStream.FlushAsync();
-                await fileStream.DisposeAsync();
             }
 
             // Dispose all memory owners after processing is complete
@@ -166,10 +160,7 @@ namespace Zipper
         /// </summary>
         private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent)
         {
-            if (!request.WithText)
-            {
-                return;
-            }
+            System.Diagnostics.Debug.Assert(request.WithText, "Should only be called when WithText is true");
 
             var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
             var textFilePathInZip = $"{fileData.WorkItem.FolderName}/{textFileName}";
