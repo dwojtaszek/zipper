@@ -2,6 +2,7 @@ using Xunit;
 
 namespace Zipper
 {
+    [Collection("ConsoleTests")]
     public class ProgramTests
     {
         [Fact]

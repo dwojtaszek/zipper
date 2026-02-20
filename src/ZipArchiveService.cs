@@ -104,6 +104,12 @@ namespace Zipper
                 fileData.MemoryOwner?.Dispose();
             }
 
+            // Dispose all memory owners after processing is complete
+            foreach (var fileData in processedFiles)
+            {
+                fileData.MemoryOwner?.Dispose();
+            }
+
             return actualLoadFilePath;
         }
 
