@@ -9,12 +9,10 @@ namespace Zipper
     /// </summary>
     public class ParallelFileGenerator : IDisposable
     {
-        private readonly MemoryPoolManager memoryPoolManager;
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
 
         public ParallelFileGenerator()
         {
-            this.memoryPoolManager = new MemoryPoolManager();
         }
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
@@ -75,9 +73,8 @@ namespace Zipper
                 var consumerTask = this.WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
 
                 // Generate files in parallel (producers)
-                using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
 
                 // Wait for all producers to complete
                 await Task.WhenAll(producerTasks);
@@ -109,7 +106,10 @@ namespace Zipper
 
         private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType)
         {
-            var channel = Channel.CreateUnbounded<FileWorkItem>();
+            var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(1000)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+            });
             var writer = channel.Writer;
 
             Task.Run(async () =>
@@ -137,27 +137,19 @@ namespace Zipper
             return channel.Reader;
         }
 
-        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request)
+        private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request)
         {
             long filesProcessed = 0;
 
             await foreach (var workItem in reader.ReadAllAsync())
             {
-                await semaphore.WaitAsync();
-                try
-                {
-                    var fileData = this.GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
-                    await writer.WriteAsync(fileData);
+                var fileData = this.GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
+                await writer.WriteAsync(fileData);
 
-                    filesProcessed++;
-                    if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
-                    {
-                        this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
-                    }
-                }
-                finally
+                filesProcessed++;
+                if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
                 {
-                    semaphore.Release();
+                    this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                 }
             }
 
@@ -203,7 +195,7 @@ namespace Zipper
 
             var totalSize = fileContent.Length + paddingPerFile;
 
-            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
+            var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
             if (memoryOwner == null)
             {
                 // Fallback to direct allocation for very large files
@@ -292,7 +284,7 @@ namespace Zipper
 
         public void Dispose()
         {
-            this.memoryPoolManager?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 

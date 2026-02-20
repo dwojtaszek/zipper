@@ -66,7 +66,7 @@ public static class PlaceholderFiles
 
     public static (string filename, byte[] content)? GetRandomAttachment()
     {
-        var random = new Random();
+        var random = Random.Shared;
         var fileTypes = new List<string>(FileContentMap.Keys);
         if (fileTypes.Count == 0)
         {

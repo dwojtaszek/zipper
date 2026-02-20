@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Threading.Channels;
 using Zipper.LoadFiles;
@@ -30,7 +29,7 @@ namespace Zipper
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
-            var processedFiles = new ConcurrentBag<FileData>();
+            var processedFiles = new List<FileData>();
 
             // Pre-compute the extracted text content selection once, outside the loop
             var extractedTextContent = request.WithText
