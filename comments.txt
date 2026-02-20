@@ -1,0 +1,1209 @@
+author:	coderabbitai
+association:	none
+edited:	true
+status:	none
+--
+<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- oss_config_warning_start -->
+
+> [!WARNING]
+> Ignoring CodeRabbit configuration file changes. For security, only the configuration from the base branch is applied for open source repositories.
+
+<!-- oss_config_warning_end -->
+
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+This PR removes copyright headers per policy, optimizes memory handling through precomputation and chunked encoding, refactors memory pooling and channel semantics in parallel generation, removes public APIs from LoadFileGenerator and OfficeFileGenerator, and introduces allocation benchmarking alongside dependency updates.
+
+## Changes
+
+|Cohort / File(s)|Summary|
+|---|---|
+|**Copyright Header Removal** <br> `src/*.cs`, `src/LoadFiles/*.cs`, `src/Profiles/*.cs`, `src/Zipper.Tests/*.cs`|Removed file-level copyright boilerplate comments from 40+ source files. No functional changes.|
+|**Configuration & Documentation** <br> `.coderabbit.yaml`, `AGENTS.md`|Added C# path instructions policy prohibiting copyright/license headers and file-level comments; documented corresponding AGENTS.md policy.|
+|**Memory & Performance Optimization** <br> `src/EmailBuilder.cs`, `src/OfficeFileGenerator.cs`, `src/Profiles/DataGenerator.cs`|EmailBuilder: Replaced single Convert.ToBase64String call with chunked ArrayPool-backed TryToBase64Chars streaming with CRLF handling. OfficeFileGenerator: Introduced static precomputed DOCX/XLSX binaries at class initialization for O(1) generation. DataGenerator: Replaced LINQ-based hash generation with stack-allocated buffer approach.|
+|**Memory Pool & Channel Refactoring** <br> `src/ParallelFileGenerator.cs`, `src/ZipArchiveService.cs`|Replaced MemoryPoolManager with System.Buffers.MemoryPool<byte>.Shared. Updated channel from unbounded to bounded (capacity 1000). Changed FileData.Data from byte[] to ReadOnlyMemory<byte>. Removed semaphore-based producer coordination. Updated memory disposal lifecycle.|
+|**API & Workflow Changes** <br> `src/LoadFileGenerator.cs`, `src/LoadFiles/...`|Removed public methods WriteLoadFileToArchiveAsync and WriteLoadFileToDiskAsync. Introduced seeded randomness flow passing Random parameter through helper methods. Enhanced load file header generation with metadata/format options.|
+|**Generation & Validation Updates** <br> `src/TiffMultiPageGenerator.cs`, `src/CommandLineValidator.cs`, `src/PlaceholderFiles.cs`|TiffMultiPageGenerator: Replaced on-demand TIFF generation with precomputed content; added ParsePageRange method; improved seed hashing. CommandLineValidator: Changed GB multiplier from int-based (1024) to long-literal (1024L). PlaceholderFiles: Switched from new Random() to Random.Shared.|
+|**Benchmark & Testing** <br> `src/PerformanceBenchmarkRunner.cs`, `src/Program.cs`, `src/Zipper.Tests/ProgramTests.cs`|Added BenchmarkAllocation to measure per-file memory allocation. Added --benchmark flag handling in Program.Main. Updated ProgramTests with Console redirection for parallel test safety and new Main_WithBenchmarkFlag_ReturnsZero test. Removed MemoryPoolManagerTests.cs.|
+|**Test Coverage Updates** <br> `src/Zipper.Tests/OfficeFileGeneratorTests.cs`|Renamed tests and updated assertions to verify precomputed content identity across indices rather than differentiation.|
+|**CI & Dependencies** <br> `.github/workflows/build-and-test.yml`, `src/Zipper.csproj`, `src/Zipper.Tests/Zipper.Tests.csproj`, `src/packages.lock.json`|Updated cache action from v5.0.1 to v5.0.3. Bumped System.Drawing.Common and System.Text.Encoding.CodePages from 10.0.2 to 10.0.3. Updated coverlet.collector from 6.0.4 to 8.0.0. Updated packages.lock.json with corresponding hash values.|
+|**Removed Infrastructure** <br> `src/MemoryPoolManager.cs`|Removed MemoryPoolManager class and all related pooling logic; usage replaced with System.Buffers.MemoryPool<byte>.Shared.|
+
+## Possibly related PRs
+
+- **dwojtaszek/zipper#67**: Identical EmailBuilder chunked Base64 encoding refactor with ArrayPool and CRLF handling.
+- **dwojtaszek/zipper#66**: Identical DataGenerator hash generation stack allocation refactor.
+- **dwojtaszek/zipper#65**: Overlapping changes to FileData.Data ReadOnlyMemory<byte>, ParallelFileGenerator ToArray removal, allocation benchmark addition.
+
+## Estimated code review effort
+
+🎯 4 (Complex) | ⏱️ ~50 minutes
+
+## Poem
+
+> 🐰 Headers gone, but logic stays bright,
+> Memory pooling takes lighter flight,
+> Chunks encode in ArrayPool's embrace,
+> Precomputed binaries set the pace,
+> Benchmarks measure where speed will show! 📊✨
+
+</details>
+
+<!-- walkthrough_end -->
+
+
+<!-- pre_merge_checks_walkthrough_start -->
+
+<details>
+<summary>🚥 Pre-merge checks | ✅ 2 | ❌ 1</summary>
+
+### ❌ Failed checks (1 warning)
+
+|     Check name     | Status     | Explanation                                                                           | Resolution                                                                         |
+| :----------------: | :--------- | :------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------- |
+| Docstring Coverage | ⚠️ Warning | Docstring coverage is 32.65% which is insufficient. The required threshold is 80.00%. | Write docstrings for the functions missing them to satisfy the coverage threshold. |
+
+<details>
+<summary>✅ Passed checks (2 passed)</summary>
+
+|     Check name    | Status   | Explanation                                                                                                                                                                                                                                |
+| :---------------: | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Description Check | ✅ Passed | Check skipped - CodeRabbit’s high-level summary is enabled.                                                                                                                                                                                |
+|    Title check    | ✅ Passed | The title clearly and specifically summarizes the main objective of the PR: resolving nine identified issues (1-9) related to determinism, correctness, and concurrency. It directly relates to the core changes throughout the changeset. |
+
+</details>
+
+<sub>✏️ Tip: You can configure your own custom pre-merge checks in the settings.</sub>
+
+</details>
+
+<!-- pre_merge_checks_walkthrough_end -->
+
+<!-- finishing_touch_checkbox_start -->
+
+<details>
+<summary>✨ Finishing Touches</summary>
+
+- [ ] <!-- {"checkboxId": "7962f53c-55bc-4827-bfbf-6a18da830691"} --> 📝 Generate docstrings (stacked PR)
+- [ ] <!-- {"checkboxId": "3e1879ae-f29b-4d0d-8e06-d12b7ba33d98"} --> 📝 Generate docstrings (commit on current branch)
+<details>
+<summary>🧪 Generate unit tests (beta)</summary>
+
+- [ ] <!-- {"checkboxId": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "radioGroupId": "utg-output-choice-group-unknown_comment_id"} -->   Create PR with unit tests
+- [ ] <!-- {"checkboxId": "07f1e7d6-8a8e-4e23-9900-8731c2c87f58", "radioGroupId": "utg-output-choice-group-unknown_comment_id"} -->   Post copyable unit tests in a comment
+- [ ] <!-- {"checkboxId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8", "radioGroupId": "utg-output-choice-group-unknown_comment_id"} -->   Commit unit tests in branch `fix/issues-1-9`
+
+</details>
+
+</details>
+
+<!-- finishing_touch_checkbox_end -->
+
+<!-- announcements_start -->
+
+> [!TIP]
+> [Issue Planner](https://www.coderabbit.ai/issue-planner) is now in beta. Read the [docs](https://docs.coderabbit.ai/issues/planning) and try it out! Share your feedback on [Discord](https://discord.com/invite/coderabbit).
+
+<!-- announcements_end -->
+
+<!-- tips_start -->
+
+---
+
+Thanks for using [CodeRabbit](https://coderabbit.ai?utm_source=oss&utm_medium=github&utm_campaign=dwojtaszek/zipper&utm_content=78)! It's free for OSS, and your support helps us grow. If you like it, consider giving us a shout-out.
+
+<details>
+<summary>❤️ Share</summary>
+
+- [X](https://twitter.com/intent/tweet?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A&url=https%3A//coderabbit.ai)
+- [Mastodon](https://mastodon.social/share?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A%20https%3A%2F%2Fcoderabbit.ai)
+- [Reddit](https://www.reddit.com/submit?title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&text=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code.%20Check%20it%20out%3A%20https%3A//coderabbit.ai)
+- [LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcoderabbit.ai&mini=true&title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&summary=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code)
+
+</details>
+
+<sub>Comment `@coderabbitai help` to get the list of available commands and usage tips.</sub>
+
+<!-- tips_end -->
+
+<!-- internal state start -->
+
+
+<!-- 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 -->
+
+<!-- internal state end -->
+--
+author:	chatgpt-codex-connector
+association:	none
+edited:	false
+status:	commented
+--
+
+### 💡 Codex Review
+
+Here are some automated review suggestions for this pull request.
+
+**Reviewed commit:** `129d73e7d0`
+    
+
+<details> <summary>ℹ️ About Codex in GitHub</summary>
+<br/>
+
+[Your team has set up Codex to review pull requests in this repo](http://chatgpt.com/codex/settings/general). Reviews are triggered when you
+- Open a pull request for review
+- Mark a draft as ready
+- Comment "@codex review".
+
+If Codex has suggestions, it will comment; otherwise it will react with 👍.
+
+
+
+
+Codex can also answer questions or update the PR. Try commenting "@codex address that feedback".
+            
+</details>
+--
+author:	coderabbitai
+association:	none
+edited:	false
+status:	commented
+--
+**Actionable comments posted: 3**
+
+> [!CAUTION]
+> Some comments are outside the diff and can’t be posted inline due to platform limitations.
+> 
+> 
+> 
+> <details>
+> <summary>⚠️ Outside diff range comments (4)</summary><blockquote>
+> 
+> <details>
+> <summary>src/EmailTemplateSystem.cs (1)</summary><blockquote>
+> 
+> `86-92`: _⚠️ Potential issue_ | _🟡 Minor_
+> 
+> **Handle negative `index` parameter in `GenerateEmailAddress` to prevent `IndexOutOfRangeException`.**
+> 
+> C#'s `%` operator preserves the sign of the left operand, so `(-1) % 10 == -1`. When `index` is negative, `EmailDomains[index % EmailDomains.Length]` throws at runtime. Since the method is `public static`, external callers can pass negative values.
+> 
+> While current callers in this codebase use non-negative indices only, the method should defend against invalid input.
+> 
+> <details>
+> <summary>Proposed fix</summary>
+> 
+> ```diff
+>  public static string GenerateEmailAddress(int index, string type)
+>  {
+> -    var domain = EmailDomains[index % EmailDomains.Length];
+> +    var domain = EmailDomains[((index % EmailDomains.Length) + EmailDomains.Length) % EmailDomains.Length];
+>      var userType = type.ToLowerInvariant();
+>      return $"{userType}{index:D3}@{domain}";
+>  }
+> ```
+> </details>
+> 
+> <details>
+> <summary>🤖 Prompt for AI Agents</summary>
+> 
+> ```
+> Verify each finding against the current code and only fix it if needed.
+> 
+> In `@src/EmailTemplateSystem.cs` around lines 86 - 92, GenerateEmailAddress can
+> throw IndexOutOfRangeException for negative index because C# % preserves sign;
+> fix by normalizing the index before indexing EmailDomains: compute a
+> non-negative domainIndex using a safe modulus (e.g., ((index %
+> EmailDomains.Length) + EmailDomains.Length) % EmailDomains.Length) and use that
+> instead of index when selecting domain, leaving the rest of GenerateEmailAddress
+> (including userType and formatting) unchanged.
+> ```
+> 
+> </details>
+> 
+> </blockquote></details>
+> <details>
+> <summary>src/ParallelFileGenerator.cs (2)</summary><blockquote>
+> 
+> `174-174`: _⚠️ Potential issue_ | _🟡 Minor_
+> 
+> **`(int)workItem.Index` — potential truncation for large file counts.**
+> 
+> `workItem.Index` is `long`, but `EmlGenerationService.GenerateEmlContent` takes `int`. For file counts exceeding `int.MaxValue`, this silently wraps. Consider adding a checked cast or validating early.
+> 
+> <details>
+> <summary>🤖 Prompt for AI Agents</summary>
+> 
+> ```
+> Verify each finding against the current code and only fix it if needed.
+> 
+> In `@src/ParallelFileGenerator.cs` at line 174, workItem.Index is a long but is
+> being cast to int when passed to EmlGenerationService.GenerateEmlContent, which
+> can silently truncate for very large file counts; update the call site to
+> validate the range (e.g., if (workItem.Index < int.MinValue || workItem.Index >
+> int.MaxValue) throw new OverflowException(...)) or use a checked cast and throw
+> a clear exception, or better yet change GenerateEmlContent’s parameter to long
+> and propagate that type change so no unsafe cast is required; reference
+> workItem.Index and EmlGenerationService.GenerateEmlContent when applying the
+> fix.
+> ```
+> 
+> </details>
+> 
+> ---
+> 
+> `196-237`: _⚠️ Potential issue_ | _🔴 Critical_
+> 
+> **Critical: buffer overrun when `totalSize > MaxPoolSize` — dead code null check and memory allocation violation.**
+> 
+> `MemoryPool<byte>.Shared.Rent()` never returns `null` per official .NET documentation; it returns an `IMemoryOwner<T>` or throws on failure. The null check at line 199 is dead code. More critically, when file size plus padding exceeds `MaxPoolSize` (100 MB) — which is possible since `MaxPaddingPerFile` is also 100 MB — the code rents only `MaxPoolSize` bytes but then attempts to use it as if it were `totalSize` bytes:
+> 
+> - Line 226: `Span.Slice(fileContent.Length, (int)paddingPerFile)` exceeds the rented buffer → `ArgumentOutOfRangeException`
+> - Line 233: `memoryOwner.Memory[..(int)totalSize]` exceeds `Memory.Length` → `ArgumentOutOfRangeException`
+> 
+> Additionally, lines 170 and 185 call `.ToLower()` inside the `GenerateFileData` hot path (once per file), allocating a new string each time. This violates the requirement to avoid allocations in hot paths. Use `StringComparison.OrdinalIgnoreCase` for case-insensitive comparisons instead.
+> 
+> <details>
+> <summary>🔧 Fix: check size before rent, eliminate string allocations</summary>
+> 
+> Replace the null check with a size check:
+> ```diff
+> -            var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
+> -            if (memoryOwner == null)
+> +            var useFallback = totalSize > PerformanceConstants.MaxPoolSize;
+> +            if (useFallback)
+>              {
+>                  // Fallback to direct allocation for very large files
+>                  var data = new byte[totalSize];
+>                  Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
+>                  if (paddingPerFile > 0)
+>                  {
+>                      var padding = new byte[paddingPerFile];
+>                      RandomNumberGenerator.Fill(padding);
+>                      Buffer.BlockCopy(padding, 0, data, fileContent.Length, padding.Length);
+>                  }
+>                  return new FileData { WorkItem = workItem, Data = data, Attachment = attachment, PageCount = pageCount };
+>              }
+> +            var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent((int)totalSize);
+>              fileContent.CopyTo(memoryOwner.Memory.Span);
+>              if (paddingPerFile > 0)
+>              {
+>                  var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)paddingPerFile);
+>                  RandomNumberGenerator.Fill(paddingSpan);
+>              }
+>              return new FileData { WorkItem = workItem, Data = memoryOwner.Memory[..(int)totalSize], MemoryOwner = memoryOwner, Attachment = attachment, PageCount = pageCount };
+> ```
+> 
+> For string allocation, replace `.ToLower()` calls with case-insensitive comparison:
+> ```diff
+> -            if (request.FileType.ToLower() == "eml")
+> +            if (request.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase))
+> -            else if (request.FileType.ToLower() == "tiff" && request.TiffPageRange.HasValue)
+> +            else if (request.FileType.Equals("tiff", StringComparison.OrdinalIgnoreCase) && request.TiffPageRange.HasValue)
+> ```
+> </details>
+> 
+> <details>
+> <summary>🤖 Prompt for AI Agents</summary>
+> 
+> ```
+> Verify each finding against the current code and only fix it if needed.
+> 
+> In `@src/ParallelFileGenerator.cs` around lines 196 - 237, The current
+> GenerateFileData hot path incorrectly assumes MemoryPool<byte>.Shared.Rent can
+> satisfy totalSize and contains a dead null-check; instead, before calling
+> MemoryPool<byte>.Shared.Rent(totalSize), compare totalSize against
+> PerformanceConstants.MaxPoolSize and if totalSize > MaxPoolSize allocate a
+> byte[] and copy fileContent + padding into it (replacing the current null-check
+> branch), otherwise rent a pool sized at (int)totalSize and safely write into
+> memoryOwner.Memory.Span; also stop calling .ToLower() in GenerateFileData (the
+> allocations at the earlier .ToLower() calls) and replace those comparisons with
+> case-insensitive checks using String.Equals or string.Equals(...,
+> StringComparison.OrdinalIgnoreCase) so no per-file string allocations occur.
+> ```
+> 
+> </details>
+> 
+> </blockquote></details>
+> <details>
+> <summary>src/Program.cs (1)</summary><blockquote>
+> 
+> `7-11`: _🛠️ Refactor suggestion_ | _🟠 Major_
+> 
+> **Missing `Encoding.RegisterProvider` call required by project guidelines.**
+> 
+> The file is missing `System.Text.Encoding.RegisterProvider(CodePagesEncodingProvider.Instance)` from the `Main` method. Per the project coding guideline for `src/Program.cs`, this registration must be present to support cross-platform ANSI encoding.
+> 
+> <details>
+> <summary>🛡️ Proposed addition</summary>
+> 
+> ```diff
+>  public static async Task<int> Main(string[] args)
+>  {
+> +    System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+> +
+>      var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+> ```
+> </details>
+> 
+> <details>
+> <summary>🤖 Prompt for AI Agents</summary>
+> 
+> ```
+> Verify each finding against the current code and only fix it if needed.
+> 
+> In `@src/Program.cs` around lines 7 - 11, Add the required encoding provider
+> registration in Program.Main: call
+> System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance)
+> near the start of the Main method (before any console I/O or encoding-dependent
+> work) so ANSI/codepage encodings are available cross-platform; update the Main
+> method in class Program to include this single call, referencing
+> System.Text.Encoding.RegisterProvider and
+> System.Text.CodePagesEncodingProvider.Instance.
+> ```
+> 
+> </details>
+> 
+> </blockquote></details>
+> 
+> </blockquote></details>
+
+<details>
+<summary>🧹 Nitpick comments (15)</summary><blockquote>
+
+<details>
+<summary>src/Profiles/DataGenerator.cs (1)</summary><blockquote>
+
+`394-407`: **LGTM — clean `stackalloc` optimisation.**
+
+Replacing the heap-allocated buffer with `stackalloc char[length]` is correct: max stack usage is 128 bytes (64 chars × 2 bytes for `sha256hash`), `Span<char>` → `ReadOnlySpan<char>` implicit conversion makes `new string(buffer)` valid, and the comment correctly documents the rationale.
+
+One optional hardening point: the documented invariant (`length ≤ 256`) lives only in the comment. A defensive guard would enforce it if a new `case` is ever added to `GenerateFromGenerator` with an unexpectedly large hash length:
+
+<details>
+<summary>🛡️ Optional: enforce the documented length constraint</summary>
+
+```diff
+ private string GenerateHash(int length)
+ {
+     const string chars = "0123456789abcdef";
+ 
++    // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
++    // so we can safely use stackalloc for efficiency.
++    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
++    ArgumentOutOfRangeException.ThrowIfGreaterThan(length, 256);
+-    // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
+-    // so we can safely use stackalloc for efficiency.
+     Span<char> buffer = stackalloc char[length];
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/Profiles/DataGenerator.cs` around lines 394 - 407, Add a defensive guard
+in GenerateHash to enforce the documented max length invariant (e.g., throw an
+ArgumentOutOfRangeException when length > 256 or length <= 0) before using
+stackalloc, and ensure callers like GenerateFromGenerator pass validated
+lengths; this keeps the stackalloc usage safe and prevents future callers from
+accidentally requesting a too-large buffer.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/EmailBuilder.cs (1)</summary><blockquote>
+
+`232-243`: **Mixed line-ending conventions: explicit `\r\n` vs platform-dependent `AppendLine()`.**
+
+Line 234 correctly uses `"\r\n"` per MIME/RFC 2045, but line 243 (`sb.AppendLine()`) emits `Environment.NewLine`, which is `\n` on Linux. This introduces mixed line endings in the output on non-Windows platforms. The same issue exists throughout the rest of the file (pre-existing), but since this chunk is new code, it's worth noting.
+
+Consider using `sb.Append("\r\n")` on line 243 for consistency within the new block:
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-            sb.AppendLine();
++            sb.Append("\r\n");
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/EmailBuilder.cs` around lines 232 - 243, The new block mixes explicit
+CRLF with platform-dependent AppendLine(): replace the final sb.AppendLine()
+call with sb.Append("\r\n") to ensure MIME-compliant CRLF endings; check the
+surrounding method that uses the StringBuilder instance named sb (and related
+buffer return via ArrayPool<char>.Shared.Return) and adjust any other
+AppendLine() usages in this method to sb.Append("\r\n") for consistent line
+endings.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/LoadFileGenerator.cs (3)</summary><blockquote>
+
+`18-67`: **Missing `await writer.FlushAsync()` at the end of `WriteLoadFileContent`.**
+
+The `StreamWriter` is caller-owned, so this method should flush it after writing but must not dispose it. Currently neither happens, leaving buffered content at risk of not being committed if the caller doesn't flush.
+
+
+
+<details>
+<summary>♻️ Proposed fix</summary>
+
+```diff
+             await writer.WriteLineAsync(lineBuilder.ToString());
+         }
++
++        await writer.FlushAsync();
+     }
+```
+
+</details>
+
+Based on learnings: "For caller-owned streams, flush but do not dispose (use `await writer.FlushAsync()` instead of `await writer.DisposeAsync()`)".
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/LoadFileGenerator.cs` around lines 18 - 67, The method
+WriteLoadFileContent writes to a caller-owned StreamWriter but never flushes it;
+add an explicit await writer.FlushAsync() just before returning from
+WriteLoadFileContent (do not Dispose or Close the writer) so buffered data is
+committed while preserving caller ownership of the stream.
+```
+
+</details>
+
+---
+
+`86-107`: **`request.FileType.ToLowerInvariant()` called three times per record.**
+
+This allocates a new string on each call. Hoist it to a local variable at the top of `WriteFileRecord` (and similarly in `WriteLoadFileContent` lines 33–50).
+
+
+
+<details>
+<summary>♻️ Proposed fix</summary>
+
+```diff
+         var workItem = fileData.WorkItem;
++        var fileTypeLower = request.FileType.ToLowerInvariant();
+         var docId = SanitizeField($"DOC{workItem.Index:D8}", request.NewlineDelimiter);
+         ...
+-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
++            if (request.WithMetadata || fileTypeLower == "eml")
+         ...
+-            if (request.FileType.ToLowerInvariant() == "eml")
++            if (fileTypeLower == "eml")
+         ...
+-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
++            if (fileTypeLower == "tiff" && request.TiffPageRange.HasValue)
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/LoadFileGenerator.cs` around lines 86 - 107, The code calls
+request.FileType.ToLowerInvariant() multiple times in WriteFileRecord (and
+similarly in WriteLoadFileContent), which allocates repeatedly; fix it by
+hoisting the lowercase file type into a local variable (e.g., var fileType =
+request.FileType?.ToLowerInvariant()) at the start of WriteFileRecord and
+WriteLoadFileContent, then replace all subsequent
+request.FileType.ToLowerInvariant() occurrences in those methods (used in the
+metadata/eml/tiff conditionals) with that local fileType variable to avoid
+repeated allocations and null issues.
+```
+
+</details>
+
+---
+
+`125-146`: **`colDelim` and `quote` redundantly re-parsed in `GetMetadataColumns` and `GetEmlColumns`.**
+
+Both helpers re-derive `colDelim` and `quote` from `request` (lines 128–129 and 145–146) even though `WriteFileRecord` already receives these values as parameters. Pass them through instead of re-computing.
+
+
+
+<details>
+<summary>♻️ Proposed fix</summary>
+
+```diff
+-        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random)
++        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random, char colDelim, char quote)
+         {
+-            // Defensive guards to prevent IndexOutOfRangeException
+-            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\^T';
+-            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
+```
+
+```diff
+-        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random)
++        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random, char colDelim, char quote)
+         {
+-            // Defensive guards to prevent IndexOutOfRangeException
+-            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\^T';
+-            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
+```
+
+And update the call sites in `WriteFileRecord`:
+
+```diff
+-                var metadataColumns = GetMetadataColumns(workItem, fileData, request, random);
++                var metadataColumns = GetMetadataColumns(workItem, fileData, request, random, colDelim, quote);
+...
+-                var emlColumns = GetEmlColumns(workItem, fileData, request, random);
++                var emlColumns = GetEmlColumns(workItem, fileData, request, random, colDelim, quote);
+```
+
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/LoadFileGenerator.cs` around lines 125 - 146, Get rid of the redundant
+parsing of request.ColumnDelimiter/QuoteDelimiter inside GetMetadataColumns and
+GetEmlColumns: change both methods to accept the already-computed char
+parameters (e.g., char colDelim, char quote) instead of re-deriving them, update
+all call sites in WriteFileRecord to pass the existing colDelim and quote
+variables, and preserve the current fallback defaults ('\^T' and '\u00fe')
+only where those chars are originally computed before calling these helpers so
+behavior is unchanged.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/Zipper.Tests/Zipper.Tests.csproj (1)</summary><blockquote>
+
+`28-28`: **Document .NET SDK 8.0.414+ requirement in CI or use explicit version pin.**
+
+coverlet.collector 8.0.0 requires SDK v8.0.414 (LTS) or newer. The CI workflow currently specifies `dotnet-version: 8.0.x`, which resolves to the latest available 8.0 patch and should satisfy this requirement. However, this is not documented. Consider pinning to `8.0.414` or later explicitly, or add a comment in the workflow documenting the minimum requirement for clarity.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/Zipper.Tests/Zipper.Tests.csproj` at line 28, The CI needs an explicit
+minimum .NET SDK requirement for coverlet.collector 8.0.0: either pin the
+runner's dotnet-version to 8.0.414 (or newer) instead of using the floating
+"dotnet-version: 8.0.x", or add a clear comment in the workflow documenting that
+coverlet.collector 8.0.0 requires SDK 8.0.414+; update your CI workflow file
+accordingly and reference the coverlet.collector 8.0.0 PackageReference when
+explaining the requirement.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/PerformanceBenchmarkRunner.cs (1)</summary><blockquote>
+
+`160-164`: **`MemoryPool<byte>.Shared.Rent` never returns null — the null check is dead code.**
+
+`MemoryPool<byte>.Shared.Rent()` is guaranteed to return a non-null `IMemoryOwner<byte>` (it throws on failure). The `if (memoryOwner != null)` guard on line 161 is unreachable. Not a bug, but misleading in a benchmark meant to demonstrate pooling behavior.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/PerformanceBenchmarkRunner.cs` around lines 160 - 164, Remove the dead
+null-check around the rented buffer: MemoryPool<byte>.Shared.Rent(bufferSize)
+never returns null, so delete the if (memoryOwner != null) branch and directly
+use memoryOwner (e.g., assign to using var memoryOwner =
+System.Buffers.MemoryPool<byte>.Shared.Rent(bufferSize); then immediately access
+memoryOwner.Memory.Span[0] = (byte)i). This keeps the using/disposal semantics
+and avoids misleading code in PerformanceBenchmarkRunner.cs.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/ParallelFileGenerator.cs (2)</summary><blockquote>
+
+`164-194`: **Repeated `request.FileType.ToLower()` allocates a string per file on the hot path.**
+
+`ToLower()` is called at lines 170, 185 inside `GenerateFileData`, which runs once per file. Consider hoisting the lowered file type into the caller or caching it on the request object.
+
+<details>
+<summary>♻️ Suggested refactor</summary>
+
+```diff
+ private FileData GenerateFileData(FileWorkItem workItem, byte[] placeholderContent, long paddingPerFile, FileGenerationRequest request)
+ {
+     byte[] fileContent;
+     (string filename, byte[] content)? attachment = null;
+     int pageCount = 1;
++    var fileTypeLower = request.FileType.ToLowerInvariant();
+
+-    if (request.FileType.ToLower() == "eml")
++    if (fileTypeLower == "eml")
+     {
+         ...
+     }
+-    else if (request.FileType.ToLower() == "tiff" && request.TiffPageRange.HasValue)
++    else if (fileTypeLower == "tiff" && request.TiffPageRange.HasValue)
+     {
+```
+</details>
+
+Based on learnings: "Distribution algorithms must be O(1) per file with no allocations in hot paths."
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/ParallelFileGenerator.cs` around lines 164 - 194, GenerateFileData is
+calling request.FileType.ToLower() multiple times on the hot path which causes
+per-file allocations; compute a single lowered file-type string once and reuse
+it (preferably using ToLowerInvariant()) either by hoisting a local variable at
+the start of GenerateFileData or adding a cached property on
+FileGenerationRequest (e.g., request.FileTypeLower). Update the comparisons that
+reference request.FileType (the EmlGenerationService branch,
+OfficeFileGenerator.IsOfficeFormat check, and the "tiff" check used with
+TiffMultiPageGenerator) to use the cached lowered value to eliminate repeated
+allocations.
+```
+
+</details>
+
+---
+
+`285-288`: **`Dispose` no longer releases resources — consider removing `IDisposable`.**
+
+With `MemoryPoolManager` removed, `Dispose` only calls `GC.SuppressFinalize` (and there's no finalizer). If the class no longer owns disposable resources, implementing `IDisposable` is misleading. However, if you want to keep it for future extensibility, this is acceptable.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/ParallelFileGenerator.cs` around lines 285 - 288, The class
+ParallelFileGenerator currently implements IDisposable but its Dispose method
+only calls GC.SuppressFinalize and there is no finalizer or owned disposable
+resources (MemoryPoolManager was removed); remove the IDisposable implementation
+and the Dispose method from the ParallelFileGenerator class to avoid misleading
+API, or alternatively, if you want to keep the pattern for future changes,
+update Dispose to be a proper disposable pattern (define Dispose(bool), call
+GC.SuppressFinalize(this) only when a finalizer exists, and release any owned
+IDisposable members). Refer to the ParallelFileGenerator class and its Dispose
+method when making the change.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/TiffMultiPageGenerator.cs (2)</summary><blockquote>
+
+`19-23`: **`pageCount` parameter is now unused in `Generate`.**
+
+Since the method returns pre-computed content regardless of `pageCount`, consider removing the parameter or marking it with a discard to make the intent clearer. The XML doc says "for metadata tracking," but the tracking happens in the caller, not here.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/TiffMultiPageGenerator.cs` around lines 19 - 23, The Generate method in
+TiffMultiPageGenerator currently accepts pageCount but never uses it; either
+remove the pageCount parameter from the Generate signature and update all
+callers to stop passing it, or explicitly mark it as unused (e.g., rename to _
+or _) to signal intent and avoid warnings; also update the XML doc comment on
+Generate to remove the misleading "for metadata tracking" note. Locate Generate
+and PlaceholderFiles.GetContent in TiffMultiPageGenerator to make the change and
+adjust call sites accordingly.
+```
+
+</details>
+
+---
+
+`55-60`: **`new Random(hashedSeed)` allocates on the hot path — avoidable.**
+
+Per the coding guideline for `src/ParallelFileGenerator.cs`, distribution algorithms must be O(1) per file with no allocations in hot paths. This `new Random()` allocates per file when page ranges are active. You can derive the page count directly from the hash:
+
+<details>
+<summary>♻️ Suggested zero-allocation alternative</summary>
+
+```diff
+         long combined = (fileIndex * 2654435761L) + (fileIndex >> 8);
+         int hashedSeed = (int)(combined ^ (combined >> 32));
+-        var random = new System.Random(hashedSeed);
+-        return random.Next(clampedMin, clampedMax + 1);
++        int range = clampedMax - clampedMin + 1;
++        return clampedMin + (int)(((uint)hashedSeed) % (uint)range);
+```
+</details>
+
+This produces equally well-distributed deterministic values without any heap allocation. Based on learnings: "Distribution algorithms must be O(1) per file with no allocations in hot paths; use Span<T> and ArrayPool<T>."
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/TiffMultiPageGenerator.cs` around lines 55 - 60, Replace the per-file
+System.Random allocation by deriving the page count directly from the hashed
+bits: keep the existing combined and hashedSeed computation (combined,
+fileIndex) but treat the hash as an unsigned 32-bit value and map it into the
+target range [clampedMin, clampedMax] using an O(1, allocation-free integer
+transform (prefer a 32x32->32 multiply-high or unbiased modulus alternative) to
+compute the value deterministically; remove the new System.Random(hashedSeed) /
+random.Next call and return the mapped integer instead so the hot path does not
+allocate.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/PlaceholderFiles.cs (1)</summary><blockquote>
+
+`70-70`: **Minor: `List<string>` allocated on every call from a static dictionary.**
+
+`FileContentMap.Keys` is stable; consider caching this list as a `private static readonly` field to avoid the allocation per invocation.
+
+<details>
+<summary>♻️ Suggested optimization</summary>
+
+```diff
++    private static readonly List<string> FileTypes = new List<string>(FileContentMap.Keys);
++
+     public static (string filename, byte[] content)? GetRandomAttachment()
+     {
+         var random = Random.Shared;
+-        var fileTypes = new List<string>(FileContentMap.Keys);
+-        if (fileTypes.Count == 0)
++        if (FileTypes.Count == 0)
+         {
+             return null;
+         }
+ 
+-        var randomFileType = fileTypes[random.Next(fileTypes.Count)];
++        var randomFileType = FileTypes[random.Next(FileTypes.Count)];
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/PlaceholderFiles.cs` at line 70, The local allocation "var fileTypes =
+new List<string>(FileContentMap.Keys);" should be replaced with a cached static
+instance to avoid per-call allocations—add a private static readonly field
+(e.g., CachedFileTypes) initialized once from FileContentMap.Keys and use that
+field wherever "fileTypes" is referenced; if FileContentMap can change at
+runtime, document or update the cache accordingly (or switch to a read-only
+wrapper such as an IReadOnlyCollection<string> exposed from the static cache)
+and update usages to reference the new cached symbol instead of allocating a new
+List each call.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/OfficeFileGenerator.cs (1)</summary><blockquote>
+
+`48-57`: **`ToLowerInvariant()` called per invocation — consider caching or using `StringComparison`.**
+
+`fileType.ToLowerInvariant()` in the switch allocates a new string each call. You could use `StringComparer.OrdinalIgnoreCase` pattern or a case-insensitive comparison instead, consistent with `IsOfficeFormat` which already uses `StringComparison.OrdinalIgnoreCase`.
+
+<details>
+<summary>♻️ Suggested refactor</summary>
+
+```diff
+     public static byte[] GenerateContent(string fileType, FileWorkItem workItem)
+     {
+-        return fileType.ToLowerInvariant() switch
++        var ft = fileType.ToLowerInvariant();
++        return ft switch
+         {
+```
+
+Or, to avoid the allocation entirely:
+
+```diff
+     public static byte[] GenerateContent(string fileType, FileWorkItem workItem)
+     {
+-        return fileType.ToLowerInvariant() switch
+-        {
+-            "docx" => GenerateDocx(workItem),
+-            "xlsx" => GenerateXlsx(workItem),
+-            "pptx" => throw new System.NotImplementedException("PPTX generation is not yet implemented. Please use DOCX or XLSX formats."),
+-            _ => throw new System.ArgumentException($"Unsupported Office format: {fileType}"),
+-        };
++        if (fileType.Equals("docx", StringComparison.OrdinalIgnoreCase)) return GenerateDocx(workItem);
++        if (fileType.Equals("xlsx", StringComparison.OrdinalIgnoreCase)) return GenerateXlsx(workItem);
++        if (fileType.Equals("pptx", StringComparison.OrdinalIgnoreCase))
++            throw new NotImplementedException("PPTX generation is not yet implemented.");
++        throw new ArgumentException($"Unsupported Office format: {fileType}");
+     }
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/OfficeFileGenerator.cs` around lines 48 - 57, The switch currently calls
+fileType.ToLowerInvariant() causing an allocation each call; update
+GenerateContent to compare fileType using case-insensitive comparisons instead
+(e.g., use string.Equals(fileType, "docx", StringComparison.OrdinalIgnoreCase) /
+string.Equals(fileType, "xlsx", StringComparison.OrdinalIgnoreCase) or
+pattern-match like `fileType is string s && string.Equals(s, "docx",
+StringComparison.OrdinalIgnoreCase)`), then call GenerateDocx(workItem) or
+GenerateXlsx(workItem) and keep the existing exceptions for pptx/unsupported
+values; this makes the method allocation-free and consistent with
+IsOfficeFormat's use of StringComparison.OrdinalIgnoreCase.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/ZipArchiveService.cs (1)</summary><blockquote>
+
+`86-86`: **Remove redundant `.ToList()` calls on lines 86 and 97.**
+
+`processedFiles` is initialized as `new List<FileData>()` on line 32 and is already a `List<FileData>`. The `WriteAsync` method signature explicitly accepts `System.Collections.Generic.List<FileData>` (not `IEnumerable`), and the implementations do not mutate the list. Passing `processedFiles` directly eliminates unnecessary list allocations.
+
+<details>
+<summary>Suggested fix</summary>
+
+```diff
+-                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList());
++                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles);
+```
+
+And on line 97:
+```diff
+-                await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
++                await loadFileWriter.WriteAsync(fileStream, request, processedFiles);
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/ZipArchiveService.cs` at line 86, Remove the unnecessary .ToList()
+allocations when passing the already-typed List<FileData> variable
+processedFiles into WriteAsync; replace calls like
+loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList()) (and
+the similar call later) to pass processedFiles directly, since processedFiles is
+created as new List<FileData>() and WriteAsync expects a List<FileData>.
+```
+
+</details>
+
+</blockquote></details>
+<details>
+<summary>src/Zipper.Tests/ProgramTests.cs (1)</summary><blockquote>
+
+`14-19`: **`StringWriter` instances are never disposed.**
+
+`Console.SetOut(new StringWriter())` allocates a `StringWriter` that is never assigned and therefore never explicitly disposed. `StringWriter` wraps a `StringBuilder` (no unmanaged resources), so there is no leak risk, but assigning and disposing it explicitly is more idiomatic.
+
+<details>
+<summary>♻️ Suggested refactor (representative — applies to all test methods)</summary>
+
+```diff
+-Console.SetOut(new StringWriter());
+-Console.SetError(new StringWriter());
++using var outWriter = new StringWriter();
++using var errWriter = new StringWriter();
++Console.SetOut(outWriter);
++Console.SetError(errWriter);
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+In `@src/Zipper.Tests/ProgramTests.cs` around lines 14 - 19, The test temporarily
+replaces Console output/error with new StringWriter instances but never assigns
+or disposes them; update the block around Console.SetOut and Console.SetError so
+you create named StringWriter variables (e.g., var outWriter = new
+StringWriter(), var errWriter = new StringWriter()), pass those to
+Console.SetOut/SetError, and ensure they are disposed (either via using or by
+disposing them in the finally after restoring originalOut/originalError). This
+change touches the Console.SetOut/Console.SetError calls and the
+originalOut/originalError restore logic in ProgramTests.cs.
+```
+
+</details>
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against the current code and only fix it if needed.
+
+Inline comments:
+In `@src/LoadFileGenerator.cs`:
+- Around line 132-133: The code uses DateTime.Now as the anchor for dateSent
+which breaks seeded determinism; replace DateTime.Now with a deterministic
+anchor (e.g., use request.ReferenceDate ?? new DateTime(2020,1,1)) and compute
+dateSent from that anchor with
+.AddDays(-random.Next(1,365)).ToString("yyyy-MM-dd") so the Random seed produces
+fully reproducible dates; update the dateSent assignment in LoadFileGenerator
+(and any other places relying on DateTime.Now) to use this deterministic
+reference.
+- Line 151: GetEmlColumns uses DateTime.Now to compute sentDate which breaks
+reproducibility; change it to use the same fixed-epoch approach used in
+GetMetadataColumns (e.g., a fixedEpoch DateTime value seeded once for the
+generator) instead of DateTime.Now so the random offsets are applied to
+fixedEpoch; update the sentDate calculation in GetEmlColumns to derive from that
+fixedEpoch plus AddDays(-random.Next(1, 30)) and keep the existing
+ToString("yyyy-MM-dd HH:mm:ss") formatting.
+
+In `@src/Zipper.Tests/ProgramTests.cs`:
+- Around line 158-182: The test Main_WithBenchmarkFlag_ReturnsZero invokes the
+full benchmark suite (via Program.Main which calls
+PerformanceBenchmarkRunner.RunBenchmarks) and is too slow for a regular [Fact];
+either mark the test to be skipped unconditionally by adding a Skip message on
+the [Fact] attribute (so it only runs manually) or categorize it so CI can
+opt-out by adding a [Trait("Category","Benchmark")] (and update CI test filters
+to exclude Category=Benchmark); ensure the test name
+Main_WithBenchmarkFlag_ReturnsZero and reference to Program.Main remain
+unchanged so behavior is clear.
+
+---
+
+Outside diff comments:
+In `@src/EmailTemplateSystem.cs`:
+- Around line 86-92: GenerateEmailAddress can throw IndexOutOfRangeException for
+negative index because C# % preserves sign; fix by normalizing the index before
+indexing EmailDomains: compute a non-negative domainIndex using a safe modulus
+(e.g., ((index % EmailDomains.Length) + EmailDomains.Length) %
+EmailDomains.Length) and use that instead of index when selecting domain,
+leaving the rest of GenerateEmailAddress (including userType and formatting)
+unchanged.
+
+In `@src/ParallelFileGenerator.cs`:
+- Line 174: workItem.Index is a long but is being cast to int when passed to
+EmlGenerationService.GenerateEmlContent, which can silently truncate for very
+large file counts; update the call site to validate the range (e.g., if
+(workItem.Index < int.MinValue || workItem.Index > int.MaxValue) throw new
+OverflowException(...)) or use a checked cast and throw a clear exception, or
+better yet change GenerateEmlContent’s parameter to long and propagate that type
+change so no unsafe cast is required; reference workItem.Index and
+EmlGenerationService.GenerateEmlContent when applying the fix.
+- Around line 196-237: The current GenerateFileData hot path incorrectly assumes
+MemoryPool<byte>.Shared.Rent can satisfy totalSize and contains a dead
+null-check; instead, before calling MemoryPool<byte>.Shared.Rent(totalSize),
+compare totalSize against PerformanceConstants.MaxPoolSize and if totalSize >
+MaxPoolSize allocate a byte[] and copy fileContent + padding into it (replacing
+the current null-check branch), otherwise rent a pool sized at (int)totalSize
+and safely write into memoryOwner.Memory.Span; also stop calling .ToLower() in
+GenerateFileData (the allocations at the earlier .ToLower() calls) and replace
+those comparisons with case-insensitive checks using String.Equals or
+string.Equals(..., StringComparison.OrdinalIgnoreCase) so no per-file string
+allocations occur.
+
+In `@src/Program.cs`:
+- Around line 7-11: Add the required encoding provider registration in
+Program.Main: call
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance)
+near the start of the Main method (before any console I/O or encoding-dependent
+work) so ANSI/codepage encodings are available cross-platform; update the Main
+method in class Program to include this single call, referencing
+System.Text.Encoding.RegisterProvider and
+System.Text.CodePagesEncodingProvider.Instance.
+
+---
+
+Nitpick comments:
+In `@src/EmailBuilder.cs`:
+- Around line 232-243: The new block mixes explicit CRLF with platform-dependent
+AppendLine(): replace the final sb.AppendLine() call with sb.Append("\r\n") to
+ensure MIME-compliant CRLF endings; check the surrounding method that uses the
+StringBuilder instance named sb (and related buffer return via
+ArrayPool<char>.Shared.Return) and adjust any other AppendLine() usages in this
+method to sb.Append("\r\n") for consistent line endings.
+
+In `@src/LoadFileGenerator.cs`:
+- Around line 18-67: The method WriteLoadFileContent writes to a caller-owned
+StreamWriter but never flushes it; add an explicit await writer.FlushAsync()
+just before returning from WriteLoadFileContent (do not Dispose or Close the
+writer) so buffered data is committed while preserving caller ownership of the
+stream.
+- Around line 86-107: The code calls request.FileType.ToLowerInvariant()
+multiple times in WriteFileRecord (and similarly in WriteLoadFileContent), which
+allocates repeatedly; fix it by hoisting the lowercase file type into a local
+variable (e.g., var fileType = request.FileType?.ToLowerInvariant()) at the
+start of WriteFileRecord and WriteLoadFileContent, then replace all subsequent
+request.FileType.ToLowerInvariant() occurrences in those methods (used in the
+metadata/eml/tiff conditionals) with that local fileType variable to avoid
+repeated allocations and null issues.
+- Around line 125-146: Get rid of the redundant parsing of
+request.ColumnDelimiter/QuoteDelimiter inside GetMetadataColumns and
+GetEmlColumns: change both methods to accept the already-computed char
+parameters (e.g., char colDelim, char quote) instead of re-deriving them, update
+all call sites in WriteFileRecord to pass the existing colDelim and quote
+variables, and preserve the current fallback defaults ('\^T' and '\u00fe')
+only where those chars are originally computed before calling these helpers so
+behavior is unchanged.
+
+In `@src/OfficeFileGenerator.cs`:
+- Around line 48-57: The switch currently calls fileType.ToLowerInvariant()
+causing an allocation each call; update GenerateContent to compare fileType
+using case-insensitive comparisons instead (e.g., use string.Equals(fileType,
+"docx", StringComparison.OrdinalIgnoreCase) / string.Equals(fileType, "xlsx",
+StringComparison.OrdinalIgnoreCase) or pattern-match like `fileType is string s
+&& string.Equals(s, "docx", StringComparison.OrdinalIgnoreCase)`), then call
+GenerateDocx(workItem) or GenerateXlsx(workItem) and keep the existing
+exceptions for pptx/unsupported values; this makes the method allocation-free
+and consistent with IsOfficeFormat's use of StringComparison.OrdinalIgnoreCase.
+
+In `@src/ParallelFileGenerator.cs`:
+- Around line 164-194: GenerateFileData is calling request.FileType.ToLower()
+multiple times on the hot path which causes per-file allocations; compute a
+single lowered file-type string once and reuse it (preferably using
+ToLowerInvariant()) either by hoisting a local variable at the start of
+GenerateFileData or adding a cached property on FileGenerationRequest (e.g.,
+request.FileTypeLower). Update the comparisons that reference request.FileType
+(the EmlGenerationService branch, OfficeFileGenerator.IsOfficeFormat check, and
+the "tiff" check used with TiffMultiPageGenerator) to use the cached lowered
+value to eliminate repeated allocations.
+- Around line 285-288: The class ParallelFileGenerator currently implements
+IDisposable but its Dispose method only calls GC.SuppressFinalize and there is
+no finalizer or owned disposable resources (MemoryPoolManager was removed);
+remove the IDisposable implementation and the Dispose method from the
+ParallelFileGenerator class to avoid misleading API, or alternatively, if you
+want to keep the pattern for future changes, update Dispose to be a proper
+disposable pattern (define Dispose(bool), call GC.SuppressFinalize(this) only
+when a finalizer exists, and release any owned IDisposable members). Refer to
+the ParallelFileGenerator class and its Dispose method when making the change.
+
+In `@src/PerformanceBenchmarkRunner.cs`:
+- Around line 160-164: Remove the dead null-check around the rented buffer:
+MemoryPool<byte>.Shared.Rent(bufferSize) never returns null, so delete the if
+(memoryOwner != null) branch and directly use memoryOwner (e.g., assign to using
+var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent(bufferSize); then
+immediately access memoryOwner.Memory.Span[0] = (byte)i). This keeps the
+using/disposal semantics and avoids misleading code in
+PerformanceBenchmarkRunner.cs.
+
+In `@src/PlaceholderFiles.cs`:
+- Line 70: The local allocation "var fileTypes = new
+List<string>(FileContentMap.Keys);" should be replaced with a cached static
+instance to avoid per-call allocations—add a private static readonly field
+(e.g., CachedFileTypes) initialized once from FileContentMap.Keys and use that
+field wherever "fileTypes" is referenced; if FileContentMap can change at
+runtime, document or update the cache accordingly (or switch to a read-only
+wrapper such as an IReadOnlyCollection<string> exposed from the static cache)
+and update usages to reference the new cached symbol instead of allocating a new
+List each call.
+
+In `@src/Profiles/DataGenerator.cs`:
+- Around line 394-407: Add a defensive guard in GenerateHash to enforce the
+documented max length invariant (e.g., throw an ArgumentOutOfRangeException when
+length > 256 or length <= 0) before using stackalloc, and ensure callers like
+GenerateFromGenerator pass validated lengths; this keeps the stackalloc usage
+safe and prevents future callers from accidentally requesting a too-large
+buffer.
+
+In `@src/TiffMultiPageGenerator.cs`:
+- Around line 19-23: The Generate method in TiffMultiPageGenerator currently
+accepts pageCount but never uses it; either remove the pageCount parameter from
+the Generate signature and update all callers to stop passing it, or explicitly
+mark it as unused (e.g., rename to _ or _) to signal intent and avoid warnings;
+also update the XML doc comment on Generate to remove the misleading "for
+metadata tracking" note. Locate Generate and PlaceholderFiles.GetContent in
+TiffMultiPageGenerator to make the change and adjust call sites accordingly.
+- Around line 55-60: Replace the per-file System.Random allocation by deriving
+the page count directly from the hashed bits: keep the existing combined and
+hashedSeed computation (combined, fileIndex) but treat the hash as an unsigned
+32-bit value and map it into the target range [clampedMin, clampedMax] using an
+O(1, allocation-free integer transform (prefer a 32x32->32 multiply-high or
+unbiased modulus alternative) to compute the value deterministically; remove the
+new System.Random(hashedSeed) / random.Next call and return the mapped integer
+instead so the hot path does not allocate.
+
+In `@src/ZipArchiveService.cs`:
+- Line 86: Remove the unnecessary .ToList() allocations when passing the
+already-typed List<FileData> variable processedFiles into WriteAsync; replace
+calls like loadFileWriter.WriteAsync(loadFileStream, request,
+processedFiles.ToList()) (and the similar call later) to pass processedFiles
+directly, since processedFiles is created as new List<FileData>() and WriteAsync
+expects a List<FileData>.
+
+In `@src/Zipper.Tests/ProgramTests.cs`:
+- Around line 14-19: The test temporarily replaces Console output/error with new
+StringWriter instances but never assigns or disposes them; update the block
+around Console.SetOut and Console.SetError so you create named StringWriter
+variables (e.g., var outWriter = new StringWriter(), var errWriter = new
+StringWriter()), pass those to Console.SetOut/SetError, and ensure they are
+disposed (either via using or by disposing them in the finally after restoring
+originalOut/originalError). This change touches the
+Console.SetOut/Console.SetError calls and the originalOut/originalError restore
+logic in ProgramTests.cs.
+
+In `@src/Zipper.Tests/Zipper.Tests.csproj`:
+- Line 28: The CI needs an explicit minimum .NET SDK requirement for
+coverlet.collector 8.0.0: either pin the runner's dotnet-version to 8.0.414 (or
+newer) instead of using the floating "dotnet-version: 8.0.x", or add a clear
+comment in the workflow documenting that coverlet.collector 8.0.0 requires SDK
+8.0.414+; update your CI workflow file accordingly and reference the
+coverlet.collector 8.0.0 PackageReference when explaining the requirement.
+```
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+--

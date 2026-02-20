@@ -15,8 +15,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
                 int exitCode = await Program.Main(args);
 
                 // Assert
@@ -40,8 +42,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
                 int exitCode = await Program.Main(args);
 
                 // Assert
@@ -65,8 +69,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
                 int exitCode = await Program.Main(args);
 
                 // Assert
@@ -95,8 +101,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
 
                 // Act
                 int exitCode = await Program.Main(args);
@@ -133,8 +141,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
 
                 // Act
                 int exitCode = await Program.Main(args);
@@ -156,6 +166,7 @@ namespace Zipper
         }
 
         [Fact]
+        [Trait("Category", "Benchmark")]
         public async Task Main_WithBenchmarkFlag_ReturnsZero()
         {
             // Arrange
@@ -165,8 +176,10 @@ namespace Zipper
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
 
                 // Act
                 int exitCode = await Program.Main(args);

@@ -395,6 +395,9 @@ internal class DataGenerator
     {
         const string chars = "0123456789abcdef";
 
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(length, 256);
+
         // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
         // so we can safely use stackalloc for efficiency.
         Span<char> buffer = stackalloc char[length];

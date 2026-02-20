@@ -40,7 +40,7 @@ namespace Zipper
 
                 var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
 
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
                     OutputPath = outputPath,
@@ -91,7 +91,7 @@ namespace Zipper
 
                 // Parallel generation
                 sw.Restart();
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
                     OutputPath = outputPath2,
@@ -158,10 +158,7 @@ namespace Zipper
             for (int i = 0; i < iterations; i++)
             {
                 using var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent(bufferSize);
-                if (memoryOwner != null)
-                {
-                    memoryOwner.Memory.Span[0] = (byte)i;
-                }
+                memoryOwner.Memory.Span[0] = (byte)i;
             }
 
             sw.Stop();
@@ -199,7 +196,7 @@ namespace Zipper
                 {
                     var sw = Stopwatch.StartNew();
 
-                    using var generator = new ParallelFileGenerator();
+                    var generator = new ParallelFileGenerator();
                     var request = new FileGenerationRequest
                     {
                         OutputPath = outputPath,

@@ -13,10 +13,10 @@ internal static class TiffMultiPageGenerator
     /// Returns a pre-computed TIFF file.
     /// The pageCount is tracked for metadata purposes only.
     /// </summary>
-    /// <param name="pageCount">Number of pages (for metadata tracking).</param>
+    /// <param name="_">Unused parameter (for metadata tracking in upstream callers).</param>
     /// <param name="workItem">File work item for context.</param>
     /// <returns>Byte array containing a TIFF file.</returns>
-    public static byte[] Generate(int pageCount, FileWorkItem workItem)
+    public static byte[] Generate(FileWorkItem workItem)
     {
         // O(1): return pre-computed TIFF from PlaceholderFiles
         return PlaceholderFiles.GetContent("tiff");
@@ -56,8 +56,8 @@ internal static class TiffMultiPageGenerator
         // Multiply by a large prime and add a scramble factor to disperse bits
         long combined = (fileIndex * 2654435761L) + (fileIndex >> 8);
         int hashedSeed = (int)(combined ^ (combined >> 32));
-        var random = new System.Random(hashedSeed);
-        return random.Next(clampedMin, clampedMax + 1);
+        int rangeSize = clampedMax - clampedMin + 1;
+        return clampedMin + (int)((uint)hashedSeed % (uint)rangeSize);
     }
 
     /// <summary>

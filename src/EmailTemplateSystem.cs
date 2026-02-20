@@ -85,7 +85,7 @@ namespace Zipper
 
         public static string GenerateEmailAddress(int index, string type)
         {
-            var domain = EmailDomains[index % EmailDomains.Length];
+            var domain = EmailDomains[((index % EmailDomains.Length) + EmailDomains.Length) % EmailDomains.Length];
             var userType = type.ToLowerInvariant();
 
             return $"{userType}{index:D3}@{domain}";

@@ -7,7 +7,7 @@ namespace Zipper
     /// <summary>
     /// Generates files in parallel with controlled concurrency and memory pooling.
     /// </summary>
-    public class ParallelFileGenerator : IDisposable
+    public class ParallelFileGenerator
     {
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
 
@@ -167,26 +167,28 @@ namespace Zipper
             (string filename, byte[] content)? attachment = null;
             int pageCount = 1;
 
-            if (request.FileType.ToLower() == "eml")
+            var fileTypeLower = request.FileType.ToLowerInvariant();
+
+            if (fileTypeLower == "eml")
             {
                 // Use the new EmlGenerationService for clean separation of concerns
                 var emlResult = EmlGenerationService.GenerateEmlContent(
-                    (int)workItem.Index,
+                    checked((int)workItem.Index),
                     request.AttachmentRate);
 
                 fileContent = emlResult.Content;
                 attachment = emlResult.Attachment;
             }
-            else if (OfficeFileGenerator.IsOfficeFormat(request.FileType))
+            else if (OfficeFileGenerator.IsOfficeFormat(fileTypeLower))
             {
                 // Generate Office format documents
                 fileContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
             }
-            else if (request.FileType.ToLower() == "tiff" && request.TiffPageRange.HasValue)
+            else if (fileTypeLower == "tiff" && request.TiffPageRange.HasValue)
             {
                 // Generate multipage TIFF
                 pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, workItem.Index);
-                fileContent = TiffMultiPageGenerator.Generate(pageCount, workItem);
+                fileContent = TiffMultiPageGenerator.Generate(workItem);
             }
             else
             {
@@ -195,8 +197,7 @@ namespace Zipper
 
             var totalSize = fileContent.Length + paddingPerFile;
 
-            var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
-            if (memoryOwner == null)
+            if (totalSize > PerformanceConstants.MaxPoolSize)
             {
                 // Fallback to direct allocation for very large files
                 var data = new byte[totalSize];
@@ -217,6 +218,8 @@ namespace Zipper
                     PageCount = pageCount,
                 };
             }
+
+            var memoryOwner = System.Buffers.MemoryPool<byte>.Shared.Rent((int)totalSize);
 
             // Use pooled memory
             fileContent.CopyTo(memoryOwner.Memory.Span);
@@ -280,11 +283,6 @@ namespace Zipper
             }
 
             return baseSize * count;
-        }
-
-        public void Dispose()
-        {
-            GC.SuppressFinalize(this);
         }
     }
 

@@ -47,13 +47,22 @@ internal static class OfficeFileGenerator
     /// <exception cref="System.ArgumentException">Thrown when file type is not a supported Office format.</exception>
     public static byte[] GenerateContent(string fileType, FileWorkItem workItem)
     {
-        return fileType.ToLowerInvariant() switch
+        if (fileType.Equals("docx", System.StringComparison.OrdinalIgnoreCase))
         {
-            "docx" => GenerateDocx(workItem),
-            "xlsx" => GenerateXlsx(workItem),
-            "pptx" => throw new System.NotImplementedException("PPTX generation is not yet implemented. Please use DOCX or XLSX formats."),
-            _ => throw new System.ArgumentException($"Unsupported Office format: {fileType}"),
-        };
+            return GenerateDocx(workItem);
+        }
+
+        if (fileType.Equals("xlsx", System.StringComparison.OrdinalIgnoreCase))
+        {
+            return GenerateXlsx(workItem);
+        }
+
+        if (fileType.Equals("pptx", System.StringComparison.OrdinalIgnoreCase))
+        {
+            throw new System.NotImplementedException("PPTX generation is not yet implemented. Please use DOCX or XLSX formats.");
+        }
+
+        throw new System.ArgumentException($"Unsupported Office format: {fileType}");
     }
 
     /// <summary>

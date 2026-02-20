@@ -25,17 +25,18 @@ namespace Zipper
             // Defensive guards to prevent IndexOutOfRangeException
             char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
             char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
+            var fileTypeLower = request.FileType.ToLowerInvariant();
 
             // Build header based on options
             var headerBuilder = new StringBuilder();
             headerBuilder.Append($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
 
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (request.WithMetadata || fileTypeLower == "eml")
             {
                 headerBuilder.Append($"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}");
             }
 
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (fileTypeLower == "eml")
             {
                 headerBuilder.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
             }
@@ -47,7 +48,7 @@ namespace Zipper
             }
 
             // Add Page Count column for TIFF with page range
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (fileTypeLower == "tiff" && request.TiffPageRange.HasValue)
             {
                 headerBuilder.Append($"{colDelim}{quote}Page Count{quote}");
             }
@@ -64,6 +65,8 @@ namespace Zipper
             {
                 await WriteFileRecord(writer, fileData, request, colDelim, quote, random);
             }
+
+            await writer.FlushAsync();
         }
 
         /// <summary>
@@ -78,21 +81,22 @@ namespace Zipper
             Random random)
         {
             var workItem = fileData.WorkItem;
+            var fileTypeLower = request.FileType.ToLowerInvariant();
             var docId = SanitizeField($"DOC{workItem.Index:D8}", request.NewlineDelimiter);
 
             var lineBuilder = new StringBuilder();
             lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{SanitizeField(workItem.FilePathInZip, request.NewlineDelimiter)}{quote}");
 
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (request.WithMetadata || fileTypeLower == "eml")
             {
-                var metadataColumns = GetMetadataColumns(workItem, fileData, request, random);
+                var metadataColumns = GetMetadataColumns(workItem, fileData, request, random, colDelim, quote);
                 lineBuilder.Append(metadataColumns);
             }
 
             // Add EML-specific columns if needed
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (fileTypeLower == "eml")
             {
-                var emlColumns = GetEmlColumns(workItem, fileData, request, random);
+                var emlColumns = GetEmlColumns(workItem, fileData, request, random, colDelim, quote);
                 lineBuilder.Append(emlColumns);
             }
 
@@ -104,7 +108,7 @@ namespace Zipper
             }
 
             // Add Page Count column for TIFF with page range
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (fileTypeLower == "tiff" && request.TiffPageRange.HasValue)
             {
                 lineBuilder.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
             }
@@ -122,14 +126,10 @@ namespace Zipper
         /// <summary>
         /// Gets metadata columns for file records.
         /// </summary>
-        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random)
+        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random, char colDelim, char quote)
         {
-            // Defensive guards to prevent IndexOutOfRangeException
-            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
-            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
-
             var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
-            var dateSent = DateTime.Now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
+            var dateSent = new DateTime(2020, 1, 1).AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
             var author = SanitizeField($"Author {random.Next(1, 100):D3}", request.NewlineDelimiter);
             var fileSize = fileData.Data.Length;
 
@@ -139,16 +139,12 @@ namespace Zipper
         /// <summary>
         /// Gets EML-specific columns for email file records.
         /// </summary>
-        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random)
+        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, Random random, char colDelim, char quote)
         {
-            // Defensive guards to prevent IndexOutOfRangeException
-            char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
-            char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
-
             var to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
             var from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
             var subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
-            var sentDate = DateTime.Now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+            var sentDate = new DateTime(2020, 1, 1).AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
             var attachmentName = SanitizeField(fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty, request.NewlineDelimiter);
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";

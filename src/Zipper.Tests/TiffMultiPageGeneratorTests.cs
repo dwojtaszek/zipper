@@ -175,7 +175,7 @@ namespace Zipper
             var workItem = new FileWorkItem { Index = 1 };
 
             // Act
-            var result = TiffMultiPageGenerator.Generate(5, workItem);
+            var result = TiffMultiPageGenerator.Generate(workItem);
 
             // Assert
             Assert.NotNull(result);
@@ -183,17 +183,16 @@ namespace Zipper
         }
 
         [Fact]
-        public void Generate_WithDifferentPageCounts_ShouldReturnDifferentSizes()
+        public void Generate_MultipleCalls_ShouldReturnValidData()
         {
             // Arrange
             var workItem = new FileWorkItem { Index = 1 };
 
             // Act
-            var result1 = TiffMultiPageGenerator.Generate(1, workItem);
-            var result2 = TiffMultiPageGenerator.Generate(10, workItem);
+            var result1 = TiffMultiPageGenerator.Generate(workItem);
+            var result2 = TiffMultiPageGenerator.Generate(workItem);
 
-            // Assert - Currently generates single-page TIFF regardless of pageCount
-            // This is expected behavior as noted in the class documentation
+            // Assert
             Assert.NotNull(result1);
             Assert.NotNull(result2);
         }

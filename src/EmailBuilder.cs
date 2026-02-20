@@ -240,16 +240,16 @@ namespace Zipper
                 ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
             }
 
-            sb.AppendLine();
-            sb.AppendLine($"--{boundary}--");
+            sb.Append("\r\n");
+            sb.Append($"--{boundary}--\r\n");
         }
 
         private static void BuildSimpleContent(StringBuilder sb, EmailTemplate template)
         {
-            sb.AppendLine("Content-Type: text/plain; charset=utf-8");
-            sb.AppendLine("Content-Transfer-Encoding: 8bit");
-            sb.AppendLine();
-            sb.AppendLine(template.Body);
+            sb.Append("Content-Type: text/plain; charset=utf-8\r\n");
+            sb.Append("Content-Transfer-Encoding: 8bit\r\n");
+            sb.Append("\r\n");
+            sb.Append(template.Body + "\r\n");
         }
 
         private static string GenerateBoundary()

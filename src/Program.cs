@@ -6,6 +6,8 @@ namespace Zipper
     {
         public static async Task<int> Main(string[] args)
         {
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
             var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             Console.WriteLine();
@@ -67,7 +69,7 @@ namespace Zipper
             try
             {
                 // Use parallel file generator for improved performance
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
 
                 var result = await generator.GenerateFilesAsync(request);
 
