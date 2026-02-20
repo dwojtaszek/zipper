@@ -47,6 +47,11 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         }
         catch (Exception ex)
         {
+            if (ex is OperationCanceledException)
+            {
+                throw;
+            }
+
             throw new InvalidOperationException(
                 $"Failed to write XML load file: {ex.Message}", ex);
         }
