@@ -2,31 +2,39 @@ using Xunit;
 
 namespace Zipper
 {
+    [Collection("ConsoleTests")]
     public class ProgramTests
     {
-        [Fact]
-        public async Task Main_WithHelpFlag_ReturnsOne()
+        private static async Task<int> RunWithRedirectedConsole(Func<Task<int>> action)
         {
-            // Arrange
-            string[] args = { "--help" };
-
-            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
             var originalOut = Console.Out;
             var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
-                int exitCode = await Program.Main(args);
-
-                // Assert
-                Assert.Equal(1, exitCode); // Help shows usage and returns 1
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
+                return await action();
             }
             finally
             {
                 Console.SetOut(originalOut);
                 Console.SetError(originalError);
             }
+        }
+
+        [Fact]
+        public async Task Main_WithHelpFlag_ReturnsOne()
+        {
+            // Arrange
+            string[] args = { "--help" };
+
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+            // Assert
+            Assert.Equal(1, exitCode); // Help shows usage and returns 1
         }
 
         [Fact]
@@ -35,23 +43,11 @@ namespace Zipper
             // Arrange - Missing required arguments
             string[] args = { };
 
-            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
-            try
-            {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
-                int exitCode = await Program.Main(args);
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code for invalid args
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-            }
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code for invalid args
         }
 
         [Fact]
@@ -60,23 +56,11 @@ namespace Zipper
             // Arrange - Missing required --output argument
             string[] args = { "--count", "10", "--type", "pdf" };
 
-            // Act — redirect Console to avoid ObjectDisposedException in parallel tests
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
-            try
-            {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
-                int exitCode = await Program.Main(args);
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-            }
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code
         }
 
         [Fact]
@@ -91,24 +75,16 @@ namespace Zipper
                 "--type", "invalid_type",
             };
 
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
-
                 // Act
-                int exitCode = await Program.Main(args);
+                int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
                 // Assert
                 Assert.Equal(1, exitCode); // Should return error code for invalid type
             }
             finally
             {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-
                 // Cleanup
                 if (Directory.Exists(tempPath))
                 {
@@ -129,24 +105,16 @@ namespace Zipper
                 "--type", "pdf",
             };
 
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
             try
             {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
-
                 // Act
-                int exitCode = await Program.Main(args);
+                int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
                 // Assert
                 Assert.Equal(1, exitCode); // Should return error code
             }
             finally
             {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-
                 // Cleanup
                 if (Directory.Exists(tempPath))
                 {
@@ -161,24 +129,11 @@ namespace Zipper
             // Arrange
             string[] args = { "--benchmark" };
 
-            var originalOut = Console.Out;
-            var originalError = Console.Error;
-            try
-            {
-                Console.SetOut(new StringWriter());
-                Console.SetError(new StringWriter());
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Act
-                int exitCode = await Program.Main(args);
-
-                // Assert
-                Assert.Equal(0, exitCode);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-                Console.SetError(originalError);
-            }
+            // Assert
+            Assert.Equal(0, exitCode);
         }
     }
 }
