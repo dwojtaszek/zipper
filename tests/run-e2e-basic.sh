@@ -12,7 +12,10 @@ set -e
 
 TEST_OUTPUT_DIR="./results/e2e-basic"
 PROJECT="src/Zipper.csproj"
-BUILD_DIR="src/bin/Release/net8.0"
+
+# Dynamically locate the built framework directory
+BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" | head -n 1)
+[ -z "$BUILD_DIR" ] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
 
 # --- Helper Functions ---
 
@@ -146,14 +149,14 @@ dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null || {
 
 # Resolve binary path
 if [ -f "$BUILD_DIR/Zipper" ]; then
-    BINARY="$BUILD_DIR/Zipper"
+    BINARY=("$BUILD_DIR/Zipper")
 elif [ -f "$BUILD_DIR/Zipper.exe" ]; then
-    BINARY="$BUILD_DIR/Zipper.exe"
+    BINARY=("$BUILD_DIR/Zipper.exe")
 else
     # Fallback: use dotnet run (slower)
-    BINARY="dotnet run --project $PROJECT --no-build -c Release --"
+    BINARY=("dotnet" "run" "--project" "$PROJECT" "--no-build" "-c" "Release" "--")
 fi
-print_info "Using binary: $BINARY"
+print_info "Using binary: ${BINARY[*]}"
 
 # --- Setup ---
 
@@ -164,7 +167,7 @@ function run_test() {
     local test_name="$1"
     shift
     print_info "START: $test_name"
-    $BINARY "$@"
+    "${BINARY[@]}" "$@"
     print_info "END: $test_name"
 }
 
@@ -178,6 +181,14 @@ print_success "Test 1: Basic PDF — PASSED"
 # 2. EML with attachments (complex format + attachment handling)
 run_test "EML with attachments" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_attach" --attachment-rate 50
 verify_output "$TEST_OUTPUT_DIR/eml_attach" 10 "Control Number,File Path,To,From,Subject" "eml" "false"
+
+# Explicitly verify attachments are in the zip
+zip_file=$(find "$TEST_OUTPUT_DIR/eml_attach" -name "*.zip")
+zip_listing=$(unzip -l "$zip_file")
+attachment_count=$(echo "$zip_listing" | grep -c "attachment\.") || true
+[ "$attachment_count" -eq 0 ] && print_error "Expected attachments in zip but found none"
+print_info "Found $attachment_count attachments in zip"
+
 print_success "Test 2: EML with attachments — PASSED"
 
 # 3. TIFF with folders (folder distribution + image gen)
