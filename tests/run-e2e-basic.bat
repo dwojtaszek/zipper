@@ -173,6 +173,10 @@ if defined dat_file (
 REM Verify .dat inside zip
 set "zip_file="
 for %%F in ("%TEST_OUTPUT_DIR%\pdf_include_load\*.zip") do set "zip_file=%%F"
+if not defined zip_file (
+    echo [ ERROR ] Test 4: No .zip file found
+    goto :cleanup
+)
 powershell -Command "Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -like '*.dat'}).Count" > "%temp%\zip_count.txt"
 set /p zip_count=<"%temp%\zip_count.txt"
 if "!zip_count!" neq "1" (

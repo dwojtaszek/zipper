@@ -128,7 +128,10 @@ function verify_load_file_included() {
 # --- Build Once ---
 
 print_info "Building project (one-time)..."
-dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null
+dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null || {
+    echo "Build failed. Run 'dotnet build $PROJECT -c Release' for details."
+    exit 1
+}
 
 # Resolve binary path
 if [ -f "$BUILD_DIR/Zipper" ]; then

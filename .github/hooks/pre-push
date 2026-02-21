@@ -38,6 +38,8 @@ echo "✅ Unit tests passed"
 echo ""
 echo "▶ Running basic E2E smoke tests..."
 
+E2E_RAN=false
+
 # Detect OS and run appropriate script
 case "$(uname -s)" in
     Linux*|Darwin*)
@@ -50,6 +52,7 @@ case "$(uname -s)" in
                 echo "   To bypass: git push --no-verify"
                 exit 1
             }
+            E2E_RAN=true
         else
             echo "⚠️  tests/run-e2e-basic.sh not found, skipping E2E"
         fi
@@ -63,6 +66,7 @@ case "$(uname -s)" in
                 echo "   To bypass: git push --no-verify"
                 exit 1
             }
+            E2E_RAN=true
         else
             echo "⚠️  tests/run-e2e-basic.bat not found, skipping E2E"
         fi
@@ -70,5 +74,9 @@ case "$(uname -s)" in
 esac
 
 echo ""
-echo "✅ All pre-push checks passed"
+if [ "$E2E_RAN" = true ]; then
+    echo "✅ All pre-push checks passed"
+else
+    echo "⚠️  Unit tests passed, but E2E smoke tests were skipped"
+fi
 exit 0
