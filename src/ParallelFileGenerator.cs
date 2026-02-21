@@ -36,7 +36,7 @@ namespace Zipper
 
                 // For EML files, use sequential processing to avoid ZIP entry creation conflicts
                 // when attachments and text extraction are enabled
-                if (request.FileType.ToLower() == "eml" && (request.WithText || request.AttachmentRate > 0))
+                if (request.FileType.ToLowerInvariant() == "eml" && (request.WithText || request.AttachmentRate > 0))
                 {
                     request.Concurrency = 1; // Force sequential processing
                 }
@@ -48,11 +48,11 @@ namespace Zipper
                 var loadFileName = $"{baseFileName}.dat";
                 var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
 
-                var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLower());
+                var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLowerInvariant());
 
                 // Allow Office formats and EML to have empty placeholder content (generated dynamically)
                 if (placeholderContent.Length == 0 &&
-                    request.FileType.ToLower() != "eml" &&
+                    request.FileType.ToLowerInvariant() != "eml" &&
                     !OfficeFileGenerator.IsOfficeFormat(request.FileType))
                 {
                     throw new InvalidOperationException($"Unknown file type: {request.FileType}");
@@ -175,7 +175,7 @@ namespace Zipper
             (string filename, byte[] content)? attachment = null;
             int pageCount = 1;
 
-            if (request.FileType.ToLower() == "eml")
+            if (request.FileType.ToLowerInvariant() == "eml")
             {
                 // Use the new EmlGenerationService for clean separation of concerns
                 var emlResult = EmlGenerationService.GenerateEmlContent(
@@ -190,7 +190,7 @@ namespace Zipper
                 // Generate Office format documents
                 fileContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
             }
-            else if (request.FileType.ToLower() == "tiff" && request.TiffPageRange.HasValue)
+            else if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
             {
                 // Generate multipage TIFF
                 pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, workItem.Index);
@@ -242,21 +242,6 @@ namespace Zipper
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
-            };
-        }
-
-        private static string GetContentTypeForExtension(string extension)
-        {
-            return extension.ToLowerInvariant() switch
-            {
-                ".pdf" => "application/pdf",
-                ".doc" or ".docx" => "application/msword",
-                ".xls" or ".xlsx" => "application/vnd.ms-excel",
-                ".txt" => "text/plain",
-                ".jpg" or ".jpeg" => "image/jpeg",
-                ".png" => "image/png",
-                ".gif" => "image/gif",
-                _ => "application/octet-stream",
             };
         }
 

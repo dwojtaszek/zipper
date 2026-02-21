@@ -68,8 +68,8 @@ internal class CsvWriter : LoadFileWriterBase
             var workItem = fileData.WorkItem;
             var values = new System.Collections.Generic.List<string>
             {
-                EscapeField(GenerateDocumentId(workItem)),
-                EscapeField(workItem.FilePathInZip),
+                EscapeCsvField(GenerateDocumentId(workItem)),
+                EscapeCsvField(workItem.FilePathInZip),
             };
 
             if (ShouldIncludeMetadata(request))
@@ -77,9 +77,9 @@ internal class CsvWriter : LoadFileWriterBase
                 var metadata = GenerateMetadataValues(workItem, fileData);
                 values.AddRange(new[]
                 {
-                    EscapeField(metadata.Custodian),
-                    EscapeField(metadata.DateSent),
-                    EscapeField(metadata.Author),
+                    EscapeCsvField(metadata.Custodian),
+                    EscapeCsvField(metadata.DateSent),
+                    EscapeCsvField(metadata.Author),
                     metadata.FileSize.ToString(),
                 });
             }
@@ -89,17 +89,17 @@ internal class CsvWriter : LoadFileWriterBase
                 var eml = GenerateEmlValues(workItem, fileData);
                 values.AddRange(new[]
                 {
-                    EscapeField(eml.To),
-                    EscapeField(eml.From),
-                    EscapeField(eml.Subject),
-                    EscapeField(eml.SentDate),
-                    EscapeField(eml.Attachment),
+                    EscapeCsvField(eml.To),
+                    EscapeCsvField(eml.From),
+                    EscapeCsvField(eml.Subject),
+                    EscapeCsvField(eml.SentDate),
+                    EscapeCsvField(eml.Attachment),
                 });
             }
 
             if (request.BatesConfig != null)
             {
-                values.Add(EscapeField(GenerateBatesNumber(request, workItem)));
+                values.Add(EscapeCsvField(GenerateBatesNumber(request, workItem)));
             }
 
             if (ShouldIncludePageCount(request))
@@ -109,25 +109,10 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (request.WithText)
             {
-                values.Add(EscapeField(GenerateTextPath(request, workItem)));
+                values.Add(EscapeCsvField(GenerateTextPath(request, workItem)));
             }
 
             await writer.WriteLineAsync(string.Join(",", values));
         }
-    }
-
-    private static string EscapeField(string field)
-    {
-        if (string.IsNullOrEmpty(field))
-        {
-            return string.Empty;
-        }
-
-        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
-        {
-            return $"\"{field.Replace("\"", "\"\"")}\"";
-        }
-
-        return field;
     }
 }

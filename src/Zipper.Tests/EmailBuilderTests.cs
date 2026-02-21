@@ -315,7 +315,7 @@ namespace Zipper
                 Body = "Email with large attachment",
             };
             var largeContent = new byte[1024 * 1024]; // 1MB
-            new Random().NextBytes(largeContent);
+            Random.Shared.NextBytes(largeContent);
 
             var attachment = new AttachmentInfo
             {
@@ -355,7 +355,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void EmailBuilder_BackwardCompatibility_WithEmlGenerator()
+        public void EmailBuilder_BackwardCompatibility_LegacyOverload()
         {
             // Arrange
             var to = "test@example.com";
@@ -365,27 +365,42 @@ namespace Zipper
             var body = "Testing backward compatibility";
             var attachment = ("test.txt", Encoding.UTF8.GetBytes("Attachment content"));
 
-            // Act
-            var emailBuilderResult = EmailBuilder.BuildEmail(to, from, subject, sentDate, body, attachment);
-            var emlGeneratorResult = EmlGenerator.CreateEmlContent(to, from, subject, sentDate, body, attachment);
+            // Act - use the legacy overload of BuildEmail
+            var legacyResult = EmailBuilder.BuildEmail(to, from, subject, sentDate, body, attachment);
+
+            // Also build via the new template API
+            var template = new EmailTemplate
+            {
+                To = to,
+                From = from,
+                Subject = subject,
+                SentDate = sentDate,
+                Body = body,
+            };
+            var attachmentInfo = new AttachmentInfo
+            {
+                FileName = attachment.Item1,
+                Content = attachment.Item2,
+            };
+            var newResult = EmailBuilder.BuildEmail(template, attachmentInfo);
 
             // Assert - Both should produce valid EML content
-            Assert.NotNull(emailBuilderResult);
-            Assert.NotNull(emlGeneratorResult);
-            Assert.True(emailBuilderResult.Length > 0);
-            Assert.True(emlGeneratorResult.Length > 0);
+            Assert.NotNull(legacyResult);
+            Assert.NotNull(newResult);
+            Assert.True(legacyResult.Length > 0);
+            Assert.True(newResult.Length > 0);
 
             // Both should contain expected EML headers
-            var builderContent = Encoding.UTF8.GetString(emailBuilderResult);
-            var generatorContent = Encoding.UTF8.GetString(emlGeneratorResult);
+            var legacyContent = Encoding.UTF8.GetString(legacyResult);
+            var newContent = Encoding.UTF8.GetString(newResult);
 
-            Assert.Contains("From: sender@example.com", builderContent);
-            Assert.Contains("To: test@example.com", builderContent);
-            Assert.Contains("Subject: Compatibility Test", builderContent);
+            Assert.Contains("From: sender@example.com", legacyContent);
+            Assert.Contains("To: test@example.com", legacyContent);
+            Assert.Contains("Subject: Compatibility Test", legacyContent);
 
-            Assert.Contains("From: sender@example.com", generatorContent);
-            Assert.Contains("To: test@example.com", generatorContent);
-            Assert.Contains("Subject: Compatibility Test", generatorContent);
+            Assert.Contains("From: sender@example.com", newContent);
+            Assert.Contains("To: test@example.com", newContent);
+            Assert.Contains("Subject: Compatibility Test", newContent);
         }
     }
 }

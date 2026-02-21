@@ -7,19 +7,11 @@ namespace Zipper
     /// </summary>
     public class MemoryPoolManager : IDisposable
     {
-        private readonly MemoryPool<byte> memoryPool;
-        private bool disposed = false;
-
-        public MemoryPoolManager()
-        {
-            this.memoryPool = MemoryPool<byte>.Shared;
-        }
-
         /// <summary>
         /// Rents memory of at least the specified size.
         /// </summary>
         /// <param name="size">Minimum size in bytes.</param>
-        /// <returns>IMemoryOwner&lt;byte&gt; or null if size exceeds maximum.</returns>
+        /// <returns>IMemoryOwner&lt;byte&gt;, or null if size is zero, negative, or exceeds maximum pool size.</returns>
         public IMemoryOwner<byte>? Rent(int size)
         {
             if (size <= 0 || size > PerformanceConstants.MaxPoolSize)
@@ -27,23 +19,13 @@ namespace Zipper
                 return null;
             }
 
-            return this.memoryPool.Rent(size);
-        }
-
-        /// <summary>
-        /// Returns memory to the pool.
-        /// </summary>
-        public void Return(IMemoryOwner<byte> memory)
-        {
-            if (memory != null && !this.disposed)
-            {
-                memory.Dispose();
-            }
+            return MemoryPool<byte>.Shared.Rent(size);
         }
 
         public void Dispose()
         {
-            this.disposed = true;
+            // No-op: MemoryPool<byte>.Shared is a singleton and should not be disposed.
+            // Individual IMemoryOwner<byte> instances are disposed by their callers.
         }
     }
 }

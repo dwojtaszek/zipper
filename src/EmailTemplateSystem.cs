@@ -123,9 +123,9 @@ namespace Zipper
             return templates[context.TemplateIndex % templates.Count];
         }
 
-        private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex)
+        private static Dictionary<string, string> BuildReplacements(int recipientIndex, int senderIndex)
         {
-            var replacements = new Dictionary<string, string>
+            return new Dictionary<string, string>
             {
                 ["{recipient}"] = $"Recipient {recipientIndex:D3}",
                 ["{sender}"] = $"Sender {senderIndex:D3}",
@@ -136,62 +136,51 @@ namespace Zipper
                 ["{course}"] = $"Course {(recipientIndex % 100) + 1}",
                 ["{project}"] = $"Project {(recipientIndex % 50) + 1}",
                 ["{quarter}"] = $"Q{Random.Shared.Next(1, 5)}",
-            };
-
-            var subject = baseSubject;
-            foreach (var replacement in replacements)
-            {
-                subject = subject.Replace(replacement.Key, replacement.Value);
-            }
-
-            return subject;
-        }
-
-        private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, EmailCategory category)
-        {
-            var replacements = new Dictionary<string, string>
-            {
-                ["{recipient}"] = $"Recipient {recipientIndex:D3}",
-                ["{sender}"] = $"Sender {senderIndex:D3}",
                 ["{company}"] = $"Company {(senderIndex % 100) + 1}",
                 ["{department}"] = GetRandomDepartment(),
-                ["{project}"] = $"Project {(recipientIndex % 50) + 1}",
                 ["{amount}"] = $"${Random.Shared.Next(100, 50000):N2}",
                 ["{deadline}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 90)).ToString("MMM dd, yyyy"),
                 ["{meeting}"] = DateTime.Now.AddDays(Random.Shared.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
-                ["{date}"] = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("MMM dd, yyyy"),
                 ["{place}"] = GetRandomPlace(),
                 ["{venue}"] = GetRandomVenue(),
                 ["{website}"] = GetRandomWebsite(),
                 ["{service}"] = GetRandomService(),
                 ["{reset_link}"] = $"https://example.com/reset?token={Guid.NewGuid():N}",
-                ["{quarter}"] = $"Q{Random.Shared.Next(1, 5)}",
                 ["{growth}"] = $"{Random.Shared.Next(5, 25)}",
                 ["{payment}"] = $"{Random.Shared.Next(25, 500):N2}",
                 ["{account}"] = $"ACC{Random.Shared.Next(100000, 999999):D6}",
                 ["{start_time}"] = $"{Random.Shared.Next(0, 12):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "AM" : "PM")}",
                 ["{end_time}"] = $"{Random.Shared.Next(13, 23):D2}:00 {(Random.Shared.Next(0, 2) == 0 ? "PM" : "AM")}",
                 ["{month}"] = DateTime.Now.AddMonths(-Random.Shared.Next(0, 12)).ToString("MMMM"),
-
-                // Education template placeholders
                 ["{gpa}"] = $"3.{Random.Shared.Next(4, 9)}",
                 ["{courses_completed}"] = $"{Random.Shared.Next(3, 6)}",
                 ["{attendance}"] = $"{Random.Shared.Next(85, 100)}",
                 ["{credits}"] = $"{Random.Shared.Next(9, 18)}",
-
-                // Travel template placeholders
                 ["{gate}"] = $"A{(senderIndex % 20) + 1}",
                 ["{seat}"] = $"{Random.Shared.Next(1, 30)}{(char)('A' + Random.Shared.Next(0, 6))}",
                 ["{rental_period}"] = $"{Random.Shared.Next(1, 14)}",
             };
+        }
 
-            var body = baseBody;
+        private static string ApplyReplacements(string template, Dictionary<string, string> replacements)
+        {
+            var result = template;
             foreach (var replacement in replacements)
             {
-                body = body.Replace(replacement.Key, replacement.Value);
+                result = result.Replace(replacement.Key, replacement.Value);
             }
 
-            return body;
+            return result;
+        }
+
+        private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex)
+        {
+            return ApplyReplacements(baseSubject, BuildReplacements(recipientIndex, senderIndex));
+        }
+
+        private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, EmailCategory category)
+        {
+            return ApplyReplacements(baseBody, BuildReplacements(recipientIndex, senderIndex));
         }
 
         private static DateTime GenerateSentDate(EmailCategory category)
