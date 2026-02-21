@@ -5,7 +5,7 @@ namespace Zipper
     public class MemoryPoolManagerTests
     {
         [Fact]
-        public void RentAndReturn_ShouldReuseMemory()
+        public void RentAndDispose_ShouldWorkCorrectly()
         {
             var manager = new MemoryPoolManager();
             var memory = manager.Rent(1024);
@@ -13,14 +13,14 @@ namespace Zipper
             Assert.NotNull(memory);
             Assert.True(memory.Memory.Length >= 1024);
 
-            manager.Return(memory);
+            memory.Dispose();
 
             // Verify we can rent again (pool should work)
             var memory2 = manager.Rent(1024);
             Assert.NotNull(memory2);
             Assert.True(memory2.Memory.Length >= 1024);
 
-            manager.Return(memory2);
+            memory2.Dispose();
         }
 
         [Fact]

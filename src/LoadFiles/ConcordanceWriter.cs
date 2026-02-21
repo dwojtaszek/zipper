@@ -87,54 +87,43 @@ internal class ConcordanceWriter : LoadFileWriterBase
             var workItem = fileData.WorkItem;
             var line = new StringBuilder();
 
-            // Helper to escape CSV values (wrap in quotes if contains comma, quote, or newline)
-            static string EscapeCsv(string value)
-            {
-                if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-                {
-                    return $"\"{value.Replace("\"", "\"\"")}\"";
-                }
-
-                return value;
-            }
-
             line.Append($"{fieldDelim}");  // BEGATTY field (empty)
             line.Append($"{fieldDelim}");  // ENDDATTY field (empty)
-            line.Append($"{EscapeCsv(GenerateDocumentId(workItem))}{fieldDelim}");
-            line.Append($"{EscapeCsv(workItem.FilePathInZip)}{fieldDelim}");
+            line.Append($"{EscapeCsvField(GenerateDocumentId(workItem))}{fieldDelim}");
+            line.Append($"{EscapeCsvField(workItem.FilePathInZip)}{fieldDelim}");
 
             if (ShouldIncludeMetadata(request))
             {
                 var metadata = GenerateMetadataValues(workItem, fileData);
-                line.Append($"{EscapeCsv(metadata.Custodian)}{fieldDelim}");
-                line.Append($"{EscapeCsv(metadata.DateSent)}{fieldDelim}");
-                line.Append($"{EscapeCsv(metadata.Author)}{fieldDelim}");
-                line.Append($"{EscapeCsv(metadata.FileSize.ToString())}{fieldDelim}");
+                line.Append($"{EscapeCsvField(metadata.Custodian)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(metadata.DateSent)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(metadata.Author)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(metadata.FileSize.ToString())}{fieldDelim}");
             }
 
             if (ShouldIncludeEmlColumns(request))
             {
                 var eml = GenerateEmlValues(workItem, fileData);
-                line.Append($"{EscapeCsv(eml.To)}{fieldDelim}");
-                line.Append($"{EscapeCsv(eml.From)}{fieldDelim}");
-                line.Append($"{EscapeCsv(eml.Subject)}{fieldDelim}");
-                line.Append($"{EscapeCsv(eml.SentDate)}{fieldDelim}");
-                line.Append($"{EscapeCsv(eml.Attachment)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(eml.To)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(eml.From)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(eml.Subject)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(eml.SentDate)}{fieldDelim}");
+                line.Append($"{EscapeCsvField(eml.Attachment)}{fieldDelim}");
             }
 
             if (request.BatesConfig != null)
             {
-                line.Append($"{EscapeCsv(GenerateBatesNumber(request, workItem))}{fieldDelim}");
+                line.Append($"{EscapeCsvField(GenerateBatesNumber(request, workItem))}{fieldDelim}");
             }
 
             if (ShouldIncludePageCount(request))
             {
-                line.Append($"{EscapeCsv(fileData.PageCount.ToString())}{fieldDelim}");
+                line.Append($"{EscapeCsvField(fileData.PageCount.ToString())}{fieldDelim}");
             }
 
             if (request.WithText)
             {
-                line.Append($"{EscapeCsv(GenerateTextPath(request, workItem))}{fieldDelim}");
+                line.Append($"{EscapeCsvField(GenerateTextPath(request, workItem))}{fieldDelim}");
             }
 
             await writer.WriteLineAsync(line.ToString().TrimEnd(fieldDelim));

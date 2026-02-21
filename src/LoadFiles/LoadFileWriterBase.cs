@@ -98,6 +98,25 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// </summary>
     /// <returns></returns>
     protected static string GenerateDocumentId(FileWorkItem workItem) => $"DOC{workItem.Index:D8}";
+
+    /// <summary>
+    /// Escapes a field value for CSV/Concordance formats per RFC 4180.
+    /// Wraps in quotes if the value contains comma, quote, CR, or LF characters.
+    /// </summary>
+    protected static string EscapeCsvField(string field)
+    {
+        if (string.IsNullOrEmpty(field))
+        {
+            return string.Empty;
+        }
+
+        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
+        {
+            return $"\"{field.Replace("\"", "\"\"")}\"";
+        }
+
+        return field;
+    }
 }
 
 /// <summary>
