@@ -75,21 +75,16 @@ namespace Zipper
                 "--type", "invalid_type",
             };
 
-            try
-            {
-                // Act
-                int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code for invalid type
-            }
-            finally
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code for invalid type
+
+            // Cleanup
+            if (Directory.Exists(tempPath))
             {
-                // Cleanup
-                if (Directory.Exists(tempPath))
-                {
-                    Directory.Delete(tempPath, true);
-                }
+                Directory.Delete(tempPath, true);
             }
         }
 
@@ -105,21 +100,16 @@ namespace Zipper
                 "--type", "pdf",
             };
 
-            try
-            {
-                // Act
-                int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code
-            }
-            finally
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code
+
+            // Cleanup
+            if (Directory.Exists(tempPath))
             {
-                // Cleanup
-                if (Directory.Exists(tempPath))
-                {
-                    Directory.Delete(tempPath, true);
-                }
+                Directory.Delete(tempPath, true);
             }
         }
 
