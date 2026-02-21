@@ -361,10 +361,10 @@ internal class DataGenerator
     private string GenerateSingleEmail()
     {
         var domains = new[] { "example.com", "company.org", "corp.net", "business.io", "enterprise.co" };
-        var firstName = Names.FirstNames[this.random.Next(Names.FirstNames.Length)];
-        var lastName = Names.LastNames[this.random.Next(Names.LastNames.Length)];
+        var firstName = Names.FirstNamesLower[this.random.Next(Names.FirstNamesLower.Length)];
+        var lastName = Names.LastNamesLower[this.random.Next(Names.LastNamesLower.Length)];
         var domain = domains[this.random.Next(domains.Length)];
-        return $"{firstName.ToLower()}.{lastName.ToLower()}@{domain}";
+        return $"{firstName}.{lastName}@{domain}";
     }
 
     private string GetValueFromDataSource(string sourceName, List<string> values)
@@ -507,6 +507,11 @@ internal static class Names
     };
 
     /// <summary>
+    /// Lowercased first names for generation.
+    /// </summary>
+    internal static readonly string[] FirstNamesLower;
+
+    /// <summary>
     /// Last names for generation.
     /// </summary>
     public static readonly string[] LastNames =
@@ -516,6 +521,20 @@ internal static class Names
         "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson",
         "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker",
     };
+
+    /// <summary>
+    /// Lowercased last names for generation.
+    /// </summary>
+    internal static readonly string[] LastNamesLower;
+
+    /// <summary>
+    /// Initializes static members of the <see cref="Names"/> class.
+    /// </summary>
+    static Names()
+    {
+        FirstNamesLower = FirstNames.Select(n => n.ToLowerInvariant()).ToArray();
+        LastNamesLower = LastNames.Select(n => n.ToLowerInvariant()).ToArray();
+    }
 }
 
 /// <summary>
