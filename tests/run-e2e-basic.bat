@@ -18,7 +18,7 @@ REM --- Build Once ---
 echo [ INFO ] Building project (one-time)...
 dotnet build %PROJECT% -c Release --nologo -v quiet 2>nul
 if errorlevel 1 (
-    echo [ ERROR ] Build failed
+    echo [ ERROR ] Build failed. Run 'dotnet build %PROJECT% -c Release' for details.
     exit /b 1
 )
 
@@ -114,6 +114,23 @@ if not defined dat_file (
     goto :cleanup
 )
 
+REM Verify line count
+powershell -Command "(Get-Content -Path '%dat_file%').Count" > "%temp%\line_count.txt"
+set /p line_count=<"%temp%\line_count.txt"
+if "!line_count!" neq "11" (
+    echo [ ERROR ] Test 2: Expected 11 lines, got !line_count!
+    goto :cleanup
+)
+
+REM Verify header
+powershell -Command "(Get-Content -Path '%dat_file%' -TotalCount 1)" > "%temp%\header.txt"
+set /p header=<"%temp%\header.txt"
+echo "%header%" | findstr /c:"To" >nul
+if errorlevel 1 (
+    echo [ ERROR ] Test 2: Header missing 'To'
+    goto :cleanup
+)
+
 REM Verify EML count in zip
 powershell -Command "Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -like '*.eml'}).Count" > "%temp%\zip_count.txt"
 set /p zip_count=<"%temp%\zip_count.txt"
@@ -136,9 +153,32 @@ if errorlevel 1 (
 )
 
 set "zip_file="
+set "dat_file="
 for %%F in ("%TEST_OUTPUT_DIR%\tiff_folders\*.zip") do set "zip_file=%%F"
+for %%F in ("%TEST_OUTPUT_DIR%\tiff_folders\*.dat") do set "dat_file=%%F"
 if not defined zip_file (
     echo [ ERROR ] Test 3: No .zip file found
+    goto :cleanup
+)
+if not defined dat_file (
+    echo [ ERROR ] Test 3: No .dat file found
+    goto :cleanup
+)
+
+REM Verify line count
+powershell -Command "(Get-Content -Path '%dat_file%').Count" > "%temp%\line_count.txt"
+set /p line_count=<"%temp%\line_count.txt"
+if "!line_count!" neq "11" (
+    echo [ ERROR ] Test 3: Expected 11 lines, got !line_count!
+    goto :cleanup
+)
+
+REM Verify header
+powershell -Command "(Get-Content -Path '%dat_file%' -TotalCount 1)" > "%temp%\header.txt"
+set /p header=<"%temp%\header.txt"
+echo "%header%" | findstr /c:"Control Number" >nul
+if errorlevel 1 (
+    echo [ ERROR ] Test 3: Header missing 'Control Number'
     goto :cleanup
 )
 

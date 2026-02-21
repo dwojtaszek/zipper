@@ -32,7 +32,8 @@ function print_error() {
 function get_zip_listing() {
     local zip_file="$1"
     local cache_var="$2"
-    local listing=$(unzip -l "$zip_file")
+    local listing
+    listing=$(unzip -l "$zip_file")
     printf -v "$cache_var" '%s' "$listing"
 }
 
@@ -46,8 +47,10 @@ function verify_output() {
 
   print_info "Verifying output in $test_dir"
 
-  local zip_file=$(find "$test_dir" -name "*.zip")
-  local dat_file=$(find "$test_dir" -name "*.dat")
+  local zip_file
+  zip_file=$(find "$test_dir" -name "*.zip")
+  local dat_file
+  dat_file=$(find "$test_dir" -name "*.dat")
 
   [ -z "$zip_file" ] && print_error "No .zip file found in $test_dir"
   [ -z "$dat_file" ] && print_error "No .dat file found in $test_dir"
@@ -58,10 +61,12 @@ function verify_output() {
   local dat_content_cmd="cat"
   [ "$encoding" = "UTF-16" ] && dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
 
-  local dat_content=$($dat_content_cmd < "$dat_file")
+  local dat_content
+  dat_content=$($dat_content_cmd < "$dat_file")
 
   # Verify line count
-  local line_count=$(echo "$dat_content" | wc -l)
+  local line_count
+  line_count=$(echo "$dat_content" | wc -l)
   line_count=$(echo "$line_count" | tr -d ' ')
   local expected_line_count=$((expected_count + 1))
   [ "$line_count" -ne "$expected_line_count" ] && \
@@ -69,7 +74,8 @@ function verify_output() {
   print_info ".dat line count OK ($line_count)"
 
   # Verify header
-  local header=$(echo "$dat_content" | head -n 1)
+  local header
+  header=$(echo "$dat_content" | head -n 1)
   IFS=',' read -ra cols <<< "$expected_header"
   for col in "${cols[@]}"; do
     echo "$header" | grep -q "$col" || \
@@ -78,7 +84,8 @@ function verify_output() {
   print_info ".dat header OK"
 
   # Verify file count in zip
-  local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
+  local zip_file_count
+  zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type") || true
   [ "$zip_file_count" -ne "$expected_count" ] && \
     print_error "Zip .$file_type count: expected $expected_count, got $zip_file_count"
   print_info ".zip .$file_type count OK ($zip_file_count)"
@@ -103,23 +110,27 @@ function verify_load_file_included() {
     local expected_header="$3"
     local file_type="$4"
 
-    local zip_file=$(find "$test_dir" -name "*.zip")
+    local zip_file
+    zip_file=$(find "$test_dir" -name "*.zip")
     [ -z "$zip_file" ] && print_error "No .zip file found in $test_dir"
 
     # No separate .dat should exist
-    local dat_file=$(find "$test_dir" -name "*.dat")
+    local dat_file
+    dat_file=$(find "$test_dir" -name "*.dat")
     [ -n "$dat_file" ] && print_error "Found separate .dat file — should be inside zip"
 
     local zip_listing
     get_zip_listing "$zip_file" zip_listing
 
     # .dat inside zip
-    local dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$")
+    local dat_in_zip
+    dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$") || true
     [ "$dat_in_zip" -ne 1 ] && print_error "Expected 1 .dat in zip, found $dat_in_zip"
     print_info ".dat correctly inside zip"
 
     # Verify file count
-    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
+    local zip_file_count
+    zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type") || true
     [ "$zip_file_count" -ne "$expected_count" ] && \
       print_error "Zip .$file_type count: expected $expected_count, got $zip_file_count"
     print_info ".zip .$file_type count OK ($zip_file_count)"
