@@ -1,7 +1,3 @@
-// <copyright file="FileGenerationRequest.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using Zipper.Profiles;
 
 namespace Zipper

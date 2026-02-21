@@ -1,10 +1,5 @@
-// <copyright file="ZipArchiveService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Collections.Concurrent;
 using System.IO.Compression;
-using System.Text;
 using System.Threading.Channels;
 using Zipper.LoadFiles;
 
@@ -37,6 +32,13 @@ namespace Zipper
 
             var processedFiles = new ConcurrentBag<FileData>();
 
+            // Pre-compute the extracted text content selection once, outside the loop
+            var extractedTextContent = request.WithText
+                ? (request.FileType.ToLowerInvariant() == "eml"
+                    ? PlaceholderFiles.EmlExtractedText
+                    : PlaceholderFiles.ExtractedText)
+                : null;
+
             // Process generated files and write to archive
             await foreach (var fileData in fileDataReader.ReadAllAsync())
             {
@@ -52,7 +54,7 @@ namespace Zipper
 
                 if (request.WithText)
                 {
-                    WriteExtractedTextToArchive(archive, fileData, request);
+                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!);
                 }
 
                 if (fileData.Attachment.HasValue)
@@ -65,7 +67,7 @@ namespace Zipper
                     WriteAttachmentTextToArchive(archive, fileData);
                 }
 
-                fileData.MemoryOwner?.Dispose();
+                // Memory owners are disposed after load file generation (see below).
             }
 
             // Get the appropriate load file writer based on format
@@ -92,14 +94,21 @@ namespace Zipper
                 actualLoadFilePath = Path.Combine(
                     Path.GetDirectoryName(loadFilePath) ?? string.Empty,
                     baseFileName + loadFileWriter.FileExtension);
-                var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
-
-                // LoadFileWriter.WriteAsync handles flushing but we own the stream here
+                await using var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
                 await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
-
-                // Flush and dispose the stream we created
                 await fileStream.FlushAsync();
-                await fileStream.DisposeAsync();
+            }
+
+            // Dispose all memory owners after processing is complete
+            foreach (var fileData in processedFiles)
+            {
+                fileData.MemoryOwner?.Dispose();
+            }
+
+            // Dispose all memory owners after processing is complete
+            foreach (var fileData in processedFiles)
+            {
+                fileData.MemoryOwner?.Dispose();
             }
 
             return actualLoadFilePath;
@@ -112,7 +121,7 @@ namespace Zipper
         {
             var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
             using var entryStream = entry.Open();
-            entryStream.Write(fileData.Data);
+            entryStream.Write(fileData.Data.Span);
         }
 
         /// <summary>
@@ -155,12 +164,9 @@ namespace Zipper
         /// <summary>
         /// Writes an extracted text version of a file to the ZIP archive (synchronous version).
         /// </summary>
-        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request)
+        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent)
         {
-            if (!request.WithText)
-            {
-                return;
-            }
+            System.Diagnostics.Debug.Assert(request.WithText, "Should only be called when WithText is true");
 
             var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
             var textFilePathInZip = $"{fileData.WorkItem.FolderName}/{textFileName}";
@@ -168,21 +174,8 @@ namespace Zipper
             var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
             using var textEntryStream = textEntry.Open();
 
-            var textContent = GetExtractedTextContent(request.FileType);
-            textEntryStream.Write(Encoding.UTF8.GetBytes(textContent));
-        }
-
-        /// <summary>
-        /// Gets the appropriate extracted text content for different file types.
-        /// </summary>
-        private static string GetExtractedTextContent(string fileType)
-        {
-            var content = fileType.ToLowerInvariant() switch
-            {
-                "eml" => PlaceholderFiles.EmlExtractedText,
-                _ => PlaceholderFiles.ExtractedText,
-            };
-            return System.Text.Encoding.UTF8.GetString(content);
+            // O(1): write pre-computed byte[] directly, no string round-trip
+            textEntryStream.Write(textContent);
         }
     }
 }

@@ -1,7 +1,3 @@
-// <copyright file="DataGeneratorTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using Xunit;
 using Zipper.Profiles;
 

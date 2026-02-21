@@ -1,7 +1,4 @@
-// <copyright file="EmailBuilder.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
+using System.Buffers;
 using System.Text;
 
 namespace Zipper
@@ -182,7 +179,68 @@ namespace Zipper
             }
 
             sb.AppendLine();
-            sb.AppendLine(Convert.ToBase64String(attachment.Content, Base64FormattingOptions.InsertLineBreaks));
+
+            // Optimization: Process base64 conversion in chunks to avoid allocating a massive string.
+            // We use a chunk size that is a multiple of 57 bytes (which produces 76 chars)
+            // so that we can maintain proper line breaking behavior (76 chars per line).
+            const int ChunkSize = 57 * 1024;
+            int offset = 0;
+            int totalLength = attachment.Content.Length;
+
+            // Buffer for base64 chars + newlines. Derive size from ChunkSize.
+            // Max expansion: ((ChunkSize + 2) / 3) * 4 chars + (maxBase64Chars / 76) * 2 chars for newlines.
+            int maxBase64Chars = ((ChunkSize + 2) / 3) * 4;
+            int maxLineBreaks = maxBase64Chars / 76;
+            int bufferSize = maxBase64Chars + (maxLineBreaks * 2);
+            char[] charBuffer = ArrayPool<char>.Shared.Rent(bufferSize);
+
+            try
+            {
+                while (offset < totalLength)
+                {
+                    int count = Math.Min(ChunkSize, totalLength - offset);
+                    bool endsWithCrlf;
+
+                    // Use TryToBase64Chars to avoid allocating intermediate strings
+                    if (Convert.TryToBase64Chars(
+                        new ReadOnlySpan<byte>(attachment.Content, offset, count),
+                        charBuffer,
+                        out int charsWritten,
+                        Base64FormattingOptions.InsertLineBreaks))
+                    {
+                        sb.Append(charBuffer, 0, charsWritten);
+                        endsWithCrlf = charsWritten >= 2 &&
+                            charBuffer[charsWritten - 2] == '\r' &&
+                            charBuffer[charsWritten - 1] == '\n';
+                    }
+                    else
+                    {
+                        // Fallback should never happen with sufficient buffer.
+                        System.Diagnostics.Debug.Fail(
+                            $"TryToBase64Chars failed unexpectedly for chunk of {count} bytes; falling back to string allocation.");
+                        var base64 = Convert.ToBase64String(
+                            attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks);
+                        sb.Append(base64);
+                        endsWithCrlf = base64.EndsWith("\r\n", StringComparison.Ordinal);
+                    }
+
+                    offset += count;
+
+                    // If there are more chunks, we need a newline separator because
+                    // InsertLineBreaks only inserts breaks inside the chunk.
+                    // Only add if the chunk doesn't already end with CRLF to avoid duplicates.
+                    if (offset < totalLength && !endsWithCrlf)
+                    {
+                        sb.Append("\r\n");
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
+            }
+
+            sb.AppendLine();
             sb.AppendLine($"--{boundary}--");
         }
 

@@ -1,7 +1,3 @@
-// <copyright file="ParallelFileGenerator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Threading.Channels;
@@ -242,7 +238,7 @@ namespace Zipper
             return new FileData
             {
                 WorkItem = workItem,
-                Data = memoryOwner.Memory[..(int)totalSize].ToArray(),
+                Data = memoryOwner.Memory[..(int)totalSize],
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
@@ -317,7 +313,7 @@ namespace Zipper
     {
         public FileWorkItem WorkItem { get; init; } = new FileWorkItem();
 
-        public byte[] Data { get; init; } = Array.Empty<byte>();
+        public ReadOnlyMemory<byte> Data { get; init; } = ReadOnlyMemory<byte>.Empty;
 
         public (string filename, byte[] content)? Attachment { get; init; }
 

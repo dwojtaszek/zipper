@@ -1,13 +1,29 @@
-// <copyright file="ProgramTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using Xunit;
 
 namespace Zipper
 {
+    [Collection("ConsoleTests")]
     public class ProgramTests
     {
+        private static async Task<int> RunWithRedirectedConsole(Func<Task<int>> action)
+        {
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            try
+            {
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
+                return await action();
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+        }
+
         [Fact]
         public async Task Main_WithHelpFlag_ReturnsOne()
         {
@@ -15,7 +31,7 @@ namespace Zipper
             string[] args = { "--help" };
 
             // Act
-            int exitCode = await Program.Main(args);
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
             // Assert
             Assert.Equal(1, exitCode); // Help shows usage and returns 1
@@ -28,7 +44,7 @@ namespace Zipper
             string[] args = { };
 
             // Act
-            int exitCode = await Program.Main(args);
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
             // Assert
             Assert.Equal(1, exitCode); // Should return error code for invalid args
@@ -41,7 +57,7 @@ namespace Zipper
             string[] args = { "--count", "10", "--type", "pdf" };
 
             // Act
-            int exitCode = await Program.Main(args);
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
             // Assert
             Assert.Equal(1, exitCode); // Should return error code
@@ -59,21 +75,16 @@ namespace Zipper
                 "--type", "invalid_type",
             };
 
-            try
-            {
-                // Act
-                int exitCode = await Program.Main(args);
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code for invalid type
-            }
-            finally
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code for invalid type
+
+            // Cleanup
+            if (Directory.Exists(tempPath))
             {
-                // Cleanup
-                if (Directory.Exists(tempPath))
-                {
-                    Directory.Delete(tempPath, true);
-                }
+                Directory.Delete(tempPath, true);
             }
         }
 
@@ -89,22 +100,30 @@ namespace Zipper
                 "--type", "pdf",
             };
 
-            try
-            {
-                // Act
-                int exitCode = await Program.Main(args);
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-                // Assert
-                Assert.Equal(1, exitCode); // Should return error code
-            }
-            finally
+            // Assert
+            Assert.Equal(1, exitCode); // Should return error code
+
+            // Cleanup
+            if (Directory.Exists(tempPath))
             {
-                // Cleanup
-                if (Directory.Exists(tempPath))
-                {
-                    Directory.Delete(tempPath, true);
-                }
+                Directory.Delete(tempPath, true);
             }
+        }
+
+        [Fact]
+        public async Task Main_WithBenchmarkFlag_ReturnsZero()
+        {
+            // Arrange
+            string[] args = { "--benchmark" };
+
+            // Act
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+            // Assert
+            Assert.Equal(0, exitCode);
         }
     }
 }

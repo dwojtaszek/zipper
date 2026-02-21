@@ -1,7 +1,3 @@
-// <copyright file="ColumnProfileLoaderTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Text.Json;
 using Xunit;
 using Zipper.Profiles;

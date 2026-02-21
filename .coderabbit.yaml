@@ -1,1 +1,8 @@
 early_access: true
+reviews:
+  path_instructions:
+    - path: "**/*.cs"
+      instructions: >
+        Do NOT suggest adding copyright headers, license headers, or file-level
+        comments such as `// <copyright ...>`. This project intentionally does
+        not use file-level copyright headers.
