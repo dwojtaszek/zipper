@@ -168,7 +168,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task XmlWriter_ShouldWriteValidXml()
+        public async Task XmlLoadFileWriter_ShouldWriteValidXml()
         {
             // Arrange
             var request = this.CreateTestRequest();
@@ -234,6 +234,7 @@ namespace Zipper
             Assert.Equal(".csv", csvWriter.FileExtension);
 
             var xmlWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Xml);
+            Assert.IsType<XmlLoadFileWriter>(xmlWriter);
             Assert.Equal("XML", xmlWriter.FormatName);
             Assert.Equal(".xml", xmlWriter.FileExtension);
 

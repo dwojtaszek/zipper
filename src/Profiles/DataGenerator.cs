@@ -394,7 +394,16 @@ internal class DataGenerator
     private string GenerateHash(int length)
     {
         const string chars = "0123456789abcdef";
-        return new string(Enumerable.Range(0, length).Select(_ => chars[this.random.Next(chars.Length)]).ToArray());
+
+        // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
+        // so we can safely use stackalloc for efficiency.
+        Span<char> buffer = stackalloc char[length];
+        for (int i = 0; i < length; i++)
+        {
+            buffer[i] = chars[this.random.Next(chars.Length)];
+        }
+
+        return new string(buffer);
     }
 }
 

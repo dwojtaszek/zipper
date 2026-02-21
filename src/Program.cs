@@ -10,6 +10,20 @@ namespace Zipper
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             Console.WriteLine();
 
+            if (args.Contains("--benchmark"))
+            {
+                try
+                {
+                    await PerformanceBenchmarkRunner.RunBenchmarks();
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"\nBenchmark error: {ex.Message}");
+                    return 1;
+                }
+            }
+
             // Validate and parse command line arguments
             var request = CommandLineValidator.ValidateAndParseArguments(args);
             if (request == null)
