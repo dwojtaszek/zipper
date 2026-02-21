@@ -315,7 +315,7 @@ namespace Zipper
                 Body = "Email with large attachment",
             };
             var largeContent = new byte[1024 * 1024]; // 1MB
-            new Random().NextBytes(largeContent);
+            Random.Shared.NextBytes(largeContent);
 
             var attachment = new AttachmentInfo
             {

@@ -25,6 +25,6 @@ namespace Zipper
         /// <summary>
         /// Default degree of parallelism for file generation.
         /// </summary>
-        public static readonly int DefaultConcurrency = Environment.ProcessorCount / 2;
+        public static readonly int DefaultConcurrency = Math.Max(1, Environment.ProcessorCount / 2);
     }
 }
