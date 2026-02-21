@@ -1,57 +1,74 @@
 #!/bin/bash
-# Pre-push git hook to check code coverage before pushing
+# Pre-push git hook — runs unit tests + basic E2E smoke suite
 # Installs to: .git/hooks/pre-push
+#
+# Full E2E + coverage checks run in CI.
+# To bypass (not recommended): git push --no-verify
 
-echo "Running code coverage check..."
+echo "┌─────────────────────────────────────────────┐"
+echo "│  Pre-push: Unit Tests + Basic E2E Smoke     │"
+echo "└─────────────────────────────────────────────┘"
 
-# Run tests with coverage
-dotnet test --configuration Release --collect:"XPlat Code Coverage" --results-directory ./TestResults > /dev/null 2>&1
+# ──────────────────────────────────────────────────
+# 1. Run unit tests (fast gate)
+# ──────────────────────────────────────────────────
+echo ""
+echo "▶ Running unit tests..."
 
-# Check if reportgenerator is installed
-if ! command -v reportgenerator &> /dev/null; then
-    echo "Installing dotnet-reportgenerator-globaltool..."
-    dotnet tool install --global dotnet-reportgenerator-globaltool
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "⚠️  dotnet not found, skipping tests"
+    exit 0
 fi
 
-# Generate coverage report
-export PATH="$PATH:$HOME/.dotnet/tools"
-reportgenerator \
-    -reports:TestResults/*/coverage.cobertura.xml \
-    -targetdir:TestResults/coverage-report \
-    -reporttypes:"TextSummary" > /dev/null 2>&1
-
-# Extract coverage percentage and check threshold using awk for cross-platform compatibility
-COVERAGE_RESULT=$(awk '/Line coverage:/ { 
-    # Extract percentage value (e.g., "Line coverage: 80.4%")
-    match($0, /[0-9]+(\.[0-9]+)?/)
-    val = substr($0, RSTART, RLENGTH)
-    
-    # Check if value was found
-    if (val == "") val = 0
-    
-    # Compare with threshold (80%)
-    if (val < 80) {
-        print "FAIL " val
-    } else {
-        print "PASS " val
-    }
-}' TestResults/coverage-report/Summary.txt)
-
-# Parse result
-STATUS=$(echo "$COVERAGE_RESULT" | cut -d' ' -f1)
-VALUE=$(echo "$COVERAGE_RESULT" | cut -d' ' -f2)
-
-if [ "$STATUS" = "FAIL" ]; then
-    echo "❌ ERROR: Code coverage is below 80% (current: ${VALUE}%)"
-    echo "Please add more tests before pushing."
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+    --logger "console;verbosity=quiet" \
+    --nologo \
+    2>/dev/null || {
     echo ""
-    echo "To bypass this check (not recommended), use: git push --no-verify"
+    echo "❌ Unit tests failed. Push aborted."
+    echo "   Run 'dotnet test' for details."
+    echo "   To bypass: git push --no-verify"
     exit 1
-else
-    echo "✅ Coverage check passed: ${VALUE}% >= 80%"
-fi
+}
+echo "✅ Unit tests passed"
 
-# Clean up
-rm -rf TestResults
+# ──────────────────────────────────────────────────
+# 2. Run basic E2E smoke suite (5 representative cases)
+# ──────────────────────────────────────────────────
+echo ""
+echo "▶ Running basic E2E smoke tests..."
 
+# Detect OS and run appropriate script
+case "$(uname -s)" in
+    Linux*|Darwin*)
+        if [ -x "./tests/run-e2e-basic.sh" ] || [ -f "./tests/run-e2e-basic.sh" ]; then
+            chmod +x ./tests/run-e2e-basic.sh
+            bash ./tests/run-e2e-basic.sh || {
+                echo ""
+                echo "❌ Basic E2E smoke tests failed. Push aborted."
+                echo "   Run 'bash tests/run-e2e-basic.sh' for details."
+                echo "   To bypass: git push --no-verify"
+                exit 1
+            }
+        else
+            echo "⚠️  tests/run-e2e-basic.sh not found, skipping E2E"
+        fi
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        if [ -f "./tests/run-e2e-basic.bat" ]; then
+            cmd.exe //c ".\\tests\\run-e2e-basic.bat" || {
+                echo ""
+                echo "❌ Basic E2E smoke tests failed. Push aborted."
+                echo "   Run 'tests\\run-e2e-basic.bat' for details."
+                echo "   To bypass: git push --no-verify"
+                exit 1
+            }
+        else
+            echo "⚠️  tests/run-e2e-basic.bat not found, skipping E2E"
+        fi
+        ;;
+esac
+
+echo ""
+echo "✅ All pre-push checks passed"
 exit 0

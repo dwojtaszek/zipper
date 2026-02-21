@@ -1,33 +1,34 @@
 # Git Hooks Setup
 
-This directory contains git hooks that can be installed to enforce code quality standards locally.
+This directory contains git hooks for local code quality enforcement.
 
 ## Available Hooks
 
+### pre-commit
+Runs on `git commit`:
+1. **bd sync** — flush pending `.beads` changes
+2. **dotnet format** — auto-fix code style (fails if changes needed)
+3. **Unit tests** — run all 374 unit tests (~1.6s)
+
 ### pre-push
-Runs before `git push` to ensure code coverage is >= 80%.
+Runs on `git push`:
+1. **Unit tests** — fast gate (~1.6s)
+2. **Basic E2E smoke suite** — 5 representative test cases (~6s)
+   - PDF generation, EML with attachments, TIFF with folders
+   - Load file in zip, Bates numbering
 
-**To install:**
-```bash
-chmod +x .github/hooks/pre-push
-cp .github/hooks/pre-push .git/hooks/pre-push
-```
+Full E2E suite + coverage checks run in CI only.
 
-Or run the setup script:
+## Installation
+
 ```bash
 ./setup-hook.sh  # Linux/Mac
 ./setup-hook.bat # Windows
 ```
 
-**To bypass the hook** (not recommended):
+## Bypass (not recommended)
+
 ```bash
+git commit --no-verify
 git push --no-verify
 ```
-
-## Automatic Installation
-
-The hooks can be automatically installed by running:
-- Linux/Mac: `./setup-hook.sh`
-- Windows: `./setup-hook.bat`
-
-These scripts will copy the pre-push hook to `.git/hooks/` and make it executable.

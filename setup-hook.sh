@@ -1,20 +1,24 @@
 #!/bin/bash
 
-# This script sets up a Git pre-commit hook to run unit tests only.
-# E2E tests run on pre-push and CI/CD for faster commit feedback.
+# Sets up Git hooks for the zipper project:
+# - pre-commit: bd sync + dotnet format + unit tests
+# - pre-push:   unit tests + basic E2E smoke suite
+#
+# Usage: bash setup-hook.sh
 
 HOOK_DIR=".git/hooks"
-HOOK_FILE="$HOOK_DIR/pre-commit"
-
-# Create the hooks directory if it doesn't exist.
 mkdir -p "$HOOK_DIR"
 
-# Create the pre-commit hook.
-cat > "$HOOK_FILE" << EOL
+# ────────────────────────────────────────────────
+# 1. Pre-commit hook (generated inline)
+# ────────────────────────────────────────────────
+HOOK_FILE="$HOOK_DIR/pre-commit"
+
+cat > "$HOOK_FILE" << 'EOL'
 #!/bin/sh
 #
-# Pre-commit hook: bd sync + unit tests
-# E2E tests run on pre-push and CI/CD only (not on commit)
+# Pre-commit hook: bd sync + dotnet format + unit tests
+# E2E tests run on pre-push only (not on commit)
 #
 
 # ──────────────────────────────────────────────────────────
@@ -24,17 +28,17 @@ if command -v bd >/dev/null 2>&1; then
     # Determine .beads directory (handles worktrees)
     BEADS_DIR=""
     if git rev-parse --git-dir >/dev/null 2>&1; then
-        if [ "\$(git rev-parse --git-dir)" != "\$(git rev-parse --git-common-dir)" ]; then
+        if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
             # Worktree: .beads is in main repo root
-            MAIN_REPO_ROOT="\$(dirname "\$(git rev-parse --git-common-dir)")"
-            [ -d "\$MAIN_REPO_ROOT/.beads" ] && BEADS_DIR="\$MAIN_REPO_ROOT/.beads"
+            MAIN_REPO_ROOT="$(dirname "$(git rev-parse --git-common-dir)")"
+            [ -d "$MAIN_REPO_ROOT/.beads" ] && BEADS_DIR="$MAIN_REPO_ROOT/.beads"
         else
             # Regular repo
             [ -d .beads ] && BEADS_DIR=".beads"
         fi
     fi
 
-    if [ -n "\$BEADS_DIR" ]; then
+    if [ -n "$BEADS_DIR" ]; then
         if ! bd sync --flush-only >/dev/null 2>&1; then
             echo "Error: Failed to flush bd changes to JSONL" >&2
             echo "Run 'bd sync --flush-only' manually to diagnose" >&2
@@ -42,9 +46,9 @@ if command -v bd >/dev/null 2>&1; then
         fi
 
         # Stage JSONL if modified (only for regular repos, not worktrees)
-        if [ -f "\$BEADS_DIR/issues.jsonl" ] && \\
-           [ "\$(git rev-parse --git-dir)" = "\$(git rev-parse --git-common-dir)" ]; then
-            git add "\$BEADS_DIR/issues.jsonl" 2>/dev/null || true
+        if [ -f "$BEADS_DIR/issues.jsonl" ] && \
+           [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
+            git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
         fi
     fi
 fi
@@ -80,21 +84,26 @@ fi
 exit 0
 EOL
 
-# Make the hook executable.
 chmod +x "$HOOK_FILE"
+echo "✅ Pre-commit hook installed (bd sync + format + unit tests)"
 
-echo "✅ Pre-commit hook created successfully (unit tests only, E2E on push)."
-
-# ────────────────────────────────────────────────────────
-# Setup pre-push hook for coverage checking
-# ────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────
+# 2. Pre-push hook (copied from template)
+# ────────────────────────────────────────────────
 PUSH_HOOK_FILE="$HOOK_DIR/pre-push"
 PUSH_HOOK_TEMPLATE=".github/hooks/pre-push"
 
 if [ -f "$PUSH_HOOK_TEMPLATE" ]; then
     cp "$PUSH_HOOK_TEMPLATE" "$PUSH_HOOK_FILE"
     chmod +x "$PUSH_HOOK_FILE"
-    echo "✅ Pre-push hook installed (coverage >= 80% required)."
+    echo "✅ Pre-push hook installed (unit tests + basic E2E smoke suite)"
 else
     echo "⚠️  Pre-push hook template not found at $PUSH_HOOK_TEMPLATE"
 fi
+
+echo ""
+echo "Done! Hooks installed in $HOOK_DIR/"
+echo "  pre-commit → format + unit tests"
+echo "  pre-push   → unit tests + basic E2E (5 cases)"
+echo ""
+echo "Bypass with: git commit --no-verify / git push --no-verify"
