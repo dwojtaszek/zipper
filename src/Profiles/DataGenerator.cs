@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.Profiles;
 
 /// <summary>
@@ -432,8 +434,19 @@ internal static class LoremIpsum
     public static string GetParagraph(Random random)
     {
         var sentenceCount = random.Next(3, 7);
-        var sentences = Enumerable.Range(0, sentenceCount).Select(_ => GetSentence(random));
-        return string.Join(" ", sentences);
+        var sb = new StringBuilder();
+
+        for (int i = 0; i < sentenceCount; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(' ');
+            }
+
+            AppendSentence(sb, random);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
@@ -443,10 +456,37 @@ internal static class LoremIpsum
     /// <returns>A sentence.</returns>
     public static string GetSentence(Random random)
     {
+        var sb = new StringBuilder();
+        AppendSentence(sb, random);
+        return sb.ToString();
+    }
+
+    private static void AppendSentence(StringBuilder sb, Random random)
+    {
         var wordCount = random.Next(8, 20);
-        var words = Enumerable.Range(0, wordCount).Select(_ => Words[random.Next(Words.Length)]);
-        var sentence = string.Join(" ", words);
-        return char.ToUpper(sentence[0]) + sentence[1..] + ".";
+        for (int i = 0; i < wordCount; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(' ');
+            }
+
+            var word = Words[random.Next(Words.Length)];
+            if (i == 0)
+            {
+                sb.Append(char.ToUpperInvariant(word[0]));
+                if (word.Length > 1)
+                {
+                    sb.Append(word, 1, word.Length - 1);
+                }
+            }
+            else
+            {
+                sb.Append(word);
+            }
+        }
+
+        sb.Append('.');
     }
 }
 
