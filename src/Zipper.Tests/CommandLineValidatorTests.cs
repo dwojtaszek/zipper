@@ -2,6 +2,7 @@ using Xunit;
 
 namespace Zipper
 {
+    [Collection("ConsoleTests")]
     public class CommandLineValidatorTests : IDisposable
     {
         private readonly string tempDir;

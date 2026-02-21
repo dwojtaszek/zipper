@@ -12,8 +12,16 @@ namespace Zipper
 
             if (args.Contains("--benchmark"))
             {
-                await PerformanceBenchmarkRunner.RunBenchmarks();
-                return 0;
+                try
+                {
+                    await PerformanceBenchmarkRunner.RunBenchmarks();
+                    return 0;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"\nBenchmark error: {ex.Message}");
+                    return 1;
+                }
             }
 
             // Validate and parse command line arguments

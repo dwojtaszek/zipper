@@ -215,7 +215,9 @@ namespace Zipper
                     }
                     else
                     {
-                        // Fallback should never happen with sufficient buffer
+                        // Fallback should never happen with sufficient buffer.
+                        System.Diagnostics.Debug.Fail(
+                            $"TryToBase64Chars failed unexpectedly for chunk of {count} bytes; falling back to string allocation.");
                         var base64 = Convert.ToBase64String(
                             attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks);
                         sb.Append(base64);
