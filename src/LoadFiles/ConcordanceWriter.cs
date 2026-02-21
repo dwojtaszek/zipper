@@ -1,7 +1,3 @@
-// <copyright file="ConcordanceWriter.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Text;
 
 namespace Zipper.LoadFiles;

@@ -1,7 +1,3 @@
-// <copyright file="ZipArchiveServiceTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.IO.Compression;
 using System.Threading.Channels;
 using Xunit;

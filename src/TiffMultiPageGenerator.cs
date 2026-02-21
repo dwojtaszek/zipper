@@ -1,7 +1,3 @@
-// <copyright file="TiffMultiPageGenerator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Tiff;
 
@@ -13,14 +9,11 @@ namespace Zipper;
 /// </summary>
 internal static class TiffMultiPageGenerator
 {
-    private const int DefaultWidth = 100;
-    private const int DefaultHeight = 100;
     private const int MinPageCount = 1;
     private const int MaxPageCount = 1000;
 
     /// <summary>
-    /// Generates a TIFF file with the specified number of pages
-    /// Note: Currently creates single-page TIFF regardless of pageCount
+    /// Returns a pre-computed TIFF file.
     /// The pageCount is tracked for metadata purposes only.
     /// </summary>
     /// <param name="pageCount">Number of pages (for metadata tracking).</param>
@@ -28,13 +21,8 @@ internal static class TiffMultiPageGenerator
     /// <returns>Byte array containing a TIFF file.</returns>
     public static byte[] Generate(int pageCount, FileWorkItem workItem)
     {
-        using var stream = new MemoryStream();
-        using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgb24>(DefaultWidth, DefaultHeight);
-
-        var encoder = new TiffEncoder();
-        image.Save(stream, encoder);
-
-        return stream.ToArray();
+        // O(1): return pre-computed TIFF from PlaceholderFiles
+        return PlaceholderFiles.GetContent("tiff");
     }
 
     /// <summary>

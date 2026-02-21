@@ -1,7 +1,3 @@
-// <copyright file="OfficeFileGeneratorTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.IO.Compression;
 using Xunit;
 
@@ -129,12 +125,12 @@ namespace Zipper
             using var reader = new StreamReader(documentStream);
             var content = reader.ReadToEnd();
 
-            Assert.Contains("Document 123", content);
-            Assert.Contains("DOC00000123", content);
+            // O(1): pre-computed content is identical for all files
+            Assert.Contains("eDiscovery testing", content);
         }
 
         [Fact]
-        public void GenerateDocx_WithDifferentIndices_ShouldProduceDifferentContent()
+        public void GenerateDocx_WithDifferentIndices_ShouldReturnSamePrecomputedContent()
         {
             // Arrange
             var workItem1 = new FileWorkItem { Index = 1 };
@@ -144,8 +140,8 @@ namespace Zipper
             var result1 = OfficeFileGenerator.GenerateDocx(workItem1);
             var result2 = OfficeFileGenerator.GenerateDocx(workItem2);
 
-            // Assert
-            Assert.NotEqual(result1, result2);
+            // Assert: O(1) pre-computed content is identical for all indices
+            Assert.Equal(result1, result2);
         }
 
         [Fact]
@@ -183,7 +179,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void GenerateXlsx_WithDifferentIndices_ShouldProduceDifferentFiles()
+        public void GenerateXlsx_WithDifferentIndices_ShouldReturnSamePrecomputedContent()
         {
             // Arrange
             var workItem1 = new FileWorkItem { Index = 1 };
@@ -193,8 +189,8 @@ namespace Zipper
             var result1 = OfficeFileGenerator.GenerateXlsx(workItem1);
             var result2 = OfficeFileGenerator.GenerateXlsx(workItem2);
 
-            // Assert
-            Assert.NotEqual(result1, result2);
+            // Assert: O(1) pre-computed content is identical for all indices
+            Assert.Equal(result1, result2);
         }
 
         [Fact]

@@ -1,7 +1,3 @@
-// <copyright file="PerformanceMonitor.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Diagnostics;
 
 namespace Zipper

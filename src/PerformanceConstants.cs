@@ -1,7 +1,3 @@
-// <copyright file="PerformanceConstants.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace Zipper
 {
     public static class PerformanceConstants
