@@ -1,4 +1,5 @@
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Zipper.LoadFiles;
@@ -6,7 +7,7 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes XML format load files - structured markup format.
 /// </summary>
-internal class XmlWriter : LoadFileWriterBase
+internal class XmlLoadFileWriter : LoadFileWriterBase
 {
     public override string FormatName => "XML";
 
@@ -17,24 +18,43 @@ internal class XmlWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
     {
-        var root = new XElement("documents");
-
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        var settings = new XmlWriterSettings
         {
-            root.Add(CreateDocumentElement(fileData.WorkItem, fileData, request));
+            Async = true,
+            Indent = true,
+            Encoding = Encoding.UTF8,
+            CloseOutput = false,
+        };
+
+        await using var writer = System.Xml.XmlWriter.Create(stream, settings);
+
+        try
+        {
+            // Match the original XDeclaration("1.0", "UTF-8", "yes")
+            await writer.WriteStartDocumentAsync(standalone: true);
+            await writer.WriteStartElementAsync(null, "documents", null);
+
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            {
+                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+                await element.WriteToAsync(writer, CancellationToken.None);
+            }
+
+            await writer.WriteEndElementAsync(); // </documents>
+            await writer.WriteEndDocumentAsync();
+
+            await writer.FlushAsync();
         }
+        catch (Exception ex)
+        {
+            if (ex is OperationCanceledException)
+            {
+                throw;
+            }
 
-        var document = new XDocument(new XDeclaration("1.0", "UTF-8", "yes"), root);
-
-        // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
-
-        // XDocument.ToString() doesn't include the declaration, so we write it explicitly
-        await writer.WriteAsync(document.Declaration?.ToString() ?? string.Empty);
-        await writer.WriteAsync(document.ToString());
-
-        // Flush to ensure data is written
-        await writer.FlushAsync();
+            throw new InvalidOperationException(
+                $"Failed to write XML load file: {ex.Message}", ex);
+        }
     }
 
     private static XElement CreateDocumentElement(
