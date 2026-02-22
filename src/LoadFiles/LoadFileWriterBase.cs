@@ -12,7 +12,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     public abstract System.Threading.Tasks.Task WriteAsync(
         System.IO.Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles);
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles);
 
     /// <summary>
     /// Gets the file type in lowercase for comparisons.
@@ -46,14 +46,14 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// Generates metadata column values for a file.
     /// </summary>
     /// <returns></returns>
-    protected static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData)
+    protected static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileMetadata fileMetadata)
     {
         return new MetadataColumns
         {
             Custodian = $"Custodian {workItem.FolderNumber}",
             DateSent = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd"),
             Author = $"Author {Random.Shared.Next(1, 100):D3}",
-            FileSize = fileData.Data.Length,
+            FileSize = fileMetadata.FileSize,
         };
     }
 
@@ -61,7 +61,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// Generates EML-specific column values for a file.
     /// </summary>
     /// <returns></returns>
-    protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData)
+    protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileMetadata fileMetadata)
     {
         return new EmlColumns
         {
@@ -69,7 +69,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             From = $"sender{workItem.Index}@example.com",
             Subject = $"Email Subject {workItem.Index}",
             SentDate = System.DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss"),
-            Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
+            Attachment = fileMetadata.AttachmentFilename ?? string.Empty,
         };
     }
 

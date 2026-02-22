@@ -22,5 +22,5 @@ internal interface ILoadFileWriter
     /// <param name="request">File generation request parameters.</param>
     /// <param name="processedFiles">List of processed file data.</param>
     /// <returns>Task representing the write operation.</returns>
-    Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.List<FileData> processedFiles);
+    Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.IEnumerable<FileMetadata> processedFiles);
 }

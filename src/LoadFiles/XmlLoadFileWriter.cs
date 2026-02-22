@@ -16,7 +16,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles)
     {
         var settings = new XmlWriterSettings
         {
@@ -34,9 +34,9 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             await writer.WriteStartDocumentAsync(standalone: true);
             await writer.WriteStartElementAsync(null, "documents", null);
 
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            foreach (var fileMetadata in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+                var element = CreateDocumentElement(fileMetadata.WorkItem, fileMetadata, request);
                 await element.WriteToAsync(writer, CancellationToken.None);
             }
 
@@ -59,7 +59,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
     private static XElement CreateDocumentElement(
         FileWorkItem workItem,
-        FileData fileData,
+        FileMetadata fileMetadata,
         FileGenerationRequest request)
     {
         var docElement = new XElement(
@@ -69,7 +69,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeMetadata(request))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData);
+            var metadata = GenerateMetadataValues(workItem, fileMetadata);
             docElement.Add(new XElement(
                 "metadata",
                 new XElement("custodian", metadata.Custodian),
@@ -80,7 +80,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeEmlColumns(request))
         {
-            var eml = GenerateEmlValues(workItem, fileData);
+            var eml = GenerateEmlValues(workItem, fileMetadata);
             docElement.Add(new XElement(
                 "email",
                 new XElement("to", eml.To),
@@ -97,7 +97,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludePageCount(request))
         {
-            docElement.Add(new XElement("pageCount", fileData.PageCount));
+            docElement.Add(new XElement("pageCount", fileMetadata.PageCount));
         }
 
         if (request.WithText)

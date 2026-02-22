@@ -14,7 +14,7 @@ internal class CsvWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
@@ -61,11 +61,11 @@ internal class CsvWriter : LoadFileWriterBase
     private static async Task WriteRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles)
     {
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileMetadata in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            var workItem = fileData.WorkItem;
+            var workItem = fileMetadata.WorkItem;
             var values = new System.Collections.Generic.List<string>
             {
                 EscapeCsvField(GenerateDocumentId(workItem)),
@@ -74,7 +74,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData);
+                var metadata = GenerateMetadataValues(workItem, fileMetadata);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(metadata.Custodian),
@@ -86,7 +86,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData);
+                var eml = GenerateEmlValues(workItem, fileMetadata);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(eml.To),
@@ -104,7 +104,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludePageCount(request))
             {
-                values.Add(fileData.PageCount.ToString());
+                values.Add(fileMetadata.PageCount.ToString());
             }
 
             if (request.WithText)

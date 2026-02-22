@@ -18,7 +18,7 @@ namespace Zipper
         public static async Task WriteLoadFileContent(
             StreamWriter writer,
             FileGenerationRequest request,
-            List<FileData> processedFiles)
+            IEnumerable<Zipper.LoadFiles.FileMetadata> processedFiles)
         {
             // Defensive guards to prevent IndexOutOfRangeException
             char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
@@ -58,9 +58,9 @@ namespace Zipper
             await writer.WriteLineAsync(headerBuilder.ToString());
 
             // Write file records
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            foreach (var fileMetadata in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                await WriteFileRecord(writer, fileData, request, colDelim, quote);
+                await WriteFileRecord(writer, fileMetadata, request, colDelim, quote);
             }
         }
 
@@ -69,12 +69,12 @@ namespace Zipper
         /// </summary>
         private static async Task WriteFileRecord(
             StreamWriter writer,
-            FileData fileData,
+            Zipper.LoadFiles.FileMetadata fileMetadata,
             FileGenerationRequest request,
             char colDelim,
             char quote)
         {
-            var workItem = fileData.WorkItem;
+            var workItem = fileMetadata.WorkItem;
             var docId = SanitizeField($"DOC{workItem.Index:D8}", request.NewlineDelimiter);
 
             var lineBuilder = new StringBuilder();
@@ -83,14 +83,14 @@ namespace Zipper
             // Add metadata columns if requested
             if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
             {
-                var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote);
+                var metadataColumns = GetMetadataColumns(workItem, fileMetadata, request, colDelim, quote);
                 lineBuilder.Append(metadataColumns);
             }
 
             // Add EML-specific columns if needed
             if (request.FileType.ToLowerInvariant() == "eml")
             {
-                var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote);
+                var emlColumns = GetEmlColumns(workItem, fileMetadata, request, colDelim, quote);
                 lineBuilder.Append(emlColumns);
             }
 
@@ -104,7 +104,7 @@ namespace Zipper
             // Add Page Count column for TIFF with page range
             if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
             {
-                lineBuilder.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
+                lineBuilder.Append($"{colDelim}{quote}{fileMetadata.PageCount}{quote}");
             }
 
             // Add extracted text column if requested
@@ -120,12 +120,12 @@ namespace Zipper
         /// <summary>
         /// Gets metadata columns for file records.
         /// </summary>
-        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote)
+        private static string GetMetadataColumns(FileWorkItem workItem, Zipper.LoadFiles.FileMetadata fileMetadata, FileGenerationRequest request, char colDelim, char quote)
         {
             var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
             var dateSent = DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
             var author = SanitizeField($"Author {Random.Shared.Next(1, 100):D3}", request.NewlineDelimiter);
-            var fileSize = fileData.Data.Length;
+            var fileSize = fileMetadata.FileSize;
 
             return $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
         }
@@ -133,13 +133,13 @@ namespace Zipper
         /// <summary>
         /// Gets EML-specific columns for email file records.
         /// </summary>
-        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote)
+        private static string GetEmlColumns(FileWorkItem workItem, Zipper.LoadFiles.FileMetadata fileMetadata, FileGenerationRequest request, char colDelim, char quote)
         {
             var to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
             var from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
             var subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
             var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-            var attachmentName = SanitizeField(fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty, request.NewlineDelimiter);
+            var attachmentName = SanitizeField(fileMetadata.AttachmentFilename ?? string.Empty, request.NewlineDelimiter);
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";
         }

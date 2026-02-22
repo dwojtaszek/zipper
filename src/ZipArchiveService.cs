@@ -30,7 +30,7 @@ namespace Zipper
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
-            var processedFiles = new ConcurrentBag<FileData>();
+            var processedFiles = new ConcurrentBag<FileMetadata>();
 
             // Pre-compute the extracted text content selection once, outside the loop
             var extractedTextContent = request.WithText
@@ -42,32 +42,46 @@ namespace Zipper
             // Process generated files and write to archive
             await foreach (var fileData in fileDataReader.ReadAllAsync())
             {
-                processedFiles.Add(fileData);
-
-                // Sequentially create ZIP entries to avoid conflicts.
-                // The order is:
-                // 1. Main file (e.g., .eml)
-                // 2. Main file's extracted text (if requested)
-                // 3. Attachment (if it exists)
-                // 4. Attachment's extracted text (if it exists and text is requested)
-                WriteFileToArchive(archive, fileData);
-
-                if (request.WithText)
+                // Create lightweight metadata and release heavy content immediately
+                var metadata = new FileMetadata
                 {
-                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!);
-                }
+                    WorkItem = fileData.WorkItem,
+                    FileSize = fileData.Data.Length,
+                    AttachmentFilename = fileData.Attachment?.filename,
+                    PageCount = fileData.PageCount
+                };
+                processedFiles.Add(metadata);
 
-                if (fileData.Attachment.HasValue)
+                try
                 {
-                    WriteAttachmentToArchive(archive, fileData);
-                }
+                    // Sequentially create ZIP entries to avoid conflicts.
+                    // The order is:
+                    // 1. Main file (e.g., .eml)
+                    // 2. Main file's extracted text (if requested)
+                    // 3. Attachment (if it exists)
+                    // 4. Attachment's extracted text (if it exists and text is requested)
+                    WriteFileToArchive(archive, fileData);
 
-                if (fileData.Attachment.HasValue && request.WithText)
+                    if (request.WithText)
+                    {
+                        WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!);
+                    }
+
+                    if (fileData.Attachment.HasValue)
+                    {
+                        WriteAttachmentToArchive(archive, fileData);
+                    }
+
+                    if (fileData.Attachment.HasValue && request.WithText)
+                    {
+                        WriteAttachmentTextToArchive(archive, fileData);
+                    }
+                }
+                finally
                 {
-                    WriteAttachmentTextToArchive(archive, fileData);
+                    // Memory owners are disposed immediately after writing to ZIP
+                    fileData.MemoryOwner?.Dispose();
                 }
-
-                // Memory owners are disposed after load file generation (see below).
             }
 
             // Get the appropriate load file writer based on format
@@ -84,7 +98,7 @@ namespace Zipper
             {
                 var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                 using var loadFileStream = loadFileEntry.Open();
-                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList());
+                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles);
 
                 // Return path within the ZIP archive when load file is included
                 actualLoadFilePath = actualLoadFileName;
@@ -95,16 +109,11 @@ namespace Zipper
                     Path.GetDirectoryName(loadFilePath) ?? string.Empty,
                     baseFileName + loadFileWriter.FileExtension);
                 await using var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
-                await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
+                await loadFileWriter.WriteAsync(fileStream, request, processedFiles);
                 await fileStream.FlushAsync();
             }
 
-            // Dispose all memory owners after processing is complete
-            foreach (var fileData in processedFiles)
-            {
-                fileData.MemoryOwner?.Dispose();
-            }
-
+            // Memory owners were already disposed during processing
             return actualLoadFilePath;
         }
 

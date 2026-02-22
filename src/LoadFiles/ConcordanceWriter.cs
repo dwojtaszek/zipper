@@ -14,7 +14,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
@@ -78,13 +78,13 @@ internal class ConcordanceWriter : LoadFileWriterBase
     private static async Task WriteRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
+        System.Collections.Generic.IEnumerable<FileMetadata> processedFiles,
         char fieldDelim,
         char quote)
     {
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileMetadata in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            var workItem = fileData.WorkItem;
+            var workItem = fileMetadata.WorkItem;
             var line = new StringBuilder();
 
             line.Append($"{fieldDelim}");  // BEGATTY field (empty)
@@ -94,7 +94,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData);
+                var metadata = GenerateMetadataValues(workItem, fileMetadata);
                 line.Append($"{EscapeCsvField(metadata.Custodian)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(metadata.DateSent)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(metadata.Author)}{fieldDelim}");
@@ -103,7 +103,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData);
+                var eml = GenerateEmlValues(workItem, fileMetadata);
                 line.Append($"{EscapeCsvField(eml.To)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(eml.From)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(eml.Subject)}{fieldDelim}");
@@ -118,7 +118,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludePageCount(request))
             {
-                line.Append($"{EscapeCsvField(fileData.PageCount.ToString())}{fieldDelim}");
+                line.Append($"{EscapeCsvField(fileMetadata.PageCount.ToString())}{fieldDelim}");
             }
 
             if (request.WithText)

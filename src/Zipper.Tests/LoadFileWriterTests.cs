@@ -37,12 +37,12 @@ namespace Zipper
             };
         }
 
-        private List<FileData> CreateTestFileData(int count = 3)
+        private List<FileMetadata> CreateTestFileData(int count = 3)
         {
-            var fileList = new List<FileData>();
+            var fileList = new List<FileMetadata>();
             for (int i = 1; i <= count; i++)
             {
-                fileList.Add(new FileData
+                fileList.Add(new FileMetadata
                 {
                     WorkItem = new FileWorkItem
                     {
@@ -50,7 +50,9 @@ namespace Zipper
                         FolderNumber = 1,
                         FilePathInZip = $"folder_001/file_{i:D8}.pdf",
                     },
-                    Data = Encoding.UTF8.GetBytes($"Test content {i}"),
+                    FileSize = Encoding.UTF8.GetByteCount($"Test content {i}"),
+                    AttachmentFilename = null,
+                    PageCount = 1
                 });
             }
 
@@ -138,9 +140,9 @@ namespace Zipper
         {
             // Arrange
             var request = this.CreateTestRequest();
-            var fileData = new List<FileData>
+            var fileData = new List<FileMetadata>
             {
-                new FileData
+                new FileMetadata
                 {
                     WorkItem = new FileWorkItem
                     {
@@ -148,7 +150,7 @@ namespace Zipper
                         FolderNumber = 1,
                         FilePathInZip = "folder_001/file_with_\"quotes\".pdf"
                     },
-                    Data = Array.Empty<byte>()
+                    FileSize = 0
                 },
             };
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
@@ -355,10 +357,10 @@ namespace Zipper
                 FolderNumber = 5,
                 FilePathInZip = "folder_005/file_00000001.pdf",
             };
-            var fileData = new FileData
+            var fileMetadata = new FileMetadata
             {
                 WorkItem = workItem,
-                Data = new byte[1024],
+                FileSize = 1024,
             };
 
             // Act - Call through concrete writer that exposes base class functionality
@@ -368,7 +370,7 @@ namespace Zipper
             var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
                 "GenerateMetadataValues",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = method?.Invoke(null, new object[] { workItem, fileData });
+            var result = method?.Invoke(null, new object[] { workItem, fileMetadata });
 
             // Assert
             Assert.NotNull(result);
