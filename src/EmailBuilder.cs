@@ -58,28 +58,38 @@ namespace Zipper
         /// <returns>Byte array representing the EML file content.</returns>
         public static byte[] BuildEmail(EmailTemplate template, AttachmentInfo? attachment = null)
         {
+            using var ms = new MemoryStream();
+            using var writer = new StreamWriter(ms, new UTF8Encoding(false));
+
+            BuildEmailToWriter(writer, template, attachment);
+            writer.Flush();
+            return ms.ToArray();
+        }
+
+        /// <summary>
+        /// Writes EML content directly to a TextWriter to minimize allocations.
+        /// </summary>
+        public static void BuildEmailToWriter(TextWriter writer, EmailTemplate template, AttachmentInfo? attachment = null)
+        {
             if (template == null)
             {
                 throw new ArgumentNullException(nameof(template));
             }
 
             var boundary = attachment != null ? GenerateBoundary() : string.Empty;
-            var sb = new StringBuilder();
 
             // Build headers
-            BuildHeaders(sb, template, attachment, boundary);
+            BuildHeaders(writer, template, attachment, boundary);
 
             // Build body and attachments
             if (attachment != null)
             {
-                BuildMultipartContent(sb, template, attachment, boundary);
+                BuildMultipartContent(writer, template, attachment, boundary);
             }
             else
             {
-                BuildSimpleContent(sb, template);
+                BuildSimpleContent(writer, template);
             }
-
-            return Encoding.UTF8.GetBytes(sb.ToString());
         }
 
         /// <summary>
@@ -108,87 +118,83 @@ namespace Zipper
             return BuildEmail(template, attachmentInfo);
         }
 
-        private static void BuildHeaders(StringBuilder sb, EmailTemplate template, AttachmentInfo? attachment, string boundary)
+        private static void BuildHeaders(TextWriter writer, EmailTemplate template, AttachmentInfo? attachment, string boundary)
         {
             // Standard headers
-            sb.AppendLine($"From: {template.From}");
-            sb.AppendLine($"To: {template.To}");
+            writer.WriteLine($"From: {template.From}");
+            writer.WriteLine($"To: {template.To}");
 
             if (!string.IsNullOrEmpty(template.Cc))
             {
-                sb.AppendLine($"Cc: {template.Cc}");
+                writer.WriteLine($"Cc: {template.Cc}");
             }
 
             if (!string.IsNullOrEmpty(template.Bcc))
             {
-                sb.AppendLine($"Bcc: {template.Bcc}");
+                writer.WriteLine($"Bcc: {template.Bcc}");
             }
 
-            sb.AppendLine($"Subject: {template.Subject}");
-            sb.AppendLine($"Date: {template.SentDate:ddd, dd MMM yyyy HH:mm:ss zzz}");
-            sb.AppendLine("MIME-Version: 1.0");
+            writer.WriteLine($"Subject: {template.Subject}");
+            writer.WriteLine($"Date: {template.SentDate:ddd, dd MMM yyyy HH:mm:ss zzz}");
+            writer.WriteLine("MIME-Version: 1.0");
 
             // Priority headers
             if (template.IsHighPriority)
             {
-                sb.AppendLine("X-Priority: 1");
-                sb.AppendLine("Priority: Urgent");
+                writer.WriteLine("X-Priority: 1");
+                writer.WriteLine("Priority: Urgent");
             }
 
             if (template.RequestReadReceipt)
             {
-                sb.AppendLine($"Disposition-Notification-To: {template.From}");
+                writer.WriteLine($"Disposition-Notification-To: {template.From}");
             }
 
             if (!string.IsNullOrEmpty(template.ReplyTo))
             {
-                sb.AppendLine($"Reply-To: {template.ReplyTo}");
+                writer.WriteLine($"Reply-To: {template.ReplyTo}");
             }
 
             // Content type based on attachment presence
             if (attachment != null)
             {
-                sb.AppendLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
-                sb.AppendLine();
+                writer.WriteLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
+                writer.WriteLine();
             }
         }
 
-        private static void BuildMultipartContent(StringBuilder sb, EmailTemplate template, AttachmentInfo attachment, string boundary)
+        private static void BuildMultipartContent(TextWriter writer, EmailTemplate template, AttachmentInfo attachment, string boundary)
         {
             // Text body part
-            sb.AppendLine($"--{boundary}");
-            sb.AppendLine("Content-Type: text/plain; charset=utf-8");
-            sb.AppendLine("Content-Transfer-Encoding: 8bit");
-            sb.AppendLine();
-            sb.AppendLine(template.Body);
-            sb.AppendLine();
+            writer.WriteLine($"--{boundary}");
+            writer.WriteLine("Content-Type: text/plain; charset=utf-8");
+            writer.WriteLine("Content-Transfer-Encoding: 8bit");
+            writer.WriteLine();
+            writer.WriteLine(template.Body);
+            writer.WriteLine();
 
             // Attachment part
-            sb.AppendLine($"--{boundary}");
-            sb.AppendLine($"Content-Type: {GetContentType(attachment)}; name=\"{attachment.FileName}\"");
-            sb.AppendLine("Content-Transfer-Encoding: base64");
+            writer.WriteLine($"--{boundary}");
+            writer.WriteLine($"Content-Type: {GetContentType(attachment)}; name=\"{attachment.FileName}\"");
+            writer.WriteLine("Content-Transfer-Encoding: base64");
 
             if (attachment.IsInline && !string.IsNullOrEmpty(attachment.ContentId))
             {
-                sb.AppendLine($"Content-ID: <{attachment.ContentId}>");
-                sb.AppendLine($"Content-Disposition: inline; filename=\"{attachment.FileName}\"");
+                writer.WriteLine($"Content-ID: <{attachment.ContentId}>");
+                writer.WriteLine($"Content-Disposition: inline; filename=\"{attachment.FileName}\"");
             }
             else
             {
-                sb.AppendLine($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
+                writer.WriteLine($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
             }
 
-            sb.AppendLine();
+            writer.WriteLine();
 
-            // Optimization: Process base64 conversion in chunks to avoid allocating a massive string.
-            // We use a chunk size that is a multiple of 57 bytes (which produces 76 chars)
-            // so that we can maintain proper line breaking behavior (76 chars per line).
+            // Optimization: Process base64 conversion in chunks and write directly
             const int ChunkSize = 57 * 1024;
             int offset = 0;
             int totalLength = attachment.Content.Length;
 
-            // Buffer for base64 chars + newlines. Derive size from ChunkSize.
-            // Max expansion: ((ChunkSize + 2) / 3) * 4 chars + (maxBase64Chars / 76) * 2 chars for newlines.
             int maxBase64Chars = ((ChunkSize + 2) / 3) * 4;
             int maxLineBreaks = maxBase64Chars / 76;
             int bufferSize = maxBase64Chars + (maxLineBreaks * 2);
@@ -201,37 +207,32 @@ namespace Zipper
                     int count = Math.Min(ChunkSize, totalLength - offset);
                     bool endsWithCrlf;
 
-                    // Use TryToBase64Chars to avoid allocating intermediate strings
                     if (Convert.TryToBase64Chars(
                         new ReadOnlySpan<byte>(attachment.Content, offset, count),
                         charBuffer,
                         out int charsWritten,
                         Base64FormattingOptions.InsertLineBreaks))
                     {
-                        sb.Append(charBuffer, 0, charsWritten);
+                        writer.Write(charBuffer, 0, charsWritten);
                         endsWithCrlf = charsWritten >= 2 &&
                             charBuffer[charsWritten - 2] == '\r' &&
                             charBuffer[charsWritten - 1] == '\n';
                     }
                     else
                     {
-                        // Fallback should never happen with sufficient buffer.
                         System.Diagnostics.Debug.Fail(
                             $"TryToBase64Chars failed unexpectedly for chunk of {count} bytes; falling back to string allocation.");
                         var base64 = Convert.ToBase64String(
                             attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks);
-                        sb.Append(base64);
+                        writer.Write(base64);
                         endsWithCrlf = base64.EndsWith("\r\n", StringComparison.Ordinal);
                     }
 
                     offset += count;
 
-                    // If there are more chunks, we need a newline separator because
-                    // InsertLineBreaks only inserts breaks inside the chunk.
-                    // Only add if the chunk doesn't already end with CRLF to avoid duplicates.
                     if (offset < totalLength && !endsWithCrlf)
                     {
-                        sb.Append("\r\n");
+                        writer.Write("\r\n");
                     }
                 }
             }
@@ -240,16 +241,16 @@ namespace Zipper
                 ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
             }
 
-            sb.AppendLine();
-            sb.AppendLine($"--{boundary}--");
+            writer.WriteLine();
+            writer.WriteLine($"--{boundary}--");
         }
 
-        private static void BuildSimpleContent(StringBuilder sb, EmailTemplate template)
+        private static void BuildSimpleContent(TextWriter writer, EmailTemplate template)
         {
-            sb.AppendLine("Content-Type: text/plain; charset=utf-8");
-            sb.AppendLine("Content-Transfer-Encoding: 8bit");
-            sb.AppendLine();
-            sb.AppendLine(template.Body);
+            writer.WriteLine("Content-Type: text/plain; charset=utf-8");
+            writer.WriteLine("Content-Transfer-Encoding: 8bit");
+            writer.WriteLine();
+            writer.WriteLine(template.Body);
         }
 
         private static string GenerateBoundary()

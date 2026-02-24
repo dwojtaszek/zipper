@@ -124,19 +124,6 @@ namespace Zipper
         }
 
         [Fact]
-        public void GetPageCount_WithValidRangeAndSameIndex_ShouldReturnSamePageCount()
-        {
-            // Arrange
-            var range = (Min: 1, Max: 10);
-
-            // Act & Assert - Deterministic random means same index = same result
-            var result1 = TiffMultiPageGenerator.GetPageCount(range, 42);
-            var result2 = TiffMultiPageGenerator.GetPageCount(range, 42);
-
-            Assert.Equal(result1, result2);
-        }
-
-        [Fact]
         public void GetPageCount_WithValidRangeAndDifferentIndex_ShouldReturnDifferentPageCounts()
         {
             // Arrange

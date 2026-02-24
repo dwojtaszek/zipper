@@ -2,9 +2,8 @@ using System.Buffers;
 
 namespace Zipper
 {
-    /// <summary>
     /// Manages memory pooling for large byte arrays to reduce GC pressure.
-    /// </summary>
+    /// Note: This class serves as a thin pass-through wrapper around <see cref="MemoryPool{T}.Shared"/>.
     public class MemoryPoolManager : IDisposable
     {
         /// <summary>

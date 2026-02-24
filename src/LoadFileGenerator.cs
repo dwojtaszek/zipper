@@ -57,22 +57,43 @@ namespace Zipper
 
             await writer.WriteLineAsync(headerBuilder.ToString());
 
+            var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+            var now = DateTime.UtcNow;
+
+            var buffer = new StringBuilder();
+            int rowCount = 0;
+
             // Write file records
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                await WriteFileRecord(writer, fileData, request, colDelim, quote);
+                var line = GetFileRecordLine(fileData, request, colDelim, quote, random, now);
+                buffer.AppendLine(line);
+                rowCount++;
+
+                if (rowCount >= 1000)
+                {
+                    await writer.WriteAsync(buffer.ToString());
+                    buffer.Clear();
+                    rowCount = 0;
+                }
+            }
+
+            if (buffer.Length > 0)
+            {
+                await writer.WriteAsync(buffer.ToString());
             }
         }
 
         /// <summary>
-        /// Writes a single file record to the load file.
+        /// Gets a single file record line for the load file.
         /// </summary>
-        private static async Task WriteFileRecord(
-            StreamWriter writer,
+        private static string GetFileRecordLine(
             FileData fileData,
             FileGenerationRequest request,
             char colDelim,
-            char quote)
+            char quote,
+            Random random,
+            DateTime now)
         {
             var workItem = fileData.WorkItem;
             var docId = SanitizeField($"DOC{workItem.Index:D8}", request.NewlineDelimiter);
@@ -83,14 +104,14 @@ namespace Zipper
             // Add metadata columns if requested
             if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
             {
-                var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote);
+                var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote, random, now);
                 lineBuilder.Append(metadataColumns);
             }
 
             // Add EML-specific columns if needed
             if (request.FileType.ToLowerInvariant() == "eml")
             {
-                var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote);
+                var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote, random, now);
                 lineBuilder.Append(emlColumns);
             }
 
@@ -114,17 +135,17 @@ namespace Zipper
                 lineBuilder.Append($"{colDelim}{quote}{textFilePath}{quote}");
             }
 
-            await writer.WriteLineAsync(lineBuilder.ToString());
+            return lineBuilder.ToString();
         }
 
         /// <summary>
         /// Gets metadata columns for file records.
         /// </summary>
-        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote)
+        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, Random random, DateTime now)
         {
             var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
-            var dateSent = DateTime.Now.AddDays(-Random.Shared.Next(1, 365)).ToString("yyyy-MM-dd");
-            var author = SanitizeField($"Author {Random.Shared.Next(1, 100):D3}", request.NewlineDelimiter);
+            var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
+            var author = SanitizeField($"Author {random.Next(1, 100):D3}", request.NewlineDelimiter);
             var fileSize = fileData.Data.Length;
 
             return $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
@@ -133,12 +154,12 @@ namespace Zipper
         /// <summary>
         /// Gets EML-specific columns for email file records.
         /// </summary>
-        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote)
+        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, Random random, DateTime now)
         {
             var to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
             var from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
             var subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
-            var sentDate = DateTime.Now.AddDays(-Random.Shared.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+            var sentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
             var attachmentName = SanitizeField(fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty, request.NewlineDelimiter);
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";

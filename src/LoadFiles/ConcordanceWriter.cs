@@ -23,8 +23,11 @@ internal class ConcordanceWriter : LoadFileWriterBase
         const char fieldDelim = ',';
         const char quote = '"';
 
+        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var now = DateTime.UtcNow;
+
         await WriteHeaderAsync(writer, request, fieldDelim, quote);
-        await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quote);
+        await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quote, random, now);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
@@ -80,21 +83,29 @@ internal class ConcordanceWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles,
         char fieldDelim,
-        char quote)
+        char quote,
+        Random random,
+        DateTime now)
     {
+        var buffer = new StringBuilder();
+        int rowCount = 0;
+
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
             var line = new StringBuilder();
 
-            line.Append($"{fieldDelim}");  // BEGATTY field (empty)
-            line.Append($"{fieldDelim}");  // ENDDATTY field (empty)
+            // Note: BEGATTY and ENDDATTY (beginning/ending attachment Bates numbers)
+            // are intentionally left empty. The format requires these fields,
+            // but this generator does not track attachment parent/child ranges.
+            line.Append($"{fieldDelim}");  // BEGATTY field
+            line.Append($"{fieldDelim}");  // ENDDATTY field
             line.Append($"{EscapeCsvField(GenerateDocumentId(workItem))}{fieldDelim}");
             line.Append($"{EscapeCsvField(workItem.FilePathInZip)}{fieldDelim}");
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData);
+                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
                 line.Append($"{EscapeCsvField(metadata.Custodian)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(metadata.DateSent)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(metadata.Author)}{fieldDelim}");
@@ -103,7 +114,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData);
+                var eml = GenerateEmlValues(workItem, fileData, random, now);
                 line.Append($"{EscapeCsvField(eml.To)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(eml.From)}{fieldDelim}");
                 line.Append($"{EscapeCsvField(eml.Subject)}{fieldDelim}");
@@ -126,7 +137,20 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 line.Append($"{EscapeCsvField(GenerateTextPath(request, workItem))}{fieldDelim}");
             }
 
-            await writer.WriteLineAsync(line.ToString().TrimEnd(fieldDelim));
+            buffer.AppendLine(line.ToString().TrimEnd(fieldDelim));
+            rowCount++;
+
+            if (rowCount >= 1000)
+            {
+                await writer.WriteAsync(buffer.ToString());
+                buffer.Clear();
+                rowCount = 0;
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await writer.WriteAsync(buffer.ToString());
         }
     }
 }

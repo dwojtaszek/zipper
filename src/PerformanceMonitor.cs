@@ -13,6 +13,7 @@ namespace Zipper
         private long totalFiles;
         private DateTime lastProgressUpdate = DateTime.UtcNow;
         private double lastDisplayedPercentage;
+        private readonly object syncRoot = new object();
 
         /// <summary>
         /// Starts performance monitoring for a new operation.
@@ -36,10 +37,13 @@ namespace Zipper
             Interlocked.Add(ref this.filesCompleted, count);
 
             var now = DateTime.UtcNow;
-            if ((now - this.lastProgressUpdate).TotalMilliseconds >= 100) // Update every 100ms
+            lock (this.syncRoot)
             {
-                this.ReportProgress(this.filesCompleted, this.totalFiles);
-                this.lastProgressUpdate = now;
+                if ((now - this.lastProgressUpdate).TotalMilliseconds >= 100) // Update every 100ms
+                {
+                    this.lastProgressUpdate = now;
+                    this.ReportProgress(this.filesCompleted, this.totalFiles);
+                }
             }
         }
 
@@ -70,11 +74,14 @@ namespace Zipper
             var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;
             var eta = rate > 0 ? TimeSpan.FromSeconds((total - completed) / rate) : TimeSpan.Zero;
 
-            // Only display progress when there's a meaningful change (at least 1% or completion)
-            if (percentage > this.lastDisplayedPercentage + 1 || percentage >= 100)
+            lock (this.syncRoot)
             {
-                this.lastDisplayedPercentage = percentage;
-                Console.Write($"\rProgress: {completed:N0} / {total:N0} files ({percentage:F1}%) - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}          ");
+                // Only display progress when there's a meaningful change (at least 1% or completion)
+                if (percentage > this.lastDisplayedPercentage + 1 || percentage >= 100)
+                {
+                    this.lastDisplayedPercentage = percentage;
+                    Console.Write($"\rProgress: {completed:N0} / {total:N0} files ({percentage:F1}%) - {rate:F1} files/sec - ETA: {eta:hh\\:mm\\:ss}          ");
+                }
             }
         }
 

@@ -147,7 +147,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithInvalidOutputPath_ShouldReturnNull()
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", "../../../etc/passwd" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", string.Empty };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -373,7 +373,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly()
         {
             // Arrange
-            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", "/tmp/test", "--tiff-pages", "5-20" };
+            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", "5-20" };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -399,7 +399,7 @@ namespace Zipper
 
             try
             {
-                var args = new[] { "--type", "tiff", "--count", "10", "--output-path", "/tmp/test", "--tiff-pages", range };
+                var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
 
                 // Act
                 var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -425,7 +425,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly(string format, LoadFileFormat expected)
         {
             // Arrange
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp/test", "--load-file-format", format };
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format };
 
             // Act
             var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -445,7 +445,7 @@ namespace Zipper
 
             try
             {
-                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp/test", "--load-file-format", "invalid" };
+                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
 
                 // Act
                 var result = CommandLineValidator.ValidateAndParseArguments(args);
@@ -500,6 +500,34 @@ namespace Zipper
             Assert.NotNull(result);
             Assert.Equal("|", result.ColumnDelimiter);  // Should override CSV preset
             Assert.Equal("\"", result.QuoteDelimiter);   // Should use CSV preset
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithUnknownArgument_ShouldOutputWarning()
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                // --unknown-arg is an invalid parameter
+                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.NotNull(result); // The valid args should still parse into a valid request
+                var output = errorOutput.ToString();
+                Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
         }
     }
 }

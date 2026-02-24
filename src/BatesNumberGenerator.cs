@@ -39,7 +39,10 @@ public static class BatesNumberGenerator
     /// <returns>The numeric Bates value.</returns>
     private static long CalculateValue(BatesNumberConfig config, long currentIndex)
     {
-        return config.Start + (currentIndex * config.Increment);
+        checked
+        {
+            return config.Start + (currentIndex * config.Increment);
+        }
     }
 
     /// <summary>

@@ -3,6 +3,8 @@ using SixLabors.ImageSharp.Formats.Tiff;
 using SixLabors.ImageSharp.Formats.Tiff.Constants;
 using SixLabors.ImageSharp.PixelFormats;
 
+namespace Zipper;
+
 public static class PlaceholderFiles
 {
     // A minimal, valid 1x1 black pixel JPG.

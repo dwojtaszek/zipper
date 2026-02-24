@@ -21,7 +21,7 @@ public enum LoadFileFormat
     Csv,
 
     /// <summary>
-    /// XML format - structured markup (legacy, same as EdrmXml).
+    /// XML format - structured markup (legacy alias, generates the exact same format as <see cref="EdrmXml"/>).
     /// </summary>
     Xml,
 

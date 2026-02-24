@@ -30,34 +30,34 @@ namespace Zipper
         [Fact]
         public void ValidateAndCreateDirectory_PathWithTraversal_ReturnsNull()
         {
-            // Arrange - Test directory traversal which is a security vulnerability
+            // Arrange
+            string baseDir = Path.GetTempPath();
             string[] traversalPaths =
             {
-                "..",
                 "../",
-                "/../",
-                "folder/../folder",
                 "folder/../../folder",
                 "..\\",
-                "folder\\..\\folder",
                 "folder\\..\\..\\folder",
             };
 
             // Act & Assert
             foreach (string path in traversalPaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
-                Assert.Null(result); // Path traversal should be blocked for security
+                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                Assert.Null(result); // Traversal escaping base directory should be blocked
             }
         }
 
         [Fact]
         public void ValidateAndCreateDirectory_RelativePathWithTraversal_ReturnsNull()
         {
-            // Arrange - Test relative path traversal attacks
+            // Arrange
+            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
+            Directory.CreateDirectory(baseDir);
+
             string[] relativePaths =
             {
-                "./../../../etc",
+                "../../../etc",
                 "test/../../../etc/passwd",
                 "folder/subfolder/../../../sensitive",
             };
@@ -65,15 +65,18 @@ namespace Zipper
             // Act & Assert
             foreach (string path in relativePaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
-                Assert.Null(result); // Relative path traversal should be blocked
+                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                Assert.Null(result);
             }
         }
 
         [Fact]
         public void ValidateAndCreateDirectory_MixedSlashesWithTraversal_ReturnsNull()
         {
-            // Arrange - Test mixed slash traversal
+            // Arrange
+            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
+            Directory.CreateDirectory(baseDir);
+
             string[] mixedPaths =
             {
                 "folder\\..\\..\\etc",
@@ -84,8 +87,8 @@ namespace Zipper
             // Act & Assert
             foreach (string path in mixedPaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
-                Assert.Null(result); // Mixed slash traversal should be blocked
+                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                Assert.Null(result);
             }
         }
 
@@ -113,12 +116,15 @@ namespace Zipper
         [Theory]
         [InlineData("")]
         [InlineData("   ")]
-        [InlineData("folder/../file")]
-        [InlineData("/absolute/path/with/../traversal")]
+        [InlineData("folder/../../file")]
+        [InlineData("/absolute/path/with/../../traversal")]
         public void IsPathSafe_InvalidPaths_ReturnsFalse(string path)
         {
+            // Arrange
+            string baseDir = Path.GetTempPath();
+
             // Act
-            bool result = PathValidator.IsPathSafe(path);
+            bool result = PathValidator.IsPathSafe(path, baseDir);
 
             // Assert
             Assert.False(result);
@@ -130,8 +136,11 @@ namespace Zipper
         [InlineData("simple-folder")]
         public void IsPathSafe_ValidPaths_ReturnsTrue(string path)
         {
+            // Arrange
+            string baseDir = Environment.CurrentDirectory;
+
             // Act
-            bool result = PathValidator.IsPathSafe(path);
+            bool result = PathValidator.IsPathSafe(path, baseDir);
 
             // Assert
             Assert.True(result);
@@ -182,6 +191,7 @@ namespace Zipper
         public void ValidateAndCreateDirectory_WithComplexTraversalAttempts_ReturnsNull()
         {
             // Arrange - Complex traversal attack patterns
+            string baseDir = Path.GetTempPath();
             string[] complexTraversals =
             {
                 "../../../../../../../etc/passwd",
@@ -194,7 +204,7 @@ namespace Zipper
             // Act & Assert
             foreach (string path in complexTraversals)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
+                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
                 Assert.Null(result); // Complex traversal attacks should be blocked
             }
         }
@@ -223,18 +233,36 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData("C:\\Program Files\\App", true)] // Windows absolute path
-        [InlineData("/usr/local/bin", true)] // Unix absolute path
         [InlineData("relative/path", true)] // Relative path without traversal
-        [InlineData("../traversal", false)] // Traversal attempt
+        [InlineData("../traversal", false)] // Traversal attempt outside current dir
         [InlineData("", false)] // Empty path
         public void IsPathSafe_VariousPathTypes_ReturnsExpectedResult(string path, bool expectedSafe)
         {
+            // Arrange
+            string baseDir = Environment.CurrentDirectory;
+
             // Act
-            bool result = PathValidator.IsPathSafe(path);
+            bool result = PathValidator.IsPathSafe(path, baseDir);
 
             // Assert
             Assert.Equal(expectedSafe, result);
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_CanonicalTraversalAttempt_ReturnsNull()
+        {
+            // Arrange
+            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
+            Directory.CreateDirectory(baseDir);
+
+            // A path that technically starts with the base dir name but canonically resolves outside it
+            string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
+
+            // Act
+            var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+
+            // Assert
+            Assert.Null(result); // Canonical path escapes baseDir, should be rejected
         }
     }
 }

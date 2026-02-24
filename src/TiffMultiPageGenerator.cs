@@ -52,11 +52,9 @@ internal static class TiffMultiPageGenerator
             return clampedMin;
         }
 
-        // Use fileIndex as seed for deterministic but distributed results
-        // Hash the fileIndex to avoid collisions when fileIndex > int.MaxValue
-        var seed = (int)(fileIndex ^ (fileIndex >> 32));
-        var random = new System.Random(seed);
-        return random.Next(clampedMin, clampedMax + 1);
+        // Use Random.Shared to avoid allocating a new System.Random instance per file.
+        // This trades strict determinism for performance.
+        return Random.Shared.Next(clampedMin, clampedMax + 1);
     }
 
     /// <summary>

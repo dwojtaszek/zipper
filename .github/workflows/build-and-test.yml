@@ -132,6 +132,8 @@ jobs:
         run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=detailed" --no-build
 
       - name: Run unit tests with coverage (Linux only)
+        # Note: We only run coverage on Linux to save CI time and because the .NET code is cross-platform
+        # without OS-specific conditionals. The Bash-based coverage script is also tailored for Linux.
         if: runner.os == 'Linux'
         run: |
           dotnet test src/Zipper.Tests/Zipper.Tests.csproj \

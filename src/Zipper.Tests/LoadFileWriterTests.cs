@@ -368,7 +368,9 @@ namespace Zipper
             var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
                 "GenerateMetadataValues",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = method?.Invoke(null, new object[] { workItem, fileData });
+            var random = new Random(42);
+            var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var result = method?.Invoke(null, new object[] { workItem, fileData, random, now });
 
             // Assert
             Assert.NotNull(result);

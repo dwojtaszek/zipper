@@ -31,6 +31,10 @@ namespace Zipper
 
             // Parse arguments
             var parsedArgs = ParseArguments(args);
+            if (parsedArgs == null)
+            {
+                return null;
+            }
 
             // Validate required arguments
             if (!ValidateRequiredArguments(parsedArgs))
@@ -102,54 +106,82 @@ namespace Zipper
         /// <summary>
         /// Parses command line arguments into a dictionary.
         /// </summary>
-        private static ParsedArguments ParseArguments(string[] args)
+        private static ParsedArguments? ParseArguments(string[] args)
         {
             var parsed = new ParsedArguments();
 
             for (int i = 0; i < args.Length; i++)
             {
-                switch (args[i])
+                switch (args[i].ToLowerInvariant())
                 {
                     case "--type":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var fileType))
                         {
-                            parsed.FileType = args[++i];
+                            parsed.FileType = fileType;
+                            i++;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("Error: --type requires a value.");
+                            return null;
                         }
 
                         break;
                     case "--count":
-                        if (i + 1 < args.Length && long.TryParse(args[++i], out var count))
+                        if (TryGetValue(args, i, out var countStr))
                         {
-                            parsed.Count = count;
+                            if (long.TryParse(countStr, out var count))
+                            {
+                                parsed.Count = count;
+                                i++;
+                            }
+                            else
+                            {
+                                Console.Error.WriteLine($"Error: Invalid value for --count: '{countStr}'");
+                                return null;
+                            }
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("Error: --count requires a value.");
+                            return null;
                         }
 
                         break;
                     case "--output-path":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var pathArg))
                         {
-                            string pathArg = args[++i];
                             parsed.OutputDirectory = PathValidator.ValidateAndCreateDirectory(pathArg);
+                            i++;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("Error: --output-path requires a value.");
+                            return null;
                         }
 
                         break;
                     case "--folders":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var folders))
+                        if (TryGetValue(args, i, out var foldersStr) && int.TryParse(foldersStr, out var folders))
                         {
                             parsed.Folders = folders;
+                            i++;
                         }
 
                         break;
                     case "--encoding":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var encoding))
                         {
-                            parsed.Encoding = args[++i];
+                            parsed.Encoding = encoding;
+                            i++;
                         }
 
                         break;
                     case "--distribution":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var dist))
                         {
-                            parsed.Distribution = args[++i];
+                            parsed.Distribution = dist;
+                            i++;
                         }
 
                         break;
@@ -160,16 +192,18 @@ namespace Zipper
                         parsed.WithText = true;
                         break;
                     case "--attachment-rate":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var attachmentRate))
+                        if (TryGetValue(args, i, out var attRateStr) && int.TryParse(attRateStr, out var attachmentRate))
                         {
                             parsed.AttachmentRate = attachmentRate;
+                            i++;
                         }
 
                         break;
                     case "--target-zip-size":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var zipSize))
                         {
-                            parsed.TargetZipSize = args[++i];
+                            parsed.TargetZipSize = zipSize;
+                            i++;
                         }
 
                         break;
@@ -177,74 +211,84 @@ namespace Zipper
                         parsed.IncludeLoadFile = true;
                         break;
                     case "--load-file-format":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var loadFmt))
                         {
-                            parsed.LoadFileFormat = args[++i];
+                            parsed.LoadFileFormat = loadFmt;
+                            i++;
                         }
 
                         break;
                     case "--bates-prefix":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var batesPfx))
                         {
-                            parsed.BatesPrefix = args[++i];
+                            parsed.BatesPrefix = batesPfx;
+                            i++;
                         }
 
                         break;
                     case "--bates-start":
-                        if (i + 1 < args.Length && long.TryParse(args[++i], out var batesStart))
+                        if (TryGetValue(args, i, out var batesStartStr) && long.TryParse(batesStartStr, out var batesStart))
                         {
                             parsed.BatesStart = batesStart;
+                            i++;
                         }
 
                         break;
                     case "--bates-digits":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var batesDigits))
+                        if (TryGetValue(args, i, out var batesDigitsStr) && int.TryParse(batesDigitsStr, out var batesDigits))
                         {
                             parsed.BatesDigits = batesDigits;
+                            i++;
                         }
 
                         break;
                     case "--tiff-pages":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var tiffPages))
                         {
-                            parsed.TiffPagesRange = args[++i];
+                            parsed.TiffPagesRange = tiffPages;
+                            i++;
                         }
 
                         break;
 
                     // New column profile arguments
                     case "--column-profile":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var colProf))
                         {
-                            parsed.ColumnProfile = args[++i];
+                            parsed.ColumnProfile = colProf;
+                            i++;
                         }
 
                         break;
                     case "--seed":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var seed))
+                        if (TryGetValue(args, i, out var seedStr) && int.TryParse(seedStr, out var seed))
                         {
                             parsed.Seed = seed;
+                            i++;
                         }
 
                         break;
                     case "--date-format":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var dateFmt))
                         {
-                            parsed.DateFormat = args[++i];
+                            parsed.DateFormat = dateFmt;
+                            i++;
                         }
 
                         break;
                     case "--empty-percentage":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var emptyPct))
+                        if (TryGetValue(args, i, out var emptyPctStr) && int.TryParse(emptyPctStr, out var emptyPct))
                         {
                             parsed.EmptyPercentage = emptyPct;
+                            i++;
                         }
 
                         break;
                     case "--custodian-count":
-                        if (i + 1 < args.Length && int.TryParse(args[++i], out var custCount))
+                        if (TryGetValue(args, i, out var custCountStr) && int.TryParse(custCountStr, out var custCount))
                         {
                             parsed.CustodianCount = custCount;
+                            i++;
                         }
 
                         break;
@@ -252,44 +296,86 @@ namespace Zipper
                         parsed.WithFamilies = true;
                         break;
                     case "--load-file-formats":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var loadFmts))
                         {
-                            parsed.LoadFileFormats = args[++i];
+                            parsed.LoadFileFormats = loadFmts;
+                            i++;
                         }
 
                         break;
                     case "--dat-delimiters":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var datDelims))
                         {
-                            parsed.DatDelimiters = args[++i];
+                            parsed.DatDelimiters = datDelims;
+                            i++;
                         }
 
                         break;
                     case "--delimiter-column":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var delCol))
                         {
-                            parsed.DelimiterColumn = args[++i];
+                            parsed.DelimiterColumn = delCol;
+                            i++;
                         }
 
                         break;
                     case "--delimiter-quote":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var delQuote))
                         {
-                            parsed.DelimiterQuote = args[++i];
+                            parsed.DelimiterQuote = delQuote;
+                            i++;
                         }
 
                         break;
                     case "--delimiter-newline":
-                        if (i + 1 < args.Length)
+                        if (TryGetValue(args, i, out var delNew))
                         {
-                            parsed.DelimiterNewline = args[++i];
+                            parsed.DelimiterNewline = delNew;
+                            i++;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine("Error: --delimiter-newline requires a value.");
+                            return null;
                         }
 
+                        break;
+                    default:
+                        Console.Error.WriteLine($"Warning: Unknown argument or unconsumed value '{args[i]}' ignored.");
                         break;
                 }
             }
 
             return parsed;
+        }
+
+        private static bool TryGetValue(string[] args, int currentIndex, out string value)
+        {
+            if (currentIndex + 1 < args.Length && !IsParameterlessFlag(args[currentIndex + 1]))
+            {
+                value = args[currentIndex + 1];
+                return true;
+            }
+
+            value = string.Empty;
+            return false;
+        }
+
+        private static bool IsParameterlessFlag(string arg)
+        {
+            if (!arg.StartsWith("--"))
+            {
+                return false;
+            }
+
+            return arg.ToLowerInvariant() switch
+            {
+                "--with-metadata" => true,
+                "--with-text" => true,
+                "--include-load-file" => true,
+                "--with-families" => true,
+                _ => false,
+            };
         }
 
         /// <summary>

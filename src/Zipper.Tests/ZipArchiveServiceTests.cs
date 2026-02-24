@@ -312,5 +312,64 @@ namespace Zipper.Tests
             Assert.Equal(2, attachmentEntries.Count);
             Assert.Equal(2, attachmentTextEntries.Count);
         }
+
+        [Fact]
+        public async Task CreateArchiveAsync_MultipleFormats_ProducesLoadFilesWithExpectedRows()
+        {
+            // Arrange
+            var zipPath = Path.GetTempFileName();
+            var loadPathBase = Path.GetTempFileName();
+            var request = new FileGenerationRequest
+            {
+                FileType = "pdf",
+                FileCount = 3,
+                Concurrency = 1,
+                IncludeLoadFile = true,
+                LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt }
+            };
+
+            var testFiles = new List<FileData>();
+            for (int i = 0; i < 3; i++)
+            {
+                testFiles.Add(this.CreateTestFileData(i));
+            }
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            var writer = channel.Writer;
+            foreach (var file in testFiles)
+            {
+                await writer.WriteAsync(file);
+            }
+
+            writer.Complete();
+
+            // Act
+            await ZipArchiveService.CreateArchiveAsync(zipPath, "load", loadPathBase, request, channel.Reader);
+
+            // Assert
+            Assert.True(File.Exists(zipPath));
+            using var archive = ZipFile.OpenRead(zipPath);
+
+            var datEntry = archive.GetEntry("load.dat");
+            var csvEntry = archive.GetEntry("load.csv");
+            var optEntry = archive.GetEntry("load.opt");
+
+            Assert.NotNull(datEntry);
+            Assert.NotNull(csvEntry);
+            Assert.NotNull(optEntry);
+
+            // Verify row counts match expectations
+            using var datStream = new StreamReader(datEntry.Open());
+            var datLines = (await datStream.ReadToEndAsync()).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(4, datLines.Length); // Header + 3 rows
+
+            using var csvStream = new StreamReader(csvEntry.Open());
+            var csvLines = (await csvStream.ReadToEndAsync()).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(4, csvLines.Length); // Header + 3 rows
+
+            using var optStream = new StreamReader(optEntry.Open());
+            var optLines = (await optStream.ReadToEndAsync()).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(4, optLines.Length); // Header + 3 rows
+        }
     }
 }

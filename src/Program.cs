@@ -31,11 +31,11 @@ namespace Zipper
                 return 1; // Error already displayed by CommandLineValidator
             }
 
-            await GenerateFiles(request);
-            return 0;
+            bool success = await GenerateFiles(request);
+            return success ? 0 : 1;
         }
 
-        private static async Task GenerateFiles(FileGenerationRequest request)
+        private static async Task<bool> GenerateFiles(FileGenerationRequest request)
         {
             Console.WriteLine("Starting parallel file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", request.FileType));
@@ -78,11 +78,13 @@ namespace Zipper
                 {
                     Console.WriteLine(string.Format("  Load file created: {0}", result.LoadFilePath));
                 }
+
+                return true;
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine(string.Format("\nAn error occurred: {0}", ex.Message));
-                return;
+                return false;
             }
         }
     }
