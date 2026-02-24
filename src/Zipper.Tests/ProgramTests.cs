@@ -192,11 +192,16 @@ namespace Zipper
                 Assert.Equal(0, exitCode1);
                 Assert.Equal(0, exitCode2);
 
-                // Assert file contents
                 var files1 = Directory.GetFiles(tempPath1, "*.*", SearchOption.AllDirectories)
-                                      .Select(f => Path.GetRelativePath(tempPath1, f)).OrderBy(n => n).ToList();
+                                      .Select(f => Path.GetRelativePath(tempPath1, f))
+                                      .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                                      .OrderBy(n => n).ToList();
                 var files2 = Directory.GetFiles(tempPath2, "*.*", SearchOption.AllDirectories)
-                                      .Select(f => Path.GetRelativePath(tempPath2, f)).OrderBy(n => n).ToList();
+                                      .Select(f => Path.GetRelativePath(tempPath2, f))
+                                      .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                                      .OrderBy(n => n).ToList();
 
                 Assert.Equal(files1, files2);
 
@@ -204,14 +209,6 @@ namespace Zipper
 
                 foreach (var relFile in files1)
                 {
-                    if (relFile.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                        relFile.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Output zip and dat filenames contain timestamps, ignore them in this test or compare internal contents.
-                        // Here we just test generated raw documents if any were outputted outside ZIP.
-                        continue;
-                    }
-
                     var file1Path = Path.Combine(tempPath1, relFile);
                     var file2Path = Path.Combine(tempPath2, relFile);
 
