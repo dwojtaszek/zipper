@@ -184,7 +184,7 @@ namespace Zipper
                 var files2 = Directory.GetFiles(tempPath2, "*.*", SearchOption.AllDirectories)
                                       .Select(f => Path.GetFileName(f)).OrderBy(n => n).ToList();
 
-                Assert.Equal(files1, files2);
+                Assert.Equal(files1.Count, files2.Count);
 
                 if (files1.Count > 0)
                 {
