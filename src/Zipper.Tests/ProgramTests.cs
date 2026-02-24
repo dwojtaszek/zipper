@@ -125,11 +125,21 @@ namespace Zipper
                 "--type", "pdf",
             };
 
-            // Act
-            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+            try
+            {
+                // Act
+                int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
 
-            // Assert
-            Assert.Equal(1, exitCode); // Should return error code
+                // Assert
+                Assert.Equal(1, exitCode); // Should return error code
+            }
+            finally
+            {
+                if (Directory.Exists(tempPath))
+                {
+                    Directory.Delete(tempPath, true);
+                }
+            }
         }
 
         [Fact]
@@ -175,23 +185,59 @@ namespace Zipper
                 };
 
                 // Act
-                await RunWithRedirectedConsole(() => Program.Main(args1));
-                await RunWithRedirectedConsole(() => Program.Main(args2));
+                int exitCode1 = await RunWithRedirectedConsole(() => Program.Main(args1));
+                int exitCode2 = await RunWithRedirectedConsole(() => Program.Main(args2));
 
-                // Assert
+                // Assert exit codes
+                Assert.Equal(0, exitCode1);
+                Assert.Equal(0, exitCode2);
+
+                // Assert file contents
                 var files1 = Directory.GetFiles(tempPath1, "*.*", SearchOption.AllDirectories)
-                                      .Select(f => Path.GetFileName(f)).OrderBy(n => n).ToList();
+                                      .Select(f => Path.GetRelativePath(tempPath1, f)).OrderBy(n => n).ToList();
                 var files2 = Directory.GetFiles(tempPath2, "*.*", SearchOption.AllDirectories)
-                                      .Select(f => Path.GetFileName(f)).OrderBy(n => n).ToList();
+                                      .Select(f => Path.GetRelativePath(tempPath2, f)).OrderBy(n => n).ToList();
 
-                Assert.Equal(files1.Count, files2.Count);
+                Assert.Equal(files1, files2);
 
-                if (files1.Count > 0)
+                using var sha256 = System.Security.Cryptography.SHA256.Create();
+
+                foreach (var relFile in files1)
                 {
-                    long size1 = files1.Sum(f => new FileInfo(Directory.GetFiles(tempPath1, f, SearchOption.AllDirectories).First()).Length);
-                    long size2 = files2.Sum(f => new FileInfo(Directory.GetFiles(tempPath2, f, SearchOption.AllDirectories).First()).Length);
+                    if (relFile.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                        relFile.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Output zip and dat filenames contain timestamps, ignore them in this test or compare internal contents.
+                        // Here we just test generated raw documents if any were outputted outside ZIP.
+                        continue;
+                    }
 
-                    Assert.Equal(size1, size2);
+                    var file1Path = Path.Combine(tempPath1, relFile);
+                    var file2Path = Path.Combine(tempPath2, relFile);
+
+                    using var fs1 = File.OpenRead(file1Path);
+                    using var fs2 = File.OpenRead(file2Path);
+
+                    // 1. Compare header length
+                    Assert.Equal(fs1.Length, fs2.Length);
+
+                    // 2. Compare first 16 bytes
+                    var header1 = new byte[Math.Min(16, fs1.Length)];
+                    var header2 = new byte[Math.Min(16, fs2.Length)];
+
+                    _ = fs1.Read(header1, 0, header1.Length);
+                    _ = fs2.Read(header2, 0, header2.Length);
+
+                    Assert.Equal(header1, header2);
+
+                    // 3. Compare full file hash
+                    fs1.Position = 0;
+                    fs2.Position = 0;
+
+                    var hash1 = sha256.ComputeHash(fs1);
+                    var hash2 = sha256.ComputeHash(fs2);
+
+                    Assert.Equal(hash1, hash2);
                 }
             }
             finally
