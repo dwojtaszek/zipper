@@ -53,17 +53,11 @@ internal static class TiffMultiPageGenerator
             return clampedMin;
         }
 
-        if (seed.HasValue)
-        {
-            // For deterministic testing, allocate a Random based on seed + index.
-            // This is only paid when a seed is explicitly requested (e.g. E2E tests).
-            var random = new Random(seed.Value + (int)fileIndex);
-            return random.Next(clampedMin, clampedMax + 1);
-        }
-
-        // Use Random.Shared to avoid allocating a new System.Random instance per file.
-        // This trades strict determinism for performance when no seed is provided.
-        return Random.Shared.Next(clampedMin, clampedMax + 1);
+        // Use a Random instance seeded by fileIndex (and optional seed)
+        // to ensure deterministic page counts for testing, while avoiding
+        // shared state contention.
+        var random = new Random((seed ?? 0) + (int)fileIndex);
+        return random.Next(clampedMin, clampedMax + 1);
     }
 
     /// <summary>
