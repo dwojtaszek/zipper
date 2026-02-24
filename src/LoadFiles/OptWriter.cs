@@ -20,8 +20,11 @@ internal class OptWriter : LoadFileWriterBase
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
         const char tab = '\t';
 
+        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var now = DateTime.UtcNow;
+
         await WriteHeaderAsync(writer, request, tab);
-        await WriteRowsAsync(writer, request, processedFiles, tab);
+        await WriteRowsAsync(writer, request, processedFiles, tab, random, now);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
@@ -64,8 +67,13 @@ internal class OptWriter : LoadFileWriterBase
         StreamWriter writer,
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles,
-        char tab)
+        char tab,
+        Random random,
+        DateTime now)
     {
+        var buffer = new StringBuilder();
+        int rowCount = 0;
+
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
@@ -76,13 +84,13 @@ internal class OptWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData);
+                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
                 line.Append($"{tab}{metadata.Custodian}{tab}{metadata.DateSent}{tab}{metadata.Author}{tab}{metadata.FileSize}");
             }
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData);
+                var eml = GenerateEmlValues(workItem, fileData, random, now);
                 line.Append($"{tab}{eml.To}{tab}{eml.From}{tab}{eml.Subject}{tab}{eml.SentDate}{tab}{eml.Attachment}");
             }
 
@@ -101,7 +109,20 @@ internal class OptWriter : LoadFileWriterBase
                 line.Append($"{tab}{GenerateTextPath(request, workItem)}");
             }
 
-            await writer.WriteLineAsync(line.ToString());
+            buffer.AppendLine(line.ToString());
+            rowCount++;
+
+            if (rowCount >= 1000)
+            {
+                await writer.WriteAsync(buffer.ToString());
+                buffer.Clear();
+                rowCount = 0;
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await writer.WriteAsync(buffer.ToString());
         }
     }
 }

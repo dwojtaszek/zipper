@@ -77,13 +77,21 @@ namespace Zipper
                 // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request));
+                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request))
+                    .ToList();
 
-                // Wait for all producers to complete
-                await Task.WhenAll(producerTasks);
+                // Wait for all producers to complete, wrapped in a task that ensures completion
+                var allProducersTask = Task.WhenAll(producerTasks);
 
-                // Signal that production is done
-                resultChannel.Writer.Complete();
+                try
+                {
+                    await allProducersTask;
+                }
+                finally
+                {
+                    // Signal that production is done, even if producers fail
+                    resultChannel.Writer.Complete(allProducersTask.Exception);
+                }
 
                 // Wait for the consumer to finish writing the archive
                 var actualLoadFilePath = await consumerTask;
@@ -193,7 +201,7 @@ namespace Zipper
             else if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
             {
                 // Generate multipage TIFF
-                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, workItem.Index);
+                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, request.Seed, workItem.Index);
                 fileContent = TiffMultiPageGenerator.Generate(pageCount, workItem);
             }
             else
@@ -203,18 +211,35 @@ namespace Zipper
 
             var totalSize = fileContent.Length + paddingPerFile;
 
+            // Cap the total size to the maximum allowed byte array size (2GB - 56 bytes) to prevent OutOfMemoryException
+            const int maxByteArraySize = 2147483591;
+            if (totalSize > maxByteArraySize)
+            {
+                totalSize = maxByteArraySize;
+                paddingPerFile = totalSize - fileContent.Length;
+            }
+
             var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
             if (memoryOwner == null)
             {
-                // Fallback to direct allocation for very large files
-                var data = new byte[totalSize];
+                // Fallback to direct allocation for very large files, cast is now safe due to the cap above
+                var data = new byte[(int)totalSize];
                 Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
 
                 if (paddingPerFile > 0)
                 {
-                    var padding = new byte[paddingPerFile];
+                    var padding = new byte[Math.Min(paddingPerFile, 1024 * 1024)]; // Max 1MB padding chunks
                     RandomNumberGenerator.Fill(padding);
-                    Buffer.BlockCopy(padding, 0, data, fileContent.Length, padding.Length);
+
+                    int offset = fileContent.Length;
+                    long remaining = paddingPerFile;
+                    while (remaining > 0)
+                    {
+                        int toCopy = (int)Math.Min(remaining, padding.Length);
+                        Buffer.BlockCopy(padding, 0, data, offset, toCopy);
+                        offset += toCopy;
+                        remaining -= toCopy;
+                    }
                 }
 
                 return new FileData

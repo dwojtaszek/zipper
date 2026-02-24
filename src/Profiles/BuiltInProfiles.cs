@@ -13,7 +13,7 @@ public static class BuiltInProfiles
     /// <summary>
     /// Gets the minimal profile (5 columns).
     /// </summary>
-    public static ColumnProfile Minimal => new()
+    public static ColumnProfile Minimal { get; } = new()
     {
         Name = "minimal",
         Description = "Basic fields for minimal load file generation",
@@ -41,7 +41,7 @@ public static class BuiltInProfiles
     /// <summary>
     /// Gets the standard profile (25 columns).
     /// </summary>
-    public static ColumnProfile Standard => new()
+    public static ColumnProfile Standard { get; } = new()
     {
         Name = "standard",
         Description = "Common e-discovery fields for standard workflows",
@@ -101,7 +101,7 @@ public static class BuiltInProfiles
     /// <summary>
     /// Gets the litigation profile (50 columns).
     /// </summary>
-    public static ColumnProfile Litigation => new()
+    public static ColumnProfile Litigation { get; } = new()
     {
         Name = "litigation",
         Description = "Full litigation support with comprehensive metadata",
@@ -130,7 +130,7 @@ public static class BuiltInProfiles
     /// <summary>
     /// Gets the full profile (150 columns).
     /// </summary>
-    public static ColumnProfile Full => new()
+    public static ColumnProfile Full { get; } = new()
     {
         Name = "full",
         Description = "Maximum field coverage for comprehensive data generation",

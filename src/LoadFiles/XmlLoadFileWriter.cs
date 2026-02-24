@@ -34,9 +34,12 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             await writer.WriteStartDocumentAsync(standalone: true);
             await writer.WriteStartElementAsync(null, "documents", null);
 
+            var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+            var now = DateTime.UtcNow;
+
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var element = CreateDocumentElement(fileData.WorkItem, fileData, request);
+                var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
                 await element.WriteToAsync(writer, CancellationToken.None);
             }
 
@@ -60,7 +63,9 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
     private static XElement CreateDocumentElement(
         FileWorkItem workItem,
         FileData fileData,
-        FileGenerationRequest request)
+        FileGenerationRequest request,
+        Random random,
+        DateTime now)
     {
         var docElement = new XElement(
             "document",
@@ -69,7 +74,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeMetadata(request))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData);
+            var metadata = GenerateMetadataValues(workItem, fileData, random, now);
             docElement.Add(new XElement(
                 "metadata",
                 new XElement("custodian", metadata.Custodian),
@@ -80,7 +85,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeEmlColumns(request))
         {
-            var eml = GenerateEmlValues(workItem, fileData);
+            var eml = GenerateEmlValues(workItem, fileData, random, now);
             docElement.Add(new XElement(
                 "email",
                 new XElement("to", eml.To),

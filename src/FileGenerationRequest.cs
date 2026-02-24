@@ -4,7 +4,8 @@ namespace Zipper
 {
     /// <summary>
     /// Represents a file generation request with all configuration options.
-    /// </summary>
+    /// This object should not be mutated after it has been passed to the generator (e.g., `GenerateFilesAsync`)
+    /// as it is shared across multiple concurrent tasks.
     public class FileGenerationRequest
     {
         /// <summary>

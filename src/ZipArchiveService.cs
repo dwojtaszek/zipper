@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Threading.Channels;
 using Zipper.LoadFiles;
@@ -30,7 +29,7 @@ namespace Zipper
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
-            var processedFiles = new ConcurrentBag<FileData>();
+            var processedFiles = new List<FileData>();
 
             // Pre-compute the extracted text content selection once, outside the loop
             var extractedTextContent = request.WithText
@@ -70,33 +69,37 @@ namespace Zipper
                 // Memory owners are disposed after load file generation (see below).
             }
 
-            // Get the appropriate load file writer based on format
-            var loadFileWriter = LoadFileWriterFactory.CreateWriter(request.LoadFileFormat);
+            var formatsToGenerate = request.LoadFileFormats?.Any() == true
+                ? request.LoadFileFormats
+                : new List<LoadFileFormat> { request.LoadFileFormat };
 
-            // Update load file name with correct extension
+            string actualLoadFilePath = loadFilePath;
             var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
-            var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
+            var baseFilePath = Path.GetDirectoryName(loadFilePath) ?? string.Empty;
 
-            string actualLoadFilePath;
-
-            // Write load file
-            if (request.IncludeLoadFile)
+            foreach (var format in formatsToGenerate)
             {
-                var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
-                using var loadFileStream = loadFileEntry.Open();
-                await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles.ToList());
+                var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
+                var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
-                // Return path within the ZIP archive when load file is included
-                actualLoadFilePath = actualLoadFileName;
-            }
-            else
-            {
-                actualLoadFilePath = Path.Combine(
-                    Path.GetDirectoryName(loadFilePath) ?? string.Empty,
-                    baseFileName + loadFileWriter.FileExtension);
-                await using var fileStream = new FileStream(actualLoadFilePath, FileMode.Create);
-                await loadFileWriter.WriteAsync(fileStream, request, processedFiles.ToList());
-                await fileStream.FlushAsync();
+                if (request.IncludeLoadFile)
+                {
+                    var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
+                    using var loadFileStream = loadFileEntry.Open();
+                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles);
+
+                    // Return path within the ZIP archive when load file is included
+                    actualLoadFilePath = actualLoadFileName;
+                }
+                else
+                {
+                    var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
+                    await using var fileStream = new FileStream(currentFilePath, FileMode.Create);
+                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles);
+                    await fileStream.FlushAsync();
+
+                    actualLoadFilePath = currentFilePath;
+                }
             }
 
             // Dispose all memory owners after processing is complete

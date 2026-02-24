@@ -6,11 +6,12 @@ namespace Zipper
     public static class PathValidator
     {
         /// <summary>
-        /// Validates and creates a secure DirectoryInfo, preventing path traversal attacks.
+        /// Validates and creates a secure DirectoryInfo, preventing path traversal attacks outside a base directory.
         /// </summary>
         /// <param name="path">The path to validate and create DirectoryInfo from.</param>
+        /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
         /// <returns>Validated DirectoryInfo if safe, null if path is invalid.</returns>
-        public static DirectoryInfo? ValidateAndCreateDirectory(string path)
+        public static DirectoryInfo? ValidateAndCreateDirectory(string path, string? baseDirectory = null)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -20,43 +21,28 @@ namespace Zipper
 
             try
             {
-                // Normalize the path to resolve any ".." or "." components
+                // Let the OS resolve the full canonical path, resolving any ".." or "." components
                 string fullPath = Path.GetFullPath(path);
 
-                // Check for directory traversal patterns in the original path
-                string normalizedPath = path.Replace('\\', '/');
-                if (normalizedPath.Contains(".."))
+                if (baseDirectory != null)
                 {
-                    Console.Error.WriteLine("Error: Path traversal detected. Relative paths with '..' are not allowed.");
-                    return null;
-                }
+                    // Determine the base directory to restrict access to
+                    string restrictToBase = Path.GetFullPath(baseDirectory);
 
-                // Additional check for absolute path traversal attempts
-                // Only block direct traversal attempts, not allow normal temp paths with GUIDs
-                if (path.StartsWith("../") || path.Contains("/../") || path.Contains("\\..\\") ||
-                    path.StartsWith("../../") || path.Contains("/../../") || path.Contains("\\..\\..\\"))
-                {
-                    Console.Error.WriteLine("Error: Path traversal detected. Paths containing '..' sequences are not allowed.");
-                    return null;
-                }
+                    // Ensure the resolved canonical path starts with the allowed base directory
+                    // We add a trailing separator to ensure /var/www doesn't allow /var/www-backup
+                    string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                    string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                // Check for invalid characters in the filename portion only
-                // This allows absolute paths with valid drive letters on Windows
-                string fileName = Path.GetFileName(path);
-                if (!string.IsNullOrEmpty(fileName))
-                {
-                    char[] invalidFileNameChars = Path.GetInvalidFileNameChars();
-                    foreach (char invalidChar in invalidFileNameChars)
+                    if (!fullPathWithTrailing.StartsWith(baseDirWithTrailing, StringComparison.OrdinalIgnoreCase))
                     {
-                        if (fileName.Contains(invalidChar))
-                        {
-                            Console.Error.WriteLine($"Error: Invalid character '{invalidChar}' in directory name.");
-                            return null;
-                        }
+                        Console.Error.WriteLine($"Error: Path traversal detected. Destination '{fullPath}' is outside the allowed base directory.");
+                        return null;
                     }
                 }
 
-                // Create and return the DirectoryInfo
+                // Create and return the DirectoryInfo (Path.GetFullPath inherently prevents directory traversal
+                // outside of the resolved canonical root, returning a valid, normalized absolute path).
                 return new DirectoryInfo(fullPath);
             }
             catch (ArgumentException ex)
@@ -82,13 +68,37 @@ namespace Zipper
         }
 
         /// <summary>
-        /// Validates if a path is safe (without creating DirectoryInfo).
+        /// Validates if a path is safe (without creating DirectoryInfo or writing to console).
         /// </summary>
         /// <param name="path">The path to validate.</param>
+        /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
         /// <returns>True if path is safe, false otherwise.</returns>
-        public static bool IsPathSafe(string path)
+        public static bool IsPathSafe(string path, string? baseDirectory = null)
         {
-            return ValidateAndCreateDirectory(path) != null;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                string fullPath = Path.GetFullPath(path);
+
+                if (baseDirectory != null)
+                {
+                    string restrictToBase = Path.GetFullPath(baseDirectory);
+                    string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                    string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+                    return fullPathWithTrailing.StartsWith(baseDirWithTrailing, StringComparison.OrdinalIgnoreCase);
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

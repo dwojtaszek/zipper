@@ -19,8 +19,11 @@ internal class CsvWriter : LoadFileWriterBase
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
 
+        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var now = DateTime.UtcNow;
+
         await WriteHeaderAsync(writer, request);
-        await WriteRowsAsync(writer, request, processedFiles);
+        await WriteRowsAsync(writer, request, processedFiles, random, now);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
@@ -61,8 +64,13 @@ internal class CsvWriter : LoadFileWriterBase
     private static async Task WriteRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.List<FileData> processedFiles,
+        Random random,
+        DateTime now)
     {
+        var buffer = new StringBuilder();
+        int rowCount = 0;
+
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
@@ -74,7 +82,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData);
+                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(metadata.Custodian),
@@ -86,7 +94,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData);
+                var eml = GenerateEmlValues(workItem, fileData, random, now);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(eml.To),
@@ -112,7 +120,20 @@ internal class CsvWriter : LoadFileWriterBase
                 values.Add(EscapeCsvField(GenerateTextPath(request, workItem)));
             }
 
-            await writer.WriteLineAsync(string.Join(",", values));
+            buffer.AppendLine(string.Join(",", values));
+            rowCount++;
+
+            if (rowCount >= 1000)
+            {
+                await writer.WriteAsync(buffer.ToString());
+                buffer.Clear();
+                rowCount = 0;
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await writer.WriteAsync(buffer.ToString());
         }
     }
 }

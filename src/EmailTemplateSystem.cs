@@ -159,6 +159,9 @@ namespace Zipper
                 ["{gate}"] = $"A{(senderIndex % 20) + 1}",
                 ["{seat}"] = $"{Random.Shared.Next(1, 30)}{(char)('A' + Random.Shared.Next(0, 6))}",
                 ["{rental_period}"] = $"{Random.Shared.Next(1, 14)}",
+                ["{description}"] = "User account lockout after multiple attempts.",
+                ["{solution}"] = "Reset password and cleared lockout flag.",
+                ["{priority}"] = (recipientIndex % 3) == 0 ? "High" : "Normal",
             };
         }
 
