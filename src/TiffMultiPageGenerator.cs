@@ -26,9 +26,10 @@ internal static class TiffMultiPageGenerator
     /// Determines the page count for a given file based on configured range.
     /// </summary>
     /// <param name="range">Optional min-max page range.</param>
+    /// <param name="seed">Optional seed for deterministic generation.</param>
     /// <param name="fileIndex">The file index for deterministic randomization.</param>
     /// <returns>The number of pages for this file.</returns>
-    public static int GetPageCount((int Min, int Max)? range, long fileIndex)
+    public static int GetPageCount((int Min, int Max)? range, int? seed, long fileIndex)
     {
         if (!range.HasValue)
         {
@@ -52,8 +53,16 @@ internal static class TiffMultiPageGenerator
             return clampedMin;
         }
 
+        if (seed.HasValue)
+        {
+            // For deterministic testing, allocate a Random based on seed + index.
+            // This is only paid when a seed is explicitly requested (e.g. E2E tests).
+            var random = new Random(seed.Value + (int)fileIndex);
+            return random.Next(clampedMin, clampedMax + 1);
+        }
+
         // Use Random.Shared to avoid allocating a new System.Random instance per file.
-        // This trades strict determinism for performance.
+        // This trades strict determinism for performance when no seed is provided.
         return Random.Shared.Next(clampedMin, clampedMax + 1);
     }
 

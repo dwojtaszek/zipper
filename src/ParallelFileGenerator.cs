@@ -201,7 +201,7 @@ namespace Zipper
             else if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
             {
                 // Generate multipage TIFF
-                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, workItem.Index);
+                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, request.Seed, workItem.Index);
                 fileContent = TiffMultiPageGenerator.Generate(pageCount, workItem);
             }
             else

@@ -104,7 +104,7 @@ namespace Zipper
         public void GetPageCount_WithNullRange_ShouldReturnOne()
         {
             // Act
-            var result = TiffMultiPageGenerator.GetPageCount(null, 1);
+            var result = TiffMultiPageGenerator.GetPageCount(null, null, 1);
 
             // Assert
             Assert.Equal(1, result);
@@ -117,7 +117,7 @@ namespace Zipper
             var range = (Min: 5, Max: 5);
 
             // Act
-            var result = TiffMultiPageGenerator.GetPageCount(range, 1);
+            var result = TiffMultiPageGenerator.GetPageCount(range, null, 1);
 
             // Assert
             Assert.Equal(5, result);
@@ -130,8 +130,8 @@ namespace Zipper
             var range = (Min: 1, Max: 100);
 
             // Act
-            var result1 = TiffMultiPageGenerator.GetPageCount(range, 1);
-            var result2 = TiffMultiPageGenerator.GetPageCount(range, 2);
+            var result1 = TiffMultiPageGenerator.GetPageCount(range, null, 1);
+            var result2 = TiffMultiPageGenerator.GetPageCount(range, null, 2);
 
             // Assert - With large range, different indices should likely produce different results
             // (Though statistically possible to be the same, very unlikely with 100 values)
@@ -148,7 +148,7 @@ namespace Zipper
             // Act
             for (int i = 0; i < 100; i++)
             {
-                var result = TiffMultiPageGenerator.GetPageCount(range, i);
+                var result = TiffMultiPageGenerator.GetPageCount(range, null, i);
 
                 // Assert
                 Assert.InRange(result, range.Min, range.Max);
