@@ -767,8 +767,18 @@ namespace Zipper
 
         private static bool IsValidStrictDelimiter(string value)
         {
-            return value.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase) ||
-                   value.StartsWith("char:", StringComparison.OrdinalIgnoreCase);
+            if (value.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
+            {
+                var numPart = value.Substring(6);
+                return int.TryParse(numPart, out var code) && code >= 0 && code <= 255;
+            }
+
+            if (value.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
+            {
+                return value.Length >= 6; // "char:" + at least 1 character
+            }
+
+            return false;
         }
 
         private static bool IsValidChaosAmount(string value)

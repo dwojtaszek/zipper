@@ -26,7 +26,9 @@ internal static class LoadfileOnlyGenerator
 
         var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
         var eolString = GetEolString(request.EndOfLine);
-        int totalLines = (int)request.FileCount + 1; // +1 for header
+        int totalLines = request.LoadFileFormat == LoadFileFormat.Opt
+            ? (int)request.FileCount // OPT has no header
+            : (int)request.FileCount + 1; // DAT: +1 for header
 
         // Initialize chaos engine if enabled
         ChaosEngine? chaosEngine = null;
@@ -58,11 +60,25 @@ internal static class LoadfileOnlyGenerator
         }
 
         // Write the companion properties JSON
-        var propertiesPath = await LoadfileAuditWriter.WriteAsync(
-            loadFilePath,
-            request,
-            request.FileCount,
-            chaosEngine?.Anomalies);
+        string propertiesPath;
+        try
+        {
+            propertiesPath = await LoadfileAuditWriter.WriteAsync(
+                loadFilePath,
+                request,
+                request.FileCount,
+                chaosEngine?.Anomalies);
+        }
+        catch
+        {
+            // Clean up partial output on failure
+            if (File.Exists(loadFilePath))
+            {
+                File.Delete(loadFilePath);
+            }
+
+            throw;
+        }
 
         stopwatch.Stop();
 
@@ -162,7 +178,6 @@ internal static class LoadfileOnlyGenerator
         // BatesID,Volume,ImagePath,DocBreak(Y/blank),BoxBreak,FolderBreak,PageCount
         var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var buffer = new StringBuilder();
-        long pageCounter = 1;
 
         for (long i = 1; i <= request.FileCount; i++)
         {
@@ -186,7 +201,6 @@ internal static class LoadfileOnlyGenerator
 
             buffer.Append(line);
             buffer.Append(eol);
-            pageCounter += pageCount;
 
             if (buffer.Length > 1000 * 200)
             {

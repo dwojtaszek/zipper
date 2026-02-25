@@ -9,7 +9,7 @@ namespace Zipper
         public void MixedDelimiters_ReplacesExactlyOneDelimiter()
         {
             var engine = new ChaosEngine(
-                totalLines: 2,
+                totalLines: 1,
                 chaosAmount: "1",
                 chaosTypes: "mixed-delimiters",
                 format: LoadFileFormat.Dat,
@@ -19,20 +19,26 @@ namespace Zipper
 
             string line = "\u00feControl Number\u00fe\u0014\u00feFile Path\u00fe\u0014\u00feCustodian\u00fe";
 
-            // Force the engine to intercept line 1
-            if (engine.ShouldIntercept(1))
+            bool intercepted = false;
+            for (int i = 1; i <= 1; i++)
             {
-                string modified = engine.Intercept(1, line, "HEADER");
+                if (engine.ShouldIntercept(i))
+                {
+                    string modified = engine.Intercept(i, line, "HEADER");
 
-                // Count how many original delimiters remain
-                int originalDelimCount = line.Count(c => c == '\u0014');
-                int modifiedDelimCount = modified.Count(c => c == '\u0014');
+                    // Count how many original delimiters remain
+                    int originalDelimCount = line.Count(c => c == '\u0014');
+                    int modifiedDelimCount = modified.Count(c => c == '\u0014');
 
-                // Exactly one delimiter should be replaced
-                Assert.Equal(originalDelimCount - 1, modifiedDelimCount);
-                Assert.Single(engine.Anomalies);
-                Assert.Equal("mixed-delimiters", engine.Anomalies[0].ErrorType);
+                    // Exactly one delimiter should be replaced
+                    Assert.Equal(originalDelimCount - 1, modifiedDelimCount);
+                    Assert.Single(engine.Anomalies);
+                    Assert.Equal("mixed-delimiters", engine.Anomalies[0].ErrorType);
+                    intercepted = true;
+                }
             }
+
+            Assert.True(intercepted, "ChaosEngine should have intercepted at least one line");
         }
 
         [Fact]

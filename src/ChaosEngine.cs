@@ -132,8 +132,8 @@ internal class ChaosEngine
 
         if (encodingName.Contains("UTF-16"))
         {
-            // Invalid UTF-16 surrogate: high surrogate without low surrogate
-            invalidBytes = new byte[] { 0xD8, 0x00 };
+            // Unpaired high surrogate in little-endian: 0x00D8 as LE bytes
+            invalidBytes = new byte[] { 0x00, 0xD8 };
         }
         else if (encodingName.Contains("UTF-8") || encodingName == "UTF-8")
         {
@@ -210,8 +210,7 @@ internal class ChaosEngine
             case "mixed-delimiters":
                 result = this.ApplyMixedDelimiters(line, out int delimIndex);
                 column = $"Delimiter {delimIndex}";
-                var replacement = result != line ? result[result.IndexOf(AlternativeDelimiters.FirstOrDefault(c => result.Contains(c)))] : '?';
-                description = $"Replaced delimiter {delimIndex} with a char:{(result != line ? this.GetReplacementChar(line, result) : "?")} character.";
+                description = $"Replaced delimiter {delimIndex} with an alternative delimiter character.";
                 break;
             case "quotes":
                 result = this.ApplyDroppedQuote(line, out string affectedColumn);
@@ -229,6 +228,11 @@ internal class ChaosEngine
                 result = this.ApplyRawNewline(line, out string eolColumn);
                 column = eolColumn;
                 description = $"Injected raw unescaped newline into field {eolColumn}.";
+                break;
+            case "encoding":
+                // Encoding anomalies are handled separately via GetEncodingAnomaly()
+                // Just mark this line for the between-line injection
+                description = "Encoding anomaly scheduled (injected between lines).";
                 break;
             default:
                 description = $"Unknown chaos type: {chaosType}";
@@ -288,6 +292,12 @@ internal class ChaosEngine
 
     private string ApplyMixedDelimiters(string line, out int delimiterIndex)
     {
+        if (string.IsNullOrEmpty(this.columnDelimiter))
+        {
+            delimiterIndex = 0;
+            return line;
+        }
+
         // Find all delimiter positions
         var positions = new List<int>();
         int searchStart = 0;
@@ -432,19 +442,6 @@ internal class ChaosEngine
 
         string corruptedValue = this.random.Next(2) == 0 ? "ABC" : "-1";
         return string.Concat(line.AsSpan(0, lastComma + 1), corruptedValue);
-    }
-
-    private char GetReplacementChar(string original, string modified)
-    {
-        for (int i = 0; i < Math.Min(original.Length, modified.Length); i++)
-        {
-            if (original[i] != modified[i])
-            {
-                return modified[i];
-            }
-        }
-
-        return '?';
     }
 
     private static string FormatDelimiterDisplay(string delimiter)

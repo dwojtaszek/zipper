@@ -1,0 +1,106 @@
+# Feature Specification: Loadfile-Only & Chaos Engine
+
+## 1. Overview
+This feature extends the `zipper` application to support generating standalone eDiscovery load files (`.dat`, `.opt`) without the overhead of generating dummy native files or building a ZIP archive. 
+
+Additionally, it introduces a "Chaos Engine" designed to deliberately inject structural and encoding anomalies into the load files. This provides Chaos Engineering for eDiscovery, allowing teams to test the resilience, error-handling, and strictness of ingestion engines like RelativityOne.
+
+---
+
+## 2. CLI Interface Additions
+
+These arguments integrate with `zipper`'s existing record generation logic (e.g., `--count`).
+
+### Core Toggles
+*   `--loadfile-only`: (Flag) Bypasses ZIP and native file generation entirely. Streams output directly to a load file on disk. **Always generates a companion `[filename]_properties.json` audit file.**
+*   `--loadfile-format <dat|opt>`: Determines the schema of the generated load file. (Default: `dat`)
+    *   `dat`: Metadata load file (Concordance/CSV style). **Always includes a header row.**
+    *   `opt`: Image load file (Opticon 7-column style).
+
+### Formatting & RelativityOne Customization
+To support the full RelativityOne Import/Export matrix, the tool allows overriding standard settings. 
+**STRICT VALIDATION RULE:** All delimiter arguments *must* be prefixed with `ascii:` (decimal) or `char:` (literal). If the prefix is missing, the CLI must throw a validation error.
+
+*   `--encoding <value>`: Output encoding: `UTF-8`, `UTF-16LE`, `Windows-1252`, `ASCII`. (Default: `UTF-8`)
+*   `--eol <CRLF|LF|CR>`: Explicit line endings. (Default: `CRLF`)
+*   `--col-delim <value>`: Column delimiter. (Default: `ascii:20`)
+*   `--quote-delim <value|none>`: Text qualifier. Use `none` to disable. (Default: `ascii:254`)
+*   `--newline-delim <value>`: In-cell newline replacement. (Default: `ascii:174`)
+*   `--multi-delim <value>`: Multi-value delimiter. (Default: `ascii:59`)
+*   `--nested-delim <value>`: Nested-value delimiter. (Default: `ascii:92`)
+
+### Chaos Engine Controls
+*   `--chaos-mode`: (Flag) Activates deliberate error injection.
+*   `--chaos-amount <value>`: Amount of anomalies to inject. Accepts a percentage (e.g., `1%`) or an exact count (e.g., `500`).
+*   `--chaos-types <list>`: Comma-separated list to filter which errors to inject (defaults to all applicable for the chosen format).
+
+---
+
+## 3. Chaos Engine Mechanics (The Anomalies)
+
+The Chaos Engine acts as an interceptor before a line is written to the stream. **Crucially, the Chaos Engine applies to the Header Row (Line 1) as well as data rows.**
+
+### Supported Types for `--loadfile-format dat`:
+1.  `mixed-delimiters`: Replaces the defined `--col-delim` with a standard comma, tab, or pipe. 
+    *   *Constraint:* Modifies **exactly one** delimiter per line, not all of them. This tests localized structural breaks.
+2.  `quotes`: Drops the closing `--quote-delim` character on a text field. *(Automatically disabled if `--quote-delim none` is used).*
+3.  `columns`: Adds or removes a single column delimiter to break the expected column count.
+4.  `eol`: Injects a raw, unescaped newline into a text field (bypassing the `--newline-delim`).
+    *   *Constraint:* Must be **encoding-aware**. The engine must inject the C# `\r\n` string into the data model *before* it passes through the `StreamWriter`, ensuring it is encoded properly (e.g., as a valid UTF-16LE newline, not a stray 8-bit byte).
+5.  `encoding`: Injects an invalid byte sequence for the chosen `--encoding`.
+    *   *Constraint:* Must only inject **between full lines** (after the EOL of Line N, before the start of Line N+1). It must never inject bad bytes inside a text field, ensuring the parser fails on encoding, not on a broken quote/delimiter.
+
+### Supported Types for `--loadfile-format opt`:
+1.  `opt-boundary`: Alters the document boundary flag (Column 4). E.g., places a `Y` on a continuation page, or removes the `Y` from the first page.
+2.  `opt-columns`: Adds or removes a comma. (Opticon strictly requires exactly 6 commas per line).
+3.  `opt-pagecount`: Replaces the final integer (page count) with a letter or negative number.
+
+---
+
+## 4. Output Specifications: JSON Audit Key
+Whenever `--loadfile-only` is executed, the tool **must** generate a companion JSON file named `[output_filename]_properties.json`. If Chaos Mode is off, the `ChaosMode` block simply states `"Enabled": false`.
+
+**Example Output (`output_properties.json`):**
+```json
+{
+  "FileName": "output.dat",
+  "Format": "DAT (Metadata)",
+  "TotalRecords": 100000,
+  "Properties": {
+    "Encoding": "UTF-16LE",
+    "LineEnding": "LF",
+    "Delimiters": {
+      "Column": "ascii:20",
+      "Quote": "ascii:254",
+      "Newline": "ascii:174"
+    }
+  },
+  "ChaosMode": {
+    "Enabled": true,
+    "TargetAmount": "3", 
+    "TotalAnomalies": 3,
+    "InjectedAnomalies": [
+      {
+        "LineNumber": 1,
+        "RecordID": "HEADER",
+        "Column": "ExtractedText",
+        "ErrorType": "quotes",
+        "Description": "Omitted the closing ascii:254 character on column header."
+      },
+      {
+        "LineNumber": 1054,
+        "RecordID": "DOC00001054",
+        "Column": "EmailSubject",
+        "ErrorType": "mixed-delimiters",
+        "Description": "Replaced delimiter 4 of 25 with a char:, (comma)."
+      },
+      {
+        "LineNumber": "Boundary 8902-8903",
+        "RecordID": "N/A",
+        "Column": "N/A",
+        "ErrorType": "encoding",
+        "Description": "Injected invalid UTF-16LE surrogate byte between lines."
+      }
+    ]
+  }
+}

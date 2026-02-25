@@ -1,0 +1,44 @@
+USAGE:
+  zipper [options]
+
+DESCRIPTION:
+  Generates eDiscovery load files and zip archives for ingestion testing.
+
+CORE OPTIONS:
+  --count <int>                 Total number of records/documents to generate. (Default: 10)
+  --loadfile-only               (Flag) Skips ZIP/Native generation. Streams directly to a load file.
+                                Always generates a companion [filename]_properties.json audit file.
+  --loadfile-format <dat|opt>   Schema of the load file. (Default: dat)
+                                  dat: Metadata load file (Concordance/CSV style).
+                                  opt: Image load file (Opticon 7-column style).
+
+DELIMITER & FORMAT OPTIONS (Requires --loadfile-only):
+  *NOTE: All delimiters MUST be prefixed with 'ascii:' (decimal) or 'char:' (literal).*
+  --encoding <value>            Output encoding: UTF-8, UTF-16LE, Windows-1252, ASCII. (Default: UTF-8)
+  --eol <CRLF|LF|CR>            End of line format. (Default: CRLF)
+  --col-delim <value>           Column delimiter. (Default: ascii:20)
+  --quote-delim <value|none>    Text qualifier. Use 'none' to disable. (Default: ascii:254)
+  --newline-delim <value>       In-cell newline replacement. (Default: ascii:174)
+  --multi-delim <value>         Multi-value choice delimiter. (Default: ascii:59)
+  --nested-delim <value>        Nested-value choice delimiter. (Default: ascii:92)
+
+CHAOS ENGINE OPTIONS (Requires --loadfile-only):
+  --chaos-mode                  (Flag) Activates deliberate anomaly injection for resilience testing.
+  --chaos-amount <value>        Amount of anomalies to inject. Accepts percentage (e.g., '1%') or 
+                                exact count (e.g., '500'). (Default: 1%)
+  --chaos-types <list>          Comma-separated list of anomalies to inject. (Default: all)
+                                  DAT Types: mixed-delimiters, quotes, columns, eol, encoding
+                                  OPT Types: opt-boundary, opt-columns, opt-pagecount
+
+EXAMPLES:
+  1. Generate a standard Concordance DAT file with 50,000 records:
+     > zipper --count 50000 --loadfile-only
+
+  2. Generate a standard Opticon image load file:
+     > zipper --count 50000 --loadfile-only --loadfile-format opt
+
+  3. Generate a CSV (Comma/Double-Quote) and inject exactly 100 structural errors:
+     > zipper --count 50000 --loadfile-only --col-delim char:, --quote-delim char:\" --chaos-mode --chaos-amount 100
+
+  4. Generate a DAT file with 2% anomalies, restricting chaos to quotes and encoding:
+     > zipper --count 100000 --loadfile-only --chaos-mode --chaos-amount 2% --chaos-types quotes,encoding

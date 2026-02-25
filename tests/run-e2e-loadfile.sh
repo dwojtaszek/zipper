@@ -14,7 +14,7 @@ TEST_OUTPUT_DIR="./results/e2e-loadfile"
 PROJECT="src/Zipper.csproj"
 
 # Dynamically locate the built framework directory
-BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" | head -n 1)
+BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" 2>/dev/null | head -n 1)
 [ -z "$BUILD_DIR" ] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
 
 # --- Helper Functions ---
