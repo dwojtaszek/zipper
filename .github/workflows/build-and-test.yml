@@ -2,7 +2,7 @@ name: Build and Test
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -249,28 +249,3 @@ jobs:
             artifacts/zipper-linux-x64/zipper-linux-x64
             artifacts/zipper-osx-arm64/zipper-osx-arm64
 
-  release:
-    needs: [prepare, lint, build, test]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v7
-        with:
-          path: artifacts
-
-      - uses: softprops/action-gh-release@v2.5.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/zipper-win-x64/zipper-win-x64.exe
-            artifacts/zipper-linux-x64/zipper-linux-x64
-            artifacts/zipper-osx-arm64/zipper-osx-arm64
