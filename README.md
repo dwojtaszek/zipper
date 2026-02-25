@@ -17,6 +17,8 @@ Zipper is a .NET command-line tool for generating large zip files containing pla
 - Can target a specific zip file size by padding files with non-compressible data
 - Optimized for high-performance parallel processing with memory pooling and buffered I/O
 - Real-time performance monitoring with progress tracking, throughput metrics, and ETA calculations
+- **Loadfile-Only mode**: Generate standalone load files (DAT/OPT) without ZIP archives or native files
+- **Chaos Engine**: Inject deliberate structural anomalies into load files for ingestion resilience testing
 
 ## Requirements
 
@@ -45,15 +47,15 @@ After building the project, you can run the executable directly. The examples be
 ### Syntax
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>]
 ```
 
 ### Arguments
 
 **Required Arguments:**
-- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required)** The type of file to generate
-- `--count <number>`: **(Required)** The total number of files to generate
-- `--output-path <directory>`: **(Required)** The directory where the output `.zip` and load file will be saved. The directory will be created if it doesn't exist
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required unless `--loadfile-only`)** The type of file to generate. Defaults to `pdf` when `--loadfile-only` is used
+- `--count <number>`: **(Required)** The total number of files/records to generate
+- `--output-path <directory>`: **(Required)** The directory where the output files will be saved. The directory will be created if it doesn't exist
 
 **Optional Arguments:**
 - `--folders <number>`: The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100
@@ -87,6 +89,20 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
 - `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns)
 
+**Loadfile-Only Options:**
+- `--loadfile-only`: Generate standalone load files (DAT or OPT) directly to disk without creating ZIP archives or native files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
+- `--eol <CRLF|LF|CR>`: Line ending format for the generated load file. Defaults to `CRLF`
+- `--col-delim <ascii:N|char:C>`: Column delimiter using strict prefix format. Requires `--loadfile-only`. Example: `ascii:20` or `char:|`
+- `--quote-delim <ascii:N|char:C|none>`: Quote delimiter using strict prefix format, or `none` to omit quotes. Requires `--loadfile-only`. Example: `ascii:254` or `none`
+- `--newline-delim <ascii:N|char:C>`: In-field newline replacement using strict prefix format. Requires `--loadfile-only`. Example: `ascii:174`
+- `--multi-delim <ascii:N|char:C>`: Multi-value separator for fields with multiple values. Requires `--loadfile-only`. Example: `char:;`
+- `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Requires `--loadfile-only`. Example: `char:\`
+
+**Chaos Engine Options:**
+- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`
+- `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
+- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`
+
 ### Arguments Quick Reference
 
 | Argument | Default | Range/Values | Description |
@@ -118,6 +134,16 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--empty-percentage` | 15 | 0-100 | Empty value % override |
 | `--custodian-count` | none | 1-1000 | Custodian count override |
 | `--with-families` | false | flag | Family relationships |
+| `--loadfile-only` | false | flag | Standalone load file (no ZIP) |
+| `--eol` | CRLF | CRLF, LF, CR | Load file line endings |
+| `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
+| `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
+| `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
+| `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
+| `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
+| `--chaos-mode` | false | flag | Enable Chaos Engine |
+| `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
+| `--chaos-types` | all | comma-separated types | Anomaly type filter |
 
 ### Argument Interactions
 
@@ -135,6 +161,11 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
 | `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
+| `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
+| `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
+| `--chaos-mode` | Requires `--loadfile-only` |
+| `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 
 ### Column Profiles
 
@@ -259,6 +290,36 @@ zipper --type pdf --count 1000 --output-path ./custom --column-profile standard 
 
 # Generate family relationships for email attachments
 zipper --type eml --count 2000 --output-path ./families --attachment-rate 30 --with-families
+
+# ── Loadfile-Only Mode ──────────────────────────
+
+# Generate a standalone DAT load file (no ZIP, no native files)
+zipper --loadfile-only --count 100000 --output-path ./dat_only
+
+# Generate a standalone OPT load file in Opticon 7-column format
+zipper --loadfile-only --loadfile-format opt --count 50000 --output-path ./opt_only
+
+# Custom delimiters with strict prefix format and LF line endings
+zipper --loadfile-only --count 10000 --output-path ./custom_delims \
+    --col-delim "char:|" --quote-delim "char:\"" --eol LF
+
+# Loadfile-only with no quotes (unquoted pipe-delimited)
+zipper --loadfile-only --count 5000 --output-path ./unquoted \
+    --col-delim "char:|" --quote-delim none
+
+# ── Chaos Engine ────────────────────────────────
+
+# Inject anomalies into 5% of records for ingestion testing
+zipper --loadfile-only --count 100000 --output-path ./chaos_test \
+    --chaos-mode --chaos-amount "5%" --seed 42
+
+# Target only quote and column anomalies
+zipper --loadfile-only --count 50000 --output-path ./chaos_targeted \
+    --chaos-mode --chaos-amount 100 --chaos-types "quotes,columns"
+
+# OPT chaos: corrupt document boundaries and page counts
+zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_chaos \
+    --chaos-mode --chaos-types "opt-boundary,opt-pagecount"
 ```
 
 ## Performance
