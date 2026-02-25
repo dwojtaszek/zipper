@@ -529,5 +529,173 @@ namespace Zipper
                 errorOutput.Dispose();
             }
         }
+
+        // === Loadfile-Only CLI Validation Tests ===
+        [Fact]
+        public void ValidateAndParseArguments_LoadfileOnly_WithoutType_ShouldSucceed()
+        {
+            var args = new[] { "--loadfile-only", "--count", "50", "--output-path", this.tempDir };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.True(result!.LoadfileOnly);
+            Assert.Equal("pdf", result.FileType); // defaults to pdf
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_LoadfileOnly_WithStrictDelimiters_ShouldParseCorrectly()
+        {
+            var args = new[]
+            {
+                "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
+                "--col-delim", "ascii:20", "--quote-delim", "ascii:254",
+                "--multi-delim", "char:;", "--nested-delim", "char:\\",
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.Equal("\u0014", result!.ColumnDelimiter); // ASCII 20
+            Assert.Equal("\u00fe", result.QuoteDelimiter); // ASCII 254
+            Assert.Equal(";", result.MultiValueDelimiter);
+            Assert.Equal("\\", result.NestedValueDelimiter);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_LoadfileOnly_QuoteDelimNone_ShouldSetEmpty()
+        {
+            var args = new[]
+            {
+                "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
+                "--quote-delim", "none",
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.Equal(string.Empty, result!.QuoteDelimiter);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ColDelim_WithoutLoadfileOnly_ShouldReturnNull()
+        {
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--col-delim", "ascii:20" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ChaosMode_WithoutLoadfileOnly_ShouldReturnNull()
+        {
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ChaosAmount_WithoutChaosMode_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ChaosTypes_WithoutChaosMode_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-types", "quotes" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_LoadfileOnly_WithTargetZipSize_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--target-zip-size", "100MB" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_LoadfileOnly_WithIncludeLoadFile_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--include-load-file" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_Eol_ValidValues_ShouldSucceed()
+        {
+            foreach (var eol in new[] { "CRLF", "LF", "CR" })
+            {
+                var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", eol };
+
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                Assert.NotNull(result);
+                Assert.Equal(eol.ToUpperInvariant(), result!.EndOfLine.ToUpperInvariant());
+            }
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_Eol_InvalidValue_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LFCR" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ColDelim_WithoutPrefix_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--col-delim", "20" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ChaosAmount_InvalidFormat_ShouldReturnNull()
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", "abc" };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_ChaosMode_WithValidArgs_ShouldSucceed()
+        {
+            var args = new[]
+            {
+                "--loadfile-only", "--count", "100", "--output-path", this.tempDir,
+                "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.True(result!.ChaosMode);
+            Assert.Equal("5%", result.ChaosAmount);
+            Assert.Equal("quotes,columns", result.ChaosTypes);
+        }
     }
 }

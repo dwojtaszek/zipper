@@ -510,4 +510,52 @@ This section clarifies behavior when multiple arguments interact:
 | `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls folders, profile controls data values |
 | `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
+| `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
+| `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
+| `--chaos-mode` | Requires `--loadfile-only` |
+| `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 
+---
+
+## 11. Loadfile-Only Mode
+
+### FR-018: Standalone Load File Generation
+
+- **REQ-087**: A new optional command-line argument `--loadfile-only` shall be introduced.
+- **REQ-088**: When `--loadfile-only` is specified, the application shall generate load files (DAT or OPT) directly to disk without creating ZIP archives or native files.
+- **REQ-089**: When `--loadfile-only` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
+- **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest.
+- **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
+- **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`.
+- **REQ-093**: New strict-prefix delimiter arguments shall be introduced, requiring `--loadfile-only`:
+  - `--col-delim <ascii:N|char:C>`: Column delimiter
+  - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter (supports `none` to omit quotes)
+  - `--newline-delim <ascii:N|char:C>`: In-field newline replacement
+  - `--multi-delim <ascii:N|char:C>`: Multi-value separator
+  - `--nested-delim <ascii:N|char:C>`: Nested value separator
+
+> [!NOTE]
+> The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values. The strict-prefix arguments are only available in loadfile-only mode.
+
+---
+
+## 12. Chaos Engine
+
+### FR-019: Deliberate Anomaly Injection
+
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`.
+- **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
+- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all types are enabled.
+- **REQ-097**: The following DAT chaos anomaly types shall be supported:
+  - `mixed-delimiters`: Replace one column delimiter with an alternative character
+  - `quotes`: Omit a closing quote delimiter to create an unclosed field
+  - `columns`: Add or remove a column delimiter to break expected column count
+  - `eol`: Inject a raw unescaped newline within a data field
+  - `encoding`: Insert invalid byte sequences between lines for the configured encoding
+- **REQ-098**: The following OPT chaos anomaly types shall be supported:
+  - `opt-boundary`: Flip the document break flag (Y ↔ blank) in column 4
+  - `opt-columns`: Add or remove a comma to break the 7-column format
+  - `opt-pagecount`: Replace the page count integer with an invalid value
+- **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description.
+- **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.

@@ -132,6 +132,41 @@ namespace Zipper
         /// Gets or sets a value indicating whether to generate family relationships.
         /// </summary>
         public bool WithFamilies { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to run in loadfile-only mode (no ZIP/native files).
+        /// </summary>
+        public bool LoadfileOnly { get; set; }
+
+        /// <summary>
+        /// Gets or sets the end-of-line format (CRLF, LF, CR).
+        /// </summary>
+        public string EndOfLine { get; set; } = "CRLF";
+
+        /// <summary>
+        /// Gets or sets the multi-value delimiter character.
+        /// </summary>
+        public string MultiValueDelimiter { get; set; } = ";"; // ASCII 59
+
+        /// <summary>
+        /// Gets or sets the nested-value delimiter character.
+        /// </summary>
+        public string NestedValueDelimiter { get; set; } = "\\"; // ASCII 92
+
+        /// <summary>
+        /// Gets or sets a value indicating whether chaos mode is enabled.
+        /// </summary>
+        public bool ChaosMode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the chaos amount (percentage like "1%" or exact count like "500").
+        /// </summary>
+        public string? ChaosAmount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the comma-separated list of chaos types to inject.
+        /// </summary>
+        public string? ChaosTypes { get; set; }
     }
 
     /// <summary>

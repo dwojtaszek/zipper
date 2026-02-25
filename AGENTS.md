@@ -57,10 +57,15 @@ tests/run-tests.bat    # Windows
 | `src/Program.cs` | Entry point, CLI orchestration |
 | `src/CommandLineValidator.cs` | CLI parsing and validation |
 | `src/ParallelFileGenerator.cs` | Core file generation pipeline |
+| `src/LoadfileOnlyGenerator.cs` | Standalone load file generation (DAT/OPT) |
+| `src/ChaosEngine.cs` | Chaos anomaly injection engine |
+| `src/ChaosAnomaly.cs` | Anomaly record for audit tracking |
+| `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
 | `src/LoadFiles/` | Load file writers (DAT, OPT, CSV, XML) |
 | `src/Profiles/` | Column profile system |
 | `src/Zipper.Tests/` | Unit tests |
 | `tests/` | E2E test scripts |
+| `tests/run-e2e-loadfile.sh` | E2E tests for loadfile-only and chaos |
 
 **For full CLI arguments and options:** See [README.md](README.md)  
 **For requirements and specifications:** See [Requirements.md](Requirements.md)

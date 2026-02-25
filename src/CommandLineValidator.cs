@@ -85,6 +85,21 @@ namespace Zipper
             Console.Error.WriteLine("  --delimiter-quote <c>    Custom quote delimiter (char or ASCII code)");
             Console.Error.WriteLine("  --delimiter-newline <c>  Custom newline replacement (char or ASCII code)");
             Console.Error.WriteLine();
+            Console.Error.WriteLine("Loadfile-Only Options:");
+            Console.Error.WriteLine("  --loadfile-only          Skip ZIP/native generation, stream directly to load file");
+            Console.Error.WriteLine("  --loadfile-format <f>    Load file schema: dat, opt (default: dat)");
+            Console.Error.WriteLine("  --eol <CRLF|LF|CR>      End-of-line format (default: CRLF)");
+            Console.Error.WriteLine("  --col-delim <value>      Column delimiter (ascii:<N> or char:<c>)");
+            Console.Error.WriteLine("  --quote-delim <value>    Quote delimiter (ascii:<N>, char:<c>, or none)");
+            Console.Error.WriteLine("  --newline-delim <value>  In-cell newline replacement (ascii:<N> or char:<c>)");
+            Console.Error.WriteLine("  --multi-delim <value>    Multi-value delimiter (ascii:<N> or char:<c>)");
+            Console.Error.WriteLine("  --nested-delim <value>   Nested-value delimiter (ascii:<N> or char:<c>)");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Chaos Engine Options:");
+            Console.Error.WriteLine("  --chaos-mode             Activate deliberate anomaly injection");
+            Console.Error.WriteLine("  --chaos-amount <value>   Anomaly count: percentage (1%) or exact (500)");
+            Console.Error.WriteLine("  --chaos-types <list>     Comma-separated anomaly types to inject");
+            Console.Error.WriteLine();
             Console.Error.WriteLine("Bates Numbering:");
             Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
             Console.Error.WriteLine("  --bates-start <number>   Bates start number (default: 1)");
@@ -340,6 +355,88 @@ namespace Zipper
                         }
 
                         break;
+
+                    // Loadfile-only mode arguments
+                    case "--loadfile-only":
+                        parsed.LoadfileOnly = true;
+                        break;
+                    case "--loadfile-format":
+                        if (TryGetValue(args, i, out var lfFmt))
+                        {
+                            parsed.LoadFileFormat = lfFmt;
+                            i++;
+                        }
+
+                        break;
+                    case "--eol":
+                        if (TryGetValue(args, i, out var eolVal))
+                        {
+                            parsed.Eol = eolVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--col-delim":
+                        if (TryGetValue(args, i, out var colDelimVal))
+                        {
+                            parsed.ColDelim = colDelimVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--quote-delim":
+                        if (TryGetValue(args, i, out var quoteDelimVal))
+                        {
+                            parsed.QuoteDelim = quoteDelimVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--newline-delim":
+                        if (TryGetValue(args, i, out var newlineDelimVal))
+                        {
+                            parsed.NewlineDelim = newlineDelimVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--multi-delim":
+                        if (TryGetValue(args, i, out var multiDelimVal))
+                        {
+                            parsed.MultiDelim = multiDelimVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--nested-delim":
+                        if (TryGetValue(args, i, out var nestedDelimVal))
+                        {
+                            parsed.NestedDelim = nestedDelimVal;
+                            i++;
+                        }
+
+                        break;
+
+                    // Chaos Engine arguments
+                    case "--chaos-mode":
+                        parsed.ChaosMode = true;
+                        break;
+                    case "--chaos-amount":
+                        if (TryGetValue(args, i, out var chaosAmtVal))
+                        {
+                            parsed.ChaosAmount = chaosAmtVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--chaos-types":
+                        if (TryGetValue(args, i, out var chaosTypesVal))
+                        {
+                            parsed.ChaosTypes = chaosTypesVal;
+                            i++;
+                        }
+
+                        break;
                     default:
                         Console.Error.WriteLine($"Warning: Unknown argument or unconsumed value '{args[i]}' ignored.");
                         break;
@@ -374,6 +471,8 @@ namespace Zipper
                 "--with-text" => true,
                 "--include-load-file" => true,
                 "--with-families" => true,
+                "--loadfile-only" => true,
+                "--chaos-mode" => true,
                 _ => false,
             };
         }
@@ -383,7 +482,8 @@ namespace Zipper
         /// </summary>
         private static bool ValidateRequiredArguments(ParsedArguments parsed)
         {
-            if (string.IsNullOrEmpty(parsed.FileType))
+            // In loadfile-only mode, --type is optional (defaults to pdf for schema)
+            if (string.IsNullOrEmpty(parsed.FileType) && !parsed.LoadfileOnly)
             {
                 Console.Error.WriteLine("Error: --type is required.");
                 return false;
@@ -544,7 +644,151 @@ namespace Zipper
                 parsed.WithMetadata = false;
             }
 
+            // === Loadfile-only dependency validation ===
+
+            // Delimiter and format args require --loadfile-only
+            var loadfileOnlyArgs = new[] { parsed.Eol, parsed.ColDelim, parsed.QuoteDelim, parsed.NewlineDelim, parsed.MultiDelim, parsed.NestedDelim };
+            var loadfileOnlyNames = new[] { "--eol", "--col-delim", "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim" };
+            for (int idx = 0; idx < loadfileOnlyArgs.Length; idx++)
+            {
+                if (!string.IsNullOrEmpty(loadfileOnlyArgs[idx]) && !parsed.LoadfileOnly)
+                {
+                    Console.Error.WriteLine($"Error: {loadfileOnlyNames[idx]} requires --loadfile-only.");
+                    return false;
+                }
+            }
+
+            // Chaos mode requires --loadfile-only
+            if (parsed.ChaosMode && !parsed.LoadfileOnly)
+            {
+                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
+                return false;
+            }
+
+            // Chaos amount/types require --chaos-mode
+            if (!string.IsNullOrEmpty(parsed.ChaosAmount) && !parsed.ChaosMode)
+            {
+                Console.Error.WriteLine("Error: --chaos-amount requires --chaos-mode.");
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(parsed.ChaosTypes) && !parsed.ChaosMode)
+            {
+                Console.Error.WriteLine("Error: --chaos-types requires --chaos-mode.");
+                return false;
+            }
+
+            // Loadfile-only conflicts with ZIP-related options
+            if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.TargetZipSize))
+            {
+                Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
+                return false;
+            }
+
+            if (parsed.LoadfileOnly && parsed.IncludeLoadFile)
+            {
+                Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
+                return false;
+            }
+
+            // Validate --eol values
+            if (!string.IsNullOrEmpty(parsed.Eol))
+            {
+                var eolUpper = parsed.Eol.ToUpperInvariant();
+                if (eolUpper != "CRLF" && eolUpper != "LF" && eolUpper != "CR")
+                {
+                    Console.Error.WriteLine("Error: --eol must be CRLF, LF, or CR.");
+                    return false;
+                }
+            }
+
+            // Validate strict delimiter prefix (ascii: or char:) for new-style delimiter args
+            var strictDelimArgs = new[] { parsed.ColDelim, parsed.NewlineDelim, parsed.MultiDelim, parsed.NestedDelim };
+            var strictDelimNames = new[] { "--col-delim", "--newline-delim", "--multi-delim", "--nested-delim" };
+            for (int idx = 0; idx < strictDelimArgs.Length; idx++)
+            {
+                if (!string.IsNullOrEmpty(strictDelimArgs[idx]) && !IsValidStrictDelimiter(strictDelimArgs[idx]!))
+                {
+                    Console.Error.WriteLine($"Error: {strictDelimNames[idx]} must use 'ascii:<N>' or 'char:<c>' prefix.");
+                    return false;
+                }
+            }
+
+            // --quote-delim allows 'none' in addition to ascii:/char: prefix
+            if (!string.IsNullOrEmpty(parsed.QuoteDelim) &&
+                !parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase) &&
+                !IsValidStrictDelimiter(parsed.QuoteDelim))
+            {
+                Console.Error.WriteLine("Error: --quote-delim must use 'ascii:<N>', 'char:<c>', or 'none'.");
+                return false;
+            }
+
+            // Validate --chaos-amount format
+            if (!string.IsNullOrEmpty(parsed.ChaosAmount))
+            {
+                if (!IsValidChaosAmount(parsed.ChaosAmount))
+                {
+                    Console.Error.WriteLine("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').");
+                    return false;
+                }
+            }
+
+            // Validate --chaos-types names
+            if (!string.IsNullOrEmpty(parsed.ChaosTypes))
+            {
+                var validDat = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mixed-delimiters", "quotes", "columns", "eol", "encoding" };
+                var validOpt = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "opt-boundary", "opt-columns", "opt-pagecount" };
+                var format = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
+                var validTypes = format == LoadFileFormat.Opt ? validOpt : validDat;
+                var types = parsed.ChaosTypes.Split(',');
+                foreach (var t in types)
+                {
+                    if (!validTypes.Contains(t.Trim()))
+                    {
+                        Console.Error.WriteLine($"Error: Invalid chaos type '{t.Trim()}'. Valid types for {format}: {string.Join(", ", validTypes)}");
+                        return false;
+                    }
+                }
+            }
+
+            // Validate encoding for loadfile-only (accept extended set)
+            if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
+            {
+                var enc = EncodingHelper.GetEncoding(parsed.Encoding);
+                if (enc == null)
+                {
+                    Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
+                    return false;
+                }
+            }
+
             return true;
+        }
+
+        private static bool IsValidStrictDelimiter(string value)
+        {
+            if (value.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
+            {
+                var numPart = value.Substring(6);
+                return int.TryParse(numPart, out var code) && code >= 0 && code <= 255;
+            }
+
+            if (value.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
+            {
+                return value.Length >= 6; // "char:" + at least 1 character
+            }
+
+            return false;
+        }
+
+        private static bool IsValidChaosAmount(string value)
+        {
+            if (value.EndsWith('%'))
+            {
+                return double.TryParse(value.TrimEnd('%'), out var pct) && pct > 0;
+            }
+
+            return int.TryParse(value, out var count) && count > 0;
         }
 
         /// <summary>
@@ -611,11 +855,52 @@ namespace Zipper
                 newlineDelim = ParseDelimiterArgument(parsed.DelimiterNewline);
             }
 
+            // Override with strict-prefix delimiter args (--col-delim, --quote-delim, etc.)
+            if (!string.IsNullOrEmpty(parsed.ColDelim))
+            {
+                columnDelim = ParseStrictDelimiter(parsed.ColDelim);
+            }
+
+            if (!string.IsNullOrEmpty(parsed.QuoteDelim))
+            {
+                quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase)
+                    ? string.Empty
+                    : ParseStrictDelimiter(parsed.QuoteDelim);
+            }
+
+            if (!string.IsNullOrEmpty(parsed.NewlineDelim))
+            {
+                newlineDelim = ParseStrictDelimiter(parsed.NewlineDelim);
+            }
+
+            string multiDelim = ";";
+            if (!string.IsNullOrEmpty(parsed.MultiDelim))
+            {
+                multiDelim = ParseStrictDelimiter(parsed.MultiDelim);
+            }
+
+            string nestedDelim = "\\";
+            if (!string.IsNullOrEmpty(parsed.NestedDelim))
+            {
+                nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
+            }
+
+            // Handle encoding for loadfile-only mode (supports extended set)
+            var encodingName = encoding?.EncodingName ?? "UTF-8";
+            if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
+            {
+                var lfEncoding = EncodingHelper.GetEncoding(parsed.Encoding);
+                if (lfEncoding != null)
+                {
+                    encodingName = parsed.Encoding.ToUpperInvariant();
+                }
+            }
+
             return new FileGenerationRequest
             {
                 OutputPath = parsed.OutputDirectory!.FullName,
                 FileCount = parsed.Count!.Value,
-                FileType = parsed.FileType!.ToLower(),
+                FileType = (parsed.FileType ?? "pdf").ToLower(),
                 Folders = parsed.Folders,
                 Concurrency = PerformanceConstants.DefaultConcurrency,
                 WithMetadata = parsed.WithMetadata,
@@ -623,13 +908,15 @@ namespace Zipper
                 TargetZipSize = !string.IsNullOrEmpty(parsed.TargetZipSize) ? ParseSize(parsed.TargetZipSize!) : null,
                 IncludeLoadFile = parsed.IncludeLoadFile,
                 Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
-                Encoding = encoding?.EncodingName ?? "UTF-8",
+                Encoding = encodingName,
                 AttachmentRate = parsed.AttachmentRate,
                 LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
                 LoadFileFormats = multiFormats,
                 ColumnDelimiter = columnDelim,
                 QuoteDelimiter = quoteDelim,
                 NewlineDelimiter = newlineDelim,
+                MultiValueDelimiter = multiDelim,
+                NestedValueDelimiter = nestedDelim,
                 BatesConfig = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
                 {
                     Prefix = parsed.BatesPrefix,
@@ -644,6 +931,11 @@ namespace Zipper
                 EmptyPercentageOverride = parsed.EmptyPercentage,
                 CustodianCountOverride = parsed.CustodianCount,
                 WithFamilies = parsed.WithFamilies,
+                LoadfileOnly = parsed.LoadfileOnly,
+                EndOfLine = parsed.Eol ?? "CRLF",
+                ChaosMode = parsed.ChaosMode,
+                ChaosAmount = parsed.ChaosAmount,
+                ChaosTypes = parsed.ChaosTypes,
             };
         }
 
@@ -752,6 +1044,38 @@ namespace Zipper
         }
 
         /// <summary>
+        /// Parses a strict-format delimiter (requires ascii: or char: prefix).
+        /// </summary>
+        /// <param name="arg">Delimiter argument with ascii:<N> or char:<c> prefix.</param>
+        /// <returns>Parsed delimiter string.</returns>
+        private static string ParseStrictDelimiter(string arg)
+        {
+            if (arg.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
+            {
+                var numPart = arg.Substring(6);
+                if (int.TryParse(numPart, out var code) && code >= 0 && code <= 255)
+                {
+                    return ((char)code).ToString();
+                }
+
+                throw new ArgumentException($"Invalid ASCII code in delimiter: '{arg}'");
+            }
+
+            if (arg.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
+            {
+                var charPart = arg.Substring(5);
+                if (charPart.Length >= 1)
+                {
+                    return charPart[0].ToString();
+                }
+
+                throw new ArgumentException($"Missing character in delimiter: '{arg}'");
+            }
+
+            throw new ArgumentException($"Delimiter must use 'ascii:<N>' or 'char:<c>' prefix: '{arg}'");
+        }
+
+        /// <summary>
         /// Internal class to hold parsed arguments before validation.
         /// </summary>
         private class ParsedArguments
@@ -810,6 +1134,28 @@ namespace Zipper
             public int? CustodianCount { get; set; }
 
             public bool WithFamilies { get; set; }
+
+            // Loadfile-only arguments
+            public bool LoadfileOnly { get; set; }
+
+            public string? Eol { get; set; }
+
+            public string? ColDelim { get; set; }
+
+            public string? QuoteDelim { get; set; }
+
+            public string? NewlineDelim { get; set; }
+
+            public string? MultiDelim { get; set; }
+
+            public string? NestedDelim { get; set; }
+
+            // Chaos Engine arguments
+            public bool ChaosMode { get; set; }
+
+            public string? ChaosAmount { get; set; }
+
+            public string? ChaosTypes { get; set; }
         }
     }
 }

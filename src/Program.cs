@@ -31,8 +31,49 @@ namespace Zipper
                 return 1; // Error already displayed by CommandLineValidator
             }
 
+            if (request.LoadfileOnly)
+            {
+                return await RunLoadfileOnly(request);
+            }
+
             bool success = await GenerateFiles(request);
             return success ? 0 : 1;
+        }
+
+        private static async Task<int> RunLoadfileOnly(FileGenerationRequest request)
+        {
+            Console.WriteLine("Starting loadfile-only generation...");
+            Console.WriteLine(string.Format("  Format: {0}", request.LoadFileFormat));
+            Console.WriteLine(string.Format("  Count: {0:N0}", request.FileCount));
+            Console.WriteLine(string.Format("  Output Path: {0}", request.OutputPath));
+            Console.WriteLine(string.Format("  Encoding: {0}", request.Encoding));
+            Console.WriteLine(string.Format("  EOL: {0}", request.EndOfLine));
+
+            if (request.ChaosMode)
+            {
+                Console.WriteLine(string.Format("  Chaos Mode: Enabled (amount: {0})", request.ChaosAmount ?? "1%"));
+                if (!string.IsNullOrEmpty(request.ChaosTypes))
+                {
+                    Console.WriteLine(string.Format("  Chaos Types: {0}", request.ChaosTypes));
+                }
+            }
+
+            try
+            {
+                var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+                Console.WriteLine(string.Format("\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
+                Console.WriteLine(string.Format("  Load file: {0}", result.LoadFilePath));
+                Console.WriteLine(string.Format("  Properties: {0}", result.PropertiesFilePath));
+                Console.WriteLine(string.Format("  Records: {0:N0}", result.TotalRecords));
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(string.Format("\nAn error occurred: {0}", ex.Message));
+                return 1;
+            }
         }
 
         private static async Task<bool> GenerateFiles(FileGenerationRequest request)
