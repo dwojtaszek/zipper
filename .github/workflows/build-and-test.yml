@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -39,9 +43,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - name: Lint code style
-        run: |
-          dotnet tool install -g dotnet-format
-          dotnet format --verify-no-changes
+        run: dotnet format --verify-no-changes
 
   build:
     needs: [prepare, lint]
@@ -62,9 +64,7 @@ jobs:
         with:
           dotnet-version: 8.0.x
           cache: true
-          cache-dependency-path: |
-            src/packages.lock.json
-            src/Zipper.Tests/packages.lock.json
+          cache-dependency-path: src/packages.lock.json
 
       - name: Restore dependencies
         run: dotnet restore zipper.sln
@@ -236,7 +236,7 @@ jobs:
 
       - name: Create Release
         if: steps.tag_step.outputs.tag != ''
-        uses: softprops/action-gh-release@v2.5.0
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -262,7 +262,7 @@ jobs:
         with:
           path: artifacts
 
-      - uses: softprops/action-gh-release@v2.5.0
+      - uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
