@@ -42,7 +42,7 @@ fi
 
 # Check for all required jobs
 echo "4. Checking for all required jobs..."
-REQUIRED_JOBS=("lint:" "build:" "test:" "release:")
+REQUIRED_JOBS=("lint:" "build:" "test:" "tag-and-release:")
 
 for job in "${REQUIRED_JOBS[@]}"; do
     if grep -q "$job" .github/workflows/build-and-test.yml; then
@@ -150,10 +150,10 @@ fi
 
 # Check for release conditions
 echo "12. Checking release conditions..."
-if grep -q "if: startsWith(github.ref, 'refs/tags/v')" .github/workflows/build-and-test.yml; then
-    echo "✓ Release job runs on tags"
+if grep -q "if: github.ref == 'refs/heads/main'" .github/workflows/build-and-test.yml; then
+    echo "✓ Release job runs on main"
 else
-    echo "✗ Release job missing tag condition"
+    echo "✗ Release job missing main branch condition"
     exit 1
 fi
 

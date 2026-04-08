@@ -61,6 +61,12 @@ verify_headers() {
     return $([ "$all_found" = true ] && echo 0 || echo 1)
 }
 
+# Helper function to count zip attachments, explicitly filtering out directory entries
+count_zip_attachments() {
+    local zip_file="$1"
+    unzip -l "$zip_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$' | grep -c -v -E '\.eml$|\.txt$' || true
+}
+
 # Function to verify attachments
 verify_attachments() {
     local dat_file="$1"
@@ -85,7 +91,8 @@ verify_attachments() {
     attachment_dat_count=$(tail -n +2 "$dat_file" | cut -d$'\024' -f"$attachment_col_index" | grep -c -v '^þþ$')
     
     local attachment_zip_count
-    attachment_zip_count=$(unzip -Z -1 "$zip_file" | grep -c -v -E '\.eml$|\.txt$')
+    # Robustly get filenames and count attachments
+    attachment_zip_count=$(count_zip_attachments "$zip_file")
 
     echo "  - Attachments found in ZIP: $attachment_zip_count"
     echo "  - Attachments referenced in DAT: $attachment_dat_count"
@@ -167,12 +174,13 @@ run_test() {
             
             if [ "$check_text" = true ]; then
                 echo "  - Verifying extracted text files..."
+                local zip_files
+                zip_files=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$')
                 local eml_count
-                eml_count=$(unzip -Z -1 "$archive_file" | grep -c '\.eml$')
+                eml_count=$(echo "$zip_files" | grep -c '\.eml$' || true)
                 local txt_count
-                txt_count=$(unzip -Z -1 "$archive_file" | grep -c '\.txt$')
-                local attachment_count
-                attachment_count=$(unzip -Z -1 "$archive_file" | grep -c -v -E '\.eml$|\.txt$')
+                txt_count=$(echo "$zip_files" | grep -c '\.txt$' || true)
+                local attachment_count=$(count_zip_attachments "$archive_file")
                 local expected_txt_count=$((eml_count + attachment_count))
 
                 if [ "$expected_txt_count" -eq "$txt_count" ]; then
@@ -185,7 +193,7 @@ run_test() {
 
             if [ "$check_attachments" = true ]; then
                 local eml_count
-                eml_count=$(unzip -Z -1 "$archive_file" | grep -c '\.eml$')
+                eml_count=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$' | grep -c '\.eml$')
                 if ! verify_attachments "$dat_file" "$archive_file" "$attachment_rate" "$eml_count"; then
                     all_checks_passed=false
                 fi
