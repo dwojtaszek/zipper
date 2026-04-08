@@ -85,7 +85,8 @@ verify_attachments() {
     attachment_dat_count=$(tail -n +2 "$dat_file" | cut -d$'\024' -f"$attachment_col_index" | grep -c -v '^þþ$')
     
     local attachment_zip_count
-    attachment_zip_count=$(unzip -Z -1 "$zip_file" | grep -c -v -E '\.eml$|\.txt$')
+    # Use portable unzip -l instead of unzip -Z -1
+    attachment_zip_count=$(unzip -l "$zip_file" | awk '/[0-9]{2}:[0-9]{2}/ {print $4}' | grep -c -v -E '\.eml$|\.txt$')
 
     echo "  - Attachments found in ZIP: $attachment_zip_count"
     echo "  - Attachments referenced in DAT: $attachment_dat_count"
@@ -167,12 +168,14 @@ run_test() {
             
             if [ "$check_text" = true ]; then
                 echo "  - Verifying extracted text files..."
+                local zip_files
+                zip_files=$(unzip -l "$archive_file" | awk '/[0-9]{2}:[0-9]{2}/ {print $4}')
                 local eml_count
-                eml_count=$(unzip -Z -1 "$archive_file" | grep -c '\.eml$')
+                eml_count=$(echo "$zip_files" | grep -c '\.eml$')
                 local txt_count
-                txt_count=$(unzip -Z -1 "$archive_file" | grep -c '\.txt$')
+                txt_count=$(echo "$zip_files" | grep -c '\.txt$')
                 local attachment_count
-                attachment_count=$(unzip -Z -1 "$archive_file" | grep -c -v -E '\.eml$|\.txt$')
+                attachment_count=$(echo "$zip_files" | grep -c -v -E '\.eml$|\.txt$')
                 local expected_txt_count=$((eml_count + attachment_count))
 
                 if [ "$expected_txt_count" -eq "$txt_count" ]; then
@@ -185,7 +188,7 @@ run_test() {
 
             if [ "$check_attachments" = true ]; then
                 local eml_count
-                eml_count=$(unzip -Z -1 "$archive_file" | grep -c '\.eml$')
+                eml_count=$(unzip -l "$archive_file" | awk '/[0-9]{2}:[0-9]{2}/ {print $4}' | grep -c '\.eml$')
                 if ! verify_attachments "$dat_file" "$archive_file" "$attachment_rate" "$eml_count"; then
                     all_checks_passed=false
                 fi

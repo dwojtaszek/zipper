@@ -204,7 +204,12 @@ function verify_zip_size() {
         print_error "No .zip file found in $test_dir"
     fi
 
-    local actual_size_bytes=$(stat -c%s "$zip_file")
+    local actual_size_bytes
+    if [ "$(uname)" == "Darwin" ]; then
+        actual_size_bytes=$(stat -f%z "$zip_file")
+    else
+        actual_size_bytes=$(stat -c%s "$zip_file")
+    fi
     local min_size=$((target_size_bytes - tolerance_bytes))
     local max_size=$((target_size_bytes + tolerance_bytes))
 
