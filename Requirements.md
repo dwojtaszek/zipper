@@ -341,11 +341,12 @@ Based on the above research, the following requirements apply to the Zipper load
 
 #### FR-010: Extended Load File Format Support
 
-- **REQ-048**: The `--load-file-format` argument shall support the following formats: `dat`, `opt`, `csv`, `edrm-xml`.
+- **REQ-048**: The `--load-file-format` argument shall support the following formats: `dat`, `opt`, `csv`, `edrm-xml`, `concordance`.
 - **REQ-049**: DAT format shall use standard Concordance delimiters (ASCII 20, 254, 174) by default.
 - **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
+- **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases for the same output format. When either value is passed to `--load-file-format`, the application shall generate identical EDRM XML v1.2 output.
 
 #### FR-011: Multi-Format Output
 
@@ -559,3 +560,22 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-pagecount`: Replace the page count integer with an invalid value
 - **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
+
+---
+
+## 13. Performance Benchmarking
+
+### FR-020: Built-in Benchmark Suite
+
+- **REQ-102**: A new command-line argument `--benchmark` shall be introduced.
+- **REQ-103**: When `--benchmark` is specified, the application shall run a built-in performance benchmark suite and exit, bypassing normal file generation.
+- **REQ-104**: The benchmark suite shall measure: parallel vs sequential generation throughput, memory pool effectiveness, scalability across file counts, and allocation overhead.
+- **REQ-105**: Benchmark results shall be printed to stdout with pass/fail indicators.
+
+---
+
+## 14. Security
+
+### FR-021: Path Traversal Prevention
+
+- **REQ-106**: The application shall validate the `--output-path` argument to prevent directory traversal attacks. Paths containing `..` components that resolve outside the intended base directory shall be rejected with a clear error message.
