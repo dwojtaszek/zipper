@@ -1,8 +1,6 @@
 # Enforce LF line endings for all text files
 * text eol=lf
 
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
 
 # Windows batch files require CRLF
 *.bat text eol=crlf

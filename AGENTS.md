@@ -2,7 +2,7 @@
 
 **Behavior:** Think step-by-step before coding. Output COMPLETE files (no placeholders/ellipses). Fix root causes, not symptoms. Match existing style. If unsure, ask for clarification – do not assume. Include error handling. Self-review for bugs/security. Suggest incremental changes over massive rewrites.
 
-Use 'bd' for task tracking.
+
 
 ## Commands
 

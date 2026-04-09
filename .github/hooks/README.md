@@ -6,9 +6,8 @@ This directory contains git hooks for local code quality enforcement.
 
 ### pre-commit
 Runs on `git commit`:
-1. **bd sync** — flush pending `.beads` changes
-2. **dotnet format** — auto-fix code style (fails if changes needed)
-3. **Unit tests** — run all 374 unit tests (~1.6s)
+1. **dotnet format** — auto-fix code style (fails if changes needed)
+2. **Unit tests** — run all 374 unit tests (~1.6s)
 
 ### pre-push
 Runs on `git push`:
