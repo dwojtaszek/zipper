@@ -27,7 +27,9 @@ namespace Zipper
             Console.WriteLine("===================");
 
             const int fileCount = 1000;
+#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
             var tempDir = Path.GetTempPath();
+#pragma warning restore S5443
             var outputPath = Path.Combine(tempDir, $"bench_alloc_{Guid.NewGuid()}");
             Directory.CreateDirectory(outputPath);
 
@@ -75,7 +77,9 @@ namespace Zipper
             Console.WriteLine("=====================================");
 
             const int fileCount = 500;
+#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
             var tempDir = Path.GetTempPath();
+#pragma warning restore S5443
             var outputPath1 = Path.Combine(tempDir, $"bench_seq_{Guid.NewGuid()}");
             var outputPath2 = Path.Combine(tempDir, $"bench_par_{Guid.NewGuid()}");
             Directory.CreateDirectory(outputPath1);
@@ -189,7 +193,9 @@ namespace Zipper
             Console.WriteLine("===================");
 
             var fileCounts = new[] { 100, 500, 1000, 2000 };
+#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
             var tempDir = Path.GetTempPath();
+#pragma warning restore S5443
 
             foreach (var fileCount in fileCounts)
             {

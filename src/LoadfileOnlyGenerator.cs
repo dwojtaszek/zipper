@@ -70,7 +70,9 @@ internal static class LoadfileOnlyGenerator
                 request.Seed);
         }
 
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Seed.HasValue ? new Random(request.Seed.Value + 1) : new Random();
+#pragma warning restore S2245
 
         // Write the load file
         await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
