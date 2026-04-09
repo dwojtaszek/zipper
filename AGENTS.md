@@ -1,7 +1,29 @@
 # AI Agent Instructions for Zipper
 
-**Behavior:** Think step-by-step before coding. Output COMPLETE files (no placeholders/ellipses). Fix root causes, not symptoms. Match existing style. If unsure, ask for clarification – do not assume. Include error handling. Self-review for bugs/security. Suggest incremental changes over massive rewrites.
+**Behavior:** Think step-by-step before coding. Output COMPLETE files (no placeholders/ellipses). Fix root causes, not symptoms. Match existing style. If unsure, ask for clarification – do not assume. Include error handling. Self-review for bugs/security. Suggest incremental changes over massive rewrites. **All discussions, documentation, and code must use the ubiquitous language terms defined in UBIQUITOUS_LANGUAGE.md.**
 
+---
+
+## Ubiquitous Language
+
+**REQUIRED:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all discussions, documentation, and code reviews.
+
+**Key Terms (use ALWAYS):**
+- **Archive** (not "ZIP file" or "package")
+- **Native File** (not "file" or "document")
+- **Load File** (not "manifest" or "index")
+- **Metadata** (not "attributes" or "properties")
+- **Folder** (for archive structure, not "directory")
+- **Volume** (for production sets, not "partition")
+- **Email** (File Type eml, not "EML file")
+- **Attachment** (embedded file in email)
+- **Bates Number** (legal document ID)
+- **Chaos Engine** (anomaly injection system)
+- **Loadfile-Only Mode** (standalone load file generation)
+
+**When in doubt:** Consult UBIQUITOUS_LANGUAGE.md for canonical definitions and aliases to avoid. This ensures consistent communication across PRs, discussions, and documentation.
+
+---
 
 
 ## Commands
@@ -30,6 +52,9 @@ tests/run-tests.bat    # Windows
 ---
 
 ## Critical Rules
+
+> [!IMPORTANT]
+> **Domain Language Mandatory**: Refer to UBIQUITOUS_LANGUAGE.md when discussing any Zipper concept. Use canonical terms (Archive, Native File, Load File, Metadata, Folder, Volume, Email, Attachment, Bates Number, Chaos Engine, Loadfile-Only Mode) consistently in all code, comments, and documentation.
 
 > [!CAUTION]
 > **Requirement numbers in Requirements.md are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
