@@ -34,7 +34,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             await writer.WriteStartDocumentAsync(standalone: true);
             await writer.WriteStartElementAsync(null, "documents", null);
 
-            #pragma warning disable S2245
+#pragma warning disable S2245
             var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
             var now = DateTime.UtcNow;

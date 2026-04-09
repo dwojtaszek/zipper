@@ -57,7 +57,7 @@ namespace Zipper
 
             await writer.WriteLineAsync(headerBuilder.ToString());
 
-            #pragma warning disable S2245
+#pragma warning disable S2245
             var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
             var now = DateTime.UtcNow;
