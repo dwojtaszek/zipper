@@ -33,7 +33,9 @@ internal static class ProductionSetGenerator
         Directory.CreateDirectory(textDir);
         Directory.CreateDirectory(imagesDir);
 
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : new Random();
+#pragma warning restore S2245
         var batesConfig = request.BatesConfig!;
 
         // Calculate volume distribution
