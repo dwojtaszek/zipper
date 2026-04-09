@@ -234,9 +234,21 @@ call .\tests\test-eml-comprehensive.bat
 call :print_success "EML comprehensive tests passed."
 
 REM Test 2: Bates numbering tests
-call :print_info "Running Bates numbering tests..."
+echo [ INFO ] Running Bates Numbering Tests...
 call .\tests\test-bates-numbering.bat
-call :print_success "Bates numbering tests passed."
+
+if errorlevel 1 (
+  echo [ ERROR ] Bates Numbering Tests failed.
+  exit /b 1
+)
+
+echo [ INFO ] Running Production Sets Tests...
+call .\tests\test-production-sets.bat
+
+if errorlevel 1 (
+  echo [ ERROR ] Production Sets Tests failed.
+  exit /b 1
+)
 
 REM Test 3: Multipage TIFF tests
 call :print_info "Running multipage TIFF tests..."

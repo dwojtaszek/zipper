@@ -604,3 +604,17 @@ This section clarifies behavior when multiple arguments interact:
 | `field-overflow` | Unescaped newlines and extra columns | `eol`, `columns` | 2% | DAT |
 | `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
 | `nuix-export` | NUIX-to-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
+
+---
+
+## 16. Production Sets
+
+### FR-023: Production Set Generator
+
+- **REQ-114**: A new command-line argument `--production-set` shall be introduced to generate structured production deliveries instead of flat mock files.
+- **REQ-115**: When `--production-set` is specified, the application shall create a root production directory (e.g., `PRODUCTION_YYYYMMDD_HHMMSS`) and distribute generated files into `DATA`, `IMAGES`, `NATIVES`, and `TEXT` subdirectories.
+- **REQ-116**: A new command-line argument `--volume-size <number>` shall control the maximum number of files per volume (e.g., `VOL001`, `VOL002`) within the output directories. Defaults to 5,000.
+- **REQ-117**: The generator shall create both a standard DAT load file (metadata) and an OPT load file (image cross-reference) within the `DATA` directory.
+- **REQ-118**: A `_manifest.json` file shall be generated at the root of the production folder containing top-level properties like volume structure, document counts, and the Bates numbering range.
+- **REQ-119**: A new command-line argument `--production-zip` shall be introduced. When specified alongside `--production-set`, the application shall compress the entire production set folder structure into a single ZIP archive named after the production root directory.
+- **REQ-120**: `--production-set` requires `--bates-prefix` to be specified and conflicts with `--loadfile-only`.

@@ -44,10 +44,10 @@ This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS
 
 After building the project, you can run the executable directly. The examples below assume the executable is in your system's PATH. Alternatively, you can still use `dotnet run` from the project directory.
 
-### Syntax
+### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--production-set] [--production-zip] [--volume-size <number>]
 ```
 
 ### Arguments
@@ -148,6 +148,9 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
 | `--chaos-list` | false | flag | List scenarios and exit |
+| `--production-set` | false | flag | Generate structured production with DATA/IMAGES/NATIVES/TEXT |
+| `--production-zip` | false | flag | Wrap production set output in a ZIP archive |
+| `--volume-size` | 5000 | number | Max files per volume subfolder |
 
 ### Argument Interactions
 
@@ -172,6 +175,8 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
+| `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
+| `--production-zip`, `--volume-size` | Require `--production-set` |
 
 ### Column Profiles
 
