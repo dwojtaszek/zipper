@@ -16,10 +16,7 @@ internal record ChaosScenarioDefinition(
 /// </summary>
 internal static class ChaosScenarios
 {
-    /// <summary>
-    /// All available built-in chaos scenarios.
-    /// </summary>
-    public static readonly ChaosScenarioDefinition[] All =
+    private static readonly ChaosScenarioDefinition[] ScenariosArray =
     {
         new(
             Name: "relativity-import",
@@ -59,12 +56,18 @@ internal static class ChaosScenarios
             RequiredFormat: LoadFileFormat.Dat),
     };
 
-    private static readonly string[] CachedScenarioNames = All.Select(s => s.Name).ToArray();
+    private static readonly IReadOnlyList<string> CachedScenarioNames =
+        Array.AsReadOnly(ScenariosArray.Select(s => s.Name).ToArray());
 
     /// <summary>
-    /// Gets all available scenario names.
+    /// All available built-in chaos scenarios (read-only).
     /// </summary>
-    public static string[] ScenarioNames => CachedScenarioNames;
+    public static IReadOnlyList<ChaosScenarioDefinition> All { get; } = Array.AsReadOnly(ScenariosArray);
+
+    /// <summary>
+    /// Gets all available scenario names (read-only).
+    /// </summary>
+    public static IReadOnlyList<string> ScenarioNames => CachedScenarioNames;
 
     /// <summary>
     /// Looks up a scenario by name (case-insensitive).
@@ -73,7 +76,7 @@ internal static class ChaosScenarios
     /// <returns>Matching scenario definition, or null if not found.</returns>
     public static ChaosScenarioDefinition? GetByName(string name)
     {
-        return All.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return ScenariosArray.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -86,7 +89,7 @@ internal static class ChaosScenarios
         Console.WriteLine($"  {"Name",-25} {"Format",-8} {"Default",-10} Description");
         Console.WriteLine($"  {new string('-', 25)} {new string('-', 8)} {new string('-', 10)} {new string('-', 50)}");
 
-        foreach (var scenario in All)
+        foreach (var scenario in ScenariosArray)
         {
             var format = scenario.RequiredFormat?.ToString() ?? "Any";
             Console.WriteLine($"  {scenario.Name,-25} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
