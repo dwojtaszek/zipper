@@ -425,9 +425,19 @@ bash ./tests/test-eml-comprehensive.sh
 print_success "EML comprehensive tests passed."
 
 # Test 2: Bates numbering tests
-print_info "Running Bates numbering tests..."
+echo "[ INFO ] Running Bates Numbering Tests..."
 bash ./tests/test-bates-numbering.sh
-print_success "Bates numbering tests passed."
+
+if [ $? -ne 0 ]; then
+  print_error "Bates Numbering Tests failed."
+fi
+
+echo "[ INFO ] Running Production Sets Tests..."
+bash ./tests/test-production-sets.sh
+
+if [ $? -ne 0 ]; then
+  print_error "Production Sets Tests failed."
+fi
 
 # Test 3: Multipage TIFF tests
 print_info "Running multipage TIFF tests..."

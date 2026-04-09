@@ -173,6 +173,22 @@ namespace Zipper
         /// When set, resolves to predefined ChaosTypes and default ChaosAmount.
         /// </summary>
         public string? ChaosScenario { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to generate a production set
+        /// with structured DATA/IMAGES/NATIVES/TEXT directories.
+        /// </summary>
+        public bool ProductionSet { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether to wrap the production set in a ZIP archive.
+        /// </summary>
+        public bool ProductionZip { get; set; }
+
+        /// <summary>
+        /// Gets or sets the maximum number of files per volume subfolder (default 5000).
+        /// </summary>
+        public int VolumeSize { get; set; } = 5000;
     }
 
     /// <summary>

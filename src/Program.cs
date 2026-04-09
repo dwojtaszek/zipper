@@ -42,8 +42,55 @@ namespace Zipper
                 return await RunLoadfileOnly(request);
             }
 
+            if (request.ProductionSet)
+            {
+                return await RunProductionSet(request);
+            }
+
             bool success = await GenerateFiles(request);
             return success ? 0 : 1;
+        }
+
+        private static async Task<int> RunProductionSet(FileGenerationRequest request)
+        {
+            Console.WriteLine("Starting production set generation...");
+            Console.WriteLine(string.Format("  File Type: {0}", request.FileType));
+            Console.WriteLine(string.Format("  Count: {0:N0}", request.FileCount));
+            Console.WriteLine(string.Format("  Output Path: {0}", request.OutputPath));
+            Console.WriteLine(string.Format("  Volume Size: {0:N0} files/volume", request.VolumeSize));
+            var batesPrefix = request.BatesConfig?.Prefix ?? string.Empty;
+            var batesStart = request.BatesConfig?.Start ?? 1;
+            var batesDigits = request.BatesConfig?.Digits ?? 8;
+            Console.WriteLine(string.Format("  Bates: {0}{1}", batesPrefix, batesStart.ToString($"D{batesDigits}")));
+            if (request.ProductionZip)
+            {
+                Console.WriteLine("  ZIP Output: Enabled");
+            }
+
+            try
+            {
+                var result = await ProductionSetGenerator.GenerateAsync(request);
+
+                Console.WriteLine(string.Format("\n\nProduction set complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
+                Console.WriteLine(string.Format("  Production: {0}", result.ProductionPath));
+                Console.WriteLine(string.Format("  Documents: {0:N0}", result.TotalDocuments));
+                Console.WriteLine(string.Format("  Bates Range: {0}", result.BatesRange));
+                Console.WriteLine(string.Format("  Volumes: {0}", result.VolumeCount));
+                Console.WriteLine(string.Format("  DAT: {0}", result.DatFilePath));
+                Console.WriteLine(string.Format("  OPT: {0}", result.OptFilePath));
+                Console.WriteLine(string.Format("  Manifest: {0}", result.ManifestPath));
+                if (result.ZipFilePath != null)
+                {
+                    Console.WriteLine(string.Format("  ZIP: {0}", result.ZipFilePath));
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(string.Format("\nAn error occurred: {0}", ex.Message));
+                return 1;
+            }
         }
 
         private static async Task<int> RunLoadfileOnly(FileGenerationRequest request)

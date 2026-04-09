@@ -102,6 +102,11 @@ namespace Zipper
             Console.Error.WriteLine("  --chaos-scenario <name>  Use a predefined chaos scenario (conflicts with --chaos-types)");
             Console.Error.WriteLine("  --chaos-list             List available chaos scenarios and exit");
             Console.Error.WriteLine();
+            Console.Error.WriteLine("Production Set Options:");
+            Console.Error.WriteLine("  --production-set         Generate structured production with DATA/IMAGES/NATIVES/TEXT");
+            Console.Error.WriteLine("  --production-zip         Wrap production set output in a ZIP archive");
+            Console.Error.WriteLine("  --volume-size <number>   Max files per volume subfolder (default: 5000)");
+            Console.Error.WriteLine();
             Console.Error.WriteLine("Bates Numbering:");
             Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
             Console.Error.WriteLine("  --bates-start <number>   Bates start number (default: 1)");
@@ -450,6 +455,20 @@ namespace Zipper
                     case "--chaos-list":
                         parsed.ChaosList = true;
                         break;
+                    case "--production-set":
+                        parsed.ProductionSet = true;
+                        break;
+                    case "--production-zip":
+                        parsed.ProductionZip = true;
+                        break;
+                    case "--volume-size":
+                        if (TryGetValue(args, i, out var volumeSizeVal) && int.TryParse(volumeSizeVal, out var volumeSize))
+                        {
+                            parsed.VolumeSize = volumeSize;
+                            i++;
+                        }
+
+                        break;
                     default:
                         Console.Error.WriteLine($"Warning: Unknown argument or unconsumed value '{args[i]}' ignored.");
                         break;
@@ -486,6 +505,8 @@ namespace Zipper
                 "--with-families" => true,
                 "--loadfile-only" => true,
                 "--chaos-mode" => true,
+                "--production-set" => true,
+                "--production-zip" => true,
                 _ => false,
             };
         }
@@ -495,8 +516,8 @@ namespace Zipper
         /// </summary>
         private static bool ValidateRequiredArguments(ParsedArguments parsed)
         {
-            // In loadfile-only mode, --type is optional (defaults to pdf for schema)
-            if (string.IsNullOrEmpty(parsed.FileType) && !parsed.LoadfileOnly)
+            // In loadfile-only mode and production-set mode, --type is optional (defaults to pdf)
+            if (string.IsNullOrEmpty(parsed.FileType) && !parsed.LoadfileOnly && !parsed.ProductionSet)
             {
                 Console.Error.WriteLine("Error: --type is required.");
                 return false;
@@ -735,6 +756,45 @@ namespace Zipper
             if (parsed.LoadfileOnly && parsed.IncludeLoadFile)
             {
                 Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
+                return false;
+            }
+
+            // === Production set validation ===
+            if (parsed.ProductionSet)
+            {
+                // Production set conflicts with loadfile-only
+                if (parsed.LoadfileOnly)
+                {
+                    Console.Error.WriteLine("Error: --production-set conflicts with --loadfile-only.");
+                    return false;
+                }
+
+                // Production set requires bates prefix
+                if (string.IsNullOrEmpty(parsed.BatesPrefix))
+                {
+                    Console.Error.WriteLine("Error: --production-set requires --bates-prefix.");
+                    return false;
+                }
+
+                // Volume size must be positive
+                if (parsed.VolumeSize.HasValue && parsed.VolumeSize.Value < 1)
+                {
+                    Console.Error.WriteLine("Error: --volume-size must be at least 1.");
+                    return false;
+                }
+            }
+
+            // --production-zip requires --production-set
+            if (parsed.ProductionZip && !parsed.ProductionSet)
+            {
+                Console.Error.WriteLine("Error: --production-zip requires --production-set.");
+                return false;
+            }
+
+            // --volume-size requires --production-set
+            if (parsed.VolumeSize.HasValue && !parsed.ProductionSet)
+            {
+                Console.Error.WriteLine("Error: --volume-size requires --production-set.");
                 return false;
             }
 
@@ -984,6 +1044,9 @@ namespace Zipper
                 ChaosAmount = parsed.ChaosAmount,
                 ChaosTypes = parsed.ChaosTypes,
                 ChaosScenario = parsed.ChaosScenario,
+                ProductionSet = parsed.ProductionSet,
+                ProductionZip = parsed.ProductionZip,
+                VolumeSize = parsed.VolumeSize ?? 5000,
             };
         }
 
@@ -1208,6 +1271,13 @@ namespace Zipper
             public string? ChaosScenario { get; set; }
 
             public bool ChaosList { get; set; }
+
+            // Production set arguments
+            public bool ProductionSet { get; set; }
+
+            public bool ProductionZip { get; set; }
+
+            public int? VolumeSize { get; set; }
         }
     }
 }
