@@ -102,6 +102,8 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`
 - `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
 - `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`
+- `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
+- `--chaos-list`: List all available chaos scenarios with descriptions and exit
 
 ### Arguments Quick Reference
 
@@ -144,6 +146,8 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--chaos-mode` | false | flag | Enable Chaos Engine |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
+| `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
+| `--chaos-list` | false | flag | List scenarios and exit |
 
 ### Argument Interactions
 
@@ -166,6 +170,8 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
 | `--chaos-mode` | Requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
+| `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 
 ### Column Profiles
 
@@ -320,6 +326,27 @@ zipper --loadfile-only --count 50000 --output-path ./chaos_targeted \
 # OPT chaos: corrupt document boundaries and page counts
 zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_chaos \
     --chaos-mode --chaos-types "opt-boundary,opt-pagecount"
+
+# ── Chaos Scenarios ─────────────────────────────
+
+# List all available chaos scenarios
+zipper --chaos-list
+
+# Simulate common Relativity ingestion failures
+zipper --loadfile-only --count 100000 --output-path ./relativity_test \
+    --chaos-mode --chaos-scenario relativity-import --seed 42
+
+# Simulate NUIX export errors with custom anomaly amount
+zipper --loadfile-only --count 50000 --output-path ./nuix_test \
+    --chaos-mode --chaos-scenario nuix-export --chaos-amount "15%"
+
+# Full chaos: all anomaly types at 10% density
+zipper --loadfile-only --count 100000 --output-path ./full_chaos \
+    --chaos-mode --chaos-scenario full-chaos
+
+# OPT boundary corruption scenario
+zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_test \
+    --chaos-mode --chaos-scenario broken-boundaries
 ```
 
 ## Performance

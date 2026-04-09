@@ -34,10 +34,32 @@ internal static class LoadfileOnlyGenerator
         ChaosEngine? chaosEngine = null;
         if (request.ChaosMode)
         {
+            // Resolve chaos scenario to types and amount
+            string? resolvedTypes = request.ChaosTypes;
+            string? resolvedAmount = request.ChaosAmount;
+
+            if (!string.IsNullOrEmpty(request.ChaosScenario))
+            {
+                var scenario = ChaosScenarios.GetByName(request.ChaosScenario);
+                if (scenario != null)
+                {
+                    // Scenario types replace manual types; empty string means "all types"
+                    resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
+
+                    // Use scenario default amount unless user explicitly set one
+                    if (string.IsNullOrEmpty(resolvedAmount))
+                    {
+                        resolvedAmount = scenario.DefaultAmount;
+                    }
+
+                    Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                }
+            }
+
             chaosEngine = new ChaosEngine(
                 totalLines,
-                request.ChaosAmount,
-                request.ChaosTypes,
+                resolvedAmount,
+                resolvedTypes,
                 request.LoadFileFormat,
                 request.ColumnDelimiter,
                 request.QuoteDelimiter,

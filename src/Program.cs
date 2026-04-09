@@ -24,6 +24,12 @@ namespace Zipper
                 }
             }
 
+            if (args.Contains("--chaos-list"))
+            {
+                ChaosScenarios.PrintScenarioList();
+                return 0;
+            }
+
             // Validate and parse command line arguments
             var request = CommandLineValidator.ValidateAndParseArguments(args);
             if (request == null)
