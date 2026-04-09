@@ -59,10 +59,12 @@ internal static class ChaosScenarios
             RequiredFormat: LoadFileFormat.Dat),
     };
 
+    private static readonly string[] CachedScenarioNames = All.Select(s => s.Name).ToArray();
+
     /// <summary>
     /// Gets all available scenario names.
     /// </summary>
-    public static string[] ScenarioNames => All.Select(s => s.Name).ToArray();
+    public static string[] ScenarioNames => CachedScenarioNames;
 
     /// <summary>
     /// Looks up a scenario by name (case-insensitive).

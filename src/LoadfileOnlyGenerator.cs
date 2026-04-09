@@ -52,6 +52,10 @@ internal static class LoadfileOnlyGenerator
                         resolvedAmount = scenario.DefaultAmount;
                     }
 
+                    // Persist resolved values back to request for accurate audit metadata
+                    request.ChaosAmount = resolvedAmount;
+                    request.ChaosTypes = resolvedTypes;
+
                     Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
             }

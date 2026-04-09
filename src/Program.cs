@@ -10,7 +10,7 @@ namespace Zipper
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             Console.WriteLine();
 
-            if (args.Contains("--benchmark"))
+            if (args.Contains("--benchmark", StringComparer.OrdinalIgnoreCase))
             {
                 try
                 {
@@ -24,7 +24,7 @@ namespace Zipper
                 }
             }
 
-            if (args.Contains("--chaos-list"))
+            if (args.Contains("--chaos-list", StringComparer.OrdinalIgnoreCase))
             {
                 ChaosScenarios.PrintScenarioList();
                 return 0;
