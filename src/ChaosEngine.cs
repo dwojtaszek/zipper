@@ -43,7 +43,9 @@ internal class ChaosEngine
         this.format = format;
         this.columnDelimiter = columnDelimiter;
         this.quoteDelimiter = quoteDelimiter;
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         this.random = seed.HasValue ? new Random(seed.Value) : new Random();
+#pragma warning restore S2245
 
         // Determine enabled types
         var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;

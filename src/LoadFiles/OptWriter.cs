@@ -20,7 +20,9 @@ internal class OptWriter : LoadFileWriterBase
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
         const char tab = '\t';
 
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        #pragma warning disable S2245
+            var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+#pragma warning restore S2245
         var now = DateTime.UtcNow;
 
         await WriteHeaderAsync(writer, request, tab);

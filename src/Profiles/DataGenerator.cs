@@ -21,7 +21,9 @@ internal class DataGenerator
     public DataGenerator(ColumnProfile profile, int? seed = null)
     {
         this.profile = profile;
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
+#pragma warning restore S2245
         this.generatedDataSources = new Dictionary<string, List<string>>();
         this.distributionIndices = new Dictionary<string, int[]>();
 
