@@ -99,6 +99,8 @@ namespace Zipper
             Console.Error.WriteLine("  --chaos-mode             Activate deliberate anomaly injection");
             Console.Error.WriteLine("  --chaos-amount <value>   Anomaly count: percentage (1%) or exact (500)");
             Console.Error.WriteLine("  --chaos-types <list>     Comma-separated anomaly types to inject");
+            Console.Error.WriteLine("  --chaos-scenario <name>  Use a predefined chaos scenario (conflicts with --chaos-types)");
+            Console.Error.WriteLine("  --chaos-list             List available chaos scenarios and exit");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Bates Numbering:");
             Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");
@@ -437,6 +439,17 @@ namespace Zipper
                         }
 
                         break;
+                    case "--chaos-scenario":
+                        if (TryGetValue(args, i, out var chaosScenarioVal))
+                        {
+                            parsed.ChaosScenario = chaosScenarioVal;
+                            i++;
+                        }
+
+                        break;
+                    case "--chaos-list":
+                        parsed.ChaosList = true;
+                        break;
                     default:
                         Console.Error.WriteLine($"Warning: Unknown argument or unconsumed value '{args[i]}' ignored.");
                         break;
@@ -676,6 +689,40 @@ namespace Zipper
             {
                 Console.Error.WriteLine("Error: --chaos-types requires --chaos-mode.");
                 return false;
+            }
+
+            // Chaos scenario requires --chaos-mode
+            if (!string.IsNullOrEmpty(parsed.ChaosScenario) && !parsed.ChaosMode)
+            {
+                Console.Error.WriteLine("Error: --chaos-scenario requires --chaos-mode.");
+                return false;
+            }
+
+            // Chaos scenario conflicts with --chaos-types
+            if (!string.IsNullOrEmpty(parsed.ChaosScenario) && !string.IsNullOrEmpty(parsed.ChaosTypes))
+            {
+                Console.Error.WriteLine("Error: --chaos-scenario conflicts with --chaos-types. Use one or the other.");
+                return false;
+            }
+
+            // Validate chaos scenario name
+            if (!string.IsNullOrEmpty(parsed.ChaosScenario))
+            {
+                var scenario = ChaosScenarios.GetByName(parsed.ChaosScenario);
+                if (scenario == null)
+                {
+                    Console.Error.WriteLine($"Error: Unknown chaos scenario '{parsed.ChaosScenario}'.");
+                    Console.Error.WriteLine($"       Available scenarios: {string.Join(", ", ChaosScenarios.ScenarioNames)}");
+                    return false;
+                }
+
+                // Validate format compatibility
+                var currentFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
+                if (scenario.RequiredFormat.HasValue && scenario.RequiredFormat.Value != currentFormat)
+                {
+                    Console.Error.WriteLine($"Error: Chaos scenario '{parsed.ChaosScenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {currentFormat.ToString().ToLowerInvariant()}.");
+                    return false;
+                }
             }
 
             // Loadfile-only conflicts with ZIP-related options
@@ -936,6 +983,7 @@ namespace Zipper
                 ChaosMode = parsed.ChaosMode,
                 ChaosAmount = parsed.ChaosAmount,
                 ChaosTypes = parsed.ChaosTypes,
+                ChaosScenario = parsed.ChaosScenario,
             };
         }
 
@@ -1156,6 +1204,10 @@ namespace Zipper
             public string? ChaosAmount { get; set; }
 
             public string? ChaosTypes { get; set; }
+
+            public string? ChaosScenario { get; set; }
+
+            public bool ChaosList { get; set; }
         }
     }
 }

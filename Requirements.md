@@ -516,6 +516,8 @@ This section clarifies behavior when multiple arguments interact:
 | `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
 | `--chaos-mode` | Requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
+| `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
 
 ---
 
@@ -579,3 +581,26 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-021: Path Traversal Prevention
 
 - **REQ-106**: The application shall validate the `--output-path` argument to prevent directory traversal attacks. Paths containing `..` components that resolve outside the intended base directory shall be rejected with a clear error message.
+
+---
+
+## 15. Chaos Scenarios
+
+### FR-022: Predefined Chaos Scenarios
+
+- **REQ-107**: A new optional command-line argument `--chaos-scenario <name>` shall be introduced. Requires `--chaos-mode`.
+- **REQ-108**: When `--chaos-scenario` is specified, the application shall resolve the named scenario to predefined `ChaosTypes` and a default `ChaosAmount`, which are passed to the Chaos Engine.
+- **REQ-109**: `--chaos-scenario` shall conflict with `--chaos-types`. The application must reject this combination with a clear error message.
+- **REQ-110**: `--chaos-amount` shall override the scenario's default amount when both are specified.
+- **REQ-111**: Each scenario may specify a required `LoadFileFormat`. If the scenario's required format does not match the current `--loadfile-format`, the application must exit with a clear error message.
+- **REQ-112**: A new command-line argument `--chaos-list` shall be introduced. When specified, the application shall print all available chaos scenarios with their descriptions and exit.
+- **REQ-113**: The following built-in chaos scenarios shall be provided:
+
+| Scenario Name | Description | Chaos Types | Default Amount | Required Format |
+|---|---|---|---|---|
+| `relativity-import` | Common Relativity ingestion failures | `mixed-delimiters`, `quotes`, `columns` | 3% | DAT |
+| `encoding-nightmare` | Multi-encoding source data | `encoding`, `mixed-delimiters` | 5% | DAT |
+| `broken-boundaries` | OPT document boundary corruption | `opt-boundary`, `opt-pagecount` | 8% | OPT |
+| `field-overflow` | Unescaped newlines and extra columns | `eol`, `columns` | 2% | DAT |
+| `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
+| `nuix-export` | NUIX-to-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
