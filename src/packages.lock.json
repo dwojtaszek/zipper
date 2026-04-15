@@ -26,9 +26,9 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[8.0.21, )",
-        "resolved": "8.0.21",
-        "contentHash": "s8H5PZQs50OcNkaB6Si54+v3GWM7vzs6vxFRMlD3aXsbM+aPCtod62gmK0BYWou9diGzmo56j8cIf/PziijDqQ=="
+        "requested": "[8.0.24, )",
+        "resolved": "8.0.24",
+        "contentHash": "1gnadp//+DoGJvV4AFdzPqYPxkypaWYjYMCr7KAacV0iadsHz1nU+rrkoxBCna4FCmeKH49CisEwa7g94/MbEg=="
       },
       "SixLabors.ImageSharp": {
         "type": "Direct",
@@ -47,9 +47,9 @@
       },
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.5, )",
-        "resolved": "10.0.5",
-        "contentHash": "XjJQDlI3ZcuhiVS5PELE+baWk4BWjxXWcojj4H7y+moVKcAxj8jgra6JQvGOKoWpA/TPDqULxTxwM/ZolErl+w=="
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
       },
       "ClosedXML.Parser": {
         "type": "Transitive",
@@ -93,33 +93,33 @@
     "net8.0/linux-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.5, )",
-        "resolved": "10.0.5",
-        "contentHash": "XjJQDlI3ZcuhiVS5PELE+baWk4BWjxXWcojj4H7y+moVKcAxj8jgra6JQvGOKoWpA/TPDqULxTxwM/ZolErl+w=="
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
       }
     },
     "net8.0/osx-arm64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.5, )",
-        "resolved": "10.0.5",
-        "contentHash": "XjJQDlI3ZcuhiVS5PELE+baWk4BWjxXWcojj4H7y+moVKcAxj8jgra6JQvGOKoWpA/TPDqULxTxwM/ZolErl+w=="
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
       }
     },
     "net8.0/osx-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.5, )",
-        "resolved": "10.0.5",
-        "contentHash": "XjJQDlI3ZcuhiVS5PELE+baWk4BWjxXWcojj4H7y+moVKcAxj8jgra6JQvGOKoWpA/TPDqULxTxwM/ZolErl+w=="
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
       }
     },
     "net8.0/win-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.5, )",
-        "resolved": "10.0.5",
-        "contentHash": "XjJQDlI3ZcuhiVS5PELE+baWk4BWjxXWcojj4H7y+moVKcAxj8jgra6JQvGOKoWpA/TPDqULxTxwM/ZolErl+w=="
+        "requested": "[10.0.6, )",
+        "resolved": "10.0.6",
+        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
       }
     }
   }
