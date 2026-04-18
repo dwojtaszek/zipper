@@ -293,11 +293,11 @@ internal class ChaosEngine
                 description = "Replaced page count integer with invalid value.";
                 break;
             case "opt-path":
-                result = this.ApplyOptPathCorruption(line);
+                result = ApplyOptPathCorruption(line);
                 description = "Corrupted the image path (Column 3).";
                 break;
             case "opt-batesid":
-                result = this.ApplyOptBatesIdCorruption(line);
+                result = ApplyOptBatesIdCorruption(line);
                 description = "Removed the Bates ID (Column 1).";
                 break;
             default:
@@ -478,7 +478,7 @@ internal class ChaosEngine
         return string.Concat(line.AsSpan(0, lastComma + 1), corruptedValue);
     }
 
-    private string ApplyOptPathCorruption(string line)
+    private static string ApplyOptPathCorruption(string line)
     {
         // OPT format: BatesID,Volume,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
         var parts = line.Split(',');
@@ -491,7 +491,7 @@ internal class ChaosEngine
         return line;
     }
 
-    private string ApplyOptBatesIdCorruption(string line)
+    private static string ApplyOptBatesIdCorruption(string line)
     {
         int firstComma = line.IndexOf(',');
         if (firstComma >= 0)

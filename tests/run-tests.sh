@@ -479,8 +479,7 @@ print_success "Unified workflow tests passed."
 
 # Test 12: Loadfile-only and Chaos Engine tests
 print_info "Running loadfile-only and Chaos Engine tests..."
-bash ./tests/run-e2e-loadfile.sh
-if [ $? -ne 0 ]; then
+if ! bash ./tests/run-e2e-loadfile.sh; then
   print_error "Loadfile-only tests failed."
   exit 1
 fi
