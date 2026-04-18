@@ -699,11 +699,40 @@ namespace Zipper
                 return false;
             }
 
+            if (parsed.ChaosMode)
+            {
+                var currentFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
+                if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
+                {
+                    Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
+                    return false;
+                }
+            }
+
             // Chaos amount/types require --chaos-mode
             if (!string.IsNullOrEmpty(parsed.ChaosAmount) && !parsed.ChaosMode)
             {
                 Console.Error.WriteLine("Error: --chaos-amount requires --chaos-mode.");
                 return false;
+            }
+
+            // Validate chaos amount format
+            if (!string.IsNullOrEmpty(parsed.ChaosAmount) && parsed.ChaosMode)
+            {
+                var amt = parsed.ChaosAmount.Trim();
+                if (amt.EndsWith('%'))
+                {
+                    if (!double.TryParse(amt.TrimEnd('%'), out _))
+                    {
+                        Console.Error.WriteLine($"Error: Invalid chaos amount percentage '{parsed.ChaosAmount}'.");
+                        return false;
+                    }
+                }
+                else if (!int.TryParse(amt, out _))
+                {
+                    Console.Error.WriteLine($"Error: Invalid chaos amount '{parsed.ChaosAmount}'. Must be an integer or percentage (e.g., 500 or 10%).");
+                    return false;
+                }
             }
 
             if (!string.IsNullOrEmpty(parsed.ChaosTypes) && !parsed.ChaosMode)

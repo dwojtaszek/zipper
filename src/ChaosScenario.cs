@@ -32,8 +32,8 @@ internal static class ChaosScenarios
             RequiredFormat: LoadFileFormat.Dat),
         new(
             Name: "broken-boundaries",
-            Description: "OPT document boundary corruption: flipped break flags and invalid page counts",
-            ChaosTypes: "opt-boundary,opt-pagecount",
+            Description: "OPT document boundary corruption: flipped break flags, invalid page counts, and invalid paths",
+            ChaosTypes: "opt-boundary,opt-pagecount,opt-path",
             DefaultAmount: "8%",
             RequiredFormat: LoadFileFormat.Opt),
         new(

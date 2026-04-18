@@ -60,13 +60,17 @@ internal static class LoadfileOnlyGenerator
                 }
             }
 
+            string chaosColDelim = request.LoadFileFormat == LoadFileFormat.Opt ? "," : request.ColumnDelimiter;
+            string chaosQuoteDelim = request.LoadFileFormat == LoadFileFormat.Opt ? string.Empty : request.QuoteDelimiter;
+
             chaosEngine = new ChaosEngine(
                 totalLines,
                 resolvedAmount,
                 resolvedTypes,
                 request.LoadFileFormat,
-                request.ColumnDelimiter,
-                request.QuoteDelimiter,
+                chaosColDelim,
+                chaosQuoteDelim,
+                eolString,
                 request.Seed);
         }
 

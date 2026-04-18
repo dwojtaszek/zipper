@@ -215,16 +215,16 @@ public class ChaosScenarioTests
 
             var json = await File.ReadAllTextAsync(jsonFiles[0]);
             using var doc = JsonDocument.Parse(json);
-            var chaosMode = doc.RootElement.GetProperty("ChaosMode");
-            Assert.True(chaosMode.GetProperty("Enabled").GetBoolean());
-            Assert.True(chaosMode.GetProperty("TotalAnomalies").GetInt32() > 0);
+            var chaosMode = doc.RootElement.GetProperty("chaosMode");
+            Assert.True(chaosMode.GetProperty("enabled").GetBoolean());
+            Assert.True(chaosMode.GetProperty("totalAnomalies").GetInt32() > 0);
 
             // Verify anomaly types match scenario (mixed-delimiters, quotes, columns)
-            var anomalies = chaosMode.GetProperty("InjectedAnomalies");
+            var anomalies = chaosMode.GetProperty("injectedAnomalies");
             var errorTypes = new HashSet<string>();
             foreach (var anomaly in anomalies.EnumerateArray())
             {
-                errorTypes.Add(anomaly.GetProperty("ErrorType").GetString()!);
+                errorTypes.Add(anomaly.GetProperty("errorType").GetString()!);
             }
 
             // Should only contain types from the relativity-import scenario
@@ -261,7 +261,7 @@ public class ChaosScenarioTests
 
             var json = await File.ReadAllTextAsync(jsonFiles[0]);
             using var doc = JsonDocument.Parse(json);
-            var totalAnomalies = doc.RootElement.GetProperty("ChaosMode").GetProperty("TotalAnomalies").GetInt32();
+            var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
 
             // 20% of 1001 lines (1000 records + 1 header) ≈ 200
             Assert.True(totalAnomalies >= 100, $"Expected at least 100 anomalies with 20% amount, got {totalAnomalies}");
@@ -293,7 +293,7 @@ public class ChaosScenarioTests
 
             var json = await File.ReadAllTextAsync(jsonFiles[0]);
             using var doc = JsonDocument.Parse(json);
-            var totalAnomalies = doc.RootElement.GetProperty("ChaosMode").GetProperty("TotalAnomalies").GetInt32();
+            var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
 
             // full-chaos at 10% of ~501 lines ≈ 50 anomalies
             Assert.True(totalAnomalies > 0, "full-chaos should inject anomalies");

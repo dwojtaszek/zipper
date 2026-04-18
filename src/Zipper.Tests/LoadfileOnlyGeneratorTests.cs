@@ -138,9 +138,9 @@ namespace Zipper
             var json = await File.ReadAllTextAsync(result.PropertiesFilePath);
             var doc = JsonDocument.Parse(json);
 
-            Assert.Equal("DAT (Metadata)", doc.RootElement.GetProperty("Format").GetString());
-            Assert.Equal(5, doc.RootElement.GetProperty("TotalRecords").GetInt64());
-            Assert.False(doc.RootElement.GetProperty("ChaosMode").GetProperty("Enabled").GetBoolean());
+            Assert.Equal("DAT (Metadata)", doc.RootElement.GetProperty("format").GetString());
+            Assert.Equal(5, doc.RootElement.GetProperty("totalRecords").GetInt64());
+            Assert.False(doc.RootElement.GetProperty("chaosMode").GetProperty("enabled").GetBoolean());
         }
 
         [Fact]
@@ -156,8 +156,8 @@ namespace Zipper
             var json = await File.ReadAllTextAsync(result.PropertiesFilePath);
             var doc = JsonDocument.Parse(json);
 
-            Assert.True(doc.RootElement.GetProperty("ChaosMode").GetProperty("Enabled").GetBoolean());
-            Assert.True(doc.RootElement.GetProperty("ChaosMode").GetProperty("TotalAnomalies").GetInt32() > 0);
+            Assert.True(doc.RootElement.GetProperty("chaosMode").GetProperty("enabled").GetBoolean());
+            Assert.True(doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32() > 0);
         }
 
         [Fact]
