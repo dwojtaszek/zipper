@@ -189,6 +189,8 @@ props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos_typed" -name "*_properties.json")
 [ -z "$props_file" ] && print_error "No _properties.json file found"
 
 # Verify only specified types appear
+grep -Eq '"errorType": "(quotes|columns)"' "$props_file" || \
+    print_error "Expected quotes or columns chaos anomalies in filtered output"
 if grep -q '"errorType": "encoding"' "$props_file"; then
     print_error "Found 'encoding' chaos type despite not being in --chaos-types filter"
 fi

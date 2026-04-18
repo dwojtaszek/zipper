@@ -51,6 +51,11 @@ internal class ChaosEngine
             throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine does not support load files larger than Int32.MaxValue lines.");
         }
 
+        if (totalLines <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine requires a positive totalLines count.");
+        }
+
         this.format = format;
         this.columnDelimiter = columnDelimiter;
         this.quoteDelimiter = quoteDelimiter;
@@ -198,17 +203,20 @@ internal class ChaosEngine
 
     private static HashSet<int> SelectTargetLines(int totalLines, int count, Random random)
     {
-        count = Math.Min(count, totalLines);
-        var allLines = Enumerable.Range(1, totalLines).ToArray();
+        count = Math.Clamp(count, 0, totalLines);
+        var selected = new HashSet<int>(count);
 
-        // Fisher-Yates partial shuffle
-        for (int i = 0; i < count; i++)
+        // Floyd's algorithm: exact unique sample without allocating all line numbers.
+        for (int j = totalLines - count + 1; j <= totalLines; j++)
         {
-            int j = random.Next(i, allLines.Length);
-            (allLines[i], allLines[j]) = (allLines[j], allLines[i]);
+            int candidate = random.Next(1, j + 1);
+            if (!selected.Add(candidate))
+            {
+                selected.Add(j);
+            }
         }
 
-        return new HashSet<int>(allLines.Take(count));
+        return selected;
     }
 
     private string ApplyDatChaos(int lineNumber, string line, string recordId, string chaosType)

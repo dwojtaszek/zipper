@@ -122,6 +122,18 @@ if errorlevel 1 (
     goto :cleanup
 )
 
+powershell -NoProfile -Command "$bad = Get-Content -Path '%opt_file%' | Where-Object { (($_.ToCharArray() | Where-Object { $_ -eq ',' }).Count) -ne 6 }; if ($bad) { exit 1 }"
+if errorlevel 1 (
+    echo [ ERROR ] OPT lines don't have 6 commas / 7 columns
+    goto :cleanup
+)
+
+powershell -NoProfile -Command "$first = Get-Content -Path '%opt_file%' -TotalCount 1; if (($first -split ',')[3] -ne 'Y') { exit 1 }"
+if errorlevel 1 (
+    echo [ ERROR ] OPT first line missing Y for doc-break
+    goto :cleanup
+)
+
 echo [ SUCCESS ] Test 2: OPT loadfile-only — PASSED
 set /a TESTS_PASSED+=1
 
@@ -185,6 +197,7 @@ if errorlevel 1 (
 set "props_file="
 for %%F in ("%TEST_OUTPUT_DIR%\dat_chaos_typed\*_properties.json") do set "props_file=%%F"
 
+findstr /c:"\"errorType\": \"quotes\"" /c:"\"errorType\": \"columns\"" "%props_file%" >nul || ( echo [ ERROR ] Expected quotes or columns & goto :cleanup )
 findstr /c:"\"errorType\": \"encoding\"" "%props_file%" >nul && ( echo [ ERROR ] Found 'encoding' type & goto :cleanup )
 findstr /c:"\"errorType\": \"eol\"" "%props_file%" >nul && ( echo [ ERROR ] Found 'eol' type & goto :cleanup )
 echo [ INFO ] Chaos type filtering OK

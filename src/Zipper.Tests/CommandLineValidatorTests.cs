@@ -688,7 +688,7 @@ namespace Zipper
         [InlineData("xml")]
         public void ValidateAndParseArguments_ChaosMode_WithUnsupportedFormat_ShouldReturnNull(string format)
         {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--loadfile-format", format, "--chaos-mode" };
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
 
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 

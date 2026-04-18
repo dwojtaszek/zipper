@@ -99,7 +99,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Requires `--loadfile-only`. Example: `char:\`
 
 **Chaos Engine Options:**
-- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`
+- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`. Only supported for dat and opt load file formats.
 - `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
 - `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`
 - `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
@@ -143,7 +143,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
 | `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
 | `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
-| `--chaos-mode` | false | flag | Enable Chaos Engine |
+| `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |

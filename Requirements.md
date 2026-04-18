@@ -547,7 +547,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` load file formats.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all types are enabled.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
