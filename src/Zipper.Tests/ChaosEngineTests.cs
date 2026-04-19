@@ -146,7 +146,31 @@ namespace Zipper
         }
 
         [Fact]
-        public void EncodingAnomaly_ReturnsInvalidBytes()
+        public void EncodingAnomaly_ReturnsNullUntilEncodingLineIsIntercepted()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 5,
+                chaosAmount: "1",
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            for (int i = 1; i <= 5; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    continue;
+                }
+
+                Assert.Null(engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8));
+            }
+        }
+
+        [Fact]
+        public void EncodingAnomaly_ReturnsInvalidBytesForInterceptedEncodingLine()
         {
             var engine = new ChaosEngine(
                 totalLines: 5,
@@ -453,11 +477,11 @@ namespace Zipper
         }
 
         [Fact]
-        public void ChaosAmount_HighPercentage_ExactDelivery()
+        public void ChaosAmount_IntMaxBoundary_SelectsExactCountWithinRange()
         {
             var engine = new ChaosEngine(
-                totalLines: 1000,
-                chaosAmount: "90%",
+                totalLines: int.MaxValue,
+                chaosAmount: "1",
                 chaosTypes: null,
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
@@ -465,16 +489,12 @@ namespace Zipper
                 eol: "\r\n",
                 seed: 42);
 
-            int interceptCount = 0;
-            for (int i = 1; i <= 1000; i++)
-            {
-                if (engine.ShouldIntercept(i))
-                {
-                    interceptCount++;
-                }
-            }
+            var targetLinesField = typeof(ChaosEngine).GetField("targetLines", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(targetLinesField);
 
-            Assert.Equal(900, interceptCount);
+            var targetLines = Assert.IsType<HashSet<int>>(targetLinesField!.GetValue(engine));
+            Assert.Single(targetLines);
+            Assert.InRange(targetLines.Single(), 1, int.MaxValue);
         }
     }
 }
