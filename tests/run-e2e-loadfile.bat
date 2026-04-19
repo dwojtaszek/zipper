@@ -141,7 +141,7 @@ REM ================================================================
 REM Test 3: Custom delimiters with strict prefix
 REM ================================================================
 echo [ INFO ] START: Custom delimiters
-%BINARY% --loadfile-only --count 20 --output-path "%TEST_OUTPUT_DIR%\dat_custom_delim" --col-delim "char:|" --quote-delim "char:\"" --eol LF
+%BINARY% --loadfile-only --count 20 --output-path "%TEST_OUTPUT_DIR%\dat_custom_delim" --col-delim "char:|" --quote-delim "char:'" --eol LF
 if errorlevel 1 (
     echo [ ERROR ] Test 3 failed: Custom delimiters execution
     goto :cleanup
@@ -180,6 +180,11 @@ if not defined props_file (
 findstr /c:"\"enabled\": true" "%props_file%" >nul || ( echo [ ERROR ] ChaosMode.Enabled not true & goto :cleanup )
 findstr /c:"\"totalAnomalies\"" "%props_file%" >nul || ( echo [ ERROR ] ChaosMode.TotalAnomalies missing & goto :cleanup )
 findstr /c:"\"injectedAnomalies\"" "%props_file%" >nul || ( echo [ ERROR ] Missing InjectedAnomalies array & goto :cleanup )
+powershell -NoProfile -Command "$json = Get-Content -Raw -Path '%props_file%' | ConvertFrom-Json; if ($json.chaosMode.totalAnomalies -le 0 -or @($json.chaosMode.injectedAnomalies).Count -le 0) { exit 1 }"
+if errorlevel 1 (
+    echo [ ERROR ] Chaos Engine did not inject any anomalies
+    goto :cleanup
+)
 
 echo [ SUCCESS ] Test 4: Chaos mode — PASSED
 set /a TESTS_PASSED+=1

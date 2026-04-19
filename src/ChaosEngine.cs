@@ -23,6 +23,7 @@ internal class ChaosEngine
     private readonly string eol;
     private readonly Random random;
     private readonly List<ChaosAnomaly> anomalies = new();
+    private readonly HashSet<int> encodingAnomalyLines = new();
     private int anomalyTypeIndex;
 
     /// <summary>
@@ -135,13 +136,8 @@ internal class ChaosEngine
     /// <returns>Invalid byte array, or null if encoding chaos is not enabled or not targeted.</returns>
     public byte[]? GetEncodingAnomaly(int lineNumber, int nextLineNumber, Encoding encoding)
     {
-        if (!this.enabledTypes.Contains("encoding"))
-        {
-            return null;
-        }
-
-        // Only inject between lines that are targeted
-        if (!this.targetLines.Contains(lineNumber))
+        // Only inject when the Chaos Engine selected the encoding anomaly for this line.
+        if (!this.encodingAnomalyLines.Remove(lineNumber))
         {
             return null;
         }
@@ -207,12 +203,12 @@ internal class ChaosEngine
         var selected = new HashSet<int>(count);
 
         // Floyd's algorithm: exact unique sample without allocating all line numbers.
-        for (int j = totalLines - count + 1; j <= totalLines; j++)
+        for (long j = (long)totalLines - count + 1; j <= totalLines; j++)
         {
-            int candidate = random.Next(1, j + 1);
+            int candidate = (int)random.NextInt64(1, j + 1);
             if (!selected.Add(candidate))
             {
-                selected.Add(j);
+                selected.Add((int)j);
             }
         }
 
@@ -251,7 +247,8 @@ internal class ChaosEngine
                 break;
             case "encoding":
                 // Encoding anomalies are handled separately via GetEncodingAnomaly()
-                // Just return the unmodified line and don't add to anomalies list
+                // Mark the line so invalid bytes are injected after this record boundary.
+                this.encodingAnomalyLines.Add(lineNumber);
                 return line;
             default:
                 description = $"Unknown chaos type: {chaosType}";

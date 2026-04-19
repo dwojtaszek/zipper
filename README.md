@@ -109,6 +109,69 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 **Utility Options:**
 - `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
 
+### `_properties.json` Audit File
+
+Loadfile-Only Mode writes a companion `_properties.json` audit file next to the generated Load File. The audit file records:
+
+- Load File identity (`fileName`, `format`, `totalRecords`)
+- Output properties (`properties.encoding`, `properties.lineEnding`)
+- Delimiter configuration (`properties.delimiters.column`, `quote`, `newline`, `multiValue`, `nestedValue`)
+- Chaos Engine output (`chaosMode.enabled`, `targetAmount`, `totalAnomalies`, `injectedAnomalies`)
+
+> [!IMPORTANT]
+> The audit file now uses `camelCase` JSON property names. This is a breaking schema change for external tooling that previously consumed PascalCase names such as `FileName`, `TotalRecords`, `ChaosMode.Enabled`, or `InjectedAnomalies[*].RecordID`.
+
+Common schema changes:
+
+- `FileName` -> `fileName`
+- `Format` -> `format`
+- `TotalRecords` -> `totalRecords`
+- `Properties` -> `properties`
+- `ChaosMode.Enabled` -> `chaosMode.enabled`
+- `ChaosMode.TargetAmount` -> `chaosMode.targetAmount`
+- `ChaosMode.TotalAnomalies` -> `chaosMode.totalAnomalies`
+- `ChaosMode.InjectedAnomalies[*].RecordID` -> `chaosMode.injectedAnomalies[*].recordID`
+
+Example:
+
+```json
+{
+  "fileName": "load.dat",
+  "format": "DAT (Metadata)",
+  "totalRecords": 200,
+  "properties": {
+    "encoding": "UTF-8",
+    "lineEnding": "LF",
+    "delimiters": {
+      "column": "ascii:20",
+      "quote": "ascii:254",
+      "newline": "ascii:174",
+      "multiValue": "none",
+      "nestedValue": "none"
+    }
+  },
+  "chaosMode": {
+    "enabled": true,
+    "targetAmount": "5%",
+    "totalAnomalies": 10,
+    "injectedAnomalies": [
+      {
+        "lineNumber": "14",
+        "recordID": "DOC00000014",
+        "column": "Column 3",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 3."
+      }
+    ]
+  }
+}
+```
+
+Compatibility checklist:
+
+- Repository unit tests and Loadfile-Only Mode E2E tests are aligned with the camelCase audit schema.
+- Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` must be updated before consuming this branch.
+
 ### Arguments Quick Reference
 
 | Argument | Default | Range/Values | Description |

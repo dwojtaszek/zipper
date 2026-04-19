@@ -161,6 +161,12 @@ namespace Zipper
             bool gotAnomaly = false;
             for (int i = 1; i <= 5; i++)
             {
+                if (!engine.ShouldIntercept(i))
+                {
+                    continue;
+                }
+
+                engine.Intercept(i, "Value1\u0014Value2", $"DOC{i:D8}");
                 var bytes = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
                 if (bytes != null)
                 {
