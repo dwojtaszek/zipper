@@ -32,3 +32,4 @@ jobs:
           automatic_review: true
           automatic_security_review: true
           review_depth: shallow
+          review_model: kimi-k2.6
