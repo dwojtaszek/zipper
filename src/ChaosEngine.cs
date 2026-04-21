@@ -495,6 +495,7 @@ internal class ChaosEngine
         {
             return line.Substring(firstComma); // Leaves empty Bates Number
         }
+
         return string.Empty;
     }
 
