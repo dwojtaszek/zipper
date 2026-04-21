@@ -154,7 +154,7 @@ if not defined dat_file (
     goto :cleanup
 )
 
-findstr "|" "%dat_file%" >nul || ( echo [ ERROR ] Pipe delimiter not found & goto :cleanup )
+findstr /L "|" "%dat_file%" >nul || ( echo [ ERROR ] Pipe delimiter not found & goto :cleanup )
 echo [ INFO ] Pipe delimiter found OK
 
 echo [ SUCCESS ] Test 3: Custom delimiters — PASSED
