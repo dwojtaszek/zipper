@@ -202,9 +202,19 @@ if errorlevel 1 (
 set "props_file="
 for %%F in ("%TEST_OUTPUT_DIR%\dat_chaos_typed\*_properties.json") do set "props_file=%%F"
 
-findstr /c:"\"errorType\": \"quotes\"" /c:"\"errorType\": \"columns\"" "%props_file%" >nul || ( echo [ ERROR ] Expected quotes or columns & goto :cleanup )
-findstr /c:"\"errorType\": \"encoding\"" "%props_file%" >nul && ( echo [ ERROR ] Found 'encoding' type & goto :cleanup )
-findstr /c:"\"errorType\": \"eol\"" "%props_file%" >nul && ( echo [ ERROR ] Found 'eol' type & goto :cleanup )
+if not defined props_file ( echo [ ERROR ] Properties file not found & goto :cleanup )
+if not exist "%props_file%" ( echo [ ERROR ] Properties file missing: %props_file% & goto :cleanup )
+
+REM Parse JSON and assert anomalies were actually injected
+powershell -NoProfile -Command ^
+    "$j = Get-Content '%props_file%' -Raw | ConvertFrom-Json; ^
+    if ($j.chaosMode.totalAnomalies -le 0) { Write-Error 'totalAnomalies is 0'; exit 1 }; ^
+    if (-not $j.chaosMode.injectedAnomalies -or $j.chaosMode.injectedAnomalies.Count -eq 0) { Write-Error 'injectedAnomalies is empty'; exit 1 }; ^
+    $types = $j.chaosMode.injectedAnomalies | ForEach-Object { $_.errorType } | Sort-Object -Unique; ^
+    if (-not ($types -contains 'quotes' -or $types -contains 'columns')) { Write-Error ('Expected quotes or columns, got: ' + ($types -join ',')); exit 1 }; ^
+    if ($types -contains 'encoding') { Write-Error 'Found forbidden type: encoding'; exit 1 }; ^
+    if ($types -contains 'eol') { Write-Error 'Found forbidden type: eol'; exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] Chaos type filter assertion failed & goto :cleanup )
 echo [ INFO ] Chaos type filtering OK
 
 echo [ SUCCESS ] Test 5: Chaos type filter — PASSED

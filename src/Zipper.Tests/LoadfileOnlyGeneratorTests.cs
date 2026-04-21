@@ -122,7 +122,7 @@ namespace Zipper
             var parts = firstLine.Split(',');
 
             Assert.Equal(7, parts.Length);
-            Assert.StartsWith("IMG", parts[0]); // BatesID
+            Assert.StartsWith("IMG", parts[0]); // Bates Number
             Assert.Equal("VOL001", parts[1]); // Volume
             Assert.Contains("IMAGES", parts[2]); // ImagePath
             Assert.Equal("Y", parts[3]); // DocBreak

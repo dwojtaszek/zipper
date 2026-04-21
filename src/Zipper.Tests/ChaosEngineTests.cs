@@ -425,7 +425,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void OptBatesId_RemovesBatesId()
+        public void OptBatesId_RemovesBatesNumber()
         {
             var engine = new ChaosEngine(
                 totalLines: 2,

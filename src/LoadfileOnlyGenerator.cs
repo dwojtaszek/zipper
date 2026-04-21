@@ -26,9 +26,9 @@ internal static class LoadfileOnlyGenerator
 
         var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
         var eolString = GetEolString(request.EndOfLine);
-        int totalLines = request.LoadFileFormat == LoadFileFormat.Opt
-            ? (int)request.FileCount // OPT has no header
-            : (int)request.FileCount + 1; // DAT: +1 for header
+        long totalLines = request.LoadFileFormat == LoadFileFormat.Opt
+            ? request.FileCount // OPT has no header
+            : request.FileCount + 1; // DAT: +1 for header
 
         // Initialize chaos engine if enabled
         ChaosEngine? chaosEngine = null;
@@ -207,7 +207,7 @@ internal static class LoadfileOnlyGenerator
         Random random)
     {
         // Opticon 7-column comma-separated format:
-        // BatesID,Volume,ImagePath,DocBreak(Y/blank),BoxBreak,FolderBreak,PageCount
+        // BatesNumber,Volume,ImagePath,DocBreak(Y/blank),BoxBreak,FolderBreak,PageCount
         var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var buffer = new StringBuilder();
 

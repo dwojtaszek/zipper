@@ -294,8 +294,8 @@ internal class ChaosEngine
                 description = "Corrupted the image path (Column 3).";
                 break;
             case "opt-batesid":
-                result = ApplyOptBatesIdCorruption(line);
-                description = "Removed the Bates ID (Column 1).";
+                result = ApplyOptBatesNumberCorruption(line);
+                description = "Removed the Bates Number (Column 1).";
                 break;
             default:
                 description = $"Unknown OPT chaos type: {chaosType}";
@@ -477,7 +477,7 @@ internal class ChaosEngine
 
     private static string ApplyOptPathCorruption(string line)
     {
-        // OPT format: BatesID,Volume,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
+        // OPT format: BatesNumber,Volume,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
         var parts = line.Split(',');
         if (parts.Length >= 3)
         {
@@ -488,14 +488,13 @@ internal class ChaosEngine
         return line;
     }
 
-    private static string ApplyOptBatesIdCorruption(string line)
+    private static string ApplyOptBatesNumberCorruption(string line)
     {
         int firstComma = line.IndexOf(',');
         if (firstComma >= 0)
         {
-            return line.Substring(firstComma); // Leaves empty Bates ID
+            return line.Substring(firstComma); // Leaves empty Bates Number
         }
-
         return string.Empty;
     }
 

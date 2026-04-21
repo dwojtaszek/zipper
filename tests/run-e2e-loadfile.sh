@@ -119,7 +119,7 @@ done < "$opt_file"
 [ "$bad_lines" -ne 0 ] && print_error "$bad_lines OPT lines don't have 6 commas (7 columns)"
 print_info "All OPT lines have correct 7-column format"
 
-# Verify first line starts with BatesID and has Y in doc-break position
+# Verify first line starts with Bates Number and has Y in doc-break position
 first_line=$(head -n 1 "$opt_file")
 echo "$first_line" | grep -q "^IMG" || print_error "OPT first line doesn't start with IMG prefix"
 echo "$first_line" | cut -d',' -f4 | grep -q "Y" || print_error "OPT first line missing Y for doc-break"
