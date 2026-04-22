@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/load-file-formats"
@@ -35,7 +38,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 print_info "Test Case 1: OPT (tab-delimited) format"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test1" \
@@ -76,7 +79,7 @@ print_success "Test Case 1: OPT format passed"
 
 print_info "Test Case 2: CSV format"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test2" \
@@ -118,7 +121,7 @@ print_success "Test Case 2: CSV format passed"
 
 print_info "Test Case 3: XML format"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test3" \
@@ -165,7 +168,7 @@ print_success "Test Case 3: XML format passed"
 
 print_info "Test Case 4: CONCORDANCE format"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test4" \
@@ -200,7 +203,7 @@ print_success "Test Case 4: CONCORDANCE format passed"
 
 print_info "Test Case 5: Default DAT format (with caret delimiter)"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test5" \
@@ -237,7 +240,7 @@ print_success "Test Case 5: Default DAT format passed"
 print_info "Test Case 6: Load file formats with Bates numbering"
 
 for format in "dat" "opt" "csv" "xml" "concordance"; do
-  dotnet run --project "$PROJECT" -- \
+  zipper \
     --type pdf \
     --count 3 \
     --output-path "$TEST_OUTPUT_DIR/test6_$format" \
@@ -273,7 +276,7 @@ done
 
 print_info "Test Case 7: Custom delimiters (pipe and caret)"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test7" \
@@ -305,7 +308,7 @@ print_success "Test Case 7: Custom delimiters passed"
 
 print_info "Test Case 8: ASCII code delimiters (20, 254)"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test8" \
@@ -337,7 +340,7 @@ print_success "Test Case 8: ASCII code delimiters passed"
 
 print_info "Test Case 9: Delimiter override (CSV preset with pipe column delimiter)"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test9" \

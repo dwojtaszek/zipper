@@ -13,8 +13,17 @@ echo
 # Set test environment
 TEST_DIR="/tmp/zipper-eml-test-$$"
 REPO_ROOT="$(pwd)"
-ZIPPER_CMD="dotnet run --project $REPO_ROOT/src/Zipper.csproj --"
 FILE_COUNT=20 # Use a consistent number of files for most tests
+
+# Shared binary resolver: builds once, exposes the `zipper` function.
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+# Keep ZIPPER_CMD available for any eval/exec call sites that reference it.
+if [ -n "${_ZIPPER_BIN:-}" ] && [ -x "${_ZIPPER_BIN}" ]; then
+    ZIPPER_CMD="${_ZIPPER_BIN}"
+else
+    ZIPPER_CMD="dotnet run --no-build -c Release --project $REPO_ROOT/src/Zipper.csproj --"
+fi
 
 # Clean up function
 cleanup() {
@@ -26,13 +35,6 @@ cleanup() {
 
 # Set trap for cleanup on exit
 trap cleanup EXIT
-
-# Build the project first
-echo "Building Zipper project..."
-if ! dotnet build src/Zipper.csproj > /dev/null 2>&1; then
-    echo "✗ Build failed. Exiting."
-    exit 1
-fi
 
 echo "Creating test directory: $TEST_DIR"
 mkdir -p "$TEST_DIR"

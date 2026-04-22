@@ -116,6 +116,9 @@ REM --- Test Cases ---
 
 call :print_info "Starting test suite..."
 
+REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
+
 REM Create a temporary directory for test output.
 if exist "%TEST_OUTPUT_DIR%" (
     rmdir /s /q "%TEST_OUTPUT_DIR%"
@@ -126,7 +129,7 @@ mkdir "%TEST_OUTPUT_DIR%"
     set "test_name=%~1"
     shift
     call :print_info "START: %test_name% at %DATE% %TIME%"
-    dotnet run --project "%PROJECT%" -- %*
+    %ZIPPER_CMD% %*
     if errorlevel 1 (
         call :print_error "%test_name% failed with exit code %errorlevel%"
     )

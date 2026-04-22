@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/office-formats"
@@ -35,7 +38,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 print_info "Test Case 1: DOCX file generation"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type docx \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test1" \
@@ -69,7 +72,7 @@ print_success "Test Case 1: DOCX generation passed"
 
 print_info "Test Case 2: XLSX file generation"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type xlsx \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test2" \
@@ -103,7 +106,7 @@ print_success "Test Case 2: XLSX generation passed"
 
 print_info "Test Case 3: DOCX with metadata"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type docx \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test3" \
@@ -136,7 +139,7 @@ print_success "Test Case 3: DOCX with metadata passed"
 
 print_info "Test Case 4: DOCX with Bates numbering"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type docx \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test4" \
@@ -165,7 +168,7 @@ print_success "Test Case 4: DOCX with Bates numbering passed"
 print_info "Test Case 5: XLSX with different load file formats"
 
 for format in "dat" "opt" "csv" "xml"; do
-  dotnet run --project "$PROJECT" -- \
+  zipper \
     --type xlsx \
     --count 3 \
     --output-path "$TEST_OUTPUT_DIR/test5_$format" \
@@ -197,7 +200,7 @@ done
 
 print_info "Test Case 6: Verify generated DOCX files are valid ZIP archives"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type docx \
   --count 3 \
   --output-path "$TEST_OUTPUT_DIR/test6"

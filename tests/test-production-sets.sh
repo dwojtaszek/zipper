@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/production-sets"
@@ -35,7 +38,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 print_info "Test Case 1: Basic production set generation"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --production-set \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test1" \
@@ -78,7 +81,7 @@ print_success "Test Case 1: Basic production set passed"
 
 print_info "Test Case 2: Production set with --production-zip"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --production-set \
   --production-zip \
   --count 5 \

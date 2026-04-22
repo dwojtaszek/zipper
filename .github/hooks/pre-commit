@@ -1,0 +1,84 @@
+#!/bin/bash
+# Pre-commit hook — format + unit tests on the STAGED snapshot.
+# Installs to: .git/hooks/pre-commit
+#
+# To bypass (not recommended): git commit --no-verify
+
+set -u
+
+# ──────────────────────────────────────────────────
+# 0. Short-circuit if only docs/markdown changed
+# ──────────────────────────────────────────────────
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+NON_DOC=$(printf '%s\n' "$STAGED" | grep -v -E '\.(md|txt)$' | grep -v '^docs/' || true)
+if [ -z "$NON_DOC" ]; then
+    echo "✓ Pre-commit: docs-only change, skipping build/test."
+    exit 0
+fi
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "⚠ dotnet not found; skipping pre-commit checks."
+    exit 0
+fi
+
+# ──────────────────────────────────────────────────
+# 1. Stash unstaged changes so we test the exact commit
+# ──────────────────────────────────────────────────
+STASH_REF=""
+if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    STASH_MSG="pre-commit-$(date +%s)-$$"
+    if git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" >/dev/null 2>&1; then
+        STASH_REF=$(git stash list --format='%gd %gs' | grep -F "$STASH_MSG" | awk '{print $1}' | head -1)
+    fi
+fi
+
+cleanup() {
+    local rc=$?
+    if [ -n "$STASH_REF" ]; then
+        git stash pop --quiet "$STASH_REF" >/dev/null 2>&1 || \
+            echo "⚠ Could not restore stash $STASH_REF — run 'git stash list' to recover." >&2
+    fi
+    exit "$rc"
+}
+trap cleanup EXIT INT TERM
+
+# ──────────────────────────────────────────────────
+# 2. dotnet format (auto-fix)
+# ──────────────────────────────────────────────────
+echo "▶ Running dotnet format..."
+if ! dotnet format --verbosity quiet; then
+    echo "❌ dotnet format failed" >&2
+    exit 1
+fi
+
+if ! git diff --quiet; then
+    echo "❌ Code formatting changes required. Files have been auto-formatted." >&2
+    echo "   Please review and git add them, then commit again." >&2
+    git --no-pager diff --stat
+    exit 1
+fi
+
+# ──────────────────────────────────────────────────
+# 3. Unit tests
+# ──────────────────────────────────────────────────
+echo "▶ Running unit tests..."
+if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet"; then
+    echo "❌ Unit tests failed. Commit aborted." >&2
+    echo "   Run 'dotnet test' for full output." >&2
+    echo "   To bypass: git commit --no-verify" >&2
+    exit 1
+fi
+
+# ──────────────────────────────────────────────────
+# 4. Record success timestamp (so pre-push can skip if recent)
+# ──────────────────────────────────────────────────
+HEAD_HASH=$(git rev-parse HEAD 2>/dev/null || echo "")
+mkdir -p .git/zipper-hooks
+printf 'timestamp=%s\nhead=%s\n' "$(date +%s)" "$HEAD_HASH" > .git/zipper-hooks/pre-commit.ok
+
+echo "✓ Pre-commit: format + unit tests passed"
+exit 0

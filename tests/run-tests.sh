@@ -311,12 +311,16 @@ print_info "Starting test suite..."
 rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
 
+# Source the shared binary-resolution helper so all 17 inline cases share one Release build.
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # Function to run a single test case with logging
 function run_test_case() {
     local test_name="$1"
     shift
     print_info "START: $test_name at $(date)"
-    dotnet run --project "$PROJECT" -- "$@"
+    zipper "$@"
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
         print_error "$test_name failed with exit code $exit_code"

@@ -12,8 +12,12 @@ echo.
 REM Set test environment
 set "TEST_DIR=%TEMP%\zipper-eml-test-%RANDOM%"
 set "REPO_ROOT=%~dp0.."
-set "ZIPPER_CMD=dotnet run --project "%REPO_ROOT%\src\Zipper.csproj" --"
 set "FILE_COUNT=20"
+
+REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
+pushd "%REPO_ROOT%"
+call "%~dp0_zipper-cli.bat"
+popd
 
 REM Clean up function
 :cleanup
@@ -23,11 +27,9 @@ if exist "%TEST_DIR%" (
 )
 goto :eof
 
-REM Build the project first
-echo Building Zipper project...
-dotnet build "%REPO_ROOT%\src\Zipper.csproj" > nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo ✗ Build failed. Exiting.
+REM Ensure the project is built (helper above already handled this).
+if "%ZIPPER_CMD%"=="" (
+    echo ✗ Zipper binary not resolved. Exiting.
     exit /b 1
 )
 

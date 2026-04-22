@@ -1,4 +1,7 @@
 @echo off
+
+REM Resolve the Zipper binary once. Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
 :: --- Test Configuration ---
@@ -18,7 +21,7 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 echo [ INFO ] Test Case 1: Basic production set generation
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --production-set ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test1" ^
@@ -65,7 +68,7 @@ echo [ SUCCESS ] Test Case 1: Basic production set passed
 
 echo [ INFO ] Test Case 2: Production set with --production-zip
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --production-set ^
   --production-zip ^
   --count 5 ^

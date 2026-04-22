@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/multipage-tiff"
@@ -41,7 +44,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 print_info "Test Case 1: Single page TIFF (default behavior)"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test1"
@@ -69,7 +72,7 @@ print_success "Test Case 1: Single page TIFF passed"
 
 print_info "Test Case 2: TIFF with page range 1-20"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test2" \
@@ -112,7 +115,7 @@ print_success "Test Case 2: TIFF page range 1-20 passed"
 
 print_info "Test Case 3: TIFF with page range 5-10"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test3" \
@@ -149,7 +152,7 @@ print_success "Test Case 3: TIFF page range 5-10 passed"
 
 print_info "Test Case 4: TIFF with page range and Bates numbering"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test4" \
@@ -205,13 +208,13 @@ print_success "Test Case 4: TIFF with page range and Bates numbering passed"
 print_info "Test Case 5: Verify deterministic page counts for same file index"
 
 # Generate twice with same parameters
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 3 \
   --output-path "$TEST_OUTPUT_DIR/test5a" \
   --tiff-pages "1-50"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 3 \
   --output-path "$TEST_OUTPUT_DIR/test5b" \
