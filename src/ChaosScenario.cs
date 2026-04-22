@@ -86,13 +86,13 @@ internal static class ChaosScenarios
     {
         Console.WriteLine("Available Chaos Scenarios:");
         Console.WriteLine();
-        Console.WriteLine($"  {"Name",-25} {"Format",-8} {"Default",-10} Description");
-        Console.WriteLine($"  {new string('-', 25)} {new string('-', 8)} {new string('-', 10)} {new string('-', 50)}");
+        Console.WriteLine($"  {"Name",-28} {"Format",-8} {"Default",-10} Description");
+        Console.WriteLine($"  {new string('-', 28)} {new string('-', 8)} {new string('-', 10)} {new string('-', 50)}");
 
         foreach (var scenario in ScenariosArray)
         {
             var format = scenario.RequiredFormat?.ToString() ?? "Any";
-            Console.WriteLine($"  {scenario.Name,-25} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
+            Console.WriteLine($"  {scenario.Name,-28} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
         }
 
         Console.WriteLine();

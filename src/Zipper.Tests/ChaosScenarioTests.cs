@@ -229,8 +229,8 @@ public class ChaosScenarioTests
 
             // Should only contain types from the structured-import-failures scenario
             Assert.Subset(
-                new HashSet<string> { "mixed-delimiters", "quotes", "columns" },
-                errorTypes);
+                errorTypes,
+                new HashSet<string> { "mixed-delimiters", "quotes", "columns" });
         }
         finally
         {

@@ -380,9 +380,9 @@ Based on the above research, the following requirements apply to the Zipper Load
 | Profile Name | Column Count | Description |
 |-------------|--------------|-------------|
 | `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
-| `standard` | 25 | Common e-discovery fields |
-| `litigation` | 50 | Full litigation support |
-| `full` | 150 | Maximum field coverage |
+| `standard` | 24 | Common e-discovery fields |
+| `litigation` | 48 | Full litigation support |
+| `full` | 138 | Maximum field coverage |
 
 - **REQ-067**: Custom profile files shall follow a JSON schema with the following structure:
 

@@ -53,7 +53,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 ### Arguments
 
 **Required Arguments:**
-- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required unless `--loadfile-only`)** The type of file to generate. Defaults to `pdf` when `--loadfile-only` is used
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required unless `--loadfile-only` or `--production-set`)** The type of Native File to generate. Defaults to `pdf` when optional
 - `--count <number>`: **(Required)** The total number of files/records to generate
 - `--output-path <directory>`: **(Required)** The directory where the output files will be saved. The directory will be created if it doesn't exist
 
@@ -254,9 +254,9 @@ Column profiles allow you to generate rich, configurable metadata with up to 200
 | Profile | Columns | Description |
 |---------|---------|-------------|
 | `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
-| `standard` | 25 | Common e-discovery fields including dates, people, classification |
-| `litigation` | 50 | Full litigation support with privilege, responsiveness, hashes |
-| `full` | 150 | Maximum coverage with custom tags, issues, and notes |
+| `standard` | 24 | Common e-discovery fields including dates, people, classification |
+| `litigation` | 48 | Full litigation support with privilege, responsiveness, hashes |
+| `full` | 138 | Maximum coverage with custom tags, issues, and notes |
 
 Column types supported:
 - `identifier`: Sequential document IDs (DOC00000001)
@@ -353,10 +353,10 @@ zipper --type tiff --count 2500 --output-path ./test_tiff_bates --tiff-pages "5-
 # Generate emails with XML Load File format
 zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format edrm-xml --with-metadata --with-text
 
-# Generate PDFs with the standard column profile (25 metadata columns)
+# Generate PDFs with the standard column profile (24 metadata columns)
 zipper --type pdf --count 1000 --output-path ./test_profiles --column-profile standard
 
-# Generate with litigation profile (50 columns) for complex e-discovery workflows
+# Generate with litigation profile (48 columns) for complex e-discovery workflows
 zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation
 
 # Generate reproducible output using a seed

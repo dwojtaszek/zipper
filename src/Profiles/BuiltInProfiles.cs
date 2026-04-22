@@ -39,7 +39,7 @@ public static class BuiltInProfiles
     };
 
     /// <summary>
-    /// Gets the standard profile (25 columns).
+    /// Gets the standard profile (24 columns).
     /// </summary>
     public static ColumnProfile Standard { get; } = new()
     {
@@ -99,7 +99,7 @@ public static class BuiltInProfiles
     };
 
     /// <summary>
-    /// Gets the litigation profile (50 columns).
+    /// Gets the litigation profile (48 columns).
     /// </summary>
     public static ColumnProfile Litigation { get; } = new()
     {
@@ -128,7 +128,7 @@ public static class BuiltInProfiles
     };
 
     /// <summary>
-    /// Gets the full profile (150 columns).
+    /// Gets the full profile (138 columns).
     /// </summary>
     public static ColumnProfile Full { get; } = new()
     {
