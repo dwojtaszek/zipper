@@ -19,8 +19,8 @@ internal static class ChaosScenarios
     private static readonly ChaosScenarioDefinition[] ScenariosArray =
     {
         new(
-            Name: "relativity-import",
-            Description: "Common Relativity ingestion failures: delimiter mismatches, unclosed quotes, column count errors",
+            Name: "structured-import-failures",
+            Description: "Common platform ingestion failures: delimiter mismatches, unclosed quotes, column count errors",
             ChaosTypes: "mixed-delimiters,quotes,columns",
             DefaultAmount: "3%",
             RequiredFormat: LoadFileFormat.Dat),
@@ -49,8 +49,8 @@ internal static class ChaosScenarios
             DefaultAmount: "10%",
             RequiredFormat: null),
         new(
-            Name: "nuix-export",
-            Description: "NUIX-to-platform transfer errors: mixed delimiters, encoding issues, unclosed quotes",
+            Name: "transfer-encoding-failures",
+            Description: "Cross-platform transfer errors: mixed delimiters, encoding issues, unclosed quotes",
             ChaosTypes: "mixed-delimiters,encoding,quotes",
             DefaultAmount: "4%",
             RequiredFormat: LoadFileFormat.Dat),

@@ -169,7 +169,7 @@ namespace Zipper
         public string? ChaosTypes { get; set; }
 
         /// <summary>
-        /// Gets or sets the named chaos scenario (e.g., "relativity-import", "encoding-nightmare").
+        /// Gets or sets the named chaos scenario (e.g., "structured-import-failures", "encoding-nightmare").
         /// When set, resolves to predefined ChaosTypes and default ChaosAmount.
         /// </summary>
         public string? ChaosScenario { get; set; }

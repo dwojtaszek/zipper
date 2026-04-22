@@ -30,18 +30,18 @@ public class ChaosScenarioTests
     [Fact]
     public void GetByName_ValidName_ReturnsScenario()
     {
-        var scenario = ChaosScenarios.GetByName("relativity-import");
+        var scenario = ChaosScenarios.GetByName("structured-import-failures");
         Assert.NotNull(scenario);
-        Assert.Equal("relativity-import", scenario.Name);
+        Assert.Equal("structured-import-failures", scenario.Name);
         Assert.Contains("mixed-delimiters", scenario.ChaosTypes);
     }
 
     [Fact]
     public void GetByName_CaseInsensitive_ReturnsScenario()
     {
-        var scenario = ChaosScenarios.GetByName("RELATIVITY-IMPORT");
+        var scenario = ChaosScenarios.GetByName("STRUCTURED-IMPORT-FAILURES");
         Assert.NotNull(scenario);
-        Assert.Equal("relativity-import", scenario.Name);
+        Assert.Equal("structured-import-failures", scenario.Name);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class ChaosScenarioTests
         var (exitCode, stdout, _) = await RunWithCapture(new[] { "--chaos-list" });
         Assert.Equal(0, exitCode);
         Assert.Contains("Available Chaos Scenarios", stdout);
-        Assert.Contains("relativity-import", stdout);
+        Assert.Contains("structured-import-failures", stdout);
         Assert.Contains("full-chaos", stdout);
     }
 
@@ -106,7 +106,7 @@ public class ChaosScenarioTests
             var (exitCode, _, stderr) = await RunWithCapture(new[]
             {
                 "--loadfile-only", "--count", "100", "--output-path", tempPath,
-                "--chaos-scenario", "relativity-import",
+                "--chaos-scenario", "structured-import-failures",
             });
             Assert.Equal(1, exitCode);
             Assert.Contains("--chaos-scenario requires --chaos-mode", stderr);
@@ -129,7 +129,7 @@ public class ChaosScenarioTests
             var (exitCode, _, stderr) = await RunWithCapture(new[]
             {
                 "--loadfile-only", "--count", "100", "--output-path", tempPath,
-                "--chaos-mode", "--chaos-scenario", "relativity-import",
+                "--chaos-mode", "--chaos-scenario", "structured-import-failures",
                 "--chaos-types", "quotes",
             });
             Assert.Equal(1, exitCode);
@@ -200,10 +200,10 @@ public class ChaosScenarioTests
             var (exitCode, stdout, _) = await RunWithCapture(new[]
             {
                 "--loadfile-only", "--count", "1000", "--output-path", tempPath,
-                "--chaos-mode", "--chaos-scenario", "relativity-import", "--seed", "42",
+                "--chaos-mode", "--chaos-scenario", "structured-import-failures", "--seed", "42",
             });
             Assert.Equal(0, exitCode);
-            Assert.Contains("Chaos Scenario: relativity-import", stdout);
+            Assert.Contains("Chaos Scenario: structured-import-failures", stdout);
 
             // Verify load file was created
             var datFiles = Directory.GetFiles(tempPath, "*.dat");
@@ -227,7 +227,7 @@ public class ChaosScenarioTests
                 errorTypes.Add(anomaly.GetProperty("errorType").GetString()!);
             }
 
-            // Should only contain types from the relativity-import scenario
+            // Should only contain types from the structured-import-failures scenario
             Assert.Subset(
                 new HashSet<string> { "mixed-delimiters", "quotes", "columns" },
                 errorTypes);
@@ -250,7 +250,7 @@ public class ChaosScenarioTests
             var (exitCode, _, _) = await RunWithCapture(new[]
             {
                 "--loadfile-only", "--count", "1000", "--output-path", tempPath,
-                "--chaos-mode", "--chaos-scenario", "relativity-import",
+                "--chaos-mode", "--chaos-scenario", "structured-import-failures",
                 "--chaos-amount", "20%", "--seed", "42",
             });
             Assert.Equal(0, exitCode);
