@@ -47,9 +47,9 @@
       },
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
       },
       "ClosedXML.Parser": {
         "type": "Transitive",
@@ -93,33 +93,33 @@
     "net8.0/linux-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
       }
     },
     "net8.0/osx-arm64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
       }
     },
     "net8.0/osx-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
       }
     },
     "net8.0/win-x64": {
       "System.Text.Encoding.CodePages": {
         "type": "Direct",
-        "requested": "[10.0.6, )",
-        "resolved": "10.0.6",
-        "contentHash": "zggg/i2lfEvFsbiIdY5jeFfQshHZLscmbnaUGiqtjg4iwKcaAbNV/Htz3R6m9IQXKq0VoH1sUuU+VWxdnPHndg=="
+        "requested": "[10.0.7, )",
+        "resolved": "10.0.7",
+        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
       }
     }
   }
