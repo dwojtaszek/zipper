@@ -1,0 +1,160 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Opt-in to Node.js 24 for JS-based actions that still default to Node 20.
+  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  docs-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      only_docs: ${{ steps.check.outputs.only_docs }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+
+          # Step 1: fetch the list of changed files; propagate a genuine
+          # `git diff` failure (missing SHA, corrupt object, etc.) so we
+          # never silently declare a failed diff as "docs-only".
+          files=$(git diff --name-only "$base" "$head")
+
+          if [[ -z "$files" ]]; then
+            echo "No files changed between $base and $head; treating as non-docs to be safe."
+            echo "only_docs=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Step 2: every changed file must match a docs pattern to qualify
+          # as docs-only. Count matches explicitly (no `|| true` masking).
+          total=$(printf '%s\n' "$files" | grep -c . || true)
+          docs=$(printf '%s\n' "$files" \
+              | grep -c -E '(^|/)(docs/|CHANGELOG\.md$|.*\.(md|txt)$)' || true)
+
+          if [[ "$total" -gt 0 && "$docs" -eq "$total" ]]; then
+            echo "Docs-only PR detected ($total files, all docs); skipping build and tests."
+            echo "only_docs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Non-docs change detected ($docs of $total files are docs); running full PR pipeline."
+            echo "only_docs=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    needs: docs-only
+    if: needs.docs-only.outputs.only_docs != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Restore (locked)
+        run: dotnet restore zipper.sln --locked-mode
+      - name: Lint code style
+        run: dotnet format --verify-no-changes --no-restore
+
+  build-and-test:
+    needs: [docs-only, lint]
+    if: needs.docs-only.outputs.only_docs != 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            coverage: true
+          - os: windows-latest
+            platform: win-x64
+            coverage: false
+          - os: macos-latest
+            platform: osx-arm64
+            coverage: false
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Restore (locked)
+        run: dotnet restore zipper.sln --locked-mode
+
+      - name: Build (Release, includes tests)
+        run: dotnet build zipper.sln -c Release --no-restore
+
+      # Unit tests + coverage on Linux only (single pass with the coverage collector).
+      - name: Unit tests + coverage (Linux)
+        if: matrix.coverage == true
+        run: |
+          dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+            -c Release --no-build \
+            --logger "console;verbosity=normal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults
+
+      - name: Cache reportgenerator tool (Linux)
+        if: matrix.coverage == true
+        uses: actions/cache@v5.0.5
+        with:
+          # dotnet tool restore installs into the per-repo tool home.
+          path: .dotnet-tools
+          key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
+          restore-keys: ${{ runner.os }}-reportgen-
+
+      - name: Coverage report + 80% gate (Linux)
+        if: matrix.coverage == true
+        env:
+          DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
+        run: |
+          dotnet tool restore
+          dotnet reportgenerator \
+            -reports:TestResults/*/coverage.cobertura.xml \
+            -targetdir:TestResults/coverage-report \
+            -reporttypes:"Html;TextSummary"
+          cat TestResults/coverage-report/Summary.txt
+          COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
+            echo "ERROR: coverage ${COVERAGE}% < 80%"
+            exit 1
+          }
+
+      - name: Unit tests (non-Linux)
+        if: matrix.coverage != true
+        run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Run basic E2E smoke suite
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            ./tests/run-e2e-basic.bat
+          else
+            bash ./tests/run-e2e-basic.sh
+          fi

@@ -62,10 +62,10 @@ function verify_output() {
   local zip_file=$(find "$test_dir" -name "*.zip")
   local dat_file=$(find "$test_dir" -name "*.dat")
 
-  if [ -z "$zip_file" ]; then
+  if [[ -z "$zip_file" ]]; then
     print_error "No .zip file found in $test_dir"
   fi
-  if [ -z "$dat_file" ]; then
+  if [[ -z "$dat_file" ]]; then
     print_error "No .dat file found in $test_dir"
   fi
 
@@ -74,9 +74,9 @@ function verify_output() {
   get_zip_listing "$zip_file" zip_listing
 
   local dat_content_cmd="cat"
-  if [ "$encoding" = "UTF-16" ]; then
+  if [[ "$encoding" = "UTF-16" ]]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
-  elif [ "$encoding" = "ANSI" ]; then
+  elif [[ "$encoding" = "ANSI" ]]; then
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
@@ -87,7 +87,7 @@ function verify_output() {
   local line_count=$(echo "$dat_content" | wc -l)
   line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
   local expected_line_count=$((expected_count + 1))
-  if [ "$line_count" -ne "$expected_line_count" ]; then
+  if [[ "$line_count" -ne "$expected_line_count" ]]; then
     print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
   fi
   print_info ".dat file line count is correct ($line_count)."
@@ -104,22 +104,22 @@ function verify_output() {
 
   # Verify file count in zip (using cached zip listing)
   local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
-  if [ "$zip_file_count" -ne "$expected_count" ]; then
+  if [[ "$zip_file_count" -ne "$expected_count" ]]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
   fi
   print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 
   # Verify text file count if required (using cached zip listing)
-  if [ "$check_text" = "true" ]; then
+  if [[ "$check_text" = "true" ]]; then
     local txt_count=0
-    if [ "$file_type" = "eml" ]; then
+    if [[ "$file_type" = "eml" ]]; then
       # For EML files, only count text files that don't have "attachment" in the name
       txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       # For other file types, count all text files
       txt_count=$(echo "$zip_listing" | grep -c "\.txt")
     fi
-    if [ "$txt_count" -ne "$expected_count" ]; then
+    if [[ "$txt_count" -ne "$expected_count" ]]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
     fi
     print_info ".zip file count for .txt is correct ($txt_count)."
@@ -152,9 +152,9 @@ function verify_eml_output() {
   get_zip_listing "$zip_file" zip_listing
 
   local dat_content_cmd="cat"
-  if [ "$encoding" = "UTF-16" ]; then
+  if [[ "$encoding" = "UTF-16" ]]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
-  elif [ "$encoding" = "ANSI" ]; then
+  elif [[ "$encoding" = "ANSI" ]]; then
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
@@ -168,22 +168,22 @@ function verify_eml_output() {
   local eml_files=$(echo "$zip_listing" | grep "\.eml$" | wc -l)
   local min_expected_attachments=$((eml_files / 4)) # Should be at least ~25% due to 50% rate randomness
 
-  if [ "$attachment_files" -lt "$min_expected_attachments" ]; then
+  if [[ "$attachment_files" -lt "$min_expected_attachments" ]]; then
     print_error "Expected at least $min_expected_attachments attachment files in ZIP, but found $attachment_files."
   fi
   print_info "Found $attachment_files attachment files in ZIP archive (expected at least $min_expected_attachments)."
 
   # Verify that some attachments are listed in the .dat file (using cached content)
   local attachment_count=$(echo "$dat_content" | grep -c "attachment")
-  if [ "$attachment_count" -lt 2 ]; then
+  if [[ "$attachment_count" -lt 2 ]]; then
     print_error "No attachments found in .dat file, but they were expected."
   fi
   print_info "Found attachments in .dat file."
 
   # Verify attachment text files if text extraction is enabled (using cached zip listing)
-  if [ "$check_text" = "true" ]; then
+  if [[ "$check_text" = "true" ]]; then
     local attachment_text_files=$(echo "$zip_listing" | grep "attachment.*\.txt$" | wc -l)
-    if [ "$attachment_text_files" -lt "$min_expected_attachments" ]; then
+    if [[ "$attachment_text_files" -lt "$min_expected_attachments" ]]; then
       print_error "Expected at least $min_expected_attachments attachment text files, but found $attachment_text_files."
     fi
     print_info "Found $attachment_text_files attachment text files in ZIP archive."
@@ -201,7 +201,7 @@ function verify_zip_size() {
     local tolerance_bytes=$((target_size_bytes / 10)) # 10%
 
     local zip_file=$(find "$test_dir" -name "*.zip")
-    if [ -z "$zip_file" ]; then
+    if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
     fi
 
@@ -209,7 +209,7 @@ function verify_zip_size() {
     local min_size=$((target_size_bytes - tolerance_bytes))
     local max_size=$((target_size_bytes + tolerance_bytes))
 
-    if [ "$actual_size_bytes" -lt "$min_size" ] || [ "$actual_size_bytes" -gt "$max_size" ]; then
+    if [[ "$actual_size_bytes" -lt "$min_size" ]] || [[ "$actual_size_bytes" -gt "$max_size" ]]; then
         print_error "Zip file size is out of tolerance. Expected around ${target_size_mb}MB, found $(($actual_size_bytes / 1024 / 1024))MB."
     fi
 
@@ -233,13 +233,13 @@ function verify_load_file_included() {
     print_info "Verifying load file included in zip archive (Encoding: $encoding)"
 
     local zip_file=$(find "$test_dir" -name "*.zip")
-    if [ -z "$zip_file" ]; then
+    if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
     fi
 
     # Verify no separate .dat file in output directory
     local dat_file=$(find "$test_dir" -name "*.dat")
-    if [ -n "$dat_file" ]; then
+    if [[ -n "$dat_file" ]]; then
         print_error "Found separate .dat file in output directory, but --include-load-file was specified"
     fi
 
@@ -249,7 +249,7 @@ function verify_load_file_included() {
 
     # Verify .dat file exists in zip archive
     local dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$")
-    if [ "$dat_in_zip" -ne 1 ]; then
+    if [[ "$dat_in_zip" -ne 1 ]]; then
         print_error "Expected 1 .dat file in zip archive, found $dat_in_zip"
     fi
     print_info ".dat file correctly included in zip archive."
@@ -262,9 +262,9 @@ function verify_load_file_included() {
     local extracted_dat=$(find "$temp_dir" -name "*.dat" | head -1)
 
     local dat_content_cmd="cat"
-    if [ "$encoding" = "UTF-16" ]; then
+    if [[ "$encoding" = "UTF-16" ]]; then
         dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
-    elif [ "$encoding" = "ANSI" ]; then
+    elif [[ "$encoding" = "ANSI" ]]; then
         dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
     fi
 
@@ -275,7 +275,7 @@ function verify_load_file_included() {
     local line_count=$(echo "$dat_content" | wc -l)
     line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
     local expected_line_count=$((expected_count + 1))
-    if [ "$line_count" -ne "$expected_line_count" ]; then
+    if [[ "$line_count" -ne "$expected_line_count" ]]; then
         print_error "Incorrect line count in .dat file. Expected $expected_line_count, found $line_count."
     fi
     print_info ".dat file line count is correct ($line_count)."
@@ -292,7 +292,7 @@ function verify_load_file_included() {
 
     # Verify file count in zip (excluding the .dat file, using cached listing)
     local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type")
-    if [ "$zip_file_count" -ne "$expected_count" ]; then
+    if [[ "$zip_file_count" -ne "$expected_count" ]]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     fi
     print_info ".zip file count for .$file_type is correct ($zip_file_count)."
@@ -314,7 +314,7 @@ function run_test_case() {
     print_info "START: $test_name at $(date)"
     dotnet run --project "$PROJECT" -- "$@"
     local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
+    if [[ $exit_code -ne 0 ]]; then
         print_error "$test_name failed with exit code $exit_code"
     fi
     print_info "END: $test_name at $(date)"

@@ -1,0 +1,138 @@
+#!/bin/bash
+# Pre-commit hook — format + unit tests on the STAGED snapshot.
+# Installs to: $(git rev-parse --git-common-dir)/hooks/pre-commit
+#
+# The success marker is written by the companion post-commit hook, because
+# this hook runs BEFORE the commit object exists (so the "skip if recent"
+# logic in pre-push can compare against the new commit's HEAD, not its parent).
+#
+# To bypass (not recommended): git commit --no-verify
+
+set -u
+
+# ──────────────────────────────────────────────────
+# 0. Short-circuit if only docs/markdown changed
+# Include Deletions, Renames, and Copies so a D- or R-only commit still
+# runs format/tests (a deletion can still break compilation elsewhere).
+# ──────────────────────────────────────────────────
+STAGED=$(git diff --cached --name-only --diff-filter=ACMRDTUX)
+if [[ -z "$STAGED" ]]; then
+    exit 0
+fi
+
+# Docs-only = every staged file matches one of the doc patterns.
+# Use a positive filter (count matches) to avoid || true masking genuine failures.
+TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
+DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG\.md$|.*\.(md|txt)$)' || true)
+if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
+    echo "✓ Pre-commit: docs-only change, skipping build/test."
+    exit 0
+fi
+
+if ! command -v dotnet >/dev/null 2>&1; then
+    echo "⚠ dotnet not found; skipping pre-commit checks."
+    exit 0
+fi
+
+# ──────────────────────────────────────────────────
+# 1. Stash unstaged changes so we test the exact commit
+# ──────────────────────────────────────────────────
+STASH_REF=""
+UNSTAGED_EXISTS=false
+if ! git diff --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+    UNSTAGED_EXISTS=true
+fi
+
+if [[ "$UNSTAGED_EXISTS" == "true" ]]; then
+    STASH_MSG="pre-commit-$(date +%s)-$$"
+    # Capture stash output so we can surface the real reason if it fails —
+    # silently continuing would test a dirty working tree, violating the
+    # "format/test the staged snapshot" contract.
+    STASH_ERR=$(git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" 2>&1)
+    STASH_RC=$?
+    if [[ "$STASH_RC" -ne 0 ]]; then
+        echo "❌ git stash push failed (exit $STASH_RC). Aborting commit to avoid" >&2
+        echo "   testing against a dirty working tree." >&2
+        [[ -n "$STASH_ERR" ]] && echo "   Details: $STASH_ERR" >&2
+        echo "   Commit your unstaged changes (or use --no-verify) and retry." >&2
+        exit 1
+    fi
+    STASH_REF=$(git stash list --format='%gd %gs' | grep -F "$STASH_MSG" | awk '{print $1}' | head -1)
+fi
+
+_CLEANUP_RAN=false
+cleanup() {
+    local rc=$?
+    # Ensure single run even if both INT/TERM and EXIT fire.
+    if [[ "$_CLEANUP_RAN" == "true" ]]; then
+        exit "$rc"
+    fi
+    _CLEANUP_RAN=true
+    if [[ -n "$STASH_REF" ]]; then
+        git stash pop --quiet "$STASH_REF" >/dev/null 2>&1 || \
+            echo "⚠ Could not restore stash $STASH_REF — run 'git stash list' to recover." >&2
+        STASH_REF=""
+    fi
+    exit "$rc"
+}
+trap cleanup EXIT
+# INT/TERM: just mark; EXIT will then run cleanup once.
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# ──────────────────────────────────────────────────
+# 2. dotnet format — scoped to staged C# files only
+# ──────────────────────────────────────────────────
+STAGED_CS=()
+while IFS= read -r f; do
+    [[ -n "$f" && "$f" == *.cs ]] && STAGED_CS+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [[ ${#STAGED_CS[@]} -gt 0 ]]; then
+    echo "▶ Running dotnet format on ${#STAGED_CS[@]} staged C# file(s)..."
+    # `dotnet format --include` is a multi-value System.CommandLine option:
+    # each file is a separate token, not a space-joined single string. The
+    # array-expansion form below is the correct idiom (verified empirically:
+    # passing A.cs B.cs this way formats both files).
+    if ! dotnet format --verbosity quiet --include "${STAGED_CS[@]}"; then
+        echo "❌ dotnet format failed" >&2
+        exit 1
+    fi
+
+    # Only treat formatting of *staged* files as a hard failure.
+    if ! git diff --quiet -- "${STAGED_CS[@]}"; then
+        echo "❌ Formatting changes required on staged files. They have been auto-formatted." >&2
+        echo "   Please review and 'git add' them, then commit again." >&2
+        git --no-pager diff --stat -- "${STAGED_CS[@]}"
+        exit 1
+    fi
+else
+    echo "▶ No staged C# files; skipping dotnet format."
+fi
+
+# ──────────────────────────────────────────────────
+# 3. Unit tests
+# ──────────────────────────────────────────────────
+echo "▶ Running unit tests..."
+if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet"; then
+    echo "❌ Unit tests failed. Commit aborted." >&2
+    echo "   Run 'dotnet test' for full output." >&2
+    echo "   To bypass: git commit --no-verify" >&2
+    exit 1
+fi
+
+echo "✓ Pre-commit: format + unit tests passed"
+
+# Success handshake with post-commit:
+#   - pre-commit (here, on success) writes a `pre-commit.pending` sentinel
+#   - post-commit only promotes it to `pre-commit.ok` if the sentinel exists
+#   - `git commit --no-verify` skips pre-commit ⇒ no sentinel ⇒ no ok marker
+#     ⇒ pre-push never wrongly skips unit tests for a bypassed commit.
+PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
+if [[ -n "$PENDING_DIR" ]]; then
+    mkdir -p "$PENDING_DIR" 2>/dev/null || true
+    printf 'timestamp=%s\npid=%s\n' "$(date +%s)" "$$" \
+        > "$PENDING_DIR/pre-commit.pending" 2>/dev/null || true
+fi
+
+exit 0

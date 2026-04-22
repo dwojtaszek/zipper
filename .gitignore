@@ -23,5 +23,9 @@ TODO.md
 # Test Results
 **/TestResults/
 
+# Local dotnet tool install dir (populated by `dotnet tool restore`;
+# the manifest is .config/dotnet-tools.json which IS committed)
+.dotnet-tools/
+
 
 

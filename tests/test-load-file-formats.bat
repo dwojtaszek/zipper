@@ -1,4 +1,7 @@
 @echo off
+
+REM Resolve the Zipper binary once. Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
 :: --- Test Configuration ---
@@ -18,7 +21,7 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 echo [ INFO ] Test Case 1: OPT (tab-delimited) format
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test1" ^
@@ -42,7 +45,7 @@ echo [ SUCCESS ] Test Case 1: OPT format passed
 
 echo [ INFO ] Test Case 2: CSV format
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test2" ^
@@ -75,7 +78,7 @@ echo [ SUCCESS ] Test Case 2: CSV format passed
 
 echo [ INFO ] Test Case 3: XML format
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test3" ^
@@ -119,7 +122,7 @@ echo [ SUCCESS ] Test Case 3: XML format passed
 
 echo [ INFO ] Test Case 4: CONCORDANCE format
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test4" ^
@@ -151,7 +154,7 @@ echo [ SUCCESS ] Test Case 4: CONCORDANCE format passed
 
 echo [ INFO ] Test Case 5: Default DAT format (with caret delimiter)
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test5" ^
@@ -180,7 +183,7 @@ for %%F in (dat opt csv xml concordance) do (
   set EXT=%%F
   if "%%F"=="concordance" set EXT=dat
 
-  dotnet run --project "%PROJECT%" -- ^
+  %ZIPPER_CMD% ^
     --type pdf ^
     --count 3 ^
     --output-path "%TEST_OUTPUT_DIR%\test6_%%F" ^
@@ -201,7 +204,7 @@ for %%F in (dat opt csv xml concordance) do (
 
 echo [ INFO ] Test Case 7: Custom delimiters (pipe and caret)
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test7" ^
@@ -234,7 +237,7 @@ echo [ SUCCESS ] Test Case 7: Custom delimiters passed
 
 echo [ INFO ] Test Case 8: ASCII code delimiters (20, 254)
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test8" ^
@@ -267,7 +270,7 @@ echo [ SUCCESS ] Test Case 8: ASCII code delimiters passed
 
 echo [ INFO ] Test Case 9: Delimiter override (CSV preset with pipe column delimiter)
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test9" ^

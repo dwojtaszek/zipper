@@ -1,82 +1,104 @@
 #!/bin/bash
-# Pre-push git hook — runs unit tests + basic E2E smoke suite
-# Installs to: .git/hooks/pre-push
+# Pre-push git hook — unit tests + basic E2E smoke suite.
+# Installs to: $(git rev-parse --git-common-dir)/hooks/pre-push
 #
-# Full E2E + coverage checks run in CI.
+# Skips unit tests if the post-commit hook wrote a success marker within the
+# last 10 minutes on the current HEAD. Full E2E + coverage checks run in CI.
+#
 # To bypass (not recommended): git push --no-verify
+
+set -u
+
+SKIP_WINDOW_SECONDS=600
 
 echo "┌─────────────────────────────────────────────┐"
 echo "│  Pre-push: Unit Tests + Basic E2E Smoke     │"
 echo "└─────────────────────────────────────────────┘"
 
-# ──────────────────────────────────────────────────
-# 1. Run unit tests (fast gate)
-# ──────────────────────────────────────────────────
-echo ""
-echo "▶ Running unit tests..."
-
 if ! command -v dotnet >/dev/null 2>&1; then
-    echo "⚠️  dotnet not found, skipping tests"
+    echo "⚠ dotnet not found; skipping pre-push checks."
     exit 0
 fi
 
-dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
-    --logger "console;verbosity=quiet" \
-    --nologo \
-    2>/dev/null || {
+# ──────────────────────────────────────────────────
+# 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD
+# ──────────────────────────────────────────────────
+RUN_UNIT_TESTS=true
+MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
+if [[ -n "$MARKER" && -f "$MARKER" ]]; then
+    MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
+    MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
+    CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+    if [[ -n "$MARKER_TS" && -n "$CURRENT_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]]; then
+        NOW=$(date +%s)
+        AGE=$((NOW - MARKER_TS))
+        if [[ "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
+            echo "✓ Unit tests already passed in pre-commit (${AGE}s ago); skipping."
+            RUN_UNIT_TESTS=false
+        fi
+    fi
+fi
+
+if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     echo ""
-    echo "❌ Unit tests failed. Push aborted."
-    echo "   Run 'dotnet test' for details."
-    echo "   To bypass: git push --no-verify"
-    exit 1
-}
-echo "✅ Unit tests passed"
+    echo "▶ Running unit tests..."
+    if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+            --logger "console;verbosity=quiet" --nologo; then
+        echo ""
+        echo "❌ Unit tests failed. Push aborted."
+        echo "   Run 'dotnet test' for details."
+        echo "   To bypass: git push --no-verify"
+        exit 1
+    fi
+    echo "✓ Unit tests passed"
+fi
 
 # ──────────────────────────────────────────────────
-# 2. Run basic E2E smoke suite (5 representative cases)
+# 2. Basic E2E smoke suite
 # ──────────────────────────────────────────────────
 echo ""
 echo "▶ Running basic E2E smoke tests..."
 
 E2E_RAN=false
-
-# Detect OS and run appropriate script
 case "$(uname -s)" in
     Linux*|Darwin*)
-        if [ -x "./tests/run-e2e-basic.sh" ] || [ -f "./tests/run-e2e-basic.sh" ]; then
-            chmod +x ./tests/run-e2e-basic.sh
-            bash ./tests/run-e2e-basic.sh || {
+        if [[ -f "./tests/run-e2e-basic.sh" ]]; then
+            if ! bash ./tests/run-e2e-basic.sh; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
                 echo "   Run 'bash tests/run-e2e-basic.sh' for details."
                 echo "   To bypass: git push --no-verify"
                 exit 1
-            }
+            fi
             E2E_RAN=true
         else
-            echo "⚠️  tests/run-e2e-basic.sh not found, skipping E2E"
+            echo "⚠ tests/run-e2e-basic.sh not found, skipping E2E"
         fi
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        if [ -f "./tests/run-e2e-basic.bat" ]; then
-            cmd.exe //c ".\\tests\\run-e2e-basic.bat" || {
+        if [[ -f "./tests/run-e2e-basic.bat" ]]; then
+            # Git Bash (MSYS2) invokes .bat files directly; no cmd.exe wrapper
+            # needed. The previous `cmd.exe //c` form is MSYS-specific and
+            # breaks under real Windows cmd.exe (which expects `/c`), and is
+            # unnecessary here because MSYS2 handles .bat natively.
+            if ! ./tests/run-e2e-basic.bat; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
                 echo "   Run 'tests\\run-e2e-basic.bat' for details."
                 echo "   To bypass: git push --no-verify"
                 exit 1
-            }
+            fi
             E2E_RAN=true
         else
-            echo "⚠️  tests/run-e2e-basic.bat not found, skipping E2E"
+            echo "⚠ tests/run-e2e-basic.bat not found, skipping E2E"
         fi
         ;;
 esac
 
 echo ""
-if [ "$E2E_RAN" = true ]; then
-    echo "✅ All pre-push checks passed"
+if [[ "$E2E_RAN" == "true" ]]; then
+    echo "✓ All pre-push checks passed"
 else
-    echo "⚠️  Unit tests passed, but E2E smoke tests were skipped"
+    echo "⚠ Unit tests passed, but E2E smoke tests were skipped"
 fi
 exit 0

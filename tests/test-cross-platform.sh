@@ -5,6 +5,9 @@
 
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,13 +57,13 @@ test_basic_functionality() {
 
     # Test 1: Basic PDF generation
     print_info "Test 1: Basic PDF generation"
-    dotnet run --project "$PROJECT" -- --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/basic_pdf"
+    zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/basic_pdf"
 
     # Check for .zip and .dat files (Zipper uses timestamped archive names)
     local zip_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.zip" 2>/dev/null | head -1)
     local dat_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.dat" 2>/dev/null | head -1)
 
-    if [ -n "$zip_file" ] && [ -n "$dat_file" ]; then
+    if [[ -n "$zip_file" ]] && [[ -n "$dat_file" ]]; then
         print_success "Basic PDF generation completed"
     else
         print_error "Basic PDF generation failed (zip: $zip_file, dat: $dat_file)"
@@ -69,12 +72,12 @@ test_basic_functionality() {
 
     # Test 2: Basic EML generation
     print_info "Test 2: Basic EML generation"
-    dotnet run --project "$PROJECT" -- --type eml --count 3 --output-path "$TEST_OUTPUT_DIR/basic_eml"
+    zipper --type eml --count 3 --output-path "$TEST_OUTPUT_DIR/basic_eml"
 
     zip_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.zip" 2>/dev/null | head -1)
     dat_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.dat" 2>/dev/null | head -1)
 
-    if [ -n "$zip_file" ] && [ -n "$dat_file" ]; then
+    if [[ -n "$zip_file" ]] && [[ -n "$dat_file" ]]; then
         print_success "Basic EML generation completed"
     else
         print_error "Basic EML generation failed"
@@ -85,20 +88,20 @@ test_basic_functionality() {
     print_info "Test 3: Different encodings"
 
     # UTF-8
-    dotnet run --project "$PROJECT" -- --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/utf8" --encoding UTF-8
+    zipper --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/utf8" --encoding UTF-8
 
     # UTF-16
-    dotnet run --project "$PROJECT" -- --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/utf16" --encoding UTF-16
+    zipper --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/utf16" --encoding UTF-16
 
     # ANSI
-    dotnet run --project "$PROJECT" -- --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/ansi" --encoding ANSI
+    zipper --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/ansi" --encoding ANSI
 
     # Check all files exist (Zipper creates subdirectories with timestamped archives)
     local utf8_zip=$(find "$TEST_OUTPUT_DIR/utf8" -name "*.zip" 2>/dev/null | head -1)
     local utf16_zip=$(find "$TEST_OUTPUT_DIR/utf16" -name "*.zip" 2>/dev/null | head -1)
     local ansi_zip=$(find "$TEST_OUTPUT_DIR/ansi" -name "*.zip" 2>/dev/null | head -1)
 
-    if [ -n "$utf8_zip" ] && [ -n "$utf16_zip" ] && [ -n "$ansi_zip" ]; then
+    if [[ -n "$utf8_zip" ]] && [[ -n "$utf16_zip" ]] && [[ -n "$ansi_zip" ]]; then
         print_success "All encoding tests completed"
     else
         print_error "Encoding tests failed"
@@ -109,10 +112,10 @@ test_basic_functionality() {
     print_info "Test 4: Different distributions"
 
     for dist in "proportional" "gaussian" "exponential"; do
-        dotnet run --project "$PROJECT" -- --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/dist_${dist}" --folders 3 --distribution "$dist"
+        zipper --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/dist_${dist}" --folders 3 --distribution "$dist"
 
         local dist_zip=$(find "$TEST_OUTPUT_DIR/dist_${dist}" -name "*.zip" 2>/dev/null | head -1)
-        if [ -n "$dist_zip" ]; then
+        if [[ -n "$dist_zip" ]]; then
             print_success "${dist} distribution test completed"
         else
             print_error "${dist} distribution test failed"
@@ -129,22 +132,22 @@ test_refactored_components() {
 
     # Test with metadata
     print_info "Testing with metadata"
-    dotnet run --project "$PROJECT" -- --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/metadata" --with-metadata
+    zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/metadata" --with-metadata
 
     # Test with text extraction
     print_info "Testing with text extraction"
-    dotnet run --project "$PROJECT" -- --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/text" --with-text
+    zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/text" --with-text
 
     # Test EML with attachments
     print_info "Testing EML with attachments"
-    dotnet run --project "$PROJECT" -- --type eml --count 5 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 80
+    zipper --type eml --count 5 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 80
 
     # Verify all tests (Zipper creates subdirectories with timestamped archives)
     local tests=("metadata" "text" "eml_attachments")
     for test in "${tests[@]}"; do
         local test_zip=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.zip" 2>/dev/null | head -1)
         local test_dat=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.dat" 2>/dev/null | head -1)
-        if [ -n "$test_zip" ] && [ -n "$test_dat" ]; then
+        if [[ -n "$test_zip" ]] && [[ -n "$test_dat" ]]; then
             print_success "${test} test completed"
         else
             print_error "${test} test failed"
@@ -163,11 +166,11 @@ test_filesystem_compatibility() {
     local test_paths=("$TEST_OUTPUT_DIR/standard_path" "$TEST_OUTPUT_DIR/path with spaces" "$TEST_OUTPUT_DIR/path-with-dashes")
 
     for path in "${test_paths[@]}"; do
-        dotnet run --project "$PROJECT" -- --type pdf --count 2 --output-path "$path"
+        zipper --type pdf --count 2 --output-path "$path"
 
         local path_zip=$(find "$path" -name "*.zip" 2>/dev/null | head -1)
         local path_dat=$(find "$path" -name "*.dat" 2>/dev/null | head -1)
-        if [ -n "$path_zip" ] && [ -n "$path_dat" ]; then
+        if [[ -n "$path_zip" ]] && [[ -n "$path_dat" ]]; then
             print_success "Path compatibility test: '$path'"
         else
             print_error "Path compatibility test failed: '$path'"
@@ -177,11 +180,11 @@ test_filesystem_compatibility() {
 
     # Test special characters in file names
     print_info "Testing special characters"
-    dotnet run --project "$PROJECT" -- --folders 1 --distribution proportional --type pdf --count 2 --output-path "$TEST_OUTPUT_DIR/special"
+    zipper --folders 1 --distribution proportional --type pdf --count 2 --output-path "$TEST_OUTPUT_DIR/special"
 
     local special_zip=$(find "$TEST_OUTPUT_DIR/special" -name "*.zip" 2>/dev/null | head -1)
     local special_dat=$(find "$TEST_OUTPUT_DIR/special" -name "*.dat" 2>/dev/null | head -1)
-    if [ -n "$special_zip" ] && [ -n "$special_dat" ]; then
+    if [[ -n "$special_zip" ]] && [[ -n "$special_dat" ]]; then
         print_success "Special characters test completed"
     else
         print_error "Special characters test failed"
@@ -197,12 +200,12 @@ test_performance() {
 
     # Small performance test
     local start_time=$(date +%s%N)
-    dotnet run --project "$PROJECT" -- --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/perf"
+    zipper --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/perf"
     local end_time=$(date +%s%N)
 
     local duration_ms=$(( (end_time - start_time) / 1000000 ))
 
-    if [ $duration_ms -lt 10000 ]; then  # Should complete in under 10 seconds
+    if [[ $duration_ms -lt 10000 ]]; then  # Should complete in under 10 seconds
         print_success "Performance test completed in ${duration_ms}ms"
     else
         print_warning "Performance test took ${duration_ms}ms (may be slow)"
@@ -211,7 +214,7 @@ test_performance() {
     # Verify output (Zipper creates subdirectories with timestamped archives)
     local perf_zip=$(find "$TEST_OUTPUT_DIR/perf" -name "*.zip" 2>/dev/null | head -1)
     local perf_dat=$(find "$TEST_OUTPUT_DIR/perf" -name "*.dat" 2>/dev/null | head -1)
-    if [ -n "$perf_zip" ] && [ -n "$perf_dat" ]; then
+    if [[ -n "$perf_zip" ]] && [[ -n "$perf_dat" ]]; then
         print_success "Performance test output verified"
     else
         print_error "Performance test output failed"
@@ -232,11 +235,11 @@ verify_output() {
 
     # Verify each ZIP file has content
     for zip_file in "$TEST_OUTPUT_DIR"/*.zip; do
-        if [ -f "$zip_file" ]; then
+        if [[ -f "$zip_file" ]]; then
             local file_count=$(unzip -l "$zip_file" | grep -E "\.(pdf|jpg|tiff|eml)$" | wc -l)
             print_info "ZIP $(basename "$zip_file"): $file_count files"
 
-            if [ $file_count -eq 0 ]; then
+            if [[ $file_count -eq 0 ]]; then
                 print_warning "ZIP file appears to be empty: $(basename "$zip_file")"
             fi
         fi

@@ -1,4 +1,7 @@
 @echo off
+
+REM Resolve the Zipper binary once. Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
 :: --- Test Configuration ---
@@ -18,7 +21,7 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 echo [ INFO ] Test Case 1: DOCX file generation
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type docx ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test1" ^
@@ -55,7 +58,7 @@ echo [ SUCCESS ] Test Case 1: DOCX generation passed
 
 echo [ INFO ] Test Case 2: XLSX file generation
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type xlsx ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test2" ^
@@ -92,7 +95,7 @@ echo [ SUCCESS ] Test Case 2: XLSX generation passed
 
 echo [ INFO ] Test Case 3: DOCX with metadata
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type docx ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test3" ^
@@ -138,7 +141,7 @@ echo [ SUCCESS ] Test Case 3: DOCX with metadata passed
 
 echo [ INFO ] Test Case 4: DOCX with Bates numbering
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type docx ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test4" ^
@@ -176,7 +179,7 @@ echo [ SUCCESS ] Test Case 4: DOCX with Bates numbering passed
 echo [ INFO ] Test Case 5: XLSX with different load file formats
 
 for %%F in (dat opt csv xml) do (
-  dotnet run --project "%PROJECT%" -- ^
+  %ZIPPER_CMD% ^
     --type xlsx ^
     --count 3 ^
     --output-path "%TEST_OUTPUT_DIR%\test5_%%F" ^
@@ -194,7 +197,7 @@ for %%F in (dat opt csv xml) do (
 
 echo [ INFO ] Test Case 6: Verify generated DOCX files are valid ZIP archives
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type docx ^
   --count 3 ^
   --output-path "%TEST_OUTPUT_DIR%\test6"

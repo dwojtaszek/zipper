@@ -1,77 +1,55 @@
 #!/bin/bash
 
-# Sets up Git hooks for the zipper project:
-# - pre-commit: dotnet format + unit tests
-# - pre-push:   unit tests + basic E2E smoke suite
+# Installs the version-controlled git hooks from .github/hooks/ into the
+# correct hooks directory for the current checkout (supports worktrees).
+#
+# Hooks:
+#   pre-commit   - dotnet format + unit tests (staged snapshot, skips docs-only)
+#   post-commit  - records success marker for pre-push skip-if-recent
+#   pre-push     - unit tests + basic E2E smoke (skips unit tests if pre-commit just ran)
 #
 # Usage: bash setup-hook.sh
 
-HOOK_DIR=".git/hooks"
+set -eu
+
+TEMPLATE_DIR=".github/hooks"
+
+# Works for both normal repos (returns .git) and worktrees (returns the
+# shared common dir under the main repo). Falls back gracefully.
+if ! HOOK_DIR=$(git rev-parse --git-common-dir 2>/dev/null)/hooks; then
+    echo "Error: not inside a git repository." >&2
+    exit 1
+fi
+
 mkdir -p "$HOOK_DIR"
 
-# ────────────────────────────────────────────────
-# 1. Pre-commit hook (generated inline)
-# ────────────────────────────────────────────────
-HOOK_FILE="$HOOK_DIR/pre-commit"
-
-cat > "$HOOK_FILE" << 'EOL'
-#!/bin/sh
-#
-# Pre-commit hook: dotnet format + unit tests
-# E2E tests run on pre-push only (not on commit)
-#
-
-# ──────────────────────────────────────────────────────────
-# 1. Run dotnet format (auto-fix formatting)
-# ──────────────────────────────────────────────────────────
-if command -v dotnet >/dev/null 2>&1; then
-    if ! dotnet format --verbosity quiet 2>/dev/null; then
-        echo "Error: dotnet format failed" >&2
+install_hook() {
+    local name="$1"
+    local src="$TEMPLATE_DIR/$name"
+    local dst="$HOOK_DIR/$name"
+    if [[ ! -f "$src" ]]; then
+        echo "Warning: template $src not found — skipping $name" >&2
+        return 0
+    fi
+    if ! cp "$src" "$dst"; then
+        echo "Error: failed to copy $src -> $dst" >&2
         exit 1
     fi
-
-    # Fail commit if formatting made changes
-    if ! git diff --exit-code --quiet 2>/dev/null; then
-        echo "Code formatting changes required. Files have been auto-formatted." >&2
-        echo "Please review and commit again." >&2
-        git --no-pager diff --stat
+    if ! chmod u+x "$dst"; then
+        echo "Error: failed to make $dst executable" >&2
         exit 1
     fi
-fi
+    echo "Installed: $dst"
+}
 
-# ──────────────────────────────────────────────────────────
-# 2. Run unit tests (fast, local validation)
-# ──────────────────────────────────────────────────────────
-if command -v dotnet >/dev/null 2>&1; then
-    dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet" 2>/dev/null || {
-        echo "Unit tests failed. Run 'dotnet test' for details." >&2
-        exit 1
-    }
-fi
-
-exit 0
-EOL
-
-chmod +x "$HOOK_FILE"
-echo "✅ Pre-commit hook installed (format + unit tests)"
-
-# ────────────────────────────────────────────────
-# 2. Pre-push hook (copied from template)
-# ────────────────────────────────────────────────
-PUSH_HOOK_FILE="$HOOK_DIR/pre-push"
-PUSH_HOOK_TEMPLATE=".github/hooks/pre-push"
-
-if [ -f "$PUSH_HOOK_TEMPLATE" ]; then
-    cp "$PUSH_HOOK_TEMPLATE" "$PUSH_HOOK_FILE"
-    chmod +x "$PUSH_HOOK_FILE"
-    echo "✅ Pre-push hook installed (unit tests + basic E2E smoke suite)"
-else
-    echo "⚠️  Pre-push hook template not found at $PUSH_HOOK_TEMPLATE"
-fi
+install_hook "pre-commit"
+install_hook "post-commit"
+install_hook "pre-push"
 
 echo ""
-echo "Done! Hooks installed in $HOOK_DIR/"
-echo "  pre-commit → format + unit tests"
-echo "  pre-push   → unit tests + basic E2E (5 cases)"
+echo "Done. Hooks installed from $TEMPLATE_DIR/ into $HOOK_DIR/"
+echo "  pre-commit  -> format + unit tests (stashed staged snapshot)"
+echo "  post-commit -> writes success marker for pre-push skip optimization"
+echo "  pre-push    -> unit tests (skippable) + basic E2E (5 cases)"
 echo ""
 echo "Bypass with: git commit --no-verify / git push --no-verify"

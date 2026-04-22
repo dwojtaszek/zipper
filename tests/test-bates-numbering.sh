@@ -3,6 +3,9 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
 # --- Test Configuration ---
 
 TEST_OUTPUT_DIR="./results/bates-numbering"
@@ -35,7 +38,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 print_info "Test Case 1: Basic Bates numbering with default prefix"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 10 \
   --output-path "$TEST_OUTPUT_DIR/test1" \
@@ -47,10 +50,10 @@ dotnet run --project "$PROJECT" -- \
 zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
 fi
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 1: No .dat file found"
 fi
 
@@ -75,7 +78,7 @@ print_success "Test Case 1: Basic Bates numbering passed"
 
 print_info "Test Case 2: Custom Bates prefix, start, and digits"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type pdf \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test2" \
@@ -100,7 +103,7 @@ print_success "Test Case 2: Custom Bates configuration passed"
 
 print_info "Test Case 3: Bates numbering with TIFF files"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type tiff \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test3" \
@@ -121,7 +124,7 @@ print_success "Test Case 3: Bates numbering with TIFF passed"
 
 print_info "Test Case 4: Bates numbering with DOCX files"
 
-dotnet run --project "$PROJECT" -- \
+zipper \
   --type docx \
   --count 5 \
   --output-path "$TEST_OUTPUT_DIR/test4" \

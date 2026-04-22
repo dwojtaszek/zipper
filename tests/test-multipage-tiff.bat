@@ -1,4 +1,7 @@
 @echo off
+
+REM Resolve the Zipper binary once. Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
 :: --- Test Configuration ---
@@ -18,7 +21,7 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 echo [ INFO ] Test Case 1: Single page TIFF (default behavior)
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test1"
@@ -47,7 +50,7 @@ echo [ SUCCESS ] Test Case 1: Single page TIFF passed
 
 echo [ INFO ] Test Case 2: TIFF with page range 1-20
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test2" ^
@@ -81,7 +84,7 @@ echo [ SUCCESS ] Test Case 2: TIFF page range 1-20 passed
 
 echo [ INFO ] Test Case 3: TIFF with page range 5-10
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test3" ^
@@ -111,7 +114,7 @@ echo [ SUCCESS ] Test Case 3: TIFF page range 5-10 passed
 
 echo [ INFO ] Test Case 4: TIFF with page range and Bates numbering
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test4" ^
@@ -162,7 +165,7 @@ echo [ SUCCESS ] Test Case 4: TIFF with page range and Bates numbering passed
 echo [ INFO ] Test Case 5: Verify deterministic page counts for same file index
 
 :: Generate twice with same parameters
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 3 ^
   --output-path "%TEST_OUTPUT_DIR%\test5a" ^
@@ -173,7 +176,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 3 ^
   --output-path "%TEST_OUTPUT_DIR%\test5b" ^

@@ -1,4 +1,7 @@
 @echo off
+
+REM Resolve the Zipper binary once. Sets %ZIPPER_CMD%.
+call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
 :: --- Test Configuration ---
@@ -18,7 +21,7 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 echo [ INFO ] Test Case 1: Basic Bates numbering with default prefix
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 10 ^
   --output-path "%TEST_OUTPUT_DIR%\test1" ^
@@ -71,7 +74,7 @@ echo [ SUCCESS ] Test Case 1: Basic Bates numbering passed
 
 echo [ INFO ] Test Case 2: Custom Bates prefix, start, and digits
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type pdf ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test2" ^
@@ -105,7 +108,7 @@ echo [ SUCCESS ] Test Case 2: Custom Bates configuration passed
 
 echo [ INFO ] Test Case 3: Bates numbering with TIFF files
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type tiff ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test3" ^
@@ -133,7 +136,7 @@ echo [ SUCCESS ] Test Case 3: Bates numbering with TIFF passed
 
 echo [ INFO ] Test Case 4: Bates numbering with DOCX files
 
-dotnet run --project "%PROJECT%" -- ^
+%ZIPPER_CMD% ^
   --type docx ^
   --count 5 ^
   --output-path "%TEST_OUTPUT_DIR%\test4" ^
