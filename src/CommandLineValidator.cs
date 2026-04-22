@@ -123,6 +123,9 @@ namespace Zipper
             Console.Error.WriteLine("  --empty-percentage <n>   Override empty value percentage (0-100)");
             Console.Error.WriteLine("  --custodian-count <n>    Override custodian count (max: 1000)");
             Console.Error.WriteLine("  --with-families          Generate parent-child document relationships");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("Utility Options:");
+            Console.Error.WriteLine("  --benchmark              Run performance benchmark suite and exit");
         }
 
         /// <summary>
@@ -699,6 +702,16 @@ namespace Zipper
                 return false;
             }
 
+            if (parsed.ChaosMode)
+            {
+                var currentFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
+                if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
+                {
+                    Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
+                    return false;
+                }
+            }
+
             // Chaos amount/types require --chaos-mode
             if (!string.IsNullOrEmpty(parsed.ChaosAmount) && !parsed.ChaosMode)
             {
@@ -844,7 +857,7 @@ namespace Zipper
             if (!string.IsNullOrEmpty(parsed.ChaosTypes))
             {
                 var validDat = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mixed-delimiters", "quotes", "columns", "eol", "encoding" };
-                var validOpt = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "opt-boundary", "opt-columns", "opt-pagecount" };
+                var validOpt = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid" };
                 var format = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
                 var validTypes = format == LoadFileFormat.Opt ? validOpt : validDat;
                 var types = parsed.ChaosTypes.Split(',');

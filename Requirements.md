@@ -346,7 +346,7 @@ Based on the above research, the following requirements apply to the Zipper load
 - **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
-- **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases for the same output format. When either value is passed to `--load-file-format`, the application shall generate identical EDRM XML v1.2 output.
+- **REQ-101**: `edrm-xml`, `xml`, and `concordance` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`, and `concordance` maps to the same output as `dat`.
 
 #### FR-011: Multi-Format Output
 
@@ -475,7 +475,7 @@ The following arguments are added or modified by the load file and column profil
 
 ### Load File Arguments
 
-- `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) Output format for the load file. Defaults to `dat`.
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the load file. Defaults to `dat`. Accepts `xml` and `concordance` as aliases.
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple load file formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 - `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.
@@ -483,7 +483,7 @@ The following arguments are added or modified by the load file and column profil
 - `--delimiter-newline <char|code>`: (Optional) Custom newline replacement for DAT files. Overrides `--dat-delimiters` preset.
 
 > [!NOTE]
-> When `--load-file-formats` is used with `--include-load-file`, only the primary DAT file is included in the archive. Other formats are written to the output directory.
+> When `--load-file-formats` is used with `--include-load-file`, all specified formats are included in the archive.
 
 ### Column Profile Arguments
 
@@ -507,7 +507,7 @@ This section clarifies behavior when multiple arguments interact:
 |-------------|----------|
 | `--with-metadata` + `--column-profile` | Profile takes precedence; `--with-metadata` ignored with warning |
 | `--type eml` + any profile | Email columns (From, To, CC, Subject, Sent Date) always added |
-| `--load-file-formats` + `--include-load-file` | Only DAT included in archive; other formats written externally |
+| `--load-file-formats` + `--include-load-file` | All specified formats are included in the archive |
 | `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls folders, profile controls data values |
 | `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
@@ -547,7 +547,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` load file formats.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all types are enabled.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
@@ -560,6 +560,8 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-boundary`: Flip the document break flag (Y ↔ blank) in column 4
   - `opt-columns`: Add or remove a comma to break the 7-column format
   - `opt-pagecount`: Replace the page count integer with an invalid value
+  - `opt-path`: Corrupt the image path in column 3 with an invalid traversal path
+  - `opt-batesid`: Remove the Bates ID from column 1
 - **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
 
@@ -600,7 +602,7 @@ This section clarifies behavior when multiple arguments interact:
 |---|---|---|---|---|
 | `relativity-import` | Common Relativity ingestion failures | `mixed-delimiters`, `quotes`, `columns` | 3% | DAT |
 | `encoding-nightmare` | Multi-encoding source data | `encoding`, `mixed-delimiters` | 5% | DAT |
-| `broken-boundaries` | OPT document boundary corruption | `opt-boundary`, `opt-pagecount` | 8% | OPT |
+| `broken-boundaries` | OPT document boundary corruption | `opt-boundary`, `opt-pagecount`, `opt-path` | 8% | OPT |
 | `field-overflow` | Unescaped newlines and extra columns | `eol`, `columns` | 2% | DAT |
 | `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
 | `nuix-export` | NUIX-to-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |

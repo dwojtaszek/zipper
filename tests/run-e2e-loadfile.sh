@@ -88,9 +88,9 @@ print_info "No ZIP file created (correct)"
 # Verify properties JSON
 props_file=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*_properties.json")
 [ -z "$props_file" ] && print_error "No _properties.json file found"
-grep -q '"Format"' "$props_file" || print_error "Properties JSON missing Format field"
-grep -q '"TotalRecords"' "$props_file" || print_error "Properties JSON missing TotalRecords field"
-grep -q '"Delimiters"' "$props_file" || print_error "Properties JSON missing Delimiters field"
+grep -q '"format"' "$props_file" || print_error "Properties JSON missing Format field"
+grep -q '"totalRecords"' "$props_file" || print_error "Properties JSON missing TotalRecords field"
+grep -q '"delimiters"' "$props_file" || print_error "Properties JSON missing Delimiters field"
 print_info "Properties JSON structure OK"
 
 PASSED=$((PASSED + 1))
@@ -119,7 +119,7 @@ done < "$opt_file"
 [ "$bad_lines" -ne 0 ] && print_error "$bad_lines OPT lines don't have 6 commas (7 columns)"
 print_info "All OPT lines have correct 7-column format"
 
-# Verify first line starts with BatesID and has Y in doc-break position
+# Verify first line starts with Bates Number and has Y in doc-break position
 first_line=$(head -n 1 "$opt_file")
 echo "$first_line" | grep -q "^IMG" || print_error "OPT first line doesn't start with IMG prefix"
 echo "$first_line" | cut -d',' -f4 | grep -q "Y" || print_error "OPT first line missing Y for doc-break"
@@ -163,16 +163,16 @@ props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos" -name "*_properties.json")
 [ -z "$props_file" ] && print_error "No _properties.json file found for chaos test"
 
 # Verify chaos section in properties JSON
-grep -q '"Enabled": true' "$props_file" || print_error "ChaosMode.Enabled not true in properties"
-grep -q '"TotalAnomalies"' "$props_file" || print_error "ChaosMode.TotalAnomalies missing"
+grep -q '"enabled": true' "$props_file" || print_error "ChaosMode.Enabled not true in properties"
+grep -q '"totalAnomalies"' "$props_file" || print_error "ChaosMode.TotalAnomalies missing"
 
 # Extract anomaly count and verify it's > 0
-anomaly_count=$(grep -o '"TotalAnomalies": [0-9]*' "$props_file" | grep -o '[0-9]*$')
+anomaly_count=$(grep -o '"totalAnomalies": [0-9]*' "$props_file" | grep -o '[0-9]*$')
 [ "$anomaly_count" -eq 0 ] && print_error "Expected anomalies but TotalAnomalies is 0"
 print_info "Chaos anomalies injected: $anomaly_count"
 
 # Verify InjectedAnomalies array exists
-grep -q '"InjectedAnomalies"' "$props_file" || print_error "Missing InjectedAnomalies array"
+grep -q '"injectedAnomalies"' "$props_file" || print_error "Missing InjectedAnomalies array"
 
 PASSED=$((PASSED + 1))
 print_success "Test 4: Chaos mode — PASSED"
@@ -189,10 +189,12 @@ props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos_typed" -name "*_properties.json")
 [ -z "$props_file" ] && print_error "No _properties.json file found"
 
 # Verify only specified types appear
-if grep -q '"encoding"' "$props_file"; then
+grep -Eq '"errorType": "(quotes|columns)"' "$props_file" || \
+    print_error "Expected quotes or columns chaos anomalies in filtered output"
+if grep -q '"errorType": "encoding"' "$props_file"; then
     print_error "Found 'encoding' chaos type despite not being in --chaos-types filter"
 fi
-if grep -q '"eol"' "$props_file"; then
+if grep -q '"errorType": "eol"' "$props_file"; then
     print_error "Found 'eol' chaos type despite not being in --chaos-types filter"
 fi
 print_info "Chaos type filtering OK"
@@ -234,6 +236,19 @@ if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/rej
     print_error "Should have rejected --col-delim without ascii:/char: prefix"
 fi
 print_info "Rejected --col-delim without ascii:/char: prefix"
+
+# --chaos-mode with --loadfile-format csv should fail
+if "${BINARY[@]}" --loadfile-only --loadfile-format csv --count 10 --output-path "$TEST_OUTPUT_DIR/reject_6" --chaos-mode 2>/dev/null; then
+    print_error "Should have rejected --chaos-mode with --loadfile-format csv"
+fi
+print_info "Rejected --chaos-mode with --loadfile-format csv"
+
+# --chaos-amount with invalid format should fail
+if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/reject_7" --chaos-mode --chaos-amount "abc" 2>/dev/null; then
+    print_error "Should have rejected invalid --chaos-amount abc"
+fi
+print_info "Rejected invalid --chaos-amount abc"
+
 
 PASSED=$((PASSED + 1))
 print_success "Test 6: Dependency rejection — PASSED"

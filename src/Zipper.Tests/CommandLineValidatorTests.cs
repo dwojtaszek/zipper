@@ -671,10 +671,24 @@ namespace Zipper
             Assert.Null(result);
         }
 
-        [Fact]
-        public void ValidateAndParseArguments_ChaosAmount_InvalidFormat_ShouldReturnNull()
+        [Theory]
+        [InlineData("abc")]
+        [InlineData("10.5x%")]
+        public void ValidateAndParseArguments_ChaosAmount_InvalidFormat_ShouldReturnNull(string amount)
         {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", "abc" };
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", amount };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Theory]
+        [InlineData("csv")]
+        [InlineData("xml")]
+        public void ValidateAndParseArguments_ChaosMode_WithUnsupportedFormat_ShouldReturnNull(string format)
+        {
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
 
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 

@@ -6,10 +6,13 @@ namespace Zipper;
 /// Chaos Engine: deliberately injects structural and encoding anomalies into load file lines.
 /// Acts as a line-level interceptor before output is written to the stream.
 /// </summary>
+/// <remarks>
+/// This class is not thread-safe. Instances should not be shared across threads.
+/// </remarks>
 internal class ChaosEngine
 {
     private static readonly string[] DatChaosTypes = { "mixed-delimiters", "quotes", "columns", "eol", "encoding" };
-    private static readonly string[] OptChaosTypes = { "opt-boundary", "opt-columns", "opt-pagecount" };
+    private static readonly string[] OptChaosTypes = { "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid" };
     private static readonly char[] AlternativeDelimiters = { ',', '\t', '|' };
 
     private readonly HashSet<int> targetLines;
@@ -17,8 +20,10 @@ internal class ChaosEngine
     private readonly LoadFileFormat format;
     private readonly string columnDelimiter;
     private readonly string quoteDelimiter;
+    private readonly string eol;
     private readonly Random random;
     private readonly List<ChaosAnomaly> anomalies = new();
+    private readonly HashSet<int> encodingAnomalyLines = new();
     private int anomalyTypeIndex;
 
     /// <summary>
@@ -30,19 +35,32 @@ internal class ChaosEngine
     /// <param name="format">Load file format (Dat or Opt).</param>
     /// <param name="columnDelimiter">Configured column delimiter.</param>
     /// <param name="quoteDelimiter">Configured quote delimiter.</param>
+    /// <param name="eol">Configured end-of-line string.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public ChaosEngine(
-        int totalLines,
+        long totalLines,
         string? chaosAmount,
         string? chaosTypes,
         LoadFileFormat format,
         string columnDelimiter,
         string quoteDelimiter,
+        string eol,
         int? seed = null)
     {
+        if (totalLines > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine does not support load files larger than Int32.MaxValue lines.");
+        }
+
+        if (totalLines <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine requires a positive totalLines count.");
+        }
+
         this.format = format;
         this.columnDelimiter = columnDelimiter;
         this.quoteDelimiter = quoteDelimiter;
+        this.eol = string.IsNullOrEmpty(eol) ? "\r\n" : eol;
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         this.random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
@@ -68,10 +86,10 @@ internal class ChaosEngine
         }
 
         // Compute target count
-        int targetCount = ParseChaosAmount(chaosAmount, totalLines);
+        int targetCount = ParseChaosAmount(chaosAmount, (int)totalLines);
 
         // Pre-compute which lines to corrupt
-        this.targetLines = SelectTargetLines(totalLines, targetCount, this.random);
+        this.targetLines = SelectTargetLines((int)totalLines, targetCount, this.random);
     }
 
     /// <summary>
@@ -118,13 +136,8 @@ internal class ChaosEngine
     /// <returns>Invalid byte array, or null if encoding chaos is not enabled or not targeted.</returns>
     public byte[]? GetEncodingAnomaly(int lineNumber, int nextLineNumber, Encoding encoding)
     {
-        if (!this.enabledTypes.Contains("encoding"))
-        {
-            return null;
-        }
-
-        // Only inject between lines that are targeted
-        if (!this.targetLines.Contains(lineNumber))
+        // Only inject when the Chaos Engine selected the encoding anomaly for this line.
+        if (!this.encodingAnomalyLines.Remove(lineNumber))
         {
             return null;
         }
@@ -186,19 +199,20 @@ internal class ChaosEngine
 
     private static HashSet<int> SelectTargetLines(int totalLines, int count, Random random)
     {
-        var lines = new HashSet<int>();
-        int attempts = 0;
-        int maxAttempts = count * 10;
+        count = Math.Clamp(count, 0, totalLines);
+        var selected = new HashSet<int>(count);
 
-        while (lines.Count < count && attempts < maxAttempts)
+        // Floyd's algorithm: exact unique sample without allocating all line numbers.
+        for (long j = (long)totalLines - count + 1; j <= totalLines; j++)
         {
-            // Line numbers are 1-based; include header (line 1) as a possible target
-            int line = random.Next(1, totalLines + 1);
-            lines.Add(line);
-            attempts++;
+            int candidate = (int)random.NextInt64(1, j + 1);
+            if (!selected.Add(candidate))
+            {
+                selected.Add((int)j);
+            }
         }
 
-        return lines;
+        return selected;
     }
 
     private string ApplyDatChaos(int lineNumber, string line, string recordId, string chaosType)
@@ -233,9 +247,9 @@ internal class ChaosEngine
                 break;
             case "encoding":
                 // Encoding anomalies are handled separately via GetEncodingAnomaly()
-                // Just mark this line for the between-line injection
-                description = "Encoding anomaly scheduled (injected between lines).";
-                break;
+                // Mark the line so invalid bytes are injected after this record boundary.
+                this.encodingAnomalyLines.Add(lineNumber);
+                return line;
             default:
                 description = $"Unknown chaos type: {chaosType}";
                 break;
@@ -274,6 +288,14 @@ internal class ChaosEngine
             case "opt-pagecount":
                 result = this.ApplyOptPagecountCorruption(line);
                 description = "Replaced page count integer with invalid value.";
+                break;
+            case "opt-path":
+                result = ApplyOptPathCorruption(line);
+                description = "Corrupted the image path (Column 3).";
+                break;
+            case "opt-batesid":
+                result = ApplyOptBatesNumberCorruption(line);
+                description = "Removed the Bates Number (Column 1).";
                 break;
             default:
                 description = $"Unknown OPT chaos type: {chaosType}";
@@ -324,7 +346,14 @@ internal class ChaosEngine
         // Pick exactly one delimiter to replace
         delimiterIndex = this.random.Next(positions.Count) + 1;
         int targetPos = positions[delimiterIndex - 1];
-        char replacementChar = AlternativeDelimiters[this.random.Next(AlternativeDelimiters.Length)];
+
+        var alternatives = AlternativeDelimiters.Where(c => c.ToString() != this.columnDelimiter).ToArray();
+        if (alternatives.Length == 0)
+        {
+            return line;
+        }
+
+        char replacementChar = alternatives[this.random.Next(alternatives.Length)];
 
         return string.Concat(
             line.AsSpan(0, targetPos),
@@ -399,14 +428,14 @@ internal class ChaosEngine
                 {
                     int insertPos = afterFirst + ((secondQuote - afterFirst) / 2);
                     column = "Field 1";
-                    return line.Insert(insertPos, "\r\n");
+                    return line.Insert(insertPos, this.eol);
                 }
             }
         }
 
         // Fallback: insert near middle
         column = "Unknown";
-        return line.Insert(line.Length / 2, "\r\n");
+        return line.Insert(line.Length / 2, this.eol);
     }
 
     private string ApplyOptBoundaryFlip(string line)
@@ -446,6 +475,30 @@ internal class ChaosEngine
         return string.Concat(line.AsSpan(0, lastComma + 1), corruptedValue);
     }
 
+    private static string ApplyOptPathCorruption(string line)
+    {
+        // OPT format: BatesNumber,Volume,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
+        var parts = line.Split(',');
+        if (parts.Length >= 3)
+        {
+            parts[2] = "IMAGES\\..\\..\\invalid\\path.tif";
+            return string.Join(",", parts);
+        }
+
+        return line;
+    }
+
+    private static string ApplyOptBatesNumberCorruption(string line)
+    {
+        int firstComma = line.IndexOf(',');
+        if (firstComma >= 0)
+        {
+            return line.Substring(firstComma); // Leaves empty Bates Number
+        }
+
+        return string.Empty;
+    }
+
     private static string FormatDelimiterDisplay(string delimiter)
     {
         if (string.IsNullOrEmpty(delimiter))
@@ -453,7 +506,12 @@ internal class ChaosEngine
             return "none";
         }
 
-        int code = delimiter[0];
-        return $"ascii:{code}";
+        if (delimiter.Length == 1)
+        {
+            int code = delimiter[0];
+            return $"ascii:{code}";
+        }
+
+        return $"string:'{delimiter}'";
     }
 }

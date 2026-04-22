@@ -47,7 +47,7 @@ After building the project, you can run the executable directly. The examples be
 ### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--production-set] [--production-zip] [--volume-size <number>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--benchmark] [--chaos-list]
 ```
 
 ### Arguments
@@ -69,7 +69,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--attachment-rate <number>`: When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0
 - `--target-zip-size <size>`: Specifies a target size for the final zip file (e.g., 500MB, 10GB). This feature works by padding each of the `--count` files with uncompressible data to meet the target size. This significantly reduces the overall compression ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
 - `--include-load-file`: Includes the generated load file in the root of the output `.zip` archive instead of as a separate file
-- `--load-file-format <dat|opt|csv|edrm-xml>`: The format of the load file. Defaults to `dat`. Available formats:
+- `--load-file-format <dat|opt|csv|edrm-xml>`: The format of the load file. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`) and `concordance` (alias for `dat`). Available formats:
   - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
   - `opt`: Opticon format - comma-separated, page-level image references
   - `csv`: Comma-separated values format with RFC 4180 escaping
@@ -91,6 +91,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 
 **Loadfile-Only Options:**
 - `--loadfile-only`: Generate standalone load files (DAT or OPT) directly to disk without creating ZIP archives or native files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
+- `--loadfile-format <dat|opt>`: Alias for `--load-file-format` in loadfile-only mode. Accepts `dat` or `opt`. Defaults to `dat`
 - `--eol <CRLF|LF|CR>`: Line ending format for the generated load file. Defaults to `CRLF`
 - `--col-delim <ascii:N|char:C>`: Column delimiter using strict prefix format. Requires `--loadfile-only`. Example: `ascii:20` or `char:|`
 - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter using strict prefix format, or `none` to omit quotes. Requires `--loadfile-only`. Example: `ascii:254` or `none`
@@ -99,11 +100,77 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Requires `--loadfile-only`. Example: `char:\`
 
 **Chaos Engine Options:**
-- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`
+- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into load files. Requires `--loadfile-only`. Only supported for dat and opt load file formats.
 - `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
-- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`
+- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesid`
 - `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
 - `--chaos-list`: List all available chaos scenarios with descriptions and exit
+
+**Utility Options:**
+- `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
+
+### `_properties.json` Audit File
+
+Loadfile-Only Mode writes a companion `_properties.json` audit file next to the generated Load File. The audit file records:
+
+- Load File identity (`fileName`, `format`, `totalRecords`)
+- Output properties (`properties.encoding`, `properties.lineEnding`)
+- Delimiter configuration (`properties.delimiters.column`, `quote`, `newline`, `multiValue`, `nestedValue`)
+- Chaos Engine output (`chaosMode.enabled`, `targetAmount`, `totalAnomalies`, `injectedAnomalies`)
+
+> [!IMPORTANT]
+> The audit file now uses `camelCase` JSON property names. This is a breaking schema change for external tooling that previously consumed PascalCase names such as `FileName`, `TotalRecords`, `ChaosMode.Enabled`, or `InjectedAnomalies[*].RecordID`.
+
+Common schema changes:
+
+- `FileName` -> `fileName`
+- `Format` -> `format`
+- `TotalRecords` -> `totalRecords`
+- `Properties` -> `properties`
+- `ChaosMode.Enabled` -> `chaosMode.enabled`
+- `ChaosMode.TargetAmount` -> `chaosMode.targetAmount`
+- `ChaosMode.TotalAnomalies` -> `chaosMode.totalAnomalies`
+- `ChaosMode.InjectedAnomalies[*].RecordID` -> `chaosMode.injectedAnomalies[*].recordID`
+
+Example:
+
+```json
+{
+  "fileName": "load.dat",
+  "format": "DAT (Metadata)",
+  "totalRecords": 200,
+  "properties": {
+    "encoding": "UTF-8",
+    "lineEnding": "LF",
+    "delimiters": {
+      "column": "ascii:20",
+      "quote": "ascii:254",
+      "newline": "ascii:174",
+      "multiValue": "none",
+      "nestedValue": "none"
+    }
+  },
+  "chaosMode": {
+    "enabled": true,
+    "targetAmount": "5%",
+    "totalAnomalies": 10,
+    "injectedAnomalies": [
+      {
+        "lineNumber": "14",
+        "recordID": "DOC00000014",
+        "column": "Column 3",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 3."
+      }
+    ]
+  }
+}
+```
+
+Compatibility checklist:
+
+- Repository unit tests and Loadfile-Only Mode E2E tests are aligned with the camelCase audit schema.
+- Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` must be updated before consuming this branch.
 
 ### Arguments Quick Reference
 
@@ -120,7 +187,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--attachment-rate` | 0 | 0-100 | EML attachment % |
 | `--target-zip-size` | none | KB/MB/GB (e.g., 500MB) | Target ZIP size |
 | `--include-load-file` | false | flag | Load file in ZIP |
-| `--load-file-format` | dat | dat, opt, csv, edrm-xml | Load file format |
+| `--load-file-format` | dat | dat, opt, csv, edrm-xml, xml, concordance | Load file format |
 | `--load-file-formats` | none | comma-separated | Multiple formats |
 | `--dat-delimiters` | standard | standard, csv | DAT delimiter style |
 | `--delimiter-column` | ASCII 20 | char or ASCII code | Custom column delimiter |
@@ -137,13 +204,14 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--custodian-count` | none | 1-1000 | Custodian count override |
 | `--with-families` | false | flag | Family relationships |
 | `--loadfile-only` | false | flag | Standalone load file (no ZIP) |
+| `--loadfile-format` | dat | dat, opt | Alias for `--load-file-format` in loadfile-only mode |
 | `--eol` | CRLF | CRLF, LF, CR | Load file line endings |
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
 | `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
 | `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
-| `--chaos-mode` | false | flag | Enable Chaos Engine |
+| `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
@@ -151,6 +219,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 | `--production-set` | false | flag | Generate structured production with DATA/IMAGES/NATIVES/TEXT |
 | `--production-zip` | false | flag | Wrap production set output in a ZIP archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
+| `--benchmark` | false | flag | Run benchmark suite and exit |
 
 ### Argument Interactions
 
@@ -428,16 +497,14 @@ To run the tests, execute the appropriate script for your operating system:
 The project includes comprehensive performance regression testing to ensure optimal performance.
 
 #### Performance Regression Tests
-```bash
-# Linux/macOS
-./tests/test-performance-regression.sh
 
-# Windows
-tests/test-performance-regression.bat
+Performance regression testing is done via the built-in benchmark suite:
+```bash
+zipper --benchmark
 ```
 
 #### Performance Features
-- **Micro-benchmarks**: BenchmarkDotNet-based performance analysis of all components
+- **Micro-benchmarks**: Built-in performance benchmark suite (run with `--benchmark`)
 - **Regression Testing**: Automated detection of performance degradation
 - **Memory Monitoring**: GC pressure and allocation tracking
 - **Throughput Analysis**: Files per second and data processing metrics

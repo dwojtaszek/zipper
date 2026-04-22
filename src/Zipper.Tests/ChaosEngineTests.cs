@@ -6,6 +6,22 @@ namespace Zipper
     public class ChaosEngineTests
     {
         [Fact]
+        public void Constructor_TotalLinesExceedsIntMax_ThrowsArgumentOutOfRangeException()
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosEngine(
+                totalLines: (long)int.MaxValue + 1,
+                chaosAmount: "1%",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42));
+
+            Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message);
+        }
+
+        [Fact]
         public void MixedDelimiters_ReplacesExactlyOneDelimiter()
         {
             var engine = new ChaosEngine(
@@ -15,6 +31,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             string line = "\u00feControl Number\u00fe\u0014\u00feFile Path\u00fe\u0014\u00feCustodian\u00fe";
@@ -51,6 +68,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
@@ -80,6 +98,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "|",
                 quoteDelimiter: "\"",
+                eol: "\r\n",
                 seed: 42);
 
             string line = "\"Val1\"|\"Val2\"|\"Val3\"";
@@ -109,6 +128,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\n",
                 seed: 42);
 
             string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
@@ -118,14 +138,39 @@ namespace Zipper
                 if (engine.ShouldIntercept(i))
                 {
                     string modified = engine.Intercept(i, line, $"DOC{i:D8}");
-                    Assert.Contains("\r\n", modified);
+                    Assert.Contains("\n", modified);
+                    Assert.DoesNotContain("\r\n", modified);
                     break;
                 }
             }
         }
 
         [Fact]
-        public void EncodingAnomaly_ReturnsInvalidBytes()
+        public void EncodingAnomaly_ReturnsNullUntilEncodingLineIsIntercepted()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 5,
+                chaosAmount: "1",
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            for (int i = 1; i <= 5; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    continue;
+                }
+
+                Assert.Null(engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8));
+            }
+        }
+
+        [Fact]
+        public void EncodingAnomaly_ReturnsInvalidBytesForInterceptedEncodingLine()
         {
             var engine = new ChaosEngine(
                 totalLines: 5,
@@ -134,11 +179,18 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             bool gotAnomaly = false;
             for (int i = 1; i <= 5; i++)
             {
+                if (!engine.ShouldIntercept(i))
+                {
+                    continue;
+                }
+
+                engine.Intercept(i, "Value1\u0014Value2", $"DOC{i:D8}");
                 var bytes = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
                 if (bytes != null)
                 {
@@ -161,6 +213,7 @@ namespace Zipper
                 format: LoadFileFormat.Opt,
                 columnDelimiter: ",",
                 quoteDelimiter: string.Empty,
+                eol: "\r\n",
                 seed: 42);
 
             string line = "IMG00000001,VOL001,IMAGES\\IMG00000001.tif,Y,,,3";
@@ -189,6 +242,7 @@ namespace Zipper
                 format: LoadFileFormat.Opt,
                 columnDelimiter: ",",
                 quoteDelimiter: string.Empty,
+                eol: "\r\n",
                 seed: 42);
 
             string line = "IMG00000001,VOL001,IMAGES\\IMG00000001.tif,Y,,,3";
@@ -217,6 +271,7 @@ namespace Zipper
                 format: LoadFileFormat.Opt,
                 columnDelimiter: ",",
                 quoteDelimiter: string.Empty,
+                eol: "\r\n",
                 seed: 42);
 
             string line = "IMG00000001,VOL001,IMAGES\\IMG00000001.tif,Y,,,3";
@@ -245,6 +300,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             int interceptCount = 0;
@@ -270,6 +326,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             int interceptCount = 0;
@@ -294,6 +351,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: "\u00fe",
+                eol: "\r\n",
                 seed: 42);
 
             string line = "\u00feValue\u00fe";
@@ -322,6 +380,7 @@ namespace Zipper
                 format: LoadFileFormat.Dat,
                 columnDelimiter: "\u0014",
                 quoteDelimiter: string.Empty, // "none"
+                eol: "\r\n",
                 seed: 42);
 
             // With quotes disabled and nothing else enabled, intercept should be a no-op
@@ -336,6 +395,106 @@ namespace Zipper
                     Assert.Equal(line, modified);
                 }
             }
+        }
+
+        [Fact]
+        public void OptPath_CorruptsImagePath()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 2,
+                chaosAmount: "2",
+                chaosTypes: "opt-path",
+                format: LoadFileFormat.Opt,
+                columnDelimiter: ",",
+                quoteDelimiter: string.Empty,
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,1";
+
+            for (int i = 1; i <= 2; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    string modified = engine.Intercept(i, line, "IMG001");
+                    var parts = modified.Split(',');
+                    Assert.Contains("invalid", parts[2]);
+                    break;
+                }
+            }
+        }
+
+        [Fact]
+        public void OptBatesId_RemovesBatesNumber()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 2,
+                chaosAmount: "2",
+                chaosTypes: "opt-batesid",
+                format: LoadFileFormat.Opt,
+                columnDelimiter: ",",
+                quoteDelimiter: string.Empty,
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,1";
+
+            for (int i = 1; i <= 2; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    string modified = engine.Intercept(i, line, "IMG001");
+                    Assert.StartsWith(",VOL001", modified);
+                    break;
+                }
+            }
+        }
+
+        [Fact]
+        public void EncodingAnomaly_SingleAuditEntry()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 1,
+                chaosAmount: "1",
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "Value1\u0014Value2";
+            if (engine.ShouldIntercept(1))
+            {
+                // Calling Intercept should not add an anomaly for "encoding" type
+                engine.Intercept(1, line, "DOC001");
+                Assert.Empty(engine.Anomalies);
+
+                // Getting the anomaly byte array should add exactly one
+                engine.GetEncodingAnomaly(1, 2, Encoding.UTF8);
+                Assert.Single(engine.Anomalies);
+            }
+        }
+
+        [Fact]
+        public void ChaosAmount_IntMaxBoundary_SelectsExactCountWithinRange()
+        {
+            var engine = new ChaosEngine(
+                totalLines: int.MaxValue,
+                chaosAmount: "1",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            var targetLinesField = typeof(ChaosEngine).GetField("targetLines", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(targetLinesField);
+
+            var targetLines = Assert.IsType<HashSet<int>>(targetLinesField!.GetValue(engine));
+            Assert.Single(targetLines);
+            Assert.InRange(targetLines.Single(), 1, int.MaxValue);
         }
     }
 }

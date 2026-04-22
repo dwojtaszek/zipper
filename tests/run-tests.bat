@@ -288,4 +288,13 @@ call :print_info "Running unified workflow tests..."
 call .\tests\test-unified-workflow.bat
 call :print_success "Unified workflow tests passed."
 
+REM Test 12: Loadfile-only and Chaos Engine tests
+call :print_info "Running loadfile-only and Chaos Engine tests..."
+call .\tests\run-e2e-loadfile.bat
+if errorlevel 1 (
+    echo [ ERROR ] Loadfile-only tests failed.
+    exit /b 1
+)
+call :print_success "Loadfile-only tests passed."
+
 call :print_success "All tests passed successfully!"
