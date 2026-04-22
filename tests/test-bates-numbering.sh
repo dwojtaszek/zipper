@@ -50,10 +50,10 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
 fi
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 1: No .dat file found"
 fi
 

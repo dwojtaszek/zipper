@@ -48,26 +48,26 @@ zipper \
 # Find production dir
 prod_dir=$(find "$TEST_OUTPUT_DIR/test1" -type d -name "PRODUCTION_*" | head -n 1)
 
-if [ -z "$prod_dir" ]; then
+if [[ -z "$prod_dir" ]]; then
   print_error "Test 1: No production directory found."
 fi
 
 # Verify structure
-if [ ! -d "$prod_dir/DATA" ]; then print_error "Missing DATA dir"; fi
-if [ ! -d "$prod_dir/NATIVES" ]; then print_error "Missing NATIVES dir"; fi
-if [ ! -d "$prod_dir/IMAGES" ]; then print_error "Missing IMAGES dir"; fi
-if [ ! -d "$prod_dir/TEXT" ]; then print_error "Missing TEXT dir"; fi
+if [[ ! -d "$prod_dir/DATA" ]]; then print_error "Missing DATA dir"; fi
+if [[ ! -d "$prod_dir/NATIVES" ]]; then print_error "Missing NATIVES dir"; fi
+if [[ ! -d "$prod_dir/IMAGES" ]]; then print_error "Missing IMAGES dir"; fi
+if [[ ! -d "$prod_dir/TEXT" ]]; then print_error "Missing TEXT dir"; fi
 
 # Verify load files exist
-if [ ! -f "$prod_dir/DATA/loadfile.dat" ]; then print_error "Missing DAT load file"; fi
-if [ ! -f "$prod_dir/DATA/loadfile.opt" ]; then print_error "Missing OPT load file"; fi
-if [ ! -f "$prod_dir/_manifest.json" ]; then print_error "Missing manifest JSON"; fi
+if [[ ! -f "$prod_dir/DATA/loadfile.dat" ]]; then print_error "Missing DAT load file"; fi
+if [[ ! -f "$prod_dir/DATA/loadfile.opt" ]]; then print_error "Missing OPT load file"; fi
+if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
 
 # Verify volumes (10 docs / 3 = 4 volumes)
 vol1=$(find "$prod_dir/NATIVES" -name "VOL001")
 vol4=$(find "$prod_dir/NATIVES" -name "VOL004")
-if [ -z "$vol1" ]; then print_error "Missing VOL001"; fi
-if [ -z "$vol4" ]; then print_error "Missing VOL004"; fi
+if [[ -z "$vol1" ]]; then print_error "Missing VOL001"; fi
+if [[ -z "$vol4" ]]; then print_error "Missing VOL004"; fi
 
 # Verify DAT contents
 if ! grep -q "PROD00000001" "$prod_dir/DATA/loadfile.dat"; then
@@ -90,13 +90,13 @@ zipper \
 
 zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" | head -n 1)
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No ZIP archive generated."
 fi
 
 # Make sure manifest exists and matches
 prod_dir=$(find "$TEST_OUTPUT_DIR/test2" -type d -name "PRODUCTION_*" | head -n 1)
-if [ ! -f "$prod_dir/_manifest.json" ]; then print_error "Missing manifest JSON"; fi
+if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
 
 print_success "Test Case 2: Production ZIP passed"
 

@@ -19,7 +19,7 @@ FILE_COUNT=20 # Use a consistent number of files for most tests
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
 # Keep ZIPPER_CMD available for any eval/exec call sites that reference it.
-if [ -n "${_ZIPPER_BIN:-}" ] && [ -x "${_ZIPPER_BIN}" ]; then
+if [[ -n "${_ZIPPER_BIN:-}" ]] && [[ -x "${_ZIPPER_BIN}" ]]; then
     ZIPPER_CMD="${_ZIPPER_BIN}"
 else
     ZIPPER_CMD="dotnet run --no-build -c Release --project $REPO_ROOT/src/Zipper.csproj --"
@@ -27,7 +27,7 @@ fi
 
 # Clean up function
 cleanup() {
-    if [ -d "$TEST_DIR" ]; then
+    if [[ -d "$TEST_DIR" ]]; then
         echo "Cleaning up test directory: $TEST_DIR"
         rm -rf "$TEST_DIR"
     fi
@@ -57,7 +57,7 @@ verify_headers() {
         fi
     done
 
-    if [ "$all_found" = true ]; then
+    if [[ "$all_found" = true ]]; then
         echo "  ✓ Header check PASSED. All expected columns are present."
     fi
     return $([ "$all_found" = true ] && echo 0 || echo 1)
@@ -84,7 +84,7 @@ verify_attachments() {
     local attachment_col_index
     attachment_col_index=$(echo "$header" | tr '\024' '\n' | grep -n 'þAttachmentþ' | cut -d: -f1)
 
-    if [ -z "$attachment_col_index" ]; then
+    if [[ -z "$attachment_col_index" ]]; then
         echo "  ✗ Could not find 'Attachment' column in DAT file."
         return 1
     fi
@@ -99,14 +99,14 @@ verify_attachments() {
     echo "  - Attachments found in ZIP: $attachment_zip_count"
     echo "  - Attachments referenced in DAT: $attachment_dat_count"
 
-    if [ "$attachment_dat_count" -ne "$attachment_zip_count" ]; then
+    if [[ "$attachment_dat_count" -ne "$attachment_zip_count" ]]; then
         echo "  ✗ Mismatch between attachments in ZIP ($attachment_zip_count) and references in DAT file ($attachment_dat_count)."
         return 1
     fi
 
     local min_expected
     min_expected=$(echo "$eml_count * $attachment_rate / 100 * 0.5" | bc -l | awk '{print int($1)}')
-    if [ "$attachment_dat_count" -ge "$min_expected" ]; then
+    if [[ "$attachment_dat_count" -ge "$min_expected" ]]; then
         echo "  ✓ Attachment count ($attachment_dat_count) is plausible for a $attachment_rate% rate."
         return 0
     else
@@ -158,11 +158,11 @@ run_test() {
         local dat_file
         dat_file=$(find "$test_path" -name "archive_*.dat")
 
-        if [ -z "$archive_file" ]; then
+        if [[ -z "$archive_file" ]]; then
             echo "  ✗ Test FAILED. Archive file not created."
             return
         fi
-        if [ -z "$dat_file" ]; then
+        if [[ -z "$dat_file" ]]; then
             echo "  ✗ Test FAILED. Load file not created."
             return
         fi
@@ -174,7 +174,7 @@ run_test() {
         if verify_headers "$header_line" "${expected_headers[@]}"; then
             local all_checks_passed=true
             
-            if [ "$check_text" = true ]; then
+            if [[ "$check_text" = true ]]; then
                 echo "  - Verifying extracted text files..."
                 local zip_files
                 zip_files=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$')
@@ -185,7 +185,7 @@ run_test() {
                 local attachment_count=$(count_zip_attachments "$archive_file")
                 local expected_txt_count=$((eml_count + attachment_count))
 
-                if [ "$expected_txt_count" -eq "$txt_count" ]; then
+                if [[ "$expected_txt_count" -eq "$txt_count" ]]; then
                     echo "  ✓ Correct number of text files found ($txt_count)."
                 else
                     echo "  ✗ Mismatch: Expected $expected_txt_count TXT files, but found $txt_count."
@@ -193,7 +193,7 @@ run_test() {
                 fi
             fi
 
-            if [ "$check_attachments" = true ]; then
+            if [[ "$check_attachments" = true ]]; then
                 local eml_count
                 eml_count=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$' | grep -c '\.eml$')
                 if ! verify_attachments "$dat_file" "$archive_file" "$attachment_rate" "$eml_count"; then
@@ -201,7 +201,7 @@ run_test() {
                 fi
             fi
 
-            if [ "$all_checks_passed" = true ]; then
+            if [[ "$all_checks_passed" = true ]]; then
                 echo "✓ Test $TEST_COUNT PASSED"
                 ((PASSED_COUNT++))
             else
@@ -272,7 +272,7 @@ echo "Passed: $PASSED_COUNT"
 FAILED_COUNT=$((TEST_COUNT - PASSED_COUNT))
 echo "Failed: $FAILED_COUNT"
 
-if [ $FAILED_COUNT -eq 0 ]; then
+if [[ $FAILED_COUNT -eq 0 ]]; then
     echo
     echo "✓ ALL TESTS PASSED - EML feature implementation is working correctly"
     exit 0

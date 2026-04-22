@@ -10,12 +10,12 @@ set -u
 # 0. Short-circuit if only docs/markdown changed
 # ──────────────────────────────────────────────────
 STAGED=$(git diff --cached --name-only --diff-filter=ACM)
-if [ -z "$STAGED" ]; then
+if [[ -z "$STAGED" ]]; then
     exit 0
 fi
 
 NON_DOC=$(printf '%s\n' "$STAGED" | grep -v -E '\.(md|txt)$' | grep -v '^docs/' || true)
-if [ -z "$NON_DOC" ]; then
+if [[ -z "$NON_DOC" ]]; then
     echo "✓ Pre-commit: docs-only change, skipping build/test."
     exit 0
 fi
@@ -29,7 +29,7 @@ fi
 # 1. Stash unstaged changes so we test the exact commit
 # ──────────────────────────────────────────────────
 STASH_REF=""
-if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+if ! git diff --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
     STASH_MSG="pre-commit-$(date +%s)-$$"
     if git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" >/dev/null 2>&1; then
         STASH_REF=$(git stash list --format='%gd %gs' | grep -F "$STASH_MSG" | awk '{print $1}' | head -1)
@@ -38,7 +38,7 @@ fi
 
 cleanup() {
     local rc=$?
-    if [ -n "$STASH_REF" ]; then
+    if [[ -n "$STASH_REF" ]]; then
         git stash pop --quiet "$STASH_REF" >/dev/null 2>&1 || \
             echo "⚠ Could not restore stash $STASH_REF — run 'git stash list' to recover." >&2
     fi

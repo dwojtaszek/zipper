@@ -48,17 +48,17 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
 opt_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.opt")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
 fi
 
-if [ -z "$opt_file" ]; then
+if [[ -z "$opt_file" ]]; then
   print_error "Test 1: No .opt file found"
 fi
 
 # Verify ZIP contains expected PDF files
 pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
-if [ "$pdf_count" -lt 10 ]; then
+if [[ "$pdf_count" -lt 10 ]]; then
   print_error "Test 1: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
@@ -89,17 +89,17 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
 csv_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.csv")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No .zip file found"
 fi
 
-if [ -z "$csv_file" ]; then
+if [[ -z "$csv_file" ]]; then
   print_error "Test 2: No .csv file found"
 fi
 
 # Verify ZIP contains expected PDF files
 pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
-if [ "$pdf_count" -lt 10 ]; then
+if [[ "$pdf_count" -lt 10 ]]; then
   print_error "Test 2: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
@@ -111,7 +111,7 @@ fi
 
 # Check for comma delimiter
 comma_count=$(head -n 1 "$csv_file" | grep -o "," | wc -l)
-if [ "$comma_count" -lt 1 ]; then
+if [[ "$comma_count" -lt 1 ]]; then
   print_error "Test 2: Expected comma delimiters in .csv file"
 fi
 
@@ -131,17 +131,17 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip")
 xml_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.xml")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 3: No .zip file found"
 fi
 
-if [ -z "$xml_file" ]; then
+if [[ -z "$xml_file" ]]; then
   print_error "Test 3: No .xml file found"
 fi
 
 # Verify ZIP contains expected PDF files
 pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
-if [ "$pdf_count" -lt 5 ]; then
+if [[ "$pdf_count" -lt 5 ]]; then
   print_error "Test 3: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
@@ -178,17 +178,17 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip")
 concordance_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 4: No .zip file found"
 fi
 
-if [ -z "$concordance_file" ]; then
+if [[ -z "$concordance_file" ]]; then
   print_error "Test 4: No .dat file found"
 fi
 
 # Verify ZIP contains expected PDF files
 pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
-if [ "$pdf_count" -lt 5 ]; then
+if [[ "$pdf_count" -lt 5 ]]; then
   print_error "Test 4: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
@@ -213,17 +213,17 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 5: No .zip file found"
 fi
 
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 5: No .dat file found"
 fi
 
 # Verify ZIP contains expected PDF files
 pdf_count=$(unzip -l "$zip_file" 2>/dev/null | grep -c "\.pdf" || true)
-if [ "$pdf_count" -lt 5 ]; then
+if [[ "$pdf_count" -lt 5 ]]; then
   print_error "Test 5: Expected at least 5 PDF files in zip, found $pdf_count"
 fi
 
@@ -260,7 +260,7 @@ for format in "dat" "opt" "csv" "xml" "concordance"; do
 
   load_file=$(find "$TEST_OUTPUT_DIR/test6_$format" -name "*.$ext")
 
-  if [ -z "$load_file" ]; then
+  if [[ -z "$load_file" ]]; then
     print_error "Test 6: No .$ext file found for format $format"
   fi
 
@@ -288,7 +288,7 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.dat")
 
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 7: No .dat file found"
 fi
 
@@ -319,18 +319,18 @@ zipper \
 # Verify output
 dat_file=$(find "$TEST_OUTPUT_DIR/test8" -name "*.dat")
 
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 8: No .dat file found"
 fi
 
 # Verify file was created (ASCII 20 and 254 are non-printable, so we just verify load file exists and has content)
-if [ ! -s "$dat_file" ]; then
+if [[ ! -s "$dat_file" ]]; then
   print_error "Test 8: DAT file is empty"
 fi
 
 # Check that it has the expected number of lines (header + 5 data rows)
 line_count=$(wc -l < "$dat_file")
-if [ "$line_count" -lt 6 ]; then
+if [[ "$line_count" -lt 6 ]]; then
   print_error "Test 8: Expected at least 6 lines in .dat file, found $line_count"
 fi
 
@@ -351,7 +351,7 @@ zipper \
 # Verify output
 dat_file=$(find "$TEST_OUTPUT_DIR/test9" -name "*.dat")
 
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 9: No .dat file found"
 fi
 

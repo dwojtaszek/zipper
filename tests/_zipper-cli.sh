@@ -12,8 +12,8 @@
 _zipper_project="${ZIPPER_PROJECT:-src/Zipper.csproj}"
 
 _zipper_resolve_bin() {
-    # Already resolved (e.g. parent script sourced this) → keep it.
-    if [ -n "${_ZIPPER_BIN:-}" ] && [ -x "${_ZIPPER_BIN}" ]; then
+    # Already resolved (e.g. parent script sourced this) keep it.
+    if [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
         return 0
     fi
 
@@ -26,17 +26,18 @@ _zipper_resolve_bin() {
     # Discover the produced binary. Works for any net* TFM.
     local build_dir
     build_dir=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" 2>/dev/null | head -n 1)
-    [ -z "$build_dir" ] && build_dir="src/bin/Release/net8.0"
+    [[ -z "$build_dir" ]] && build_dir="src/bin/Release/net8.0"
 
-    if [ -f "$build_dir/Zipper" ]; then
+    if [[ -f "$build_dir/Zipper" ]]; then
         export _ZIPPER_BIN="$build_dir/Zipper"
-    elif [ -f "$build_dir/Zipper.exe" ]; then
+    elif [[ -f "$build_dir/Zipper.exe" ]]; then
         export _ZIPPER_BIN="$build_dir/Zipper.exe"
     fi
+    return 0
 }
 
 zipper() {
-    if [ -n "${_ZIPPER_BIN:-}" ] && [ -x "${_ZIPPER_BIN}" ]; then
+    if [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
         "${_ZIPPER_BIN}" "$@"
     else
         dotnet run --no-build -c Release --project "$_zipper_project" -- "$@"

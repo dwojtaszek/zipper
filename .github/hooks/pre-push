@@ -25,21 +25,21 @@ fi
 # ──────────────────────────────────────────────────
 RUN_UNIT_TESTS=true
 MARKER=".git/zipper-hooks/pre-commit.ok"
-if [ -f "$MARKER" ]; then
+if [[ -f "$MARKER" ]]; then
     MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
     MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
     CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
-    if [ -n "$MARKER_TS" ] && [ -n "$CURRENT_HEAD" ] && [ "$MARKER_HEAD" = "$CURRENT_HEAD" ]; then
+    if [[ -n "$MARKER_TS" ]] && [[ -n "$CURRENT_HEAD" ]] && [[ "$MARKER_HEAD" = "$CURRENT_HEAD" ]]; then
         NOW=$(date +%s)
         AGE=$((NOW - MARKER_TS))
-        if [ "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]; then
+        if [[ "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
             echo "✓ Unit tests already passed in pre-commit (${AGE}s ago); skipping."
             RUN_UNIT_TESTS=false
         fi
     fi
 fi
 
-if [ "$RUN_UNIT_TESTS" = true ]; then
+if [[ "$RUN_UNIT_TESTS" = true ]]; then
     echo ""
     echo "▶ Running unit tests..."
     if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
@@ -62,7 +62,7 @@ echo "▶ Running basic E2E smoke tests..."
 E2E_RAN=false
 case "$(uname -s)" in
     Linux*|Darwin*)
-        if [ -f "./tests/run-e2e-basic.sh" ]; then
+        if [[ -f "./tests/run-e2e-basic.sh" ]]; then
             chmod +x ./tests/run-e2e-basic.sh
             if ! bash ./tests/run-e2e-basic.sh; then
                 echo ""
@@ -77,7 +77,7 @@ case "$(uname -s)" in
         fi
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        if [ -f "./tests/run-e2e-basic.bat" ]; then
+        if [[ -f "./tests/run-e2e-basic.bat" ]]; then
             if ! cmd.exe //c ".\\tests\\run-e2e-basic.bat"; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
@@ -93,7 +93,7 @@ case "$(uname -s)" in
 esac
 
 echo ""
-if [ "$E2E_RAN" = true ]; then
+if [[ "$E2E_RAN" = true ]]; then
     echo "✓ All pre-push checks passed"
 else
     echo "⚠ Unit tests passed, but E2E smoke tests were skipped"

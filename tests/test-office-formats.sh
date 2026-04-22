@@ -48,16 +48,16 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
 fi
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 1: No .dat file found"
 fi
 
 # Verify DOCX files were created
 docx_count=$(unzip -l "$zip_file" | grep -c "\.docx" || true)
-if [ "$docx_count" -lt 10 ]; then
+if [[ "$docx_count" -lt 10 ]]; then
   print_error "Test 1: Expected at least 10 DOCX files in zip, found $docx_count"
 fi
 
@@ -82,16 +82,16 @@ zipper \
 zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
 dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat")
 
-if [ -z "$zip_file" ]; then
+if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No .zip file found"
 fi
-if [ -z "$dat_file" ]; then
+if [[ -z "$dat_file" ]]; then
   print_error "Test 2: No .dat file found"
 fi
 
 # Verify XLSX files were created
 xlsx_count=$(unzip -l "$zip_file" | grep -c "\.xlsx" || true)
-if [ "$xlsx_count" -lt 10 ]; then
+if [[ "$xlsx_count" -lt 10 ]]; then
   print_error "Test 2: Expected at least 10 XLSX files in zip, found $xlsx_count"
 fi
 
@@ -184,7 +184,7 @@ for format in "dat" "opt" "csv" "xml"; do
 
   load_file=$(find "$TEST_OUTPUT_DIR/test5_$format" -name "*.$ext")
 
-  if [ -z "$load_file" ]; then
+  if [[ -z "$load_file" ]]; then
     print_error "Test 5: No .$ext file found for format $format"
   fi
 
@@ -211,7 +211,7 @@ zip_file=$(find "$TEST_OUTPUT_DIR/test6" -name "*.zip")
 # Get the first DOCX file from the archive
 docx_filename=$(unzip -l "$zip_file" | grep "\.docx" | head -n 1 | awk '{print $4}')
 
-if [ -z "$docx_filename" ]; then
+if [[ -z "$docx_filename" ]]; then
   print_error "Test 6: Could not find DOCX file in archive"
 fi
 
@@ -222,7 +222,7 @@ unzip -q "$zip_file" "$docx_filename" -d "$temp_dir"
 
 # Verify the extracted DOCX is a valid ZIP archive
 unzip -t "$temp_dir/$docx_filename" > /dev/null 2>&1
-if [ $? -eq 0 ]; then
+if [[ $? -eq 0 ]]; then
   print_success "Test Case 6: DOCX file is valid ZIP archive"
 else
   print_error "Test 6: Extracted DOCX file is not a valid ZIP archive"

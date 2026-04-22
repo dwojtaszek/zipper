@@ -15,7 +15,7 @@ PROJECT="src/Zipper.csproj"
 
 # Dynamically locate the built framework directory
 BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" | head -n 1)
-[ -z "$BUILD_DIR" ] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
+[[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
 
 # --- Helper Functions ---
 
@@ -55,14 +55,14 @@ function verify_output() {
   local dat_file
   dat_file=$(find "$test_dir" -name "*.dat")
 
-  [ -z "$zip_file" ] && print_error "No .zip file found in $test_dir"
-  [ -z "$dat_file" ] && print_error "No .dat file found in $test_dir"
+  [[ -z "$zip_file" ]] && print_error "No .zip file found in $test_dir"
+  [[ -z "$dat_file" ]] && print_error "No .dat file found in $test_dir"
 
   local zip_listing
   get_zip_listing "$zip_file" zip_listing
 
   local dat_content_cmd="cat"
-  [ "$encoding" = "UTF-16" ] && dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
+  [[ "$encoding" = "UTF-16" ]] && dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
 
   local dat_content
   dat_content=$($dat_content_cmd < "$dat_file")
@@ -72,7 +72,7 @@ function verify_output() {
   line_count=$(echo "$dat_content" | wc -l)
   line_count=$(echo "$line_count" | tr -d ' ')
   local expected_line_count=$((expected_count + 1))
-  [ "$line_count" -ne "$expected_line_count" ] && \
+  [[ "$line_count" -ne "$expected_line_count" ]] && \
     print_error "Line count: expected $expected_line_count, got $line_count"
   print_info ".dat line count OK ($line_count)"
 
@@ -89,19 +89,19 @@ function verify_output() {
   # Verify file count in zip
   local zip_file_count
   zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type") || true
-  [ "$zip_file_count" -ne "$expected_count" ] && \
+  [[ "$zip_file_count" -ne "$expected_count" ]] && \
     print_error "Zip .$file_type count: expected $expected_count, got $zip_file_count"
   print_info ".zip .$file_type count OK ($zip_file_count)"
 
   # Verify text files if required
-  if [ "$check_text" = "true" ]; then
+  if [[ "$check_text" = "true" ]]; then
     local txt_count
-    if [ "$file_type" = "eml" ]; then
+    if [[ "$file_type" = "eml" ]]; then
       txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       txt_count=$(echo "$zip_listing" | grep -c "\.txt")
     fi
-    [ "$txt_count" -ne "$expected_count" ] && \
+    [[ "$txt_count" -ne "$expected_count" ]] && \
       print_error "Zip .txt count: expected $expected_count, got $txt_count"
     print_info ".zip .txt count OK ($txt_count)"
   fi
@@ -115,12 +115,12 @@ function verify_load_file_included() {
 
     local zip_file
     zip_file=$(find "$test_dir" -name "*.zip")
-    [ -z "$zip_file" ] && print_error "No .zip file found in $test_dir"
+    [[ -z "$zip_file" ]] && print_error "No .zip file found in $test_dir"
 
     # No separate .dat should exist
     local dat_file
     dat_file=$(find "$test_dir" -name "*.dat")
-    [ -n "$dat_file" ] && print_error "Found separate .dat file — should be inside zip"
+    [[ -n "$dat_file" ]] && print_error "Found separate .dat file — should be inside zip"
 
     local zip_listing
     get_zip_listing "$zip_file" zip_listing
@@ -128,13 +128,13 @@ function verify_load_file_included() {
     # .dat inside zip
     local dat_in_zip
     dat_in_zip=$(echo "$zip_listing" | grep -c "\.dat$") || true
-    [ "$dat_in_zip" -ne 1 ] && print_error "Expected 1 .dat in zip, found $dat_in_zip"
+    [[ "$dat_in_zip" -ne 1 ]] && print_error "Expected 1 .dat in zip, found $dat_in_zip"
     print_info ".dat correctly inside zip"
 
     # Verify file count
     local zip_file_count
     zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type") || true
-    [ "$zip_file_count" -ne "$expected_count" ] && \
+    [[ "$zip_file_count" -ne "$expected_count" ]] && \
       print_error "Zip .$file_type count: expected $expected_count, got $zip_file_count"
     print_info ".zip .$file_type count OK ($zip_file_count)"
 }
@@ -148,9 +148,9 @@ dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null || {
 }
 
 # Resolve binary path
-if [ -f "$BUILD_DIR/Zipper" ]; then
+if [[ -f "$BUILD_DIR/Zipper" ]]; then
     BINARY=("$BUILD_DIR/Zipper")
-elif [ -f "$BUILD_DIR/Zipper.exe" ]; then
+elif [[ -f "$BUILD_DIR/Zipper.exe" ]]; then
     BINARY=("$BUILD_DIR/Zipper.exe")
 else
     # Fallback: use dotnet run (slower)
@@ -186,7 +186,7 @@ verify_output "$TEST_OUTPUT_DIR/eml_attach" 10 "Control Number,File Path,To,From
 zip_file=$(find "$TEST_OUTPUT_DIR/eml_attach" -name "*.zip")
 zip_listing=$(unzip -l "$zip_file")
 attachment_count=$(echo "$zip_listing" | grep -c "attachment\.") || true
-[ "$attachment_count" -eq 0 ] && print_error "Expected attachments in zip but found none"
+[[ "$attachment_count" -eq 0 ]] && print_error "Expected attachments in zip but found none"
 print_info "Found $attachment_count attachments in zip"
 
 print_success "Test 2: EML with attachments — PASSED"
@@ -204,7 +204,7 @@ print_success "Test 4: Load file in zip — PASSED"
 # 5. Bates numbering (feature-specific)
 run_test "Bates numbering" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_bates" --bates-prefix "SMOKE" --bates-start 1 --bates-digits 8
 dat_file=$(find "$TEST_OUTPUT_DIR/pdf_bates" -name "*.dat")
-[ -z "$dat_file" ] && print_error "No .dat file found for Bates test"
+[[ -z "$dat_file" ]] && print_error "No .dat file found for Bates test"
 grep -q "SMOKE00000001" "$dat_file" || print_error "Bates number SMOKE00000001 not found"
 grep -q "SMOKE00000010" "$dat_file" || print_error "Bates number SMOKE00000010 not found"
 print_success "Test 5: Bates numbering — PASSED"

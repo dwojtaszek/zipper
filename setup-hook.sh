@@ -13,7 +13,7 @@ set -eu
 HOOK_DIR=".git/hooks"
 TEMPLATE_DIR=".github/hooks"
 
-if [ ! -d .git ]; then
+if [[ ! -d .git ]]; then
     echo "Error: not a git repository (no .git directory)." >&2
     exit 1
 fi
@@ -24,12 +24,12 @@ install_hook() {
     local name="$1"
     local src="$TEMPLATE_DIR/$name"
     local dst="$HOOK_DIR/$name"
-    if [ ! -f "$src" ]; then
+    if [[ ! -f "$src" ]]; then
         echo "Warning: template $src not found — skipping $name" >&2
         return 0
     fi
     cp "$src" "$dst"
-    chmod +x "$dst"
+    chmod u+x "$dst"
     echo "Installed: $dst"
 }
 
@@ -37,7 +37,7 @@ install_hook "pre-commit"
 install_hook "pre-push"
 
 # Optional PowerShell variant for Windows dev envs without Git Bash.
-if [ -f "$TEMPLATE_DIR/pre-push.ps1" ]; then
+if [[ -f "$TEMPLATE_DIR/pre-push.ps1" ]]; then
     cp "$TEMPLATE_DIR/pre-push.ps1" "$HOOK_DIR/pre-push.ps1"
     echo "Installed: $HOOK_DIR/pre-push.ps1 (PowerShell fallback)"
 fi
