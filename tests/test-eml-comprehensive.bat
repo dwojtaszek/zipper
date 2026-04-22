@@ -14,7 +14,11 @@ set "TEST_DIR=%TEMP%\zipper-eml-test-%RANDOM%"
 set "REPO_ROOT=%~dp0.."
 set "FILE_COUNT=20"
 
-REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
+REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD% to an
+REM absolute path (helper uses %%~fD), so later calls work regardless of cwd.
+REM Pass ZIPPER_PROJECT as an absolute path so the helper's 'dotnet build'
+REM and the bin discovery remain correct after popd.
+set "ZIPPER_PROJECT=%REPO_ROOT%\src\Zipper.csproj"
 pushd "%REPO_ROOT%"
 call "%~dp0_zipper-cli.bat"
 popd

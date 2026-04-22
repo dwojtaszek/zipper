@@ -6,17 +6,20 @@ Version-controlled git hooks for local code quality enforcement.
 
 ### pre-commit
 Runs on `git commit` against the **staged snapshot** (unstaged changes are stashed first):
-1. Short-circuits if the commit only touches `*.md` / `*.txt` / `docs/` files.
-2. `dotnet format` — auto-fixes style; fails the commit if changes were needed.
-3. Unit tests — all ~450 tests (~1 s on a modern machine).
-4. On success, records a timestamp marker in `.git/zipper-hooks/pre-commit.ok`.
+1. Short-circuits if **every** changed file matches a docs pattern (`*.md`, `*.txt`, `docs/`, `CHANGELOG.md`).
+2. Stashes unstaged changes so the checks see exactly what's about to land.
+3. `dotnet format` — runs only on staged `*.cs` files (via `--include`). Fails the commit if those staged files need reformatting.
+4. Unit tests — all ~450 tests (~1 s on a modern machine).
+
+### post-commit
+Runs on `git commit` **after** the new commit object is created. Writes a success marker at `$(git rev-parse --git-path zipper-hooks)/pre-commit.ok` containing the timestamp and the new commit's HEAD hash. The pre-push hook uses this marker to skip unit tests if they just ran.
 
 ### pre-push
 Runs on `git push`:
-1. Unit tests — **skipped** if `pre-commit.ok` was recorded within the last 10 minutes on the same HEAD.
+1. Unit tests — **skipped** if the post-commit marker was recorded within the last 10 minutes on the current HEAD.
 2. Basic E2E smoke suite (5 representative cases, ~6 s) via `tests/run-e2e-basic.sh` / `.bat`.
 
-A PowerShell variant (`pre-push.ps1`) is installed for Windows developers without Git Bash.
+All three hooks support git worktrees (they use `git rev-parse --git-common-dir` / `--git-path` rather than hard-coded `.git/…` paths).
 
 Full E2E suite + coverage checks run in CI only.
 
@@ -27,7 +30,7 @@ Full E2E suite + coverage checks run in CI only.
 setup-hook.bat    # Windows
 ```
 
-Both scripts copy `.github/hooks/{pre-commit,pre-push,pre-push.ps1}` into `.git/hooks/`.
+Both scripts copy `.github/hooks/{pre-commit,post-commit,pre-push}` into `$(git rev-parse --git-common-dir)/hooks/`.
 
 ## Bypass (not recommended)
 

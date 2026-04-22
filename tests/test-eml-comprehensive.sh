@@ -22,7 +22,9 @@ source "$(dirname "$0")/_zipper-cli.sh"
 if [[ -n "${_ZIPPER_BIN:-}" ]] && [[ -x "${_ZIPPER_BIN}" ]]; then
     ZIPPER_CMD="${_ZIPPER_BIN}"
 else
-    ZIPPER_CMD="dotnet run --no-build -c Release --project $REPO_ROOT/src/Zipper.csproj --"
+    # Fallback WITHOUT --no-build: if the helper's build failed, dotnet run
+    # needs to be able to compile on demand.
+    ZIPPER_CMD="dotnet run -c Release --project $REPO_ROOT/src/Zipper.csproj --"
 fi
 
 # Clean up function

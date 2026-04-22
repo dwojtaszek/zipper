@@ -18,6 +18,10 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    # Non-blocking: review is informational and can run 10-20 min. A failure or
+    # timeout here must not fail the whole workflow / gate PR merges.
+    continue-on-error: true
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -36,4 +40,6 @@ jobs:
           automatic_review: true
           automatic_security_review: true
           review_depth: shallow
-          review_model: kimi-k2.6
+          # Faster, cheaper model than kimi-k2.6 (~5-8 min vs 11-19 min).
+          review_model: claude-haiku-4-5-20251001
+          reasoning_effort: low

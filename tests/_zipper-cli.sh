@@ -24,9 +24,14 @@ _zipper_resolve_bin() {
     fi
 
     # Discover the produced binary. Works for any net* TFM.
+    # Resolve to an absolute path so the caller can cd elsewhere between
+    # helper-init and command invocation without breaking the binary path.
     local build_dir
     build_dir=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" 2>/dev/null | head -n 1)
     [[ -z "$build_dir" ]] && build_dir="src/bin/Release/net8.0"
+    if [[ -d "$build_dir" ]]; then
+        build_dir=$(cd "$build_dir" && pwd)
+    fi
 
     if [[ -f "$build_dir/Zipper" ]]; then
         export _ZIPPER_BIN="$build_dir/Zipper"
@@ -40,7 +45,10 @@ zipper() {
     if [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
         "${_ZIPPER_BIN}" "$@"
     else
-        dotnet run --no-build -c Release --project "$_zipper_project" -- "$@"
+        # Build failed or binary not found: fall back to `dotnet run` WITHOUT
+        # --no-build so the project is compiled on demand. Using --no-build
+        # here would guarantee a missing-assembly failure.
+        dotnet run -c Release --project "$_zipper_project" -- "$@"
     fi
 }
 

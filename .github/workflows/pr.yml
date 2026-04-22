@@ -29,13 +29,32 @@ jobs:
       - id: check
         shell: bash
         run: |
+          set -euo pipefail
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          changed=$(git diff --name-only "$base" "$head" | grep -v -E '\.(md|txt)$' | grep -v '^docs/' || true)
-          if [[ -z "$changed" ]]; then
-            echo "Docs-only PR detected; skipping build and tests."
+
+          # Step 1: fetch the list of changed files; propagate a genuine
+          # `git diff` failure (missing SHA, corrupt object, etc.) so we
+          # never silently declare a failed diff as "docs-only".
+          files=$(git diff --name-only "$base" "$head")
+
+          if [[ -z "$files" ]]; then
+            echo "No files changed between $base and $head; treating as non-docs to be safe."
+            echo "only_docs=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Step 2: every changed file must match a docs pattern to qualify
+          # as docs-only. Count matches explicitly (no `|| true` masking).
+          total=$(printf '%s\n' "$files" | grep -c . || true)
+          docs=$(printf '%s\n' "$files" \
+              | grep -c -E '(^|/)(docs/|CHANGELOG\.md$|.*\.(md|txt)$)' || true)
+
+          if [[ "$total" -gt 0 && "$docs" -eq "$total" ]]; then
+            echo "Docs-only PR detected ($total files, all docs); skipping build and tests."
             echo "only_docs=true" >> "$GITHUB_OUTPUT"
           else
+            echo "Non-docs change detected ($docs of $total files are docs); running full PR pipeline."
             echo "only_docs=false" >> "$GITHUB_OUTPUT"
           fi
 

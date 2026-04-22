@@ -1,9 +1,9 @@
 #!/bin/bash
 # Pre-push git hook — unit tests + basic E2E smoke suite.
-# Installs to: .git/hooks/pre-push
+# Installs to: $(git rev-parse --git-common-dir)/hooks/pre-push
 #
-# Skips unit tests if pre-commit ran them within the last 10 minutes on the
-# same HEAD. Full E2E + coverage checks run in CI.
+# Skips unit tests if the post-commit hook wrote a success marker within the
+# last 10 minutes on the current HEAD. Full E2E + coverage checks run in CI.
 #
 # To bypass (not recommended): git push --no-verify
 
@@ -21,15 +21,15 @@ if ! command -v dotnet >/dev/null 2>&1; then
 fi
 
 # ──────────────────────────────────────────────────
-# 1. Unit tests — skip if pre-commit ran them recently on the same HEAD
+# 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD
 # ──────────────────────────────────────────────────
 RUN_UNIT_TESTS=true
-MARKER=".git/zipper-hooks/pre-commit.ok"
-if [[ -f "$MARKER" ]]; then
+MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
+if [[ -n "$MARKER" && -f "$MARKER" ]]; then
     MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
     MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
     CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
-    if [[ -n "$MARKER_TS" ]] && [[ -n "$CURRENT_HEAD" ]] && [[ "$MARKER_HEAD" = "$CURRENT_HEAD" ]]; then
+    if [[ -n "$MARKER_TS" && -n "$CURRENT_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]]; then
         NOW=$(date +%s)
         AGE=$((NOW - MARKER_TS))
         if [[ "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
@@ -39,7 +39,7 @@ if [[ -f "$MARKER" ]]; then
     fi
 fi
 
-if [[ "$RUN_UNIT_TESTS" = true ]]; then
+if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     echo ""
     echo "▶ Running unit tests..."
     if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
@@ -63,7 +63,6 @@ E2E_RAN=false
 case "$(uname -s)" in
     Linux*|Darwin*)
         if [[ -f "./tests/run-e2e-basic.sh" ]]; then
-            chmod +x ./tests/run-e2e-basic.sh
             if ! bash ./tests/run-e2e-basic.sh; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
@@ -93,7 +92,7 @@ case "$(uname -s)" in
 esac
 
 echo ""
-if [[ "$E2E_RAN" = true ]]; then
+if [[ "$E2E_RAN" == "true" ]]; then
     echo "✓ All pre-push checks passed"
 else
     echo "⚠ Unit tests passed, but E2E smoke tests were skipped"

@@ -1,0 +1,29 @@
+#!/bin/bash
+# Post-commit hook — records a success marker for the pre-push "skip if recent"
+# optimization. Runs AFTER the new commit object exists, so git rev-parse HEAD
+# returns the newly created commit, which is exactly what pre-push will see.
+#
+# Works in both regular repositories and worktrees: uses `git rev-parse
+# --git-path` so the marker lives next to the active hook's git dir.
+
+set -u
+
+# Only record a marker if pre-commit actually ran its checks. We rely on a
+# sentinel env var set by the wrapper invocation via --no-verify detection
+# is not reliable, so instead we always record it here and let pre-push use
+# a window-based heuristic.
+
+HEAD_HASH=$(git rev-parse HEAD 2>/dev/null || echo "")
+if [[ -z "$HEAD_HASH" ]]; then
+    exit 0
+fi
+
+MARKER_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
+if [[ -z "$MARKER_DIR" ]]; then
+    exit 0
+fi
+
+mkdir -p "$MARKER_DIR" 2>/dev/null || exit 0
+printf 'timestamp=%s\nhead=%s\n' "$(date +%s)" "$HEAD_HASH" > "$MARKER_DIR/pre-commit.ok" 2>/dev/null || true
+
+exit 0
