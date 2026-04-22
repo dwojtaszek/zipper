@@ -8,73 +8,73 @@
 
 ## 1. Core Purpose
 
-The `zipper` application is a .NET Core command-line tool designed to generate large, highly compressed `.zip` files containing a specified number of placeholder files. It also generates a corresponding load file compatible with import specifications.
+The `zipper` application is a .NET Core command-line tool designed to generate large, highly compressed Archives containing a specified number of Native Files. It also generates a corresponding Load File compatible with import specifications.
 
 ## 2. Features
 
 ### FR_E-002: Core File Generation
-- **REQ_E-008**: The application must generate a user-specified number of files.
-- **REQ_E-009**: The application must support generating up to 100 million files.
-- **REQ_E-010**: The application must support generating files of type `pdf`, `jpg`, `tiff`, `eml`, `docx`, or `xlsx`.
-- **REQ_E-011**: The content for the generated files must be a minimal, valid, and identical placeholder to ensure maximum compression.
+- **REQ_E-008**: The application must generate a user-specified number of Native Files.
+- **REQ_E-009**: The application must support generating up to 100 million Native Files.
+- **REQ_E-010**: The application must support generating Native Files of type `pdf`, `jpg`, `tiff`, `eml`, `docx`, or `xlsx`.
+- **REQ_E-011**: The content for the generated Native Files must be a minimal, valid, and identical placeholder to ensure maximum compression.
 - **REQ_E-012**: The application will provide placeholder content internally, without requiring user-supplied template files.
 
 ### FR_E-003: Archive Creation
-- **REQ_E-013**: The application must output a single `.zip` archive.
+- **REQ_E-013**: The application must output a single Archive.
 - **REQ_E-014**: The compression level must be equivalent to the standard "best compression" (DEFLATE).
-- **REQ_E-015**: The system must support archives exceeding 4GB and 65,535 files (Zip64).
+- **REQ_E-015**: The system must support Archives exceeding 4GB and 65,535 Native Files (Zip64).
 
 ### FR_E-004: Load File Generation
-- **REQ_E-016**: The application must generate a single `.dat` load file corresponding to the zip archive.
-- **REQ_E-017**: The load file must use ASCII character 20 as the column delimiter.
-- **REQ_E-018**: The load file must use ASCII character 254 as the quote/text qualifier.
-- **REQ_E-019**: The load file must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`.
-- **REQ_E-020**: The load file must contain a unique `Control Number` column for each document.
-- **REQ_E-021**: The load file must contain a `File Path` column pointing to the file's relative location within the zip archive.
+- **REQ_E-016**: The application must generate a single `.dat` Load File corresponding to the Archive.
+- **REQ_E-017**: The Load File must use ASCII character 20 as the column delimiter.
+- **REQ_E-018**: The Load File must use ASCII character 254 as the quote/text qualifier.
+- **REQ_E-019**: The Load File must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`.
+- **REQ_E-020**: The Load File must contain a unique `Control Number` column for each Native File.
+- **REQ_E-021**: The Load File must contain a `File Path` column pointing to the Native File's relative location within the Archive.
 
 ### FR-000: Automatic Metadata Generation
 - **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
-- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For EML file types, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to email files.
-- **REQ-002**: The `Custodian` field shall be linked to the folder structure. The tool will generate a unique custodian name for each folder (e.g., "Custodian 1"). All files within a given folder will be assigned that folder's custodian. If no folders are specified, a single default custodian name will be assigned to all files.
+- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For the Email File Type, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to Emails.
+- **REQ-002**: The `Custodian` field shall be linked to the Folder structure. The tool will generate a unique custodian name for each Folder (e.g., "Custodian 1"). All Native Files within a given Folder will be assigned that Folder's custodian. If no Folders are specified, a single default custodian name will be assigned to all Native Files.
 - **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
 
 ### FR-001: Integrated Extracted Text
 - **REQ-004**: A new optional command-line argument `--with-text` shall be introduced.
-- **REQ-005**: When specified, the tool will generate a matching `.txt` file for every document within the zip archive.
+- **REQ-005**: When specified, the tool will generate a matching `.txt` file for every document within the Archive.
 - **REQ-006**: The content for each `.txt` file will be a fixed, non-configurable, standard block of internal placeholder text to ensure maximum compressibility.
-- **REQ-007**: The `.dat` load file must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
+- **REQ-007**: The `.dat` Load File must be updated to include a column `Extracted Text` pointing to the relative path of the corresponding `.txt` file.
 
 ### FR-002: Basic Email Generation
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
-- **REQ-009**: When `--type eml` is specified, the tool will generate `.eml` files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
-- **REQ-010**: The associated `.dat` load file will contain columns corresponding to the email headers, populated with auto-generated data. For EML files, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to email files.
-- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated emails have one of the placeholder documents included as a random attachment. Defaults to 0.
+- **REQ-009**: When `--type eml` is specified, the tool will generate Email Native Files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
+- **REQ-010**: The associated `.dat` Load File will contain columns corresponding to the email headers, populated with auto-generated data. For Emails, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to Emails.
+- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have one of the Native Files included as a random Attachment. Defaults to 0.
 
 ### FR_E-005: File Distribution Patterns
 - **REQ_E-022**: A new optional command-line argument `--distribution` shall be introduced.
 - **REQ_E-023**: The tool shall support three distribution patterns: `proportional`, `gaussian`, and `exponential`.
 - **REQ_E-024**: `proportional` shall be the default distribution pattern.
-- **REQ_E-025**: `proportional` distribution shall assign files to folders in a round-robin fashion.
-- **REQ_E-026**: `gaussian` distribution shall assign files in a bell-curve pattern, with most files concentrated in the middle folders.
-- **REQ_E-027**: `exponential` distribution shall assign files in an exponential decay pattern, with most files concentrated in the first few folders.
-- **REQ_E-028**: The application must support distributing files into a user-specified number of folders (from 1 to 100), defaulting to 1.
+- **REQ_E-025**: `proportional` distribution shall assign Native Files to Folders in a round-robin fashion.
+- **REQ_E-026**: `gaussian` distribution shall assign Native Files in a bell-curve pattern, with most Native Files concentrated in the middle Folders.
+- **REQ_E-027**: `exponential` distribution shall assign Native Files in an exponential decay pattern, with most Native Files concentrated in the first few Folders.
+- **REQ_E-028**: The application must support distributing Native Files into a user-specified number of Folders (from 1 to 100), defaulting to 1.
 
 ### FR-005: Target Zip Size via In-File Padding
 - **REQ-021**: A new optional command-line argument `--target-zip-size <size>` shall be introduced.
 - **REQ-022**: The application must exit with a validation error if `--target-zip-size` is specified without the `--count` argument.
-- **REQ-023**: When both `--target-zip-size` and `--count` are used, the tool must calculate the amount of uncompressible padding needed for each file to meet the final compressed --target-zip-size.
-- **REQ-024**: The tool must append the calculated amount of random (non-compressible) data to each of the count placeholder files' content before they are added to the archive for compression.
-- **REQ-025**: The final generated zip file size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation.
+- **REQ-023**: When both `--target-zip-size` and `--count` are used, the tool must calculate the amount of uncompressible padding needed for each Native File to meet the final compressed --target-zip-size.
+- **REQ-024**: The tool must append the calculated amount of random (non-compressible) data to each of the count Native Files' content before they are added to the Archive for compression.
+- **REQ-025**: The final generated Archive size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation.
 - **REQ-026**: The application must perform a pre-check to estimate the minimum possible compressed size of the requested files. If this estimated minimum size already exceeds the --target-zip-size, the tool must exit immediately with a clear error message to prevent an impossible task from running.
 
 ### FR-006: Inclusive Load File
 - **REQ-027**: A new optional command-line argument `--include-load-file` shall be introduced.
-- **REQ-028**: When this flag is specified, the generated `.dat` load file must be included in the root of the output `.zip` archive.
-- **REQ-029**: When this flag is specified, the `.dat` load file must not be created as a separate file in the output directory.
+- **REQ-028**: When this flag is specified, the generated Load File must be included in the root of the output Archive.
+- **REQ-029**: When this flag is specified, the Load File must not be created as a separate file in the output directory.
 
 ### FR-007: Multiple Load File Formats
 - **REQ-036**: A new optional command-line argument `--load-file-format <format>` shall be introduced.
-- **REQ-037**: The tool shall support multiple load file formats as specified in Section 8: `dat` (default), `opt`, `csv`, and `edrm-xml`.
+- **REQ-037**: The tool shall support multiple Load File formats as specified in Section 8: `dat` (default), `opt`, `csv`, and `edrm-xml`.
 - **REQ-038**: Each format shall conform to industry-standard specifications defined in Section 8 (Load File Format Standards).
 
 ### FR-008: Bates Numbering System
@@ -82,15 +82,15 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
   - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
   - `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
   - `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
-- **REQ-040**: When Bates numbering is enabled, the load file must include a `Bates Number` column.
+- **REQ-040**: When Bates numbering is enabled, the Load File must include a `Bates Number` column.
 - **REQ-041**: Bates numbers shall be formatted as `{PREFIX}{PADDED_NUMBER}` where the number is zero-padded to the specified digit count.
-- **REQ-042**: Bates numbers must increment sequentially for each file generated.
+- **REQ-042**: Bates numbers must increment sequentially for each Native File generated.
 
 ### FR-009: Multipage TIFF Support
 - **REQ-043**: A new optional command-line argument `--tiff-pages <min-max>` shall be introduced.
 - **REQ-044**: The argument accepts a range specification (e.g., "1-20") to define the minimum and maximum page count.
-- **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF file shall have a random page count within the specified range.
-- **REQ-046**: The load file must include a `Page Count` column indicating the number of pages in each TIFF file.
+- **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF Native File shall have a random page count within the specified range.
+- **REQ-046**: The Load File must include a `Page Count` column indicating the number of pages in each TIFF file.
 - **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility.
 
 ## 3. Technical Requirements
@@ -103,7 +103,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
   - `ClosedXML` - For XLSX spreadsheet generation
   - `DocumentFormat.OpenXml` - For DOCX document generation
   - `System.Drawing.Common` - For image processing
-- **Performance**: The application must be designed to stream data directly to the archive without storing intermediate files on disk, minimizing memory and disk space usage.
+- **Performance**: The application must be designed to stream data directly to the Archive without storing intermediate files on disk, minimizing memory and disk space usage.
 - **Parallel Processing**: The application must support parallel file generation with configurable worker pools to optimize performance on multi-core systems.
 - **Memory Management**: The application must implement object pooling and buffered I/O to reduce garbage collection pressure and improve throughput.
 - **Performance Monitoring**: The application must provide real-time progress tracking, performance metrics, and ETA calculations during file generation.
@@ -111,20 +111,20 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ## 4. Command-Line Arguments
 
 > [!NOTE]
-> Additional arguments for load file formats and column profiles are defined in Section 9.
+> Additional arguments for Load File formats, column profiles, Loadfile-Only Mode, Chaos Engine, benchmarking, and production sets are defined in Sections 9 through 16.
 
-- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required) The type of file to generate.
-- `--count <number>`: (Required) The total number of files to generate.
-- `--output-path <directory>`: (Required) The directory where the output `.zip` and load file will be saved.
-- `--folders <number>`: (Optional) The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100.
-- `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the load file. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
-- `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for files across folders. Defaults to `proportional`.
-- `--with-metadata`: (Optional) Generates a load file with additional metadata columns (Custodian, Date Sent, Author, File Size).
-- `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the load file.
-- `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of emails (0-100) that will receive a random document as an attachment. Defaults to 0.
-- `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final zip file (e.g., 500MB, 10GB).
-- `--include-load-file`: (Optional) Includes the generated load file in the root of the output `.zip` archive.
-- `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) The format of the load file. Defaults to `dat`. See Section 8 for format specifications.
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required unless `--loadfile-only` or `--production-set`) The type of Native File to generate. Defaults to `pdf` when optional.
+- `--count <number>`: (Required) The total number of Native Files to generate.
+- `--output-path <directory>`: (Required) The directory where the output Archive and Load File will be saved.
+- `--folders <number>`: (Optional) The number of Folders to distribute Native Files into. Defaults to 1. Must be between 1 and 100.
+- `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the Load File. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
+- `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for Native Files across Folders. Defaults to `proportional`.
+- `--with-metadata`: (Optional) Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size).
+- `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the Load File.
+- `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
+- `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).
+- `--include-load-file`: (Optional) Includes the generated Load File in the root of the output Archive.
+- `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications.
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
@@ -161,7 +161,7 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 
 ## 8. Load File Format Standards (E-Discovery Industry Specifications)
 
-This section documents industry-standard load file formats used by major e-discovery platforms. These specifications inform the implementation of the `--load-file-format` feature and ensure broad platform compatibility.
+This section documents industry-standard Load File formats used by major e-discovery platforms. These specifications inform the implementation of the `--load-file-format` feature and ensure broad platform compatibility.
 
 ### 8.1 Overview of Load File Types
 
@@ -173,7 +173,7 @@ This section documents industry-standard load file formats used by major e-disco
 
 ### 8.2 Concordance DAT Format Specification
 
-The Concordance DAT format is the most widely used load file format in e-discovery. It is a delimited text file containing metadata and document information.
+The Concordance DAT format is the most widely used Load File format in e-discovery. It is a delimited text file containing metadata and document information.
 
 #### Structure
 - **Encoding**: UTF-8 (preferred), UTF-8 without BOM, ASCII (Windows-1252), or UTF-16
@@ -195,8 +195,8 @@ The Concordance DAT format is the most widely used load file format in e-discove
 > While these are the standard defaults, some platforms allow custom delimiters. When generating DAT files, use the standard delimiters for maximum compatibility.
 
 #### Required Fields
-- **Unique Identifier**: Every load file must have a unique document identifier (e.g., `Control Number`, `DOCID`, `Bates Number`)
-- **File Path**: Relative path to the file within the archive/production
+- **Unique Identifier**: Every Load File must have a unique document identifier (e.g., `Control Number`, `DOCID`, `Bates Number`)
+- **File Path**: Relative path to the Native File within the Archive/production
 
 #### Common Metadata Fields
 
@@ -223,10 +223,10 @@ The Concordance DAT format is the most widely used load file format in e-discove
 
 - Header rows strongly recommended but not always mandatory
 - Field order is generally flexible
-- An identifier field is required for each load
+- An identifier field is required for each Load
 - Column headers in ALL CAPITAL LETTERS recommended for maximum compatibility
 - `DOCID` column required with unique values
-- Native file path column should be named `ITEMPATH`
+- Native File path column should be named `ITEMPATH`
 - `PARENT_DOCID` required for family relationships
 - Date formats may need configuration during import
 - Prefer ASCII or UTF-8 encoding
@@ -234,7 +234,7 @@ The Concordance DAT format is the most widely used load file format in e-discove
 
 ### 8.3 Opticon (OPT) Format Specification
 
-The Opticon format is a page-level load file that links Bates numbers to image file locations, defining document boundaries.
+The Opticon format is a page-level Load File that links Bates numbers to image file locations, defining document boundaries.
 
 #### Structure
 - **Encoding**: ANSI/Western European (Windows-1252) — Unicode NOT supported in most platforms
@@ -337,7 +337,7 @@ The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral s
 
 ### 8.6 Implementation Requirements for Zipper
 
-Based on the above research, the following requirements apply to the Zipper load file generation feature:
+Based on the above research, the following requirements apply to the Zipper Load File generation feature:
 
 #### FR-010: Extended Load File Format Support
 
@@ -350,27 +350,27 @@ Based on the above research, the following requirements apply to the Zipper load
 
 #### FR-011: Multi-Format Output
 
-- **REQ-055**: A new argument `--load-file-formats <format1,format2,...>` (plural) shall allow generating multiple load file formats simultaneously.
+- **REQ-055**: A new argument `--load-file-formats <format1,format2,...>` (plural) shall allow generating multiple Load File formats simultaneously.
 - **REQ-056**: When `--load-file-formats` is specified, all requested formats shall be generated to the output directory.
 
 #### FR-012: OPT File Generation
 
-- **REQ-057**: When `--type tiff` or `--type jpg` is used, an OPT file shall be generated automatically alongside the DAT file. Note: PDF files do NOT trigger automatic OPT generation as they are treated as native files, not page-level images.
+- **REQ-057**: When `--type tiff` or `--type jpg` is used, an OPT file shall be generated automatically alongside the DAT file. Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
 - **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`).
 - **REQ-059**: OPT files shall use ANSI encoding for maximum platform compatibility.
 
 #### FR-013: Family Relationship Support
 
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
-- **REQ-061**: When `--with-families` is specified, the load file shall include `BEGATTACH`, `ENDATTACH`, and `PARENT_DOCID` columns.
-- **REQ-062**: Email attachments (when using `--attachment-rate`) shall be properly linked as children of their parent email documents.
+- **REQ-061**: When `--with-families` is specified, the Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENT_DOCID` columns.
+- **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
 
 #### FR-014: Column Profile System
 
 - **REQ-063**: A new argument `--column-profile <name|path>` shall be introduced to specify metadata columns.
 - **REQ-064**: The argument shall accept either a built-in profile name or a path to a custom JSON profile file.
 - **REQ-065**: Column profiles shall be embedded in the application binary as resources.
-- **REQ-066**: If `--column-profile` is not specified, only base columns (Control Number, File Path) shall be included in the load file. The `--with-metadata` flag adds its columns independently.
+- **REQ-066**: If `--column-profile` is not specified, only base columns (Control Number, File Path) shall be included in the Load File. The `--with-metadata` flag adds its columns independently.
 - **REQ-076**: When both `--column-profile` and `--with-metadata` are specified, the profile columns take precedence, and `--with-metadata` is ignored with a warning.
 - **REQ-077**: When `--type eml` is specified, email-intrinsic columns (From, To, CC, Subject, Sent Date) are always included regardless of the column profile or `--with-metadata` flag.
 - **REQ-078**: Custom profiles shall have a maximum of 200 columns. Profiles exceeding this limit shall produce a validation error.
@@ -380,9 +380,9 @@ Based on the above research, the following requirements apply to the Zipper load
 | Profile Name | Column Count | Description |
 |-------------|--------------|-------------|
 | `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
-| `standard` | 25 | Common e-discovery fields |
-| `litigation` | 50 | Full litigation support |
-| `full` | 127 | Maximum field coverage |
+| `standard` | 24 | Common e-discovery fields |
+| `litigation` | 48 | Full litigation support |
+| `full` | 138 | Maximum field coverage |
 
 - **REQ-067**: Custom profile files shall follow a JSON schema with the following structure:
 
@@ -465,25 +465,25 @@ Based on the above research, the following requirements apply to the Zipper load
   - Column delimiter: ASCII 20 (Concordance standard)
   - Quote delimiter: ASCII 254 (Concordance standard)
   - Newline delimiter: ASCII 174 (Concordance standard)
-- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent load file corruption.
+- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption.
 
 ---
 
 ## 9. Updated Command-Line Arguments
 
-The following arguments are added or modified by the load file and column profile features:
+The following arguments are added or modified by the Load File and column profile features:
 
 ### Load File Arguments
 
-- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the load file. Defaults to `dat`. Accepts `xml` and `concordance` as aliases.
-- `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple load file formats simultaneously.
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` and `concordance` as aliases.
+- `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple Load File formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 - `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.
 - `--delimiter-quote <char|code>`: (Optional) Custom quote delimiter for DAT files. Overrides `--dat-delimiters` preset.
 - `--delimiter-newline <char|code>`: (Optional) Custom newline replacement for DAT files. Overrides `--dat-delimiters` preset.
 
 > [!NOTE]
-> When `--load-file-formats` is used with `--include-load-file`, all specified formats are included in the archive.
+> When `--load-file-formats` is used with `--include-load-file`, all specified formats are included in the Archive.
 
 ### Column Profile Arguments
 
@@ -507,17 +507,23 @@ This section clarifies behavior when multiple arguments interact:
 |-------------|----------|
 | `--with-metadata` + `--column-profile` | Profile takes precedence; `--with-metadata` ignored with warning |
 | `--type eml` + any profile | Email columns (From, To, CC, Subject, Sent Date) always added |
-| `--load-file-formats` + `--include-load-file` | All specified formats are included in the archive |
-| `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls folders, profile controls data values |
+| `--load-file-formats` + `--include-load-file` | All specified formats are included in the Archive |
+| `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls Folders, profile controls data values |
 | `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
+| `--loadfile-only` + `--production-set` | **Conflict**: cannot use both |
+| `--production-set` + `--bates-prefix` | **Required**: `--bates-prefix` is mandatory when `--production-set` is used |
+| `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
+| `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
 | `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
 | `--chaos-mode` | Requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
+| `--benchmark` | **Early exit**: bypasses all file generation and argument validation; runs benchmarks and exits |
+| `--chaos-list` | **Early exit**: bypasses all file generation and argument validation; prints scenarios and exits |
 
 ---
 
@@ -526,8 +532,8 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-018: Standalone Load File Generation
 
 - **REQ-087**: A new optional command-line argument `--loadfile-only` shall be introduced.
-- **REQ-088**: When `--loadfile-only` is specified, the application shall generate load files (DAT or OPT) directly to disk without creating ZIP archives or native files.
-- **REQ-089**: When `--loadfile-only` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
+- **REQ-088**: When `--loadfile-only` is specified, the application shall generate Load Files (DAT or OPT) directly to disk without creating Archives or Native Files.
+- **REQ-089**: When `--loadfile-only` or `--production-set` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
 - **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest.
 - **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
 - **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`.
@@ -547,7 +553,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` load file formats.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` Load File formats.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all types are enabled.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
@@ -600,12 +606,12 @@ This section clarifies behavior when multiple arguments interact:
 
 | Scenario Name | Description | Chaos Types | Default Amount | Required Format |
 |---|---|---|---|---|
-| `relativity-import` | Common Relativity ingestion failures | `mixed-delimiters`, `quotes`, `columns` | 3% | DAT |
+| `structured-import-failures` | Common platform ingestion failures | `mixed-delimiters`, `quotes`, `columns` | 3% | DAT |
 | `encoding-nightmare` | Multi-encoding source data | `encoding`, `mixed-delimiters` | 5% | DAT |
 | `broken-boundaries` | OPT document boundary corruption | `opt-boundary`, `opt-pagecount`, `opt-path` | 8% | OPT |
 | `field-overflow` | Unescaped newlines and extra columns | `eol`, `columns` | 2% | DAT |
 | `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
-| `nuix-export` | NUIX-to-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
+| `transfer-encoding-failures` | Cross-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
 
 ---
 
@@ -614,9 +620,9 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-023: Production Set Generator
 
 - **REQ-114**: A new command-line argument `--production-set` shall be introduced to generate structured production deliveries instead of flat mock files.
-- **REQ-115**: When `--production-set` is specified, the application shall create a root production directory (e.g., `PRODUCTION_YYYYMMDD_HHMMSS`) and distribute generated files into `DATA`, `IMAGES`, `NATIVES`, and `TEXT` subdirectories.
-- **REQ-116**: A new command-line argument `--volume-size <number>` shall control the maximum number of files per volume (e.g., `VOL001`, `VOL002`) within the output directories. Defaults to 5,000.
-- **REQ-117**: The generator shall create both a standard DAT load file (metadata) and an OPT load file (image cross-reference) within the `DATA` directory.
+- **REQ-115**: When `--production-set` is specified, the application shall create a root production directory (e.g., `PRODUCTION_YYYYMMDD_HHMMSS`) and distribute generated Native Files into `DATA`, `IMAGES`, `NATIVES`, and `TEXT` subdirectories.
+- **REQ-116**: A new command-line argument `--volume-size <number>` shall control the maximum number of Native Files per Volume (e.g., `VOL001`, `VOL002`) within the output directories. Defaults to 5,000.
+- **REQ-117**: The generator shall create both a standard DAT Load File (metadata) and an OPT Load File (image cross-reference) within the `DATA` directory.
 - **REQ-118**: A `_manifest.json` file shall be generated at the root of the production folder containing top-level properties like volume structure, document counts, and the Bates numbering range.
-- **REQ-119**: A new command-line argument `--production-zip` shall be introduced. When specified alongside `--production-set`, the application shall compress the entire production set folder structure into a single ZIP archive named after the production root directory.
+- **REQ-119**: A new command-line argument `--production-zip` shall be introduced. When specified alongside `--production-set`, the application shall compress the entire production set directory structure into a single Archive named after the production root directory.
 - **REQ-120**: `--production-set` requires `--bates-prefix` to be specified and conflicts with `--loadfile-only`.

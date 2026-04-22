@@ -19,8 +19,8 @@ internal static class ChaosScenarios
     private static readonly ChaosScenarioDefinition[] ScenariosArray =
     {
         new(
-            Name: "relativity-import",
-            Description: "Common Relativity ingestion failures: delimiter mismatches, unclosed quotes, column count errors",
+            Name: "structured-import-failures",
+            Description: "Common platform ingestion failures: delimiter mismatches, unclosed quotes, column count errors",
             ChaosTypes: "mixed-delimiters,quotes,columns",
             DefaultAmount: "3%",
             RequiredFormat: LoadFileFormat.Dat),
@@ -49,8 +49,8 @@ internal static class ChaosScenarios
             DefaultAmount: "10%",
             RequiredFormat: null),
         new(
-            Name: "nuix-export",
-            Description: "NUIX-to-platform transfer errors: mixed delimiters, encoding issues, unclosed quotes",
+            Name: "transfer-encoding-failures",
+            Description: "Cross-platform transfer errors: mixed delimiters, encoding issues, unclosed quotes",
             ChaosTypes: "mixed-delimiters,encoding,quotes",
             DefaultAmount: "4%",
             RequiredFormat: LoadFileFormat.Dat),
@@ -86,13 +86,13 @@ internal static class ChaosScenarios
     {
         Console.WriteLine("Available Chaos Scenarios:");
         Console.WriteLine();
-        Console.WriteLine($"  {"Name",-25} {"Format",-8} {"Default",-10} Description");
-        Console.WriteLine($"  {new string('-', 25)} {new string('-', 8)} {new string('-', 10)} {new string('-', 50)}");
+        Console.WriteLine($"  {"Name",-28} {"Format",-8} {"Default",-10} Description");
+        Console.WriteLine($"  {new string('-', 28)} {new string('-', 8)} {new string('-', 10)} {new string('-', 50)}");
 
         foreach (var scenario in ScenariosArray)
         {
             var format = scenario.RequiredFormat?.ToString() ?? "Any";
-            Console.WriteLine($"  {scenario.Name,-25} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
+            Console.WriteLine($"  {scenario.Name,-28} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
         }
 
         Console.WriteLine();

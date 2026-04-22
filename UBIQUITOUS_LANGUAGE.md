@@ -99,7 +99,7 @@
 | **Anomaly** | A deliberately injected error in a **Load File** record. Types: delimiter corruption, quote issues, column misalignment, unescaped newlines, encoding errors. Tracked in `_properties.json`. | Error, corruption, defect |
 | **Anomaly Type** | The classification of an **Anomaly**. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`. | Error type, corruption type |
 | **Chaos Amount** | The number or percentage of **Load File** records to corrupt with **Anomalies**. Specified as a count or percentage (e.g., `5` or `10%`). | Anomaly count, corruption amount |
-| **Chaos Scenario** | A predefined set of **Anomaly Types** and **Chaos Amount** for common ingestion failure patterns (e.g., `relativity-import`, `encoding-nightmare`). | Scenario, preset configuration |
+| **Chaos Scenario** | A predefined set of **Anomaly Types** and **Chaos Amount** for common ingestion failure patterns (e.g., `structured-import-failures`, `encoding-nightmare`). | Scenario, preset configuration |
 | **Audit File** | The `_properties.json` file generated in **Loadfile-Only Mode**, documenting format details, delimiters, and all injected **Anomalies** with line numbers and descriptions. | Metadata file, manifest |
 
 ---
