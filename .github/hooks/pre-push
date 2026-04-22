@@ -77,7 +77,11 @@ case "$(uname -s)" in
         ;;
     MINGW*|MSYS*|CYGWIN*)
         if [[ -f "./tests/run-e2e-basic.bat" ]]; then
-            if ! cmd.exe //c ".\\tests\\run-e2e-basic.bat"; then
+            # Git Bash (MSYS2) invokes .bat files directly; no cmd.exe wrapper
+            # needed. The previous `cmd.exe //c` form is MSYS-specific and
+            # breaks under real Windows cmd.exe (which expects `/c`), and is
+            # unnecessary here because MSYS2 handles .bat natively.
+            if ! ./tests/run-e2e-basic.bat; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
                 echo "   Run 'tests\\run-e2e-basic.bat' for details."

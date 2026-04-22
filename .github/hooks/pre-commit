@@ -45,9 +45,19 @@ fi
 
 if [[ "$UNSTAGED_EXISTS" == "true" ]]; then
     STASH_MSG="pre-commit-$(date +%s)-$$"
-    if git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" >/dev/null 2>&1; then
-        STASH_REF=$(git stash list --format='%gd %gs' | grep -F "$STASH_MSG" | awk '{print $1}' | head -1)
+    # Capture stash output so we can surface the real reason if it fails —
+    # silently continuing would test a dirty working tree, violating the
+    # "format/test the staged snapshot" contract.
+    STASH_ERR=$(git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" 2>&1)
+    STASH_RC=$?
+    if [[ "$STASH_RC" -ne 0 ]]; then
+        echo "❌ git stash push failed (exit $STASH_RC). Aborting commit to avoid" >&2
+        echo "   testing against a dirty working tree." >&2
+        [[ -n "$STASH_ERR" ]] && echo "   Details: $STASH_ERR" >&2
+        echo "   Commit your unstaged changes (or use --no-verify) and retry." >&2
+        exit 1
     fi
+    STASH_REF=$(git stash list --format='%gd %gs' | grep -F "$STASH_MSG" | awk '{print $1}' | head -1)
 fi
 
 _CLEANUP_RAN=false
@@ -108,5 +118,17 @@ if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosit
 fi
 
 echo "✓ Pre-commit: format + unit tests passed"
-# Success marker is written by post-commit (after the new commit exists).
+
+# Success handshake with post-commit:
+#   - pre-commit (here, on success) writes a `pre-commit.pending` sentinel
+#   - post-commit only promotes it to `pre-commit.ok` if the sentinel exists
+#   - `git commit --no-verify` skips pre-commit ⇒ no sentinel ⇒ no ok marker
+#     ⇒ pre-push never wrongly skips unit tests for a bypassed commit.
+PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
+if [[ -n "$PENDING_DIR" ]]; then
+    mkdir -p "$PENDING_DIR" 2>/dev/null || true
+    printf 'timestamp=%s\npid=%s\n' "$(date +%s)" "$$" \
+        > "$PENDING_DIR/pre-commit.pending" 2>/dev/null || true
+fi
+
 exit 0

@@ -98,18 +98,18 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/cache@v5.0.5
         with:
-          path: ~/.dotnet/tools
+          # dotnet tool restore installs into the per-repo tool home.
+          path: .dotnet-tools
           key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
           restore-keys: ${{ runner.os }}-reportgen-
 
       - name: Coverage report + 80% gate (Linux)
         if: runner.os == 'Linux'
+        env:
+          DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
         run: |
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          if ! command -v reportgenerator >/dev/null 2>&1; then
-            dotnet tool install --global dotnet-reportgenerator-globaltool
-          fi
-          reportgenerator \
+          dotnet tool restore
+          dotnet reportgenerator \
             -reports:TestResults/*/coverage.cobertura.xml \
             -targetdir:TestResults/coverage-report \
             -reporttypes:"Html;TextSummary"

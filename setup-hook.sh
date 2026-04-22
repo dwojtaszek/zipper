@@ -17,7 +17,7 @@ TEMPLATE_DIR=".github/hooks"
 # Works for both normal repos (returns .git) and worktrees (returns the
 # shared common dir under the main repo). Falls back gracefully.
 if ! HOOK_DIR=$(git rev-parse --git-common-dir 2>/dev/null)/hooks; then
-    echo "Error: not inside a git repository."
+    echo "Error: not inside a git repository." >&2
     exit 1
 fi
 
@@ -28,11 +28,17 @@ install_hook() {
     local src="$TEMPLATE_DIR/$name"
     local dst="$HOOK_DIR/$name"
     if [[ ! -f "$src" ]]; then
-        echo "Warning: template $src not found — skipping $name"
+        echo "Warning: template $src not found — skipping $name" >&2
         return 0
     fi
-    cp "$src" "$dst"
-    chmod u+x "$dst"
+    if ! cp "$src" "$dst"; then
+        echo "Error: failed to copy $src -> $dst" >&2
+        exit 1
+    fi
+    if ! chmod u+x "$dst"; then
+        echo "Error: failed to make $dst executable" >&2
+        exit 1
+    fi
     echo "Installed: $dst"
 }
 

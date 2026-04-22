@@ -148,11 +148,15 @@ run_test() {
 
     local test_path="$TEST_DIR/test_$TEST_COUNT"
     mkdir -p "$test_path"
-    
-    local full_command="$ZIPPER_CMD $command_args --output-path $test_path"
-    echo "  - Executing: $full_command"
 
-    if $full_command > "$test_path/test_output.log" 2>&1; then
+    # Word-split $command_args intentionally (test-local, no spaces in args)
+    # but invoke via the `zipper` helper so the project path (which may
+    # contain spaces in REPO_ROOT) is never subject to IFS splitting.
+    # shellcheck disable=SC2086
+    set -- $command_args --output-path "$test_path"
+    echo "  - Executing: zipper $*"
+
+    if zipper "$@" > "$test_path/test_output.log" 2>&1; then
         echo "  ✓ Command executed successfully."
         
         local archive_file

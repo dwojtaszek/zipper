@@ -220,9 +220,11 @@ temp_dir="$TEST_OUTPUT_DIR/test6/temp"
 mkdir -p "$temp_dir"
 unzip -q "$zip_file" "$docx_filename" -d "$temp_dir"
 
-# Verify the extracted DOCX is a valid ZIP archive
-unzip -t "$temp_dir/$docx_filename" > /dev/null 2>&1
-if [[ $? -eq 0 ]]; then
+# Verify the extracted DOCX is a valid ZIP archive.
+# Place `unzip -t` inside the if-condition: with `set -e`, a standalone
+# failing call would terminate the script before the error branch below
+# could run.
+if unzip -t "$temp_dir/$docx_filename" > /dev/null 2>&1; then
   print_success "Test Case 6: DOCX file is valid ZIP archive"
 else
   print_error "Test 6: Extracted DOCX file is not a valid ZIP archive"

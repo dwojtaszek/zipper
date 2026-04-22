@@ -48,5 +48,10 @@ if not exist "%src%" (
     goto :eof
 )
 copy /y "%src%" "%dst%" >nul
+if errorlevel 1 (
+    echo Error: failed to copy %src% -^> %dst%
+    echo   (check permissions, disk space, and that the destination is writable)
+    exit /b 1
+)
 echo Installed: %dst%
 goto :eof
