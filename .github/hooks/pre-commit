@@ -90,6 +90,10 @@ done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 if [[ ${#STAGED_CS[@]} -gt 0 ]]; then
     echo "▶ Running dotnet format on ${#STAGED_CS[@]} staged C# file(s)..."
+    # `dotnet format --include` is a multi-value System.CommandLine option:
+    # each file is a separate token, not a space-joined single string. The
+    # array-expansion form below is the correct idiom (verified empirically:
+    # passing A.cs B.cs this way formats both files).
     if ! dotnet format --verbosity quiet --include "${STAGED_CS[@]}"; then
         echo "❌ dotnet format failed" >&2
         exit 1
