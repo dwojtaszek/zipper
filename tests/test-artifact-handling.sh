@@ -69,10 +69,12 @@ else
     exit 1
 fi
 
-# Check cache keys
-CACHE_KEYS=$(grep -A 3 "key:" "$WORKFLOW_FILE" | grep -E "key:|build-" | wc -l)
+# Check cache keys (setup-dotnet cache: true counts as implicit cache key)
+IMPLICIT_KEYS=$(grep -c "cache: true" "$WORKFLOW_FILE" || echo 0)
+EXPLICIT_KEYS=$(grep -c "key:" "$WORKFLOW_FILE" || echo 0)
+CACHE_KEYS=$((IMPLICIT_KEYS + EXPLICIT_KEYS))
 if [ "$CACHE_KEYS" -ge 2 ]; then
-    echo "✓ Found platform-specific cache keys"
+    echo "✓ Found sufficient cache keys ($CACHE_KEYS total)"
 else
     echo "✗ Insufficient cache keys found (expected at least 2, got $CACHE_KEYS)"
     exit 1
@@ -145,12 +147,12 @@ else
     exit 1
 fi
 
-# Check for conditional builds based on cache
-echo "9. Checking conditional build logic..."
-if grep -q "cache-hit != 'true'" "$WORKFLOW_FILE"; then
-    echo "✓ Uses conditional builds based on cache"
+# Check for cache dependency path (enables cache hits/restores in setup-dotnet)
+echo "9. Checking cache dependency configuration..."
+if grep -q "cache-dependency-path:" "$WORKFLOW_FILE"; then
+    echo "✓ Found cache dependency path for precise cache keys"
 else
-    echo "✗ Missing conditional build logic"
+    echo "✗ Missing cache dependency path"
     exit 1
 fi
 

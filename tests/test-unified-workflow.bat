@@ -47,7 +47,7 @@ if errorlevel 1 (
 REM Check for all required jobs
 echo.
 echo 4. Checking for all required jobs...
-set REQUIRED_JOBS=lint: build: test: release:
+set REQUIRED_JOBS=prepare: lint: build-and-test: tag-and-release:
 for %%J in (%REQUIRED_JOBS%) do (
     findstr /C:"%%J" ".github\workflows\build-and-test.yml" > nul
     if errorlevel 1 (
@@ -63,21 +63,13 @@ echo.
 echo 5. Checking job dependencies...
 findstr /C:"needs: [prepare, lint]" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
-    echo [FAIL] Build job missing correct dependencies
+    echo [FAIL] Build-and-test job missing correct dependencies
     exit /b 1
 ) else (
-    echo [OK] Build job depends on prepare and lint
+    echo [OK] Build-and-test job depends on prepare and lint
 )
 
-findstr /C:"needs: build" ".github\workflows\build-and-test.yml" > nul
-if errorlevel 1 (
-    echo [FAIL] Test job missing build dependency
-    exit /b 1
-) else (
-    echo [OK] Test job depends on build
-)
-
-findstr /C:"needs: [prepare, lint, build, test]" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"needs: [prepare, lint, build-and-test]" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Release job missing dependencies
     exit /b 1
@@ -87,29 +79,18 @@ if errorlevel 1 (
 
 REM Check for matrix strategy in build job
 echo.
-echo 6. Checking build job matrix strategy...
-findstr /A:10 /C:"build:" ".github\workflows\build-and-test.yml" | findstr /C:"matrix:" > nul
+echo 6. Checking build-and-test job matrix strategy...
+findstr /A:10 /C:"build-and-test:" ".github\workflows\build-and-test.yml" | findstr /C:"matrix:" > nul
 if errorlevel 1 (
-    echo [FAIL] Build job missing matrix strategy
+    echo [FAIL] Build-and-test job missing matrix strategy
     exit /b 1
 ) else (
-    echo [OK] Build job has matrix strategy
-)
-
-REM Check for matrix strategy in test job
-echo.
-echo 7. Checking test job matrix strategy...
-findstr /A:10 /C:"test:" ".github\workflows\build-and-test.yml" | findstr /C:"matrix:" > nul
-if errorlevel 1 (
-    echo [FAIL] Test job missing matrix strategy
-    exit /b 1
-) else (
-    echo [OK] Test job has matrix strategy
+    echo [OK] Build-and-test job has matrix strategy
 )
 
 REM Check platforms in matrix
 echo.
-echo 8. Checking platform support...
+echo 7. Checking platform support...
 set PLATFORMS=win-x64 linux-x64 osx-arm64
 for %%P in (%PLATFORMS%) do (
     findstr /C:"%%P" ".github\workflows\build-and-test.yml" > nul
@@ -123,7 +104,7 @@ for %%P in (%PLATFORMS%) do (
 
 REM Check for artifact handling
 echo.
-echo 9. Checking artifact handling...
+echo 8. Checking artifact handling...
 findstr /C:"actions/upload-artifact@v" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing upload-artifact
@@ -142,7 +123,7 @@ if errorlevel 1 (
 
 REM Check for artifact retention
 echo.
-echo 10. Checking artifact retention configuration...
+echo 9. Checking artifact retention configuration...
 findstr /C:"retention-days: 7" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing artifact retention configuration
@@ -153,7 +134,7 @@ if errorlevel 1 (
 
 REM Check for branch triggers
 echo.
-echo 11. Checking branch triggers...
+echo 10. Checking branch triggers...
 findstr /C:"branches:" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing branch triggers
@@ -172,18 +153,18 @@ if errorlevel 1 (
 
 REM Check for release conditions
 echo.
-echo 12. Checking release conditions...
-findstr /C:"if: startsWith(github.ref, 'refs/tags/v')" ".github\workflows\build-and-test.yml" > nul
+echo 11. Checking release conditions...
+findstr /C:"if: github.ref == 'refs/heads/main'" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
-    echo [FAIL] Release job missing tag condition
+    echo [FAIL] Release job missing main branch condition
     exit /b 1
 ) else (
-    echo [OK] Release job runs on tags
+    echo [OK] Release job runs on main
 )
 
 REM Check for permissions
 echo.
-echo 13. Checking release permissions...
+echo 12. Checking release permissions...
 findstr /C:"permissions:" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Release job missing permissions
@@ -202,7 +183,7 @@ if errorlevel 1 (
 
 REM Check for caching
 echo.
-echo 14. Checking caching configuration...
+echo 13. Checking caching configuration...
 findstr /C:"actions/cache@v" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing caching
@@ -213,7 +194,7 @@ if errorlevel 1 (
 
 REM Check for version handling
 echo.
-echo 15. Checking version handling...
+echo 14. Checking version handling...
 findstr /C:"Set Version" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing version handling

@@ -90,27 +90,19 @@ if !errorlevel! equ 0 (
 
 echo 4. Checking cache paths...
 
-findstr /C:"publish/win-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"publish/" "%WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
-    echo [OK] Found cache path for win-x64
+    echo [OK] Found publish/ directory structure
 ) else (
-    echo [X] Missing cache path for win-x64
+    echo [X] Missing publish/ directory structure
     exit /b 1
 )
 
-findstr /C:"publish/linux-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"matrix.platform" "%WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
-    echo [OK] Found cache path for linux-x64
+    echo [OK] Uses platform matrix variable
 ) else (
-    echo [X] Missing cache path for linux-x64
-    exit /b 1
-)
-
-findstr /C:"publish/osx-arm64" "%WORKFLOW_FILE%" >nul
-if !errorlevel! equ 0 (
-    echo [OK] Found cache path for osx-arm64
-) else (
-    echo [X] Missing cache path for osx-arm64
+    echo [X] Missing platform matrix variable
     exit /b 1
 )
 
@@ -170,13 +162,13 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-echo 9. Checking conditional build logic...
+echo 9. Checking cache dependency configuration...
 
-findstr /C:"cache-hit != 'true'" "%WORKFLOW_FILE%" >nul
+findstr /C:"cache-dependency-path:" "%WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
-    echo [OK] Uses conditional builds based on cache
+    echo [OK] Found cache dependency path for precise cache keys
 ) else (
-    echo [X] Missing conditional build logic
+    echo [X] Missing cache dependency path
     exit /b 1
 )
 

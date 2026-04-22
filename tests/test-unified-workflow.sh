@@ -42,7 +42,7 @@ fi
 
 # Check for all required jobs
 echo "4. Checking for all required jobs..."
-REQUIRED_JOBS=("lint:" "build:" "test:" "tag-and-release:")
+REQUIRED_JOBS=("prepare:" "lint:" "build-and-test:" "tag-and-release:")
 
 for job in "${REQUIRED_JOBS[@]}"; do
     if grep -q "$job" .github/workflows/build-and-test.yml; then
@@ -56,46 +56,30 @@ done
 # Check job dependencies
 echo "5. Checking job dependencies..."
 if grep -q "needs: \[prepare, lint\]" .github/workflows/build-and-test.yml; then
-    echo "✓ Build job depends on prepare and lint"
+    echo "✓ Build-and-test job depends on prepare and lint"
 else
-    echo "✗ Build job missing correct dependencies"
+    echo "✗ Build-and-test job missing correct dependencies"
     exit 1
 fi
 
-if grep -q "needs: build" .github/workflows/build-and-test.yml; then
-    echo "✓ Test job depends on build"
-else
-    echo "✗ Test job missing build dependency"
-    exit 1
-fi
-
-if grep -q "needs: \[prepare, lint, build, test\]" .github/workflows/build-and-test.yml; then
+if grep -q "needs: \[prepare, lint, build-and-test\]" .github/workflows/build-and-test.yml; then
     echo "✓ Release job depends on all previous jobs"
 else
     echo "✗ Release job missing dependencies"
     exit 1
 fi
 
-# Check for matrix strategy in build job
-echo "6. Checking build job matrix strategy..."
-if grep -A 10 "build:" .github/workflows/build-and-test.yml | grep -q "matrix:"; then
-    echo "✓ Build job has matrix strategy"
+# Check for matrix strategy in build-and-test job
+echo "6. Checking build-and-test job matrix strategy..."
+if grep -A 10 "build-and-test:" .github/workflows/build-and-test.yml | grep -q "matrix:"; then
+    echo "✓ Build-and-test job has matrix strategy"
 else
-    echo "✗ Build job missing matrix strategy"
-    exit 1
-fi
-
-# Check for matrix strategy in test job
-echo "7. Checking test job matrix strategy..."
-if grep -A 10 "test:" .github/workflows/build-and-test.yml | grep -q "matrix:"; then
-    echo "✓ Test job has matrix strategy"
-else
-    echo "✗ Test job missing matrix strategy"
+    echo "✗ Build-and-test job missing matrix strategy"
     exit 1
 fi
 
 # Check platforms in matrix
-echo "8. Checking platform support..."
+echo "7. Checking platform support..."
 PLATFORMS=("win-x64" "linux-x64" "osx-arm64")
 
 for platform in "${PLATFORMS[@]}"; do
@@ -108,7 +92,7 @@ for platform in "${PLATFORMS[@]}"; do
 done
 
 # Check for artifact handling
-echo "9. Checking artifact handling..."
+echo "8. Checking artifact handling..."
 if grep -q "actions/upload-artifact@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses upload-artifact"
 else
@@ -124,7 +108,7 @@ else
 fi
 
 # Check for artifact retention
-echo "10. Checking artifact retention configuration..."
+echo "9. Checking artifact retention configuration..."
 if grep -q "retention-days: 7" .github/workflows/build-and-test.yml; then
     echo "✓ Artifact retention set to 7 days"
 else
@@ -133,7 +117,7 @@ else
 fi
 
 # Check for branch triggers
-echo "11. Checking branch triggers..."
+echo "10. Checking branch triggers..."
 if grep -q "branches:" .github/workflows/build-and-test.yml; then
     echo "✓ Has branch triggers configured"
 else
@@ -149,7 +133,7 @@ else
 fi
 
 # Check for release conditions
-echo "12. Checking release conditions..."
+echo "11. Checking release conditions..."
 if grep -q "if: github.ref == 'refs/heads/main'" .github/workflows/build-and-test.yml; then
     echo "✓ Release job runs on main"
 else
@@ -158,7 +142,7 @@ else
 fi
 
 # Check for permissions
-echo "13. Checking release permissions..."
+echo "12. Checking release permissions..."
 if grep -q "permissions:" .github/workflows/build-and-test.yml; then
     echo "✓ Release job has permissions"
 else
@@ -174,7 +158,7 @@ else
 fi
 
 # Check for caching
-echo "14. Checking caching configuration..."
+echo "13. Checking caching configuration..."
 if grep -q "actions/cache@v" .github/workflows/build-and-test.yml; then
     echo "✓ Uses caching"
 else
@@ -183,7 +167,7 @@ else
 fi
 
 # Check for version handling
-echo "15. Checking version handling..."
+echo "14. Checking version handling..."
 if grep -q "Set Version" .github/workflows/build-and-test.yml; then
     echo "✓ Has version handling"
 else
