@@ -44,8 +44,8 @@ jobs:
           dotnet-version: 8.0.x
           cache: true
           cache-dependency-path: '**/packages.lock.json'
-      - name: Restore (locked)
-        run: dotnet restore zipper.sln --locked-mode
+      - name: Restore
+        run: dotnet restore zipper.sln
       - name: Lint code style
         run: dotnet format --verify-no-changes --no-restore
 
@@ -73,8 +73,8 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
-      - name: Restore (locked)
-        run: dotnet restore zipper.sln --locked-mode
+      - name: Restore
+        run: dotnet restore zipper.sln
 
       - name: Build solution (Release, includes tests)
         run: dotnet build zipper.sln -c Release --no-restore
