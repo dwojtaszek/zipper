@@ -79,7 +79,7 @@ jobs:
     needs: [docs-only, lint]
     if: needs.docs-only.outputs.only_docs != 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -150,11 +150,11 @@ jobs:
         if: matrix.coverage != true
         run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
 
-      - name: Run basic E2E smoke suite
+      - name: Run full E2E suite (same as main CI)
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            ./tests/run-e2e-basic.bat
+            ./tests/run-tests.bat
           else
-            bash ./tests/run-e2e-basic.sh
+            bash ./tests/run-tests.sh
           fi

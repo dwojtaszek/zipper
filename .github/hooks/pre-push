@@ -72,7 +72,9 @@ case "$(uname -s)" in
             fi
             E2E_RAN=true
         else
-            echo "⚠ tests/run-e2e-basic.sh not found, skipping E2E"
+            echo "❌ tests/run-e2e-basic.sh not found. Push aborted."
+            echo "   The E2E smoke script is required for pre-push checks."
+            exit 1
         fi
         ;;
     MINGW*|MSYS*|CYGWIN*)
@@ -90,7 +92,9 @@ case "$(uname -s)" in
             fi
             E2E_RAN=true
         else
-            echo "⚠ tests/run-e2e-basic.bat not found, skipping E2E"
+            echo "❌ tests/run-e2e-basic.bat not found. Push aborted."
+            echo "   The E2E smoke script is required for pre-push checks."
+            exit 1
         fi
         ;;
 esac
@@ -98,7 +102,8 @@ esac
 echo ""
 if [[ "$E2E_RAN" == "true" ]]; then
     echo "✓ All pre-push checks passed"
+    exit 0
 else
-    echo "⚠ Unit tests passed, but E2E smoke tests were skipped"
+    echo "❌ E2E smoke tests were skipped. Push aborted."
+    exit 1
 fi
-exit 0

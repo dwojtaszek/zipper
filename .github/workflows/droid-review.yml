@@ -42,4 +42,4 @@ jobs:
           review_depth: shallow
           # Faster, cheaper model than kimi-k2.6 (~5-8 min vs 11-19 min).
           review_model: claude-haiku-4-5-20251001
-          reasoning_effort: low
+          reasoning_effort: medium
