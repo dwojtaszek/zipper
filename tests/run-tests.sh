@@ -413,6 +413,43 @@ run_test_case "Test Case 17: Maximum folders edge case (100 folders)" --type pdf
 verify_output "$TEST_OUTPUT_DIR/pdf_max_folders" 25 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 17 passed."
 
+# Test Case 18: CSV load file format (non-DAT format inline validation)
+run_test_case "Test Case 18: CSV load file format" --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/pdf_csv" --load-file-format csv
+csv_dir="$TEST_OUTPUT_DIR/pdf_csv"
+csv_zip=$(find "$csv_dir" -name "*.zip")
+csv_file=$(find "$csv_dir" -name "*.csv")
+if [[ -z "$csv_zip" ]]; then
+  print_error "Test 18: No .zip file found"
+fi
+if [[ -z "$csv_file" ]]; then
+  print_error "Test 18: No .csv file found"
+fi
+if ! head -n 1 "$csv_file" | grep -q "Control Number"; then
+  print_error "Test 18: 'Control Number' column not found in .csv header"
+fi
+print_success "Test Case 18 passed."
+
+# Test Case 19: OPT load file format (non-DAT format inline validation)
+run_test_case "Test Case 19: OPT load file format" --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/pdf_opt" --load-file-format opt
+opt_dir="$TEST_OUTPUT_DIR/pdf_opt"
+opt_zip=$(find "$opt_dir" -name "*.zip")
+opt_file=$(find "$opt_dir" -name "*.opt")
+if [[ -z "$opt_zip" ]]; then
+  print_error "Test 19: No .zip file found"
+fi
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 19: No .opt file found"
+fi
+# OPT uses comma delimiter (Opticon 7-column standard)
+if ! grep ',' "$opt_file" > /dev/null; then
+  print_error "Test 19: No comma delimiter found in .opt file"
+fi
+# OPT has no header row
+if head -n 1 "$opt_file" | grep -q "Control Number"; then
+  print_error "Test 19: OPT should not contain header row, found 'Control Number'"
+fi
+print_success "Test Case 19 passed."
+
 # --- Cleanup ---
 
 print_info "Cleaning up test output..."
@@ -463,10 +500,7 @@ print_info "Running artifact handling tests..."
 bash ./tests/test-artifact-handling.sh
 print_success "Artifact handling tests passed."
 
-# Test 7-8: Skip workflow validation tests (obsolete - checking old build.yml structure)
-print_info "Skipping obsolete workflow validation tests..."
-
-# Test 9: Cross-platform tests
+# Test 7: Cross-platform tests
 print_info "Running cross-platform tests..."
 bash ./tests/test-cross-platform.sh
 print_success "Cross-platform tests passed."
