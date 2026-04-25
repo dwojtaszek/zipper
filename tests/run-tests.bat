@@ -120,10 +120,16 @@ REM %2: Target size in MB
     set "check_text=%~5"
     set "encoding=%~6"
 
-    call :verify_output "%test_dir%" "%expected_count%" "%expected_header_str%" "%file_type%" "%check_text%"
+    call :verify_output "%test_dir%" "%expected_count%" "%expected_header_str%" "%file_type%" "%check_text%" "%encoding%"
 
     for %%F in ("%test_dir%\*.zip") do set "zip_file=%%F"
     for %%F in ("%test_dir%\*.dat") do set "dat_file=%%F"
+    if not defined zip_file (
+        call :print_error "No .zip file found in %test_dir%"
+    )
+    if not defined dat_file (
+        call :print_error "No .dat file found in %test_dir%"
+    )
 
     REM Count attachment files in zip (attachment*.pdf, .jpg, .tiff)
     powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match 'attachment.*\.(pdf|jpg|tiff)$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_count.txt"
