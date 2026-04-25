@@ -31,7 +31,7 @@ internal static class LoadfileOnlyGenerator
         var eolString = GetEolString(request.EndOfLine);
         long totalLines = request.LoadFileFormat == LoadFileFormat.Opt
             ? request.FileCount // OPT has no header
-            : request.FileCount + 1; // DAT: +1 for header
+            : (long)request.FileCount + 1; // DAT: +1 for header; cast to long to avoid overflow
 
         // Initialize chaos engine if enabled
         ChaosEngine? chaosEngine = null;

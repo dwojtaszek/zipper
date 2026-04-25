@@ -19,8 +19,9 @@ internal class ConcordanceWriter : LoadFileWriterBase
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
-        // Concordance DAT format uses comma delimiter with DAT escaping (þ quote char doubled)
-        const char fieldDelim = ',';
+        // Concordance DAT format uses request.ColumnDelimiter with DAT escaping (þ quote char doubled)
+        // Default column delimiter is ASCII 20 (DC4), quote delimiter is ASCII 254 (þ)
+        char fieldDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : ',';
         char quoteDelim = '\u00fe'; // ASCII 254 — Concordance standard quote character
 
 #pragma warning disable S2245

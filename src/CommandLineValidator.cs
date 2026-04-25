@@ -538,9 +538,11 @@ namespace Zipper
                 return false;
             }
 
-            if (parsed.Count.Value > int.MaxValue)
+            // Cap at int.MaxValue - 1: DAT format adds a header line (+1),
+            // and chaos mode targets lines by number, which would overflow.
+            if (parsed.Count.Value > int.MaxValue - 1)
             {
-                Console.Error.WriteLine($"Error: --count must not exceed {int.MaxValue}.");
+                Console.Error.WriteLine($"Error: --count must not exceed {int.MaxValue - 1}.");
                 return false;
             }
 

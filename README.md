@@ -177,7 +177,7 @@ Compatibility checklist:
 | Argument | Default | Range/Values | Description |
 |----------|---------|--------------|-------------|
 | `--type` | **required** | pdf, jpg, tiff, eml, docx, xlsx | File type to generate (optional with `--loadfile-only` or `--production-set`) |
-| `--count` | **required** | positive integer (max 2,147,483,647) | Number of files |
+| `--count` | **required** | positive integer (max 2,147,483,646) | Number of files |
 | `--output-path` | **required** | directory path | Output directory |
 | `--folders` | 1 | 1-100 | Number of folders |
 | `--encoding` | UTF-8 | UTF-8, UTF-16, ANSI | Load File encoding |

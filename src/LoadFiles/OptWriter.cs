@@ -20,11 +20,7 @@ internal class OptWriter : LoadFileWriterBase
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
-#pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
-#pragma warning restore S2245
-
-        await WriteRowsAsync(writer, request, processedFiles, random);
+        await WriteRowsAsync(writer, request, processedFiles);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
@@ -33,8 +29,7 @@ internal class OptWriter : LoadFileWriterBase
     private static async Task WriteRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
-        Random random)
+        System.Collections.Generic.List<FileData> processedFiles)
     {
         if (ShouldIncludeMetadata(request))
         {

@@ -208,7 +208,7 @@ internal class ChaosEngine
             long candidate = random.NextInt64(1, j + 1);
             if (!selected.Add(candidate))
             {
-                selected.Add((long)j);
+                selected.Add(j);
             }
         }
 

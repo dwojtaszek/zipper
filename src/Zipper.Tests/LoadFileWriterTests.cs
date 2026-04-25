@@ -263,8 +263,13 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert — Fields containing þ should have it doubled (þ → þþ) per DAT escaping
-            Assert.Contains("\u00fe\u00fe", content);
+            // Assert — Fields containing þ should have it doubled (þ → þþ) per DAT escaping.
+            // Verify in the actual PATH column, not just empty BEGATTY/ENDDATTY.
+            var dataLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1]; // skip header
+            var fields = dataLine.Split('\u0014'); // ASCII 20 column delimiter
+
+            // PATH is the 4th column (index 3): BEGATTY, ENDDATTY, CONTROLNUMBER, PATH, ...
+            Assert.Contains("\u00fe\u00fe", fields[3]);
         }
 
         [Fact]
@@ -284,15 +289,16 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert - Concordance uses comma delimiter with CSV escaping
-            Assert.Contains(',', content);
+            // Assert - Concordance uses ASCII 20 column delimiter with þ quote wrapping
+            var colDelim = '\u0014'; // ASCII 20
+            Assert.Contains(colDelim, content);
             Assert.Contains("CONTROLNUMBER", content);
 
-            // Verify format: fields are comma-separated with quote delimiter wrapping header names
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            Assert.Contains("BEGATTY", lines[0]);
-            Assert.Contains("CONTROLNUMBER", lines[0]);
-            Assert.Contains("PATH", lines[0]);
+            // Verify format: fields are ASCII-20-separated with þ quote delimiter wrapping header names
+            var lines_split = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Contains("BEGATTY", lines_split[0]);
+            Assert.Contains("CONTROLNUMBER", lines_split[0]);
+            Assert.Contains("PATH", lines_split[0]);
         }
 
         [Fact]

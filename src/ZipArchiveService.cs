@@ -135,7 +135,7 @@ namespace Zipper
                 return;
             }
 
-            var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.Attachment.Value.filename}";
+            var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{fileData.Attachment.Value.filename}";
             if (!usedEntryPaths.Add(entryPath))
             {
                 return;
@@ -157,7 +157,7 @@ namespace Zipper
             }
 
             var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
-            var entryPath = $"{fileData.WorkItem.FolderName}/{attachmentTextFileName}";
+            var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attachmentTextFileName}";
             if (!usedEntryPaths.Add(entryPath))
             {
                 return;
