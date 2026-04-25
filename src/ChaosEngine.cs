@@ -15,7 +15,7 @@ internal class ChaosEngine
     private static readonly string[] OptChaosTypes = { "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid" };
     private static readonly char[] AlternativeDelimiters = { ',', '\t', '|' };
 
-    private readonly HashSet<int> targetLines;
+    private readonly HashSet<long> targetLines;
     private readonly HashSet<string> enabledTypes;
     private readonly LoadFileFormat format;
     private readonly string columnDelimiter;
@@ -23,7 +23,7 @@ internal class ChaosEngine
     private readonly string eol;
     private readonly Random random;
     private readonly List<ChaosAnomaly> anomalies = new();
-    private readonly HashSet<int> encodingAnomalyLines = new();
+    private readonly HashSet<long> encodingAnomalyLines = new();
     private int anomalyTypeIndex;
 
     /// <summary>
@@ -49,7 +49,7 @@ internal class ChaosEngine
     {
         if (totalLines > int.MaxValue)
         {
-            throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine does not support load files larger than Int32.MaxValue lines.");
+            throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine does not support load files larger than Int32.MaxValue lines due to Floyd's sampling algorithm constraints.");
         }
 
         if (totalLines <= 0)
@@ -102,7 +102,7 @@ internal class ChaosEngine
     /// </summary>
     /// <param name="lineNumber">1-based line number.</param>
     /// <returns>True if the line should be corrupted.</returns>
-    public bool ShouldIntercept(int lineNumber) => this.targetLines.Contains(lineNumber);
+    public bool ShouldIntercept(long lineNumber) => this.targetLines.Contains(lineNumber);
 
     /// <summary>
     /// Intercepts and corrupts a line. Returns the modified line.
@@ -111,7 +111,7 @@ internal class ChaosEngine
     /// <param name="line">Original line content.</param>
     /// <param name="recordId">Record ID (e.g., "DOC00001054" or "HEADER").</param>
     /// <returns>Modified line with injected anomaly.</returns>
-    public string Intercept(int lineNumber, string line, string recordId)
+    public string Intercept(long lineNumber, string line, string recordId)
     {
         if (this.enabledTypes.Count == 0)
         {
@@ -134,7 +134,7 @@ internal class ChaosEngine
     /// <param name="nextLineNumber">Next line number.</param>
     /// <param name="encoding">Target encoding.</param>
     /// <returns>Invalid byte array, or null if encoding chaos is not enabled or not targeted.</returns>
-    public byte[]? GetEncodingAnomaly(int lineNumber, int nextLineNumber, Encoding encoding)
+    public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding)
     {
         // Only inject when the Chaos Engine selected the encoding anomaly for this line.
         if (!this.encodingAnomalyLines.Remove(lineNumber))
@@ -197,25 +197,25 @@ internal class ChaosEngine
         return Math.Max(1, totalLines / 100);
     }
 
-    private static HashSet<int> SelectTargetLines(int totalLines, int count, Random random)
+    private static HashSet<long> SelectTargetLines(int totalLines, int count, Random random)
     {
         count = Math.Clamp(count, 0, totalLines);
-        var selected = new HashSet<int>(count);
+        var selected = new HashSet<long>(count);
 
         // Floyd's algorithm: exact unique sample without allocating all line numbers.
         for (long j = (long)totalLines - count + 1; j <= totalLines; j++)
         {
-            int candidate = (int)random.NextInt64(1, j + 1);
+            long candidate = random.NextInt64(1, j + 1);
             if (!selected.Add(candidate))
             {
-                selected.Add((int)j);
+                selected.Add((long)j);
             }
         }
 
         return selected;
     }
 
-    private string ApplyDatChaos(int lineNumber, string line, string recordId, string chaosType)
+    private string ApplyDatChaos(long lineNumber, string line, string recordId, string chaosType)
     {
         string result = line;
         string column = "N/A";
@@ -267,7 +267,7 @@ internal class ChaosEngine
         return result;
     }
 
-    private string ApplyOptChaos(int lineNumber, string line, string recordId, string chaosType)
+    private string ApplyOptChaos(long lineNumber, string line, string recordId, string chaosType)
     {
         string result = line;
         string description;

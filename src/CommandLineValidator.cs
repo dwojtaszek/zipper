@@ -532,6 +532,18 @@ namespace Zipper
                 return false;
             }
 
+            if (parsed.Count.Value <= 0)
+            {
+                Console.Error.WriteLine("Error: --count must be a positive number.");
+                return false;
+            }
+
+            if (parsed.Count.Value > int.MaxValue)
+            {
+                Console.Error.WriteLine($"Error: --count must not exceed {int.MaxValue}.");
+                return false;
+            }
+
             if (parsed.OutputDirectory == null)
             {
                 Console.Error.WriteLine("Error: --output-path is required or was invalid.");

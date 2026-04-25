@@ -158,10 +158,26 @@ namespace Zipper
         /// </summary>
         private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, Random random, DateTime now)
         {
-            var to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
-            var from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
-            var subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
-            var sentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+            string to;
+            string from;
+            string subject;
+            string sentDate;
+
+            if (fileData.EmailTemplate is { } template)
+            {
+                to = SanitizeField(template.To, request.NewlineDelimiter);
+                from = SanitizeField(template.From, request.NewlineDelimiter);
+                subject = SanitizeField(template.Subject, request.NewlineDelimiter);
+                sentDate = template.SentDate.ToString("yyyy-MM-dd HH:mm:ss");
+            }
+            else
+            {
+                to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
+                from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
+                subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
+                sentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+            }
+
             var attachmentName = SanitizeField(fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty, request.NewlineDelimiter);
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";

@@ -130,7 +130,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void GenerateDocx_WithDifferentIndices_ShouldReturnSamePrecomputedContent()
+        public void GenerateDocx_WithDifferentIndices_ShouldReturnUniqueContent()
         {
             // Arrange
             var workItem1 = new FileWorkItem { Index = 1 };
@@ -140,8 +140,8 @@ namespace Zipper
             var result1 = OfficeFileGenerator.GenerateDocx(workItem1);
             var result2 = OfficeFileGenerator.GenerateDocx(workItem2);
 
-            // Assert: O(1) pre-computed content is identical for all indices
-            Assert.Equal(result1, result2);
+            // Assert: Each file should have unique content based on work item index
+            Assert.NotEqual(result1, result2);
         }
 
         [Fact]
@@ -179,7 +179,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void GenerateXlsx_WithDifferentIndices_ShouldReturnSamePrecomputedContent()
+        public void GenerateXlsx_WithDifferentIndices_ShouldReturnUniqueContent()
         {
             // Arrange
             var workItem1 = new FileWorkItem { Index = 1 };
@@ -189,8 +189,8 @@ namespace Zipper
             var result1 = OfficeFileGenerator.GenerateXlsx(workItem1);
             var result2 = OfficeFileGenerator.GenerateXlsx(workItem2);
 
-            // Assert: O(1) pre-computed content is identical for all indices
-            Assert.Equal(result1, result2);
+            // Assert: Each file should have unique content based on work item index
+            Assert.NotEqual(result1, result2);
         }
 
         [Fact]

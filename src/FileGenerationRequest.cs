@@ -189,6 +189,15 @@ namespace Zipper
         /// Gets or sets the maximum number of files per volume subfolder (default 5000).
         /// </summary>
         public int VolumeSize { get; set; } = 5000;
+
+        /// <summary>
+        /// Creates a shallow clone of this request so generators can adjust fields
+        /// (e.g., Concurrency, ChaosAmount) without mutating the original shared instance.
+        /// </summary>
+        public FileGenerationRequest Clone()
+        {
+            return (FileGenerationRequest)this.MemberwiseClone();
+        }
     }
 
     /// <summary>

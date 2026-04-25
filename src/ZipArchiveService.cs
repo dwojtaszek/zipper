@@ -30,6 +30,7 @@ namespace Zipper
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
             var processedFiles = new List<FileData>();
+            var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Pre-compute the extracted text content selection once, outside the loop
             var extractedTextContent = request.WithText
@@ -49,24 +50,27 @@ namespace Zipper
                 // 2. Main file's extracted text (if requested)
                 // 3. Attachment (if it exists)
                 // 4. Attachment's extracted text (if it exists and text is requested)
-                WriteFileToArchive(archive, fileData);
+                WriteFileToArchive(archive, fileData, usedEntryPaths);
 
                 if (request.WithText)
                 {
-                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!);
+                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
                 }
 
                 if (fileData.Attachment.HasValue)
                 {
-                    WriteAttachmentToArchive(archive, fileData);
+                    WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
                 }
 
                 if (fileData.Attachment.HasValue && request.WithText)
                 {
-                    WriteAttachmentTextToArchive(archive, fileData);
+                    WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
                 }
 
-                // Memory owners are disposed after load file generation (see below).
+                // Dispose memory owner immediately after writing to archive to bound memory usage.
+                // The FileData record remains in processedFiles for load file generation,
+                // but the large byte arrays are released since they've been written to the ZIP.
+                fileData.MemoryOwner?.Dispose();
             }
 
             var formatsToGenerate = request.LoadFileFormats?.Any() == true
@@ -102,47 +106,50 @@ namespace Zipper
                 }
             }
 
-            // Dispose all memory owners after processing is complete
-            foreach (var fileData in processedFiles)
-            {
-                fileData.MemoryOwner?.Dispose();
-            }
-
             return actualLoadFilePath;
         }
 
         /// <summary>
-        /// Writes a single file to the ZIP archive (synchronous version).
+        /// Writes a single file to the ZIP archive. Skips if the entry path already exists.
         /// </summary>
-        private static void WriteFileToArchive(ZipArchive archive, FileData fileData)
+        private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
         {
-            var entry = archive.CreateEntry(fileData.WorkItem.FilePathInZip, CompressionLevel.Optimal);
+            var entryPath = fileData.WorkItem.FilePathInZip;
+            if (!usedEntryPaths.Add(entryPath))
+            {
+                return;
+            }
+
+            var entry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
             using var entryStream = entry.Open();
             entryStream.Write(fileData.Data.Span);
         }
 
         /// <summary>
-        /// Writes an attachment file to the ZIP archive (synchronous version).
+        /// Writes an attachment file to the ZIP archive. Skips if the entry path already exists.
         /// </summary>
-        private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData)
+        private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
         {
             if (!fileData.Attachment.HasValue)
             {
                 return;
             }
 
-            var attachmentEntry = archive.CreateEntry(
-                $"{fileData.WorkItem.FolderName}/{fileData.Attachment.Value.filename}",
-                CompressionLevel.Optimal);
+            var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.Attachment.Value.filename}";
+            if (!usedEntryPaths.Add(entryPath))
+            {
+                return;
+            }
 
+            var attachmentEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
             using var attachmentStream = attachmentEntry.Open();
             attachmentStream.Write(fileData.Attachment.Value.content);
         }
 
         /// <summary>
-        /// Writes the extracted text for an attachment to the ZIP archive.
+        /// Writes the extracted text for an attachment to the ZIP archive. Skips if the entry path already exists.
         /// </summary>
-        private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData)
+        private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
         {
             if (!fileData.Attachment.HasValue)
             {
@@ -150,25 +157,33 @@ namespace Zipper
             }
 
             var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment.Value.filename)}.txt";
-            var attachmentTextEntry = archive.CreateEntry(
-                $"{fileData.WorkItem.FolderName}/{attachmentTextFileName}",
-                CompressionLevel.Optimal);
+            var entryPath = $"{fileData.WorkItem.FolderName}/{attachmentTextFileName}";
+            if (!usedEntryPaths.Add(entryPath))
+            {
+                return;
+            }
 
+            var attachmentTextEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
             using var attachmentTextStream = attachmentTextEntry.Open();
             attachmentTextStream.Write(PlaceholderFiles.ExtractedText);
         }
 
         /// <summary>
-        /// Writes an extracted text version of a file to the ZIP archive (synchronous version).
+        /// Writes an extracted text version of a file to the ZIP archive. Skips if the entry path already exists.
         /// </summary>
-        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent)
+        private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths)
         {
             System.Diagnostics.Debug.Assert(request.WithText, "Should only be called when WithText is true");
 
             var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
-            var textFilePathInZip = $"{fileData.WorkItem.FolderName}/{textFileName}";
+            var entryPath = $"{fileData.WorkItem.FolderName}/{textFileName}";
 
-            var textEntry = archive.CreateEntry(textFilePathInZip, CompressionLevel.Optimal);
+            if (!usedEntryPaths.Add(entryPath))
+            {
+                return;
+            }
+
+            var textEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
             using var textEntryStream = textEntry.Open();
 
             // O(1): write pre-computed byte[] directly, no string round-trip

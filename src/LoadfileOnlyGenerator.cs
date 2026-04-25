@@ -16,6 +16,9 @@ internal static class LoadfileOnlyGenerator
     /// <returns>Result containing generated file paths and performance metrics.</returns>
     public static async Task<LoadfileOnlyResult> GenerateAsync(FileGenerationRequest request)
     {
+        // Clone to avoid mutating the caller's request object
+        request = request.Clone();
+
         var stopwatch = Stopwatch.StartNew();
 
         Directory.CreateDirectory(request.OutputPath);
@@ -153,7 +156,7 @@ internal static class LoadfileOnlyGenerator
 
         for (long i = 1; i <= request.FileCount; i++)
         {
-            int lineNumber = (int)i + 1; // Line 1 is header, data starts at line 2
+            long lineNumber = i + 1; // Line 1 is header, data starts at line 2
             string recordId = $"DOC{i:D8}";
 
             var line = BuildDatRow(i, recordId, request, colDelim, quote, hasQuote, random, now);
@@ -213,7 +216,7 @@ internal static class LoadfileOnlyGenerator
 
         for (long i = 1; i <= request.FileCount; i++)
         {
-            int lineNumber = (int)i; // No header in Opticon format
+            long lineNumber = i; // No header in Opticon format
             string batesId = $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
