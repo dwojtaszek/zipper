@@ -36,7 +36,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 # --- Test Case 1: OPT Format ---
 
-print_info "Test Case 1: OPT (tab-delimited) format"
+print_info "Test Case 1: OPT (comma-delimited, no-header) format"
 
 zipper \
   --type pdf \
@@ -62,15 +62,15 @@ if [[ "$pdf_count" -lt 10 ]]; then
   print_error "Test 1: Expected at least 10 PDF files in zip, found $pdf_count"
 fi
 
-# Check for tab delimiter (OPT uses tabs) - use $'\t' for cross-platform compatibility
-if ! grep $'\t' "$opt_file" > /dev/null; then
-  print_error "Test 1: No tab delimiter found in .opt file"
+# Check for comma delimiter (OPT uses comma per Opticon 7-column standard)
+if ! grep ',' "$opt_file" > /dev/null; then
+  print_error "Test 1: No comma delimiter found in .opt file"
 fi
 
-# Verify header contains expected columns
+# Verify first line is a data row (OPT has no header), not a header row with "Control Number"
 first_line=$(head -n 1 "$opt_file")
-if ! echo "$first_line" | grep -q "Control Number"; then
-  print_error "Test 1: 'Control Number' column not found in .opt header"
+if echo "$first_line" | grep -q "Control Number"; then
+  print_error "Test 1: OPT should not contain header row, found 'Control Number'"
 fi
 
 print_success "Test Case 1: OPT format passed"
