@@ -16,7 +16,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ_E-008**: The application must generate a user-specified number of Native Files.
 - **REQ_E-009**: The application must support generating up to 100 million Native Files.
 - **REQ_E-010**: The application must support generating Native Files of type `pdf`, `jpg`, `tiff`, `eml`, `docx`, or `xlsx`.
-- **REQ_E-011**: The content for the generated Native Files must be a minimal, valid placeholder to ensure high compression. For DOCX and XLSX formats, content includes unique per-document identifiers to support realistic eDiscovery testing workflows (hash uniqueness, content search, near-duplicate detection).
+- **REQ_E-011**: The content for the generated Native Files must be a minimal, valid, and identical placeholder to ensure maximum compression.
 - **REQ_E-012**: The application will provide placeholder content internally, without requiring user-supplied template files.
 
 ### FR_E-003: Archive Creation

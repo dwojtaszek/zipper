@@ -4,28 +4,38 @@ namespace Zipper;
 
 /// <summary>
 /// Generates Microsoft Office format documents (DOCX, XLSX)
-/// Creates unique documents per work item by injecting index-based content.
+/// Pre-computes minimal valid Office files at static init for O(1) generation.
 /// </summary>
 internal static class OfficeFileGenerator
 {
     /// <summary>
-    /// Generates a unique DOCX document with content varied by work item index.
+    /// Pre-computed minimal valid DOCX document.
+    /// </summary>
+    private static readonly byte[] PrecomputedDocx = CreateMinimalDocx();
+
+    /// <summary>
+    /// Pre-computed minimal valid XLSX spreadsheet.
+    /// </summary>
+    private static readonly byte[] PrecomputedXlsx = CreateMinimalXlsx();
+
+    /// <summary>
+    /// Returns a pre-computed minimal DOCX document.
     /// </summary>
     /// <param name="workItem">File work item containing index and metadata.</param>
-    /// <returns>Byte array containing a valid DOCX document with unique content.</returns>
+    /// <returns>Byte array containing a valid DOCX document.</returns>
     public static byte[] GenerateDocx(FileWorkItem workItem)
     {
-        return CreateDocx(workItem);
+        return PrecomputedDocx;
     }
 
     /// <summary>
-    /// Generates a unique XLSX spreadsheet with content varied by work item index.
+    /// Returns a pre-computed minimal XLSX spreadsheet.
     /// </summary>
     /// <param name="workItem">File work item containing index and metadata.</param>
-    /// <returns>Byte array containing a valid XLSX spreadsheet with unique content.</returns>
+    /// <returns>Byte array containing a valid XLSX spreadsheet.</returns>
     public static byte[] GenerateXlsx(FileWorkItem workItem)
     {
-        return CreateXlsx(workItem);
+        return PrecomputedXlsx;
     }
 
     /// <summary>
@@ -58,9 +68,9 @@ internal static class OfficeFileGenerator
     }
 
     /// <summary>
-    /// Creates a DOCX document with unique content based on the work item index.
+    /// Creates a minimal valid DOCX document once at static init.
     /// </summary>
-    private static byte[] CreateDocx(FileWorkItem workItem)
+    private static byte[] CreateMinimalDocx()
     {
         using var stream = new MemoryStream();
 
@@ -95,9 +105,7 @@ internal static class OfficeFileGenerator
             var documentXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
                 "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
                 "<w:body>" +
-                $"<w:p><w:r><w:t>This is document {workItem.Index} for eDiscovery testing.</w:t></w:r></w:p>" +
-                $"<w:p><w:r><w:t>Control Number: DOC{workItem.Index:D8}</w:t></w:r></w:p>" +
-                $"<w:p><w:r><w:t>Folder: {workItem.FolderName}</w:t></w:r></w:p>" +
+                "<w:p><w:r><w:t>This is a sample document for eDiscovery testing.</w:t></w:r></w:p>" +
                 "</w:body>" +
                 "</w:document>";
 
@@ -113,9 +121,9 @@ internal static class OfficeFileGenerator
     }
 
     /// <summary>
-    /// Creates an XLSX spreadsheet with unique content based on the work item index.
+    /// Creates a minimal valid XLSX spreadsheet once at static init.
     /// </summary>
-    private static byte[] CreateXlsx(FileWorkItem workItem)
+    private static byte[] CreateMinimalXlsx()
     {
         using var workbook = new ClosedXML.Excel.XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Sheet1");
@@ -124,9 +132,9 @@ internal static class OfficeFileGenerator
         worksheet.Cell("B1").Value = "Date";
         worksheet.Cell("C1").Value = "Description";
 
-        worksheet.Cell("A2").Value = $"DOC{workItem.Index:D8}";
-        worksheet.Cell("B2").Value = DateTime.Now.ToString("yyyy-MM-dd");
-        worksheet.Cell("C2").Value = $"Document {workItem.Index} for eDiscovery testing in {workItem.FolderName}";
+        worksheet.Cell("A2").Value = "DOC00000001";
+        worksheet.Cell("B2").Value = "Sample Date";
+        worksheet.Cell("C2").Value = "Sample document for eDiscovery testing";
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);

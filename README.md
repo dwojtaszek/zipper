@@ -11,7 +11,7 @@ Zipper is a .NET command-line tool for generating large Archives containing Nati
 - Supports Bates numbering for legal document identification
 - Supports multipage TIFF files with configurable page count ranges
 - Creates a corresponding Load File compatible with standard import tools
-- Uses minimal, valid placeholder Native Files for high compression (DOCX/XLSX files include unique per-document content for realistic eDiscovery testing)
+- Uses minimal, valid placeholder Native Files for maximum compression
 - Streams data directly to the archive to handle very large datasets efficiently
 - Provides progress indication during generation with real-time performance metrics
 - Can target a specific Archive size by padding Native Files with non-compressible data
