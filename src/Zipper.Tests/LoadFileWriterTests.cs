@@ -115,6 +115,44 @@ namespace Zipper
             Assert.Equal(6, lines[0].Count(c => c == ','));
         }
 
+        [Theory]
+        [InlineData("UTF-16")]
+        [InlineData("ANSI")]
+        public async Task OptWriter_ShouldRespectRequestEncoding(string encoding)
+        {
+            // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+            // Arrange - Test that OPT writer respects the requested encoding
+            var request = this.CreateTestRequest();
+            request.Encoding = encoding;
+            var fileData = this.CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
+            var outputPath = Path.Combine(this.tempDir, "test.opt");
+
+            // Act
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            // Read with the specified encoding to verify it was written correctly
+            var targetEncoding = encoding.ToUpperInvariant() switch
+            {
+                "UTF-16" => Encoding.Unicode,
+                "ANSI" => Encoding.GetEncoding("Windows-1252"),
+                _ => Encoding.UTF8,
+            };
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Assert — OPT format: 3 data lines, comma-separated, 7 columns each
+            Assert.Equal(3, lines.Length);
+            Assert.Contains(',', lines[0]);
+            Assert.Equal(6, lines[0].Count(c => c == ','));
+        }
+
         [Fact]
         public async Task CsvWriter_ShouldWriteCsvFormat()
         {

@@ -210,7 +210,7 @@ internal static class LoadfileOnlyGenerator
         Random random)
     {
         // Opticon 7-column comma-separated format:
-        // BatesNumber,Volume,ImagePath,DocBreak(Y/blank),BoxBreak,FolderBreak,PageCount
+        // BatesNumber,Volume,ImagePath,DocBreak(Y/blank),FolderBreak,BoxBreak,PageCount
         var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var buffer = new StringBuilder();
 
@@ -221,11 +221,11 @@ internal static class LoadfileOnlyGenerator
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
             string docBreak = "Y"; // First page of each document
-            string boxBreak = string.Empty;
             string folderBreak = string.Empty;
+            string boxBreak = string.Empty;
             int pageCount = random.Next(1, 11);
 
-            string line = $"{batesId},{volume},{imagePath},{docBreak},{boxBreak},{folderBreak},{pageCount}";
+            string line = $"{batesId},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
 
             // Apply chaos if targeted
             if (chaos != null && chaos.ShouldIntercept(lineNumber))

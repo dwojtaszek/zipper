@@ -4,7 +4,7 @@ namespace Zipper.LoadFiles;
 
 /// <summary>
 /// Writes OPT (Opticon) format load files — comma-separated, no header, 7-column standard.
-/// Opticon specification: BatesNumber,Volume,ImagePath,DocBreak(Y/blank),BoxBreak,FolderBreak,PageCount
+/// Opticon specification: BatesNumber,Volume,ImagePath,DocBreak(Y/blank),FolderBreak,BoxBreak,PageCount
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
@@ -18,7 +18,7 @@ internal class OptWriter : LoadFileWriterBase
         System.Collections.Generic.List<FileData> processedFiles)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
+        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
 #pragma warning disable S2245
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
@@ -36,6 +36,26 @@ internal class OptWriter : LoadFileWriterBase
         System.Collections.Generic.List<FileData> processedFiles,
         Random random)
     {
+        if (ShouldIncludeMetadata(request))
+        {
+            Console.Error.WriteLine("Warning: --with-metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
+        }
+
+        if (ShouldIncludeEmlColumns(request))
+        {
+            Console.Error.WriteLine("Warning: Email metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
+        }
+
+        if (request.WithText)
+        {
+            Console.Error.WriteLine("Warning: --with-text is not supported in Opticon format. The OPT file uses the standard 7-column layout.");
+        }
+
+        if (request.BatesConfig != null)
+        {
+            Console.Error.WriteLine("Warning: The Bates number column is part of the standard Opticon 7-column format (column 1). Other Bates configuration is ignored.");
+        }
+
         var buffer = new StringBuilder();
         int rowCount = 0;
 
@@ -43,19 +63,19 @@ internal class OptWriter : LoadFileWriterBase
         {
             var workItem = fileData.WorkItem;
 
-            // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
+            // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,FolderBreak,BoxBreak,PageCount
             string batesNumber = request.BatesConfig != null
                 ? GenerateBatesNumber(request, workItem)
                 : GenerateDocumentId(workItem);
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesNumber}.tif";
             string docBreak = "Y";
-            string boxBreak = string.Empty;
             string folderBreak = string.Empty;
+            string boxBreak = string.Empty;
             int pageCount = ShouldIncludePageCount(request) ? fileData.PageCount : 1;
 
             // Comma-separated, no header — Opticon standard
-            var line = $"{batesNumber},{volume},{imagePath},{docBreak},{boxBreak},{folderBreak},{pageCount}";
+            var line = $"{batesNumber},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
 
             buffer.AppendLine(line);
             rowCount++;

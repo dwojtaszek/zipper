@@ -65,6 +65,26 @@ tests/run-tests.bat    # Windows
 > 2. `Requirements.md` - Add new requirements
 > 3. This file - if adding major features
 
+## Requirement-Driven Changes
+
+> [!IMPORTANT]
+> **Every code change that alters behavior MUST be verified against Requirements.md and README.md.**
+> 
+> **Before committing:**
+> 1. Identify which REQ-XXX requirements are affected by the change
+> 2. Check if the change violates any existing requirement — if so, flag it before implementing
+> 3. If a requirement must change, update the requirement text (never change REQ numbers — they are IMMUTABLE per the CAUTION block above)
+> 4. Update README.md if the change affects: CLI arguments, format specifications, behavior descriptions, the Arguments Quick Reference table, or the Argument Interactions section
+> 5. Run `grep -n "REQ_XXX" Requirements.md` to verify all referenced requirements still exist
+> 
+> **Review checklist for code review:**
+> - [ ] Code behavior matches Requirements.md (no violations)
+> - [ ] CLI argument changes reflected in README.md Arguments Quick Reference table
+> - [ ] CLI argument changes reflected in Requirements.md argument descriptions
+> - [ ] Format changes align with Section 8 (Load File Format Standards)
+> - [ ] New options documented in README.md examples section
+> - [ ] Argument interactions updated in both README.md and Requirements.md Section 10
+
 **Test Location:** All unit tests go in `src/Zipper.Tests/` (NOT the root `Zipper.Tests/` which is obsolete).
 
 **E2E Tests:** Must verify actual output (file counts, headers, content). All new E2E tests need both `.sh` and `.bat` implementations.
