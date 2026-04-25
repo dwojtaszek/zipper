@@ -188,9 +188,15 @@ for format in "dat" "opt" "csv" "xml"; do
     print_error "Test 5: No .$ext file found for format $format"
   fi
 
-  # Verify XLSX extension is in load file
-  if ! grep -q "\.xlsx" "$load_file"; then
-    print_error "Test 5: .xlsx extension not found in $format load file"
+  # Verify XLSX reference appears in load file (OPT uses .tif image paths per spec)
+  if [[ "$format" == "opt" ]]; then
+    if ! grep -q "\.tif" "$load_file"; then
+      print_error "Test 5: .tif image path not found in OPT load file"
+    fi
+  else
+    if ! grep -q "\.xlsx" "$load_file"; then
+      print_error "Test 5: .xlsx extension not found in $format load file"
+    fi
   fi
 
   print_success "Test Case 5: XLSX with $format format passed"
