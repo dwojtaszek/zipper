@@ -696,6 +696,87 @@ namespace Zipper
         }
 
         [Fact]
+        public void ValidateAndParseArguments_WithCountZero_ShouldReturnNull()
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.Null(result);
+                var output = errorOutput.ToString();
+                Assert.Contains("--count must be a positive number", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithCountNegative_ShouldReturnNull()
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.Null(result);
+                var output = errorOutput.ToString();
+                Assert.Contains("--count must be a positive number", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithCountExceedingMax_ShouldReturnNull()
+        {
+            // Arrange
+            var originalError = Console.Error;
+            var errorOutput = new StringWriter();
+            Console.SetError(errorOutput);
+
+            try
+            {
+                var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
+
+                // Act
+                var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+                // Assert
+                Assert.Null(result);
+                var output = errorOutput.ToString();
+                Assert.Contains("--count must not exceed", output);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+                errorOutput.Dispose();
+            }
+        }
+
+        [Fact]
         public void ValidateAndParseArguments_ChaosMode_WithValidArgs_ShouldSucceed()
         {
             var args = new[]

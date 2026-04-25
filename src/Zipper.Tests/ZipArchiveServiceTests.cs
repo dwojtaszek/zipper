@@ -369,7 +369,7 @@ namespace Zipper.Tests
 
             using var optStream = new StreamReader(optEntry.Open());
             var optLines = (await optStream.ReadToEndAsync()).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            Assert.Equal(4, optLines.Length); // Header + 3 rows
+            Assert.Equal(3, optLines.Length); // Opticon: no header, 3 rows
         }
     }
 }

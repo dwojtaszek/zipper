@@ -92,5 +92,39 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public async Task GenerateFilesAsync_WithImpossibleTargetSize_ThrowsInvalidOperationException()
+        {
+            // REQ-026: When estimated minimum compressed size already exceeds target, abort immediately.
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                // Request a very small target size (1KB) with many files — impossible to fit
+                var generator = new ParallelFileGenerator();
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 100,
+                        FileType = "pdf",
+                        Folders = 1,
+                        Concurrency = 1,
+                        TargetZipSize = 100, // 100 bytes — impossibly small for 100 PDFs
+                    }));
+
+                Assert.Contains("target ZIP size", ex.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
     }
 }

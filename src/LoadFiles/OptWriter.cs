@@ -3,7 +3,8 @@ using System.Text;
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes OPT (Opticon) format load files - tab-separated format used by Relativity.
+/// Writes OPT (Opticon) format load files — comma-separated, no header, 7-column standard.
+/// Opticon specification: BatesNumber,Volume,ImagePath,DocBreak(Y/blank),FolderBreak,BoxBreak,PageCount
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
@@ -17,101 +18,61 @@ internal class OptWriter : LoadFileWriterBase
         System.Collections.Generic.List<FileData> processedFiles)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
-        const char tab = '\t';
+        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
-#pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
-#pragma warning restore S2245
-        var now = DateTime.UtcNow;
-
-        await WriteHeaderAsync(writer, request, tab);
-        await WriteRowsAsync(writer, request, processedFiles, tab, random, now);
+        await WriteRowsAsync(writer, request, processedFiles);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
     }
 
-    private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char tab)
+    private static async Task WriteRowsAsync(
+        StreamWriter writer,
+        FileGenerationRequest request,
+        System.Collections.Generic.List<FileData> processedFiles)
     {
-        var header = new StringBuilder();
-        header.Append($"Control Number{tab}File Path");
-
         if (ShouldIncludeMetadata(request))
         {
-            header.Append($"{tab}Custodian{tab}Date Sent{tab}Author{tab}File Size");
+            Console.Error.WriteLine("Warning: --with-metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
         if (ShouldIncludeEmlColumns(request))
         {
-            header.Append($"{tab}To{tab}From{tab}Subject{tab}Sent Date{tab}Attachment");
-        }
-
-        if (request.BatesConfig != null)
-        {
-            header.Append($"{tab}Bates Number");
-        }
-
-        if (ShouldIncludePageCount(request))
-        {
-            header.Append($"{tab}Page Count");
+            Console.Error.WriteLine("Warning: Email metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
         if (request.WithText)
         {
-            header.Append($"{tab}Extracted Text");
+            Console.Error.WriteLine("Warning: --with-text is not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
-        return writer.WriteLineAsync(header.ToString());
-    }
+        if (request.BatesConfig != null)
+        {
+            Console.Error.WriteLine("Warning: The Bates number column is part of the standard Opticon 7-column format (column 1). Other Bates configuration is ignored.");
+        }
 
-    private static async Task WriteRowsAsync(
-        StreamWriter writer,
-        FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
-        char tab,
-        Random random,
-        DateTime now)
-    {
         var buffer = new StringBuilder();
         int rowCount = 0;
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
-            var docId = GenerateDocumentId(workItem);
-            var line = new StringBuilder();
 
-            line.Append($"{docId}{tab}{workItem.FilePathInZip}");
+            // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,FolderBreak,BoxBreak,PageCount
+            string batesNumber = request.BatesConfig != null
+                ? GenerateBatesNumber(request, workItem)
+                : GenerateDocumentId(workItem);
+            string volume = "VOL001";
+            string imagePath = $"IMAGES\\{batesNumber}.tif";
+            string docBreak = "Y";
+            string folderBreak = string.Empty;
+            string boxBreak = string.Empty;
+            int pageCount = ShouldIncludePageCount(request) ? fileData.PageCount : 1;
 
-            if (ShouldIncludeMetadata(request))
-            {
-                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
-                line.Append($"{tab}{metadata.Custodian}{tab}{metadata.DateSent}{tab}{metadata.Author}{tab}{metadata.FileSize}");
-            }
+            // Comma-separated, no header — Opticon standard
+            var line = $"{batesNumber},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
 
-            if (ShouldIncludeEmlColumns(request))
-            {
-                var eml = GenerateEmlValues(workItem, fileData, random, now);
-                line.Append($"{tab}{eml.To}{tab}{eml.From}{tab}{eml.Subject}{tab}{eml.SentDate}{tab}{eml.Attachment}");
-            }
-
-            if (request.BatesConfig != null)
-            {
-                line.Append($"{tab}{GenerateBatesNumber(request, workItem)}");
-            }
-
-            if (ShouldIncludePageCount(request))
-            {
-                line.Append($"{tab}{fileData.PageCount}");
-            }
-
-            if (request.WithText)
-            {
-                line.Append($"{tab}{GenerateTextPath(request, workItem)}");
-            }
-
-            buffer.AppendLine(line.ToString());
+            buffer.AppendLine(line);
             rowCount++;
 
             if (rowCount >= 1000)

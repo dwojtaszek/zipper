@@ -84,9 +84,9 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task OptWriter_ShouldWriteTabDelimitedFormat()
+        public async Task OptWriter_ShouldWriteCommaDelimitedNoHeaderFormat()
         {
-            // Arrange
+            // Arrange — Opticon standard: comma-separated, no header, 7-column
             var request = this.CreateTestRequest();
             var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
@@ -101,12 +101,56 @@ namespace Zipper
             var content = await File.ReadAllTextAsync(outputPath);
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            // Assert
-            Assert.Equal(4, lines.Length);
+            // Assert — 3 data lines, no header
+            Assert.Equal(3, lines.Length);
 
-            // OPT format uses tab delimiters
-            Assert.Contains('\t', lines[0]);
-            Assert.Contains("Control Number", lines[0]);
+            // OPT format uses comma delimiters (Opticon standard)
+            Assert.Contains(',', lines[0]);
+            Assert.DoesNotContain('\t', lines[0]);
+
+            // No header row — first line is data
+            Assert.DoesNotContain("Control Number", lines[0]);
+
+            // Each line should have exactly 6 commas (7 columns)
+            Assert.Equal(6, lines[0].Count(c => c == ','));
+        }
+
+        [Theory]
+        [InlineData("UTF-16")]
+        [InlineData("ANSI")]
+        public async Task OptWriter_ShouldRespectRequestEncoding(string encoding)
+        {
+            // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+            // Arrange - Test that OPT writer respects the requested encoding
+            var request = this.CreateTestRequest();
+            request.Encoding = encoding;
+            var fileData = this.CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
+            var outputPath = Path.Combine(this.tempDir, "test.opt");
+
+            // Act
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            // Read with the specified encoding to verify it was written correctly
+            var targetEncoding = encoding.ToUpperInvariant() switch
+            {
+                "UTF-16" => Encoding.Unicode,
+                "ANSI" => Encoding.GetEncoding("Windows-1252"),
+                _ => Encoding.UTF8,
+            };
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Assert — OPT format: 3 data lines, comma-separated, 7 columns each
+            Assert.Equal(3, lines.Length);
+            Assert.Contains(',', lines[0]);
+            Assert.Equal(6, lines[0].Count(c => c == ','));
         }
 
         [Fact]
@@ -191,6 +235,44 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task ConcordanceWriter_ShouldUseDatEscapingForQuoteDelimiter()
+        {
+            // Arrange — Concordance DAT uses ASCII 254 (þ) as quote delimiter
+            var request = this.CreateTestRequest();
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/file_with_\u00fe_char.pdf"
+                    },
+                    Data = Array.Empty<byte>()
+                },
+            };
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Concordance);
+            var outputPath = Path.Combine(this.tempDir, "test.dat");
+
+            // Act
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var content = await File.ReadAllTextAsync(outputPath);
+
+            // Assert — Fields containing þ should have it doubled (þ → þþ) per DAT escaping.
+            // Verify in the actual PATH column, not just empty BEGATTY/ENDDATTY.
+            var dataLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1]; // skip header
+            var fields = dataLine.Split('\u0014'); // ASCII 20 column delimiter
+
+            // PATH is the 4th column (index 3): BEGATTY, ENDDATTY, CONTROLNUMBER, PATH, ...
+            Assert.Contains("\u00fe\u00fe", fields[3]);
+        }
+
+        [Fact]
         public async Task ConcordanceWriter_ShouldUseProperDelimiters()
         {
             // Arrange
@@ -207,13 +289,16 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert - Concordance uses comma delimiter with CSV escaping
-            Assert.Contains(',', content);
+            // Assert - Concordance uses ASCII 20 column delimiter with þ quote wrapping
+            var colDelim = '\u0014'; // ASCII 20
+            Assert.Contains(colDelim, content);
             Assert.Contains("CONTROLNUMBER", content);
 
-            // Verify format: fields are comma-separated without trailing delimiter
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            Assert.Contains("BEGATTY,ENDDATTY,CONTROLNUMBER,PATH", lines[0]);
+            // Verify format: fields are ASCII-20-separated with þ quote delimiter wrapping header names
+            var lines_split = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Contains("BEGATTY", lines_split[0]);
+            Assert.Contains("CONTROLNUMBER", lines_split[0]);
+            Assert.Contains("PATH", lines_split[0]);
         }
 
         [Fact]

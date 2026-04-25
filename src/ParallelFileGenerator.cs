@@ -19,6 +19,9 @@ namespace Zipper
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
+            // Clone to avoid mutating the caller's request object
+            request = request.Clone();
+
             this.performanceMonitor.Start(request.FileCount);
 
             try
@@ -182,6 +185,7 @@ namespace Zipper
             byte[] fileContent;
             (string filename, byte[] content)? attachment = null;
             int pageCount = 1;
+            EmailTemplate? emailTemplate = null;
 
             if (request.FileType.ToLowerInvariant() == "eml")
             {
@@ -192,6 +196,7 @@ namespace Zipper
 
                 fileContent = emlResult.Content;
                 attachment = emlResult.Attachment;
+                emailTemplate = emlResult.Template;
             }
             else if (OfficeFileGenerator.IsOfficeFormat(request.FileType))
             {
@@ -248,6 +253,7 @@ namespace Zipper
                     Data = data,
                     Attachment = attachment,
                     PageCount = pageCount,
+                    EmailTemplate = emailTemplate,
                 };
             }
 
@@ -267,6 +273,7 @@ namespace Zipper
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
+                EmailTemplate = emailTemplate,
             };
         }
 
@@ -281,7 +288,10 @@ namespace Zipper
             var estimatedBaseSize = this.EstimateCompressedSize(baseSize, fileCount, withText);
             if (estimatedBaseSize >= targetSize)
             {
-                return 0;
+                throw new InvalidOperationException(
+                    $"Estimated minimum compressed size ({estimatedBaseSize:N0} bytes) already exceeds " +
+                    $"the target ZIP size ({targetSize:N0} bytes). Cannot proceed — reduce --count, " +
+                    $"use smaller files, or increase --target-zip-size.");
             }
 
             var padding = (targetSize - estimatedBaseSize) / fileCount;
@@ -330,5 +340,7 @@ namespace Zipper
         public IMemoryOwner<byte>? MemoryOwner { get; init; }
 
         public int PageCount { get; init; } = 1;
+
+        public EmailTemplate? EmailTemplate { get; init; }
     }
 }

@@ -35,6 +35,12 @@ namespace Zipper
         /// Gets optional attachment information for the file data.
         /// </summary>
         public (string filename, byte[] content)? Attachment { get; init; }
+
+        /// <summary>
+        /// Gets the email template used to generate this EML content.
+        /// Propagated to FileData for load file metadata consistency.
+        /// </summary>
+        public EmailTemplate? Template { get; init; }
     }
 
     /// <summary>
@@ -75,6 +81,7 @@ namespace Zipper
             {
                 Content = emlContent,
                 Attachment = attachment,
+                Template = emailTemplate,
             };
         }
 

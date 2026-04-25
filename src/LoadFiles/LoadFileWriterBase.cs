@@ -59,10 +59,22 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
 
     /// <summary>
     /// Generates EML-specific column values for a file.
+    /// Uses actual EmailTemplate metadata when available for consistency with EML content.
     /// </summary>
-    /// <returns></returns>
     protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
     {
+        if (fileData.EmailTemplate is { } template)
+        {
+            return new EmlColumns
+            {
+                To = template.To,
+                From = template.From,
+                Subject = template.Subject,
+                SentDate = template.SentDate.ToString("yyyy-MM-dd HH:mm:ss"),
+                Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
+            };
+        }
+
         return new EmlColumns
         {
             To = $"recipient{workItem.Index}@example.com",
@@ -113,6 +125,28 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
         {
             return $"\"{field.Replace("\"", "\"\"")}\"";
+        }
+
+        return field;
+    }
+
+    /// <summary>
+    /// Escapes a field value for Concordance DAT format using the configured quote delimiter.
+    /// Doubles the quote character within the field value (e.g., þ → þþ).
+    /// </summary>
+    /// <param name="field">Field value to escape.</param>
+    /// <param name="quoteDelimiter">The quote delimiter character (e.g., ASCII 254 þ).</param>
+    /// <returns>Escaped field value.</returns>
+    protected static string EscapeDatField(string field, char quoteDelimiter)
+    {
+        if (string.IsNullOrEmpty(field))
+        {
+            return string.Empty;
+        }
+
+        if (field.Contains(quoteDelimiter))
+        {
+            return field.Replace(quoteDelimiter.ToString(), new string(quoteDelimiter, 2));
         }
 
         return field;

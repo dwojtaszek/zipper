@@ -492,7 +492,7 @@ namespace Zipper
             var targetLinesField = typeof(ChaosEngine).GetField("targetLines", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(targetLinesField);
 
-            var targetLines = Assert.IsType<HashSet<int>>(targetLinesField!.GetValue(engine));
+            var targetLines = Assert.IsType<HashSet<long>>(targetLinesField!.GetValue(engine));
             Assert.Single(targetLines);
             Assert.InRange(targetLines.Single(), 1, int.MaxValue);
         }

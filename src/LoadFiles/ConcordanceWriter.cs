@@ -19,62 +19,63 @@ internal class ConcordanceWriter : LoadFileWriterBase
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
 
-        // Concordance DAT format uses comma delimiter with CSV escaping
-        const char fieldDelim = ',';
-        const char quote = '"';
+        // Concordance DAT format uses request.ColumnDelimiter with DAT escaping (þ quote char doubled)
+        // Default column delimiter is ASCII 20 (DC4), quote delimiter is ASCII 254 (þ)
+        char fieldDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : ',';
+        char quoteDelim = '\u00fe'; // ASCII 254 — Concordance standard quote character
 
 #pragma warning disable S2245
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
         var now = DateTime.UtcNow;
 
-        await WriteHeaderAsync(writer, request, fieldDelim, quote);
-        await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quote, random, now);
+        await WriteHeaderAsync(writer, request, fieldDelim, quoteDelim);
+        await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quoteDelim, random, now);
 
         // Flush to ensure data is written
         await writer.FlushAsync();
     }
 
-    private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char fieldDelim, char quote)
+    private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request, char fieldDelim, char quoteDelim)
     {
         var header = new StringBuilder();
 
-        // Concordance format headers are unquoted, comma-delimited
-        header.Append($"BEGATTY{fieldDelim}");
-        header.Append($"ENDDATTY{fieldDelim}");
-        header.Append($"CONTROLNUMBER{fieldDelim}");
-        header.Append($"PATH{fieldDelim}");
+        // Concordance format headers are wrapped in quote delimiter, comma-delimited
+        header.Append($"{quoteDelim}BEGATTY{quoteDelim}{fieldDelim}");
+        header.Append($"{quoteDelim}ENDDATTY{quoteDelim}{fieldDelim}");
+        header.Append($"{quoteDelim}CONTROLNUMBER{quoteDelim}{fieldDelim}");
+        header.Append($"{quoteDelim}PATH{quoteDelim}{fieldDelim}");
 
         if (ShouldIncludeMetadata(request))
         {
-            header.Append($"CUSTODIAN{fieldDelim}");
-            header.Append($"DATESENT{fieldDelim}");
-            header.Append($"AUTHOR{fieldDelim}");
-            header.Append($"FILESIZE{fieldDelim}");
+            header.Append($"{quoteDelim}CUSTODIAN{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}DATESENT{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}AUTHOR{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}FILESIZE{quoteDelim}{fieldDelim}");
         }
 
         if (ShouldIncludeEmlColumns(request))
         {
-            header.Append($"TO{fieldDelim}");
-            header.Append($"FROM{fieldDelim}");
-            header.Append($"SUBJECT{fieldDelim}");
-            header.Append($"SENTDATE{fieldDelim}");
-            header.Append($"ATTACHMENT{fieldDelim}");
+            header.Append($"{quoteDelim}TO{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}FROM{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}SUBJECT{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}SENTDATE{quoteDelim}{fieldDelim}");
+            header.Append($"{quoteDelim}ATTACHMENT{quoteDelim}{fieldDelim}");
         }
 
         if (request.BatesConfig != null)
         {
-            header.Append($"BATES{fieldDelim}");
+            header.Append($"{quoteDelim}BATES{quoteDelim}{fieldDelim}");
         }
 
         if (ShouldIncludePageCount(request))
         {
-            header.Append($"PAGECOUNT{fieldDelim}");
+            header.Append($"{quoteDelim}PAGECOUNT{quoteDelim}{fieldDelim}");
         }
 
         if (request.WithText)
         {
-            header.Append($"TEXT_PATH{fieldDelim}");
+            header.Append($"{quoteDelim}TEXT_PATH{quoteDelim}{fieldDelim}");
         }
 
         return writer.WriteLineAsync(header.ToString().TrimEnd(fieldDelim));
@@ -85,7 +86,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles,
         char fieldDelim,
-        char quote,
+        char quoteDelim,
         Random random,
         DateTime now)
     {
@@ -100,43 +101,43 @@ internal class ConcordanceWriter : LoadFileWriterBase
             // Note: BEGATTY and ENDDATTY (beginning/ending attachment Bates numbers)
             // are intentionally left empty. The format requires these fields,
             // but this generator does not track attachment parent/child ranges.
-            line.Append($"{fieldDelim}");  // BEGATTY field
-            line.Append($"{fieldDelim}");  // ENDDATTY field
-            line.Append($"{EscapeCsvField(GenerateDocumentId(workItem))}{fieldDelim}");
-            line.Append($"{EscapeCsvField(workItem.FilePathInZip)}{fieldDelim}");
+            line.Append($"{quoteDelim}{quoteDelim}{fieldDelim}");  // BEGATTY field (empty)
+            line.Append($"{quoteDelim}{quoteDelim}{fieldDelim}");  // ENDDATTY field (empty)
+            line.Append($"{quoteDelim}{EscapeDatField(GenerateDocumentId(workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
+            line.Append($"{quoteDelim}{EscapeDatField(workItem.FilePathInZip, quoteDelim)}{quoteDelim}{fieldDelim}");
 
             if (ShouldIncludeMetadata(request))
             {
                 var metadata = GenerateMetadataValues(workItem, fileData, random, now);
-                line.Append($"{EscapeCsvField(metadata.Custodian)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(metadata.DateSent)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(metadata.Author)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(metadata.FileSize.ToString())}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(metadata.Custodian, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(metadata.DateSent, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(metadata.Author, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(metadata.FileSize.ToString(), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
             if (ShouldIncludeEmlColumns(request))
             {
                 var eml = GenerateEmlValues(workItem, fileData, random, now);
-                line.Append($"{EscapeCsvField(eml.To)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(eml.From)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(eml.Subject)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(eml.SentDate)}{fieldDelim}");
-                line.Append($"{EscapeCsvField(eml.Attachment)}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(eml.To, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(eml.From, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(eml.Subject, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(eml.SentDate, quoteDelim)}{quoteDelim}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(eml.Attachment, quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
             if (request.BatesConfig != null)
             {
-                line.Append($"{EscapeCsvField(GenerateBatesNumber(request, workItem))}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(GenerateBatesNumber(request, workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
             if (ShouldIncludePageCount(request))
             {
-                line.Append($"{EscapeCsvField(fileData.PageCount.ToString())}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(fileData.PageCount.ToString(), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
             if (request.WithText)
             {
-                line.Append($"{EscapeCsvField(GenerateTextPath(request, workItem))}{fieldDelim}");
+                line.Append($"{quoteDelim}{EscapeDatField(GenerateTextPath(request, workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
             buffer.AppendLine(line.ToString().TrimEnd(fieldDelim));
