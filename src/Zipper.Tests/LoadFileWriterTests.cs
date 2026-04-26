@@ -144,7 +144,7 @@ namespace Zipper
                 _ => Encoding.UTF8,
             };
 
-            var content = await File.ReadAllTextAsync(outputPath);
+            var content = await File.ReadAllTextAsync(outputPath, targetEncoding);
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             // Assert — OPT format: 3 data lines, comma-separated, 7 columns each
@@ -422,7 +422,7 @@ namespace Zipper
                 _ => Encoding.UTF8,
             };
 
-            var content = await File.ReadAllTextAsync(outputPath);
+            var content = await File.ReadAllTextAsync(outputPath, targetEncoding);
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             // Assert - File should be readable and contain expected content
@@ -444,6 +444,7 @@ namespace Zipper
             {
                 WorkItem = workItem,
                 Data = new byte[1024],
+                DataLength = 1024,
             };
 
             // Act - Call through concrete writer that exposes base class functionality

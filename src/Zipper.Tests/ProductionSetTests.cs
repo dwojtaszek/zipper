@@ -290,19 +290,60 @@ public class ProductionSetTests : IDisposable
         Assert.True(File.Exists(Path.Combine(prodDirs[0], "_manifest.json")));
     }
 
+    // === C3: EML files in production sets (regression) ===
+    [Fact]
+    public async Task ProductionSet_WithEml_CreatesNonZeroNativeFiles()
+    {
+        // C3 regression: EML files in production sets were zero-byte because
+        // PlaceholderFiles.GetContent("eml") returns Array.Empty<byte>() and
+        // no EML-specific generation branch existed.
+        var request = this.CreateTestRequest(count: 5, fileType: "eml");
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.eml", SearchOption.AllDirectories);
+        Assert.Equal(5, nativeFiles.Length);
+
+        // Each native file should have non-zero content
+        foreach (var file in nativeFiles)
+        {
+            var info = new FileInfo(file);
+            Assert.True(info.Length > 0, $"EML native file {file} is zero bytes");
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithEml_ContainsValidEmailHeaders()
+    {
+        // Verify EML content in production sets has valid email headers
+        var request = this.CreateTestRequest(count: 3, fileType: "eml");
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.eml", SearchOption.AllDirectories);
+
+        foreach (var file in nativeFiles)
+        {
+            var content = await File.ReadAllTextAsync(file);
+            Assert.Contains("From:", content);
+            Assert.Contains("To:", content);
+            Assert.Contains("Subject:", content);
+            Assert.Contains("Date:", content);
+        }
+    }
+
     private FileGenerationRequest CreateTestRequest(
         int count = 10,
         string batesPrefix = "TEST",
         long batesStart = 1,
         int batesDigits = 8,
         int volumeSize = 5000,
-        int? seed = null)
+        int? seed = null,
+        string fileType = "pdf")
     {
         return new FileGenerationRequest
         {
             OutputPath = this.testOutputPath,
             FileCount = count,
-            FileType = "pdf",
+            FileType = fileType,
             ProductionSet = true,
             VolumeSize = volumeSize,
             Seed = seed,

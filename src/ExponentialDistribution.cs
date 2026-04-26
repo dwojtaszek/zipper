@@ -22,7 +22,8 @@ namespace Zipper
             }
 
             // Exponential distribution parameter
-            double lambda = 3.0 / totalFolders;
+            // lambda = 2/totalFolders gives mean = totalFolders/2 for balanced spread
+            double lambda = 2.0 / totalFolders;
 
             // Convert file index to normalized position (0 to 1)
             double normalizedPosition = (fileIndex - 1.0) / Math.Max(totalFiles - 1.0, 1.0);

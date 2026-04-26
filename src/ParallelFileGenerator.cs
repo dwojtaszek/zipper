@@ -68,7 +68,7 @@ namespace Zipper
                 }
 
                 // Create channels for work distribution
-                var workChannelReader = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType);
+                var workChannelReader = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType, request.Concurrency);
                 var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Concurrency * 2)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
@@ -118,9 +118,12 @@ namespace Zipper
             }
         }
 
-        private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType)
+        private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType, int concurrency)
         {
-            var channel = Channel.CreateUnbounded<FileWorkItem>();
+            var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(concurrency * 2)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+            });
             var writer = channel.Writer;
 
             _ = Task.Run(async () =>
@@ -259,6 +262,7 @@ namespace Zipper
                 {
                     WorkItem = workItem,
                     Data = data,
+                    DataLength = data.Length,
                     Attachment = attachment,
                     PageCount = pageCount,
                     EmailTemplate = emailTemplate,
@@ -278,6 +282,7 @@ namespace Zipper
             {
                 WorkItem = workItem,
                 Data = memoryOwner.Memory[..(int)totalSize],
+                DataLength = (int)totalSize,
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
@@ -342,6 +347,13 @@ namespace Zipper
         public FileWorkItem WorkItem { get; init; } = new FileWorkItem();
 
         public ReadOnlyMemory<byte> Data { get; init; } = ReadOnlyMemory<byte>.Empty;
+
+        /// <summary>
+        /// Length of Data, stored explicitly because MemoryOwner is disposed
+        /// before load file generation. Access DataLength, not Data.Length,
+        /// after MemoryOwner.Dispose().
+        /// </summary>
+        public int DataLength { get; init; }
 
         public (string filename, byte[] content)? Attachment { get; init; }
 
