@@ -1,10 +1,10 @@
 # RTK - Rust Token Killer (Google Antigravity)
 
-**Usage**: Token-optimized CLI proxy for shell commands.
+**Usage**: Token-optimized CLI proxy for shell commands. Requires separate installation. If `rtk` is not installed, use raw shell commands directly.
 
 ## Rule
 
-Always prefix shell commands with `rtk` to minimize token consumption.
+Prefix shell commands with `rtk` to minimize token consumption. If `rtk` is not available on the system, fall back to raw commands.
 
 Examples:
 

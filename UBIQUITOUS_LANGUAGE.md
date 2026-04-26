@@ -142,9 +142,9 @@
 ## Relationships
 
 - An **Archive** contains one or more **Native Files** organized into **Folders**
-- A **Load File** maps to one **Archive** and contains one record per **Native File**
+- A **Load File** maps to one **Archive**, one **Production Set**, or stands alone in **Loadfile-Only Mode**. Contains one record per **Native File**
 - A **Column Profile** defines zero or more **Columns** for a **Load File**
-- An **Email** may have zero or one **Attachments** (controlled by **Attachment Rate**)
+- An **Email** may have zero or one **Attachment** (controlled by **Attachment Rate**)
 - A **Production Set** contains **Volumes**, each Volume contains up to **Volume Size** **Native Files**
 - A **Bates Number** is assigned to each **Native File** in a **Production Set**
 - The **Chaos Engine** injects **Anomalies** into **Load File** records in **Loadfile-Only Mode**
