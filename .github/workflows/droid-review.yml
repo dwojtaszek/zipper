@@ -40,6 +40,6 @@ jobs:
           automatic_review: true
           automatic_security_review: true
           review_depth: shallow
-          # Faster, cheaper model than kimi-k2.6 (~5-8 min vs 11-19 min).
-          review_model: claude-haiku-4-5-20251001
+          # Open-source GLM-5.1 — cheapest option for shallow review.
+          review_model: glm-5.1
           reasoning_effort: medium
