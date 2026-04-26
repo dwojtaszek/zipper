@@ -792,5 +792,88 @@ namespace Zipper
             Assert.Equal("5%", result.ChaosAmount);
             Assert.Equal("quotes,columns", result.ChaosTypes);
         }
+
+        // === B2: Bates prefix path traversal prevention ===
+        [Theory]
+        [InlineData("../../../")]
+        [InlineData("..\\..\\")]
+        [InlineData("foo/bar")]
+        [InlineData("foo\\bar")]
+        [InlineData("evil/path")]
+        public void ValidateAndParseArguments_WithBatesPrefixContainingPathSeparator_ReturnsNull(string maliciousPrefix)
+        {
+            var args = new[]
+            {
+                "--production-set", "--bates-prefix", maliciousPrefix,
+                "--count", "10", "--output-path", this.tempDir,
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithBatesPrefixContainingDotDot_ReturnsNull()
+        {
+            var args = new[]
+            {
+                "--production-set", "--bates-prefix", "..",
+                "--count", "10", "--output-path", this.tempDir,
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithBatesPrefixContainingSpecialChars_ReturnsNull()
+        {
+            var args = new[]
+            {
+                "--production-set", "--bates-prefix", "hello world!@#",
+                "--count", "10", "--output-path", this.tempDir,
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void ValidateAndParseArguments_WithValidBatesPrefix_ReturnsValidRequest()
+        {
+            var args = new[]
+            {
+                "--production-set", "--bates-prefix", "CLIENT001",
+                "--count", "10", "--output-path", this.tempDir,
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.Equal("CLIENT001", result!.BatesConfig?.Prefix);
+        }
+
+        [Theory]
+        [InlineData("CLIENT_001")]
+        [InlineData("PREFIX-ABC")]
+        [InlineData("Doc_v1")]
+        [InlineData("ABC")]
+        [InlineData("123")]
+        public void ValidateAndParseArguments_WithValidBatesPrefixVariations_ReturnsValidRequest(string validPrefix)
+        {
+            var args = new[]
+            {
+                "--production-set", "--bates-prefix", validPrefix,
+                "--count", "10", "--output-path", this.tempDir,
+            };
+
+            var result = CommandLineValidator.ValidateAndParseArguments(args);
+
+            Assert.NotNull(result);
+            Assert.Equal(validPrefix, result!.BatesConfig?.Prefix);
+        }
     }
 }

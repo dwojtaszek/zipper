@@ -55,7 +55,8 @@ public static class BatesNumberGenerator
     {
         var number = CalculateValue(config, currentIndex);
         var formattedNumber = number.ToString($"D{config.Digits}");
-        return $"{config.Prefix}{formattedNumber}";
+        var safePrefix = Path.GetFileName(config.Prefix);
+        return $"{safePrefix}{formattedNumber}";
     }
 
     /// <summary>

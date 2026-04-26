@@ -123,26 +123,33 @@ namespace Zipper
             var channel = Channel.CreateUnbounded<FileWorkItem>();
             var writer = channel.Writer;
 
-            Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
-                for (long i = 1; i <= fileCount; i++)
+                try
                 {
-                    var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
-                    var folderName = $"folder_{folderNumber:D3}";
-                    var fileName = $"{i:D8}.{fileType}";
-                    var filePathInZip = $"{folderName}/{fileName}";
-
-                    await writer.WriteAsync(new FileWorkItem
+                    for (long i = 1; i <= fileCount; i++)
                     {
-                        Index = i,
-                        FolderNumber = folderNumber,
-                        FolderName = folderName,
-                        FileName = fileName,
-                        FilePathInZip = filePathInZip,
-                    });
-                }
+                        var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
+                        var folderName = $"folder_{folderNumber:D3}";
+                        var fileName = $"{i:D8}.{fileType}";
+                        var filePathInZip = $"{folderName}/{fileName}";
 
-                writer.Complete();
+                        await writer.WriteAsync(new FileWorkItem
+                        {
+                            Index = i,
+                            FolderNumber = folderNumber,
+                            FolderName = folderName,
+                            FileName = fileName,
+                            FilePathInZip = filePathInZip,
+                        });
+                    }
+
+                    writer.Complete();
+                }
+                catch (Exception ex)
+                {
+                    writer.Complete(ex);
+                }
             });
 
             return channel.Reader;
@@ -214,15 +221,16 @@ namespace Zipper
                 fileContent = placeholderContent;
             }
 
-            var totalSize = fileContent.Length + paddingPerFile;
+            var effectivePadding = paddingPerFile;
 
             // Cap the total size to the maximum allowed byte array size (2GB - 56 bytes) to prevent OutOfMemoryException
             const int maxByteArraySize = 2147483591;
-            if (totalSize > maxByteArraySize)
+            if (fileContent.Length + effectivePadding > maxByteArraySize)
             {
-                totalSize = maxByteArraySize;
-                paddingPerFile = totalSize - fileContent.Length;
+                effectivePadding = maxByteArraySize - fileContent.Length;
             }
+
+            var totalSize = fileContent.Length + effectivePadding;
 
             var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
             if (memoryOwner == null)
