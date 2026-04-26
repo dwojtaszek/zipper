@@ -127,6 +127,43 @@ namespace Zipper
             }
         }
 
+        // === C1: Bounded work channel prevents OOM at scale ===
+        [Fact]
+        public async Task GenerateFilesAsync_LargeFileCount_DoesNotDeadlock()
+        {
+            // C1 regression: unbounded work channel materialized ALL work items upfront,
+            // causing OOM. Bounded channel with backpressure must still complete.
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                var generator = new ParallelFileGenerator();
+                var task = generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1000,
+                    FileType = "pdf",
+                    Folders = 5,
+                    Concurrency = 4,
+                });
+
+                var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(60))) == task;
+                Assert.True(completed, "GenerateFilesAsync with 1000 files did not complete within 60s (possible deadlock from bounded channel)");
+
+                var result = await task;
+                Assert.Equal(1000, result.FilesGenerated);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
         // === B3: Padding truncation must not corrupt subsequent files ===
         [Fact]
         public async Task GenerateFilesAsync_MultipleFilesWithPadding_AllFilesGenerated()

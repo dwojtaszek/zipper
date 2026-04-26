@@ -53,7 +53,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             Custodian = $"Custodian {workItem.FolderNumber}",
             DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd"),
             Author = $"Author {random.Next(1, 100):D3}",
-            FileSize = fileData.Data.Length,
+            FileSize = fileData.DataLength,
         };
     }
 

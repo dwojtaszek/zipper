@@ -257,7 +257,7 @@ internal class DataGenerator
     {
         if (column.Name.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase))
         {
-            return fileData.Data.Length.ToString();
+            return fileData.DataLength.ToString();
         }
 
         if (column.Name.Equals("PAGECOUNT", StringComparison.OrdinalIgnoreCase))

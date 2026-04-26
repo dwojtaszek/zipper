@@ -84,6 +84,11 @@ internal static class ProductionSetGenerator
                 };
                 nativeContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
             }
+            else if (request.FileType.ToLowerInvariant() == "eml")
+            {
+                var emlResult = EmlGenerationService.GenerateEmlContent((int)(i + 1), request.AttachmentRate);
+                nativeContent = emlResult.Content;
+            }
             else
             {
                 nativeContent = placeholder;

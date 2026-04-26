@@ -6,28 +6,9 @@
 
 ## Ubiquitous Language
 
-**REQUIRED:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all discussions, documentation, and code reviews.
+**REQUIRED:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all discussions, documentation, and code reviews. Use canonical terms (Archive, Native File, Load File, Bates Number, etc.) — the file defines each with aliases to avoid.
 
-**Key Terms (use ALWAYS):**
-- **Archive** (not "ZIP file" or "package")
-- **Native File** (not "file" or "document")
-- **Load File** (not "manifest" or "index")
-- **Metadata** (not "attributes" or "properties")
-- **Folder** (for archive structure, not "directory")
-- **Volume** (for production sets, not "partition")
-- **Email** (File Type eml, not "EML file")
-- **Attachment** (embedded file in email)
-- **Bates Number** (legal document ID)
-- **Chaos Engine** (anomaly injection system)
-- **Loadfile-Only Mode** (standalone load file generation)
-
-**When in doubt:** Consult UBIQUITOUS_LANGUAGE.md for canonical definitions and aliases to avoid. This ensures consistent communication across PRs, discussions, and documentation.
-
-**Usage workflow:**
-1. Before writing code, comments, or PR descriptions — grep `UBIQUITOUS_LANGUAGE.md` for the correct term
-2. Use canonical terms exactly as defined (e.g., **Archive** not "ZIP file", **Native File** not "document")
-3. During code review, flag non-canonical terms (aliases from the "Aliases to avoid" column)
-4. New domain concept? Run `/ubiquitous-language` to update UBIQUITOUS_LANGUAGE.md with the new term
+**Usage:** grep the file before writing docs/PRs; flag non-canonical terms in review.
 
 ---
 
@@ -74,31 +55,19 @@ tests/run-tests.bat    # Windows
 > 2. `Requirements.md` - Add new requirements
 > 3. This file - if adding major features
 
-## Issue Backlog & Priority Order
+## Issue Priority Order
 
 **All open issues:** https://github.com/dwojtaszek/zipper/issues
 
-When working through the backlog, tackle issues in this priority order. Each issue gets its own branch named `fix/ISSUE-NNN-short-desc`, fixed with TDD (write failing test first, then implementation), and submitted as a PR.
-
-| Priority | Range | Tackle Order |
-|----------|-------|-------------|
-| **Blockers** | #124–#127 | First — ship-stoppers: deadlock, path traversal, padding corruption, encoding crash |
-| **Critical** | #128–#132 | Second — wrong results: OOM at scale, broken math, zero-byte EML, wrong MIME types, fragile memory |
-| **High** | #133–#141 | Third — correctness/UX: seed non-determinism, missing parallelism, no --help, silent typos, cancellation |
-| **Test Coverage** | #148–#161 | Fourth — untested code: fill gaps before refactoring to prevent regressions |
-| **Design** | #142–#147 | Fifth — structural: god class split, IFileGenerator extraction, deduplication (do AFTER test coverage exists) |
+Tackle in this order: **Blockers** → **Critical** → **High** → **Test Coverage** (fill gaps before refactoring) → **Design** (D1-D6, only after test coverage exists).
 
 **Workflow per issue:**
 1. `git checkout main && git pull`
 2. `git checkout -b fix/ISSUE-NNN-short-desc`
 3. Read the issue body for file paths, line numbers, and fix guidance
 4. Write a failing test first (TDD), then implement the fix
-5. Run unit tests: `dotnet test src/Zipper.Tests/Zipper.Tests.csproj`
-6. Run E2E tests: `./tests/run-tests.sh`
-7. Run lint: `dotnet format --verify-no-changes`
-8. Commit and create PR
-
-**Design issues (D1-D6):** Do NOT start these until test coverage gaps (T1-T14) are resolved. Refactoring untested code risks regressions.
+5. Run unit tests, E2E tests, lint
+6. Commit and create PR
 
 ## Requirement-Driven Changes
 
@@ -182,6 +151,16 @@ When working through the backlog, tackle issues in this priority order. Each iss
 | **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyGenerator.GenerateAsync()` | Load File + `_properties.json` audit |
 | **Production Set** | `--production-set` | `ProductionSetGenerator.GenerateAsync()` | Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
 
+**Which mode to use?**
+
+| If you need... | Use... | Flag |
+|----------------|--------|------|
+| A single Archive with Load File | Standard | (default, no flag needed) |
+| Only a Load File, no Archive | Loadfile-Only | `--loadfile-only` |
+| Structured production set (NATIVES/IMAGES/DATA/TEXT Folders) with cross-referenced Load Files | Production Set | `--production-set` (requires `--bates-prefix`) |
+| Chaos anomaly injection | Loadfile-Only + Chaos | `--loadfile-only --chaos-mode` |
+| Output wrapped in Archive | Standard (or Production Set + `--production-zip`) | |
+
 ### Standard Pipeline (Channel-Based Producer-Consumer)
 
 `ParallelFileGenerator` uses `System.Threading.Channels` for a 3-stage pipeline:
@@ -201,6 +180,17 @@ Memory: `MemoryPool<byte>.Shared` rented via `IMemoryOwner<byte>` for normal fil
 - `CsvWriter` — Standard CSV
 - `XmlLoadFileWriter` — EDRM-XML
 - `ConcordanceWriter` — Concordance DAT with standard delimiters
+
+**Which format to use?**
+
+| If consumer uses... | Use... | CLI value | Notes |
+|---------------------|--------|-----------|-------|
+| Concordance (standard) | DAT | `dat` | Configurable delimiters via `--dat-delimiters` / `--delimiter-*` |
+| Opticon | OPT | `opt` | Comma-delimited, no-header format |
+| Standard CSV | CSV | `csv` | Comma-separated with header |
+| EDRM XML | XML | `edrm-xml` | XML schema per EDRM standard |
+| Concordance (legacy fixed delimiters) | Concordance | `concordance` | Uses `þ` (254) / `Þ` (222) fixed delimiters |
+| Multiple outputs | Any combination | `--load-file-formats dat,opt,csv` | Comma-separated list |
 
 ### Chaos Engine (Loadfile-Only Mode only)
 

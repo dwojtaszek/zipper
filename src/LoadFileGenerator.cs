@@ -148,7 +148,7 @@ namespace Zipper
             var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
             var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
             var author = SanitizeField($"Author {random.Next(1, 100):D3}", request.NewlineDelimiter);
-            var fileSize = fileData.Data.Length;
+            var fileSize = fileData.DataLength;
 
             return $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
         }

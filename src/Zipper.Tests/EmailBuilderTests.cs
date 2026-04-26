@@ -65,7 +65,6 @@ namespace Zipper
             var content = Encoding.UTF8.GetString(result);
             Assert.Contains("multipart/mixed", content);
             Assert.Contains("Content-Type: text/plain", content);
-            Assert.Contains("Content-Type: text/plain", content); // .txt files are text/plain
             Assert.Contains("Content-Transfer-Encoding: base64", content);
             Assert.Contains("Content-Disposition: attachment", content);
             Assert.Contains("VGVzdCBhdHRhY2htZW50IGNvbnRlbnQ=", content); // Base64 encoded content
@@ -160,8 +159,8 @@ namespace Zipper
 
         [Theory]
         [InlineData("test.pdf", "application/pdf")]
-        [InlineData("document.docx", "application/msword")]
-        [InlineData("spreadsheet.xlsx", "application/vnd.ms-excel")]
+        [InlineData("document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        [InlineData("spreadsheet.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
         [InlineData("image.jpg", "image/jpeg")]
         [InlineData("image.png", "image/png")]
         [InlineData("text.txt", "text/plain")]
