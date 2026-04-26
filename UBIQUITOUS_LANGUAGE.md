@@ -139,10 +139,22 @@
 
 ---
 
+## Relationships
+
+- An **Archive** contains one or more **Native Files** organized into **Folders**
+- A **Load File** maps to one **Archive**, one **Production Set**, or stands alone in **Loadfile-Only Mode**. Contains one record per **Native File**
+- A **Column Profile** defines zero or more **Columns** for a **Load File**
+- An **Email** may have zero or one **Attachment** (controlled by **Attachment Rate**)
+- A **Production Set** contains **Volumes**, each Volume contains up to **Volume Size** **Native Files**
+- A **Bates Number** is assigned to each **Native File** in a **Production Set**
+- The **Chaos Engine** injects **Anomalies** into **Load File** records in **Loadfile-Only Mode**
+- An **Audit File** (`_properties.json`) records all **Anomalies** injected by the **Chaos Engine**
+- A **Production Manifest** (`_manifest.json`) documents the **Volume** structure and **Bates Number** ranges of a **Production Set**
+
 ## Example Dialogue
 
 > **Developer:** "When I run Zipper to create an **Archive**, what files end up in it?"
-> 
+>
 > **Domain Expert:** "Two things: the **Native Files** (your PDFs, emails, whatever **File Type** you specified) and optionally a **Load File**. The **Load File** is the metadata. If you use `--include-load-file`, the **Load File** gets added to the **Archive** too. Otherwise it's written separately."
 >
 > **Dev:** "So if I generate 1,000 **Native Files** and distribute them into 10 **Folders**, the **Archive** will have a 10-level **Folder** structure?"
@@ -156,6 +168,14 @@
 > **Dev:** "And the `--chaos-mode` option?"
 >
 > **Expert:** "That's for testing. It injects **Anomalies**—deliberate errors in the **Load File**—so you can test whether your ingestion system handles corruption. The **Chaos Engine** tracks every **Anomaly** in `_properties.json` so you know exactly what was broken. Only works in **Loadfile-Only Mode**."
+>
+> **Dev:** "How does `--production-set` differ from a regular **Archive**?"
+>
+> **Expert:** "A **Production Set** is a structured directory tree — `NATIVES/`, `IMAGES/`, `DATA/`, `TEXT/` — with **Native Files** organized into **Volumes**. Each **Volume** holds up to **Volume Size** files and gets a unique **Bates Number** range. A regular **Archive** is just a compressed `.zip` with **Folders** — no **Bates Numbers**, no **Volumes**."
+>
+> **Dev:** "And the **Production Manifest**?"
+>
+> **Expert:** "That's the `_manifest.json` at the root of the **Production Set**. It tells you exactly what's in each **Volume** — file counts, **Bates Number** ranges, directory paths. Think of it as the audit trail for the entire production."
 
 ---
 

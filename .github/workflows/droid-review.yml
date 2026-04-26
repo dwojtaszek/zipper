@@ -34,12 +34,13 @@ jobs:
         with:
           fetch-depth: 1
       - name: Run Droid Auto Review
+        continue-on-error: true
         uses: Factory-AI/droid-action@e3d1f5e7861c36fe4a9c4dca3edec87b964b2bc4  # v5
         with:
           factory_api_key: ${{ secrets.FACTORY_API_KEY }}
           automatic_review: true
           automatic_security_review: true
           review_depth: shallow
-          # Faster, cheaper model than kimi-k2.6 (~5-8 min vs 11-19 min).
-          review_model: claude-haiku-4-5-20251001
+          # Open-source GLM-5.1 — cheapest option for shallow review.
+          review_model: glm-5.1
           reasoning_effort: medium
