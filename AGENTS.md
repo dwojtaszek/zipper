@@ -157,7 +157,7 @@ Tackle in this order: **Blockers** → **Critical** → **High** → **Test Cove
 |----------------|--------|------|
 | A single Archive with Load File | Standard | (default, no flag needed) |
 | Only a Load File, no Archive | Loadfile-Only | `--loadfile-only` |
-| Structured production set (NATIVES/IMAGES/DATA/TEXT dirs) with cross-referenced Load Files | Production Set | `--production-set` (requires `--bates-prefix`) |
+| Structured production set (NATIVES/IMAGES/DATA/TEXT Folders) with cross-referenced Load Files | Production Set | `--production-set` (requires `--bates-prefix`) |
 | Chaos anomaly injection | Loadfile-Only + Chaos | `--loadfile-only --chaos-mode` |
 | Output wrapped in Archive | Standard (or Production Set + `--production-zip`) | |
 
