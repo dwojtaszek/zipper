@@ -23,6 +23,12 @@
 
 **When in doubt:** Consult UBIQUITOUS_LANGUAGE.md for canonical definitions and aliases to avoid. This ensures consistent communication across PRs, discussions, and documentation.
 
+**Usage workflow:**
+1. Before writing code, comments, or PR descriptions — grep `UBIQUITOUS_LANGUAGE.md` for the correct term
+2. Use canonical terms exactly as defined (e.g., **Archive** not "ZIP file", **Native File** not "document")
+3. During code review, flag non-canonical terms (aliases from the "Aliases to avoid" column)
+4. New domain concept? Run `/ubiquitous-language` to update UBIQUITOUS_LANGUAGE.md with the new term
+
 ---
 
 
@@ -40,6 +46,9 @@ dotnet run --project src/Zipper.csproj -- [args]
 
 # Unit Tests (must pass before commit)
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj
+
+# Single test class
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"
 
 # Lint (CI runs this - fix with: dotnet format)
 dotnet format --verify-no-changes
@@ -64,6 +73,32 @@ tests/run-tests.bat    # Windows
 > 1. `README.md` - Arguments Quick Reference table
 > 2. `Requirements.md` - Add new requirements
 > 3. This file - if adding major features
+
+## Issue Backlog & Priority Order
+
+**All open issues:** https://github.com/dwojtaszek/zipper/issues
+
+When working through the backlog, tackle issues in this priority order. Each issue gets its own branch named `fix/ISSUE-NNN-short-desc`, fixed with TDD (write failing test first, then implementation), and submitted as a PR.
+
+| Priority | Range | Tackle Order |
+|----------|-------|-------------|
+| **Blockers** | #124–#127 | First — ship-stoppers: deadlock, path traversal, padding corruption, encoding crash |
+| **Critical** | #128–#132 | Second — wrong results: OOM at scale, broken math, zero-byte EML, wrong MIME types, fragile memory |
+| **High** | #133–#141 | Third — correctness/UX: seed non-determinism, missing parallelism, no --help, silent typos, cancellation |
+| **Test Coverage** | #148–#161 | Fourth — untested code: fill gaps before refactoring to prevent regressions |
+| **Design** | #142–#147 | Fifth — structural: god class split, IFileGenerator extraction, deduplication (do AFTER test coverage exists) |
+
+**Workflow per issue:**
+1. `git checkout main && git pull`
+2. `git checkout -b fix/ISSUE-NNN-short-desc`
+3. Read the issue body for file paths, line numbers, and fix guidance
+4. Write a failing test first (TDD), then implement the fix
+5. Run unit tests: `dotnet test src/Zipper.Tests/Zipper.Tests.csproj`
+6. Run E2E tests: `./tests/run-tests.sh`
+7. Run lint: `dotnet format --verify-no-changes`
+8. Commit and create PR
+
+**Design issues (D1-D6):** Do NOT start these until test coverage gaps (T1-T14) are resolved. Refactoring untested code risks regressions.
 
 ## Requirement-Driven Changes
 
@@ -99,32 +134,105 @@ tests/run-tests.bat    # Windows
 | Path | Purpose |
 |------|---------|
 | `src/Zipper.csproj` | Main application |
-| `src/Program.cs` | Entry point, CLI orchestration |
-| `src/CommandLineValidator.cs` | CLI parsing and validation |
-| `src/ParallelFileGenerator.cs` | Core file generation pipeline |
-| `src/LoadfileOnlyGenerator.cs` | Standalone load file generation (DAT/OPT) |
-| `src/ChaosEngine.cs` | Chaos anomaly injection engine |
+| `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
+| `src/CommandLineValidator.cs` | CLI parsing, validation, request assembly |
+| `src/FileGenerationRequest.cs` | Configuration object (40+ properties) shared across pipeline |
+| `src/ParallelFileGenerator.cs` | Channel-based producer-consumer pipeline (standard mode) |
+| `src/ZipArchiveService.cs` | Archive creation + Load File writing (consumer side) |
+| `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
+| `src/ProductionSetGenerator.cs` | Production set directory tree + Load Files |
+| `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
 | `src/ChaosAnomaly.cs` | Anomaly record for audit tracking |
+| `src/ChaosScenario.cs` | Named, reproducible Chaos configurations |
 | `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
-| `src/LoadFiles/` | Load file writers (DAT, OPT, CSV, XML) |
-| `src/Profiles/` | Column profile system |
+| `src/ProductionManifestWriter.cs` | `_manifest.json` production manifest writer |
+| `src/OfficeFileGenerator.cs` | DOCX/XLSX Native File generation |
+| `src/EmlGenerationService.cs` | Email Native File generation |
+| `src/EmailBuilder.cs` | MIME construction for Email Native Files |
+| `src/EmailTemplateSystem.cs` | Email template data (categories, bodies, addresses) |
+| `src/PlaceholderFiles.cs` | Pre-computed byte content for PDF, JPG, TIFF |
+| `src/FileDistributionHelper.cs` | Distribution facade (proportional/gaussian/exponential) |
+| `src/TiffMultiPageGenerator.cs` | TIFF page range parsing and generation |
+| `src/BatesNumberGenerator.cs` | Bates Number generation |
+| `src/PathValidator.cs` | Path traversal protection |
+| `src/EncodingHelper.cs` | Encoding name resolution (UTF-8, UTF-16, ANSI) |
+| `src/ContentTypeHelper.cs` | MIME type mapping by extension |
+| `src/PerformanceMonitor.cs` | Real-time progress, throughput, ETA |
+| `src/PerformanceBenchmarkRunner.cs` | Built-in benchmark suite |
+| `src/MemoryPoolManager.cs` | `MemoryPool<byte>.Shared` wrapper |
+| `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
+| `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/Zipper.Tests/` | Unit tests |
 | `tests/` | E2E test scripts |
-| `tests/run-e2e-loadfile.sh` | E2E tests for loadfile-only and chaos |
 
 **For full CLI arguments and options:** See [README.md](README.md)  
 **For requirements and specifications:** See [Requirements.md](Requirements.md)
 
 ---
 
+## Architecture
+
+### Three Generation Modes
+
+`Program.Main` dispatches to one of three paths based on CLI flags:
+
+| Mode | Trigger | Entry Point | Output |
+|------|---------|-------------|--------|
+| **Standard** | default | `ParallelFileGenerator.GenerateFilesAsync()` | Archive (.zip) + Load File |
+| **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyGenerator.GenerateAsync()` | Load File + `_properties.json` audit |
+| **Production Set** | `--production-set` | `ProductionSetGenerator.GenerateAsync()` | Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
+
+### Standard Pipeline (Channel-Based Producer-Consumer)
+
+`ParallelFileGenerator` uses `System.Threading.Channels` for a 3-stage pipeline:
+
+1. **Work channel** (`CreateWorkChannel`): Produces `FileWorkItem` objects (Folder assignment, file index) using the configured distribution algorithm. Bounded channel provides backpressure.
+2. **Generation** (`ProcessFileWorkAsync`): N concurrent producers read from work channel, call `GenerateFileData()` (placeholder content + optional padding), write `FileData` to result channel. Email with Attachments or Extracted Text forces `Concurrency = 1`.
+3. **Archive writing** (`ZipArchiveService.CreateArchiveAsync`): Single consumer reads from result channel, writes ZIP entries sequentially, accumulates `processedFiles` list, then writes Load Files via `ILoadFileWriter` implementations.
+
+Memory: `MemoryPool<byte>.Shared` rented via `IMemoryOwner<byte>` for normal files, direct allocation fallback for oversized. Padding uses `RandomNumberGenerator.Fill` for non-compressible data.
+
+### Load File Writers
+
+`LoadFiles/` directory: `ILoadFileWriter` interface + `LoadFileWriterBase` abstract class + `LoadFileWriterFactory`. Each format is a subclass:
+
+- `DatWriter` (in `LoadFileWriterFactory.cs`) — Concordance DAT with configurable delimiters
+- `OptWriter` — Opticon comma-delimited
+- `CsvWriter` — Standard CSV
+- `XmlLoadFileWriter` — EDRM-XML
+- `ConcordanceWriter` — Concordance DAT with standard delimiters
+
+### Chaos Engine (Loadfile-Only Mode only)
+
+`ChaosEngine` intercepts Load File lines using Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Supports DAT Anomaly types (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`) and OPT types (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesid`). Injected Anomalies tracked in `_properties.json` via `LoadfileAuditWriter`.
+
+### Distribution Algorithms
+
+`ProportionalDistribution`, `GaussianDistribution`, `ExponentialDistribution` — static classes. `FileDistributionHelper` facade. Each is O(1) per file.
+
+### Column Profile System
+
+`Profiles/` directory: `ColumnProfileLoader` validates and loads JSON profiles (built-in or custom file). `DataGenerator` produces column values by type. `BuiltInProfiles` embeds minimal/standard/litigation/full definitions in C#.
+
+---
+
+## Key Invariants
+
+- **Request immutability:** `FileGenerationRequest` must not be mutated after passing to a generator. Used across concurrent tasks. Callers `Clone()` before modifying. `Clone()` is shallow via `MemberwiseClone` — reference-type properties (ColumnProfile, BatesConfig, LoadFileFormats) are shared between original and clone.
+- **MemoryOwner lifecycle:** `MemoryOwner.Dispose()` in `ZipArchiveService:73` happens before Load File writing. Load File writers access `Data.Length` only — accessing `.Span` after disposal is use-after-free (issue #132).
+- **Path separators:** Load File paths use backslash `\` (eDiscovery convention). ZIP entry paths use forward slash `/` (ZIP spec). `ProductionSetGenerator` converts via `.Replace(Path.DirectorySeparatorChar, '\\')`.
+- **Loadfile-Only vs standard metadata:** `LoadfileOnlyGenerator` and `LoadFileGenerator` use separate metadata generation paths. Same seed + same count can produce different metadata rows.
+
+---
+
 ## Code Patterns
 
 ```csharp
-// EML forces sequential processing with attachments
+// Email forces sequential processing with attachments
 if (request.FileType == "eml" && (request.WithText || request.AttachmentRate > 0))
     request.Concurrency = 1;
 
-// Cross-platform ANSI encoding
+// Cross-platform ANSI encoding — MUST register at startup in Program.Main
 System.Text.Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 // Caller-owned streams: flush but don't dispose
