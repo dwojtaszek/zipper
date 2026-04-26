@@ -126,5 +126,80 @@ namespace Zipper
                 }
             }
         }
+
+        // === B3: Padding truncation must not corrupt subsequent files ===
+        [Fact]
+        public async Task GenerateFilesAsync_MultipleFilesWithPadding_AllFilesGenerated()
+        {
+            // B3 regression: padding per file must apply independently.
+            // Previous code mutated shared paddingPerFile var on cap.
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                var generator = new ParallelFileGenerator();
+                var result = await generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 25,
+                    FileType = "pdf",
+                    Folders = 2,
+                    Concurrency = 4,
+                    TargetZipSize = 2_000_000,
+                });
+
+                Assert.Equal(25, result.FilesGenerated);
+                Assert.True(File.Exists(result.ZipFilePath));
+
+                using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
+                Assert.Equal(25, archive.Entries.Count);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        // === B1: Pipeline must not deadlock on errors ===
+        [Fact]
+        public async Task GenerateFilesAsync_CompletesWithinTimeout()
+        {
+            // B1 regression: fire-and-forget Task.Run in CreateWorkChannel could deadlock
+            // if an exception prevented writer.Complete(). Verify pipeline always completes.
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                var generator = new ParallelFileGenerator();
+                var task = generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 5,
+                    FileType = "pdf",
+                    Folders = 1,
+                    Concurrency = 2,
+                });
+
+                var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
+                Assert.True(completed, "GenerateFilesAsync did not complete within 30s timeout (possible deadlock)");
+
+                var result = await task;
+                Assert.Equal(5, result.FilesGenerated);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
     }
 }

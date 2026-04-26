@@ -628,6 +628,28 @@ namespace Zipper
                 return false;
             }
 
+            // B2: Validate bates prefix — path traversal prevention (CWE-22)
+            if (!string.IsNullOrEmpty(parsed.BatesPrefix))
+            {
+                if (parsed.BatesPrefix.Contains('/') || parsed.BatesPrefix.Contains('\\'))
+                {
+                    Console.Error.WriteLine("Error: --bates-prefix must not contain path separators.");
+                    return false;
+                }
+
+                if (parsed.BatesPrefix == ".." || parsed.BatesPrefix.Contains("../") || parsed.BatesPrefix.Contains("..\\"))
+                {
+                    Console.Error.WriteLine("Error: --bates-prefix must not contain directory traversal sequences.");
+                    return false;
+                }
+
+                if (!parsed.BatesPrefix.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+                {
+                    Console.Error.WriteLine("Error: --bates-prefix must only contain letters, digits, underscores, and hyphens.");
+                    return false;
+                }
+            }
+
             // Validate TIFF pages range
             if (!string.IsNullOrEmpty(parsed.TiffPagesRange))
             {
