@@ -105,10 +105,7 @@ namespace Zipper
                 // Always wait for consumer (releases zip file handles)
                 var actualLoadFilePath = await consumerTask;
 
-                if (producerException is not null)
-                {
-                    throw producerException;
-                }
+                RethrowIfNotNull(producerException);
 
                 this.performanceMonitor.FinalizeProgress();
                 var performanceMetrics = this.performanceMonitor.Stop();
@@ -304,6 +301,14 @@ namespace Zipper
         public void Dispose()
         {
             this.memoryPoolManager?.Dispose();
+        }
+
+        private static void RethrowIfNotNull(Exception? ex)
+        {
+            if (ex is not null)
+            {
+                throw ex;
+            }
         }
     }
 
