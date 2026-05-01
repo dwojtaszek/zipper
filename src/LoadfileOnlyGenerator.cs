@@ -295,7 +295,6 @@ internal static class LoadfileOnlyGenerator
         MetadataRowBuilder builder)
     {
         var workItem = new FileWorkItem { Index = index };
-        var dummyFileData = new FileData { WorkItem = workItem };
         var sb = new StringBuilder();
         var custodian = builder.GetCustodianByIndex(index);
         var dateSent = builder.GetDateSent();
@@ -316,13 +315,13 @@ internal static class LoadfileOnlyGenerator
         sb.Append(colDelim);
         MetadataRowBuilder.AppendField(sb, fileSize, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailSubject(workItem, dummyFileData), quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailSubject(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailFrom(workItem, dummyFileData), quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailFrom(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailTo(workItem, dummyFileData), quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailTo(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailSentDate(workItem, dummyFileData), quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailSentDate(workItem), quote, hasQuote);
         sb.Append(colDelim);
         MetadataRowBuilder.AppendField(sb, extractedText, quote, hasQuote);
 

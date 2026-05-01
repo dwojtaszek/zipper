@@ -34,7 +34,8 @@ internal class MetadataRowBuilder
 
     public string GetCustodian()
     {
-        return $"Custodian {this.random.Next(1, Math.Max(2, this.request.CustodianCountOverride ?? 10))}";
+        var maxCustodians = Math.Max(2, this.request.CustodianCountOverride ?? 10);
+        return $"Custodian {this.random.Next(1, maxCustodians + 1)}";
     }
 
     public string GetDateSent()
@@ -57,9 +58,19 @@ internal class MetadataRowBuilder
         return fileData.EmailTemplate?.To ?? $"recipient{workItem.Index}@example.com";
     }
 
+    public string GetEmailTo(FileWorkItem workItem)
+    {
+        return $"recipient{workItem.Index}@example.com";
+    }
+
     public string GetEmailFrom(FileWorkItem workItem, FileData fileData)
     {
         return fileData.EmailTemplate?.From ?? $"sender{workItem.Index}@example.com";
+    }
+
+    public string GetEmailFrom(FileWorkItem workItem)
+    {
+        return $"sender{workItem.Index}@example.com";
     }
 
     public string GetEmailSubject(FileWorkItem workItem, FileData fileData)
@@ -67,9 +78,19 @@ internal class MetadataRowBuilder
         return fileData.EmailTemplate?.Subject ?? $"Email Subject {workItem.Index}";
     }
 
+    public string GetEmailSubject(FileWorkItem workItem)
+    {
+        return $"Email Subject {workItem.Index}";
+    }
+
     public string GetEmailSentDate(FileWorkItem workItem, FileData fileData)
     {
         return fileData.EmailTemplate?.SentDate.ToString("yyyy-MM-dd HH:mm:ss") ?? this.now.AddDays(-this.random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    public string GetEmailSentDate(FileWorkItem workItem)
+    {
+        return this.now.AddDays(-this.random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
     }
 
     public string GetEmailAttachment(FileData fileData)
@@ -81,7 +102,10 @@ internal class MetadataRowBuilder
 
     public string GetTextPath(FileWorkItem workItem)
     {
-        return workItem.FilePathInZip.Replace($".{this.request.FileType}", ".txt");
+        var sourceSuffix = $".{this.request.FileType}";
+        return workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
+            ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
+            : workItem.FilePathInZip;
     }
 
     public string GetBatesNumber(FileWorkItem workItem)

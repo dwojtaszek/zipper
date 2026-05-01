@@ -36,7 +36,7 @@ internal static class ProductionSetGenerator
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : new Random();
 #pragma warning restore S2245
-        var builder = new MetadataRowBuilder(request, random, DateTime.Now);
+        var builder = new MetadataRowBuilder(request, random, DateTime.UtcNow);
         var batesConfig = request.BatesConfig
             ?? throw new InvalidOperationException("Production set requires Bates configuration. Specify --bates-prefix.");
 
