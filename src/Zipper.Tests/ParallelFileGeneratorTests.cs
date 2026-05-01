@@ -251,21 +251,23 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
-                var task = generator.GenerateFilesAsync(new FileGenerationRequest
+                using (var generator = new ParallelFileGenerator())
                 {
-                    OutputPath = outputPath,
-                    FileCount = 10,
-                    FileType = "pdf",
-                    Folders = 0,
-                    Concurrency = 2,
-                });
+                    var task = generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 10,
+                        FileType = "pdf",
+                        Folders = 0,
+                        Concurrency = 2,
+                    });
 
-                var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
-                Assert.True(completed, "GenerateFilesAsync did not complete within timeout (exception was swallowed, pipeline deadlocked)");
+                    var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
+                    Assert.True(completed, "GenerateFilesAsync did not complete within timeout (exception was swallowed, pipeline deadlocked)");
 
-                var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => task);
-                Assert.Equal("totalFolders", ex.ParamName);
+                    var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => task);
+                    Assert.Equal("totalFolders", ex.ParamName);
+                }
             }
             finally
             {
