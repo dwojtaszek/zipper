@@ -35,41 +35,21 @@ namespace Zipper
 
         private static async Task<string> CaptureOutputAsync()
         {
-            var outputPath = Path.Combine(Path.GetTempPath(), $"bench_out_{Guid.NewGuid()}.txt");
+            var originalOut = Console.Out;
+            using var stringWriter = new StringWriter();
+            Console.SetOut(stringWriter);
+
             try
             {
-                var originalOut = Console.Out;
-
-                using (var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read))
-                using (var streamWriter = new StreamWriter(fileStream))
-                {
-                    Console.SetOut(streamWriter);
-                    try
-                    {
-                        await PerformanceBenchmarkRunner.RunBenchmarks();
-                    }
-                    finally
-                    {
-                        await streamWriter.FlushAsync();
-                        Console.SetOut(originalOut);
-                    }
-                }
-
-                return await File.ReadAllTextAsync(outputPath);
+                await PerformanceBenchmarkRunner.RunBenchmarks();
             }
             finally
             {
-                if (File.Exists(outputPath))
-                {
-                    try
-                    {
-                        File.Delete(outputPath);
-                    }
-                    catch
-                    {
-                    }
-                }
+                await stringWriter.FlushAsync();
+                Console.SetOut(originalOut);
             }
+
+            return stringWriter.ToString();
         }
     }
 }
