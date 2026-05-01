@@ -251,7 +251,7 @@ namespace Zipper
 
             try
             {
-                var generator = new ParallelFileGenerator();
+                using var generator = new ParallelFileGenerator();
                 var task = generator.GenerateFilesAsync(new FileGenerationRequest
                 {
                     OutputPath = outputPath,
