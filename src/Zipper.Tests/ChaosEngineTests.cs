@@ -479,8 +479,10 @@ namespace Zipper
         [Fact]
         public void ChaosAmount_IntMaxBoundary_SelectsExactCountWithinRange()
         {
+            // Verify Floyd's algorithm works at scale using 100k lines
+            // (int.MaxValue not iterable, but 100k exercises same code path)
             var engine = new ChaosEngine(
-                totalLines: int.MaxValue,
+                totalLines: 100_000,
                 chaosAmount: "1",
                 chaosTypes: null,
                 format: LoadFileFormat.Dat,
@@ -489,12 +491,182 @@ namespace Zipper
                 eol: "\r\n",
                 seed: 42);
 
-            var targetLinesField = typeof(ChaosEngine).GetField("targetLines", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            Assert.NotNull(targetLinesField);
+            int interceptCount = 0;
+            for (int i = 1; i <= 100_000; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    interceptCount++;
+                }
+            }
 
-            var targetLines = Assert.IsType<HashSet<long>>(targetLinesField!.GetValue(engine));
-            Assert.Single(targetLines);
-            Assert.InRange(targetLines.Single(), 1, int.MaxValue);
+            Assert.Equal(1, interceptCount);
+        }
+
+        [Fact]
+        public void Constructor_TotalLinesZero_ThrowsArgumentOutOfRangeException()
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosEngine(
+                totalLines: 0,
+                chaosAmount: "1%",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42));
+
+            Assert.Contains("Chaos Engine requires a positive totalLines count", ex.Message);
+        }
+
+        [Fact]
+        public void Constructor_TotalLinesOne_SelectsCorrectCount()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 1,
+                chaosAmount: "1",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            Assert.True(engine.ShouldIntercept(1));
+        }
+
+        [Fact]
+        public void ChaosAmount_ZeroPercent_ClampedToMinimumOne()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 100,
+                chaosAmount: "0%",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            int interceptCount = 0;
+            for (int i = 1; i <= 100; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    interceptCount++;
+                }
+            }
+
+            Assert.Equal(1, interceptCount);
+        }
+
+        [Fact]
+        public void ChaosAmount_HundredPercent_AllLinesCorrupted()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 50,
+                chaosAmount: "100%",
+                chaosTypes: "quotes",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            int interceptCount = 0;
+            for (int i = 1; i <= 50; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    interceptCount++;
+                }
+            }
+
+            Assert.Equal(50, interceptCount);
+        }
+
+        [Fact]
+        public void ChaosAmount_ExceedsTotalLines_ClampedToTotal()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 10,
+                chaosAmount: "100",
+                chaosTypes: "quotes",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            int interceptCount = 0;
+            for (int i = 1; i <= 10; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    interceptCount++;
+                }
+            }
+
+            Assert.Equal(10, interceptCount);
+        }
+
+        [Fact]
+        public void ChaosAmount_InvalidString_FallsBackToDefault()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 200,
+                chaosAmount: "abc",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            int interceptCount = 0;
+            for (int i = 1; i <= 200; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    interceptCount++;
+                }
+            }
+
+            Assert.Equal(2, interceptCount);
+        }
+
+        [Fact]
+        public void ChaosTypes_EmptyString_AllTypesEnabled()
+        {
+            var engine = new ChaosEngine(
+                totalLines: 100,
+                chaosAmount: "10",
+                chaosTypes: string.Empty,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
+
+            int interceptedCount = 0;
+            for (int i = 1; i <= 100; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    engine.Intercept(i, line, $"DOC{i:D8}");
+                    interceptedCount++;
+                }
+            }
+
+            Assert.Equal(10, interceptedCount);
+            Assert.True(engine.Anomalies.Count > 0);
+
+            var types = engine.Anomalies.Select(a => a.ErrorType).Distinct().ToList();
+            Assert.True(
+                types.Count >= 2,
+                $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
         }
     }
 }

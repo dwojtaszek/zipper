@@ -71,6 +71,7 @@ namespace Zipper
         /// </summary>
         public static void BuildEmailToWriter(TextWriter writer, EmailTemplate template, AttachmentInfo? attachment = null)
         {
+            ArgumentNullException.ThrowIfNull(writer);
             if (template == null)
             {
                 throw new ArgumentNullException(nameof(template));

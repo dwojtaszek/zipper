@@ -158,13 +158,9 @@ namespace Zipper
                 new string('x', 500), // Very long path
             };
 
-            // Act & Assert - Should not throw exceptions, returns null or DirectoryInfo depending on  platform
+            // Act & Assert - Should not throw exceptions, returns null or DirectoryInfo depending on platform
             foreach (string path in edgeCasePaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
-
-                // Test passes if no exception is thrown
-                // Result checking is platform specific, but execution should be safe
                 var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(path));
                 Assert.Null(exception);
             }
@@ -177,13 +173,9 @@ namespace Zipper
             string longPath = Path.Combine(Path.GetTempPath(), new string('a', 300));
 
             // Act
-            var result = PathValidator.ValidateAndCreateDirectory(longPath);
+            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(longPath));
 
             // Assert
-            // On some systems this may succeed, on others it will fail
-            // The important thing is it doesn't throw an unhandled exception
-            // The important thing is it doesn't throw an unhandled exception
-            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(longPath));
             Assert.Null(exception);
         }
 
@@ -225,10 +217,8 @@ namespace Zipper
             // Act & Assert
             foreach (string path in exceptionPaths)
             {
-                // Should not throw exceptions, should return null for invalid paths
-                var result = PathValidator.ValidateAndCreateDirectory(path);
-
-                // All of these should be rejected or handled gracefully
+                var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(path));
+                Assert.Null(exception);
             }
         }
 
@@ -263,6 +253,61 @@ namespace Zipper
 
             // Assert
             Assert.Null(result); // Canonical path escapes baseDir, should be rejected
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_WithUncPath_DoesNotThrow()
+        {
+            var baseDir = Path.GetTempPath();
+            var uncPath = @"\\server\share\folder";
+            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(uncPath, baseDir));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_WithUnicodeCharacters_ReturnsDirectoryInfo()
+        {
+            var tempPath = Path.GetTempPath();
+            var unicodePath = Path.Combine(tempPath, "über-cool_文件_パス");
+            var result = PathValidator.ValidateAndCreateDirectory(unicodePath);
+            Assert.NotNull(result);
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_WithTrailingSeparator_NormalizesPath()
+        {
+            var tempPath = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+            var pathWithTrailing = tempPath + Path.DirectorySeparatorChar;
+            var result = PathValidator.ValidateAndCreateDirectory(pathWithTrailing);
+            Assert.NotNull(result);
+            Assert.Equal(tempPath, result.FullName.TrimEnd(Path.DirectorySeparatorChar));
+        }
+
+        [Fact]
+        public void IsPathSafe_UncPath_DoesNotThrow()
+        {
+            var uncPath = @"\\server\share\folder";
+            var baseDir = Path.GetTempPath();
+            var exception = Record.Exception(() => PathValidator.IsPathSafe(uncPath, baseDir));
+            Assert.Null(exception);
+        }
+
+        [Theory]
+        [InlineData("über-cool")]
+        [InlineData("文件")]
+        [InlineData("パス")]
+        public void IsPathSafe_UnicodePath_ReturnsTrue(string pathComponent)
+        {
+            var exception = Record.Exception(() => PathValidator.IsPathSafe(pathComponent));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public void IsPathSafe_TrailingSeparator_ReturnsTrue()
+        {
+            var safePath = Path.Combine(Environment.CurrentDirectory, "folder") + Path.DirectorySeparatorChar;
+            var result = PathValidator.IsPathSafe(safePath);
+            Assert.True(result);
         }
     }
 }

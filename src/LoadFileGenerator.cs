@@ -28,12 +28,12 @@ namespace Zipper
             var headerBuilder = new StringBuilder();
             headerBuilder.Append($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
 
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (request.WithMetadata || string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
                 headerBuilder.Append($"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}");
             }
 
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
                 headerBuilder.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
             }
@@ -45,7 +45,7 @@ namespace Zipper
             }
 
             // Add Page Count column for TIFF with page range
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (string.Equals(request.FileType, "tiff", StringComparison.OrdinalIgnoreCase) && request.TiffPageRange.HasValue)
             {
                 headerBuilder.Append($"{colDelim}{quote}Page Count{quote}");
             }
@@ -104,14 +104,14 @@ namespace Zipper
             lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{SanitizeField(workItem.FilePathInZip, request.NewlineDelimiter)}{quote}");
 
             // Add metadata columns if requested
-            if (request.WithMetadata || request.FileType.ToLowerInvariant() == "eml")
+            if (request.WithMetadata || string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
                 var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote, random, now);
                 lineBuilder.Append(metadataColumns);
             }
 
             // Add EML-specific columns if needed
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
                 var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote, random, now);
                 lineBuilder.Append(emlColumns);
@@ -125,7 +125,7 @@ namespace Zipper
             }
 
             // Add Page Count column for TIFF with page range
-            if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            if (string.Equals(request.FileType, "tiff", StringComparison.OrdinalIgnoreCase) && request.TiffPageRange.HasValue)
             {
                 lineBuilder.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
             }

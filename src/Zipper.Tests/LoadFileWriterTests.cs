@@ -120,6 +120,8 @@ namespace Zipper
         [InlineData("ANSI")]
         public async Task OptWriter_ShouldRespectRequestEncoding(string encoding)
         {
+            ArgumentNullException.ThrowIfNull(encoding);
+
             // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
@@ -398,6 +400,8 @@ namespace Zipper
         [InlineData("ANSI")]
         public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
         {
+            ArgumentNullException.ThrowIfNull(encoding);
+
             // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
@@ -431,158 +435,82 @@ namespace Zipper
         }
 
         [Fact]
-        public void LoadFileWriterBase_GenerateMetadataValues_ReturnsValidMetadata()
+        public async Task CsvWriter_WritesDocumentIdInDataRows()
         {
-            // Arrange
-            var workItem = new FileWorkItem
-            {
-                Index = 1,
-                FolderNumber = 5,
-                FilePathInZip = "folder_005/file_00000001.pdf",
-            };
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                Data = new byte[1024],
-                DataLength = 1024,
-            };
-
-            // Act - Call through concrete writer that exposes base class functionality
-            var writer = new DatWriter();
-
-            // Use reflection to access protected method for testing
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "GenerateMetadataValues",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var random = new Random(42);
-            var now = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var result = method?.Invoke(null, new object[] { workItem, fileData, random, now });
-
-            // Assert
-            Assert.NotNull(result);
-            var metadata = result as LoadFiles.MetadataColumns;
-            Assert.NotNull(metadata);
-            Assert.Equal("Custodian 5", metadata.Custodian);
-            Assert.Equal(1024, metadata.FileSize);
-            Assert.NotEmpty(metadata.DateSent);
-            Assert.NotEmpty(metadata.Author);
+            var request = this.CreateTestRequest();
+            var files = this.CreateTestFileData(2);
+            var content = await this.CaptureCsvOutput(request, files);
+            Assert.Contains("DOC00000001", content);
+            Assert.Contains("DOC00000002", content);
         }
 
         [Fact]
-        public void LoadFileWriterBase_ShouldIncludeMetadata_WithVariousRequests_ReturnsExpectedResults()
+        public async Task CsvWriter_WithText_WritesTextPath()
         {
-            // Arrange & Act & Assert
-            var pdfRequest = this.CreateTestRequest("pdf");
-            pdfRequest.WithMetadata = true;
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "ShouldIncludeMetadata",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = (bool)method!.Invoke(null, new object[] { pdfRequest })!;
-            Assert.True(result); // WithMetadata = true
+            var request = this.CreateTestRequest();
+            request.WithText = true;
+            var files = this.CreateTestFileData(1);
+            files[0] = files[0] with { WorkItem = files[0].WorkItem with { FilePathInZip = "folder_001/file_00000001.pdf" } };
+            var content = await this.CaptureCsvOutput(request, files);
+            Assert.Contains("folder_001/file_00000001.txt", content);
+        }
 
-            pdfRequest.WithMetadata = false;
-            result = (bool)method.Invoke(null, new object[] { pdfRequest })!;
-            Assert.False(result); // WithMetadata = false and not EML
+        [Fact]
+        public async Task CsvWriter_MetadataHeader_ReflectsRequestConfiguration()
+        {
+            var request = this.CreateTestRequest();
+            request.WithMetadata = true;
+            var files = this.CreateTestFileData(1);
+            var contentWith = await this.CaptureCsvOutput(request, files);
+            Assert.Contains("Custodian", contentWith);
+
+            request.WithMetadata = false;
+            var contentWithout = await this.CaptureCsvOutput(request, files);
+            Assert.DoesNotContain("Custodian", contentWithout);
 
             var emlRequest = this.CreateTestRequest("eml");
             emlRequest.WithMetadata = false;
-            result = (bool)method.Invoke(null, new object[] { emlRequest })!;
-            Assert.True(result); // EML always includes metadata
+            var emlContent = await this.CaptureCsvOutput(emlRequest, files);
+            Assert.Contains("Custodian", emlContent);
         }
 
         [Fact]
-        public void LoadFileWriterBase_ShouldIncludeEmlColumns_WithVariousFileTypes_ReturnsExpectedResults()
+        public async Task CsvWriter_EmlColumns_OnlyForEmlFileType()
         {
-            // Arrange & Act & Assert
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "ShouldIncludeEmlColumns",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
+            var files = this.CreateTestFileData(1);
             var emlRequest = this.CreateTestRequest("eml");
-            var result = (bool)method!.Invoke(null, new object[] { emlRequest })!;
-            Assert.True(result); // EML file type
+            var emlContent = await this.CaptureCsvOutput(emlRequest, files);
+            Assert.Contains("To", emlContent);
+            Assert.Contains("From", emlContent);
 
             var pdfRequest = this.CreateTestRequest("pdf");
-            result = (bool)method.Invoke(null, new object[] { pdfRequest })!;
-            Assert.False(result); // Non-EML file type
+            var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
+            Assert.DoesNotContain("To", pdfContent);
         }
 
         [Fact]
-        public void LoadFileWriterBase_ShouldIncludePageCount_WithTiffAndPageRange_ReturnsTrue()
+        public async Task CsvWriter_PageCount_OnlyForTiffWithPageRange()
         {
-            // Arrange & Act & Assert
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "ShouldIncludePageCount",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            var request = this.CreateTestRequest("tiff");
+            request.TiffPageRange = (1, 10);
+            var files = this.CreateTestFileData(1);
+            files[0] = files[0] with { PageCount = 5 };
+            var contentWith = await this.CaptureCsvOutput(request, files);
+            Assert.Contains("Page Count", contentWith);
 
-            var tiffRequest = this.CreateTestRequest("tiff");
-            tiffRequest.TiffPageRange = (1, 10);
-            var result = (bool)method!.Invoke(null, new object[] { tiffRequest })!;
-            Assert.True(result); // TIFF with page range
-
-            tiffRequest.TiffPageRange = null;
-            result = (bool)method.Invoke(null, new object[] { tiffRequest })!;
-            Assert.False(result); // TIFF without page range
+            request.TiffPageRange = null;
+            var contentWithout = await this.CaptureCsvOutput(request, files);
+            Assert.DoesNotContain("Page Count", contentWithout);
 
             var pdfRequest = this.CreateTestRequest("pdf");
             pdfRequest.TiffPageRange = (1, 10);
-            result = (bool)method.Invoke(null, new object[] { pdfRequest })!;
-            Assert.False(result); // Non-TIFF even with page range
+            var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
+            Assert.DoesNotContain("Page Count", pdfContent);
         }
 
         [Fact]
-        public void LoadFileWriterBase_GenerateTextPath_ReplacesExtensionCorrectly()
+        public async Task CsvWriter_WithBatesConfig_WritesCorrectBatesNumber()
         {
-            // Arrange
-            var workItem = new FileWorkItem
-            {
-                Index = 1,
-                FolderNumber = 1,
-                FilePathInZip = "folder_001/document_00000001.pdf",
-            };
-            var request = this.CreateTestRequest("pdf");
-
-            // Act
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "GenerateTextPath",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = (string)method!.Invoke(null, new object[] { request, workItem })!;
-
-            // Assert
-            Assert.Equal("folder_001/document_00000001.txt", result);
-        }
-
-        [Fact]
-        public void LoadFileWriterBase_GenerateDocumentId_FormatsCorrectly()
-        {
-            // Arrange
-            var workItem = new FileWorkItem
-            {
-                Index = 42,
-                FolderNumber = 1,
-                FilePathInZip = "folder_001/file_00000042.pdf",
-            };
-
-            // Act
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "GenerateDocumentId",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = (string)method!.Invoke(null, new object[] { workItem })!;
-
-            // Assert
-            Assert.Equal("DOC00000042", result);
-        }
-
-        [Fact]
-        public void LoadFileWriterBase_GenerateBatesNumber_WithConfig_GeneratesBatesNumber()
-        {
-            // Arrange
-            var workItem = new FileWorkItem
-            {
-                Index = 10,
-                FolderNumber = 1,
-                FilePathInZip = "folder_001/file_00000010.pdf",
-            };
             var request = this.CreateTestRequest();
             request.BatesConfig = new BatesNumberConfig
             {
@@ -591,15 +519,32 @@ namespace Zipper
                 Digits = 6,
                 Increment = 1,
             };
+            var files = this.CreateTestFileData(1);
+            files[0] = files[0] with { WorkItem = files[0].WorkItem with { Index = 10 } };
+            var content = await this.CaptureCsvOutput(request, files);
+            Assert.Contains("TEST001009", content);
+        }
 
-            // Act
-            var method = typeof(LoadFiles.LoadFileWriterBase).GetMethod(
-                "GenerateBatesNumber",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var result = (string)method!.Invoke(null, new object[] { request, workItem })!;
+        [Fact]
+        public async Task CsvWriter_WithMetadata_ContainsCustodianAndFileSizeInDataRow()
+        {
+            var request = this.CreateTestRequest();
+            request.WithMetadata = true;
+            var files = this.CreateTestFileData(1);
+            files[0] = files[0] with { DataLength = 1024, WorkItem = files[0].WorkItem with { FolderNumber = 5 } };
+            var content = await this.CaptureCsvOutput(request, files);
+            var dataLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1];
+            Assert.Contains("Custodian 5", dataLine);
+            Assert.Contains("1024", dataLine);
+        }
 
-            // Assert
-            Assert.Equal("TEST001009", result);
+        private async Task<string> CaptureCsvOutput(FileGenerationRequest request, List<FileData> files)
+        {
+            var writer = new LoadFiles.CsvWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, files);
+            stream.Position = 0;
+            return await new StreamReader(stream).ReadToEndAsync();
         }
     }
 }

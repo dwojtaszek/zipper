@@ -31,8 +31,11 @@ dotnet test src/Zipper.Tests/Zipper.Tests.csproj
 # Single test class
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"
 
-# Lint (CI runs this - fix with: dotnet format)
+# Lint (runs automatically before every commit via pre-commit hook)
 dotnet format --verify-no-changes
+
+# Quick lint (run after every code change before staging)
+dotnet format --verify-no-changes src/
 
 # E2E Tests (must pass before push - enforced by git hooks)
 ./tests/run-tests.sh   # Linux/macOS
@@ -66,8 +69,12 @@ Tackle in this order: **Blockers** → **Critical** → **High** → **Test Cove
 2. `git checkout -b fix/ISSUE-NNN-short-desc`
 3. Read the issue body for file paths, line numbers, and fix guidance
 4. Write a failing test first (TDD), then implement the fix
-5. Run unit tests, E2E tests, lint
+5. **Run lint + tests after EVERY code change:**
+   - `dotnet format --verify-no-changes src/` — quick lint check
+   - `dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build` — quick test (if build hasn't changed)
+   - `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` — full test + build (after structural changes)
 6. Commit and create PR
+7. **Monitor CI after PR:** After creating or updating a PR, monitor GitHub CI status until all checks pass. If CI fails, diagnose and fix before requesting review.
 
 ## Requirement-Driven Changes
 
@@ -90,6 +97,8 @@ Tackle in this order: **Blockers** → **Critical** → **High** → **Test Cove
 > - [ ] Argument interactions updated in both README.md and Requirements.md Section 10
 
 **Test Location:** All unit tests go in `src/Zipper.Tests/` (NOT the root `Zipper.Tests/` which is obsolete).
+
+**Pre-commit Hook:** The `.git/hooks/pre-commit` hook runs `dotnet format --verify-no-changes`, auto-formats staged C# files, then runs unit tests on every `git commit`. To bypass: `git commit --no-verify`.
 
 **E2E Tests:** Must verify actual output (file counts, headers, content). All new E2E tests need both `.sh` and `.bat` implementations.
 

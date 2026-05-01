@@ -163,6 +163,7 @@ public static class BuiltInProfiles
     /// </summary>
     public static ColumnProfile? GetProfile(string name)
     {
+        ArgumentNullException.ThrowIfNull(name);
         return name.ToLowerInvariant() switch
         {
             "minimal" => Minimal,

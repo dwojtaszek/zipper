@@ -230,11 +230,10 @@ namespace Zipper
         }
 
         [Fact]
-        public void GenerateEmlContent_NullConfig_ThrowsNullReferenceException()
+        public void GenerateEmlContent_NullConfig_ThrowsArgumentNullException()
         {
             // Act & Assert
-            // The implementation doesn't explicitly validate null, so it throws NullReferenceException
-            Assert.Throws<NullReferenceException>(() => EmlGenerationService.GenerateEmlContent(null!));
+            Assert.Throws<ArgumentNullException>(() => EmlGenerationService.GenerateEmlContent(null!));
         }
 
         [Theory]
@@ -400,6 +399,25 @@ namespace Zipper
             Assert.Equal(config1.AttachmentRate, config2.AttachmentRate);
             Assert.Equal(config1.Category, config2.Category);
             Assert.True(config1 == config2);
+        }
+
+        [Fact]
+        public async Task GenerateEmlContent_ConcurrentCalls_AllSucceed()
+        {
+            var tasks = Enumerable.Range(1, 50).Select(i => Task.Run(() =>
+                EmlGenerationService.GenerateEmlContent(new EmlGenerationConfig
+                {
+                    FileIndex = i,
+                    AttachmentRate = 50,
+                }))).ToArray();
+
+            var results = await Task.WhenAll(tasks);
+
+            Assert.All(results, r =>
+            {
+                Assert.NotNull(r);
+                Assert.True(r.Content.Length > 0);
+            });
         }
     }
 }

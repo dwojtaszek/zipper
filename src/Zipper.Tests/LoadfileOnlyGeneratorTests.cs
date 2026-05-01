@@ -213,5 +213,137 @@ namespace Zipper
             Assert.False(string.IsNullOrEmpty(result.LoadFilePath));
             Assert.False(string.IsNullOrEmpty(result.PropertiesFilePath));
         }
+
+        [Fact]
+        public async Task GenerateAsync_Dat_FileCountOne_CreatesHeaderAndOneRow()
+        {
+            var request = this.CreateRequest(format: LoadFileFormat.Dat, count: 1);
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            Assert.True(File.Exists(result.LoadFilePath));
+            var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+
+            Assert.Equal(2, lines.Length);
+            Assert.Contains("Control Number", lines[0]);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Opt_FileCountOne_CreatesSingleLine()
+        {
+            var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 1);
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            Assert.True(File.Exists(result.LoadFilePath));
+            var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+
+            Assert.Single(lines);
+            var parts = lines[0].Split(',');
+            Assert.Equal(7, parts.Length);
+            Assert.StartsWith("IMG", parts[0]);
+            Assert.Equal("VOL001", parts[1]);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Dat_WithCrEol_UsesCorrectLineEndings()
+        {
+            var request = this.CreateRequest(count: 5);
+            request.EndOfLine = "CR";
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+            var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
+
+            Assert.Contains("\r", content);
+            Assert.DoesNotContain("\n", content);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Dat_WithCrlfEol_Explicitly_UsesCrlf()
+        {
+            var request = this.CreateRequest(count: 5);
+            request.EndOfLine = "CRLF";
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+            var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
+
+            Assert.Contains("\r\n", content);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Opt_WithLfEol_UsesCorrectLineEndings()
+        {
+            var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
+            request.EndOfLine = "LF";
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+            var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
+
+            Assert.Contains("\n", content);
+            Assert.DoesNotContain("\r\n", content);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_WithChaos_HundredPercent_AllLinesCorrupted()
+        {
+            var request = this.CreateRequest(count: 20);
+            request.ChaosMode = true;
+            request.ChaosAmount = "100%";
+            request.Seed = 42;
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            var json = await File.ReadAllTextAsync(result.PropertiesFilePath);
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            // With 100% chaos, every line should have an anomaly (header + 20 data rows = 21 lines)
+            var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
+            Assert.True(totalAnomalies > 0, "Expected at least one anomaly with 100% chaos rate");
+        }
+
+        [Fact]
+        public async Task GenerateAsync_WithNullEol_FallsBackToCrlf()
+        {
+            var request = this.CreateRequest(count: 3);
+            request.EndOfLine = string.Empty;
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+            var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
+
+            Assert.Contains("\r\n", content);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_PropertiesJson_ContainsFormatAndRecordCount()
+        {
+            var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 25);
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            var json = await File.ReadAllTextAsync(result.PropertiesFilePath);
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.Equal("OPT (Image)", doc.RootElement.GetProperty("format").GetString());
+            Assert.Equal(25, doc.RootElement.GetProperty("totalRecords").GetInt64());
+        }
+
+        [Fact]
+        public async Task GenerateAsync_WithSeed_LoadfileOnly_DatAndOpt_BothDeterministic()
+        {
+            var request1 = this.CreateRequest(format: LoadFileFormat.Dat, count: 5);
+            request1.Seed = 42;
+            var result1 = await LoadfileOnlyGenerator.GenerateAsync(request1);
+            var content1 = await File.ReadAllTextAsync(result1.LoadFilePath);
+
+            var request2 = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
+            request2.Seed = 42;
+            var result2 = await LoadfileOnlyGenerator.GenerateAsync(request2);
+            var content2 = await File.ReadAllTextAsync(result2.LoadFilePath);
+
+            // DAT should have header, OPT should not
+            Assert.Contains("Control Number", content1);
+            Assert.DoesNotContain("Control Number", content2);
+        }
     }
 }

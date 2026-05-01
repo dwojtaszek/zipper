@@ -1,18 +1,10 @@
 using System.Text;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Zipper
 {
     public class EmailBuilderTests
     {
-        private readonly ITestOutputHelper output;
-
-        public EmailBuilderTests(ITestOutputHelper output)
-        {
-            this.output = output;
-        }
-
         [Fact]
         public void BuildEmail_BasicTemplate_CreatesValidEml()
         {
@@ -351,6 +343,90 @@ namespace Zipper
             var content = Encoding.UTF8.GetString(result);
             Assert.Contains("tëst@éxample.com", content);
             Assert.Contains("Tëst with spëcial chars: 你好", content);
+        }
+
+        [Fact]
+        public void BuildEmail_EmptyBodyAndSubject_CreatesValidEml()
+        {
+            var template = new EmailTemplate
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = string.Empty,
+                SentDate = new DateTime(2023, 1, 1),
+                Body = string.Empty,
+            };
+
+            var result = EmailBuilder.BuildEmail(template);
+
+            Assert.NotNull(result);
+            Assert.True(result.Length > 0);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("Subject:", content);
+        }
+
+        [Fact]
+        public void BuildEmail_DateTimeMinValue_HandlesGracefully()
+        {
+            var template = new EmailTemplate
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Date Test",
+                SentDate = DateTime.MinValue,
+                Body = "Test body",
+            };
+
+            var result = EmailBuilder.BuildEmail(template);
+
+            Assert.NotNull(result);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("Date:", content);
+        }
+
+        [Fact]
+        public void BuildEmail_ZeroLengthAttachment_HandlesGracefully()
+        {
+            var template = new EmailTemplate
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Empty Attachment",
+                Body = "Test",
+            };
+            var attachment = new AttachmentInfo
+            {
+                FileName = "empty.txt",
+                Content = Array.Empty<byte>(),
+            };
+
+            var result = EmailBuilder.BuildEmail(template, attachment);
+
+            Assert.NotNull(result);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("multipart/mixed", content);
+        }
+
+        [Fact]
+        public void BuildEmail_NullAttachmentFileName_HandlesGracefully()
+        {
+            var template = new EmailTemplate
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Null FileName",
+                Body = "Test",
+            };
+            var attachment = new AttachmentInfo
+            {
+                FileName = null!,
+                Content = new byte[] { 1, 2, 3 },
+            };
+
+            var result = EmailBuilder.BuildEmail(template, attachment);
+
+            Assert.NotNull(result);
+            Assert.True(result.Length > 0);
         }
 
         [Fact]
