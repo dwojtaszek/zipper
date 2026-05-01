@@ -36,6 +36,7 @@ internal static class ProductionSetGenerator
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : new Random();
 #pragma warning restore S2245
+        var builder = new MetadataRowBuilder(request, random, DateTime.Now);
         var batesConfig = request.BatesConfig
             ?? throw new InvalidOperationException("Production set requires Bates configuration. Specify --bates-prefix.");
 
@@ -103,8 +104,8 @@ internal static class ProductionSetGenerator
                 NativePath = nativeRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
                 TextPath = textRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
                 ImagePath = imageRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
-                Custodian = $"Custodian {random.Next(1, Math.Max(2, request.CustodianCountOverride ?? 10))}",
-                DateCreated = DateTime.Now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd"),
+                Custodian = builder.GetCustodian(),
+                DateCreated = builder.GetDateCreated(),
                 FileSize = nativeContent.Length,
                 FileType = nativeExt.ToUpperInvariant(),
                 VolumeName = volName,

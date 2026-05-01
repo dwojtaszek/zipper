@@ -61,6 +61,7 @@ namespace Zipper
             var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
             var now = DateTime.UtcNow;
+            var builder = new MetadataRowBuilder(request, random, now);
 
             var buffer = new StringBuilder();
             int rowCount = 0;
@@ -68,7 +69,7 @@ namespace Zipper
             // Write file records
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var line = GetFileRecordLine(fileData, request, colDelim, quote, random, now);
+                var line = GetFileRecordLine(fileData, request, colDelim, quote, builder);
                 buffer.AppendLine(line);
                 rowCount++;
 
@@ -94,33 +95,32 @@ namespace Zipper
             FileGenerationRequest request,
             char colDelim,
             char quote,
-            Random random,
-            DateTime now)
+            MetadataRowBuilder builder)
         {
             var workItem = fileData.WorkItem;
-            var docId = SanitizeField($"DOC{workItem.Index:D8}", request.NewlineDelimiter);
+            var docId = MetadataRowBuilder.SanitizeField(builder.GetControlNumber(workItem), request.NewlineDelimiter);
 
             var lineBuilder = new StringBuilder();
-            lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{SanitizeField(workItem.FilePathInZip, request.NewlineDelimiter)}{quote}");
+            lineBuilder.Append($"{quote}{docId}{quote}{colDelim}{quote}{MetadataRowBuilder.SanitizeField(workItem.FilePathInZip, request.NewlineDelimiter)}{quote}");
 
             // Add metadata columns if requested
             if (request.WithMetadata || string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
-                var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote, random, now);
+                var metadataColumns = GetMetadataColumns(workItem, fileData, request, colDelim, quote, builder);
                 lineBuilder.Append(metadataColumns);
             }
 
             // Add EML-specific columns if needed
             if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
-                var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote, random, now);
+                var emlColumns = GetEmlColumns(workItem, fileData, request, colDelim, quote, builder);
                 lineBuilder.Append(emlColumns);
             }
 
             // Add Bates Number column if configured
             if (request.BatesConfig != null)
             {
-                var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig, workItem.Index - 1);
+                var batesNumber = builder.GetBatesNumber(workItem);
                 lineBuilder.Append($"{colDelim}{quote}{batesNumber}{quote}");
             }
 
@@ -133,7 +133,7 @@ namespace Zipper
             // Add extracted text column if requested
             if (request.WithText)
             {
-                var textFilePath = workItem.FilePathInZip.Replace($".{request.FileType}", ".txt");
+                var textFilePath = builder.GetTextPath(workItem);
                 lineBuilder.Append($"{colDelim}{quote}{textFilePath}{quote}");
             }
 
@@ -143,12 +143,12 @@ namespace Zipper
         /// <summary>
         /// Gets metadata columns for file records.
         /// </summary>
-        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, Random random, DateTime now)
+        private static string GetMetadataColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, MetadataRowBuilder builder)
         {
-            var custodian = SanitizeField($"Custodian {workItem.FolderNumber}", request.NewlineDelimiter);
-            var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
-            var author = SanitizeField($"Author {random.Next(1, 100):D3}", request.NewlineDelimiter);
-            var fileSize = fileData.DataLength;
+            var custodian = MetadataRowBuilder.SanitizeField(builder.GetCustodian(workItem.FolderNumber), request.NewlineDelimiter);
+            var dateSent = builder.GetDateSent();
+            var author = MetadataRowBuilder.SanitizeField(builder.GetAuthor(), request.NewlineDelimiter);
+            var fileSize = builder.GetFileSize(fileData);
 
             return $"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}";
         }
@@ -156,49 +156,15 @@ namespace Zipper
         /// <summary>
         /// Gets EML-specific columns for email file records.
         /// </summary>
-        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, Random random, DateTime now)
+        private static string GetEmlColumns(FileWorkItem workItem, FileData fileData, FileGenerationRequest request, char colDelim, char quote, MetadataRowBuilder builder)
         {
-            string to;
-            string from;
-            string subject;
-            string sentDate;
-
-            if (fileData.EmailTemplate is { } template)
-            {
-                to = SanitizeField(template.To, request.NewlineDelimiter);
-                from = SanitizeField(template.From, request.NewlineDelimiter);
-                subject = SanitizeField(template.Subject, request.NewlineDelimiter);
-                sentDate = template.SentDate.ToString("yyyy-MM-dd HH:mm:ss");
-            }
-            else
-            {
-                to = SanitizeField($"recipient{workItem.Index}@example.com", request.NewlineDelimiter);
-                from = SanitizeField($"sender{workItem.Index}@example.com", request.NewlineDelimiter);
-                subject = SanitizeField($"Email Subject {workItem.Index}", request.NewlineDelimiter);
-                sentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
-            }
-
-            var attachmentName = SanitizeField(fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty, request.NewlineDelimiter);
+            var to = MetadataRowBuilder.SanitizeField(builder.GetEmailTo(workItem, fileData), request.NewlineDelimiter);
+            var from = MetadataRowBuilder.SanitizeField(builder.GetEmailFrom(workItem, fileData), request.NewlineDelimiter);
+            var subject = MetadataRowBuilder.SanitizeField(builder.GetEmailSubject(workItem, fileData), request.NewlineDelimiter);
+            var sentDate = builder.GetEmailSentDate(workItem, fileData);
+            var attachmentName = MetadataRowBuilder.SanitizeField(builder.GetEmailAttachment(fileData), request.NewlineDelimiter);
 
             return $"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachmentName}{quote}";
-        }
-
-        /// <summary>
-        /// Sanitizes a field value by replacing newline characters with the configured delimiter.
-        /// </summary>
-        /// <param name="value">The field value to sanitize.</param>
-        /// <param name="newlineDelimiter">The newline replacement character.</param>
-        /// <returns>Sanitized field value.</returns>
-        private static string SanitizeField(string value, string newlineDelimiter)
-        {
-            if (string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-
-            return value.Replace("\r\n", newlineDelimiter)
-                        .Replace("\n", newlineDelimiter)
-                        .Replace("\r", newlineDelimiter);
         }
 
         /// <summary>

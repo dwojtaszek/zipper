@@ -108,7 +108,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
+                var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
                 line.Append($"{quoteDelim}{EscapeDatField(metadata.Custodian, quoteDelim)}{quoteDelim}{fieldDelim}");
                 line.Append($"{quoteDelim}{EscapeDatField(metadata.DateSent, quoteDelim)}{quoteDelim}{fieldDelim}");
                 line.Append($"{quoteDelim}{EscapeDatField(metadata.Author, quoteDelim)}{quoteDelim}{fieldDelim}");
@@ -117,7 +117,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData, random, now);
+                var eml = GenerateEmlValues(workItem, fileData, random, now, request);
                 line.Append($"{quoteDelim}{EscapeDatField(eml.To, quoteDelim)}{quoteDelim}{fieldDelim}");
                 line.Append($"{quoteDelim}{EscapeDatField(eml.From, quoteDelim)}{quoteDelim}{fieldDelim}");
                 line.Append($"{quoteDelim}{EscapeDatField(eml.Subject, quoteDelim)}{quoteDelim}{fieldDelim}");
