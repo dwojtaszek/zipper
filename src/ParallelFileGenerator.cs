@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
 
@@ -19,6 +20,8 @@ namespace Zipper
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
+            ArgumentNullException.ThrowIfNull(request);
+
             // Clone to avoid mutating the caller's request object
             request = request.Clone();
 
@@ -39,7 +42,7 @@ namespace Zipper
 
                 // For EML files, use sequential processing to avoid ZIP entry creation conflicts
                 // when attachments and text extraction are enabled
-                if (request.FileType.ToLowerInvariant() == "eml" && (request.WithText || request.AttachmentRate > 0))
+                if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase) && (request.WithText || request.AttachmentRate > 0))
                 {
                     request.Concurrency = 1; // Force sequential processing
                 }
@@ -55,7 +58,7 @@ namespace Zipper
 
                 // Allow Office formats and EML to have empty placeholder content (generated dynamically)
                 if (placeholderContent.Length == 0 &&
-                    request.FileType.ToLowerInvariant() != "eml" &&
+                    !string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase) &&
                     !OfficeFileGenerator.IsOfficeFormat(request.FileType))
                 {
                     throw new InvalidOperationException($"Unknown file type: {request.FileType}");
@@ -205,7 +208,7 @@ namespace Zipper
             int pageCount = 1;
             EmailTemplate? emailTemplate = null;
 
-            if (request.FileType.ToLowerInvariant() == "eml")
+            if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
             {
                 // Use the new EmlGenerationService for clean separation of concerns
                 var emlResult = EmlGenerationService.GenerateEmlContent(
@@ -221,7 +224,7 @@ namespace Zipper
                 // Generate Office format documents
                 fileContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
             }
-            else if (request.FileType.ToLowerInvariant() == "tiff" && request.TiffPageRange.HasValue)
+            else if (string.Equals(request.FileType, "tiff", StringComparison.OrdinalIgnoreCase) && request.TiffPageRange.HasValue)
             {
                 // Generate multipage TIFF
                 pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, request.Seed, workItem.Index);
@@ -243,7 +246,39 @@ namespace Zipper
 
             var totalSize = fileContent.Length + effectivePadding;
 
-            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize))!;
+            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
+
+            if (memoryOwner == null)
+            {
+                var data = new byte[(int)totalSize];
+                Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
+
+                if (paddingPerFile > 0)
+                {
+                    var padding = new byte[Math.Min(paddingPerFile, 1024 * 1024)];
+                    RandomNumberGenerator.Fill(padding);
+
+                    int offset = fileContent.Length;
+                    long remaining = paddingPerFile;
+                    while (remaining > 0)
+                    {
+                        int toCopy = (int)Math.Min(remaining, padding.Length);
+                        Buffer.BlockCopy(padding, 0, data, offset, toCopy);
+                        offset += toCopy;
+                        remaining -= toCopy;
+                    }
+                }
+
+                return new FileData
+                {
+                    WorkItem = workItem,
+                    Data = data,
+                    DataLength = (int)totalSize,
+                    Attachment = attachment,
+                    PageCount = pageCount,
+                    EmailTemplate = emailTemplate,
+                };
+            }
 
             fileContent.CopyTo(memoryOwner.Memory.Span);
 
@@ -307,7 +342,7 @@ namespace Zipper
         {
             if (ex is not null)
             {
-                throw ex;
+                ExceptionDispatchInfo.Capture(ex).Throw();
             }
         }
     }

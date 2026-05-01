@@ -130,6 +130,21 @@ dotnet_diagnostic.CS1591.severity = none
 # IDE0055: Fix formatting
 dotnet_diagnostic.IDE0055.severity = warning
 
+# IDE0051: Remove unused private members (dead code prevention)
+dotnet_diagnostic.IDE0051.severity = warning
+
+# IDE0052: Remove unread private members (dead code prevention)
+dotnet_diagnostic.IDE0052.severity = warning
+
+# CA1062: Validate arguments of public methods (null ref prevention)
+dotnet_diagnostic.CA1062.severity = warning
+
+# CA1854: Prefer Dictionary.TryGetValue over ContainsKey + indexer (correctness)
+dotnet_diagnostic.CA1854.severity = warning
+
+# CA1861: Avoid constant arrays as arguments (performance)
+dotnet_diagnostic.CA1861.severity = suggestion
+
 # SA1200: Using directives should be placed correctly
 dotnet_diagnostic.SA1200.severity = none
 
@@ -173,6 +188,9 @@ dotnet_diagnostic.SA1647.severity = none
 dotnet_diagnostic.SA1648.severity = none
 dotnet_diagnostic.SA1649.severity = none
 dotnet_diagnostic.SA1650.severity = none
+
+# RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
+dotnet_diagnostic.RCS1139.severity = none
 
 # SA1402: File may only contain single type (disabled - multiple types per file is OK)
 dotnet_diagnostic.SA1402.severity = none

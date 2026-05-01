@@ -34,7 +34,7 @@ namespace Zipper
 
             // Pre-compute the extracted text content selection once, outside the loop
             var extractedTextContent = request.WithText
-                ? (request.FileType.ToLowerInvariant() == "eml"
+                ? (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase)
                     ? PlaceholderFiles.EmlExtractedText
                     : PlaceholderFiles.ExtractedText)
                 : null;

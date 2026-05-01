@@ -58,6 +58,7 @@ namespace Zipper
         /// <returns>EmailTemplate tailored to the context.</returns>
         public static EmailTemplate GetContextualTemplate(EmailContext context)
         {
+            ArgumentNullException.ThrowIfNull(context);
             var baseTemplate = GetContextualBaseTemplate(context);
 
             return new EmailTemplate
@@ -85,6 +86,7 @@ namespace Zipper
 
         public static string GenerateEmailAddress(int index, string type)
         {
+            ArgumentNullException.ThrowIfNull(type);
             var domain = EmailDomains[index % EmailDomains.Length];
             var userType = type.ToLowerInvariant();
 

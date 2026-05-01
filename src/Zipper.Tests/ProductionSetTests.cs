@@ -355,4 +355,88 @@ public class ProductionSetTests : IDisposable
             },
         };
     }
+
+    [Fact]
+    public async Task ProductionSet_FileCountOne_CreatesSingleFile()
+    {
+        var request = this.CreateTestRequest(count: 1);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        Assert.Equal(1, result.TotalDocuments);
+        Assert.Equal(1, result.VolumeCount);
+
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.*", SearchOption.AllDirectories);
+        Assert.Single(nativeFiles);
+    }
+
+    [Fact]
+    public async Task ProductionSet_VolumeSizeOne_EveryFileInOwnVolume()
+    {
+        var request = this.CreateTestRequest(count: 5, volumeSize: 1);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        Assert.Equal(5, result.VolumeCount);
+
+        var volDirs = Directory.GetDirectories(Path.Combine(result.ProductionPath, "NATIVES"));
+        Assert.Equal(5, volDirs.Length);
+    }
+
+    [Fact]
+    public async Task ProductionSet_VolumeSizeExceedsCount_SingleVolume()
+    {
+        var request = this.CreateTestRequest(count: 5, volumeSize: 100);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        Assert.Equal(1, result.VolumeCount);
+
+        var volDirs = Directory.GetDirectories(Path.Combine(result.ProductionPath, "NATIVES"));
+        Assert.Single(volDirs);
+    }
+
+    [Theory]
+    [InlineData("docx")]
+    [InlineData("xlsx")]
+    public async Task ProductionSet_WithOfficeTypes_CreatesNativeFiles(string fileType)
+    {
+        var request = this.CreateTestRequest(count: 3, fileType: fileType);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), $"*.{fileType}", SearchOption.AllDirectories);
+        Assert.Equal(3, nativeFiles.Length);
+
+        foreach (var file in nativeFiles)
+        {
+            var info = new FileInfo(file);
+            Assert.True(info.Length > 0);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithTiff_CreatesNativeFiles()
+    {
+        var request = this.CreateTestRequest(count: 3, fileType: "tiff");
+        request.TiffPageRange = (1, 5);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.tiff", SearchOption.AllDirectories);
+        Assert.Equal(3, nativeFiles.Length);
+
+        foreach (var file in nativeFiles)
+        {
+            var info = new FileInfo(file);
+            Assert.True(info.Length > 0);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithCustomEncoding_ProducesValidDat()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Encoding = "UTF-16";
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.Encoding.Unicode);
+        Assert.Contains("DOCID", datContent);
+        Assert.Equal(4, datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
+    }
 }

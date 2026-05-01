@@ -277,5 +277,174 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public async Task GenerateFilesAsync_FileCountZero_ThrowsArgumentException()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using var generator = new ParallelFileGenerator();
+                var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+                    generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 0,
+                        FileType = "pdf",
+                        Folders = 1,
+                    }));
+
+                Assert.Contains("File count must be positive", ex.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_FileCountOne_GeneratesSingleFile()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using var generator = new ParallelFileGenerator();
+                var result = await generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = "pdf",
+                    Folders = 1,
+                });
+
+                Assert.Equal(1, result.FilesGenerated);
+
+                using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
+                Assert.Single(archive.Entries);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_UnknownFileType_ThrowsInvalidOperationException()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using var generator = new ParallelFileGenerator();
+                var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                    generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 5,
+                        FileType = "unknown",
+                        Folders = 1,
+                    }));
+
+                Assert.Contains("Unknown file type", ex.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_ConcurrencyZero_UsesDefaultConcurrency()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using var generator = new ParallelFileGenerator();
+                var result = await generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 10,
+                    FileType = "pdf",
+                    Folders = 1,
+                    Concurrency = 0,
+                });
+
+                Assert.Equal(10, result.FilesGenerated);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_ConcurrencyExceedsFileCount_WorksCorrectly()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using var generator = new ParallelFileGenerator();
+                var result = await generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = outputPath,
+                    FileCount = 3,
+                    FileType = "pdf",
+                    Folders = 1,
+                    Concurrency = 10,
+                });
+
+                Assert.Equal(3, result.FilesGenerated);
+
+                using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
+                Assert.Equal(3, archive.Entries.Count);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_NullOutputPath_ThrowsArgumentNullException()
+        {
+            using var generator = new ParallelFileGenerator();
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+                generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    OutputPath = null!,
+                    FileCount = 5,
+                    FileType = "pdf",
+                    Folders = 1,
+                }));
+        }
     }
 }

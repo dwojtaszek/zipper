@@ -1,19 +1,11 @@
 using System.IO.Compression;
 using System.Threading.Channels;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Zipper.Tests
 {
     public class ZipArchiveServiceTests
     {
-        private readonly ITestOutputHelper output;
-
-        public ZipArchiveServiceTests(ITestOutputHelper output)
-        {
-            this.output = output;
-        }
-
         [Fact]
         public async Task CreateArchiveAsync_WithBasicFiles_CreatesValidArchive()
         {

@@ -199,15 +199,14 @@ public class DataGeneratorTests
             var emailToValue = row["EMAILTO"];
             if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(delimiter))
             {
-                // Found a multi-value - verify it uses the right delimiter
                 Assert.Contains(delimiter, emailToValue);
                 var parts = emailToValue.Split(delimiter);
-                Assert.True(parts.Length >= 2, "Multi-value should have at least 2 values");
-                return; // Test passed
+                Assert.True(parts.Length >= 2);
+                return;
             }
         }
 
-        // It's okay if we never find a multi-value in 100 iterations (random)
+        Assert.Fail("No multi-value column found in 100 iterations with seed 42");
     }
 
     /// <summary>

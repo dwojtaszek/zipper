@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Zipper
 {
-    public class Program
+    public static class Program
     {
         public static async Task<int> Main(string[] args)
         {

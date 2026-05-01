@@ -69,6 +69,7 @@ public static class ColumnProfileLoader
     /// <exception cref="InvalidOperationException">If validation fails.</exception>
     public static void Validate(ColumnProfile profile)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         if (string.IsNullOrWhiteSpace(profile.Name))
         {
             throw new InvalidOperationException("Column profile must have a name.");

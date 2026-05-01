@@ -8,23 +8,25 @@ namespace Zipper
     /// </summary>
     public static class PerformanceBenchmarkRunner
     {
-        public static async Task RunBenchmarks()
+        public static async Task RunBenchmarks(TextWriter? writer = null)
         {
-            Console.WriteLine("=== Performance Benchmark Suite ===");
-            Console.WriteLine();
+            writer ??= Console.Out;
 
-            await BenchmarkParallelVsSequential();
-            await BenchmarkMemoryPooling();
-            await BenchmarkScalability();
-            await BenchmarkAllocation();
+            await writer.WriteLineAsync("=== Performance Benchmark Suite ===");
+            await writer.WriteLineAsync();
 
-            Console.WriteLine("=== Benchmark Suite Complete ===");
+            await BenchmarkParallelVsSequential(writer);
+            await BenchmarkMemoryPooling(writer);
+            await BenchmarkScalability(writer);
+            await BenchmarkAllocation(writer);
+
+            await writer.WriteLineAsync("=== Benchmark Suite Complete ===");
         }
 
-        private static async Task BenchmarkAllocation()
+        private static async Task BenchmarkAllocation(TextWriter writer)
         {
-            Console.WriteLine("4. Allocation Impact");
-            Console.WriteLine("===================");
+            await writer.WriteLineAsync("4. Allocation Impact");
+            await writer.WriteLineAsync("===================");
 
             const int fileCount = 1000;
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
@@ -59,22 +61,22 @@ namespace Zipper
                 var totalAllocated = allocatedAfter - allocatedBefore;
                 var bytesPerFile = totalAllocated / fileCount;
 
-                Console.WriteLine($"  Files Generated: {fileCount}");
-                Console.WriteLine($"  Total Allocated: {totalAllocated:N0} bytes");
-                Console.WriteLine($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
+                await writer.WriteLineAsync($"  Files Generated: {fileCount}");
+                await writer.WriteLineAsync($"  Total Allocated: {totalAllocated:N0} bytes");
+                await writer.WriteLineAsync($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
             }
             finally
             {
                 CleanupDirectory(outputPath);
             }
 
-            Console.WriteLine();
+            await writer.WriteLineAsync();
         }
 
-        private static async Task BenchmarkParallelVsSequential()
+        private static async Task BenchmarkParallelVsSequential(TextWriter writer)
         {
-            Console.WriteLine("1. Parallel vs Sequential Generation");
-            Console.WriteLine("=====================================");
+            await writer.WriteLineAsync("1. Parallel vs Sequential Generation");
+            await writer.WriteLineAsync("=====================================");
 
             const int fileCount = 500;
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
@@ -111,10 +113,10 @@ namespace Zipper
 
                 var speedup = (double)sequentialTime / parallelTime;
 
-                Console.WriteLine($"  Sequential: {sequentialTime}ms");
-                Console.WriteLine($"  Parallel:   {parallelTime}ms");
-                Console.WriteLine($"  Speedup:    {speedup:F2}x");
-                Console.WriteLine($"  Status:     {(speedup >= 1.0 ? "✓ PASS" : "✗ FAIL")}");
+                await writer.WriteLineAsync($"  Sequential: {sequentialTime}ms");
+                await writer.WriteLineAsync($"  Parallel:   {parallelTime}ms");
+                await writer.WriteLineAsync($"  Speedup:    {speedup:F2}x");
+                await writer.WriteLineAsync($"  Status:     {(speedup >= 1.0 ? "✓ PASS" : "✗ FAIL")}");
             }
             finally
             {
@@ -122,13 +124,13 @@ namespace Zipper
                 CleanupDirectory(outputPath2);
             }
 
-            Console.WriteLine();
+            await writer.WriteLineAsync();
         }
 
-        private static Task BenchmarkMemoryPooling()
+        private static async Task BenchmarkMemoryPooling(TextWriter writer)
         {
-            Console.WriteLine("2. Memory Pool Performance");
-            Console.WriteLine("===========================");
+            await writer.WriteLineAsync("2. Memory Pool Performance");
+            await writer.WriteLineAsync("===========================");
 
             const int iterations = 50;
             const int bufferSize = 2 * 1024 * 1024; // 2MB
@@ -176,21 +178,19 @@ namespace Zipper
             var timeSpeedup = (double)timeWithoutPool / timeWithPool;
             var memoryReduction = (double)(memoryAfterWithoutPool - memoryAfterWithPool) / memoryAfterWithoutPool * 100;
 
-            Console.WriteLine($"  Without Pool: {timeWithoutPool}ms, {memoryAfterWithoutPool:N0} bytes");
-            Console.WriteLine($"  With Pool:    {timeWithPool}ms, {memoryAfterWithPool:N0} bytes");
-            Console.WriteLine($"  Time Speedup: {timeSpeedup:F2}x");
-            Console.WriteLine($"  Memory Reduction: {memoryReduction:F1}%");
-            Console.WriteLine($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
+            await writer.WriteLineAsync($"  Without Pool: {timeWithoutPool}ms, {memoryAfterWithoutPool:N0} bytes");
+            await writer.WriteLineAsync($"  With Pool:    {timeWithPool}ms, {memoryAfterWithPool:N0} bytes");
+            await writer.WriteLineAsync($"  Time Speedup: {timeSpeedup:F2}x");
+            await writer.WriteLineAsync($"  Memory Reduction: {memoryReduction:F1}%");
+            await writer.WriteLineAsync($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
 
-            Console.WriteLine();
-
-            return Task.CompletedTask;
+            await writer.WriteLineAsync();
         }
 
-        private static async Task BenchmarkScalability()
+        private static async Task BenchmarkScalability(TextWriter writer)
         {
-            Console.WriteLine("3. Scalability Test");
-            Console.WriteLine("===================");
+            await writer.WriteLineAsync("3. Scalability Test");
+            await writer.WriteLineAsync("===================");
 
             var fileCounts = new[] { 100, 500, 1000, 2000 };
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
@@ -223,7 +223,7 @@ namespace Zipper
                     var throughput = result.FilesPerSecond;
                     var avgTimePerFile = sw.ElapsedMilliseconds / (double)fileCount;
 
-                    Console.WriteLine($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file");
+                    await writer.WriteLineAsync($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file");
                 }
                 finally
                 {
@@ -231,8 +231,8 @@ namespace Zipper
                 }
             }
 
-            Console.WriteLine("  Status: ✓ PASS (scalability verified)");
-            Console.WriteLine();
+            await writer.WriteLineAsync("  Status: ✓ PASS (scalability verified)");
+            await writer.WriteLineAsync();
         }
 
         private static Task GenerateSequentialFiles(long count, string outputPath)
