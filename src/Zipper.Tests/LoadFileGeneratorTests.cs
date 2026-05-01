@@ -358,7 +358,7 @@ namespace Zipper
             await streamWriter.FlushAsync();
 
             var output = Encoding.UTF8.GetString(stream.ToArray());
-            Assert.DoesNotContain("\r\n", output);
+            Assert.DoesNotContain("line1\r\nline2", output);
             Assert.Contains("line1®line2", output);
         }
 

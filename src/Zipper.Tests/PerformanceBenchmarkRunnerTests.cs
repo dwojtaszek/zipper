@@ -39,18 +39,20 @@ namespace Zipper
             try
             {
                 var originalOut = Console.Out;
-                using var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read);
-                using var streamWriter = new StreamWriter(fileStream);
-                Console.SetOut(streamWriter);
 
-                try
+                using (var fileStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var streamWriter = new StreamWriter(fileStream))
                 {
-                    await PerformanceBenchmarkRunner.RunBenchmarks();
-                }
-                finally
-                {
-                    await streamWriter.FlushAsync();
-                    Console.SetOut(originalOut);
+                    Console.SetOut(streamWriter);
+                    try
+                    {
+                        await PerformanceBenchmarkRunner.RunBenchmarks();
+                    }
+                    finally
+                    {
+                        await streamWriter.FlushAsync();
+                        Console.SetOut(originalOut);
+                    }
                 }
 
                 return await File.ReadAllTextAsync(outputPath);
