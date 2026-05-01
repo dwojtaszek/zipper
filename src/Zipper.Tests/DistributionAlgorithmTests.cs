@@ -194,9 +194,44 @@ namespace Zipper.Tests
         }
 
         [Theory]
-        [InlineData(1.0, 0.5, 0.693)] // -ln(1-0.5)/1 = -ln(0.5) = 0.693
-        [InlineData(2.0, 0.5, 0.346)] // -ln(1-0.5)/2 = 0.693/2 = 0.346
-        [InlineData(1.0, 0.9, 2.303)] // -ln(1-0.9)/1 = -ln(0.1) = 2.303
+        [InlineData(10, 100, 1, 1)]
+        [InlineData(10, 100, 51, 4)]
+        [InlineData(10, 100, 100, 10)]
+        [InlineData(100, 100, 1, 1)]
+        public void CalculateFolder_WithLambda2_ReturnsExpectedFolders(int totalFolders, long totalFiles, long fileIndex, int expectedFolder)
+        {
+            // C2: with lambda = 2.0/totalFolders, verify known folder assignments
+            int result = ExponentialDistribution.CalculateFolder(fileIndex, totalFiles, totalFolders);
+            Assert.Equal(expectedFolder, result);
+        }
+
+        [Fact]
+        public void CalculateFolder_Lambda2_DistributionSpreadWithinExpectedRange()
+        {
+            // C2: with lambda = 2.0/totalFolders, verify no single folder
+            // gets more than 35% of files (would indicate concentration bug)
+            int totalFiles = 1000;
+            int totalFolders = 20;
+
+            var folderNumbers = Enumerable.Range(1, totalFiles)
+                .Select(i => ExponentialDistribution.CalculateFolder(i, totalFiles, totalFolders))
+                .GroupBy(f => f)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            int maxCount = folderNumbers.Values.Max();
+            double maxPercent = (double)maxCount / totalFiles;
+
+            Assert.True(
+                maxPercent < 0.35,
+                $"Folder {folderNumbers.First(kv => kv.Value == maxCount).Key} has {maxPercent:P1} of files, expected < 35%");
+        }
+
+        [Theory]
+        [InlineData(1.0, 0.5, 0.693)]
+        [InlineData(2.0, 0.5, 0.346)]
+        [InlineData(1.0, 0.9, 2.303)]
+        [InlineData(0.2, 0.5, 3.465)]
+        [InlineData(0.02, 0.5, 34.66)]
         public void CalculateExponential_ValidParameters_ReturnsCorrectValue(double lambda, double probability, double expectedApprox)
         {
             // Act

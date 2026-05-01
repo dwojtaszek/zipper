@@ -238,5 +238,44 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public async Task GenerateFilesAsync_InvalidFolders_PropagatesException()
+        {
+            // B1 regression: exception inside CreateWorkChannel's Task.Run must propagate
+            // via writer.Complete(ex), not hang the pipeline. Folders=0 triggers
+            // ArgumentOutOfRangeException in FileDistributionHelper.GetFolderNumber.
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                using (var generator = new ParallelFileGenerator())
+                {
+                    var task = generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 10,
+                        FileType = "pdf",
+                        Folders = 0,
+                        Concurrency = 2,
+                    });
+
+                    var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
+                    Assert.True(completed, "GenerateFilesAsync did not complete within timeout (exception was swallowed, pipeline deadlocked)");
+
+                    var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => task);
+                    Assert.Equal("totalFolders", ex.ParamName);
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
     }
 }

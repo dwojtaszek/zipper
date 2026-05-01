@@ -27,5 +27,5 @@ TODO.md
 # the manifest is .config/dotnet-tools.json which IS committed)
 .dotnet-tools/
 
-
-
+# Planning artifacts
+.planning/

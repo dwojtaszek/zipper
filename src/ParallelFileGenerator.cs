@@ -86,18 +86,26 @@ namespace Zipper
                 // Wait for all producers to complete, wrapped in a task that ensures completion
                 var allProducersTask = Task.WhenAll(producerTasks);
 
+                Exception? producerException = null;
                 try
                 {
                     await allProducersTask;
                 }
+                catch (Exception ex)
+                {
+                    // Capture exception — must await consumer before rethrowing
+                    producerException = ex;
+                }
                 finally
                 {
-                    // Signal that production is done, even if producers fail
-                    resultChannel.Writer.Complete(allProducersTask.Exception);
+                    // Signal production done so consumer can drain and exit
+                    resultChannel.Writer.Complete(null);
                 }
 
-                // Wait for the consumer to finish writing the archive
+                // Always wait for consumer (releases zip file handles)
                 var actualLoadFilePath = await consumerTask;
+
+                RethrowIfNotNull(producerException);
 
                 this.performanceMonitor.FinalizeProgress();
                 var performanceMetrics = this.performanceMonitor.Stop();
@@ -235,41 +243,8 @@ namespace Zipper
 
             var totalSize = fileContent.Length + effectivePadding;
 
-            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
-            if (memoryOwner == null)
-            {
-                // Fallback to direct allocation for very large files, cast is now safe due to the cap above
-                var data = new byte[(int)totalSize];
-                Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
+            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize))!;
 
-                if (paddingPerFile > 0)
-                {
-                    var padding = new byte[Math.Min(paddingPerFile, 1024 * 1024)]; // Max 1MB padding chunks
-                    RandomNumberGenerator.Fill(padding);
-
-                    int offset = fileContent.Length;
-                    long remaining = paddingPerFile;
-                    while (remaining > 0)
-                    {
-                        int toCopy = (int)Math.Min(remaining, padding.Length);
-                        Buffer.BlockCopy(padding, 0, data, offset, toCopy);
-                        offset += toCopy;
-                        remaining -= toCopy;
-                    }
-                }
-
-                return new FileData
-                {
-                    WorkItem = workItem,
-                    Data = data,
-                    DataLength = data.Length,
-                    Attachment = attachment,
-                    PageCount = pageCount,
-                    EmailTemplate = emailTemplate,
-                };
-            }
-
-            // Use pooled memory
             fileContent.CopyTo(memoryOwner.Memory.Span);
 
             if (paddingPerFile > 0)
@@ -326,6 +301,14 @@ namespace Zipper
         public void Dispose()
         {
             this.memoryPoolManager?.Dispose();
+        }
+
+        private static void RethrowIfNotNull(Exception? ex)
+        {
+            if (ex is not null)
+            {
+                throw ex;
+            }
         }
     }
 
