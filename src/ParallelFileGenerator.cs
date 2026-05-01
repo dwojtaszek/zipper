@@ -86,18 +86,29 @@ namespace Zipper
                 // Wait for all producers to complete, wrapped in a task that ensures completion
                 var allProducersTask = Task.WhenAll(producerTasks);
 
+                Exception? producerException = null;
                 try
                 {
                     await allProducersTask;
                 }
+                catch (Exception ex)
+                {
+                    // Capture exception — must await consumer before rethrowing
+                    producerException = ex;
+                }
                 finally
                 {
                     // Signal that production is done, even if producers fail
-                    resultChannel.Writer.Complete(allProducersTask.Exception);
+                    resultChannel.Writer.Complete(producerException);
                 }
 
-                // Wait for the consumer to finish writing the archive
+                // Always wait for consumer (releases zip file handles)
                 var actualLoadFilePath = await consumerTask;
+
+                if (producerException is not null)
+                {
+                    throw producerException;
+                }
 
                 this.performanceMonitor.FinalizeProgress();
                 var performanceMetrics = this.performanceMonitor.Stop();
