@@ -189,6 +189,9 @@ dotnet_diagnostic.SA1648.severity = none
 dotnet_diagnostic.SA1649.severity = none
 dotnet_diagnostic.SA1650.severity = none
 
+# RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
+dotnet_diagnostic.RCS1139.severity = none
+
 # SA1402: File may only contain single type (disabled - multiple types per file is OK)
 dotnet_diagnostic.SA1402.severity = none
 

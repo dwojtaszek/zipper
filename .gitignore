@@ -10,6 +10,10 @@ in-memoria.db
 # gemini-cli settings
 .gemini/
 
+# AI agent directories
+.factory/
+.qwen/
+
 # GitHub App credentials
 gha-creds-*.jsonspec-kit/
 
