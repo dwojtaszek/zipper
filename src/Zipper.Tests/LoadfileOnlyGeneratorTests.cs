@@ -299,7 +299,7 @@ namespace Zipper
 
             // With 100% chaos, every line should have an anomaly (header + 20 data rows = 21 lines)
             var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
-            Assert.True(totalAnomalies > 0, "Expected at least one anomaly with 100% chaos rate");
+            Assert.Equal(1 + request.FileCount, totalAnomalies);
         }
 
         [Fact]

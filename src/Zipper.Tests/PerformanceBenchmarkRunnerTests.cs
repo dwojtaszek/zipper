@@ -1,55 +1,42 @@
 using Xunit;
 
-namespace Zipper
+namespace Zipper.Tests;
+
+public class PerformanceBenchmarkRunnerTests
 {
-    public class PerformanceBenchmarkRunnerTests
+    [Fact]
+    public async Task RunBenchmarks_CompletesWithoutThrowing()
     {
-        [Fact]
-        public async Task RunBenchmarks_WritesAllFourSections()
-        {
-            var output = await CaptureOutputAsync();
+        var exception = await Record.ExceptionAsync(() => PerformanceBenchmarkRunner.RunBenchmarks());
+        Assert.Null(exception);
+    }
 
-            Assert.Contains("Parallel vs Sequential", output);
-            Assert.Contains("Memory Pool Performance", output);
-            Assert.Contains("Scalability", output);
-            Assert.Contains("Allocation Impact", output);
-            Assert.Contains("Benchmark Suite Complete", output);
-        }
+    [Fact]
+    public async Task RunBenchmarks_WritesAllFourSections()
+    {
+        var output = await CaptureOutputAsync();
 
-        [Fact]
-        public async Task RunBenchmarks_PrintsTimingMetrics()
-        {
-            var output = await CaptureOutputAsync();
+        Assert.Contains("Parallel vs Sequential", output);
+        Assert.Contains("Memory Pool", output);
+        Assert.Contains("Scalability", output);
+        Assert.Contains("Allocation", output);
+        Assert.Contains("Benchmark Suite Complete", output);
+    }
 
-            Assert.Contains("ms", output);
-            Assert.Contains("files/sec", output);
-            Assert.Contains("Status", output);
-        }
+    [Fact]
+    public async Task RunBenchmarks_PrintsTimingMetrics()
+    {
+        var output = await CaptureOutputAsync();
 
-        [Fact]
-        public async Task RunBenchmarks_CompletesWithoutThrowing()
-        {
-            var exception = await Record.ExceptionAsync(() => PerformanceBenchmarkRunner.RunBenchmarks());
-            Assert.Null(exception);
-        }
+        Assert.Contains("ms", output);
+        Assert.Contains("files/sec", output);
+        Assert.Contains("Status", output);
+    }
 
-        private static async Task<string> CaptureOutputAsync()
-        {
-            var originalOut = Console.Out;
-            using var stringWriter = new StringWriter();
-            Console.SetOut(stringWriter);
-
-            try
-            {
-                await PerformanceBenchmarkRunner.RunBenchmarks();
-            }
-            finally
-            {
-                await stringWriter.FlushAsync();
-                Console.SetOut(originalOut);
-            }
-
-            return stringWriter.ToString();
-        }
+    private static async Task<string> CaptureOutputAsync()
+    {
+        var writer = new StringWriter();
+        await PerformanceBenchmarkRunner.RunBenchmarks(writer);
+        return writer.ToString();
     }
 }

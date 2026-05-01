@@ -167,7 +167,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithPathTooLong_ReturnsNull()
+        public void ValidateAndCreateDirectory_WithPathTooLong_DoesNotThrow()
         {
             // Arrange - Create a path longer than max path length
             string longPath = Path.Combine(Path.GetTempPath(), new string('a', 300));
@@ -298,8 +298,8 @@ namespace Zipper
         [InlineData("パス")]
         public void IsPathSafe_UnicodePath_ReturnsTrue(string pathComponent)
         {
-            var exception = Record.Exception(() => PathValidator.IsPathSafe(pathComponent));
-            Assert.Null(exception);
+            var result = PathValidator.IsPathSafe(pathComponent);
+            Assert.True(result);
         }
 
         [Fact]
