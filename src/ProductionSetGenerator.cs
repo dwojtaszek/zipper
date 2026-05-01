@@ -52,7 +52,9 @@ internal static class ProductionSetGenerator
         }
 
         var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
-        var placeholder = PlaceholderFiles.GetContent(request.FileType.ToLowerInvariant());
+
+        var fileGenerator = FileGeneratorFactory.Create(request.FileType, request)
+            ?? throw new InvalidOperationException($"Unknown file type: {request.FileType}");
 
         // Generate files and collect records for load files
         var datRecords = new List<ProductionRecord>();
@@ -71,28 +73,16 @@ internal static class ProductionSetGenerator
 
             // Write native file
             var nativeFullPath = Path.Combine(productionPath, nativeRelPath);
-            byte[] nativeContent;
-            if (OfficeFileGenerator.IsOfficeFormat(request.FileType))
+            var workItem = new FileWorkItem
             {
-                var workItem = new FileWorkItem
-                {
-                    Index = i + 1,
-                    FolderNumber = volumeIndex,
-                    FolderName = volName,
-                    FileName = $"{batesNumber}.{nativeExt}",
-                    FilePathInZip = nativeRelPath,
-                };
-                nativeContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
-            }
-            else if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
-            {
-                var emlResult = EmlGenerationService.GenerateEmlContent((int)(i + 1), request.AttachmentRate);
-                nativeContent = emlResult.Content;
-            }
-            else
-            {
-                nativeContent = placeholder;
-            }
+                Index = i + 1,
+                FolderNumber = volumeIndex,
+                FolderName = volName,
+                FileName = $"{batesNumber}.{nativeExt}",
+                FilePathInZip = nativeRelPath,
+            };
+            var generated = fileGenerator.Generate(workItem, request);
+            var nativeContent = generated.Content;
 
             await File.WriteAllBytesAsync(nativeFullPath, nativeContent);
 

@@ -40,9 +40,11 @@ namespace Zipper
                     request.Concurrency = PerformanceConstants.DefaultConcurrency;
                 }
 
+                var fileGenerator = FileGeneratorFactory.Create(request.FileType, request)
+                    ?? throw new InvalidOperationException($"Unknown file type: {request.FileType}");
+
                 // For EML files, use sequential processing to avoid ZIP entry creation conflicts
-                // when attachments and text extraction are enabled
-                if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase) && (request.WithText || request.AttachmentRate > 0))
+                if (fileGenerator.RequiresSequentialProcessing(request))
                 {
                     request.Concurrency = 1; // Force sequential processing
                 }
@@ -54,20 +56,15 @@ namespace Zipper
                 var loadFileName = $"{baseFileName}.dat";
                 var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
 
-                var placeholderContent = PlaceholderFiles.GetContent(request.FileType.ToLowerInvariant());
-
-                // Allow Office formats and EML to have empty placeholder content (generated dynamically)
-                if (placeholderContent.Length == 0 &&
-                    !string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase) &&
-                    !OfficeFileGenerator.IsOfficeFormat(request.FileType))
-                {
-                    throw new InvalidOperationException($"Unknown file type: {request.FileType}");
-                }
+                var placeholderContent = fileGenerator.IsPlaceholderBased
+                    ? PlaceholderFiles.GetContent(request.FileType.ToLowerInvariant())
+                    : Array.Empty<byte>();
 
                 long paddingPerFile = 0;
                 if (request.TargetZipSize.HasValue)
                 {
-                    paddingPerFile = this.CalculatePaddingPerFile(request.TargetZipSize.Value, placeholderContent.Length, request.FileCount, request.WithText);
+                    var baseSize = placeholderContent.Length > 0 ? placeholderContent.Length : 1024;
+                    paddingPerFile = this.CalculatePaddingPerFile(request.TargetZipSize.Value, baseSize, request.FileCount, request.WithText);
                 }
 
                 // Create channels for work distribution
@@ -83,7 +80,7 @@ namespace Zipper
                 // Generate files in parallel (producers)
                 using var semaphore = new SemaphoreSlim(request.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, placeholderContent, paddingPerFile, resultChannel.Writer, request))
+                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -169,7 +166,7 @@ namespace Zipper
             return channel.Reader;
         }
 
-        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, byte[] placeholderContent, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request)
+        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator)
         {
             long filesProcessed = 0;
 
@@ -178,7 +175,7 @@ namespace Zipper
                 await semaphore.WaitAsync();
                 try
                 {
-                    var fileData = this.GenerateFileData(workItem, placeholderContent, paddingPerFile, request);
+                    var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
                     await writer.WriteAsync(fileData);
 
                     filesProcessed++;
@@ -201,39 +198,13 @@ namespace Zipper
             }
         }
 
-        private FileData GenerateFileData(FileWorkItem workItem, byte[] placeholderContent, long paddingPerFile, FileGenerationRequest request)
+        private FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
         {
-            byte[] fileContent;
-            (string filename, byte[] content)? attachment = null;
-            int pageCount = 1;
-            EmailTemplate? emailTemplate = null;
-
-            if (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase))
-            {
-                // Use the new EmlGenerationService for clean separation of concerns
-                var emlResult = EmlGenerationService.GenerateEmlContent(
-                    (int)workItem.Index,
-                    request.AttachmentRate);
-
-                fileContent = emlResult.Content;
-                attachment = emlResult.Attachment;
-                emailTemplate = emlResult.Template;
-            }
-            else if (OfficeFileGenerator.IsOfficeFormat(request.FileType))
-            {
-                // Generate Office format documents
-                fileContent = OfficeFileGenerator.GenerateContent(request.FileType, workItem);
-            }
-            else if (string.Equals(request.FileType, "tiff", StringComparison.OrdinalIgnoreCase) && request.TiffPageRange.HasValue)
-            {
-                // Generate multipage TIFF
-                pageCount = TiffMultiPageGenerator.GetPageCount(request.TiffPageRange, request.Seed, workItem.Index);
-                fileContent = TiffMultiPageGenerator.Generate(pageCount, workItem);
-            }
-            else
-            {
-                fileContent = placeholderContent;
-            }
+            var generated = fileGenerator.Generate(workItem, request);
+            var fileContent = generated.Content;
+            var attachment = generated.Attachment;
+            var pageCount = generated.PageCount;
+            var emailTemplate = generated.EmailTemplate;
 
             var effectivePadding = paddingPerFile;
 
