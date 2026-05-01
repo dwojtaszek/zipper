@@ -7,7 +7,7 @@ public class PerformanceBenchmarkRunnerTests
     [Fact]
     public async Task RunBenchmarks_CompletesWithoutThrowing()
     {
-        var exception = await Record.ExceptionAsync(() => PerformanceBenchmarkRunner.RunBenchmarks());
+        var exception = await Record.ExceptionAsync(() => PerformanceBenchmarkRunner.RunBenchmarks(new StringWriter()));
         Assert.Null(exception);
     }
 
