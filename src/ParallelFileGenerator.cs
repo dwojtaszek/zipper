@@ -98,8 +98,8 @@ namespace Zipper
                 }
                 finally
                 {
-                    // Signal that production is done, even if producers fail
-                    resultChannel.Writer.Complete(producerException);
+                    // Signal production done so consumer can drain and exit
+                    resultChannel.Writer.Complete(null);
                 }
 
                 // Always wait for consumer (releases zip file handles)
