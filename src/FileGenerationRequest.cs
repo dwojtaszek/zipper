@@ -1,233 +1,265 @@
+using Zipper.Config;
 using Zipper.Profiles;
 
 namespace Zipper
 {
-    /// <summary>
-    /// Represents a file generation request with all configuration options.
-    /// This object should not be mutated after it has been passed to the generator (e.g., `GenerateFilesAsync`)
-    /// as it is shared across multiple concurrent tasks.
     public class FileGenerationRequest
     {
-        /// <summary>
-        /// Gets or sets the output path.
-        /// </summary>
-        public string OutputPath { get; set; } = string.Empty;
+        public OutputConfig Output { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the file count.
-        /// </summary>
-        public long FileCount { get; set; }
+        public MetadataConfig Metadata { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the file type.
-        /// </summary>
-        public string FileType { get; set; } = string.Empty;
+        public LoadFileConfig LoadFile { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the number of folders.
-        /// </summary>
-        public int Folders { get; set; } = 1;
+        public DelimiterConfig Delimiters { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the concurrency level.
-        /// </summary>
-        public int Concurrency { get; set; } = PerformanceConstants.DefaultConcurrency;
+        public BatesNumberConfig? Bates { get; set; }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether to include metadata.
-        /// </summary>
-        public bool WithMetadata { get; set; }
+        public TiffConfig Tiff { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets a value indicating whether to include text files.
-        /// </summary>
-        public bool WithText { get; set; }
+        public ChaosConfig Chaos { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets the target zip size.
-        /// </summary>
-        public long? TargetZipSize { get; set; }
+        public ProductionConfig Production { get; set; } = new();
 
-        /// <summary>
-        /// Gets or sets a value indicating whether to include load file in archive.
-        /// </summary>
-        public bool IncludeLoadFile { get; set; }
+        public string OutputPath
+        {
+            get => this.Output.OutputPath;
+            set => this.Output = this.Output with { OutputPath = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the distribution type.
-        /// </summary>
-        public DistributionType Distribution { get; set; } = DistributionType.Proportional;
+        public long FileCount
+        {
+            get => this.Output.FileCount;
+            set => this.Output = this.Output with { FileCount = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the encoding.
-        /// </summary>
-        public string Encoding { get; set; } = "UTF-8";
+        public string FileType
+        {
+            get => this.Output.FileType;
+            set => this.Output = this.Output with { FileType = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the attachment rate percentage.
-        /// </summary>
-        public int AttachmentRate { get; set; } = 0;
+        public int Folders
+        {
+            get => this.Output.Folders;
+            set => this.Output = this.Output with { Folders = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the load file format.
-        /// </summary>
-        public LoadFileFormat LoadFileFormat { get; set; } = LoadFileFormat.Dat;
+        public int Concurrency
+        {
+            get => this.Output.Concurrency;
+            set => this.Output = this.Output with { Concurrency = value };
+        }
 
-        /// <summary>
-        /// Gets or sets multiple load file formats to generate simultaneously.
-        /// </summary>
-        public List<LoadFileFormat>? LoadFileFormats { get; set; }
+        public bool WithText
+        {
+            get => this.Output.WithText;
+            set => this.Output = this.Output with { WithText = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the column delimiter character for DAT files.
-        /// </summary>
-        public string ColumnDelimiter { get; set; } = "\u0014"; // ASCII 20
+        public long? TargetZipSize
+        {
+            get => this.Output.TargetZipSize;
+            set => this.Output = this.Output with { TargetZipSize = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the quote delimiter character for DAT files.
-        /// </summary>
-        public string QuoteDelimiter { get; set; } = "\u00fe"; // ASCII 254
+        public bool IncludeLoadFile
+        {
+            get => this.Output.IncludeLoadFile;
+            set => this.Output = this.Output with { IncludeLoadFile = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the newline replacement character for DAT files.
-        /// </summary>
-        public string NewlineDelimiter { get; set; } = "\u00ae"; // ASCII 174
+        public bool WithMetadata
+        {
+            get => this.Metadata.WithMetadata;
+            set => this.Metadata = this.Metadata with { WithMetadata = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the Bates number configuration.
-        /// </summary>
-        public BatesNumberConfig? BatesConfig { get; set; }
+        public ColumnProfile? ColumnProfile
+        {
+            get => this.Metadata.ColumnProfile;
+            set => this.Metadata = this.Metadata with { ColumnProfile = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the TIFF page range.
-        /// </summary>
-        public (int Min, int Max)? TiffPageRange { get; set; }
+        public int? Seed
+        {
+            get => this.Metadata.Seed;
+            set => this.Metadata = this.Metadata with { Seed = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the column profile for metadata generation.
-        /// </summary>
-        public ColumnProfile? ColumnProfile { get; set; }
+        public string? DateFormatOverride
+        {
+            get => this.Metadata.DateFormatOverride;
+            set => this.Metadata = this.Metadata with { DateFormatOverride = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the random seed for reproducible output.
-        /// </summary>
-        public int? Seed { get; set; }
+        public int? EmptyPercentageOverride
+        {
+            get => this.Metadata.EmptyPercentageOverride;
+            set => this.Metadata = this.Metadata with { EmptyPercentageOverride = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the date format override.
-        /// </summary>
-        public string? DateFormatOverride { get; set; }
+        public int? CustodianCountOverride
+        {
+            get => this.Metadata.CustodianCountOverride;
+            set => this.Metadata = this.Metadata with { CustodianCountOverride = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the empty percentage override.
-        /// </summary>
-        public int? EmptyPercentageOverride { get; set; }
+        public bool WithFamilies
+        {
+            get => this.Metadata.WithFamilies;
+            set => this.Metadata = this.Metadata with { WithFamilies = value };
+        }
 
-        /// <summary>
-        /// Gets or sets the custodian count override.
-        /// </summary>
-        public int? CustodianCountOverride { get; set; }
+        public LoadFileFormat LoadFileFormat
+        {
+            get => this.LoadFile.LoadFileFormat;
+            set => this.LoadFile = this.LoadFile with { LoadFileFormat = value };
+        }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether to generate family relationships.
-        /// </summary>
-        public bool WithFamilies { get; set; }
+        public List<LoadFileFormat>? LoadFileFormats
+        {
+            get => this.LoadFile.LoadFileFormats;
+            set => this.LoadFile = this.LoadFile with { LoadFileFormats = value };
+        }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether to run in loadfile-only mode (no ZIP/native files).
-        /// </summary>
+        public string Encoding
+        {
+            get => this.LoadFile.Encoding;
+            set => this.LoadFile = this.LoadFile with { Encoding = value };
+        }
+
+        public DistributionType Distribution
+        {
+            get => this.LoadFile.Distribution;
+            set => this.LoadFile = this.LoadFile with { Distribution = value };
+        }
+
+        public int AttachmentRate
+        {
+            get => this.LoadFile.AttachmentRate;
+            set => this.LoadFile = this.LoadFile with { AttachmentRate = value };
+        }
+
+        public string ColumnDelimiter
+        {
+            get => this.Delimiters.ColumnDelimiter;
+            set => this.Delimiters = this.Delimiters with { ColumnDelimiter = value };
+        }
+
+        public string QuoteDelimiter
+        {
+            get => this.Delimiters.QuoteDelimiter;
+            set => this.Delimiters = this.Delimiters with { QuoteDelimiter = value };
+        }
+
+        public string NewlineDelimiter
+        {
+            get => this.Delimiters.NewlineDelimiter;
+            set => this.Delimiters = this.Delimiters with { NewlineDelimiter = value };
+        }
+
+        public string MultiValueDelimiter
+        {
+            get => this.Delimiters.MultiValueDelimiter;
+            set => this.Delimiters = this.Delimiters with { MultiValueDelimiter = value };
+        }
+
+        public string NestedValueDelimiter
+        {
+            get => this.Delimiters.NestedValueDelimiter;
+            set => this.Delimiters = this.Delimiters with { NestedValueDelimiter = value };
+        }
+
+        public string EndOfLine
+        {
+            get => this.Delimiters.EndOfLine;
+            set => this.Delimiters = this.Delimiters with { EndOfLine = value };
+        }
+
+        public BatesNumberConfig? BatesConfig
+        {
+            get => this.Bates;
+            set => this.Bates = value;
+        }
+
+        public (int Min, int Max)? TiffPageRange
+        {
+            get => this.Tiff.PageRange;
+            set => this.Tiff = this.Tiff with { PageRange = value };
+        }
+
+        public bool ChaosMode
+        {
+            get => this.Chaos.ChaosMode;
+            set => this.Chaos = this.Chaos with { ChaosMode = value };
+        }
+
+        public string? ChaosAmount
+        {
+            get => this.Chaos.ChaosAmount;
+            set => this.Chaos = this.Chaos with { ChaosAmount = value };
+        }
+
+        public string? ChaosTypes
+        {
+            get => this.Chaos.ChaosTypes;
+            set => this.Chaos = this.Chaos with { ChaosTypes = value };
+        }
+
+        public string? ChaosScenario
+        {
+            get => this.Chaos.ChaosScenario;
+            set => this.Chaos = this.Chaos with { ChaosScenario = value };
+        }
+
+        public bool ProductionSet
+        {
+            get => this.Production.ProductionSet;
+            set => this.Production = this.Production with { ProductionSet = value };
+        }
+
+        public bool ProductionZip
+        {
+            get => this.Production.ProductionZip;
+            set => this.Production = this.Production with { ProductionZip = value };
+        }
+
+        public int VolumeSize
+        {
+            get => this.Production.VolumeSize;
+            set => this.Production = this.Production with { VolumeSize = value };
+        }
+
         public bool LoadfileOnly { get; set; }
 
-        /// <summary>
-        /// Gets or sets the end-of-line format (CRLF, LF, CR).
-        /// </summary>
-        public string EndOfLine { get; set; } = "CRLF";
-
-        /// <summary>
-        /// Gets or sets the multi-value delimiter character.
-        /// </summary>
-        public string MultiValueDelimiter { get; set; } = ";"; // ASCII 59
-
-        /// <summary>
-        /// Gets or sets the nested-value delimiter character.
-        /// </summary>
-        public string NestedValueDelimiter { get; set; } = "\\"; // ASCII 92
-
-        /// <summary>
-        /// Gets or sets a value indicating whether chaos mode is enabled.
-        /// </summary>
-        public bool ChaosMode { get; set; }
-
-        /// <summary>
-        /// Gets or sets the chaos amount (percentage like "1%" or exact count like "500").
-        /// </summary>
-        public string? ChaosAmount { get; set; }
-
-        /// <summary>
-        /// Gets or sets the comma-separated list of chaos types to inject.
-        /// </summary>
-        public string? ChaosTypes { get; set; }
-
-        /// <summary>
-        /// Gets or sets the named chaos scenario (e.g., "structured-import-failures", "encoding-nightmare").
-        /// When set, resolves to predefined ChaosTypes and default ChaosAmount.
-        /// </summary>
-        public string? ChaosScenario { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether to generate a production set
-        /// with structured DATA/IMAGES/NATIVES/TEXT directories.
-        /// </summary>
-        public bool ProductionSet { get; set; }
-
-        /// <summary>
-        /// Gets or sets a value indicating whether to wrap the production set in a ZIP archive.
-        /// </summary>
-        public bool ProductionZip { get; set; }
-
-        /// <summary>
-        /// Gets or sets the maximum number of files per volume subfolder (default 5000).
-        /// </summary>
-        public int VolumeSize { get; set; } = 5000;
-
-        /// <summary>
-        /// Creates a shallow clone of this request so generators can adjust fields
-        /// (e.g., Concurrency, ChaosAmount) without mutating the original shared instance.
-        /// </summary>
         public FileGenerationRequest Clone()
         {
-            return (FileGenerationRequest)this.MemberwiseClone();
+            return new FileGenerationRequest
+            {
+                Output = this.Output,
+                Metadata = this.Metadata,
+                LoadFile = this.LoadFile,
+                Delimiters = this.Delimiters,
+                Bates = this.Bates,
+                Tiff = this.Tiff,
+                Chaos = this.Chaos,
+                Production = this.Production,
+                LoadfileOnly = this.LoadfileOnly,
+            };
         }
     }
 
-    /// <summary>
-    /// Represents the result of a file generation operation.
-    /// </summary>
     public class FileGenerationResult
     {
-        /// <summary>
-        /// Gets or sets the zip file path.
-        /// </summary>
         public string ZipFilePath { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Gets or sets the load file path.
-        /// </summary>
         public string LoadFilePath { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Gets or sets the number of files generated.
-        /// </summary>
         public long FilesGenerated { get; set; }
 
-        /// <summary>
-        /// Gets or sets the generation time.
-        /// </summary>
         public TimeSpan GenerationTime { get; set; }
 
-        /// <summary>
-        /// Gets or sets the files per second rate.
-        /// </summary>
         public double FilesPerSecond { get; set; }
     }
 }
