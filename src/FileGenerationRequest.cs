@@ -239,7 +239,12 @@ namespace Zipper
             {
                 Output = this.Output,
                 Metadata = this.Metadata,
-                LoadFile = this.LoadFile,
+                LoadFile = this.LoadFile with
+                {
+                    LoadFileFormats = this.LoadFile.LoadFileFormats is null
+                        ? null
+                        : new List<LoadFileFormat>(this.LoadFile.LoadFileFormats),
+                },
                 Delimiters = this.Delimiters,
                 Bates = this.Bates,
                 Tiff = this.Tiff,
