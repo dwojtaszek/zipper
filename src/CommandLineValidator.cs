@@ -20,7 +20,6 @@ namespace Zipper
 
             if (!CliValidator.Validate(parsedArgs))
             {
-                HelpTextGenerator.Show();
                 return null;
             }
 
