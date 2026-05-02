@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.Config;
 using Zipper.Profiles;
 
 namespace Zipper.Cli;
@@ -112,48 +113,69 @@ public static class RequestBuilder
 
         return new FileGenerationRequest
         {
-            OutputPath = parsed.OutputDirectory!.FullName,
-            FileCount = parsed.Count!.Value,
-            FileType = (parsed.FileType ?? "pdf").ToLower(),
-            Folders = parsed.Folders,
-            Concurrency = PerformanceConstants.DefaultConcurrency,
-            WithMetadata = parsed.WithMetadata,
-            WithText = parsed.WithText,
-            TargetZipSize = !string.IsNullOrEmpty(parsed.TargetZipSize) ? ParseSize(parsed.TargetZipSize!) : null,
-            IncludeLoadFile = parsed.IncludeLoadFile,
-            Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
-            Encoding = encodingName,
-            AttachmentRate = parsed.AttachmentRate,
-            LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
-            LoadFileFormats = multiFormats,
-            ColumnDelimiter = columnDelim,
-            QuoteDelimiter = quoteDelim,
-            NewlineDelimiter = newlineDelim,
-            MultiValueDelimiter = multiDelim,
-            NestedValueDelimiter = nestedDelim,
-            BatesConfig = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
+            Output = new OutputConfig
+            {
+                OutputPath = parsed.OutputDirectory!.FullName,
+                FileCount = parsed.Count!.Value,
+                FileType = (parsed.FileType ?? "pdf").ToLower(),
+                Folders = parsed.Folders,
+                Concurrency = PerformanceConstants.DefaultConcurrency,
+                WithText = parsed.WithText,
+                TargetZipSize = !string.IsNullOrEmpty(parsed.TargetZipSize) ? ParseSize(parsed.TargetZipSize!) : null,
+                IncludeLoadFile = parsed.IncludeLoadFile,
+            },
+            Metadata = new MetadataConfig
+            {
+                WithMetadata = parsed.WithMetadata,
+                ColumnProfile = profile,
+                Seed = parsed.Seed,
+                DateFormatOverride = parsed.DateFormat,
+                EmptyPercentageOverride = parsed.EmptyPercentage,
+                CustodianCountOverride = parsed.CustodianCount,
+                WithFamilies = parsed.WithFamilies,
+            },
+            LoadFile = new LoadFileConfig
+            {
+                LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
+                LoadFileFormats = multiFormats,
+                Encoding = encodingName,
+                Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
+                AttachmentRate = parsed.AttachmentRate,
+            },
+            Delimiters = new DelimiterConfig
+            {
+                ColumnDelimiter = columnDelim,
+                QuoteDelimiter = quoteDelim,
+                NewlineDelimiter = newlineDelim,
+                MultiValueDelimiter = multiDelim,
+                NestedValueDelimiter = nestedDelim,
+                EndOfLine = parsed.Eol ?? "CRLF",
+            },
+            Bates = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
             {
                 Prefix = parsed.BatesPrefix,
                 Start = parsed.BatesStart ?? 1,
                 Digits = parsed.BatesDigits ?? 8,
             }
             : null,
-            TiffPageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null,
-            ColumnProfile = profile,
-            Seed = parsed.Seed,
-            DateFormatOverride = parsed.DateFormat,
-            EmptyPercentageOverride = parsed.EmptyPercentage,
-            CustodianCountOverride = parsed.CustodianCount,
-            WithFamilies = parsed.WithFamilies,
+            Tiff = new TiffConfig
+            {
+                PageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null,
+            },
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = parsed.ChaosMode,
+                ChaosAmount = parsed.ChaosAmount,
+                ChaosTypes = parsed.ChaosTypes,
+                ChaosScenario = parsed.ChaosScenario,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = parsed.ProductionSet,
+                ProductionZip = parsed.ProductionZip,
+                VolumeSize = parsed.VolumeSize ?? 5000,
+            },
             LoadfileOnly = parsed.LoadfileOnly,
-            EndOfLine = parsed.Eol ?? "CRLF",
-            ChaosMode = parsed.ChaosMode,
-            ChaosAmount = parsed.ChaosAmount,
-            ChaosTypes = parsed.ChaosTypes,
-            ChaosScenario = parsed.ChaosScenario,
-            ProductionSet = parsed.ProductionSet,
-            ProductionZip = parsed.ProductionZip,
-            VolumeSize = parsed.VolumeSize ?? 5000,
         };
     }
 
