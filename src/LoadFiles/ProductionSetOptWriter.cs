@@ -12,7 +12,8 @@ internal class ProductionSetOptWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
+        var eol = GetEolString(request.EndOfLine);
+        await using var writer = CreateWriter(stream, request);
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
@@ -25,7 +26,7 @@ internal class ProductionSetOptWriter : LoadFileWriterBase
             var docBreak = "Y";
             var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
 
-            await writer.WriteLineAsync(line);
+            await writer.WriteAsync(line + eol);
         }
 
         await writer.FlushAsync();

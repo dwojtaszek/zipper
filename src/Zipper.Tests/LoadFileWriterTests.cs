@@ -633,6 +633,7 @@ namespace Zipper
                 FileCount = 5,
                 FileType = "pdf",
                 Seed = 42,
+                EndOfLine = "CRLF",
                 OutputPath = this.tempDir,
                 VolumeSize = 5000,
                 BatesConfig = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
@@ -669,6 +670,7 @@ namespace Zipper
             Assert.Contains("BATES_NUMBER", lines[0]);
             Assert.Contains("NATIVE_PATH", lines[0]);
             Assert.Contains("IMAGE_PATH", lines[0]);
+            Assert.Contains("\r\n", content);
         }
 
         [Fact]
@@ -679,6 +681,7 @@ namespace Zipper
                 FileCount = 3,
                 FileType = "pdf",
                 Seed = 42,
+                EndOfLine = "CRLF",
                 OutputPath = this.tempDir,
                 VolumeSize = 10,
                 BatesConfig = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 },
@@ -716,6 +719,8 @@ namespace Zipper
                 Assert.Contains(".tif", line);
                 Assert.Contains("VOL001", line);
             }
+
+            Assert.Contains("\r\n", content);
         }
 
         [Fact]

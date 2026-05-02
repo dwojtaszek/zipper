@@ -19,8 +19,6 @@ internal class LoadfileOnlyOptWriter : LoadFileWriterBase
 
         using var memStream = new MemoryStream();
 
-        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-
 #pragma warning disable S2245
         var random = request.Seed.HasValue ? new Random(request.Seed.Value + 1) : new Random();
 #pragma warning restore S2245

@@ -14,13 +14,13 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
     {
         var col = string.IsNullOrEmpty(request.ColumnDelimiter) ? "\u0014" : request.ColumnDelimiter;
         var quote = string.IsNullOrEmpty(request.QuoteDelimiter) ? "\u00fe" : request.QuoteDelimiter;
+        var eol = GetEolString(request.EndOfLine);
 
-        await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
+        await using var writer = CreateWriter(stream, request);
 
         // Header
         var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
-        var headerLine = string.Join(col, headers.Select(h => $"{quote}{h}{quote}"));
-        await writer.WriteLineAsync(headerLine);
+        await writer.WriteAsync(string.Join(col, headers.Select(h => $"{quote}{h}{quote}")) + eol);
 
         // Data rows
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
@@ -52,8 +52,7 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
                 fileData.DataLength.ToString(),
                 request.FileType.ToUpperInvariant(),
             };
-            var line = string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
-            await writer.WriteLineAsync(line);
+            await writer.WriteAsync(string.Join(col, fields.Select(f => $"{quote}{f}{quote}")) + eol);
         }
 
         await writer.FlushAsync();
