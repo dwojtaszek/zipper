@@ -23,7 +23,7 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
         using var memStream = new MemoryStream();
 
         // Build header
-        var header = BuildDatHeader(request, colDelim, quote, hasQuote);
+        var header = BuildDatHeader(colDelim, quote, hasQuote);
 
         // Apply chaos to header (line 1)
         header = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
@@ -45,7 +45,7 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
             long lineNumber = i + 1;
             string recordId = builder.GetControlNumber(i);
 
-            var line = BuildDatRow(i, recordId, request, colDelim, quote, hasQuote, builder);
+            var line = BuildDatRow(i, recordId, colDelim, quote, hasQuote, builder);
 
             line = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
 
@@ -82,7 +82,6 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
     }
 
     private static string BuildDatHeader(
-        FileGenerationRequest request,
         char colDelim,
         char quote,
         bool hasQuote)
@@ -116,7 +115,6 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
     private static string BuildDatRow(
         long index,
         string recordId,
-        FileGenerationRequest request,
         char colDelim,
         char quote,
         bool hasQuote,

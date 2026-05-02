@@ -29,7 +29,7 @@ internal static class LoadfileOnlyGenerator
         var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.EndOfLine);
         long totalLines = request.LoadFileFormat == LoadFileFormat.Opt
             ? request.FileCount
-            : (long)request.FileCount + 1;
+            : request.FileCount + 1;
 
         ChaosEngine? chaosEngine = null;
         if (request.ChaosMode)

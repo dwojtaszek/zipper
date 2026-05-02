@@ -15,9 +15,8 @@ internal class ProductionSetOptWriter : LoadFileWriterBase
         var eol = GetEolString(request.EndOfLine);
         await using var writer = CreateWriter(stream, request);
 
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
         {
-            var workItem = fileData.WorkItem;
             var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig!, workItem.Index - 1);
             var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
