@@ -151,15 +151,16 @@ internal static class LoadfileOnlyGenerator
         await stream.WriteAsync(headerBytes);
 
         var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var builder = new MetadataRowBuilder(request, random, now);
         var buffer = new StringBuilder();
         int batchSize = 1000;
 
         for (long i = 1; i <= request.FileCount; i++)
         {
             long lineNumber = i + 1; // Line 1 is header, data starts at line 2
-            string recordId = $"DOC{i:D8}";
+            string recordId = builder.GetControlNumber(i);
 
-            var line = BuildDatRow(i, recordId, request, colDelim, quote, hasQuote, random, now);
+            var line = BuildDatRow(i, recordId, request, colDelim, quote, hasQuote, builder);
 
             // Apply chaos if targeted
             if (chaos != null && chaos.ShouldIntercept(lineNumber))
@@ -259,27 +260,27 @@ internal static class LoadfileOnlyGenerator
         bool hasQuote)
     {
         var sb = new StringBuilder();
-        AppendField(sb, "Control Number", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "Control Number", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "File Path", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "File Path", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Custodian", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "Custodian", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Date Sent", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "Date Sent", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Author", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "Author", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "File Size", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "File Size", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailSubject", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "EmailSubject", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailFrom", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "EmailFrom", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailTo", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "EmailTo", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailSentDate", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "EmailSentDate", quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "ExtractedText", quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, "ExtractedText", quote, hasQuote);
 
         return sb.ToString();
     }
@@ -291,58 +292,40 @@ internal static class LoadfileOnlyGenerator
         char colDelim,
         char quote,
         bool hasQuote,
-        Random random,
-        DateTime now)
+        MetadataRowBuilder builder)
     {
+        var workItem = new FileWorkItem { Index = index };
         var sb = new StringBuilder();
-        var custodian = $"Custodian {(index % 10) + 1}";
-        var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
-        var author = $"Author {random.Next(1, 100):D3}";
-        var fileSize = random.Next(1024, 10485760).ToString();
-        var subject = $"RE: Document Review - Batch {random.Next(1, 500)}";
-        var from = $"user{random.Next(1, 200):D3}@example.com";
-        var to = $"recipient{random.Next(1, 200):D3}@example.com";
-        var sentDate = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd HH:mm:ss");
+        var custodian = builder.GetCustodianByIndex(index);
+        var dateSent = builder.GetDateSent();
+        var author = builder.GetAuthor();
+        var fileSize = builder.GetFileSize();
         var filePath = $"NATIVES\\{(index % 50) + 1:D3}\\{recordId}.pdf";
         var extractedText = $"Sample extracted text content for document {recordId}.";
 
-        AppendField(sb, recordId, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, recordId, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, filePath, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, filePath, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, custodian, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, custodian, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, dateSent, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, dateSent, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, author, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, author, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, fileSize, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, fileSize, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, subject, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailSubject(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, from, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailFrom(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, to, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailTo(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, sentDate, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, builder.GetEmailSentDate(workItem), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, extractedText, quote, hasQuote);
+        MetadataRowBuilder.AppendField(sb, extractedText, quote, hasQuote);
 
         return sb.ToString();
-    }
-
-    private static void AppendField(StringBuilder sb, string value, char quote, bool hasQuote)
-    {
-        if (hasQuote)
-        {
-            sb.Append(quote);
-            sb.Append(value);
-            sb.Append(quote);
-        }
-        else
-        {
-            sb.Append(value);
-        }
     }
 
     private static string GetEolString(string eol)

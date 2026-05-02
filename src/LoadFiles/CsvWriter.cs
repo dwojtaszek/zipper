@@ -84,7 +84,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeMetadata(request))
             {
-                var metadata = GenerateMetadataValues(workItem, fileData, random, now);
+                var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(metadata.Custodian),
@@ -96,7 +96,7 @@ internal class CsvWriter : LoadFileWriterBase
 
             if (ShouldIncludeEmlColumns(request))
             {
-                var eml = GenerateEmlValues(workItem, fileData, random, now);
+                var eml = GenerateEmlValues(workItem, fileData, random, now, request);
                 values.AddRange(new[]
                 {
                     EscapeCsvField(eml.To),

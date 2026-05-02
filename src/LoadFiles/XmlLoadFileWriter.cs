@@ -76,7 +76,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeMetadata(request))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData, random, now);
+            var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
                 "metadata",
                 new XElement("custodian", metadata.Custodian),
@@ -87,7 +87,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (ShouldIncludeEmlColumns(request))
         {
-            var eml = GenerateEmlValues(workItem, fileData, random, now);
+            var eml = GenerateEmlValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
                 "email",
                 new XElement("to", eml.To),

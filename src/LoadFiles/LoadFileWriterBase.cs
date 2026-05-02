@@ -46,13 +46,14 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// Generates metadata column values for a file.
     /// </summary>
     /// <returns></returns>
-    protected static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
+    protected static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
     {
+        var builder = new MetadataRowBuilder(request, random, now);
         return new MetadataColumns
         {
-            Custodian = $"Custodian {workItem.FolderNumber}",
-            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd"),
-            Author = $"Author {random.Next(1, 100):D3}",
+            Custodian = builder.GetCustodian(workItem.FolderNumber),
+            DateSent = builder.GetDateSent(),
+            Author = builder.GetAuthor(),
             FileSize = fileData.DataLength,
         };
     }
@@ -61,27 +62,16 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// Generates EML-specific column values for a file.
     /// Uses actual EmailTemplate metadata when available for consistency with EML content.
     /// </summary>
-    protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
+    protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
     {
-        if (fileData.EmailTemplate is { } template)
-        {
-            return new EmlColumns
-            {
-                To = template.To,
-                From = template.From,
-                Subject = template.Subject,
-                SentDate = template.SentDate.ToString("yyyy-MM-dd HH:mm:ss"),
-                Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
-            };
-        }
-
+        var builder = new MetadataRowBuilder(request, random, now);
         return new EmlColumns
         {
-            To = $"recipient{workItem.Index}@example.com",
-            From = $"sender{workItem.Index}@example.com",
-            Subject = $"Email Subject {workItem.Index}",
-            SentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss"),
-            Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
+            To = builder.GetEmailTo(workItem, fileData),
+            From = builder.GetEmailFrom(workItem, fileData),
+            Subject = builder.GetEmailSubject(workItem, fileData),
+            SentDate = builder.GetEmailSentDate(workItem, fileData),
+            Attachment = builder.GetEmailAttachment(fileData),
         };
     }
 
