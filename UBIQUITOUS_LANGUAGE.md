@@ -118,7 +118,7 @@
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Generation Request** | The complete configuration (all CLI arguments) for a single generation job. Encapsulated in `FileGenerationRequest`. | Request, job specification |
+| **Generation Request** | The complete configuration (all CLI arguments) for a single generation job. Encapsulated in `FileGenerationRequest` and grouped by sub-configs such as Output, Metadata, Load File, Delimiters, Bates, TIFF, Chaos, and Production. New code should prefer the sub-config tree over flat pass-through properties. | Request, job specification |
 | **File Generation** | The process of creating all **Native Files** for an **Archive** or **Production Set**, distributed across **Folders** or **Volumes** according to the **Generation Request**. | File creation, document generation |
 | **Parallel Generation** | Multi-threaded **File Generation** with configurable worker pools optimized for available CPU cores. | Concurrent generation, parallel processing |
 | **Worker Pool** | The set of background threads performing **Parallel Generation**. Size is auto-detected based on CPU core count. | Thread pool, worker threads |
