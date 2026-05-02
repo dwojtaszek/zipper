@@ -33,3 +33,6 @@ TODO.md
 
 # Planning artifacts
 .planning/
+
+# Coverage
+coverage*

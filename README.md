@@ -247,6 +247,16 @@ Compatibility checklist:
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
 
+### Maintainer Notes for Issue Authors
+
+When writing or updating issue scopes, use the current CLI names and Audit File schema:
+
+- Use `--load-file-format` for general Load File format selection and `--loadfile-format` as the Loadfile-Only Mode alias. There is no `--format` flag.
+- Use `--production-set --output-path <directory>` for Production Set output. `--production-set` does not take a path value.
+- Use `--chaos-mode --chaos-types <type> --chaos-amount <N|N%>` for Chaos Engine examples. Omit `--chaos-mode` for a non-Chaos baseline.
+- Loadfile-Only Mode currently supports DAT and OPT output only.
+- `_properties.json` uses camelCase JSON. Chaos Anomalies are under `chaosMode.injectedAnomalies[*]` with `errorType`, `lineNumber`, and `recordID`.
+
 ### Column Profiles
 
 Column profiles allow you to generate rich, configurable metadata with up to 200 columns. Built-in profiles:
