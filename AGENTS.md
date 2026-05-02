@@ -220,7 +220,7 @@ Memory: `MemoryPool<byte>.Shared` rented via `IMemoryOwner<byte>` for normal fil
 - **Request immutability:** `FileGenerationRequest` must not be mutated after passing to a generator. Used across concurrent tasks. Callers `Clone()` before modifying. `Clone()` is shallow via `MemberwiseClone` — reference-type properties (ColumnProfile, BatesConfig, LoadFileFormats) are shared between original and clone.
 - **MemoryOwner lifecycle:** `MemoryOwner.Dispose()` in `ZipArchiveService:73` happens before Load File writing. Load File writers access `Data.Length` only — accessing `.Span` after disposal is use-after-free (issue #132).
 - **Path separators:** Load File paths use backslash `\` (eDiscovery convention). ZIP entry paths use forward slash `/` (ZIP spec). `ProductionSetGenerator` converts via `.Replace(Path.DirectorySeparatorChar, '\\')`.
-- **Loadfile-Only vs standard metadata:** `LoadfileOnlyGenerator` and `LoadFileGenerator` use separate metadata generation paths. Same seed + same count can produce different metadata rows.
+- **Loadfile-Only vs standard metadata:** `LoadfileOnlyGenerator` and the standard `DatWriter` use separate metadata generation paths. Same seed + same count can produce different metadata rows.
 
 ---
 
