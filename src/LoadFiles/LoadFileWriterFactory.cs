@@ -37,7 +37,8 @@ internal class DatWriter : ILoadFileWriter
     public async System.Threading.Tasks.Task WriteAsync(
         System.IO.Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null)
     {
         var encoding = Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding);
 

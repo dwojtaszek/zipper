@@ -90,7 +90,7 @@ namespace Zipper
                 {
                     var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                     using var loadFileStream = loadFileEntry.Open();
-                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles);
+                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, null);
 
                     // Return path within the ZIP archive when load file is included
                     actualLoadFilePath = actualLoadFileName;
@@ -99,7 +99,7 @@ namespace Zipper
                 {
                     var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
                     await using var fileStream = new FileStream(currentFilePath, FileMode.Create);
-                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles);
+                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles, null);
                     await fileStream.FlushAsync();
 
                     actualLoadFilePath = currentFilePath;

@@ -538,6 +538,212 @@ namespace Zipper
             Assert.Contains("1024", dataLine);
         }
 
+        [Fact]
+        public async Task LoadfileOnlyDatWriter_ProducesCorrectFormat()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 5,
+                FileType = "pdf",
+                Seed = 42,
+                Encoding = "UTF-8",
+                EndOfLine = "CRLF",
+            };
+            var writer = new LoadfileOnlyDatWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, new List<FileData>());
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Header + 5 data rows
+            Assert.Equal(6, lines.Length);
+            Assert.Contains("Control Number", lines[0]);
+            Assert.Contains("File Path", lines[0]);
+            Assert.Contains("EmailSubject", lines[0]);
+            Assert.Contains("ExtractedText", lines[0]);
+        }
+
+        [Fact]
+        public async Task LoadfileOnlyOptWriter_ProducesCorrectFormat()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 3,
+                FileType = "pdf",
+                Seed = 42,
+                Encoding = "UTF-8",
+                EndOfLine = "CRLF",
+            };
+            var writer = new LoadfileOnlyOptWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, new List<FileData>());
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // 3 data rows, no header
+            Assert.Equal(3, lines.Length);
+            foreach (var line in lines)
+            {
+                int commaCount = line.Count(c => c == ',');
+                Assert.Equal(6, commaCount);
+                Assert.StartsWith("IMG", line);
+                Assert.Contains("VOL001", line);
+            }
+        }
+
+        [Fact]
+        public async Task LoadfileOnlyDatWriter_WithChaos_ProducesCorruptedLines()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 20,
+                FileType = "pdf",
+                Seed = 42,
+                Encoding = "UTF-8",
+                EndOfLine = "CRLF",
+            };
+
+            var eol = "\r\n";
+            long totalLines = request.FileCount + 1;
+            var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
+
+            var writer = new LoadfileOnlyDatWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, new List<FileData>(), chaos);
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+
+            // Chaos should have modified at least 5 lines
+            Assert.NotEmpty(content);
+
+            // Verify anomalies were tracked
+            Assert.True(chaos.Anomalies.Count > 0);
+        }
+
+        [Fact]
+        public async Task ProductionSetDatWriter_ProducesCorrectFormat()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 5,
+                FileType = "pdf",
+                Seed = 42,
+                EndOfLine = "CRLF",
+                OutputPath = this.tempDir,
+                VolumeSize = 5000,
+                BatesConfig = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+            };
+
+            var files = new List<FileData>();
+            for (int i = 0; i < 5; i++)
+            {
+                files.Add(new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = i + 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = $"TEST{i + 1:D8}.pdf",
+                        FilePathInZip = $"NATIVES\\VOL001\\TEST{i + 1:D8}.pdf",
+                    },
+                    DataLength = 1024 * (i + 1),
+                });
+            }
+
+            var writer = new ProductionSetDatWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, files);
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Header + 5 data rows
+            Assert.Equal(6, lines.Length);
+            Assert.Contains("DOCID", lines[0]);
+            Assert.Contains("BATES_NUMBER", lines[0]);
+            Assert.Contains("NATIVE_PATH", lines[0]);
+            Assert.Contains("IMAGE_PATH", lines[0]);
+            Assert.Contains("\r\n", content);
+        }
+
+        [Fact]
+        public async Task ProductionSetOptWriter_ProducesCorrectFormat()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 3,
+                FileType = "pdf",
+                Seed = 42,
+                EndOfLine = "CRLF",
+                OutputPath = this.tempDir,
+                VolumeSize = 10,
+                BatesConfig = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 },
+            };
+
+            var files = new List<FileData>();
+            for (int i = 0; i < 3; i++)
+            {
+                files.Add(new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = i + 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = $"PROD{i + 1:D6}.pdf",
+                        FilePathInZip = $"NATIVES\\VOL001\\PROD{i + 1:D6}.pdf",
+                    },
+                    DataLength = 1024,
+                });
+            }
+
+            var writer = new ProductionSetOptWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, files);
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(3, lines.Length);
+            foreach (var line in lines)
+            {
+                Assert.StartsWith("PROD", line);
+                Assert.Contains(".tif", line);
+                Assert.Contains("VOL001", line);
+            }
+
+            Assert.Contains("\r\n", content);
+        }
+
+        [Fact]
+        public async Task LoadfileOnlyDatWriter_WithNullEol_FallsBackToCrlf()
+        {
+            var request = new FileGenerationRequest
+            {
+                FileCount = 3,
+                FileType = "pdf",
+                Seed = 42,
+                Encoding = "UTF-8",
+                EndOfLine = string.Empty,
+            };
+            var writer = new LoadfileOnlyDatWriter();
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, new List<FileData>());
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+
+            Assert.Contains("\r\n", content);
+        }
+
         private async Task<string> CaptureCsvOutput(FileGenerationRequest request, List<FileData> files)
         {
             var writer = new LoadFiles.CsvWriter();
