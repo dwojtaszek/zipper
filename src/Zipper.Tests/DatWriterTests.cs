@@ -1,35 +1,15 @@
 using System.Text;
 using Xunit;
+using Zipper.LoadFiles;
 
 namespace Zipper
 {
-    public class LoadFileGeneratorTests
+    public class DatWriterTests
     {
         [Fact]
-        public void GetEncoding_ReturnsExpectedEncoding()
+        public async Task WriteAsync_BasicHeader_WritesCorrectColumns()
         {
-            var encoding = LoadFileGenerator.GetEncoding("UTF-8");
-            Assert.Equal(Encoding.UTF8, encoding);
-        }
-
-        [Fact]
-        public void GetEncoding_WithNull_ReturnsDefaultEncoding()
-        {
-            var encoding = LoadFileGenerator.GetEncoding(null!);
-            Assert.Equal(Encoding.UTF8, encoding);
-        }
-
-        [Fact]
-        public void GetEncoding_WithUnknownName_ReturnsDefaultEncoding()
-        {
-            var encoding = LoadFileGenerator.GetEncoding("not-a-real-encoding");
-            Assert.Equal(Encoding.UTF8, encoding);
-        }
-
-        [Fact]
-        public async Task WriteLoadFileContent_BasicHeader_WritesCorrectColumns()
-        {
-            var (output, lines) = await WriteAndCapture(DefaultRequest(), []);
+            var (_, lines) = await WriteAndCapture(DefaultRequest(), []);
             var header = lines[0];
 
             Assert.Contains("Control Number", header);
@@ -38,7 +18,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithMetadata_IncludesMetadataColumns()
+        public async Task WriteAsync_WithMetadata_IncludesMetadataColumns()
         {
             var request = DefaultRequest();
             request.WithMetadata = true;
@@ -50,7 +30,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithEmailType_IncludesEmlColumns()
+        public async Task WriteAsync_WithEmailType_IncludesEmlColumns()
         {
             var request = DefaultRequest();
             request.FileType = "eml";
@@ -63,7 +43,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithBatesConfig_IncludesBatesNumberColumn()
+        public async Task WriteAsync_WithBatesConfig_IncludesBatesNumberColumn()
         {
             var request = DefaultRequest();
             request.BatesConfig = new BatesNumberConfig
@@ -78,7 +58,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithTiffPageRange_IncludesPageCountColumn()
+        public async Task WriteAsync_WithTiffPageRange_IncludesPageCountColumn()
         {
             var request = DefaultRequest();
             request.FileType = "tiff";
@@ -88,7 +68,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithText_IncludesExtractedTextColumn()
+        public async Task WriteAsync_WithText_IncludesExtractedTextColumn()
         {
             var request = DefaultRequest();
             request.WithText = true;
@@ -97,47 +77,41 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithFileData_WritesDataRows()
+        public async Task WriteAsync_WithFileData_WritesDataRows()
         {
             var request = DefaultRequest();
             var files = new List<FileData> { MakeFileData(1), MakeFileData(2) };
-            var (output, lines) = await WriteAndCapture(request, files);
+            var (_, lines) = await WriteAndCapture(request, files);
             Assert.Equal(3, lines.Length);
             Assert.Contains("DOC00000001", lines[1]);
             Assert.Contains("DOC00000002", lines[2]);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WritesInOrderOfFileIndex()
+        public async Task WriteAsync_WritesInOrderOfFileIndex()
         {
             var request = DefaultRequest();
             var files = new List<FileData> { MakeFileData(3), MakeFileData(1), MakeFileData(2) };
-            var (output, lines) = await WriteAndCapture(request, files);
+            var (_, lines) = await WriteAndCapture(request, files);
             Assert.Contains("DOC00000001", lines[1]);
             Assert.Contains("DOC00000002", lines[2]);
             Assert.Contains("DOC00000003", lines[3]);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithMetadata_WritesMetadataValues()
+        public async Task WriteAsync_WithMetadata_WritesMetadataValues()
         {
             var request = DefaultRequest();
             request.WithMetadata = true;
             var files = new List<FileData> { MakeFileData(1) };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains("Custodian 1", output);
             Assert.Contains("File Size", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithEmailData_WritesEmlColumns()
+        public async Task WriteAsync_WithEmailData_WritesEmlColumns()
         {
             var request = DefaultRequest();
             request.FileType = "eml";
@@ -163,16 +137,10 @@ namespace Zipper
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
                     EmailTemplate = template,
-                }
+                },
             };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains("test@example.com", output);
             Assert.Contains("sender@example.com", output);
             Assert.Contains("Test Subject", output);
@@ -180,7 +148,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithBates_WritesBatesNumber()
+        public async Task WriteAsync_WithBates_WritesBatesNumber()
         {
             var request = DefaultRequest();
             request.BatesConfig = new BatesNumberConfig
@@ -192,18 +160,12 @@ namespace Zipper
             };
             var files = new List<FileData> { MakeFileData(1) };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains("DOC000100", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithTiff_WritesPageCount()
+        public async Task WriteAsync_WithTiff_WritesPageCount()
         {
             var request = DefaultRequest();
             request.FileType = "tiff";
@@ -223,40 +185,28 @@ namespace Zipper
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
                     PageCount = 3,
-                }
+                },
             };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             var dataLine = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Last();
             Assert.EndsWith("þ3þ", dataLine);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithText_WritesTextFileReference()
+        public async Task WriteAsync_WithText_WritesTextFileReference()
         {
             var request = DefaultRequest();
             request.WithText = true;
             request.FileType = "pdf";
             var files = new List<FileData> { MakeFileData(1) };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains(".txt", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_BufferedWrite_FlushesAtBatchSize()
+        public async Task WriteAsync_BufferedWrite_FlushesAtBatchSize()
         {
             var request = DefaultRequest();
             var files = new List<FileData>();
@@ -265,20 +215,20 @@ namespace Zipper
                 files.Add(MakeFileData(i));
             }
 
-            var (output, lines) = await WriteAndCapture(request, files);
+            var (_, lines) = await WriteAndCapture(request, files);
             Assert.Equal(1501, lines.Length);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_EmptyFileList_WritesOnlyHeader()
+        public async Task WriteAsync_EmptyFileList_WritesOnlyHeader()
         {
             var request = DefaultRequest();
-            var (output, lines) = await WriteAndCapture(request, []);
+            var (_, lines) = await WriteAndCapture(request, []);
             Assert.Single(lines);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_WithEmlWithoutTemplate_WritesFallbackEmlValues()
+        public async Task WriteAsync_WithEmlWithoutTemplate_WritesFallbackEmlValues()
         {
             var request = DefaultRequest();
             request.FileType = "eml";
@@ -297,40 +247,28 @@ namespace Zipper
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
                     EmailTemplate = null,
-                }
+                },
             };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains("recipient1@example.com", output);
             Assert.Contains("sender1@example.com", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_DefaultDelimiters_UseNonPrintingChars()
+        public async Task WriteAsync_DefaultDelimiters_UseNonPrintingChars()
         {
             var request = DefaultRequest();
             request.ColumnDelimiter = null!;
             request.QuoteDelimiter = null!;
             var files = new List<FileData> { MakeFileData(1) };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.Contains("þ", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_SanitizeField_ReplacesWindowsNewline()
+        public async Task WriteAsync_SanitizeField_ReplacesWindowsNewline()
         {
             var request = DefaultRequest();
             request.WithMetadata = true;
@@ -348,22 +286,16 @@ namespace Zipper
                     },
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
-                }
+                },
             };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             Assert.DoesNotContain("line1\r\nline2", output);
             Assert.Contains("line1®line2", output);
         }
 
         [Fact]
-        public async Task WriteLoadFileContent_SanitizeField_ReplacesUnixNewline()
+        public async Task WriteAsync_SanitizeField_ReplacesUnixNewline()
         {
             var request = DefaultRequest();
             var files = new List<FileData>
@@ -380,27 +312,40 @@ namespace Zipper
                     },
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
-                }
+                },
             };
 
-            using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
-
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+            var output = await WriteAndCaptureOutput(request, files);
             var dataLine = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Last();
             Assert.Contains("line1®line2", dataLine);
+        }
+
+        [Fact]
+        public void Factory_ReturnsDatWriter_AsLoadFileWriterBase()
+        {
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
+            Assert.IsType<DatWriter>(writer);
+            Assert.IsAssignableFrom<LoadFileWriterBase>(writer);
+            Assert.Equal("DAT", writer.FormatName);
+            Assert.Equal(".dat", writer.FileExtension);
+        }
+
+        [Fact]
+        public async Task WriteAsync_LeavesUnderlyingStreamOpen()
+        {
+            var request = DefaultRequest();
+            using var stream = new MemoryStream();
+            var writer = new DatWriter();
+            await writer.WriteAsync(stream, request, []);
+            Assert.True(stream.CanWrite);
+            stream.WriteByte(0x00); // would throw if disposed
         }
 
         private static async Task<(string output, string[] lines)> WriteAndCapture(FileGenerationRequest request, List<FileData> files)
         {
             using var stream = new MemoryStream();
-            using var streamWriter = new StreamWriter(stream);
-
-            await LoadFileGenerator.WriteLoadFileContent(streamWriter, request, files);
-            await streamWriter.FlushAsync();
+            var writer = new DatWriter();
+            await writer.WriteAsync(stream, request, files);
 
             var output = Encoding.UTF8.GetString(stream.ToArray());
             var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);

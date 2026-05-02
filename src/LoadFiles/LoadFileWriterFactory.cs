@@ -24,29 +24,3 @@ internal static class LoadFileWriterFactory
         };
     }
 }
-
-/// <summary>
-/// Wrapper for the existing LoadFileGenerator to implement ILoadFileWriter.
-/// </summary>
-internal class DatWriter : ILoadFileWriter
-{
-    public string FormatName => "DAT";
-
-    public string FileExtension => ".dat";
-
-    public async System.Threading.Tasks.Task WriteAsync(
-        System.IO.Stream stream,
-        FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
-    {
-        var encoding = Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding);
-
-        // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new System.IO.StreamWriter(stream, encoding, leaveOpen: true);
-        await LoadFileGenerator.WriteLoadFileContent(writer, request, processedFiles);
-
-        // Flush to ensure data is written
-        await writer.FlushAsync();
-    }
-}
