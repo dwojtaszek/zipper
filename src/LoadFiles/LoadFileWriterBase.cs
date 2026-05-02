@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -12,7 +14,8 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     public abstract System.Threading.Tasks.Task WriteAsync(
         System.IO.Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles);
+        System.Collections.Generic.List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null);
 
     /// <summary>
     /// Gets the file type in lowercase for comparisons.
@@ -140,6 +143,69 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         }
 
         return field;
+    }
+
+    /// <summary>
+    /// Gets the end-of-line string from the configured EOL specifier.
+    /// </summary>
+    internal static string GetEolString(string eol) => eol?.ToUpperInvariant() switch
+    {
+        "LF" => "\n",
+        "CR" => "\r",
+        _ => "\r\n",
+    };
+
+    /// <summary>
+    /// Creates a StreamWriter with the configured encoding, leaving the underlying stream open.
+    /// </summary>
+    protected static StreamWriter CreateWriter(Stream stream, FileGenerationRequest request)
+    {
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
+        return new StreamWriter(stream, encoding, leaveOpen: true);
+    }
+
+    /// <summary>
+    /// Flushes the StringBuilder buffer to the stream in batches.
+    /// </summary>
+    protected static async Task FlushBufferAsync(StreamWriter writer, StringBuilder buffer)
+    {
+        if (buffer.Length > 0)
+        {
+            await writer.WriteAsync(buffer.ToString());
+            buffer.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Applies chaos interception to a line if the Chaos Engine targets this line number.
+    /// </summary>
+    protected static string ApplyChaosInterception(ChaosEngine? chaos, long lineNumber, string line, string recordId)
+    {
+        if (chaos != null && chaos.ShouldIntercept(lineNumber))
+        {
+            return chaos.Intercept(lineNumber, line, recordId);
+        }
+
+        return line;
+    }
+
+    /// <summary>
+    /// Writes encoding anomaly bytes between lines if the Chaos Engine has an anomaly for this boundary.
+    /// Returns true if bytes were written.
+    /// </summary>
+    protected static async Task<bool> WriteEncodingAnomalyBytesAsync(Stream stream, ChaosEngine? chaos, long lineNumber, long nextLineNumber, Encoding encoding)
+    {
+        if (chaos != null)
+        {
+            var anomaly = chaos.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding);
+            if (anomaly != null)
+            {
+                await stream.WriteAsync(anomaly);
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

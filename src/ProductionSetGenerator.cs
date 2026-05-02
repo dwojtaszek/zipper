@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Text;
 
 namespace Zipper;
 
@@ -58,8 +57,7 @@ internal static class ProductionSetGenerator
             ?? throw new InvalidOperationException($"Unknown file type: {request.FileType}");
 
         // Generate files and collect records for load files
-        var datRecords = new List<ProductionRecord>();
-        var optRecords = new List<string>();
+        var fileDataList = new List<FileData>();
 
         for (long i = 0; i < request.FileCount; i++)
         {
@@ -97,24 +95,11 @@ internal static class ProductionSetGenerator
             var imageFullPath = Path.Combine(productionPath, imageRelPath);
             await File.WriteAllBytesAsync(imageFullPath, PlaceholderFiles.GetContent("tiff"));
 
-            // Collect DAT record data
-            var record = new ProductionRecord
+            fileDataList.Add(new FileData
             {
-                BatesNumber = batesNumber,
-                NativePath = nativeRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
-                TextPath = textRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
-                ImagePath = imageRelPath.Replace(Path.DirectorySeparatorChar, '\\'),
-                Custodian = builder.GetCustodian(),
-                DateCreated = builder.GetDateCreated(),
-                FileSize = nativeContent.Length,
-                FileType = nativeExt.ToUpperInvariant(),
-                VolumeName = volName,
-            };
-            datRecords.Add(record);
-
-            // OPT line: Bates,VolumeName,ImagePath,DocBreak,BoxBreak,FolderBreak,PageCount
-            var docBreak = "Y";
-            optRecords.Add($"{batesNumber},{volName},{imageRelPath.Replace(Path.DirectorySeparatorChar, '\\')},{docBreak},,1");
+                WorkItem = workItem,
+                DataLength = nativeContent.Length,
+            });
 
             // Progress reporting
             if ((i + 1) % 1000 == 0 || i == request.FileCount - 1)
@@ -127,11 +112,19 @@ internal static class ProductionSetGenerator
 
         // Write DAT load file
         var datPath = Path.Combine(dataDir, "loadfile.dat");
-        await WriteDatLoadFile(datPath, request, datRecords, encoding);
+        var datWriter = new LoadFiles.ProductionSetDatWriter();
+        await using (var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
+        {
+            await datWriter.WriteAsync(datStream, request, fileDataList);
+        }
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
-        await WriteOptLoadFile(optPath, optRecords, encoding);
+        var optWriter = new LoadFiles.ProductionSetOptWriter();
+        await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
+        {
+            await optWriter.WriteAsync(optStream, request, fileDataList);
+        }
 
         // Write manifest
         var batesStart = BatesNumberGenerator.Generate(batesConfig, 0);
@@ -164,90 +157,6 @@ internal static class ProductionSetGenerator
             GenerationTime = stopwatch.Elapsed,
         };
     }
-
-    private static async Task WriteDatLoadFile(
-        string datPath,
-        FileGenerationRequest request,
-        List<ProductionRecord> records,
-        Encoding encoding)
-    {
-        var col = request.ColumnDelimiter;
-        var quote = request.QuoteDelimiter;
-
-        await using var stream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true);
-        await using var writer = new StreamWriter(stream, encoding);
-
-        // Header
-        var headers = new[]
-        {
-            "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH",
-            "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE",
-        };
-        var headerLine = string.Join(col, headers.Select(h => $"{quote}{h}{quote}"));
-        await writer.WriteLineAsync(headerLine);
-
-        // Data rows
-        foreach (var record in records)
-        {
-            var fields = new[]
-            {
-                record.BatesNumber,
-                record.BatesNumber,
-                record.VolumeName,
-                record.NativePath,
-                record.TextPath,
-                record.ImagePath,
-                record.Custodian,
-                record.DateCreated,
-                record.FileSize.ToString(),
-                record.FileType,
-            };
-            var line = string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
-            await writer.WriteLineAsync(line);
-        }
-
-        await writer.FlushAsync();
-    }
-
-    private static async Task WriteOptLoadFile(
-        string optPath,
-        List<string> optLines,
-        Encoding encoding)
-    {
-        await using var stream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true);
-        await using var writer = new StreamWriter(stream, encoding);
-
-        foreach (var line in optLines)
-        {
-            await writer.WriteLineAsync(line);
-        }
-
-        await writer.FlushAsync();
-    }
-}
-
-/// <summary>
-/// Data record for a single document in a production set DAT.
-/// </summary>
-internal class ProductionRecord
-{
-    public string BatesNumber { get; set; } = string.Empty;
-
-    public string NativePath { get; set; } = string.Empty;
-
-    public string TextPath { get; set; } = string.Empty;
-
-    public string ImagePath { get; set; } = string.Empty;
-
-    public string Custodian { get; set; } = string.Empty;
-
-    public string DateCreated { get; set; } = string.Empty;
-
-    public long FileSize { get; set; }
-
-    public string FileType { get; set; } = string.Empty;
-
-    public string VolumeName { get; set; } = string.Empty;
 }
 
 /// <summary>

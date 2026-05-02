@@ -14,7 +14,8 @@ internal class CsvWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
