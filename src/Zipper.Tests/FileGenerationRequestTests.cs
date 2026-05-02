@@ -167,5 +167,32 @@ namespace Zipper.Tests
             Assert.Equal(200, clone.FileCount);
             Assert.Equal("10%", clone.ChaosAmount);
         }
+
+        [Fact]
+        public void Clone_LoadFileFormatsList_IsIsolatedFromOriginal()
+        {
+            var original = new FileGenerationRequest
+            {
+                LoadFile = new LoadFileConfig
+                {
+                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat },
+                },
+            };
+            var clone = original.Clone();
+
+            clone.LoadFileFormats!.Add(LoadFileFormat.Csv);
+
+            Assert.Single(original.LoadFileFormats!);
+            Assert.Equal(2, clone.LoadFileFormats!.Count);
+            Assert.NotSame(original.LoadFileFormats, clone.LoadFileFormats);
+        }
+
+        [Fact]
+        public void Clone_NullLoadFileFormats_RemainsNull()
+        {
+            var original = new FileGenerationRequest();
+            var clone = original.Clone();
+            Assert.Null(clone.LoadFileFormats);
+        }
     }
 }
