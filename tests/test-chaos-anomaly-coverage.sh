@@ -9,6 +9,8 @@
 #
 # Must be called from the repository root:
 #   bash ./tests/test-chaos-anomaly-coverage.sh
+#
+# Bash 3.2 compatible (required for macOS /bin/bash).
 
 set -euo pipefail
 
@@ -34,42 +36,20 @@ function validate_properties_json() {
     bash "$GOLDENS_LIB_DIR/validate-properties-json.sh" "$1"
 }
 
+# Lookup a field from the scenario-types TSV. Usage: tsv_lookup <scenario> <field_index>
+# field_index: 2=chaos_types, 3=format (1-based)
+function tsv_lookup() {
+    local scenario="$1"
+    local field="$2"
+    grep "^${scenario}	" "$FIXTURES_DIR/chaos-scenario-types.tsv" \
+        | cut -f"$field" | head -1
+}
+
 PASSED=0
 TOTAL=0
 
 rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
-
-# ---------------------------------------------------------------------------
-# Load fixture lists
-# ---------------------------------------------------------------------------
-# DAT types: all lines that do NOT start with 'opt-' (or '#' or empty)
-mapfile -t DAT_TYPES < <(
-    grep -v '^#' "$FIXTURES_DIR/chaos-anomaly-types.txt" \
-    | grep -v '^[[:space:]]*$' \
-    | grep -v '^opt-'
-)
-
-# OPT types: lines starting with 'opt-'
-mapfile -t OPT_TYPES < <(
-    grep -v '^#' "$FIXTURES_DIR/chaos-anomaly-types.txt" \
-    | grep -v '^[[:space:]]*$' \
-    | grep '^opt-'
-)
-
-# Scenario names (one per line, skip blank)
-mapfile -t SCENARIO_NAMES < <(
-    grep -v '^[[:space:]]*$' "$FIXTURES_DIR/chaos-scenarios.txt"
-)
-
-# Scenario → format + chaos_types from TSV (skip header row)
-declare -A SCENARIO_FORMAT
-declare -A SCENARIO_TYPES
-while IFS=$'\t' read -r name types fmt; do
-    [[ "$name" == "scenario_name" ]] && continue
-    SCENARIO_FORMAT["$name"]="${fmt:-dat}"
-    SCENARIO_TYPES["$name"]="${types:-}"
-done < "$FIXTURES_DIR/chaos-scenario-types.tsv"
 
 # ---------------------------------------------------------------------------
 # B3 prep: validate existing golden _properties.json files up-front
@@ -100,9 +80,14 @@ BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline_opt" -name "*.opt" | head -1)
 [[ -z "$BASELINE_OPT" ]] && print_error "No baseline OPT file generated"
 
 # ---------------------------------------------------------------------------
-# B1 — per-Anomaly-Type: DAT types
+# B1 — per-Anomaly-Type: DAT types (all non-'opt-' lines in fixture)
 # ---------------------------------------------------------------------------
-for TYPE in "${DAT_TYPES[@]}"; do
+while IFS= read -r TYPE; do
+    # Skip comments, blank lines, and OPT types
+    case "$TYPE" in
+        ''|'#'*|opt-*) continue ;;
+    esac
+
     TOTAL=$((TOTAL + 1))
     SAFE="${TYPE//-/_}"
     OUT_DIR="$TEST_OUTPUT_DIR/dat_type_${SAFE}"
@@ -124,12 +109,12 @@ for TYPE in "${DAT_TYPES[@]}"; do
 
     # Set equality: only the requested type appears
     TYPES_PRESENT=$(jq -r '[.chaosMode.injectedAnomalies[]?.errorType] | unique | sort | .[]' \
-        "$PROPS" 2>/dev/null | paste -sd ',' || true)
+        "$PROPS" 2>/dev/null | paste -sd ',' - || true)
     if [[ "$TYPES_PRESENT" != "$TYPE" ]]; then
         print_error "Type mismatch for $TYPE: got '$TYPES_PRESENT'"
     fi
 
-    # Unique line numbers (duplicates would indicate a bug)
+    # Unique line numbers (duplicates indicate a bug)
     DUP_LINES=$(jq -r '
         [.chaosMode.injectedAnomalies[]?.lineNumber]
         | group_by(.)
@@ -137,9 +122,9 @@ for TYPE in "${DAT_TYPES[@]}"; do
         | .[0]? // empty' "$PROPS" 2>/dev/null || true)
     [[ -n "$DUP_LINES" ]] && print_error "Duplicate line numbers for type: $TYPE"
 
-    # Numeric line numbers must be in [1, totalRecords+1]
+    # Numeric line numbers must be in [1, totalRecords+1] (header=1, data=2..N+1)
     TOTAL_RECORDS=$(jq '.totalRecords' "$PROPS")
-    MAX_LINE=$(( TOTAL_RECORDS + 1 ))  # header is line 1, data is 2..501
+    MAX_LINE=$(( TOTAL_RECORDS + 1 ))
     BAD_LINES=$(jq -r --argjson max "$MAX_LINE" '
         [.chaosMode.injectedAnomalies[]?
          | select(.lineNumber | test("^[0-9]+$"))
@@ -148,8 +133,7 @@ for TYPE in "${DAT_TYPES[@]}"; do
         | .[]?' "$PROPS" 2>/dev/null || true)
     [[ -n "$BAD_LINES" ]] && print_error "Line number out of [1,$MAX_LINE] for type: $TYPE: $BAD_LINES"
 
-    # Baseline diff: the chaos file must differ from the no-chaos baseline.
-    # (For 'encoding', differences are at the byte level — still detectable via cmp.)
+    # Baseline diff: chaos file must differ from no-chaos baseline
     CHAOS_DAT=$(find "$OUT_DIR/run1" -name "*.dat" | head -1)
     if cmp -s "$BASELINE_DAT" "$CHAOS_DAT" 2>/dev/null; then
         print_error "Chaos DAT identical to baseline for type: $TYPE — anomaly not injected?"
@@ -167,12 +151,19 @@ for TYPE in "${DAT_TYPES[@]}"; do
 
     PASSED=$((PASSED + 1))
     print_success "B1 DAT type '$TYPE' — PASSED (anomalies: $ANOMALY_COUNT)"
-done
+done < "$FIXTURES_DIR/chaos-anomaly-types.txt"
 
 # ---------------------------------------------------------------------------
-# B1 — per-Anomaly-Type: OPT types
+# B1 — per-Anomaly-Type: OPT types (lines starting with 'opt-')
 # ---------------------------------------------------------------------------
-for TYPE in "${OPT_TYPES[@]}"; do
+while IFS= read -r TYPE; do
+    # Only process opt- lines; skip comments and blank
+    case "$TYPE" in
+        ''|'#'*) continue ;;
+        opt-*) ;;
+        *) continue ;;
+    esac
+
     TOTAL=$((TOTAL + 1))
     SAFE="${TYPE//-/_}"
     OUT_DIR="$TEST_OUTPUT_DIR/opt_type_${SAFE}"
@@ -191,7 +182,7 @@ for TYPE in "${OPT_TYPES[@]}"; do
     [[ "$ANOMALY_COUNT" -le 0 ]] && print_error "No anomalies for OPT type: $TYPE"
 
     TYPES_PRESENT=$(jq -r '[.chaosMode.injectedAnomalies[]?.errorType] | unique | sort | .[]' \
-        "$PROPS" 2>/dev/null | paste -sd ',' || true)
+        "$PROPS" 2>/dev/null | paste -sd ',' - || true)
     [[ "$TYPES_PRESENT" != "$TYPE" ]] \
         && print_error "Type mismatch for OPT $TYPE: got '$TYPES_PRESENT'"
 
@@ -229,29 +220,34 @@ for TYPE in "${OPT_TYPES[@]}"; do
 
     PASSED=$((PASSED + 1))
     print_success "B1 OPT type '$TYPE' — PASSED (anomalies: $ANOMALY_COUNT)"
-done
+done < "$FIXTURES_DIR/chaos-anomaly-types.txt"
 
 # ---------------------------------------------------------------------------
 # B2 — per-Scenario coverage
 # ---------------------------------------------------------------------------
-for SCENARIO in "${SCENARIO_NAMES[@]}"; do
+while IFS= read -r SCENARIO; do
     [[ -z "$SCENARIO" ]] && continue
+
     TOTAL=$((TOTAL + 1))
     SAFE="${SCENARIO//-/_}"
     OUT_DIR="$TEST_OUTPUT_DIR/scenario_${SAFE}"
-    FMT="${SCENARIO_FORMAT[$SCENARIO]:-dat}"
-    DECLARED_TYPES="${SCENARIO_TYPES[$SCENARIO]:-}"
+
+    # Look up format and declared chaos types from TSV (skip header line)
+    FMT=$(tsv_lookup "$SCENARIO" 3)
+    DECLARED_TYPES=$(tsv_lookup "$SCENARIO" 2)
+    FMT="${FMT:-dat}"
 
     print_info "B2 Scenario: $SCENARIO (format: $FMT)"
 
-    FORMAT_ARG=()
-    [[ "$FMT" == "opt" ]] && FORMAT_ARG=(--loadfile-format opt)
+    # Build format arg
+    FORMAT_FLAG=""
+    [[ "$FMT" == "opt" ]] && FORMAT_FLAG="--loadfile-format opt"
 
     # Run 1
+    # shellcheck disable=SC2086
     zipper --loadfile-only --count 1000 \
         --output-path "$OUT_DIR/run1" \
-        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 \
-        "${FORMAT_ARG[@]}"
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 $FORMAT_FLAG
 
     PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" | head -1)
     [[ -z "$PROPS" ]] && print_error "No _properties.json for scenario: $SCENARIO"
@@ -261,7 +257,7 @@ for SCENARIO in "${SCENARIO_NAMES[@]}"; do
     ANOMALY_COUNT=$(jq '.chaosMode.totalAnomalies' "$PROPS")
     [[ "$ANOMALY_COUNT" -le 0 ]] && print_error "No anomalies for scenario: $SCENARIO"
 
-    # Assert every actual type is within the declared set (skip check for full-chaos)
+    # Assert every actual type is within the declared set (full-chaos has empty declared set)
     if [[ -n "$DECLARED_TYPES" ]]; then
         while IFS= read -r actual_type; do
             [[ -z "$actual_type" ]] && continue
@@ -272,10 +268,11 @@ for SCENARIO in "${SCENARIO_NAMES[@]}"; do
     fi
 
     # Determinism
+    # shellcheck disable=SC2086
     zipper --loadfile-only --count 1000 \
         --output-path "$OUT_DIR/run2" \
-        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 \
-        "${FORMAT_ARG[@]}"
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 $FORMAT_FLAG
+
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" | head -1)
 
     if [[ "$FMT" == "opt" ]]; then
@@ -292,7 +289,7 @@ for SCENARIO in "${SCENARIO_NAMES[@]}"; do
 
     PASSED=$((PASSED + 1))
     print_success "B2 Scenario '$SCENARIO' — PASSED (anomalies: $ANOMALY_COUNT)"
-done
+done < "$FIXTURES_DIR/chaos-scenarios.txt"
 
 # ---------------------------------------------------------------------------
 # Cleanup & summary

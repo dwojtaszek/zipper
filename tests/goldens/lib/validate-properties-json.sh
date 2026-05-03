@@ -40,11 +40,10 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 0
 fi
 
+# Use jq -e with != null so boolean false values pass (false != null is true in jq).
 _check() {
     local field="$1"
-    local value
-    value=$(jq -r "$field // empty" "$JSON_FILE" 2>/dev/null)
-    if [[ -z "$value" ]]; then
+    if ! jq -e "$field != null" "$JSON_FILE" >/dev/null 2>&1; then
         echo "[validate-properties-json] FAIL: missing required field $field in $JSON_FILE" >&2
         exit 1
     fi
@@ -58,10 +57,6 @@ _check ".properties.lineEnding"
 _check ".properties.delimiters.column"
 _check ".properties.delimiters.quote"
 _check ".chaosMode.enabled"
-# totalAnomalies can be 0 — use a different check
-if ! jq -e '.chaosMode | has("totalAnomalies")' "$JSON_FILE" >/dev/null 2>&1; then
-    echo "[validate-properties-json] FAIL: .chaosMode.totalAnomalies missing in $JSON_FILE" >&2
-    exit 1
-fi
+_check ".chaosMode.totalAnomalies"
 
 echo "[validate-properties-json] OK: $JSON_FILE"
