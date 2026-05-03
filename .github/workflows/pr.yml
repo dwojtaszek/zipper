@@ -182,5 +182,5 @@ jobs:
       - name: Run golden scenarios
         run: |
           chmod +x ./tests/goldens/run-goldens.sh
-          ZIPPER_CLI=./publish-bin/Zipper bash ./tests/goldens/run-goldens.sh
+          ZIPPER_CLI="$(pwd)/publish-bin/Zipper" bash ./tests/goldens/run-goldens.sh
 
