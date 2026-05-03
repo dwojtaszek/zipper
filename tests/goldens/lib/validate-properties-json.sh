@@ -26,26 +26,37 @@ if [[ ! -f "$SCHEMA_FILE" ]]; then
 fi
 
 # --- Try ajv-cli (preferred, authoritative) ---
-# Run ajv only when npx is available. Capture its exit code:
-#   0  → JSON passed validation → exit 0 (done)
-#   1  → JSON failed validation → exit 1 (error; do NOT fall through to jq)
-#   127→ ajv-cli not installed  → fall through to jq fallback
+# In ajv-cli@5: exit 0 = data is valid, exit 1 = data is invalid.
+# Use 'npx --yes' to auto-install if not already present.
+# Only fall through to jq when npx cannot install/find ajv-cli (exit 127 or 1 from npx itself).
+#
+# Strategy:
+#   1. Check if ajv-cli is reachable via npx (probe with --help; install if needed).
+#   2. If probe succeeds, run validation authoritatively.
+#   3. If probe fails (not installable / network offline), fall through to jq.
 if command -v npx >/dev/null 2>&1; then
+    # Probe: install ajv-cli@5 if absent, then verify it answers --help.
     set +e
-    npx --yes ajv-cli@5 validate -s "$SCHEMA_FILE" -d "$JSON_FILE" \
-        --valid --errors=text 2>/dev/null
-    AJV_EXIT=$?
+    npx --yes ajv-cli@5 --help >/dev/null 2>&1
+    PROBE_EXIT=$?
     set -e
-    if [[ $AJV_EXIT -eq 0 ]]; then
-        # Validation passed
-        echo "[validate-properties-json] OK (ajv): $JSON_FILE"
-        exit 0
-    elif [[ $AJV_EXIT -ne 127 ]]; then
-        # ajv ran but found the JSON invalid; do not fall through to jq
-        echo "[validate-properties-json] FAIL (ajv): $JSON_FILE" >&2
-        exit 1
+
+    if [[ $PROBE_EXIT -eq 0 ]]; then
+        # ajv-cli is available; run validation authoritatively.
+        set +e
+        npx ajv-cli@5 validate -s "$SCHEMA_FILE" -d "$JSON_FILE"
+        AJV_EXIT=$?
+        set -e
+
+        if [[ $AJV_EXIT -eq 0 ]]; then
+            echo "[validate-properties-json] OK (ajv): $JSON_FILE"
+            exit 0
+        else
+            echo "[validate-properties-json] FAIL (ajv): $JSON_FILE" >&2
+            exit 1
+        fi
     fi
-    # AJV_EXIT=127 → ajv binary unavailable; fall through to jq fallback
+    # Probe failed: ajv not installable; fall through to jq
 fi
 
 # --- Fallback: jq hand-rolled checks ---
