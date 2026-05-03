@@ -14,7 +14,7 @@
 ## Commands
 
 ```bash
-dotnet restore zipper.sln                # Restore (after clone or adding packages)
+dotnet restore zipper.sln                # Restore NuGet packages
 dotnet build zipper.sln                  # Build
 dotnet publish -c Release               # Publish
 dotnet run --project src/Zipper.csproj -- [args]  # Run
@@ -24,7 +24,10 @@ dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # 
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"  # Single test class
 
 # Lint
-dotnet format --verify-no-changes src/   # Quick lint (run after every code change)
+dotnet format --verify-no-changes src/   # Format check (run after every code change)
+
+# Build + lint + test combo (run after every change)
+dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj
 
 # E2E (must pass before push)
 ./tests/run-tests.sh   # Linux/macOS
@@ -54,16 +57,17 @@ tests/run-tests.bat    # Windows
 
 ## Workflow
 
-**Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists).
+**Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists). Issues tracked as GitHub issues with labels matching priority levels.
 
 **Per-issue workflow:**
 1. `git checkout main && git pull`
-2. `git checkout -b fix/ISSUE-NNN-short-desc`
-3. Read the issue body; refresh labels, comments, and linked blockers before coding
-4. Write a failing test first (TDD), then implement the fix
-5. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
-6. Commit and create PR
-7. Monitor CI until all checks pass; fix failures before requesting review
+2. `git checkout -b fix/ISSUE-NNN-short-desc` (prefix: `fix/` for bugs, `feat/` for features, `refactor/`, `test/`, `docs/` per issue type)
+3. Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
+4. Read the issue body; refresh labels, comments, and linked blockers before coding
+5. Write a failing test first (TDD), then implement the fix
+6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
+7. Commit and create PR
+8. Monitor CI until all checks pass; fix failures before requesting review
 
 **Test location:** `src/Zipper.Tests/` (NOT the root `Zipper.Tests/` which is obsolete).
 
@@ -80,16 +84,30 @@ tests/run-tests.bat    # Windows
 | `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
 | `src/FileGenerationRequest.cs` | Configuration object (40+ properties) shared across pipeline |
+| `src/IGenerationMode.cs` | Mode interface — one RunAsync per generation strategy |
+| `src/GenerationRunner.cs` | Dispatches IGenerationMode, handles errors → exit codes |
+| `src/StandardMode.cs` | Standard mode adapter (wraps ParallelFileGenerator) |
+| `src/LoadfileOnlyMode.cs` | Loadfile-Only mode adapter (wraps LoadfileOnlyGenerator) |
+| `src/ProductionSetMode.cs` | Production Set mode adapter (wraps ProductionSetGenerator) |
+| `src/IFileGenerator.cs` | File generator interface — one implementation per file type |
+| `src/FileGeneratorFactory.cs` | Creates IFileGenerator by file type, eliminates string dispatch |
 | `src/ParallelFileGenerator.cs` | Channel-based producer-consumer pipeline (standard mode) |
 | `src/ZipArchiveService.cs` | Archive creation + Load File writing (consumer side) |
 | `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
+| `src/MetadataRowBuilder.cs` | Assembles metadata rows from profiles + generation context |
 | `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
 | `src/ProductionManifestWriter.cs` | `_manifest.json` production manifest writer |
 | `src/EmlGenerationService.cs` | Email Native File generation |
 | `src/EmailBuilder.cs` | MIME construction for Email Native Files |
+| `src/EmailTemplateSystem.cs` | Predefined email templates for test data generation |
+| `src/EmlFileGenerator.cs` | EML IFileGenerator implementation |
+| `src/PlaceholderFileGenerator.cs` | PDF/JPG/TIFF placeholder content generation |
+| `src/TiffFileGenerator.cs` | TIFF IFileGenerator implementation with multi-page support |
+| `src/TiffMultiPageGenerator.cs` | TIFF page count metadata + placeholder content (static helper) |
 | `src/OfficeFileGenerator.cs` | DOCX/XLSX Native File generation |
+| `src/OfficeFileGeneratorAdapter.cs` | Adapts OfficeFileGenerator to IFileGenerator |
 | `src/PlaceholderFiles.cs` | Pre-computed byte content for PDF, JPG, TIFF |
 | `src/BatesNumberGenerator.cs` | Bates Number generation |
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
@@ -104,11 +122,13 @@ tests/run-tests.bat    # Windows
 
 ### Three Generation Modes
 
-| Mode | Trigger | Entry Point | Output |
-|------|---------|-------------|--------|
-| **Standard** | default | `ParallelFileGenerator.GenerateFilesAsync()` | Archive (.zip) + Load File |
-| **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyGenerator.GenerateAsync()` | Load File + `_properties.json` audit |
-| **Production Set** | `--production-set` | `ProductionSetGenerator.GenerateAsync()` | Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
+`Program.cs` uses `SelectMode(request)` → `IGenerationMode` → `GenerationRunner.RunAsync()` to dispatch to one of three strategies:
+
+| Mode | Trigger | Adapter | Generator |
+|------|---------|---------|-----------|
+| **Standard** | default | `StandardMode` | `ParallelFileGenerator.GenerateFilesAsync()` → Archive (.zip) + Load File |
+| **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyMode` | `LoadfileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit |
+| **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
 
 ### Standard Pipeline
 
@@ -144,6 +164,6 @@ System.Text.Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 await writer.FlushAsync();  // NOT: await writer.DisposeAsync();
 ```
 
-- C# 8.0+, file-scoped namespaces, nullable reference types, switch expressions, pattern matching
+- C# 12 (net8.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
 - **No copyright headers** — do not add `// <copyright ...>` to any files
