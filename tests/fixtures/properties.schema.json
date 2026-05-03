@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Zipper _properties.json",
+  "description": "Schema for the audit file emitted by LoadfileAuditWriter in loadfile-only mode.",
+  "type": "object",
+  "required": ["fileName", "format", "totalRecords", "properties", "chaosMode"],
+  "additionalProperties": false,
+  "properties": {
+    "fileName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "format": {
+      "type": "string",
+      "minLength": 1
+    },
+    "totalRecords": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "properties": {
+      "type": "object",
+      "required": ["encoding", "lineEnding", "delimiters"],
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lineEnding": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delimiters": {
+          "type": "object",
+          "required": ["column", "quote", "newline", "multiValue", "nestedValue"],
+          "additionalProperties": false,
+          "properties": {
+            "column":      { "type": "string" },
+            "quote":       { "type": "string" },
+            "newline":     { "type": "string" },
+            "multiValue":  { "type": "string" },
+            "nestedValue": { "type": "string" }
+          }
+        }
+      }
+    },
+    "chaosMode": {
+      "type": "object",
+      "required": ["enabled", "totalAnomalies"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "targetAmount": {
+          "type": ["string", "null"]
+        },
+        "totalAnomalies": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "injectedAnomalies": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["lineNumber", "recordID", "column", "errorType", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "lineNumber":   { "type": "string" },
+              "recordID":     { "type": "string" },
+              "column":       { "type": "string" },
+              "errorType":    { "type": "string", "minLength": 1 },
+              "description":  { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

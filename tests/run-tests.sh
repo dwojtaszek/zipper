@@ -523,4 +523,9 @@ if ! bash ./tests/run-e2e-loadfile.sh; then
 fi
 print_success "Loadfile-only tests passed."
 
+# Test 13: Chaos anomaly-type and scenario coverage
+print_info "Running chaos anomaly coverage tests..."
+bash ./tests/test-chaos-anomaly-coverage.sh
+print_success "Chaos anomaly coverage tests passed."
+
 print_success "All tests passed successfully!"
