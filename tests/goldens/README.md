@@ -7,7 +7,7 @@ end-to-end output. The existing E2E suite under `tests/` validates structure
 
 ## Layout
 
-```
+```text
 tests/goldens/
 ├── README.md              # this file
 ├── run-goldens.sh         # the runner — drives scenarios.tsv

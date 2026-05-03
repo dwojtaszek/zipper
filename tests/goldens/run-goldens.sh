@@ -187,8 +187,16 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
     exit 2
   fi
 
+  # Execute the CLI. Catch non-zero exits so `set -e` doesn't abort the whole suite.
   # shellcheck disable=SC2086 # cli_args is intentionally word-split here.
-  ( cd "$work_dir" && "$zipper_cli" $cli_args )
+  if ! ( cd "$work_dir" && "$zipper_cli" $cli_args --seed "$seed" ); then
+    echo "    CLI crashed with non-zero exit code" >&2
+    failed=$((failed + 1))
+    scenario_failed=1
+    rm -rf "$work_dir"
+    trap - EXIT
+    continue
+  fi
 
   # Normalize timestamped output to stable names.
   normalize_output "$work_dir"
