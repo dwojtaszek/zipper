@@ -1,4 +1,3 @@
-
 namespace Zipper.Profiles;
 
 /// <summary>
