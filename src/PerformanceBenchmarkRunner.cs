@@ -162,13 +162,8 @@ namespace Zipper
 
             for (int i = 0; i < iterations; i++)
             {
-                using IMemoryOwner<byte>? memoryOwner = bufferSize > 0 && bufferSize <= PerformanceConstants.MaxPoolSize
-                    ? MemoryPool<byte>.Shared.Rent(bufferSize)
-                    : null;
-                if (memoryOwner != null)
-                {
-                    memoryOwner.Memory.Span[0] = (byte)i;
-                }
+                using var memoryOwner = MemoryPool<byte>.Shared.Rent(bufferSize);
+                memoryOwner.Memory.Span[0] = (byte)i;
             }
 
             sw.Stop();
