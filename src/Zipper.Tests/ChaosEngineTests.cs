@@ -668,5 +668,87 @@ namespace Zipper
                 types.Count >= 2,
                 $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
         }
+
+        [Fact]
+        public void AnomalyLineNumbers_AllMatchShouldInterceptTargets()
+        {
+            // Verifies that every numeric LineNumber in Anomalies corresponds to a line
+            // where ShouldIntercept returned true — the invariant the E2E tests rely on.
+            const int totalLines = 100;
+            var engine = new ChaosEngine(
+                totalLines: totalLines,
+                chaosAmount: "10",
+                chaosTypes: "mixed-delimiters,quotes,columns,eol",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe\u0014\u00feValue3\u00fe";
+            var interceptedLines = new HashSet<long>();
+
+            for (int i = 1; i <= totalLines; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    engine.Intercept(i, line, $"DOC{i:D8}");
+                    interceptedLines.Add(i);
+                }
+            }
+
+            // Every numeric line number in Anomalies must be an intercepted line
+            foreach (var anomaly in engine.Anomalies)
+            {
+                if (long.TryParse(anomaly.LineNumber, out var lineNum))
+                {
+                    Assert.Contains(lineNum, interceptedLines);
+                }
+            }
+
+            // Count should match (each intercepted line produces exactly one anomaly for non-encoding types)
+            Assert.Equal(interceptedLines.Count, engine.Anomalies.Count);
+        }
+
+        [Fact]
+        public void AnomalyLineNumbers_NonInterceptedLines_HaveNoAnomalies()
+        {
+            // Verifies that lines NOT selected by ShouldIntercept appear in no anomaly record.
+            const int totalLines = 50;
+            var engine = new ChaosEngine(
+                totalLines: totalLines,
+                chaosAmount: "5",
+                chaosTypes: "columns",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "|",
+                quoteDelimiter: "\"",
+                eol: "\r\n",
+                seed: 42);
+
+            string line = "\"Val1\"|\"Val2\"|\"Val3\"";
+
+            for (int i = 1; i <= totalLines; i++)
+            {
+                if (engine.ShouldIntercept(i))
+                {
+                    engine.Intercept(i, line, $"DOC{i:D8}");
+                }
+            }
+
+            var anomalyLines = engine.Anomalies
+                .Select(a => long.TryParse(a.LineNumber, out var n) ? (long?)n : null)
+                .Where(n => n.HasValue)
+                .Select(n => n!.Value)
+                .ToHashSet();
+
+            // Non-intercepted lines must not appear in any anomaly
+            for (int i = 1; i <= totalLines; i++)
+            {
+                if (!engine.ShouldIntercept(i))
+                {
+                    Assert.DoesNotContain((long)i, anomalyLines);
+                }
+            }
+        }
     }
 }

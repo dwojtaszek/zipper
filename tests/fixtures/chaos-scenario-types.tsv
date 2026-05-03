@@ -1,0 +1,7 @@
+scenario_name	chaos_types	format
+structured-import-failures	mixed-delimiters,quotes,columns	dat
+encoding-nightmare	encoding,mixed-delimiters	dat
+broken-boundaries	opt-boundary,opt-pagecount,opt-path	opt
+field-overflow	eol,columns	dat
+full-chaos		dat
+transfer-encoding-failures	mixed-delimiters,encoding,quotes	dat

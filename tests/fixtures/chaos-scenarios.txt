@@ -1,0 +1,6 @@
+structured-import-failures
+encoding-nightmare
+broken-boundaries
+field-overflow
+full-chaos
+transfer-encoding-failures

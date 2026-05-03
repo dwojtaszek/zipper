@@ -1,0 +1,14 @@
+# DAT chaos anomaly types (LoadFileFormat.Dat — default)
+# Source: ChaosEngine.cs DatChaosTypes
+mixed-delimiters
+quotes
+columns
+eol
+encoding
+# OPT chaos anomaly types (LoadFileFormat.Opt — requires --loadfile-format opt)
+# Source: ChaosEngine.cs OptChaosTypes
+opt-boundary
+opt-columns
+opt-pagecount
+opt-path
+opt-batesid
