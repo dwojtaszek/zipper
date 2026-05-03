@@ -197,7 +197,7 @@ while IFS= read -r TYPE; do
     [[ -n "$DUP_LINES" ]] && print_error "Duplicate line numbers for OPT type: $TYPE"
 
     TOTAL_RECORDS=$(jq '.totalRecords' "$PROPS")
-    MAX_LINE=$(( TOTAL_RECORDS + 1 ))
+    MAX_LINE=$TOTAL_RECORDS  # OPT has no header row; valid lines are [1, totalRecords]
     BAD_LINES=$(jq -r --argjson max "$MAX_LINE" '
         [.chaosMode.injectedAnomalies[]?
          | select(.lineNumber | test("^[0-9]+$"))
