@@ -10,13 +10,7 @@ namespace Zipper
     /// </summary>
     public class ParallelFileGenerator : IDisposable
     {
-        private readonly MemoryPoolManager memoryPoolManager;
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
-
-        public ParallelFileGenerator()
-        {
-            this.memoryPoolManager = new MemoryPoolManager();
-        }
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
@@ -217,7 +211,10 @@ namespace Zipper
 
             var totalSize = fileContent.Length + effectivePadding;
 
-            var memoryOwner = this.memoryPoolManager.Rent((int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize));
+            var rentSize = (int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize);
+            var memoryOwner = rentSize > 0 && rentSize <= PerformanceConstants.MaxPoolSize
+                ? MemoryPool<byte>.Shared.Rent(rentSize)
+                : null;
 
             if (memoryOwner == null)
             {
@@ -306,7 +303,6 @@ namespace Zipper
 
         public void Dispose()
         {
-            this.memoryPoolManager?.Dispose();
         }
 
         private static void RethrowIfNotNull(Exception? ex)

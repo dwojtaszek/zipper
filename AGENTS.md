@@ -56,8 +56,6 @@ tests/run-tests.bat    # Windows
 
 **Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists).
 
-**Current dependency gate:** #198 (E2E golden fixtures + CI job) blocks most refactor work. Do not start design/refactor/KISS issues blocked on #198 until the golden CI job is active.
-
 **Per-issue workflow:**
 1. `git checkout main && git pull`
 2. `git checkout -b fix/ISSUE-NNN-short-desc`

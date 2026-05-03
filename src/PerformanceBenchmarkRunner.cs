@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.IO.Compression;
 
@@ -159,14 +160,10 @@ namespace Zipper
             memoryBefore = GC.GetTotalMemory(false);
             sw.Restart();
 
-            using var poolManager = new MemoryPoolManager();
             for (int i = 0; i < iterations; i++)
             {
-                using var memoryOwner = poolManager.Rent(bufferSize);
-                if (memoryOwner != null)
-                {
-                    memoryOwner.Memory.Span[0] = (byte)i;
-                }
+                using var memoryOwner = MemoryPool<byte>.Shared.Rent(bufferSize);
+                memoryOwner.Memory.Span[0] = (byte)i;
             }
 
             sw.Stop();
