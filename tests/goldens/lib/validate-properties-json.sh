@@ -25,13 +25,27 @@ if [[ ! -f "$SCHEMA_FILE" ]]; then
     exit 1
 fi
 
-# --- Try ajv-cli (preferred) ---
+# --- Try ajv-cli (preferred, authoritative) ---
+# Run ajv only when npx is available. Capture its exit code:
+#   0  → JSON passed validation → exit 0 (done)
+#   1  → JSON failed validation → exit 1 (error; do NOT fall through to jq)
+#   127→ ajv-cli not installed  → fall through to jq fallback
 if command -v npx >/dev/null 2>&1; then
-    # ajv-cli@5 uses ajv v8 and supports draft-07
-    if npx --yes ajv-cli@5 validate -s "$SCHEMA_FILE" -d "$JSON_FILE" \
-            --valid --errors=text 2>/dev/null; then
+    set +e
+    npx --yes ajv-cli@5 validate -s "$SCHEMA_FILE" -d "$JSON_FILE" \
+        --valid --errors=text 2>/dev/null
+    AJV_EXIT=$?
+    set -e
+    if [[ $AJV_EXIT -eq 0 ]]; then
+        # Validation passed
+        echo "[validate-properties-json] OK (ajv): $JSON_FILE"
         exit 0
+    elif [[ $AJV_EXIT -ne 127 ]]; then
+        # ajv ran but found the JSON invalid; do not fall through to jq
+        echo "[validate-properties-json] FAIL (ajv): $JSON_FILE" >&2
+        exit 1
     fi
+    # AJV_EXIT=127 → ajv binary unavailable; fall through to jq fallback
 fi
 
 # --- Fallback: jq hand-rolled checks ---
@@ -59,4 +73,4 @@ _check ".properties.delimiters.quote"
 _check ".chaosMode.enabled"
 _check ".chaosMode.totalAnomalies"
 
-echo "[validate-properties-json] OK: $JSON_FILE"
+echo "[validate-properties-json] OK (jq): $JSON_FILE"
