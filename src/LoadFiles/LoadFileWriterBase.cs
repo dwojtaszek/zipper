@@ -115,10 +115,9 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             return string.Empty;
         }
 
-        if (field.Contains(',') || field.Contains('"') || field.Contains('
-') || field.Contains(''))
+        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
         {
-            return $""{ field.Replace(""", """") }"";
+            return $"\"{field.Replace("\"", "\"\"")}\"";
         }
 
         return field;
@@ -151,11 +150,9 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// </summary>
     internal static string GetEolString(string eol) => eol?.ToUpperInvariant() switch
     {
-        "LF" => "
-",
-        "CR" => "",
-        _ => "
-",
+        "LF" => "\n",
+        "CR" => "\r",
+        _ => "\r\n",
     };
 
     /// <summary>
