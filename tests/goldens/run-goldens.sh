@@ -89,6 +89,7 @@ normalize_output() {
       -e 's/loadfile_[0-9]{8}_[0-9]{6}/loadfile/g' \
       -e 's/PRODUCTION_[0-9]{8}_[0-9]{6}/PRODUCTION/g' \
       -e 's/"productionDate": "[^"]*"/"productionDate": "NORMALIZED"/g' \
+      -e 's/"generationTime": "[^"]*"/"generationTime": "NORMALIZED"/g' \
       "$jf"
   done < <( find "$dir" -type f -name '*.json' -print0 2>/dev/null )
 }
