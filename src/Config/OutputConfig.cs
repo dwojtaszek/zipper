@@ -17,4 +17,10 @@ public record OutputConfig
     public long? TargetZipSize { get; init; }
 
     public bool IncludeLoadFile { get; init; }
+
+    public string FileTypeLower => this.FileType.ToLowerInvariant();
+
+    public bool IsEml => this.FileTypeLower == "eml";
+
+    public bool IsTiff => this.FileTypeLower == "tiff";
 }

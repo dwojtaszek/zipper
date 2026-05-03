@@ -17,4 +17,8 @@ public record MetadataConfig
     public int? CustodianCountOverride { get; init; }
 
     public bool WithFamilies { get; init; }
+
+    public bool ShouldIncludeEmlColumns(OutputConfig output) => output.IsEml;
+
+    public bool ShouldIncludeMetadataColumns(OutputConfig output) => this.WithMetadata || output.IsEml;
 }
