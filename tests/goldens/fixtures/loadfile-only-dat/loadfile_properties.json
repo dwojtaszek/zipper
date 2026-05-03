@@ -1,0 +1,20 @@
+{
+  "fileName": "loadfile.dat",
+  "format": "DAT (Metadata)",
+  "totalRecords": 2000,
+  "properties": {
+    "encoding": "UTF-8",
+    "lineEnding": "CRLF",
+    "delimiters": {
+      "column": "ascii:20",
+      "quote": "ascii:254",
+      "newline": "ascii:174",
+      "multiValue": "char:;",
+      "nestedValue": "char:\\"
+    }
+  },
+  "chaosMode": {
+    "enabled": false,
+    "totalAnomalies": 0
+  }
+}

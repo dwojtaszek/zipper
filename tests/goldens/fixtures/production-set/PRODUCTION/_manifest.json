@@ -1,0 +1,30 @@
+{
+  "productionDate": "NORMALIZED",
+  "batesRange": {
+    "start": "CLIENT00000001",
+    "end": "CLIENT00001500",
+    "prefix": "CLIENT",
+    "digits": 8
+  },
+  "documentCount": 1500,
+  "fileType": "pdf",
+  "volumeCount": 3,
+  "volumeSize": 500,
+  "directories": {
+    "data": "DATA",
+    "natives": "NATIVES",
+    "text": "TEXT",
+    "images": "IMAGES"
+  },
+  "loadFiles": {
+    "dat": "DATA/loadfile.dat",
+    "opt": "DATA/loadfile.opt"
+  },
+  "settings": {
+    "encoding": "Unicode (UTF-8)",
+    "columnDelimiter": "ascii:20",
+    "quoteDelimiter": "char:\u00FE",
+    "seed": 42
+  },
+  "generationTime": "NORMALIZED"
+}

@@ -8,3 +8,11 @@
 
 # Treat PNG files as binary
 *.png binary
+
+# Golden fixtures must be byte-exact — disable all line-ending normalisation.
+# Load files use CRLF (eDiscovery convention); SHA-based comparison requires
+# git to store them verbatim.
+tests/goldens/fixtures/**/*.dat binary
+tests/goldens/fixtures/**/*.opt binary
+tests/goldens/fixtures/**/*.json -diff
+
