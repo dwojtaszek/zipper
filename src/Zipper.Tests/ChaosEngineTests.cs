@@ -668,6 +668,7 @@ namespace Zipper
                 types.Count >= 2,
                 $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
         }
+
         [Fact]
         public void AnomalyLineNumbers_AllMatchShouldInterceptTargets()
         {
