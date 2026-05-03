@@ -22,28 +22,28 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// </summary>
     /// <returns></returns>
     protected static string GetFileTypeLower(FileGenerationRequest request) =>
-        request.FileType.ToLowerInvariant();
+        request.Output.FileTypeLower;
 
     /// <summary>
     /// Determines if metadata columns should be included.
     /// </summary>
     /// <returns></returns>
     protected static bool ShouldIncludeMetadata(FileGenerationRequest request) =>
-        request.WithMetadata || GetFileTypeLower(request) == "eml";
+        request.Metadata.ShouldIncludeMetadataColumns(request.Output);
 
     /// <summary>
     /// Determines if EML-specific columns should be included.
     /// </summary>
     /// <returns></returns>
     protected static bool ShouldIncludeEmlColumns(FileGenerationRequest request) =>
-        GetFileTypeLower(request) == "eml";
+        request.Metadata.ShouldIncludeEmlColumns(request.Output);
 
     /// <summary>
     /// Determines if page count column should be included.
     /// </summary>
     /// <returns></returns>
     protected static bool ShouldIncludePageCount(FileGenerationRequest request) =>
-        GetFileTypeLower(request) == "tiff" && request.TiffPageRange.HasValue;
+        request.Tiff.ShouldIncludePageCount(request.Output);
 
     /// <summary>
     /// Generates metadata column values for a file.
