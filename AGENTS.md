@@ -1,6 +1,11 @@
 # AI Agent Instructions for Zipper
 
-**Behavior:** Think step-by-step before coding. Output COMPLETE files (no placeholders/ellipses). Fix root causes, not symptoms. Match existing style. If unsure, ask for clarification – do not assume. Include error handling. Self-review for bugs/security. Suggest incremental changes over massive rewrites.
+## Principles
+
+1. **Think before coding:** State assumptions, surface tradeoffs, ask if unclear. Fix root causes, not symptoms.
+2. **Simplicity first:** No speculative features, no single-use abstractions, minimum code. YAGNI.
+3. **Surgical changes:** Don't touch adjacent code, match existing style, no drive-by refactors. Output complete files — no placeholders or ellipses.
+4. **Goal-driven execution:** Define verifiable success criteria before starting. Loop until met. Include error handling.
 
 ---
 
@@ -38,40 +43,60 @@ tests/run-tests.bat    # Windows
 
 ## Critical Rules
 
-> [!IMPORTANT]
-> **Domain Language:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all code, comments, documentation, and reviews. Grep the file before writing docs/PRs; flag non-canonical terms in review.
+### IMPORTANT
+**Domain Language:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all code, comments, documentation, and reviews. Grep the file before writing docs/PRs; flag non-canonical terms in review.
 
-> [!CAUTION]
-> **Requirement IDs are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
+### CAUTION
+**Requirement IDs are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
 
-> [!IMPORTANT]
-> **Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
-> 1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
-> 2. `Requirements.md` — add or revise requirements (never renumber)
-> 3. `UBIQUITOUS_LANGUAGE.md` — if domain terms change
-> 4. E2E scripts — both `.sh` and `.bat` for new coverage
->
-> Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement.
+### CAUTION
+**Test coverage must never decrease.** The only thing worse than a failing test is a reduction in test coverage. Fix failing tests — don't delete them. If a test is wrong, replace it with a correct one covering the same behavior. Never remove test files to make a test run green.
+
+### IMPORTANT
+**Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
+1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
+2. `Requirements.md` — add or revise requirements (never renumber)
+3. `UBIQUITOUS_LANGUAGE.md` — if domain terms change
+4. E2E scripts — both `.sh` and `.bat` for new coverage
+
+Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement.
 
 ---
 
-## Workflow
+## Workflow for github issues
 
-**Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists). Issues tracked as GitHub issues with labels matching priority levels.
+**Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists). 
 
 **Per-issue workflow:**
 1. `git checkout main && git pull`
 2. `git checkout -b fix/ISSUE-NNN-short-desc` (prefix: `fix/` for bugs, `feat/` for features, `refactor/`, `test/`, `docs/` per issue type)
-3. Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
+3. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
 4. Read the issue body; refresh labels, comments, and linked blockers before coding
 5. Write a failing test first (TDD), then implement the fix
 6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
-7. Commit and create PR
-8. Monitor CI until all checks pass; fix failures before requesting review
+7. Run adversarial review before marking work complete (see Adversarial Review section below)
+8. Commit and create PR
+9. Monitor CI until all checks pass; fix failures before requesting review
 
-**Test location:** `src/Zipper.Tests/` (NOT the root `Zipper.Tests/` which is obsolete).
+**Test location:** `src/Zipper.Tests/`.
 
 **Pre-commit hook:** Runs lint + auto-format + unit tests on every `git commit`. Bypass: `git commit --no-verify`.
+
+---
+
+## Adversarial Review
+
+Always use a subagent to perform adversarial review.
+
+**Techniques:**
+
+- **Fresh eyes:** "Look at this again with fresh eyes."
+- **Subagent review:** Dispatch a review subagent with no knowledge of how the code was built.
+- **Cross-model:** Use a different, if available, model for review than for coding.
+- **Competition:** Ask two subagents to review the work. Tell them whomever finds the most serious issues gets five points (or a cookie). The reward details don't matter — the competitive framing does.
+- **Set expectations:** "I'll be disappointed if they don't find at least N significant problems."
+
+Run adversarial review before marking work as complete. Treat findings as bugs, not suggestions.
 
 ---
 
@@ -144,25 +169,8 @@ tests/run-tests.bat    # Windows
 
 ---
 
-## Key Invariants
-
-- **Request immutability:** `FileGenerationRequest` must not be mutated after passing to a generator. Callers `Clone()` before modifying. `Clone()` is shallow — reference-type properties are shared.
-- **MemoryOwner lifecycle:** Disposed before Load File writing. Writers access `Data.Length` only — accessing `.Span` after disposal is use-after-free.
-- **Path separators:** Load File paths use `\` (eDiscovery convention). ZIP entries use `/` (ZIP spec).
-- **Loadfile-Only scope:** Writes DAT or OPT only. Do not add CSV/XML Loadfile-Only scenarios without changing implementation + docs first.
-- **Audit File schema:** camelCase throughout — `chaosMode.injectedAnomalies[*].errorType`, `lineNumber`, `recordID`. Not PascalCase, not snake_case.
-
----
 
 ## Code Style
-
-```csharp
-// Cross-platform ANSI encoding — MUST register at startup in Program.Main
-System.Text.Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-
-// Caller-owned streams: flush but don't dispose
-await writer.FlushAsync();  // NOT: await writer.DisposeAsync();
-```
 
 - C# 12 (net8.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
