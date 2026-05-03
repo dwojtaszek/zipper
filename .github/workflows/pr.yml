@@ -158,3 +158,29 @@ jobs:
           else
             bash ./tests/run-tests.sh
           fi
+
+  goldens:
+    needs: [docs-only, build-and-test]
+    if: needs.docs-only.outputs.only_docs != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Restore (locked)
+        run: dotnet restore zipper.sln --locked-mode
+
+      - name: Publish CLI (Release)
+        run: dotnet publish src/Zipper.csproj -c Release -o ./publish-bin
+
+      - name: Run golden scenarios
+        run: |
+          chmod +x ./tests/goldens/run-goldens.sh
+          ZIPPER_CLI=./publish-bin/Zipper bash ./tests/goldens/run-goldens.sh
+

@@ -1,1 +1,14 @@
 scenario_name | cli_args | seed | description
+pdf-basic | --count 500 --type pdf --output-path . --seed 42 | 42 | Basic PDF generation
+pdf-metadata | --count 500 --type pdf --with-metadata --output-path . --seed 42 | 42 | PDF with metadata columns
+pdf-text | --count 500 --type pdf --with-text --output-path . --seed 42 | 42 | PDF with extracted text
+pdf-full | --count 500 --type pdf --with-metadata --with-text --bates-prefix CLIENT --output-path . --seed 42 | 42 | PDF with metadata + text + Bates
+jpg-folders-gaussian | --count 1000 --type jpg --folders 10 --distribution gaussian --output-path . --seed 42 | 42 | JPG in 10 folders with Gaussian distribution
+tiff-multipage | --count 200 --type tiff --tiff-pages 1-10 --output-path . --seed 42 | 42 | Multi-page TIFF (1-10 pages per file)
+eml-attachments | --count 500 --type eml --attachment-rate 30 --output-path . --seed 42 | 42 | EML with 30% attachment rate
+eml-full | --count 500 --type eml --with-metadata --with-text --attachment-rate 50 --output-path . --seed 42 | 42 | EML full-featured
+docx-basic | --count 300 --type docx --output-path . --seed 42 | 42 | Basic DOCX generation
+xlsx-basic | --count 300 --type xlsx --output-path . --seed 42 | 42 | Basic XLSX generation
+loadfile-only-dat | --loadfile-only --count 2000 --loadfile-format dat --output-path . --seed 42 | 42 | Loadfile-only DAT
+loadfile-only-opt | --loadfile-only --count 2000 --loadfile-format opt --output-path . --seed 42 | 42 | Loadfile-only OPT
+production-set | --production-set --count 1500 --type pdf --volume-size 500 --bates-prefix CLIENT --bates-digits 8 --output-path . --seed 42 | 42 | Production set with volumes
