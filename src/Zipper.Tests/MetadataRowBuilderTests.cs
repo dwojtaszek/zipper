@@ -194,10 +194,12 @@ namespace Zipper
             var request = new FileGenerationRequest
             {
                 Output = new OutputConfig { FileType = "pdf" },
-                Bates = new BatesNumberConfig,
-                Prefix = "TEST",
-                Start = 100,
-                Digits = 6,
+                Bates = new BatesNumberConfig
+                {
+                    Prefix = "TEST",
+                    Start = 100,
+                    Digits = 6,
+                },
             };
             var builder = new MetadataRowBuilder(request, new Random(), DateTime.UtcNow);
             var workItem = new FileWorkItem { Index = 5 };

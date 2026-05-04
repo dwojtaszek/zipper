@@ -355,10 +355,12 @@ public class ProductionSetTests : IDisposable
                 VolumeSize = volumeSize,
             },
             Metadata = new MetadataConfig { Seed = seed },
-            Bates = new BatesNumberConfig,
-            Prefix = batesPrefix,
-            Start = batesStart,
-            Digits = batesDigits,
+            Bates = new BatesNumberConfig
+            {
+                Prefix = batesPrefix,
+                Start = batesStart,
+                Digits = batesDigits,
+            },
         };
     }
 

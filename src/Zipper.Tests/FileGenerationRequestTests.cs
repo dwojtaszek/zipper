@@ -174,7 +174,6 @@ namespace Zipper.Tests
             var original = new FileGenerationRequest
             {
                 LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
-                LoadFile = new LoadFileConfig,
             };
             var clone = original.Clone();
 
