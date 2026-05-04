@@ -476,7 +476,7 @@ namespace Zipper
             Assert.DoesNotContain("Custodian", contentWithout);
 
             var emlRequest = this.CreateTestRequest("eml");
-            emlRequest.Metadata.WithMetadata = false;
+            emlRequest.Metadata = emlRequest.Metadata with { WithMetadata = false };
             var emlContent = await this.CaptureCsvOutput(emlRequest, files);
             Assert.Contains("Custodian", emlContent);
         }
@@ -510,7 +510,7 @@ namespace Zipper
             Assert.DoesNotContain("Page Count", contentWithout);
 
             var pdfRequest = this.CreateTestRequest("pdf");
-            pdfRequest.Tiff.PageRange = (1, 10);
+            pdfRequest.Tiff = pdfRequest.Tiff with { PageRange = (1, 10) };
             var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
             Assert.DoesNotContain("Page Count", pdfContent);
         }
