@@ -9,10 +9,15 @@
     <AnalysisLevel>latest</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <NoWarn>$(NoWarn);SA0001;EnableGenerateDocumentationFile</NoWarn>
+    <!--
+      RS1036: "A project containing analyzers should specify EnforceExtendedAnalyzerRules=true."
+      RS2008: "Enable analyzer release tracking for the analyzer project."
+      Both are informational guidance rules for publicly-shipped analyzer packages. This
+      analyzer is repo-internal (not published to NuGet), so the overhead of release tracking
+      files is disproportionate. Suppressed until the project is prepared for a NuGet release.
+    -->
+    <NoWarn>$(NoWarn);SA0001;EnableGenerateDocumentationFile;RS1036;RS2008</NoWarn>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <!-- Required by RS1036 for projects that contain Roslyn analyzers -->
-    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,9 +36,6 @@
 
   <ItemGroup>
     <AdditionalFiles Include="../../stylecop.json" Link="stylecop.json" />
-    <!-- Analyzer release tracking files required by RS2008 -->
-    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
-    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>
 
   <ItemGroup>
