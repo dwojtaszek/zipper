@@ -12,9 +12,9 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        var col = string.IsNullOrEmpty(request.ColumnDelimiter) ? "\u0014" : request.ColumnDelimiter;
-        var quote = string.IsNullOrEmpty(request.QuoteDelimiter) ? "\u00fe" : request.QuoteDelimiter;
-        var eol = GetEolString(request.EndOfLine);
+        var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "\u0014" : request.Delimiters.ColumnDelimiter;
+        var quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "\u00fe" : request.Delimiters.QuoteDelimiter;
+        var eol = GetEolString(request.Delimiters.EndOfLine);
 
         await using var writer = CreateWriter(stream, request);
 
@@ -26,18 +26,18 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
-            var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig!, workItem.Index - 1);
+            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
 
             var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-            var textPath = nativePath.Replace($".{request.FileType}", ".txt");
+            var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
             var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
-            var random = request.Seed.HasValue ? new Random(request.Seed.Value + (int)workItem.Index) : Random.Shared;
+            var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
 #pragma warning restore S2245
-            var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+            var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
             var builder = new MetadataRowBuilder(request, random, now);
 
             var fields = new[]
@@ -51,7 +51,7 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
                 builder.GetCustodian(),
                 builder.GetDateCreated(),
                 fileData.DataLength.ToString(),
-                request.FileType.ToUpperInvariant(),
+                request.Output.FileType.ToUpperInvariant(),
             };
             await writer.WriteAsync(string.Join(col, fields.Select(f => $"{quote}{f}{quote}")) + eol);
         }

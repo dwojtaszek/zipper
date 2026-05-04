@@ -11,14 +11,14 @@ internal sealed class EmlFileGenerator : IFileGenerator
 
     public bool RequiresSequentialProcessing(FileGenerationRequest request)
     {
-        return request.WithText || request.AttachmentRate > 0;
+        return request.Output.WithText || request.LoadFile.AttachmentRate > 0;
     }
 
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         var emlResult = EmlGenerationService.GenerateEmlContent(
             (int)workItem.Index,
-            request.AttachmentRate);
+            request.LoadFile.AttachmentRate);
 
         return new GeneratedFileContent
         {

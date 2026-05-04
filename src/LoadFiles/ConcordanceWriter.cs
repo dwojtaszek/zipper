@@ -18,17 +18,17 @@ internal class ConcordanceWriter : LoadFileWriterBase
         ChaosEngine? chaosEngine = null)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
+        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
 
-        // Concordance DAT format uses request.ColumnDelimiter with DAT escaping (þ quote char doubled)
+        // Concordance DAT format uses request.Delimiters.ColumnDelimiter with DAT escaping (þ quote char doubled)
         // Default column delimiter is ASCII 20 (DC4), quote delimiter is ASCII 254 (þ)
-        char fieldDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : ',';
+        char fieldDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : ',';
         char quoteDelim = '\u00fe'; // ASCII 254 — Concordance standard quote character
 
 #pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
         await WriteHeaderAsync(writer, request, fieldDelim, quoteDelim);
         await WriteRowsAsync(writer, request, processedFiles, fieldDelim, quoteDelim, random, now);
@@ -64,7 +64,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
             header.Append($"{quoteDelim}ATTACHMENT{quoteDelim}{fieldDelim}");
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             header.Append($"{quoteDelim}BATES{quoteDelim}{fieldDelim}");
         }
@@ -74,7 +74,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
             header.Append($"{quoteDelim}PAGECOUNT{quoteDelim}{fieldDelim}");
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             header.Append($"{quoteDelim}TEXT_PATH{quoteDelim}{fieldDelim}");
         }
@@ -126,7 +126,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 line.Append($"{quoteDelim}{EscapeDatField(eml.Attachment, quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
-            if (request.BatesConfig != null)
+            if (request.Bates != null)
             {
                 line.Append($"{quoteDelim}{EscapeDatField(GenerateBatesNumber(request, workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
@@ -136,7 +136,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 line.Append($"{quoteDelim}{EscapeDatField(fileData.PageCount.ToString(), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
-            if (request.WithText)
+            if (request.Output.WithText)
             {
                 line.Append($"{quoteDelim}{EscapeDatField(GenerateTextPath(request, workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             }

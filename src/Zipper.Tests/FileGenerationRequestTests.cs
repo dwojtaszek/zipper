@@ -47,8 +47,8 @@ namespace Zipper.Tests
         {
             var request = new FileGenerationRequest();
             var profile = new ColumnProfile { Name = "test", Description = "standard" };
-            request.ColumnProfile = profile;
-            Assert.Same(profile, request.ColumnProfile);
+            request.Metadata = request.Metadata with { ColumnProfile = profile };
+            Assert.Same(profile, request.Metadata.ColumnProfile);
             Assert.Same(profile, request.Metadata.ColumnProfile);
         }
 
@@ -56,8 +56,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_DateFormatOverride_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.DateFormatOverride = "yyyy-MM-dd";
-            Assert.Equal("yyyy-MM-dd", request.DateFormatOverride);
+            request.Metadata = request.Metadata with { DateFormatOverride = "yyyy-MM-dd" };
+            Assert.Equal("yyyy-MM-dd", request.Metadata.DateFormatOverride);
             Assert.Equal("yyyy-MM-dd", request.Metadata.DateFormatOverride);
         }
 
@@ -65,8 +65,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_EmptyPercentageOverride_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.EmptyPercentageOverride = 25;
-            Assert.Equal(25, request.EmptyPercentageOverride);
+            request.Metadata = request.Metadata with { EmptyPercentageOverride = 25 };
+            Assert.Equal(25, request.Metadata.EmptyPercentageOverride);
             Assert.Equal(25, request.Metadata.EmptyPercentageOverride);
         }
 
@@ -74,8 +74,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_WithFamilies_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.WithFamilies = true;
-            Assert.True(request.WithFamilies);
+            request.Metadata = request.Metadata with { WithFamilies = true };
+            Assert.True(request.Metadata.WithFamilies);
             Assert.True(request.Metadata.WithFamilies);
         }
 
@@ -83,8 +83,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_AttachmentRate_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.AttachmentRate = 50;
-            Assert.Equal(50, request.AttachmentRate);
+            request.LoadFile = request.LoadFile with { AttachmentRate = 50 };
+            Assert.Equal(50, request.LoadFile.AttachmentRate);
             Assert.Equal(50, request.LoadFile.AttachmentRate);
         }
 
@@ -92,8 +92,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_NewlineDelimiter_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.NewlineDelimiter = " ";
-            Assert.Equal(" ", request.NewlineDelimiter);
+            request.Delimiters = request.Delimiters with { NewlineDelimiter = " " };
+            Assert.Equal(" ", request.Delimiters.NewlineDelimiter);
             Assert.Equal(" ", request.Delimiters.NewlineDelimiter);
         }
 
@@ -101,8 +101,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_MultiValueDelimiter_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.MultiValueDelimiter = ",";
-            Assert.Equal(",", request.MultiValueDelimiter);
+            request.Delimiters = request.Delimiters with { MultiValueDelimiter = "," };
+            Assert.Equal(",", request.Delimiters.MultiValueDelimiter);
             Assert.Equal(",", request.Delimiters.MultiValueDelimiter);
         }
 
@@ -110,8 +110,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_NestedValueDelimiter_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.NestedValueDelimiter = "/";
-            Assert.Equal("/", request.NestedValueDelimiter);
+            request.Delimiters = request.Delimiters with { NestedValueDelimiter = "/" };
+            Assert.Equal("/", request.Delimiters.NestedValueDelimiter);
             Assert.Equal("/", request.Delimiters.NestedValueDelimiter);
         }
 
@@ -119,8 +119,8 @@ namespace Zipper.Tests
         public void FileGenerationRequest_ChaosScenario_Roundtrips()
         {
             var request = new FileGenerationRequest();
-            request.ChaosScenario = "encoding-nightmare";
-            Assert.Equal("encoding-nightmare", request.ChaosScenario);
+            request.Chaos = request.Chaos with { ChaosScenario = "encoding-nightmare" };
+            Assert.Equal("encoding-nightmare", request.Chaos.ChaosScenario);
             Assert.Equal("encoding-nightmare", request.Chaos.ChaosScenario);
         }
 

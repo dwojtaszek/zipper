@@ -19,7 +19,7 @@ internal static class ProductionSetGenerator
         var stopwatch = Stopwatch.StartNew();
 
         var productionName = $"PRODUCTION_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var productionPath = Path.Combine(request.OutputPath, productionName);
+        var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
@@ -33,13 +33,13 @@ internal static class ProductionSetGenerator
         Directory.CreateDirectory(imagesDir);
 
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : new Random();
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
 #pragma warning restore S2245
-        var batesConfig = request.BatesConfig
+        var batesConfig = request.Bates
             ?? throw new InvalidOperationException("Production set requires Bates configuration. Specify --bates-prefix.");
 
         // Calculate volume distribution
-        int volumeCount = (int)Math.Ceiling((double)request.FileCount / request.VolumeSize);
+        int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
         for (int v = 1; v <= volumeCount; v++)
@@ -50,21 +50,21 @@ internal static class ProductionSetGenerator
             Directory.CreateDirectory(Path.Combine(imagesDir, volName));
         }
 
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
-        var fileGenerator = FileGeneratorFactory.Create(request.FileType, request)
-            ?? throw new InvalidOperationException($"Unknown file type: {request.FileType}");
+        var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
+            ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
 
         // Generate files and collect records for load files
         var fileDataList = new List<FileData>();
 
-        for (long i = 0; i < request.FileCount; i++)
+        for (long i = 0; i < request.Output.FileCount; i++)
         {
-            int volumeIndex = (int)(i / request.VolumeSize) + 1;
+            int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
             var volName = $"VOL{volumeIndex:D3}";
             var batesNumber = BatesNumberGenerator.Generate(batesConfig, i);
 
-            var nativeExt = request.FileType.ToLowerInvariant();
+            var nativeExt = request.Output.FileTypeLower;
             var nativeRelPath = Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}");
             var textRelPath = Path.Combine("TEXT", volName, $"{batesNumber}.txt");
             var imageRelPath = Path.Combine("IMAGES", volName, $"{batesNumber}.tif");
@@ -101,9 +101,9 @@ internal static class ProductionSetGenerator
             });
 
             // Progress reporting
-            if ((i + 1) % 1000 == 0 || i == request.FileCount - 1)
+            if ((i + 1) % 1000 == 0 || i == request.Output.FileCount - 1)
             {
-                Console.Write($"\r  Progress: {i + 1:N0} / {request.FileCount:N0} documents");
+                Console.Write($"\r  Progress: {i + 1:N0} / {request.Output.FileCount:N0} documents");
             }
         }
 
@@ -127,15 +127,15 @@ internal static class ProductionSetGenerator
 
         // Write manifest
         var batesStart = BatesNumberGenerator.Generate(batesConfig, 0);
-        var batesEnd = BatesNumberGenerator.Generate(batesConfig, request.FileCount - 1);
+        var batesEnd = BatesNumberGenerator.Generate(batesConfig, request.Output.FileCount - 1);
         var manifestPath = await ProductionManifestWriter.WriteAsync(
             productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed);
 
         // Optionally wrap in ZIP
         string? zipPath = null;
-        if (request.ProductionZip)
+        if (request.Production.ProductionZip)
         {
-            zipPath = Path.Combine(request.OutputPath, $"{productionName}.zip");
+            zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
             Console.Write("  Creating ZIP archive...");
             ZipFile.CreateFromDirectory(productionPath, zipPath, CompressionLevel.Optimal, true);
             Console.WriteLine(" done.");
@@ -150,7 +150,7 @@ internal static class ProductionSetGenerator
             DatFilePath = datPath,
             OptFilePath = optPath,
             ManifestPath = manifestPath,
-            TotalDocuments = request.FileCount,
+            TotalDocuments = request.Output.FileCount,
             BatesRange = $"{batesStart} - {batesEnd}",
             VolumeCount = volumeCount,
             GenerationTime = stopwatch.Elapsed,

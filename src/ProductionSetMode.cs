@@ -8,15 +8,15 @@ namespace Zipper
         public async Task RunAsync(FileGenerationRequest request)
         {
             Console.WriteLine("Starting production set generation...");
-            Console.WriteLine(string.Format("  File Type: {0}", request.FileType));
-            Console.WriteLine(string.Format("  Count: {0:N0}", request.FileCount));
-            Console.WriteLine(string.Format("  Output Path: {0}", request.OutputPath));
-            Console.WriteLine(string.Format("  Volume Size: {0:N0} files/volume", request.VolumeSize));
-            var batesPrefix = request.BatesConfig?.Prefix ?? string.Empty;
-            var batesStart = request.BatesConfig?.Start ?? 1;
-            var batesDigits = request.BatesConfig?.Digits ?? 8;
+            Console.WriteLine(string.Format("  File Type: {0}", request.Output.FileType));
+            Console.WriteLine(string.Format("  Count: {0:N0}", request.Output.FileCount));
+            Console.WriteLine(string.Format("  Output Path: {0}", request.Output.OutputPath));
+            Console.WriteLine(string.Format("  Volume Size: {0:N0} files/volume", request.Production.VolumeSize));
+            var batesPrefix = request.Bates?.Prefix ?? string.Empty;
+            var batesStart = request.Bates?.Start ?? 1;
+            var batesDigits = request.Bates?.Digits ?? 8;
             Console.WriteLine(string.Format("  Bates: {0}{1}", batesPrefix, batesStart.ToString($"D{batesDigits}")));
-            if (request.ProductionZip)
+            if (request.Production.ProductionZip)
             {
                 Console.WriteLine("  ZIP Output: Enabled");
             }

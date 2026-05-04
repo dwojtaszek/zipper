@@ -12,12 +12,12 @@ internal class ProductionSetOptWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        var eol = GetEolString(request.EndOfLine);
+        var eol = GetEolString(request.Delimiters.EndOfLine);
         await using var writer = CreateWriter(stream, request);
 
         foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
         {
-            var batesNumber = BatesNumberGenerator.Generate(request.BatesConfig!, workItem.Index - 1);
+            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
                 .Replace(Path.DirectorySeparatorChar, '\\');

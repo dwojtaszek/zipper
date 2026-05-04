@@ -19,51 +19,51 @@ namespace Zipper
             // Clone to avoid mutating the caller's request object
             request = request.Clone();
 
-            this.performanceMonitor.Start(request.FileCount);
+            this.performanceMonitor.Start(request.Output.FileCount);
 
             try
             {
                 // Validate inputs
-                if (request.FileCount <= 0)
+                if (request.Output.FileCount <= 0)
                 {
-                    throw new ArgumentException("File count must be positive", nameof(request.FileCount));
+                    throw new ArgumentException("File count must be positive", nameof(request.Output.FileCount));
                 }
 
-                if (request.Concurrency <= 0)
+                if (request.Output.Concurrency <= 0)
                 {
-                    request.Concurrency = PerformanceConstants.DefaultConcurrency;
+                    request.Output = request.Output with { Concurrency = PerformanceConstants.DefaultConcurrency };
                 }
 
-                var fileGenerator = FileGeneratorFactory.Create(request.FileType, request)
-                    ?? throw new InvalidOperationException($"Unknown file type: {request.FileType}");
+                var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
+                    ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
 
                 // For EML files, use sequential processing to avoid ZIP entry creation conflicts
                 if (fileGenerator.RequiresSequentialProcessing(request))
                 {
-                    request.Concurrency = 1; // Force sequential processing
+                    request.Output = request.Output with { Concurrency = 1 }; // Force sequential processing
                 }
 
-                Directory.CreateDirectory(request.OutputPath);
+                Directory.CreateDirectory(request.Output.OutputPath);
 
                 var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
-                var zipFilePath = Path.Combine(request.OutputPath, $"{baseFileName}.zip");
+                var zipFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.zip");
                 var loadFileName = $"{baseFileName}.dat";
-                var loadFilePath = Path.Combine(request.OutputPath, loadFileName);
+                var loadFilePath = Path.Combine(request.Output.OutputPath, loadFileName);
 
                 var placeholderContent = fileGenerator.IsPlaceholderBased
-                    ? PlaceholderFiles.GetContent(request.FileType.ToLowerInvariant())
+                    ? PlaceholderFiles.GetContent(request.Output.FileTypeLower)
                     : Array.Empty<byte>();
 
                 long paddingPerFile = 0;
-                if (request.TargetZipSize.HasValue)
+                if (request.Output.TargetZipSize.HasValue)
                 {
                     var baseSize = placeholderContent.Length > 0 ? placeholderContent.Length : 1024;
-                    paddingPerFile = this.CalculatePaddingPerFile(request.TargetZipSize.Value, baseSize, request.FileCount, request.WithText);
+                    paddingPerFile = this.CalculatePaddingPerFile(request.Output.TargetZipSize.Value, baseSize, request.Output.FileCount, request.Output.WithText);
                 }
 
                 // Create channels for work distribution
-                var workChannelReader = CreateWorkChannel(request.FileCount, request.Folders, request.Distribution, request.FileType, request.Concurrency);
-                var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Concurrency * 2)
+                var workChannelReader = CreateWorkChannel(request.Output.FileCount, request.Output.Folders, request.LoadFile.Distribution, request.Output.FileType, request.Output.Concurrency);
+                var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
                 });
@@ -72,8 +72,8 @@ namespace Zipper
                 var consumerTask = this.WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
 
                 // Generate files in parallel (producers)
-                using var semaphore = new SemaphoreSlim(request.Concurrency);
-                var producerTasks = Enumerable.Range(0, request.Concurrency)
+                using var semaphore = new SemaphoreSlim(request.Output.Concurrency);
+                var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
                     .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator))
                     .ToList();
 
@@ -108,7 +108,7 @@ namespace Zipper
                 {
                     ZipFilePath = zipFilePath,
                     LoadFilePath = actualLoadFilePath,
-                    FilesGenerated = request.FileCount,
+                    FilesGenerated = request.Output.FileCount,
                     GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
                     FilesPerSecond = performanceMetrics.FilesPerSecond,
                 };

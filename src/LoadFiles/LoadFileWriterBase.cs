@@ -84,8 +84,8 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// <returns></returns>
     protected static string GenerateBatesNumber(FileGenerationRequest request, FileWorkItem workItem)
     {
-        return request.BatesConfig != null
-            ? BatesNumberGenerator.Generate(request.BatesConfig, workItem.Index - 1)
+        return request.Bates != null
+            ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
             : string.Empty;
     }
 
@@ -95,7 +95,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// <returns></returns>
     protected static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
     {
-        return workItem.FilePathInZip.Replace($".{request.FileType}", ".txt");
+        return workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt");
     }
 
     /// <summary>
@@ -160,7 +160,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// </summary>
     protected static StreamWriter CreateWriter(Stream stream, FileGenerationRequest request)
     {
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         return new StreamWriter(stream, encoding, leaveOpen: true);
     }
 

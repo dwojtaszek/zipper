@@ -35,13 +35,13 @@ internal static class ProductionManifestWriter
             {
                 Start = batesStart,
                 End = batesEnd,
-                Prefix = request.BatesConfig?.Prefix ?? string.Empty,
-                Digits = request.BatesConfig?.Digits ?? 8,
+                Prefix = request.Bates?.Prefix ?? string.Empty,
+                Digits = request.Bates?.Digits ?? 8,
             },
-            DocumentCount = request.FileCount,
-            FileType = request.FileType,
+            DocumentCount = request.Output.FileCount,
+            FileType = request.Output.FileType,
             VolumeCount = volumeCount,
-            VolumeSize = request.VolumeSize,
+            VolumeSize = request.Production.VolumeSize,
             Directories = new ProductionDirectories
             {
                 Data = "DATA",
@@ -56,11 +56,11 @@ internal static class ProductionManifestWriter
             },
             Settings = new ProductionSettings
             {
-                Encoding = request.Encoding,
-                ColumnDelimiter = FormatDelimiter(request.ColumnDelimiter),
-                QuoteDelimiter = FormatDelimiter(request.QuoteDelimiter),
-                ColumnProfile = request.ColumnProfile?.Name,
-                Seed = request.Seed,
+                Encoding = request.LoadFile.Encoding,
+                ColumnDelimiter = FormatDelimiter(request.Delimiters.ColumnDelimiter),
+                QuoteDelimiter = FormatDelimiter(request.Delimiters.QuoteDelimiter),
+                ColumnProfile = request.Metadata.ColumnProfile?.Name,
+                Seed = request.Metadata.Seed,
             },
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
         };

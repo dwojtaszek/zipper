@@ -21,9 +21,9 @@ internal class CsvWriter : LoadFileWriterBase
         await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
 
 #pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
         await WriteHeaderAsync(writer, request);
         await WriteRowsAsync(writer, request, processedFiles, random, now);
@@ -46,7 +46,7 @@ internal class CsvWriter : LoadFileWriterBase
             headers.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             headers.Add("Bates Number");
         }
@@ -56,7 +56,7 @@ internal class CsvWriter : LoadFileWriterBase
             headers.Add("Page Count");
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             headers.Add("Extracted Text");
         }
@@ -108,7 +108,7 @@ internal class CsvWriter : LoadFileWriterBase
                 });
             }
 
-            if (request.BatesConfig != null)
+            if (request.Bates != null)
             {
                 values.Add(EscapeCsvField(GenerateBatesNumber(request, workItem)));
             }
@@ -118,7 +118,7 @@ internal class CsvWriter : LoadFileWriterBase
                 values.Add(fileData.PageCount.ToString());
             }
 
-            if (request.WithText)
+            if (request.Output.WithText)
             {
                 values.Add(EscapeCsvField(GenerateTextPath(request, workItem)));
             }

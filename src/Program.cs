@@ -55,7 +55,7 @@ namespace Zipper
                 return new LoadfileOnlyMode();
             }
 
-            if (request.ProductionSet)
+            if (request.Production.ProductionSet)
             {
                 return new ProductionSetMode();
             }
