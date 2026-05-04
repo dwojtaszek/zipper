@@ -37,11 +37,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Exclude files from sibling projects that share the src/ tree root -->
     <Compile Remove="Zipper.Tests/**/*.cs" />
+    <Compile Remove="Zipper.Analyzers/**/*.cs" />
+    <Compile Remove="Zipper.Analyzers.Tests/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Zipper.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Zipper.Analyzers\Zipper.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

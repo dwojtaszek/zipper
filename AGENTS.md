@@ -77,6 +77,7 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 7. Run adversarial review before marking work complete (see Adversarial Review section below)
 8. Commit and create PR
 9. Monitor CI until all checks pass; fix failures before requesting review
+10. Check SonarCloud issues on the PR after CI completes (see SonarCloud & External Checks below)
 
 **Test location:** `src/Zipper.Tests/`.
 
@@ -97,6 +98,42 @@ Always use a subagent to perform adversarial review.
 - **Set expectations:** "I'll be disappointed if they don't find at least N significant problems."
 
 Run adversarial review before marking work as complete. Treat findings as bugs, not suggestions.
+
+---
+
+## SonarCloud & External Checks
+
+After CI completes on a PR, SonarCloud posts a comment with a link to new issues. These are NOT surfaced as GitHub check failures — they must be fetched manually with the public API.
+
+### How to retrieve SonarCloud issues for a PR
+
+```bash
+# Fetch all new SonarCloud issues for a PR
+curl -s "https://sonarcloud.io/api/issues/search?componentKeys=dwojtaszek_zipper&pullRequest=NNN&statuses=OPEN,CONFIRMED&ps=50" | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+for i in data['issues']:
+    f = i['component'].split(':')[1]
+    print(f'{i[\"severity\"]:10s} {i[\"rule\"]:25s} L{i[\"line\"]:4d}  {f}')
+    print(f'  {i[\"message\"]}')
+    print()
+"
+```
+
+This API does not require authentication. Issues are ordered by severity: `BLOCKER` first, then `MAJOR`, `MINOR`, `INFO`.
+
+### GitHub code scanning alerts (alternative)
+
+```bash
+gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --jq '.[] | {rule: .rule.id, severity: .rule.security_severity_level, path: .most_recent_instance.location.path, line: .most_recent_instance.location.start_line, message: .most_recent_instance.message.text}'
+```
+
+### Other GitHub checks
+
+- **CodeRabbit** comments are review-quality suggestions; address blocking issues, treat nitpicks as optional.
+- **factory-droid** errors are bot infrastructure — retry, do not block merge.
+- **CodeQL** failures (via `gh pr checks`) block merge and must be fixed.
+- **Goldens** check compares Zipper CLI output against `tests/goldens/fixtures/`. Drift can be pre-existing (date-sensitive seeds); regenerate with `ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture`.
 
 ---
 
@@ -138,6 +175,8 @@ Run adversarial review before marking work as complete. Treat findings as bugs, 
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/Zipper.Tests/` | Unit tests |
+| `src/Zipper.Analyzers/` | Roslyn analyzer — `FGR_FLAT_ACCESS` diagnostic (Info severity); escalates to Error in F4 (#213) |
+| `src/Zipper.Analyzers.Tests/` | Unit tests for Roslyn analyzers |
 | `tests/` | E2E test scripts |
 
 

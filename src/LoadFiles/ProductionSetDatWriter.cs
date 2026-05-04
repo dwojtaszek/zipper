@@ -37,7 +37,8 @@ internal class ProductionSetDatWriter : LoadFileWriterBase
 #pragma warning disable S2245
             var random = request.Seed.HasValue ? new Random(request.Seed.Value + (int)workItem.Index) : Random.Shared;
 #pragma warning restore S2245
-            var builder = new MetadataRowBuilder(request, random, DateTime.UtcNow);
+            var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+            var builder = new MetadataRowBuilder(request, random, now);
 
             var fields = new[]
             {
