@@ -75,7 +75,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             new XElement("controlNumber", GenerateDocumentId(workItem)),
             new XElement("filePath", workItem.FilePathInZip));
 
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
@@ -86,7 +86,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
                 new XElement("fileSize", metadata.FileSize)));
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             var eml = GenerateEmlValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
@@ -103,7 +103,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             docElement.Add(new XElement("batesNumber", GenerateBatesNumber(request, workItem)));
         }
 
-        if (ShouldIncludePageCount(request))
+        if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             docElement.Add(new XElement("pageCount", fileData.PageCount));
         }

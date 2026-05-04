@@ -47,7 +47,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
         header.Append($"{quoteDelim}CONTROLNUMBER{quoteDelim}{fieldDelim}");
         header.Append($"{quoteDelim}PATH{quoteDelim}{fieldDelim}");
 
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             header.Append($"{quoteDelim}CUSTODIAN{quoteDelim}{fieldDelim}");
             header.Append($"{quoteDelim}DATESENT{quoteDelim}{fieldDelim}");
@@ -55,7 +55,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
             header.Append($"{quoteDelim}FILESIZE{quoteDelim}{fieldDelim}");
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             header.Append($"{quoteDelim}TO{quoteDelim}{fieldDelim}");
             header.Append($"{quoteDelim}FROM{quoteDelim}{fieldDelim}");
@@ -69,7 +69,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
             header.Append($"{quoteDelim}BATES{quoteDelim}{fieldDelim}");
         }
 
-        if (ShouldIncludePageCount(request))
+        if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             header.Append($"{quoteDelim}PAGECOUNT{quoteDelim}{fieldDelim}");
         }
@@ -107,7 +107,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
             line.Append($"{quoteDelim}{EscapeDatField(GenerateDocumentId(workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             line.Append($"{quoteDelim}{EscapeDatField(workItem.FilePathInZip, quoteDelim)}{quoteDelim}{fieldDelim}");
 
-            if (ShouldIncludeMetadata(request))
+            if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
             {
                 var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
                 line.Append($"{quoteDelim}{EscapeDatField(metadata.Custodian, quoteDelim)}{quoteDelim}{fieldDelim}");
@@ -116,7 +116,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 line.Append($"{quoteDelim}{EscapeDatField(metadata.FileSize.ToString(), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
-            if (ShouldIncludeEmlColumns(request))
+            if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
             {
                 var eml = GenerateEmlValues(workItem, fileData, random, now, request);
                 line.Append($"{quoteDelim}{EscapeDatField(eml.To, quoteDelim)}{quoteDelim}{fieldDelim}");
@@ -131,7 +131,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
                 line.Append($"{quoteDelim}{EscapeDatField(GenerateBatesNumber(request, workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             }
 
-            if (ShouldIncludePageCount(request))
+            if (request.Tiff.ShouldIncludePageCount(request.Output))
             {
                 line.Append($"{quoteDelim}{EscapeDatField(fileData.PageCount.ToString(), quoteDelim)}{quoteDelim}{fieldDelim}");
             }

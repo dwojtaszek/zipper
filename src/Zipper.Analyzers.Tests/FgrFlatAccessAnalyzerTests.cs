@@ -66,15 +66,15 @@ class T
     }
 
     /// <summary>
-    /// The rule ships with Info severity so it does not fail the build.
+    /// The rule ships with Error severity to prevent re-introduction of flat pass-throughs.
     /// </summary>
     [Fact]
-    public void SupportedDiagnostics_ContainsInfoSeverityRule()
+    public void SupportedDiagnostics_ContainsErrorSeverityRule()
     {
         var analyzer = new FgrFlatAccessAnalyzer();
         var descriptor = Assert.Single(analyzer.SupportedDiagnostics);
         Assert.Equal(FgrFlatAccessAnalyzer.DiagnosticId, descriptor.Id);
-        Assert.Equal(DiagnosticSeverity.Info, descriptor.DefaultSeverity);
+        Assert.Equal(DiagnosticSeverity.Error, descriptor.DefaultSeverity);
     }
 
     /// <summary>

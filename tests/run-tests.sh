@@ -528,4 +528,13 @@ print_info "Running chaos anomaly coverage tests..."
 bash ./tests/test-chaos-anomaly-coverage.sh
 print_success "Chaos anomaly coverage tests passed."
 
+
+# FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
+print_info "Checking for flat pass-through properties on FileGenerationRequest..."
+if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then
+  print_error "FileGenerationRequest must not have flat pass-through properties (see issue #213)."
+  exit 1
+fi
+print_success "FGR flat-property guard passed."
+
 print_success "All tests passed successfully!"

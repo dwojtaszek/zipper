@@ -16,35 +16,6 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null);
-
-    /// <summary>
-    /// Gets the file type in lowercase for comparisons.
-    /// </summary>
-    /// <returns></returns>
-    protected static string GetFileTypeLower(FileGenerationRequest request) =>
-        request.Output.FileTypeLower;
-
-    /// <summary>
-    /// Determines if metadata columns should be included.
-    /// </summary>
-    /// <returns></returns>
-    protected static bool ShouldIncludeMetadata(FileGenerationRequest request) =>
-        request.Metadata.ShouldIncludeMetadataColumns(request.Output);
-
-    /// <summary>
-    /// Determines if EML-specific columns should be included.
-    /// </summary>
-    /// <returns></returns>
-    protected static bool ShouldIncludeEmlColumns(FileGenerationRequest request) =>
-        request.Metadata.ShouldIncludeEmlColumns(request.Output);
-
-    /// <summary>
-    /// Determines if page count column should be included.
-    /// </summary>
-    /// <returns></returns>
-    protected static bool ShouldIncludePageCount(FileGenerationRequest request) =>
-        request.Tiff.ShouldIncludePageCount(request.Output);
-
     /// <summary>
     /// Generates metadata column values for a file.
     /// </summary>

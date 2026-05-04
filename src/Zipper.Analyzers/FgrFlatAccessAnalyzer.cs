@@ -11,9 +11,9 @@ namespace Zipper.Analyzers;
 /// <c>FileGenerationRequest</c> instead of going directly to the appropriate sub-config.
 /// </summary>
 /// <remarks>
-/// Diagnostic ID: <c>FGR_FLAT_ACCESS</c> (Info / non-fatal).
-/// Severity will be escalated to Error in phase F4 (#213) once all 106 call sites
-/// are rewritten by phase F3 (#212).
+/// Diagnostic ID: <c>FGR_FLAT_ACCESS</c> (Error / build-breaking).
+/// Severity escalated to Error in F4 (#213); flat pass-throughs have been deleted.
+/// This rule now acts as a forever-guard preventing re-introduction.
 /// </remarks>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
@@ -34,11 +34,11 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Rule = new(
         id: DiagnosticId,
         title: "Use sub-config access instead of flat pass-through on FileGenerationRequest",
-        messageFormat: "Access '{0}' via '{1}.{0}' instead of the flat pass-through on FileGenerationRequest. This property will be removed in a follow-up.",
+        messageFormat: "Access '{0}' via '{1}.{0}' instead of a flat pass-through on FileGenerationRequest. Flat pass-throughs have been removed (see #213).",
         category: "Design",
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The flat pass-through properties on FileGenerationRequest delegate to sub-configs and are scheduled for removal. Access sub-configs directly.");
+        description: "The flat pass-through properties on FileGenerationRequest were removed in #213. Access sub-configs directly. Adding a new flat pass-through will break the build.");
 
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);

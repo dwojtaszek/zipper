@@ -36,12 +36,12 @@ internal class CsvWriter : LoadFileWriterBase
     {
         var headers = new System.Collections.Generic.List<string> { "Control Number", "File Path" };
 
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             headers.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             headers.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
         }
@@ -51,7 +51,7 @@ internal class CsvWriter : LoadFileWriterBase
             headers.Add("Bates Number");
         }
 
-        if (ShouldIncludePageCount(request))
+        if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             headers.Add("Page Count");
         }
@@ -83,7 +83,7 @@ internal class CsvWriter : LoadFileWriterBase
                 EscapeCsvField(workItem.FilePathInZip),
             };
 
-            if (ShouldIncludeMetadata(request))
+            if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
             {
                 var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
                 values.AddRange(new[]
@@ -95,7 +95,7 @@ internal class CsvWriter : LoadFileWriterBase
                 });
             }
 
-            if (ShouldIncludeEmlColumns(request))
+            if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
             {
                 var eml = GenerateEmlValues(workItem, fileData, random, now, request);
                 values.AddRange(new[]
@@ -113,7 +113,7 @@ internal class CsvWriter : LoadFileWriterBase
                 values.Add(EscapeCsvField(GenerateBatesNumber(request, workItem)));
             }
 
-            if (ShouldIncludePageCount(request))
+            if (request.Tiff.ShouldIncludePageCount(request.Output))
             {
                 values.Add(fileData.PageCount.ToString());
             }
