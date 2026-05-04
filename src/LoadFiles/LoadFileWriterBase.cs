@@ -16,6 +16,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null);
+
     /// <summary>
     /// Generates metadata column values for a file.
     /// </summary>
