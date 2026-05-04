@@ -249,7 +249,7 @@ namespace Zipper.Tests
                     FolderName = $"folder{index % 5}",
                     FolderNumber = index % 5,
                 },
-                Data = System.Text.LoadFile.Encoding.UTF8.GetBytes($"Test content {index}"),
+                Data = System.Text.Encoding.UTF8.GetBytes($"Test content {index}"),
                 MemoryOwner = null,
             };
         }
@@ -266,9 +266,9 @@ namespace Zipper.Tests
                     FolderName = $"folder{index % 3}",
                     FolderNumber = index % 3,
                 },
-                Data = System.Text.LoadFile.Encoding.UTF8.GetBytes($"Test EML content {index}"),
+                Data = System.Text.Encoding.UTF8.GetBytes($"Test EML content {index}"),
                 MemoryOwner = null,
-                Attachment = ($"attachment{index}.pdf", System.Text.LoadFile.Encoding.UTF8.GetBytes($"Attachment content {index}")),
+                Attachment = ($"attachment{index}.pdf", System.Text.Encoding.UTF8.GetBytes($"Attachment content {index}")),
             };
         }
 

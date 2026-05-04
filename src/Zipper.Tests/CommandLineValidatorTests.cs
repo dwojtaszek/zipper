@@ -32,7 +32,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(this.tempDir, result!.OutputPath);
+            Assert.Equal(this.tempDir, result!.Output.OutputPath);
             Assert.Equal(100, result.Output.FileCount);
             Assert.Equal("pdf", result.Output.FileType);
             Assert.Equal(1, result.Output.Folders);
@@ -68,7 +68,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(this.tempDir, result!.OutputPath);
+            Assert.Equal(this.tempDir, result!.Output.OutputPath);
             Assert.Equal(500, result.Output.FileCount);
             Assert.Equal("jpg", result.Output.FileType);
             Assert.Equal(5, result.Output.Folders);
@@ -277,7 +277,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedEncoding, result!.Encoding);
+            Assert.Equal(expectedEncoding, result!.LoadFile.Encoding);
         }
 
         [Theory]
@@ -297,7 +297,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedDistribution, result!.Distribution);
+            Assert.Equal(expectedDistribution, result!.LoadFile.Distribution);
         }
 
         [Theory]
@@ -316,7 +316,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedBytes, result!.TargetZipSize);
+            Assert.Equal(expectedBytes, result!.Output.TargetZipSize);
         }
 
         [Theory]
@@ -338,7 +338,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expectedType, result!.FileType);
+            Assert.Equal(expectedType, result!.Output.FileType);
         }
 
         [Fact]
@@ -556,7 +556,7 @@ namespace Zipper
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             Assert.NotNull(result);
-            Assert.Equal("\u0014", result!.ColumnDelimiter); // ASCII 20
+            Assert.Equal("\u0014", result!.Delimiters.ColumnDelimiter); // ASCII 20
             Assert.Equal("\u00fe", result.Delimiters.QuoteDelimiter); // ASCII 254
             Assert.Equal(";", result.Delimiters.MultiValueDelimiter);
             Assert.Equal("\\", result.Delimiters.NestedValueDelimiter);
@@ -574,7 +574,7 @@ namespace Zipper
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             Assert.NotNull(result);
-            Assert.Equal(string.Empty, result!.QuoteDelimiter);
+            Assert.Equal(string.Empty, result!.Delimiters.QuoteDelimiter);
         }
 
         [Fact]
@@ -647,7 +647,7 @@ namespace Zipper
                 var result = CommandLineValidator.ValidateAndParseArguments(args);
 
                 Assert.NotNull(result);
-                Assert.Equal(eol.ToUpperInvariant(), result!.EndOfLine.ToUpperInvariant());
+                Assert.Equal(eol.ToUpperInvariant(), result!.Delimiters.EndOfLine.ToUpperInvariant());
             }
         }
 
@@ -788,7 +788,7 @@ namespace Zipper
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             Assert.NotNull(result);
-            Assert.True(result!.ChaosMode);
+            Assert.True(result!.Chaos.ChaosMode);
             Assert.Equal("5%", result.Chaos.ChaosAmount);
             Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
         }
@@ -853,7 +853,7 @@ namespace Zipper
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             Assert.NotNull(result);
-            Assert.Equal("CLIENT001", result!.BatesConfig?.Prefix);
+            Assert.Equal("CLIENT001", result!.Bates?.Prefix);
         }
 
         [Theory]
@@ -873,7 +873,7 @@ namespace Zipper
             var result = CommandLineValidator.ValidateAndParseArguments(args);
 
             Assert.NotNull(result);
-            Assert.Equal(validPrefix, result!.BatesConfig?.Prefix);
+            Assert.Equal(validPrefix, result!.Bates?.Prefix);
         }
     }
 }
