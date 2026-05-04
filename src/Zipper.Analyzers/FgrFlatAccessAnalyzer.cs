@@ -37,60 +37,52 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
     /// All 35 flat pass-through property names on <c>FileGenerationRequest</c>.
     /// Exposed internally so tests can drive fixture-style coverage over every name.
     /// </summary>
-    internal static readonly ImmutableHashSet<string> FlatPropertyNames =
-        ImmutableHashSet.Create(
-            StringComparer.Ordinal,
-
-            // Output sub-config (8)
-            "OutputPath",
-            "FileCount",
-            "FileType",
-            "Folders",
-            "Concurrency",
-            "WithText",
-            "TargetZipSize",
-            "IncludeLoadFile",
-
-            // Metadata sub-config (7)
-            "WithMetadata",
-            "ColumnProfile",
-            "Seed",
-            "DateFormatOverride",
-            "EmptyPercentageOverride",
-            "CustodianCountOverride",
-            "WithFamilies",
-
-            // LoadFile sub-config (5)
-            "LoadFileFormat",
-            "LoadFileFormats",
-            "Encoding",
-            "Distribution",
-            "AttachmentRate",
-
-            // Delimiters sub-config (6)
-            "ColumnDelimiter",
-            "QuoteDelimiter",
-            "NewlineDelimiter",
-            "MultiValueDelimiter",
-            "NestedValueDelimiter",
-            "EndOfLine",
-
-            // Bates sub-config (1)
-            "BatesConfig",
-
-            // Tiff sub-config (1)
-            "TiffPageRange",
-
-            // Chaos sub-config (4)
-            "ChaosMode",
-            "ChaosAmount",
-            "ChaosTypes",
-            "ChaosScenario",
-
-            // Production sub-config (3)
-            "ProductionSet",
-            "ProductionZip",
-            "VolumeSize");
+    internal static readonly ImmutableHashSet<string> FlatPropertyNames = new[]
+    {
+        // Output sub-config (8)
+        "OutputPath",
+        "FileCount",
+        "FileType",
+        "Folders",
+        "Concurrency",
+        "WithText",
+        "TargetZipSize",
+        "IncludeLoadFile",
+        // Metadata sub-config (7)
+        "WithMetadata",
+        "ColumnProfile",
+        "Seed",
+        "DateFormatOverride",
+        "EmptyPercentageOverride",
+        "CustodianCountOverride",
+        "WithFamilies",
+        // LoadFile sub-config (5)
+        "LoadFileFormat",
+        "LoadFileFormats",
+        "Encoding",
+        "Distribution",
+        "AttachmentRate",
+        // Delimiters sub-config (6)
+        "ColumnDelimiter",
+        "QuoteDelimiter",
+        "NewlineDelimiter",
+        "MultiValueDelimiter",
+        "NestedValueDelimiter",
+        "EndOfLine",
+        // Bates sub-config (1)
+        "BatesConfig",
+        // Tiff sub-config (1)
+        "TiffPageRange",
+        // Chaos sub-config (4)
+        "ChaosMode",
+        "ChaosAmount",
+        "ChaosTypes",
+        "ChaosScenario",
+        // Production sub-config (3)
+        "ProductionSet",
+        "ProductionZip",
+        "VolumeSize",
+    }.ToImmutableHashSet(StringComparer.Ordinal);
 
     // Maps each flat property name to the name of the sub-config it delegates to.
     private static readonly ImmutableDictionary<string, string> SubConfigMap =

@@ -2,7 +2,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
 using Xunit;
-using Zipper.Analyzers;
 
 using VerifyCS = Microsoft.CodeAnalysis.CSharp.Testing.XUnit.AnalyzerVerifier<
     Zipper.Analyzers.FgrFlatAccessAnalyzer>;
@@ -17,10 +16,7 @@ namespace Zipper.Analyzers.Tests;
 /// </summary>
 public class FgrFlatAccessAnalyzerTests
 {
-    // ---------------------------------------------------------------------------
-    // 1. Each of the 35 flat property names produces FGR_FLAT_ACCESS
-    // ---------------------------------------------------------------------------
-
+    // Each of the 35 flat property names produces FGR_FLAT_ACCESS
     /// <summary>
     /// For every flat property name in FlatPropertyNames, verify that accessing
     /// that property on a FileGenerationRequest receiver triggers one diagnostic.
@@ -52,20 +48,14 @@ class T
             .OrderBy(n => n, StringComparer.Ordinal)
             .Select(name => new object[] { name });
 
-    // ---------------------------------------------------------------------------
-    // 2. Exactly 35 names are tracked
-    // ---------------------------------------------------------------------------
-
+    // Exactly 35 names are tracked
     [Fact]
     public void FlatPropertyNames_Contains35Names()
     {
         Assert.Equal(35, FgrFlatAccessAnalyzer.FlatPropertyNames.Count);
     }
 
-    // ---------------------------------------------------------------------------
-    // 3. Diagnostic metadata
-    // ---------------------------------------------------------------------------
-
+    // Diagnostic metadata
     [Fact]
     public void DiagnosticId_IsCorrect()
     {
@@ -81,10 +71,7 @@ class T
         Assert.Equal(DiagnosticSeverity.Info, descriptor.DefaultSeverity);
     }
 
-    // ---------------------------------------------------------------------------
-    // 4. Subconfig access does not trigger the diagnostic
-    // ---------------------------------------------------------------------------
-
+    // Subconfig access does not trigger the diagnostic
     [Fact]
     public async Task SubconfigAccess_NoDiagnostic()
     {
@@ -110,10 +97,7 @@ class T
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
 
-    // ---------------------------------------------------------------------------
-    // 5. Non-FGR type with same property name — no diagnostic
-    // ---------------------------------------------------------------------------
-
+    // Non-FGR type with same property name — no diagnostic
     [Fact]
     public async Task FlatPropertyNameOnDifferentType_NoDiagnostic()
     {
@@ -134,10 +118,7 @@ class T
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
 
-    // ---------------------------------------------------------------------------
-    // 6. Access inside a file named FileGenerationRequest.cs — suppressed
-    // ---------------------------------------------------------------------------
-
+    // Access inside a file named FileGenerationRequest.cs — suppressed
     [Fact]
     public async Task AccessInFgrFile_IsSuppressed()
     {
@@ -167,10 +148,7 @@ class FileGenerationRequest
         await test.RunAsync();
     }
 
-    // ---------------------------------------------------------------------------
-    // 7. Verify diagnostic message arguments for specific cases
-    // ---------------------------------------------------------------------------
-
+    // Verify diagnostic message arguments for specific cases
     [Fact]
     public async Task OutputPath_ReportsDiagnosticWithOutputSubConfig()
     {
