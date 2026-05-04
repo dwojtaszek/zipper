@@ -1,8 +1,7 @@
 using System.Text;
 using Xunit;
-using Zipper.LoadFiles;
-
 using Zipper.Config;
+using Zipper.LoadFiles;
 
 namespace Zipper
 {
