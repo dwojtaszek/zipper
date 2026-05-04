@@ -19,7 +19,7 @@ internal class OptWriter : LoadFileWriterBase
         ChaosEngine? chaosEngine = null)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.Encoding), leaveOpen: true);
+        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
 
         await WriteRowsAsync(writer, request, processedFiles);
 
@@ -42,12 +42,12 @@ internal class OptWriter : LoadFileWriterBase
             Console.Error.WriteLine("Warning: Email metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             Console.Error.WriteLine("Warning: --with-text is not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             Console.Error.WriteLine("Warning: The Bates number column is part of the standard Opticon 7-column format (column 1). Other Bates configuration is ignored.");
         }
@@ -60,7 +60,7 @@ internal class OptWriter : LoadFileWriterBase
             var workItem = fileData.WorkItem;
 
             // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,FolderBreak,BoxBreak,PageCount
-            string batesNumber = request.BatesConfig != null
+            string batesNumber = request.Bates != null
                 ? GenerateBatesNumber(request, workItem)
                 : GenerateDocumentId(workItem);
             string volume = "VOL001";

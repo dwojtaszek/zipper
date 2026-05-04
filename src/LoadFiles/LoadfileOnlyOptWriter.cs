@@ -14,18 +14,18 @@ internal class LoadfileOnlyOptWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
-        var eolString = GetEolString(request.EndOfLine);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var eolString = GetEolString(request.Delimiters.EndOfLine);
 
         using var memStream = new MemoryStream();
 
 #pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value + 1) : new Random();
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
         var buffer = new StringBuilder();
 
-        for (long i = 1; i <= request.FileCount; i++)
+        for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i;
             string batesId = $"IMG{i:D8}";

@@ -14,11 +14,11 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
-        var eolString = GetEolString(request.EndOfLine);
-        char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
-        char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
-        bool hasQuote = !string.IsNullOrEmpty(request.QuoteDelimiter);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var eolString = GetEolString(request.Delimiters.EndOfLine);
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
         using var memStream = new MemoryStream();
 
@@ -31,16 +31,16 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
         var headerBytes = encoding.GetBytes(header + eolString);
         await memStream.WriteAsync(headerBytes);
 
-        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
 #pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value + 1) : new Random();
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
         var builder = new MetadataRowBuilder(request, random, now);
         var buffer = new StringBuilder();
 
-        for (long i = 1; i <= request.FileCount; i++)
+        for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             string recordId = builder.GetControlNumber(i);
@@ -53,7 +53,7 @@ internal class LoadfileOnlyDatWriter : LoadFileWriterBase
             buffer.Append(eolString);
 
             // Handle encoding anomalies between lines
-            if (chaosEngine != null && i < request.FileCount)
+            if (chaosEngine != null && i < request.Output.FileCount)
             {
                 // Flush current buffer first
                 var bufferedBytes = encoding.GetBytes(buffer.ToString());

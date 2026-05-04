@@ -19,7 +19,7 @@ internal class DatWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.Encoding);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         // Use leaveOpen: true to avoid disposing the caller's stream
         await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
@@ -39,15 +39,15 @@ internal class DatWriter : LoadFileWriterBase
         List<FileData> processedFiles)
     {
         // Defensive guards to prevent IndexOutOfRangeException when delimiters are unset
-        char colDelim = !string.IsNullOrEmpty(request.ColumnDelimiter) ? request.ColumnDelimiter[0] : '\u0014';
-        char quote = !string.IsNullOrEmpty(request.QuoteDelimiter) ? request.QuoteDelimiter[0] : '\u00fe';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
 
         await writer.WriteLineAsync(BuildHeader(request, colDelim, quote));
 
 #pragma warning disable S2245
-        var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var builder = new MetadataRowBuilder(request, random, now);
 
         var buffer = new StringBuilder();
@@ -88,7 +88,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             sb.Append($"{colDelim}{quote}Bates Number{quote}");
         }
@@ -98,7 +98,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}Page Count{quote}");
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             sb.Append($"{colDelim}{quote}Extracted Text{quote}");
         }
@@ -114,31 +114,31 @@ internal class DatWriter : LoadFileWriterBase
         MetadataRowBuilder builder)
     {
         var workItem = fileData.WorkItem;
-        var docId = MetadataRowBuilder.SanitizeField(builder.GetControlNumber(workItem), request.NewlineDelimiter);
+        var docId = MetadataRowBuilder.SanitizeField(builder.GetControlNumber(workItem), request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
-        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{MetadataRowBuilder.SanitizeField(workItem.FilePathInZip, request.NewlineDelimiter)}{quote}");
+        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{MetadataRowBuilder.SanitizeField(workItem.FilePathInZip, request.Delimiters.NewlineDelimiter)}{quote}");
 
         if (ShouldIncludeMetadata(request))
         {
-            var custodian = MetadataRowBuilder.SanitizeField(builder.GetCustodian(workItem.FolderNumber), request.NewlineDelimiter);
+            var custodian = MetadataRowBuilder.SanitizeField(builder.GetCustodian(workItem.FolderNumber), request.Delimiters.NewlineDelimiter);
             var dateSent = builder.GetDateSent();
-            var author = MetadataRowBuilder.SanitizeField(builder.GetAuthor(), request.NewlineDelimiter);
+            var author = MetadataRowBuilder.SanitizeField(builder.GetAuthor(), request.Delimiters.NewlineDelimiter);
             var fileSize = builder.GetFileSize(fileData);
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
         if (ShouldIncludeEmlColumns(request))
         {
-            var to = MetadataRowBuilder.SanitizeField(builder.GetEmailTo(workItem, fileData), request.NewlineDelimiter);
-            var from = MetadataRowBuilder.SanitizeField(builder.GetEmailFrom(workItem, fileData), request.NewlineDelimiter);
-            var subject = MetadataRowBuilder.SanitizeField(builder.GetEmailSubject(workItem, fileData), request.NewlineDelimiter);
+            var to = MetadataRowBuilder.SanitizeField(builder.GetEmailTo(workItem, fileData), request.Delimiters.NewlineDelimiter);
+            var from = MetadataRowBuilder.SanitizeField(builder.GetEmailFrom(workItem, fileData), request.Delimiters.NewlineDelimiter);
+            var subject = MetadataRowBuilder.SanitizeField(builder.GetEmailSubject(workItem, fileData), request.Delimiters.NewlineDelimiter);
             var sentDate = builder.GetEmailSentDate(workItem, fileData);
-            var attachment = MetadataRowBuilder.SanitizeField(builder.GetEmailAttachment(fileData), request.NewlineDelimiter);
+            var attachment = MetadataRowBuilder.SanitizeField(builder.GetEmailAttachment(fileData), request.Delimiters.NewlineDelimiter);
             sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             sb.Append($"{colDelim}{quote}{builder.GetBatesNumber(workItem)}{quote}");
         }
@@ -148,7 +148,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             sb.Append($"{colDelim}{quote}{builder.GetTextPath(workItem)}{quote}");
         }

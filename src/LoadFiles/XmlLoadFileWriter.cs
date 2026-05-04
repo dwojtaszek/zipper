@@ -36,9 +36,9 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             await writer.WriteStartElementAsync(null, "documents", null);
 
 #pragma warning disable S2245
-            var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
+            var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-            var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+            var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
@@ -98,7 +98,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
                 new XElement("attachment", eml.Attachment)));
         }
 
-        if (request.BatesConfig != null)
+        if (request.Bates != null)
         {
             docElement.Add(new XElement("batesNumber", GenerateBatesNumber(request, workItem)));
         }
@@ -108,7 +108,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             docElement.Add(new XElement("pageCount", fileData.PageCount));
         }
 
-        if (request.WithText)
+        if (request.Output.WithText)
         {
             docElement.Add(new XElement("extractedTextPath", GenerateTextPath(request, workItem)));
         }

@@ -127,7 +127,7 @@ namespace Zipper
 
             // Arrange - Test that OPT writer respects the requested encoding
             var request = this.CreateTestRequest();
-            request.Encoding = encoding;
+            request.LoadFile = request.LoadFile with { Encoding = encoding };
             var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
             var outputPath = Path.Combine(this.tempDir, "test.opt");
@@ -334,7 +334,7 @@ namespace Zipper
         {
             // Arrange
             var request = this.CreateTestRequest();
-            request.BatesConfig = new BatesNumberConfig
+            request.Bates = new BatesNumberConfig
             {
                 Prefix = "TEST",
                 Start = 1,
@@ -368,7 +368,7 @@ namespace Zipper
         {
             // Arrange
             var request = this.CreateTestRequest("tiff");
-            request.TiffPageRange = (1, 10);
+            request.Tiff = request.Tiff with { PageRange = (1, 10) };
             var fileData = this.CreateTestFileData();
             fileData[0] = fileData[0] with { PageCount = 5 };
             fileData[1] = fileData[1] with { PageCount = 7 };
@@ -407,7 +407,7 @@ namespace Zipper
 
             // Arrange - Test encoding path with non-UTF8 encoding to verify proper encoding handling
             var request = this.CreateTestRequest();
-            request.Encoding = encoding;
+            request.LoadFile = request.LoadFile with { Encoding = encoding };
             var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
             var outputPath = Path.Combine(this.tempDir, "test.dat");
@@ -448,7 +448,7 @@ namespace Zipper
         public async Task CsvWriter_WithText_WritesTextPath()
         {
             var request = this.CreateTestRequest();
-            request.WithText = true;
+            request.Output = request.Output with { WithText = true };
             var files = this.CreateTestFileData(1);
             files[0] = files[0] with { WorkItem = files[0].WorkItem with { FilePathInZip = "folder_001/file_00000001.pdf" } };
             var content = await this.CaptureCsvOutput(request, files);
@@ -459,12 +459,12 @@ namespace Zipper
         public async Task CsvWriter_MetadataHeader_ReflectsRequestConfiguration()
         {
             var request = this.CreateTestRequest();
-            request.WithMetadata = true;
+            request.Metadata = request.Metadata with { WithMetadata = true };
             var files = this.CreateTestFileData(1);
             var contentWith = await this.CaptureCsvOutput(request, files);
             Assert.Contains("Custodian", contentWith);
 
-            request.WithMetadata = false;
+            request.Metadata = request.Metadata with { WithMetadata = false };
             var contentWithout = await this.CaptureCsvOutput(request, files);
             Assert.DoesNotContain("Custodian", contentWithout);
 
@@ -492,13 +492,13 @@ namespace Zipper
         public async Task CsvWriter_PageCount_OnlyForTiffWithPageRange()
         {
             var request = this.CreateTestRequest("tiff");
-            request.TiffPageRange = (1, 10);
+            request.Tiff = request.Tiff with { PageRange = (1, 10) };
             var files = this.CreateTestFileData(1);
             files[0] = files[0] with { PageCount = 5 };
             var contentWith = await this.CaptureCsvOutput(request, files);
             Assert.Contains("Page Count", contentWith);
 
-            request.TiffPageRange = null;
+            request.Tiff = request.Tiff with { PageRange = null };
             var contentWithout = await this.CaptureCsvOutput(request, files);
             Assert.DoesNotContain("Page Count", contentWithout);
 
@@ -512,7 +512,7 @@ namespace Zipper
         public async Task CsvWriter_WithBatesConfig_WritesCorrectBatesNumber()
         {
             var request = this.CreateTestRequest();
-            request.BatesConfig = new BatesNumberConfig
+            request.Bates = new BatesNumberConfig
             {
                 Prefix = "TEST",
                 Start = 1000,
@@ -529,7 +529,7 @@ namespace Zipper
         public async Task CsvWriter_WithMetadata_ContainsCustodianAndFileSizeInDataRow()
         {
             var request = this.CreateTestRequest();
-            request.WithMetadata = true;
+            request.Metadata = request.Metadata with { WithMetadata = true };
             var files = this.CreateTestFileData(1);
             files[0] = files[0] with { DataLength = 1024, WorkItem = files[0].WorkItem with { FolderNumber = 5 } };
             var content = await this.CaptureCsvOutput(request, files);
@@ -608,7 +608,7 @@ namespace Zipper
             };
 
             var eol = "\r\n";
-            long totalLines = request.FileCount + 1;
+            long totalLines = request.Output.FileCount + 1;
             var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
 
             var writer = new LoadfileOnlyDatWriter();

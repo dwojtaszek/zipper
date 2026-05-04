@@ -68,8 +68,8 @@ namespace Zipper
         public async Task GenerateAsync_Dat_UsesConfiguredDelimiters()
         {
             var request = this.CreateRequest();
-            request.ColumnDelimiter = "\u0014";
-            request.QuoteDelimiter = "\u00fe";
+            request.Delimiters = request.Delimiters with { ColumnDelimiter = "\u0014" };
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = "\u00fe" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var content = await File.ReadAllTextAsync(result.LoadFilePath);
@@ -82,8 +82,8 @@ namespace Zipper
         public async Task GenerateAsync_Dat_WithQuoteDelimNone_OmitsQuotes()
         {
             var request = this.CreateRequest();
-            request.QuoteDelimiter = string.Empty;
-            request.ColumnDelimiter = "|";
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Delimiters = request.Delimiters with { ColumnDelimiter = "|" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var firstLine = (await File.ReadAllLinesAsync(result.LoadFilePath))[0];
@@ -147,9 +147,9 @@ namespace Zipper
         public async Task GenerateAsync_WithChaos_PropertiesJsonContainsAnomalies()
         {
             var request = this.CreateRequest(count: 100);
-            request.ChaosMode = true;
-            request.ChaosAmount = "5";
-            request.Seed = 42;
+            request.Chaos = request.Chaos with { ChaosMode = true };
+            request.Chaos = request.Chaos with { ChaosAmount = "5" };
+            request.Metadata = request.Metadata with { Seed = 42 };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
 
@@ -164,7 +164,7 @@ namespace Zipper
         public async Task GenerateAsync_Dat_WithLfEol_UsesCorrectLineEndings()
         {
             var request = this.CreateRequest(count: 5);
-            request.EndOfLine = "LF";
+            request.Delimiters = request.Delimiters with { EndOfLine = "LF" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
@@ -179,7 +179,7 @@ namespace Zipper
         public async Task GenerateAsync_WithSeed_ProducesDeterministicOutput()
         {
             var request1 = this.CreateRequest(count: 10);
-            request1.Seed = 123;
+            request1.Metadata = request1.Metadata with { Seed = 123 };
             var result1 = await LoadfileOnlyGenerator.GenerateAsync(request1);
             var content1 = await File.ReadAllTextAsync(result1.LoadFilePath);
 
@@ -189,8 +189,8 @@ namespace Zipper
             try
             {
                 var request2 = this.CreateRequest(count: 10);
-                request2.Seed = 123;
-                request2.OutputPath = tempDir2;
+                request2.Metadata = request2.Metadata with { Seed = 123 };
+                request2.Output = request2.Output with { OutputPath = tempDir2 };
                 var result2 = await LoadfileOnlyGenerator.GenerateAsync(request2);
                 var content2 = await File.ReadAllTextAsync(result2.LoadFilePath);
 
@@ -247,7 +247,7 @@ namespace Zipper
         public async Task GenerateAsync_Dat_WithCrEol_UsesCorrectLineEndings()
         {
             var request = this.CreateRequest(count: 5);
-            request.EndOfLine = "CR";
+            request.Delimiters = request.Delimiters with { EndOfLine = "CR" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
@@ -261,7 +261,7 @@ namespace Zipper
         public async Task GenerateAsync_Dat_WithCrlfEol_Explicitly_UsesCrlf()
         {
             var request = this.CreateRequest(count: 5);
-            request.EndOfLine = "CRLF";
+            request.Delimiters = request.Delimiters with { EndOfLine = "CRLF" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
@@ -274,7 +274,7 @@ namespace Zipper
         public async Task GenerateAsync_Opt_WithLfEol_UsesCorrectLineEndings()
         {
             var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
-            request.EndOfLine = "LF";
+            request.Delimiters = request.Delimiters with { EndOfLine = "LF" };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
@@ -288,9 +288,9 @@ namespace Zipper
         public async Task GenerateAsync_WithChaos_HundredPercent_AllLinesCorrupted()
         {
             var request = this.CreateRequest(count: 20);
-            request.ChaosMode = true;
-            request.ChaosAmount = "100%";
-            request.Seed = 42;
+            request.Chaos = request.Chaos with { ChaosMode = true };
+            request.Chaos = request.Chaos with { ChaosAmount = "100%" };
+            request.Metadata = request.Metadata with { Seed = 42 };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
 
@@ -299,14 +299,14 @@ namespace Zipper
 
             // With 100% chaos, every line should have an anomaly (header + 20 data rows = 21 lines)
             var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
-            Assert.Equal(1 + request.FileCount, totalAnomalies);
+            Assert.Equal(1 + request.Output.FileCount, totalAnomalies);
         }
 
         [Fact]
         public async Task GenerateAsync_WithNullEol_FallsBackToCrlf()
         {
             var request = this.CreateRequest(count: 3);
-            request.EndOfLine = string.Empty;
+            request.Delimiters = request.Delimiters with { EndOfLine = string.Empty };
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
@@ -332,12 +332,12 @@ namespace Zipper
         public async Task GenerateAsync_WithSeed_LoadfileOnly_DatAndOpt_BothDeterministic()
         {
             var request1 = this.CreateRequest(format: LoadFileFormat.Dat, count: 5);
-            request1.Seed = 42;
+            request1.Metadata = request1.Metadata with { Seed = 42 };
             var result1 = await LoadfileOnlyGenerator.GenerateAsync(request1);
             var content1 = await File.ReadAllTextAsync(result1.LoadFilePath);
 
             var request2 = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
-            request2.Seed = 42;
+            request2.Metadata = request2.Metadata with { Seed = 42 };
             var result2 = await LoadfileOnlyGenerator.GenerateAsync(request2);
             var content2 = await File.ReadAllTextAsync(result2.LoadFilePath);
 

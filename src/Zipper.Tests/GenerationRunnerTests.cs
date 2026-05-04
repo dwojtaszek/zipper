@@ -62,7 +62,7 @@ namespace Zipper
         public void Program_SelectMode_ProductionSet_ReturnsProductionSetMode()
         {
             var request = DefaultRequest();
-            request.ProductionSet = true;
+            request.Production = request.Production with { ProductionSet = true };
             Assert.IsType<ProductionSetMode>(Program.SelectMode(request));
         }
 
@@ -78,7 +78,7 @@ namespace Zipper
         {
             var request = DefaultRequest();
             request.LoadfileOnly = true;
-            request.ProductionSet = true;
+            request.Production = request.Production with { ProductionSet = true };
             Assert.IsType<LoadfileOnlyMode>(Program.SelectMode(request));
         }
 

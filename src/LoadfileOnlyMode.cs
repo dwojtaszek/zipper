@@ -8,18 +8,18 @@ namespace Zipper
         public async Task RunAsync(FileGenerationRequest request)
         {
             Console.WriteLine("Starting loadfile-only generation...");
-            Console.WriteLine(string.Format("  Format: {0}", request.LoadFileFormat));
-            Console.WriteLine(string.Format("  Count: {0:N0}", request.FileCount));
-            Console.WriteLine(string.Format("  Output Path: {0}", request.OutputPath));
-            Console.WriteLine(string.Format("  Encoding: {0}", request.Encoding));
-            Console.WriteLine(string.Format("  EOL: {0}", request.EndOfLine));
+            Console.WriteLine(string.Format("  Format: {0}", request.LoadFile.LoadFileFormat));
+            Console.WriteLine(string.Format("  Count: {0:N0}", request.Output.FileCount));
+            Console.WriteLine(string.Format("  Output Path: {0}", request.Output.OutputPath));
+            Console.WriteLine(string.Format("  Encoding: {0}", request.LoadFile.Encoding));
+            Console.WriteLine(string.Format("  EOL: {0}", request.Delimiters.EndOfLine));
 
-            if (request.ChaosMode)
+            if (request.Chaos.ChaosMode)
             {
-                Console.WriteLine(string.Format("  Chaos Mode: Enabled (amount: {0})", request.ChaosAmount ?? "1%"));
-                if (!string.IsNullOrEmpty(request.ChaosTypes))
+                Console.WriteLine(string.Format("  Chaos Mode: Enabled (amount: {0})", request.Chaos.ChaosAmount ?? "1%"));
+                if (!string.IsNullOrEmpty(request.Chaos.ChaosTypes))
                 {
-                    Console.WriteLine(string.Format("  Chaos Types: {0}", request.ChaosTypes));
+                    Console.WriteLine(string.Format("  Chaos Types: {0}", request.Chaos.ChaosTypes));
                 }
             }
 

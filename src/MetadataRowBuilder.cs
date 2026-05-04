@@ -34,7 +34,7 @@ internal class MetadataRowBuilder
 
     public string GetCustodian()
     {
-        var maxCustodians = Math.Max(2, this.request.CustodianCountOverride ?? 10);
+        var maxCustodians = Math.Max(2, this.request.Metadata.CustodianCountOverride ?? 10);
         return $"Custodian {this.random.Next(1, maxCustodians + 1)}";
     }
 
@@ -102,7 +102,7 @@ internal class MetadataRowBuilder
 
     public string GetTextPath(FileWorkItem workItem)
     {
-        var sourceSuffix = $".{this.request.FileType}";
+        var sourceSuffix = $".{this.request.Output.FileType}";
         return workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
             ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
             : workItem.FilePathInZip;
@@ -110,7 +110,7 @@ internal class MetadataRowBuilder
 
     public string GetBatesNumber(FileWorkItem workItem)
     {
-        return this.request.BatesConfig != null ? BatesNumberGenerator.Generate(this.request.BatesConfig, workItem.Index - 1) : string.Empty;
+        return this.request.Bates != null ? BatesNumberGenerator.Generate(this.request.Bates, workItem.Index - 1) : string.Empty;
     }
 
     public static string SanitizeField(string value, string newlineDelimiter)

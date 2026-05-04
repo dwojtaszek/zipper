@@ -67,11 +67,11 @@ public class ProductionSetTests : IDisposable
         var request = CommandLineValidator.ValidateAndParseArguments(args);
 
         Assert.NotNull(request);
-        Assert.True(request.ProductionSet);
-        Assert.Equal(50L, request.FileCount);
-        Assert.Equal("PROD", request.BatesConfig!.Prefix);
-        Assert.Equal(6, request.BatesConfig.Digits);
-        Assert.Equal(25, request.VolumeSize);
+        Assert.True(request.Production.ProductionSet);
+        Assert.Equal(50L, request.Output.FileCount);
+        Assert.Equal("PROD", request.Bates!.Prefix);
+        Assert.Equal(6, request.Bates.Digits);
+        Assert.Equal(25, request.Production.VolumeSize);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class ProductionSetTests : IDisposable
         var request = CommandLineValidator.ValidateAndParseArguments(args);
 
         Assert.NotNull(request);
-        Assert.Equal(5000, request.VolumeSize);
+        Assert.Equal(5000, request.Production.VolumeSize);
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public class ProductionSetTests : IDisposable
         var request = CommandLineValidator.ValidateAndParseArguments(args);
 
         Assert.NotNull(request);
-        Assert.Equal("pdf", request.FileType);
+        Assert.Equal("pdf", request.Output.FileType);
     }
 
     // === End-to-End Generation Tests ===
@@ -217,7 +217,7 @@ public class ProductionSetTests : IDisposable
     public async Task ProductionSet_WithZip_CreatesArchive()
     {
         var request = this.CreateTestRequest(count: 3);
-        request.ProductionZip = true;
+        request.Production = request.Production with { ProductionZip = true };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         Assert.NotNull(result.ZipFilePath);
@@ -229,7 +229,7 @@ public class ProductionSetTests : IDisposable
     public async Task ProductionSet_WithoutZip_NoArchive()
     {
         var request = this.CreateTestRequest(count: 3);
-        request.ProductionZip = false;
+        request.Production = request.Production with { ProductionZip = false };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         Assert.Null(result.ZipFilePath);
@@ -415,7 +415,7 @@ public class ProductionSetTests : IDisposable
     public async Task ProductionSet_WithTiff_CreatesNativeFiles()
     {
         var request = this.CreateTestRequest(count: 3, fileType: "tiff");
-        request.TiffPageRange = (1, 5);
+        request.Tiff = request.Tiff with { PageRange = (1, 5) };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.tiff", SearchOption.AllDirectories);
@@ -432,7 +432,7 @@ public class ProductionSetTests : IDisposable
     public async Task ProductionSet_WithCustomEncoding_ProducesValidDat()
     {
         var request = this.CreateTestRequest(count: 3);
-        request.Encoding = "UTF-16";
+        request.LoadFile = request.LoadFile with { Encoding = "UTF-16" };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.Encoding.Unicode);

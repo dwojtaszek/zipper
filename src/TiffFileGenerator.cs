@@ -13,7 +13,7 @@ internal sealed class TiffFileGenerator : IFileGenerator
 
     public TiffFileGenerator(FileGenerationRequest request)
     {
-        this.hasPageRange = request.TiffPageRange.HasValue;
+        this.hasPageRange = request.Tiff.PageRange.HasValue;
     }
 
     public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
@@ -29,7 +29,7 @@ internal sealed class TiffFileGenerator : IFileGenerator
         }
 
         var pageCount = TiffMultiPageGenerator.GetPageCount(
-            request.TiffPageRange!.Value, request.Seed, workItem.Index);
+            request.Tiff.PageRange!.Value, request.Metadata.Seed, workItem.Index);
 
         return new GeneratedFileContent
         {

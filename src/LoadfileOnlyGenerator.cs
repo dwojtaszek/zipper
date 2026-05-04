@@ -20,26 +20,26 @@ internal static class LoadfileOnlyGenerator
 
         var stopwatch = Stopwatch.StartNew();
 
-        Directory.CreateDirectory(request.OutputPath);
+        Directory.CreateDirectory(request.Output.OutputPath);
 
         var baseFileName = $"loadfile_{DateTime.Now:yyyyMMdd_HHmmss}";
-        var extension = request.LoadFileFormat == LoadFileFormat.Opt ? ".opt" : ".dat";
-        var loadFilePath = Path.Combine(request.OutputPath, $"{baseFileName}{extension}");
+        var extension = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt ? ".opt" : ".dat";
+        var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
 
-        var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.EndOfLine);
-        long totalLines = request.LoadFileFormat == LoadFileFormat.Opt
-            ? request.FileCount
-            : request.FileCount + 1;
+        var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+        long totalLines = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
+            ? request.Output.FileCount
+            : request.Output.FileCount + 1;
 
         ChaosEngine? chaosEngine = null;
-        if (request.ChaosMode)
+        if (request.Chaos.ChaosMode)
         {
-            string? resolvedTypes = request.ChaosTypes;
-            string? resolvedAmount = request.ChaosAmount;
+            string? resolvedTypes = request.Chaos.ChaosTypes;
+            string? resolvedAmount = request.Chaos.ChaosAmount;
 
-            if (!string.IsNullOrEmpty(request.ChaosScenario))
+            if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
             {
-                var scenario = ChaosScenarios.GetByName(request.ChaosScenario);
+                var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
                 if (scenario != null)
                 {
                     resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
@@ -48,28 +48,28 @@ internal static class LoadfileOnlyGenerator
                         resolvedAmount = scenario.DefaultAmount;
                     }
 
-                    request.ChaosAmount = resolvedAmount;
-                    request.ChaosTypes = resolvedTypes;
+                    request.Chaos = request.Chaos with { ChaosAmount = resolvedAmount };
+                    request.Chaos = request.Chaos with { ChaosTypes = resolvedTypes };
 
                     Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
             }
 
-            string chaosColDelim = request.LoadFileFormat == LoadFileFormat.Opt ? "," : request.ColumnDelimiter;
-            string chaosQuoteDelim = request.LoadFileFormat == LoadFileFormat.Opt ? string.Empty : request.QuoteDelimiter;
+            string chaosColDelim = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter;
+            string chaosQuoteDelim = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter;
 
             chaosEngine = new ChaosEngine(
                 totalLines,
                 resolvedAmount,
                 resolvedTypes,
-                request.LoadFileFormat,
+                request.LoadFile.LoadFileFormat,
                 chaosColDelim,
                 chaosQuoteDelim,
                 eolString,
-                request.Seed);
+                request.Metadata.Seed);
         }
 
-        ILoadFileWriter writer = request.LoadFileFormat == LoadFileFormat.Opt
+        ILoadFileWriter writer = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
             ? new LoadfileOnlyOptWriter()
             : new LoadfileOnlyDatWriter();
 
@@ -84,7 +84,7 @@ internal static class LoadfileOnlyGenerator
             propertiesPath = await LoadfileAuditWriter.WriteAsync(
                 loadFilePath,
                 request,
-                request.FileCount,
+                request.Output.FileCount,
                 chaosEngine?.Anomalies);
         }
         catch
@@ -103,7 +103,7 @@ internal static class LoadfileOnlyGenerator
         {
             LoadFilePath = loadFilePath,
             PropertiesFilePath = propertiesPath,
-            TotalRecords = request.FileCount,
+            TotalRecords = request.Output.FileCount,
             GenerationTime = stopwatch.Elapsed,
         };
     }

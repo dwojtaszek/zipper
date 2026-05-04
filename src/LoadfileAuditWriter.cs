@@ -31,7 +31,7 @@ internal static class LoadfileAuditWriter
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
 
-        var formatName = request.LoadFileFormat == LoadFileFormat.Opt
+        var formatName = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
             ? "OPT (Image)"
             : "DAT (Metadata)";
 
@@ -42,21 +42,21 @@ internal static class LoadfileAuditWriter
             TotalRecords = totalRecords,
             Properties = new AuditProperties
             {
-                Encoding = request.Encoding,
-                LineEnding = request.EndOfLine,
+                Encoding = request.LoadFile.Encoding,
+                LineEnding = request.Delimiters.EndOfLine,
                 Delimiters = new AuditDelimiters
                 {
-                    Column = FormatDelimiter(request.ColumnDelimiter),
-                    Quote = string.IsNullOrEmpty(request.QuoteDelimiter) ? "none" : FormatDelimiter(request.QuoteDelimiter),
-                    Newline = FormatDelimiter(request.NewlineDelimiter),
-                    MultiValue = FormatDelimiter(request.MultiValueDelimiter),
-                    NestedValue = FormatDelimiter(request.NestedValueDelimiter),
+                    Column = FormatDelimiter(request.Delimiters.ColumnDelimiter),
+                    Quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "none" : FormatDelimiter(request.Delimiters.QuoteDelimiter),
+                    Newline = FormatDelimiter(request.Delimiters.NewlineDelimiter),
+                    MultiValue = FormatDelimiter(request.Delimiters.MultiValueDelimiter),
+                    NestedValue = FormatDelimiter(request.Delimiters.NestedValueDelimiter),
                 },
             },
             ChaosMode = new AuditChaosMode
             {
-                Enabled = request.ChaosMode,
-                TargetAmount = request.ChaosAmount,
+                Enabled = request.Chaos.ChaosMode,
+                TargetAmount = request.Chaos.ChaosAmount,
                 TotalAnomalies = anomalies?.Count ?? 0,
                 InjectedAnomalies = anomalies != null && anomalies.Count > 0
                     ? anomalies.Select(a => new AuditAnomalyEntry

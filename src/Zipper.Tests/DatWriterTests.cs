@@ -21,7 +21,7 @@ namespace Zipper
         public async Task WriteAsync_WithMetadata_IncludesMetadataColumns()
         {
             var request = DefaultRequest();
-            request.WithMetadata = true;
+            request.Metadata = request.Metadata with { WithMetadata = true };
             var output = await WriteAndCaptureOutput(request, []);
             Assert.Contains("Custodian", output);
             Assert.Contains("Date Sent", output);
@@ -33,7 +33,7 @@ namespace Zipper
         public async Task WriteAsync_WithEmailType_IncludesEmlColumns()
         {
             var request = DefaultRequest();
-            request.FileType = "eml";
+            request.Output = request.Output with { FileType = "eml" };
             var output = await WriteAndCaptureOutput(request, []);
             Assert.Contains("To", output);
             Assert.Contains("From", output);
@@ -46,7 +46,7 @@ namespace Zipper
         public async Task WriteAsync_WithBatesConfig_IncludesBatesNumberColumn()
         {
             var request = DefaultRequest();
-            request.BatesConfig = new BatesNumberConfig
+            request.Bates = new BatesNumberConfig
             {
                 Prefix = "TEST",
                 Start = 1,
@@ -61,8 +61,8 @@ namespace Zipper
         public async Task WriteAsync_WithTiffPageRange_IncludesPageCountColumn()
         {
             var request = DefaultRequest();
-            request.FileType = "tiff";
-            request.TiffPageRange = (1, 10);
+            request.Output = request.Output with { FileType = "tiff" };
+            request.Tiff = request.Tiff with { PageRange = (1, 10) };
             var output = await WriteAndCaptureOutput(request, []);
             Assert.Contains("Page Count", output);
         }
@@ -71,7 +71,7 @@ namespace Zipper
         public async Task WriteAsync_WithText_IncludesExtractedTextColumn()
         {
             var request = DefaultRequest();
-            request.WithText = true;
+            request.Output = request.Output with { WithText = true };
             var output = await WriteAndCaptureOutput(request, []);
             Assert.Contains("Extracted Text", output);
         }
@@ -102,7 +102,7 @@ namespace Zipper
         public async Task WriteAsync_WithMetadata_WritesMetadataValues()
         {
             var request = DefaultRequest();
-            request.WithMetadata = true;
+            request.Metadata = request.Metadata with { WithMetadata = true };
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
@@ -114,7 +114,7 @@ namespace Zipper
         public async Task WriteAsync_WithEmailData_WritesEmlColumns()
         {
             var request = DefaultRequest();
-            request.FileType = "eml";
+            request.Output = request.Output with { FileType = "eml" };
             var template = new EmailTemplate
             {
                 To = "test@example.com",
@@ -151,7 +151,7 @@ namespace Zipper
         public async Task WriteAsync_WithBates_WritesBatesNumber()
         {
             var request = DefaultRequest();
-            request.BatesConfig = new BatesNumberConfig
+            request.Bates = new BatesNumberConfig
             {
                 Prefix = "DOC",
                 Start = 100,
@@ -168,8 +168,8 @@ namespace Zipper
         public async Task WriteAsync_WithTiff_WritesPageCount()
         {
             var request = DefaultRequest();
-            request.FileType = "tiff";
-            request.TiffPageRange = (1, 5);
+            request.Output = request.Output with { FileType = "tiff" };
+            request.Tiff = request.Tiff with { PageRange = (1, 5) };
             var files = new List<FileData>
             {
                 new()
@@ -197,8 +197,8 @@ namespace Zipper
         public async Task WriteAsync_WithText_WritesTextFileReference()
         {
             var request = DefaultRequest();
-            request.WithText = true;
-            request.FileType = "pdf";
+            request.Output = request.Output with { WithText = true };
+            request.Output = request.Output with { FileType = "pdf" };
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
@@ -231,7 +231,7 @@ namespace Zipper
         public async Task WriteAsync_WithEmlWithoutTemplate_WritesFallbackEmlValues()
         {
             var request = DefaultRequest();
-            request.FileType = "eml";
+            request.Output = request.Output with { FileType = "eml" };
             var files = new List<FileData>
             {
                 new()
@@ -259,8 +259,8 @@ namespace Zipper
         public async Task WriteAsync_DefaultDelimiters_UseNonPrintingChars()
         {
             var request = DefaultRequest();
-            request.ColumnDelimiter = null!;
-            request.QuoteDelimiter = null!;
+            request.Delimiters = request.Delimiters with { ColumnDelimiter = null! };
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = null! };
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
@@ -271,7 +271,7 @@ namespace Zipper
         public async Task WriteAsync_SanitizeField_ReplacesWindowsNewline()
         {
             var request = DefaultRequest();
-            request.WithMetadata = true;
+            request.Metadata = request.Metadata with { WithMetadata = true };
             var files = new List<FileData>
             {
                 new()

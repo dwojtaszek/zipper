@@ -33,8 +33,8 @@ namespace Zipper
             var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Pre-compute the extracted text content selection once, outside the loop
-            var extractedTextContent = request.WithText
-                ? (string.Equals(request.FileType, "eml", StringComparison.OrdinalIgnoreCase)
+            var extractedTextContent = request.Output.WithText
+                ? (string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
                     ? PlaceholderFiles.EmlExtractedText
                     : PlaceholderFiles.ExtractedText)
                 : null;
@@ -52,7 +52,7 @@ namespace Zipper
                 // 4. Attachment's extracted text (if it exists and text is requested)
                 WriteFileToArchive(archive, fileData, usedEntryPaths);
 
-                if (request.WithText)
+                if (request.Output.WithText)
                 {
                     WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
                 }
@@ -62,7 +62,7 @@ namespace Zipper
                     WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
                 }
 
-                if (fileData.Attachment.HasValue && request.WithText)
+                if (fileData.Attachment.HasValue && request.Output.WithText)
                 {
                     WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
                 }
@@ -73,9 +73,9 @@ namespace Zipper
                 fileData.MemoryOwner?.Dispose();
             }
 
-            var formatsToGenerate = request.LoadFileFormats?.Any() == true
-                ? request.LoadFileFormats
-                : new List<LoadFileFormat> { request.LoadFileFormat };
+            var formatsToGenerate = request.LoadFile.LoadFileFormats?.Any() == true
+                ? request.LoadFile.LoadFileFormats
+                : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
 
             string actualLoadFilePath = loadFilePath;
             var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
@@ -86,7 +86,7 @@ namespace Zipper
                 var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
                 var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
-                if (request.IncludeLoadFile)
+                if (request.Output.IncludeLoadFile)
                 {
                     var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                     using var loadFileStream = loadFileEntry.Open();
@@ -173,9 +173,9 @@ namespace Zipper
         /// </summary>
         private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths)
         {
-            System.Diagnostics.Debug.Assert(request.WithText, "Should only be called when WithText is true");
+            System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
-            var textFileName = fileData.WorkItem.FileName.Replace($".{request.FileType}", ".txt");
+            var textFileName = fileData.WorkItem.FileName.Replace($".{request.Output.FileType}", ".txt");
             var entryPath = $"{fileData.WorkItem.FolderName}/{textFileName}";
 
             if (!usedEntryPaths.Add(entryPath))
