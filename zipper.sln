@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper", "src\Zipper.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper.Tests", "src\Zipper.Tests\Zipper.Tests.csproj", "{B2C3D4E5-F6G7-8901-BCDE-F23456789012}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper.Analyzers", "src\Zipper.Analyzers\Zipper.Analyzers.csproj", "{C5F8B9D0-E1A2-4A3B-8C6D-7E0F9A1B2C3D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zipper.Analyzers.Tests", "src\Zipper.Analyzers.Tests\Zipper.Analyzers.Tests.csproj", "{D6A9C0E1-F2B3-4B5C-9D7E-8F0A1B2C3D4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +24,14 @@ Global
 		{B2C3D4E5-F6G7-8901-BCDE-F23456789012}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2C3D4E5-F6G7-8901-BCDE-F23456789012}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B2C3D4E5-F6G7-8901-BCDE-F23456789012}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C5F8B9D0-E1A2-4A3B-8C6D-7E0F9A1B2C3D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C5F8B9D0-E1A2-4A3B-8C6D-7E0F9A1B2C3D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C5F8B9D0-E1A2-4A3B-8C6D-7E0F9A1B2C3D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C5F8B9D0-E1A2-4A3B-8C6D-7E0F9A1B2C3D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6A9C0E1-F2B3-4B5C-9D7E-8F0A1B2C3D4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6A9C0E1-F2B3-4B5C-9D7E-8F0A1B2C3D4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6A9C0E1-F2B3-4B5C-9D7E-8F0A1B2C3D4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6A9C0E1-F2B3-4B5C-9D7E-8F0A1B2C3D4E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -44,4 +44,10 @@
     <InternalsVisibleTo Include="Zipper.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="Zipper.Analyzers\Zipper.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

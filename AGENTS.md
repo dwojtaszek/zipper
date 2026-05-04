@@ -138,6 +138,8 @@ Run adversarial review before marking work as complete. Treat findings as bugs, 
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/Zipper.Tests/` | Unit tests |
+| `src/Zipper.Analyzers/` | Roslyn analyzer — `FGR_FLAT_ACCESS` diagnostic (Info severity); escalates to Error in F4 (#213) |
+| `src/Zipper.Analyzers.Tests/` | Unit tests for Roslyn analyzers |
 | `tests/` | E2E test scripts |
 
 
