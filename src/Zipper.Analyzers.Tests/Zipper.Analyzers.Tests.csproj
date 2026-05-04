@@ -15,13 +15,13 @@
 
   <ItemGroup>
     <!--
-      Explicit version floor for the Roslyn packages transitively required by the
-      testing harness. Without this, NuGet can pick up the 1.0.1 legacy
-      .NETFramework-only release that ships as the minimum version in
-      Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit, which fails
-      NU1701 on net8.0 with TreatWarningsAsErrors.
+      Explicit floor for Roslyn packages required by the testing harness.
+      Without this, NuGet can resolve the legacy 1.0.1 build
+      (Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit 1.1.2 sets 1.0.1 as
+      its minimum), which targets .NETFramework only and triggers NU1701 with
+      TreatWarningsAsErrors. 4.8.0 is the .NET 8 GA release and has a net8.0 TFM.
     -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.12.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit" Version="1.1.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <PackageReference Include="xunit" Version="2.9.3" />

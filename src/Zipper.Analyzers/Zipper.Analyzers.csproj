@@ -12,16 +12,21 @@
     <!--
       RS1036: "A project containing analyzers should specify EnforceExtendedAnalyzerRules=true."
       RS2008: "Enable analyzer release tracking for the analyzer project."
-      Both are informational guidance rules for publicly-shipped analyzer packages. This
-      analyzer is repo-internal (not published to NuGet), so the overhead of release tracking
-      files is disproportionate. Suppressed until the project is prepared for a NuGet release.
+      Suppressed: analyzer is repo-internal (not published to NuGet).
+      Version note: pin to 4.8.0 — matches .NET SDK 8.0 GA Roslyn baseline.
+      Using a newer Roslyn version here would trigger CS9057 on CI runners
+      whose SDK ships an older compiler.
     -->
     <NoWarn>$(NoWarn);SA0001;EnableGenerateDocumentationFile;RS1036;RS2008</NoWarn>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0">
+    <!--
+      Pin to 4.8.0 (ships with .NET 8 SDK GA). Using a version newer than the
+      CI runner's compiler causes CS9057 ("references version X, newer than running Y").
+    -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Roslynator.Analyzers" Version="4.15.0">
