@@ -47,7 +47,7 @@ internal class DatWriter : LoadFileWriterBase
 #pragma warning disable S2245
         var random = request.Seed.HasValue ? new Random(request.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        var now = DateTime.UtcNow;
+        var now = request.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var builder = new MetadataRowBuilder(request, random, now);
 
         var buffer = new StringBuilder();
