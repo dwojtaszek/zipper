@@ -2,6 +2,7 @@ using System.Text;
 using Xunit;
 using Zipper.LoadFiles;
 
+using Zipper.Config;
 namespace Zipper
 {
     public class DatWriterTests
@@ -362,10 +363,13 @@ namespace Zipper
         {
             return new FileGenerationRequest
             {
-                OutputPath = "/tmp/test",
-                FileCount = 10,
-                FileType = "pdf",
-                Folders = 1,
+                Output = new OutputConfig
+                {
+                    OutputPath = "/tmp/test",
+                    FileCount = 10,
+                    FileType = "pdf",
+                    Folders = 1,
+                },
             };
         }
 

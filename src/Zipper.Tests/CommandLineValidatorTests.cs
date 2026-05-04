@@ -33,15 +33,15 @@ namespace Zipper
             // Assert
             Assert.NotNull(result);
             Assert.Equal(this.tempDir, result!.OutputPath);
-            Assert.Equal(100, result.FileCount);
-            Assert.Equal("pdf", result.FileType);
-            Assert.Equal(1, result.Folders);
-            Assert.Equal("Unicode (UTF-8)", result.Encoding);
-            Assert.Equal(DistributionType.Proportional, result.Distribution);
-            Assert.False(result.WithMetadata);
-            Assert.False(result.WithText);
-            Assert.False(result.IncludeLoadFile);
-            Assert.Equal(0, result.AttachmentRate);
+            Assert.Equal(100, result.Output.FileCount);
+            Assert.Equal("pdf", result.Output.FileType);
+            Assert.Equal(1, result.Output.Folders);
+            Assert.Equal("Unicode (UTF-8)", result.LoadFile.Encoding);
+            Assert.Equal(DistributionType.Proportional, result.LoadFile.Distribution);
+            Assert.False(result.Metadata.WithMetadata);
+            Assert.False(result.Output.WithText);
+            Assert.False(result.Output.IncludeLoadFile);
+            Assert.Equal(0, result.LoadFile.AttachmentRate);
         }
 
         [Fact]
@@ -69,16 +69,16 @@ namespace Zipper
             // Assert
             Assert.NotNull(result);
             Assert.Equal(this.tempDir, result!.OutputPath);
-            Assert.Equal(500, result.FileCount);
-            Assert.Equal("jpg", result.FileType);
-            Assert.Equal(5, result.Folders);
-            Assert.Equal("Unicode", result.Encoding);
-            Assert.Equal(DistributionType.Gaussian, result.Distribution);
-            Assert.True(result.WithMetadata);
-            Assert.True(result.WithText);
-            Assert.True(result.IncludeLoadFile);
-            Assert.Equal(25, result.AttachmentRate);
-            Assert.Equal(10 * 1024 * 1024, result.TargetZipSize);
+            Assert.Equal(500, result.Output.FileCount);
+            Assert.Equal("jpg", result.Output.FileType);
+            Assert.Equal(5, result.Output.Folders);
+            Assert.Equal("Unicode", result.LoadFile.Encoding);
+            Assert.Equal(DistributionType.Gaussian, result.LoadFile.Distribution);
+            Assert.True(result.Metadata.WithMetadata);
+            Assert.True(result.Output.WithText);
+            Assert.True(result.Output.IncludeLoadFile);
+            Assert.Equal(25, result.LoadFile.AttachmentRate);
+            Assert.Equal(10 * 1024 * 1024, result.Output.TargetZipSize);
         }
 
         [Fact]
@@ -380,9 +380,9 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.NotNull(result.TiffPageRange);
-            Assert.Equal(5, result.TiffPageRange.Value.Min);
-            Assert.Equal(20, result.TiffPageRange.Value.Max);
+            Assert.NotNull(result.Tiff.PageRange);
+            Assert.Equal(5, result.Tiff.PageRange.Value.Min);
+            Assert.Equal(20, result.Tiff.PageRange.Value.Max);
         }
 
         [Theory]
@@ -432,7 +432,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expected, result.LoadFileFormat);
+            Assert.Equal(expected, result.LoadFile.LoadFileFormat);
         }
 
         [Fact]
@@ -477,7 +477,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal(expected, result.ColumnDelimiter);
+            Assert.Equal(expected, result.Delimiters.ColumnDelimiter);
         }
 
         [Fact]
@@ -498,8 +498,8 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
-            Assert.Equal("|", result.ColumnDelimiter);  // Should override CSV preset
-            Assert.Equal("\"", result.QuoteDelimiter);   // Should use CSV preset
+            Assert.Equal("|", result.Delimiters.ColumnDelimiter);  // Should override CSV preset
+            Assert.Equal("\"", result.Delimiters.QuoteDelimiter);   // Should use CSV preset
         }
 
         [Fact]
@@ -540,7 +540,7 @@ namespace Zipper
 
             Assert.NotNull(result);
             Assert.True(result!.LoadfileOnly);
-            Assert.Equal("pdf", result.FileType); // defaults to pdf
+            Assert.Equal("pdf", result.Output.FileType); // defaults to pdf
         }
 
         [Fact]
@@ -557,9 +557,9 @@ namespace Zipper
 
             Assert.NotNull(result);
             Assert.Equal("\u0014", result!.ColumnDelimiter); // ASCII 20
-            Assert.Equal("\u00fe", result.QuoteDelimiter); // ASCII 254
-            Assert.Equal(";", result.MultiValueDelimiter);
-            Assert.Equal("\\", result.NestedValueDelimiter);
+            Assert.Equal("\u00fe", result.Delimiters.QuoteDelimiter); // ASCII 254
+            Assert.Equal(";", result.Delimiters.MultiValueDelimiter);
+            Assert.Equal("\\", result.Delimiters.NestedValueDelimiter);
         }
 
         [Fact]
@@ -789,8 +789,8 @@ namespace Zipper
 
             Assert.NotNull(result);
             Assert.True(result!.ChaosMode);
-            Assert.Equal("5%", result.ChaosAmount);
-            Assert.Equal("quotes,columns", result.ChaosTypes);
+            Assert.Equal("5%", result.Chaos.ChaosAmount);
+            Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
         }
 
         // === B2: Bates prefix path traversal prevention ===

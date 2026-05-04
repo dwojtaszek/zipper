@@ -143,10 +143,10 @@ namespace Zipper.Tests
             };
             var clone = original.Clone();
 
-            Assert.Equal(100, clone.FileCount);
-            Assert.Equal("pdf", clone.FileType);
-            Assert.True(clone.WithMetadata);
-            Assert.Equal("5%", clone.ChaosAmount);
+            Assert.Equal(100, clone.Output.FileCount);
+            Assert.Equal("pdf", clone.Output.FileType);
+            Assert.True(clone.Metadata.WithMetadata);
+            Assert.Equal("5%", clone.Chaos.ChaosAmount);
         }
 
         [Fact]
@@ -162,10 +162,10 @@ namespace Zipper.Tests
             clone.Output = clone.Output with { FileCount = 200 };
             clone.Chaos = clone.Chaos with { ChaosAmount = "10%" };
 
-            Assert.Equal(100, original.FileCount);
-            Assert.Equal("5%", original.ChaosAmount);
-            Assert.Equal(200, clone.FileCount);
-            Assert.Equal("10%", clone.ChaosAmount);
+            Assert.Equal(100, original.Output.FileCount);
+            Assert.Equal("5%", original.Chaos.ChaosAmount);
+            Assert.Equal(200, clone.Output.FileCount);
+            Assert.Equal("10%", clone.Chaos.ChaosAmount);
         }
 
         [Fact]
@@ -173,18 +173,16 @@ namespace Zipper.Tests
         {
             var original = new FileGenerationRequest
             {
-                LoadFile = new LoadFileConfig
-                {
-                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat },
-                },
+                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
+                LoadFile = new LoadFileConfig,
             };
             var clone = original.Clone();
 
-            clone.LoadFileFormats!.Add(LoadFileFormat.Csv);
+            clone.LoadFile.LoadFileFormats!.Add(LoadFileFormat.Csv);
 
-            Assert.Single(original.LoadFileFormats!);
-            Assert.Equal(2, clone.LoadFileFormats!.Count);
-            Assert.NotSame(original.LoadFileFormats, clone.LoadFileFormats);
+            Assert.Single(original.LoadFile.LoadFileFormats!);
+            Assert.Equal(2, clone.LoadFile.LoadFileFormats!.Count);
+            Assert.NotSame(original.LoadFile.LoadFileFormats, clone.LoadFile.LoadFileFormats);
         }
 
         [Fact]
@@ -192,7 +190,7 @@ namespace Zipper.Tests
         {
             var original = new FileGenerationRequest();
             var clone = original.Clone();
-            Assert.Null(clone.LoadFileFormats);
+            Assert.Null(clone.LoadFile.LoadFileFormats);
         }
     }
 }

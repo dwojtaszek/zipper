@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Xunit;
 
+using Zipper.Config;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
@@ -341,18 +342,22 @@ public class ProductionSetTests : IDisposable
     {
         return new FileGenerationRequest
         {
-            OutputPath = this.testOutputPath,
-            FileCount = count,
-            FileType = fileType,
-            ProductionSet = true,
-            VolumeSize = volumeSize,
-            Seed = seed,
-            BatesConfig = new BatesNumberConfig
+            Output = new OutputConfig
             {
-                Prefix = batesPrefix,
-                Start = batesStart,
-                Digits = batesDigits,
+                OutputPath = this.testOutputPath,
+                FileCount = count,
+                FileType = fileType,
             },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = volumeSize,
+            },
+            Metadata = new MetadataConfig { Seed = seed },
+            Bates = new BatesNumberConfig,
+            Prefix = batesPrefix,
+            Start = batesStart,
+            Digits = batesDigits,
         };
     }
 
@@ -435,7 +440,7 @@ public class ProductionSetTests : IDisposable
         request.LoadFile = request.LoadFile with { Encoding = "UTF-16" };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
-        var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.Encoding.Unicode);
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.LoadFile.Encoding.Unicode);
         Assert.Contains("DOCID", datContent);
         Assert.Equal(4, datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
     }

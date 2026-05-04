@@ -1,5 +1,6 @@
 using Xunit;
 
+using Zipper.Config;
 namespace Zipper
 {
     public class ParallelFileGeneratorTests
@@ -16,11 +17,14 @@ namespace Zipper
                 var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 10,
-                    FileType = "pdf",
-                    Folders = 2,
-                    Concurrency = 2,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 10,
+                        FileType = "pdf",
+                        Folders = 2,
+                        Concurrency = 2,
+                    },
                 });
 
                 Assert.Equal(10, result.FilesGenerated);
@@ -53,12 +57,15 @@ namespace Zipper
                 var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 10,
-                    FileType = "pdf",
-                    Folders = 2,
-                    Concurrency = 2,
-                    TargetZipSize = targetSize,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 10,
+                        FileType = "pdf",
+                        Folders = 2,
+                        Concurrency = 2,
+                        TargetZipSize = targetSize,
+                    },
                 });
 
                 Assert.Equal(10, result.FilesGenerated);
@@ -108,12 +115,15 @@ namespace Zipper
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                     generator.GenerateFilesAsync(new FileGenerationRequest
                     {
-                        OutputPath = outputPath,
-                        FileCount = 100,
-                        FileType = "pdf",
-                        Folders = 1,
-                        Concurrency = 1,
-                        TargetZipSize = 100, // 100 bytes — impossibly small for 100 PDFs
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = 100,
+                            FileType = "pdf",
+                            Folders = 1,
+                            Concurrency = 1,
+                            TargetZipSize = 100, // 100 bytes — impossibly small for 100 PDFs,
+                        },
                     }));
 
                 Assert.Contains("target ZIP size", ex.Message);
@@ -142,11 +152,14 @@ namespace Zipper
                 var generator = new ParallelFileGenerator();
                 var task = generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 1000,
-                    FileType = "pdf",
-                    Folders = 5,
-                    Concurrency = 4,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 1000,
+                        FileType = "pdf",
+                        Folders = 5,
+                        Concurrency = 4,
+                    },
                 });
 
                 var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(60))) == task;
@@ -179,12 +192,15 @@ namespace Zipper
                 var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 25,
-                    FileType = "pdf",
-                    Folders = 2,
-                    Concurrency = 4,
-                    TargetZipSize = 2_000_000,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 25,
+                        FileType = "pdf",
+                        Folders = 2,
+                        Concurrency = 4,
+                        TargetZipSize = 2_000_000,
+                    },
                 });
 
                 Assert.Equal(25, result.FilesGenerated);
@@ -217,11 +233,14 @@ namespace Zipper
                 var generator = new ParallelFileGenerator();
                 var task = generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 5,
-                    FileType = "pdf",
-                    Folders = 1,
-                    Concurrency = 2,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 5,
+                        FileType = "pdf",
+                        Folders = 1,
+                        Concurrency = 2,
+                    },
                 });
 
                 var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
@@ -255,11 +274,14 @@ namespace Zipper
                 {
                     var task = generator.GenerateFilesAsync(new FileGenerationRequest
                     {
-                        OutputPath = outputPath,
-                        FileCount = 10,
-                        FileType = "pdf",
-                        Folders = 0,
-                        Concurrency = 2,
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = 10,
+                            FileType = "pdf",
+                            Folders = 0,
+                            Concurrency = 2,
+                        },
                     });
 
                     var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(30))) == task;
@@ -291,10 +313,13 @@ namespace Zipper
                 var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
                     generator.GenerateFilesAsync(new FileGenerationRequest
                     {
-                        OutputPath = outputPath,
-                        FileCount = 0,
-                        FileType = "pdf",
-                        Folders = 1,
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = 0,
+                            FileType = "pdf",
+                            Folders = 1,
+                        },
                     }));
 
                 Assert.Contains("File count must be positive", ex.Message);
@@ -320,10 +345,13 @@ namespace Zipper
                 using var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 1,
-                    FileType = "pdf",
-                    Folders = 1,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 1,
+                        FileType = "pdf",
+                        Folders = 1,
+                    },
                 });
 
                 Assert.Equal(1, result.FilesGenerated);
@@ -353,10 +381,13 @@ namespace Zipper
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                     generator.GenerateFilesAsync(new FileGenerationRequest
                     {
-                        OutputPath = outputPath,
-                        FileCount = 5,
-                        FileType = "unknown",
-                        Folders = 1,
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = 5,
+                            FileType = "unknown",
+                            Folders = 1,
+                        },
                     }));
 
                 Assert.Contains("Unknown file type", ex.Message);
@@ -382,11 +413,14 @@ namespace Zipper
                 using var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 10,
-                    FileType = "pdf",
-                    Folders = 1,
-                    Concurrency = 0,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 10,
+                        FileType = "pdf",
+                        Folders = 1,
+                        Concurrency = 0,
+                    },
                 });
 
                 Assert.Equal(10, result.FilesGenerated);
@@ -412,11 +446,14 @@ namespace Zipper
                 using var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = 3,
-                    FileType = "pdf",
-                    Folders = 1,
-                    Concurrency = 10,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 3,
+                        FileType = "pdf",
+                        Folders = 1,
+                        Concurrency = 10,
+                    },
                 });
 
                 Assert.Equal(3, result.FilesGenerated);
@@ -440,10 +477,13 @@ namespace Zipper
             await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 generator.GenerateFilesAsync(new FileGenerationRequest
                 {
-                    OutputPath = null!,
-                    FileCount = 5,
-                    FileType = "pdf",
-                    Folders = 1,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = null!,
+                        FileCount = 5,
+                        FileType = "pdf",
+                        Folders = 1,
+                    },
                 }));
         }
     }
