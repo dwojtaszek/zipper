@@ -48,6 +48,7 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
         "WithText",
         "TargetZipSize",
         "IncludeLoadFile",
+
         // Metadata sub-config (7)
         "WithMetadata",
         "ColumnProfile",
@@ -56,12 +57,14 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
         "EmptyPercentageOverride",
         "CustodianCountOverride",
         "WithFamilies",
+
         // LoadFile sub-config (5)
         "LoadFileFormat",
         "LoadFileFormats",
         "Encoding",
         "Distribution",
         "AttachmentRate",
+
         // Delimiters sub-config (6)
         "ColumnDelimiter",
         "QuoteDelimiter",
@@ -69,15 +72,19 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
         "MultiValueDelimiter",
         "NestedValueDelimiter",
         "EndOfLine",
+
         // Bates sub-config (1)
         "BatesConfig",
+
         // Tiff sub-config (1)
         "TiffPageRange",
+
         // Chaos sub-config (4)
         "ChaosMode",
         "ChaosAmount",
         "ChaosTypes",
         "ChaosScenario",
+
         // Production sub-config (3)
         "ProductionSet",
         "ProductionZip",
@@ -128,6 +135,11 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
     {
+        if (context == null)
+        {
+            throw new ArgumentNullException(nameof(context));
+        }
+
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression);

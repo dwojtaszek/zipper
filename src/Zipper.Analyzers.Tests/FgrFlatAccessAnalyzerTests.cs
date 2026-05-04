@@ -16,7 +16,6 @@ namespace Zipper.Analyzers.Tests;
 /// </summary>
 public class FgrFlatAccessAnalyzerTests
 {
-    // Each of the 35 flat property names produces FGR_FLAT_ACCESS
     /// <summary>
     /// For every flat property name in FlatPropertyNames, verify that accessing
     /// that property on a FileGenerationRequest receiver triggers one diagnostic.
@@ -48,20 +47,27 @@ class T
             .OrderBy(n => n, StringComparer.Ordinal)
             .Select(name => new object[] { name });
 
-    // Exactly 35 names are tracked
+    /// <summary>
+    /// Exactly 35 flat pass-through property names are tracked.
+    /// </summary>
     [Fact]
     public void FlatPropertyNames_Contains35Names()
     {
         Assert.Equal(35, FgrFlatAccessAnalyzer.FlatPropertyNames.Count);
     }
 
-    // Diagnostic metadata
+    /// <summary>
+    /// The diagnostic ID constant matches the documented rule ID.
+    /// </summary>
     [Fact]
     public void DiagnosticId_IsCorrect()
     {
         Assert.Equal("FGR_FLAT_ACCESS", FgrFlatAccessAnalyzer.DiagnosticId);
     }
 
+    /// <summary>
+    /// The rule ships with Info severity so it does not fail the build.
+    /// </summary>
     [Fact]
     public void SupportedDiagnostics_ContainsInfoSeverityRule()
     {
@@ -71,7 +77,10 @@ class T
         Assert.Equal(DiagnosticSeverity.Info, descriptor.DefaultSeverity);
     }
 
-    // Subconfig access does not trigger the diagnostic
+    /// <summary>
+    /// Accessing a property via a sub-config (e.g. request.Output.OutputPath) does
+    /// not trigger the diagnostic.
+    /// </summary>
     [Fact]
     public async Task SubconfigAccess_NoDiagnostic()
     {
@@ -97,7 +106,9 @@ class T
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
 
-    // Non-FGR type with same property name — no diagnostic
+    /// <summary>
+    /// A flat property name on a different type is not flagged.
+    /// </summary>
     [Fact]
     public async Task FlatPropertyNameOnDifferentType_NoDiagnostic()
     {
@@ -118,7 +129,9 @@ class T
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
 
-    // Access inside a file named FileGenerationRequest.cs — suppressed
+    /// <summary>
+    /// Code in a file named FileGenerationRequest.cs is fully suppressed.
+    /// </summary>
     [Fact]
     public async Task AccessInFgrFile_IsSuppressed()
     {
@@ -148,7 +161,9 @@ class FileGenerationRequest
         await test.RunAsync();
     }
 
-    // Verify diagnostic message arguments for specific cases
+    /// <summary>
+    /// OutputPath maps to the Output sub-config in the diagnostic message.
+    /// </summary>
     [Fact]
     public async Task OutputPath_ReportsDiagnosticWithOutputSubConfig()
     {
@@ -172,6 +187,9 @@ class T
         await VerifyCS.VerifyAnalyzerAsync(source, expected);
     }
 
+    /// <summary>
+    /// ChaosScenario maps to the Chaos sub-config in the diagnostic message.
+    /// </summary>
     [Fact]
     public async Task ChaosScenario_ReportsDiagnosticWithChaosSubConfig()
     {
