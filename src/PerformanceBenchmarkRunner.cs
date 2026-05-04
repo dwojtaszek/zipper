@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.IO.Compression;
+using Zipper.Config;
 
 namespace Zipper
 {
@@ -46,12 +47,15 @@ namespace Zipper
                 using var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
-                    OutputPath = outputPath,
-                    FileCount = fileCount,
-                    FileType = "pdf",
-                    Folders = 10,
-                    Concurrency = PerformanceConstants.DefaultConcurrency,
-                    Distribution = DistributionType.Proportional,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = fileCount,
+                        FileType = "pdf",
+                        Folders = 10,
+                        Concurrency = PerformanceConstants.DefaultConcurrency,
+                    },
+                    LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                 };
 
                 await generator.GenerateFilesAsync(request);
@@ -99,12 +103,15 @@ namespace Zipper
                 using var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
-                    OutputPath = outputPath2,
-                    FileCount = fileCount,
-                    FileType = "pdf",
-                    Folders = 3,
-                    Concurrency = PerformanceConstants.DefaultConcurrency,
-                    Distribution = DistributionType.Proportional,
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath2,
+                        FileCount = fileCount,
+                        FileType = "pdf",
+                        Folders = 3,
+                        Concurrency = PerformanceConstants.DefaultConcurrency,
+                    },
+                    LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                 };
                 await generator.GenerateFilesAsync(request);
                 sw.Stop();
@@ -206,12 +213,15 @@ namespace Zipper
                     using var generator = new ParallelFileGenerator();
                     var request = new FileGenerationRequest
                     {
-                        OutputPath = outputPath,
-                        FileCount = fileCount,
-                        FileType = "pdf",
-                        Folders = Math.Max(1, fileCount / 200),
-                        Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, (fileCount / 50) + 1),
-                        Distribution = DistributionType.Proportional,
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = fileCount,
+                            FileType = "pdf",
+                            Folders = Math.Max(1, fileCount / 200),
+                            Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, (fileCount / 50) + 1),
+                        },
+                        LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                     };
 
                     var result = await generator.GenerateFilesAsync(request);
