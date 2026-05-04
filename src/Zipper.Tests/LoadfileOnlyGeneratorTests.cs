@@ -259,7 +259,7 @@ namespace Zipper
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
-            var content = System.Text.LoadFile.Encoding.UTF8.GetString(bytes);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
 
             Assert.Contains("\r", content);
             Assert.DoesNotContain("\n", content);
@@ -273,7 +273,7 @@ namespace Zipper
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
-            var content = System.Text.LoadFile.Encoding.UTF8.GetString(bytes);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
 
             Assert.Contains("\r\n", content);
         }
@@ -286,7 +286,7 @@ namespace Zipper
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
-            var content = System.Text.LoadFile.Encoding.UTF8.GetString(bytes);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
 
             Assert.Contains("\n", content);
             Assert.DoesNotContain("\r\n", content);
@@ -318,7 +318,7 @@ namespace Zipper
 
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
-            var content = System.Text.LoadFile.Encoding.UTF8.GetString(bytes);
+            var content = System.Text.Encoding.UTF8.GetString(bytes);
 
             Assert.Contains("\r\n", content);
         }

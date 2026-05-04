@@ -130,7 +130,7 @@ namespace Zipper
             ArgumentNullException.ThrowIfNull(encoding);
 
             // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
-            System.Text.LoadFile.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             // Arrange - Test that OPT writer respects the requested encoding
             var request = this.CreateTestRequest();
@@ -410,7 +410,7 @@ namespace Zipper
             ArgumentNullException.ThrowIfNull(encoding);
 
             // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
-            System.Text.LoadFile.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
             // Arrange - Test encoding path with non-UTF8 encoding to verify proper encoding handling
             var request = this.CreateTestRequest();

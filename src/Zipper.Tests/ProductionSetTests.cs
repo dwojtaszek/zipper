@@ -443,7 +443,7 @@ public class ProductionSetTests : IDisposable
         request.LoadFile = request.LoadFile with { Encoding = "UTF-16" };
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
-        var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.LoadFile.Encoding.Unicode);
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.Encoding.Unicode);
         Assert.Contains("DOCID", datContent);
         Assert.Equal(4, datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
     }
