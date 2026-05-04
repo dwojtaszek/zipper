@@ -33,68 +33,12 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
     /// <inheritdoc/>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
-    /// <summary>
-    /// All 35 flat pass-through property names on <c>FileGenerationRequest</c>.
-    /// Exposed internally so tests can drive fixture-style coverage over every name.
-    /// </summary>
-    internal static readonly ImmutableHashSet<string> FlatPropertyNames = new[]
-    {
-        // Output sub-config (8)
-        "OutputPath",
-        "FileCount",
-        "FileType",
-        "Folders",
-        "Concurrency",
-        "WithText",
-        "TargetZipSize",
-        "IncludeLoadFile",
-
-        // Metadata sub-config (7)
-        "WithMetadata",
-        "ColumnProfile",
-        "Seed",
-        "DateFormatOverride",
-        "EmptyPercentageOverride",
-        "CustodianCountOverride",
-        "WithFamilies",
-
-        // LoadFile sub-config (5)
-        "LoadFileFormat",
-        "LoadFileFormats",
-        "Encoding",
-        "Distribution",
-        "AttachmentRate",
-
-        // Delimiters sub-config (6)
-        "ColumnDelimiter",
-        "QuoteDelimiter",
-        "NewlineDelimiter",
-        "MultiValueDelimiter",
-        "NestedValueDelimiter",
-        "EndOfLine",
-
-        // Bates sub-config (1)
-        "BatesConfig",
-
-        // Tiff sub-config (1)
-        "TiffPageRange",
-
-        // Chaos sub-config (4)
-        "ChaosMode",
-        "ChaosAmount",
-        "ChaosTypes",
-        "ChaosScenario",
-
-        // Production sub-config (3)
-        "ProductionSet",
-        "ProductionZip",
-        "VolumeSize",
-    }.ToImmutableHashSet(StringComparer.Ordinal);
-
     // Maps each flat property name to the name of the sub-config it delegates to.
+    // Single source of truth for both property detection and sub-config resolution.
     private static readonly ImmutableDictionary<string, string> SubConfigMap =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
+            // Output sub-config (8)
             ["OutputPath"] = "Output",
             ["FileCount"] = "Output",
             ["FileType"] = "Output",
@@ -103,6 +47,8 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
             ["WithText"] = "Output",
             ["TargetZipSize"] = "Output",
             ["IncludeLoadFile"] = "Output",
+
+            // Metadata sub-config (7)
             ["WithMetadata"] = "Metadata",
             ["ColumnProfile"] = "Metadata",
             ["Seed"] = "Metadata",
@@ -110,27 +56,47 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
             ["EmptyPercentageOverride"] = "Metadata",
             ["CustodianCountOverride"] = "Metadata",
             ["WithFamilies"] = "Metadata",
+
+            // LoadFile sub-config (5)
             ["LoadFileFormat"] = "LoadFile",
             ["LoadFileFormats"] = "LoadFile",
             ["Encoding"] = "LoadFile",
             ["Distribution"] = "LoadFile",
             ["AttachmentRate"] = "LoadFile",
+
+            // Delimiters sub-config (6)
             ["ColumnDelimiter"] = "Delimiters",
             ["QuoteDelimiter"] = "Delimiters",
             ["NewlineDelimiter"] = "Delimiters",
             ["MultiValueDelimiter"] = "Delimiters",
             ["NestedValueDelimiter"] = "Delimiters",
             ["EndOfLine"] = "Delimiters",
+
+            // Bates sub-config (1)
             ["BatesConfig"] = "Bates",
+
+            // Tiff sub-config (1)
             ["TiffPageRange"] = "Tiff",
+
+            // Chaos sub-config (4)
             ["ChaosMode"] = "Chaos",
             ["ChaosAmount"] = "Chaos",
             ["ChaosTypes"] = "Chaos",
             ["ChaosScenario"] = "Chaos",
+
+            // Production sub-config (3)
             ["ProductionSet"] = "Production",
             ["ProductionZip"] = "Production",
             ["VolumeSize"] = "Production",
         }.ToImmutableDictionary();
+
+    /// <summary>
+    /// All 35 flat pass-through property names on <c>FileGenerationRequest</c>.
+    /// Derived from <see cref="SubConfigMap"/> keys — single source of truth.
+    /// Exposed internally so tests can drive fixture-style coverage over every name.
+    /// </summary>
+    internal static readonly ImmutableHashSet<string> FlatPropertyNames =
+        SubConfigMap.Keys.ToImmutableHashSet(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public override void Initialize(AnalysisContext context)
@@ -150,7 +116,7 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
         var propertyName = memberAccess.Name.Identifier.Text;
 
-        if (!FlatPropertyNames.Contains(propertyName))
+        if (!SubConfigMap.TryGetValue(propertyName, out var subConfig))
         {
             return;
         }
@@ -176,7 +142,6 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var subConfig = SubConfigMap.TryGetValue(propertyName, out var sub) ? sub : "?";
         var diagnostic = Diagnostic.Create(Rule, memberAccess.GetLocation(), propertyName, subConfig);
         context.ReportDiagnostic(diagnostic);
     }

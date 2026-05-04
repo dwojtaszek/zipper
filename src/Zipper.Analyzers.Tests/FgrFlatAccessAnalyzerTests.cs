@@ -177,11 +177,12 @@ class T
 {
     void M(FileGenerationRequest r)
     {
-        var x = {|FGR_FLAT_ACCESS:r.OutputPath|};
+        var x = r.OutputPath;
     }
 }
 ";
         var expected = VerifyCS.Diagnostic(FgrFlatAccessAnalyzer.DiagnosticId)
+            .WithLocation(11, 17)
             .WithArguments("OutputPath", "Output");
 
         await VerifyCS.VerifyAnalyzerAsync(source, expected);
@@ -203,11 +204,12 @@ class T
 {
     void M(FileGenerationRequest r)
     {
-        var x = {|FGR_FLAT_ACCESS:r.ChaosScenario|};
+        var x = r.ChaosScenario;
     }
 }
 ";
         var expected = VerifyCS.Diagnostic(FgrFlatAccessAnalyzer.DiagnosticId)
+            .WithLocation(11, 17)
             .WithArguments("ChaosScenario", "Chaos");
 
         await VerifyCS.VerifyAnalyzerAsync(source, expected);
