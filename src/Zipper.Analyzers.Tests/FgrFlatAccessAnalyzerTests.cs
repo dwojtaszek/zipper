@@ -157,8 +157,10 @@ class FileGenerationRequest
             },
         };
 
-        // If the file-path suppression is working, zero diagnostics are expected.
-        await test.RunAsync();
+        // RunAsync throws if unexpected diagnostics are produced.
+        // Record.ExceptionAsync returns null on success, satisfying S2699.
+        var exception = await Record.ExceptionAsync(() => test.RunAsync());
+        Assert.Null(exception);
     }
 
     /// <summary>

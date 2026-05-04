@@ -21,6 +21,16 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
     /// <summary>The diagnostic identifier emitted by this analyzer.</summary>
     public const string DiagnosticId = "FGR_FLAT_ACCESS";
 
+    // Sub-config type names — defined as constants to avoid string literal repetition (S1192).
+    private const string OutputSub = "Output";
+    private const string MetadataSub = "Metadata";
+    private const string LoadFileSub = "LoadFile";
+    private const string DelimitersSub = "Delimiters";
+    private const string ChaosSub = "Chaos";
+    private const string BatesSub = "Bates";
+    private const string TiffSub = "Tiff";
+    private const string ProductionSub = "Production";
+
     private static readonly DiagnosticDescriptor Rule = new(
         id: DiagnosticId,
         title: "Use sub-config access instead of flat pass-through on FileGenerationRequest",
@@ -39,55 +49,55 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             // Output sub-config (8)
-            ["OutputPath"] = "Output",
-            ["FileCount"] = "Output",
-            ["FileType"] = "Output",
-            ["Folders"] = "Output",
-            ["Concurrency"] = "Output",
-            ["WithText"] = "Output",
-            ["TargetZipSize"] = "Output",
-            ["IncludeLoadFile"] = "Output",
+            ["OutputPath"] = OutputSub,
+            ["FileCount"] = OutputSub,
+            ["FileType"] = OutputSub,
+            ["Folders"] = OutputSub,
+            ["Concurrency"] = OutputSub,
+            ["WithText"] = OutputSub,
+            ["TargetZipSize"] = OutputSub,
+            ["IncludeLoadFile"] = OutputSub,
 
             // Metadata sub-config (7)
-            ["WithMetadata"] = "Metadata",
-            ["ColumnProfile"] = "Metadata",
-            ["Seed"] = "Metadata",
-            ["DateFormatOverride"] = "Metadata",
-            ["EmptyPercentageOverride"] = "Metadata",
-            ["CustodianCountOverride"] = "Metadata",
-            ["WithFamilies"] = "Metadata",
+            ["WithMetadata"] = MetadataSub,
+            ["ColumnProfile"] = MetadataSub,
+            ["Seed"] = MetadataSub,
+            ["DateFormatOverride"] = MetadataSub,
+            ["EmptyPercentageOverride"] = MetadataSub,
+            ["CustodianCountOverride"] = MetadataSub,
+            ["WithFamilies"] = MetadataSub,
 
             // LoadFile sub-config (5)
-            ["LoadFileFormat"] = "LoadFile",
-            ["LoadFileFormats"] = "LoadFile",
-            ["Encoding"] = "LoadFile",
-            ["Distribution"] = "LoadFile",
-            ["AttachmentRate"] = "LoadFile",
+            ["LoadFileFormat"] = LoadFileSub,
+            ["LoadFileFormats"] = LoadFileSub,
+            ["Encoding"] = LoadFileSub,
+            ["Distribution"] = LoadFileSub,
+            ["AttachmentRate"] = LoadFileSub,
 
             // Delimiters sub-config (6)
-            ["ColumnDelimiter"] = "Delimiters",
-            ["QuoteDelimiter"] = "Delimiters",
-            ["NewlineDelimiter"] = "Delimiters",
-            ["MultiValueDelimiter"] = "Delimiters",
-            ["NestedValueDelimiter"] = "Delimiters",
-            ["EndOfLine"] = "Delimiters",
+            ["ColumnDelimiter"] = DelimitersSub,
+            ["QuoteDelimiter"] = DelimitersSub,
+            ["NewlineDelimiter"] = DelimitersSub,
+            ["MultiValueDelimiter"] = DelimitersSub,
+            ["NestedValueDelimiter"] = DelimitersSub,
+            ["EndOfLine"] = DelimitersSub,
 
             // Bates sub-config (1)
-            ["BatesConfig"] = "Bates",
+            ["BatesConfig"] = BatesSub,
 
             // Tiff sub-config (1)
-            ["TiffPageRange"] = "Tiff",
+            ["TiffPageRange"] = TiffSub,
 
             // Chaos sub-config (4)
-            ["ChaosMode"] = "Chaos",
-            ["ChaosAmount"] = "Chaos",
-            ["ChaosTypes"] = "Chaos",
-            ["ChaosScenario"] = "Chaos",
+            ["ChaosMode"] = ChaosSub,
+            ["ChaosAmount"] = ChaosSub,
+            ["ChaosTypes"] = ChaosSub,
+            ["ChaosScenario"] = ChaosSub,
 
             // Production sub-config (3)
-            ["ProductionSet"] = "Production",
-            ["ProductionZip"] = "Production",
-            ["VolumeSize"] = "Production",
+            ["ProductionSet"] = ProductionSub,
+            ["ProductionZip"] = ProductionSub,
+            ["VolumeSize"] = ProductionSub,
         }.ToImmutableDictionary();
 
     /// <summary>
