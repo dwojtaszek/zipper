@@ -3,6 +3,7 @@ using Xunit;
 using Zipper.LoadFiles;
 
 using Zipper.Config;
+
 namespace Zipper
 {
     public class LoadFileWriterTests : IDisposable

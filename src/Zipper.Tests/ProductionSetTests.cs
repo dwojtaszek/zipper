@@ -2,6 +2,7 @@ using System.Text.Json;
 using Xunit;
 
 using Zipper.Config;
+
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]

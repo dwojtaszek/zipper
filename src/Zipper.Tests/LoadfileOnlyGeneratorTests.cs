@@ -3,6 +3,7 @@ using System.Text.Json;
 using Xunit;
 
 using Zipper.Config;
+
 namespace Zipper
 {
     public class LoadfileOnlyGeneratorTests : IDisposable
