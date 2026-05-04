@@ -78,12 +78,12 @@ internal class DatWriter : LoadFileWriterBase
         var sb = new StringBuilder();
         sb.Append($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
 
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             sb.Append($"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}");
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             sb.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
         }
@@ -93,7 +93,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}Bates Number{quote}");
         }
 
-        if (ShouldIncludePageCount(request))
+        if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             sb.Append($"{colDelim}{quote}Page Count{quote}");
         }
@@ -119,7 +119,7 @@ internal class DatWriter : LoadFileWriterBase
         var sb = new StringBuilder();
         sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{MetadataRowBuilder.SanitizeField(workItem.FilePathInZip, request.Delimiters.NewlineDelimiter)}{quote}");
 
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var custodian = MetadataRowBuilder.SanitizeField(builder.GetCustodian(workItem.FolderNumber), request.Delimiters.NewlineDelimiter);
             var dateSent = builder.GetDateSent();
@@ -128,7 +128,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             var to = MetadataRowBuilder.SanitizeField(builder.GetEmailTo(workItem, fileData), request.Delimiters.NewlineDelimiter);
             var from = MetadataRowBuilder.SanitizeField(builder.GetEmailFrom(workItem, fileData), request.Delimiters.NewlineDelimiter);
@@ -143,7 +143,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}{builder.GetBatesNumber(workItem)}{quote}");
         }
 
-        if (ShouldIncludePageCount(request))
+        if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             sb.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
         }

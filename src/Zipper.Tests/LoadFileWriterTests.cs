@@ -1,5 +1,6 @@
 using System.Text;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 
 namespace Zipper
@@ -26,14 +27,20 @@ namespace Zipper
         {
             return new FileGenerationRequest
             {
-                OutputPath = this.tempDir,
-                FileCount = 3,
-                FileType = fileType,
-                Folders = 1,
-                Encoding = "Unicode (UTF-8)",
-                WithMetadata = true,
-                WithText = false,
-                LoadFileFormat = LoadFileFormat.Dat,
+                Output = new OutputConfig
+                {
+                    OutputPath = this.tempDir,
+                    FileCount = 3,
+                    FileType = fileType,
+                    Folders = 1,
+                    WithText = false,
+                },
+                LoadFile = new LoadFileConfig
+                {
+                    Encoding = "Unicode (UTF-8)",
+                    LoadFileFormat = LoadFileFormat.Dat,
+                },
+                Metadata = new MetadataConfig { WithMetadata = true },
             };
         }
 
@@ -469,7 +476,7 @@ namespace Zipper
             Assert.DoesNotContain("Custodian", contentWithout);
 
             var emlRequest = this.CreateTestRequest("eml");
-            emlRequest.WithMetadata = false;
+            emlRequest.Metadata = emlRequest.Metadata with { WithMetadata = false };
             var emlContent = await this.CaptureCsvOutput(emlRequest, files);
             Assert.Contains("Custodian", emlContent);
         }
@@ -503,7 +510,7 @@ namespace Zipper
             Assert.DoesNotContain("Page Count", contentWithout);
 
             var pdfRequest = this.CreateTestRequest("pdf");
-            pdfRequest.TiffPageRange = (1, 10);
+            pdfRequest.Tiff = pdfRequest.Tiff with { PageRange = (1, 10) };
             var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
             Assert.DoesNotContain("Page Count", pdfContent);
         }
@@ -543,11 +550,14 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 5,
-                FileType = "pdf",
-                Seed = 42,
-                Encoding = "UTF-8",
-                EndOfLine = "CRLF",
+                Output = new OutputConfig
+                {
+                    FileCount = 5,
+                    FileType = "pdf",
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
             var writer = new LoadfileOnlyDatWriter();
             using var stream = new MemoryStream();
@@ -570,11 +580,14 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 3,
-                FileType = "pdf",
-                Seed = 42,
-                Encoding = "UTF-8",
-                EndOfLine = "CRLF",
+                Output = new OutputConfig
+                {
+                    FileCount = 3,
+                    FileType = "pdf",
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
             var writer = new LoadfileOnlyOptWriter();
             using var stream = new MemoryStream();
@@ -600,11 +613,14 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 20,
-                FileType = "pdf",
-                Seed = 42,
-                Encoding = "UTF-8",
-                EndOfLine = "CRLF",
+                Output = new OutputConfig
+                {
+                    FileCount = 20,
+                    FileType = "pdf",
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
 
             var eol = "\r\n";
@@ -630,13 +646,16 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 5,
-                FileType = "pdf",
-                Seed = 42,
-                EndOfLine = "CRLF",
-                OutputPath = this.tempDir,
-                VolumeSize = 5000,
-                BatesConfig = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+                Output = new OutputConfig
+                {
+                    FileCount = 5,
+                    FileType = "pdf",
+                    OutputPath = this.tempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
             };
 
             var files = new List<FileData>();
@@ -678,13 +697,16 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 3,
-                FileType = "pdf",
-                Seed = 42,
-                EndOfLine = "CRLF",
-                OutputPath = this.tempDir,
-                VolumeSize = 10,
-                BatesConfig = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 },
+                Output = new OutputConfig
+                {
+                    FileCount = 3,
+                    FileType = "pdf",
+                    OutputPath = this.tempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 10 },
+                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 },
             };
 
             var files = new List<FileData>();
@@ -728,11 +750,14 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileCount = 3,
-                FileType = "pdf",
-                Seed = 42,
-                Encoding = "UTF-8",
-                EndOfLine = string.Empty,
+                Output = new OutputConfig
+                {
+                    FileCount = 3,
+                    FileType = "pdf",
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+                Delimiters = new DelimiterConfig { EndOfLine = string.Empty },
             };
             var writer = new LoadfileOnlyDatWriter();
             using var stream = new MemoryStream();

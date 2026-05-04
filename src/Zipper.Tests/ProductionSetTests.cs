@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Xunit;
 
+using Zipper.Config;
+
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
@@ -341,13 +343,19 @@ public class ProductionSetTests : IDisposable
     {
         return new FileGenerationRequest
         {
-            OutputPath = this.testOutputPath,
-            FileCount = count,
-            FileType = fileType,
-            ProductionSet = true,
-            VolumeSize = volumeSize,
-            Seed = seed,
-            BatesConfig = new BatesNumberConfig
+            Output = new OutputConfig
+            {
+                OutputPath = this.testOutputPath,
+                FileCount = count,
+                FileType = fileType,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = volumeSize,
+            },
+            Metadata = new MetadataConfig { Seed = seed },
+            Bates = new BatesNumberConfig
             {
                 Prefix = batesPrefix,
                 Start = batesStart,

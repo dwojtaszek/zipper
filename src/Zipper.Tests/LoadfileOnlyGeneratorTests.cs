@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using Xunit;
 
+using Zipper.Config;
+
 namespace Zipper
 {
     public class LoadfileOnlyGeneratorTests : IDisposable
@@ -26,14 +28,20 @@ namespace Zipper
         {
             return new FileGenerationRequest
             {
-                OutputPath = this.tempDir,
-                FileCount = count,
-                FileType = "pdf",
+                Output = new OutputConfig
+                {
+                    OutputPath = this.tempDir,
+                    FileCount = count,
+                    FileType = "pdf",
+                },
+                LoadFile = new LoadFileConfig
+                {
+                    LoadFileFormat = format,
+                    Encoding = "UTF-8",
+                },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Metadata = new MetadataConfig { Seed = 42 },
                 LoadfileOnly = true,
-                LoadFileFormat = format,
-                Encoding = "UTF-8",
-                EndOfLine = "CRLF",
-                Seed = 42,
             };
         }
 

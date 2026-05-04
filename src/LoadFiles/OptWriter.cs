@@ -32,12 +32,12 @@ internal class OptWriter : LoadFileWriterBase
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
     {
-        if (ShouldIncludeMetadata(request))
+        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             Console.Error.WriteLine("Warning: --with-metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
 
-        if (ShouldIncludeEmlColumns(request))
+        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             Console.Error.WriteLine("Warning: Email metadata columns are not supported in Opticon format. The OPT file uses the standard 7-column layout.");
         }
@@ -68,7 +68,7 @@ internal class OptWriter : LoadFileWriterBase
             string docBreak = "Y";
             string folderBreak = string.Empty;
             string boxBreak = string.Empty;
-            int pageCount = ShouldIncludePageCount(request) ? fileData.PageCount : 1;
+            int pageCount = request.Tiff.ShouldIncludePageCount(request.Output) ? fileData.PageCount : 1;
 
             // Comma-separated, no header — Opticon standard
             var line = $"{batesNumber},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";

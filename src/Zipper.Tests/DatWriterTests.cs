@@ -1,5 +1,6 @@
 using System.Text;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 
 namespace Zipper
@@ -362,10 +363,13 @@ namespace Zipper
         {
             return new FileGenerationRequest
             {
-                OutputPath = "/tmp/test",
-                FileCount = 10,
-                FileType = "pdf",
-                Folders = 1,
+                Output = new OutputConfig
+                {
+                    OutputPath = "/tmp/test",
+                    FileCount = 10,
+                    FileType = "pdf",
+                    Folders = 1,
+                },
             };
         }
 

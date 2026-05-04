@@ -23,16 +23,16 @@ namespace Zipper.Tests
             var result = RequestBuilder.Build(parsed);
 
             Assert.NotNull(result);
-            Assert.Equal(Path.GetTempPath(), result.OutputPath);
-            Assert.Equal(100, result.FileCount);
-            Assert.Equal("pdf", result.FileType);
-            Assert.Equal(1, result.Folders);
-            Assert.Equal(DistributionType.Proportional, result.Distribution);
-            Assert.False(result.WithMetadata);
-            Assert.False(result.WithText);
-            Assert.False(result.IncludeLoadFile);
-            Assert.Equal(0, result.AttachmentRate);
-            Assert.Null(result.BatesConfig);
+            Assert.Equal(Path.GetTempPath(), result.Output.OutputPath);
+            Assert.Equal(100, result.Output.FileCount);
+            Assert.Equal("pdf", result.Output.FileType);
+            Assert.Equal(1, result.Output.Folders);
+            Assert.Equal(DistributionType.Proportional, result.LoadFile.Distribution);
+            Assert.False(result.Metadata.WithMetadata);
+            Assert.False(result.Output.WithText);
+            Assert.False(result.Output.IncludeLoadFile);
+            Assert.Equal(0, result.LoadFile.AttachmentRate);
+            Assert.Null(result.Bates);
         }
 
         [Fact]
@@ -52,9 +52,9 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.True(result.ChaosMode);
-            Assert.Equal("5%", result.ChaosAmount);
-            Assert.Equal("quotes,columns", result.ChaosTypes);
+            Assert.True(result.Chaos.ChaosMode);
+            Assert.Equal("5%", result.Chaos.ChaosAmount);
+            Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
         }
 
         [Fact]
@@ -68,8 +68,8 @@ namespace Zipper.Tests
             var result = RequestBuilder.Build(parsed);
 
             Assert.True(result.LoadfileOnly);
-            Assert.Equal("LF", result.EndOfLine);
-            Assert.Equal(LoadFileFormat.Opt, result.LoadFileFormat);
+            Assert.Equal("LF", result.Delimiters.EndOfLine);
+            Assert.Equal(LoadFileFormat.Opt, result.LoadFile.LoadFileFormat);
         }
 
         [Fact]
@@ -81,8 +81,8 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.True(result.ProductionSet);
-            Assert.Equal(1000, result.VolumeSize);
+            Assert.True(result.Production.ProductionSet);
+            Assert.Equal(1000, result.Production.VolumeSize);
         }
 
         [Fact]
@@ -95,10 +95,10 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.NotNull(result.BatesConfig);
-            Assert.Equal("CL001", result.BatesConfig.Prefix);
-            Assert.Equal(100, result.BatesConfig.Start);
-            Assert.Equal(6, result.BatesConfig.Digits);
+            Assert.NotNull(result.Bates);
+            Assert.Equal("CL001", result.Bates.Prefix);
+            Assert.Equal(100, result.Bates.Start);
+            Assert.Equal(6, result.Bates.Digits);
         }
 
         [Fact]
@@ -109,7 +109,7 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.NotNull(result.ColumnProfile);
+            Assert.NotNull(result.Metadata.ColumnProfile);
         }
 
         [Fact]
@@ -120,8 +120,8 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.Equal(",", result.ColumnDelimiter);
-            Assert.Equal("\"", result.QuoteDelimiter);
+            Assert.Equal(",", result.Delimiters.ColumnDelimiter);
+            Assert.Equal("\"", result.Delimiters.QuoteDelimiter);
         }
 
         [Fact]
@@ -133,8 +133,8 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.Equal("|", result.ColumnDelimiter);
-            Assert.Equal("\"", result.QuoteDelimiter);
+            Assert.Equal("|", result.Delimiters.ColumnDelimiter);
+            Assert.Equal("\"", result.Delimiters.QuoteDelimiter);
         }
 
         [Fact]
@@ -147,7 +147,7 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.Equal("\u0014", result.ColumnDelimiter);
+            Assert.Equal("\u0014", result.Delimiters.ColumnDelimiter);
         }
 
         [Fact]
@@ -158,10 +158,10 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.NotNull(result.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Dat, result.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Opt, result.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Csv, result.LoadFileFormats);
+            Assert.NotNull(result.LoadFile.LoadFileFormats);
+            Assert.Contains(LoadFileFormat.Dat, result.LoadFile.LoadFileFormats);
+            Assert.Contains(LoadFileFormat.Opt, result.LoadFile.LoadFileFormats);
+            Assert.Contains(LoadFileFormat.Csv, result.LoadFile.LoadFileFormats);
         }
 
         [Fact]
@@ -173,7 +173,7 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.Equal("WINDOWS-1252", result.Encoding);
+            Assert.Equal("WINDOWS-1252", result.LoadFile.Encoding);
         }
 
         [Fact]

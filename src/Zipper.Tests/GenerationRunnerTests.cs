@@ -1,5 +1,7 @@
 using Xunit;
 
+using Zipper.Config;
+
 namespace Zipper
 {
     [Collection("ConsoleTests")]
@@ -106,10 +108,13 @@ namespace Zipper
         {
             return new FileGenerationRequest
             {
-                OutputPath = "/tmp/test",
-                FileCount = 1,
-                FileType = "pdf",
-                Folders = 1,
+                Output = new OutputConfig
+                {
+                    OutputPath = "/tmp/test",
+                    FileCount = 1,
+                    FileType = "pdf",
+                    Folders = 1,
+                },
             };
         }
 

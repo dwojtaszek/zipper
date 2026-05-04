@@ -1,5 +1,7 @@
 using Xunit;
 
+using Zipper.Config;
+
 namespace Zipper
 {
     public class MetadataRowBuilderTests
@@ -8,9 +10,12 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileType = fileType,
-                OutputPath = "/tmp",
-                FileCount = 10,
+                Output = new OutputConfig
+                {
+                    FileType = fileType,
+                    OutputPath = "/tmp",
+                    FileCount = 10,
+                },
             };
             var random = seed.HasValue ? new Random(seed.Value) : new Random();
             return new MetadataRowBuilder(request, random, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
@@ -77,8 +82,8 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                CustodianCountOverride = 5,
+                Output = new OutputConfig { FileType = "pdf" },
+                Metadata = new MetadataConfig { CustodianCountOverride = 5 },
             };
             var builder = new MetadataRowBuilder(request, new Random(42), DateTime.UtcNow);
             var result = builder.GetCustodian();
@@ -188,8 +193,8 @@ namespace Zipper
         {
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                BatesConfig = new BatesNumberConfig
+                Output = new OutputConfig { FileType = "pdf" },
+                Bates = new BatesNumberConfig
                 {
                     Prefix = "TEST",
                     Start = 100,

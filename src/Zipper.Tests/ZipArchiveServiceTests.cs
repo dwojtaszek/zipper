@@ -2,6 +2,8 @@ using System.IO.Compression;
 using System.Threading.Channels;
 using Xunit;
 
+using Zipper.Config;
+
 namespace Zipper.Tests
 {
     public class ZipArchiveServiceTests
@@ -14,10 +16,13 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = 5,
-                Concurrency = 1,
-                IncludeLoadFile = false,
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 5,
+                    Concurrency = 1,
+                    IncludeLoadFile = false,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -52,10 +57,13 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = 3,
-                Concurrency = 1,
-                IncludeLoadFile = true,
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 3,
+                    Concurrency = 1,
+                    IncludeLoadFile = true,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -93,10 +101,13 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = 3,
-                Concurrency = 1,
-                WithText = true,
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 3,
+                    Concurrency = 1,
+                    WithText = true,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -135,10 +146,13 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "eml",
-                FileCount = 2,
-                Concurrency = 1,
-                WithText = false,
+                Output = new OutputConfig
+                {
+                    FileType = "eml",
+                    FileCount = 2,
+                    Concurrency = 1,
+                    WithText = false,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -179,11 +193,14 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = 2,
-                Concurrency = 1,
-                WithText = true,
-                IncludeLoadFile = true,
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 2,
+                    Concurrency = 1,
+                    WithText = true,
+                    IncludeLoadFile = true,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -263,10 +280,13 @@ namespace Zipper.Tests
             var loadPath = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "eml",
-                FileCount = 2,
-                Concurrency = 1,
-                WithText = true,
+                Output = new OutputConfig
+                {
+                    FileType = "eml",
+                    FileCount = 2,
+                    Concurrency = 1,
+                    WithText = true,
+                },
             };
 
             var testFiles = new List<FileData>();
@@ -313,11 +333,14 @@ namespace Zipper.Tests
             var loadPathBase = Path.GetTempFileName();
             var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = 3,
-                Concurrency = 1,
-                IncludeLoadFile = true,
-                LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt }
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 3,
+                    Concurrency = 1,
+                    IncludeLoadFile = true,
+                },
+                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt } },
             };
 
             var testFiles = new List<FileData>();
