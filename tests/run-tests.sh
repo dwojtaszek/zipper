@@ -529,6 +529,21 @@ bash ./tests/test-chaos-anomaly-coverage.sh
 print_success "Chaos anomaly coverage tests passed."
 
 
+# Test 14: Column-profile built-in matrix (40 combos: 4 profiles × 5 file types × 2 seeds)
+print_info "Running column-profile built-in matrix tests..."
+bash ./tests/test-column-profile-builtin-matrix.sh
+print_success "Column-profile built-in matrix tests passed."
+
+# Test 15: Column-profile custom every-kind profile
+print_info "Running column-profile custom-kinds test..."
+bash ./tests/test-column-profile-custom-kinds.sh
+print_success "Column-profile custom-kinds test passed."
+
+# Test 16: Column-profile EmptyPercentage chi-square
+print_info "Running column-profile empty-percentage tests..."
+bash ./tests/test-column-profile-empty-pct.sh
+print_success "Column-profile empty-percentage tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then

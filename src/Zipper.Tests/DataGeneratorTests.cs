@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Xunit;
 using Zipper.Profiles;
 
@@ -228,4 +229,139 @@ public class DataGeneratorTests
             $"Expected valid number but got {fileSizeValue}");
         Assert.True(size >= 0, "File size should be non-negative");
     }
+
+    /// <summary>
+    /// Test that a custom profile exercising every column kind produces correct values.
+    /// </summary>
+    [Fact]
+    public void CustomProfile_WithEveryColumnKind_AllColumnsWithinSpec()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "test-every-kind",
+            DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>
+            {
+                ["statusValues"] = new DataSourceConfig { Values = ["Active", "Inactive", "Pending", "Closed", "Archived"] },
+                ["categoryValues"] = new DataSourceConfig { Values = ["CategoryA", "CategoryB", "CategoryC", "CategoryD"], Weights = [40, 30, 20, 10] },
+            },
+            Columns = new System.Collections.Generic.List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "TEXTFIELD", Type = "text", Required = true },
+                new() { Name = "LONGTEXTFIELD", Type = "longtext", Required = true },
+                new() { Name = "DATEFIELD", Type = "date", Required = true, DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" } },
+                new() { Name = "DATETIMEFIELD", Type = "datetime", Required = true, DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" } },
+                new() { Name = "NUMBERFIELD", Type = "number", Required = true, Range = new RangeConfig { Min = 0, Max = 10000 } },
+                new() { Name = "BOOLEANFIELD", Type = "boolean", Required = true, TruePercentage = 60, Format = "YN" },
+                new() { Name = "CODEDFIELD", Type = "coded", Required = true, DataSource = "statusValues" },
+                new() { Name = "EMAILFIELD", Type = "email", Required = true },
+                new() { Name = "EMAILMULTI", Type = "email", Required = true, MultiValue = true, MultiValueCount = new RangeConfig { Min = 2, Max = 4 } },
+            },
+        };
+        var generator = new DataGenerator(profile, seed: 42);
+        var emailRegex = new System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$");
+        var validCoded = new HashSet<string> { "Active", "Inactive", "Pending", "Closed", "Archived" };
+        var validBool = new HashSet<string> { "Y", "N" };
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            // identifier
+            Assert.Matches(@"^DOC[0-9]+$", row["DOCID"]);
+
+            // date: yyyy-MM-dd format
+            if (!string.IsNullOrEmpty(row["DATEFIELD"]))
+            {
+                Assert.True(DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out _),
+                    $"DATEFIELD '{row["DATEFIELD"]}' is not yyyy-MM-dd");
+            }
+
+            // datetime: ISO 8601 with time component
+            if (!string.IsNullOrEmpty(row["DATETIMEFIELD"]))
+            {
+                Assert.Contains("T", row["DATETIMEFIELD"]);
+            }
+
+            // number: integer in valid range
+            if (!string.IsNullOrEmpty(row["NUMBERFIELD"]))
+            {
+                Assert.True(int.TryParse(row["NUMBERFIELD"], out var numVal), $"NUMBERFIELD is not an integer: {row["NUMBERFIELD"]}");
+                Assert.InRange(numVal, 0, 10000);
+            }
+
+            // boolean: Y or N
+            if (!string.IsNullOrEmpty(row["BOOLEANFIELD"]))
+            {
+                Assert.Contains(row["BOOLEANFIELD"], validBool);
+            }
+
+            // coded: from declared set
+            if (!string.IsNullOrEmpty(row["CODEDFIELD"]))
+            {
+                Assert.Contains(row["CODEDFIELD"], validCoded);
+            }
+
+            // email: matches pattern
+            if (!string.IsNullOrEmpty(row["EMAILFIELD"]))
+            {
+                Assert.Matches(emailRegex, row["EMAILFIELD"]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Test that EmptyPercentage produces the configured empty rate within statistical tolerance.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(50)]
+    [InlineData(100)]
+    public void EmptyPercentage_Observed_MatchesConfigured_WithinTolerance(int emptyPct)
+    {
+        var profile = new ColumnProfile
+        {
+            Name = $"test-empty-{emptyPct}",
+            DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>(),
+            Columns = new System.Collections.Generic.List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "TEXTFIELD", Type = "text", EmptyPercentage = emptyPct },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        int sampleSize = 5000;
+        int emptyCount = 0;
+
+        for (int i = 1; i <= sampleSize; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+            if (string.IsNullOrEmpty(row["TEXTFIELD"]))
+            {
+                emptyCount++;
+            }
+        }
+
+        if (emptyPct == 0)
+        {
+            Assert.Equal(0, emptyCount);
+        }
+        else if (emptyPct == 100)
+        {
+            Assert.Equal(sampleSize, emptyCount);
+        }
+        else
+        {
+            // Allow ±5% absolute tolerance for random variation
+            double observed = (double)emptyCount / sampleSize * 100;
+            Assert.InRange(observed, emptyPct - 5.0, emptyPct + 5.0);
+        }
+    }
+
 }

@@ -188,4 +188,28 @@ public class ColumnProfileTests
             Assert.Contains(column.DataSource, profile.DataSources.Keys);
         }
     }
+
+    /// <summary>
+    /// Test that GetColumnNames returns columns in the same order as declared in the profile.
+    /// </summary>
+    [Theory]
+    [InlineData("minimal")]
+    [InlineData("standard")]
+    [InlineData("litigation")]
+    [InlineData("full")]
+    public void EachProfile_Produces_DeclaredColumnHeaders_InOrder(string profileName)
+    {
+        var profile = BuiltInProfiles.GetProfile(profileName);
+        Assert.NotNull(profile);
+
+        var generator = new DataGenerator(profile);
+        var columnNames = generator.GetColumnNames().ToList();
+
+        Assert.Equal(profile.Columns.Count, columnNames.Count);
+        for (int i = 0; i < profile.Columns.Count; i++)
+        {
+            Assert.Equal(profile.Columns[i].Name, columnNames[i]);
+        }
+    }
+
 }
