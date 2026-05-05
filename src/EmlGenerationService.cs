@@ -6,8 +6,7 @@ namespace Zipper
     public record EmlGenerationConfig
     {
         /// <summary>
-        /// Gets index of the file being generated (used for template variation).
-        /// </summary>
+        /// Gets index of the file being generated (used for template variation).</summary>
         public int FileIndex { get; init; }
 
         /// <summary>
@@ -57,33 +56,20 @@ namespace Zipper
         {
             ArgumentNullException.ThrowIfNull(config);
 
-            // Get a realistic email template
-            var emailTemplate = EmailTemplateSystem.GetRandomTemplate(
-                config.FileIndex,
-                config.FileIndex,
-                config.Category);
+            var email = EmailFactory.Create(config.FileIndex, config.FileIndex, config.Category, Random.Shared);
+            var attachmentInfo = EmailAttachmentPicker.Default.Pick(
+                config.FileIndex, config.AttachmentRate, EmailAttachmentPicker.PlaceholderPool, Random.Shared);
+            var emlContent = EmailSerializer.ToEml(email, attachmentInfo);
 
-            // Determine if we should include an attachment
-            (string filename, byte[] content)? attachment = null;
-            if (ShouldIncludeAttachment(config.AttachmentRate))
-            {
-                attachment = PlaceholderFiles.GetRandomAttachment();
-            }
-
-            // Build the EML content
-            var emlContent = EmailBuilder.BuildEmail(
-                emailTemplate.To,
-                emailTemplate.From,
-                emailTemplate.Subject,
-                emailTemplate.SentDate,
-                emailTemplate.Body,
-                attachment);
+            (string filename, byte[] content)? attachment = attachmentInfo != null
+                ? (attachmentInfo.FileName, attachmentInfo.Content)
+                : null;
 
             return new EmlGenerationResult
             {
                 Content = emlContent,
                 Attachment = attachment,
-                Template = emailTemplate,
+                Template = email,
             };
         }
 
@@ -107,18 +93,6 @@ namespace Zipper
             };
 
             return GenerateEmlContent(config);
-        }
-
-        /// <summary>
-        /// Determines whether an attachment should be included based on the attachment rate.
-        /// </summary>
-        /// <param name="attachmentRate">Attachment rate as percentage (0-100).</param>
-        /// <returns>True if an attachment should be included.</returns>
-        private static bool ShouldIncludeAttachment(int attachmentRate)
-        {
-            // Ensure attachment rate is within valid bounds
-            attachmentRate = Math.Max(0, Math.Min(100, attachmentRate));
-            return Random.Shared.Next(100) < attachmentRate;
         }
     }
 }
