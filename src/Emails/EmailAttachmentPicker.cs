@@ -52,7 +52,7 @@ internal sealed class EmailAttachmentPicker : IEmailAttachmentPicker
 
         var rate = Math.Max(0.0, Math.Min(100.0, attachmentRate));
 
-        if (rate == 0.0 || pool.Count == 0)
+        if (rate <= 0.0 || pool.Count == 0)
         {
             return null;
         }
