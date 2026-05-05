@@ -158,7 +158,7 @@ internal static class EmailFactory
             To = GenerateEmailAddress(recipientIndex, "recipient"),
             From = GenerateEmailAddress(senderIndex, "sender"),
             Subject = GenerateSubject(baseTemplate.Subject, recipientIndex, senderIndex, random),
-            Body = GenerateBody(baseTemplate.Body, recipientIndex, senderIndex, selectedCategory, random),
+            Body = GenerateBody(baseTemplate.Body, recipientIndex, senderIndex, random),
             SentDate = GenerateSentDate(selectedCategory, random),
             Cc = GenerateCcAddresses(selectedCategory, recipientIndex, random),
             IsHighPriority = ShouldBeHighPriority(selectedCategory, random),
@@ -177,7 +177,7 @@ internal static class EmailFactory
             To = GenerateEmailAddress(context.RecipientIndex, context.RecipientType ?? "recipient"),
             From = GenerateEmailAddress(context.SenderIndex, context.SenderType ?? "sender"),
             Subject = GenerateSubject(baseTemplate.Subject, context.RecipientIndex, context.SenderIndex, random),
-            Body = GenerateBody(baseTemplate.Body, context.RecipientIndex, context.SenderIndex, context.Category, random),
+            Body = GenerateBody(baseTemplate.Body, context.RecipientIndex, context.SenderIndex, random),
             SentDate = context.SentDate ?? GenerateSentDate(context.Category, random),
             Cc = GenerateCcAddresses(context.Category, context.RecipientIndex, random),
             IsHighPriority = context.IsHighPriority ?? ShouldBeHighPriority(context.Category, random),
@@ -283,7 +283,7 @@ internal static class EmailFactory
         return ApplyReplacements(baseSubject, BuildReplacements(recipientIndex, senderIndex, random));
     }
 
-    private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, EmailCategory category, Random random)
+    private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, Random random)
     {
         return ApplyReplacements(baseBody, BuildReplacements(recipientIndex, senderIndex, random));
     }
@@ -419,5 +419,5 @@ internal static class EmailFactory
         return Services[random.Next(Services.Length)];
     }
 
-    private record EmailTemplateBase(string Subject, string Body);
+    private sealed record EmailTemplateBase(string Subject, string Body);
 }
