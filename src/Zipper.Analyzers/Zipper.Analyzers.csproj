@@ -26,7 +26,7 @@
       Pin to 4.8.0 (ships with .NET 8 SDK GA). Using a version newer than the
       CI runner's compiler causes CS9057 ("references version X, newer than running Y").
     -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0">
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Roslynator.Analyzers" Version="4.15.0">
