@@ -6,25 +6,6 @@ namespace Zipper
     public static class EmailTemplateSystem
     {
         /// <summary>
-        /// Email template categories for variety.
-        /// </summary>
-        public enum EmailCategory
-        {
-            Business,
-            Personal,
-            Technical,
-            Marketing,
-            Legal,
-            Financial,
-            Notification,
-            Support,
-            Healthcare,
-            Education,
-            Ecommerce,
-            Travel,
-        }
-
-        /// <summary>
         /// Gets a random email template from the available categories.
         /// </summary>
         /// <param name="recipientIndex">Index used to generate recipient email.</param>
@@ -466,7 +447,7 @@ namespace Zipper
 
         public int SenderIndex { get; init; }
 
-        public EmailTemplateSystem.EmailCategory Category { get; init; }
+        public EmailCategory Category { get; init; }
 
         public int TemplateIndex { get; init; }
 

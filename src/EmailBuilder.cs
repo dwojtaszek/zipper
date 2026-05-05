@@ -4,48 +4,6 @@ using System.Text;
 namespace Zipper
 {
     /// <summary>
-    /// Represents email metadata and content for building EML files.
-    /// </summary>
-    public record EmailTemplate
-    {
-        public string To { get; init; } = string.Empty;
-
-        public string From { get; init; } = string.Empty;
-
-        public string Subject { get; init; } = string.Empty;
-
-        public DateTime SentDate { get; init; } = DateTime.Now;
-
-        public string Body { get; init; } = string.Empty;
-
-        public string? Cc { get; init; }
-
-        public string? Bcc { get; init; }
-
-        public string? ReplyTo { get; init; }
-
-        public bool IsHighPriority { get; init; } = false;
-
-        public bool RequestReadReceipt { get; init; } = false;
-    }
-
-    /// <summary>
-    /// Represents attachment information for emails.
-    /// </summary>
-    public record AttachmentInfo
-    {
-        public string FileName { get; init; } = string.Empty;
-
-        public byte[] Content { get; init; } = Array.Empty<byte>();
-
-        public string? ContentType { get; init; }
-
-        public string? ContentId { get; init; }
-
-        public bool IsInline { get; init; } = false;
-    }
-
-    /// <summary>
     /// Builds EML email content with proper MIME formatting.
     /// </summary>
     public static class EmailBuilder
