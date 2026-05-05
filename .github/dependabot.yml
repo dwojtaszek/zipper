@@ -18,6 +18,9 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    ignore:
+      - dependency-name: "Microsoft.CodeAnalysis.*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
     groups:
       nuget-minor-patch:
         update-types: ["minor", "patch"]
