@@ -777,5 +777,67 @@ namespace Zipper
             stream.Position = 0;
             return await new StreamReader(stream).ReadToEndAsync();
         }
+
+        [Fact]
+        public async Task XmlLoadFileWriter_WhenOperationCanceledException_Rethrows()
+        {
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
+            var writer = new Zipper.LoadFiles.XmlLoadFileWriter();
+            using var stream = new CancelingStream();
+
+            await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                writer.WriteAsync(stream, request, fileData));
+        }
+
+        private class CancelingStream : Stream
+        {
+            public override bool CanRead => false;
+
+            public override bool CanSeek => false;
+
+            public override bool CanWrite => true;
+
+            public override long Length => 0;
+
+            public override long Position
+            {
+                get => 0;
+                set { }
+            }
+
+            public override void Flush()
+            {
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                return 0;
+            }
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                return 0;
+            }
+
+            public override void SetLength(long value)
+            {
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new OperationCanceledException();
+            }
+
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                throw new OperationCanceledException();
+            }
+
+            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                throw new OperationCanceledException();
+            }
+        }
     }
 }
