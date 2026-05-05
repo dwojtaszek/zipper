@@ -18,7 +18,10 @@ internal static class EmailSerializer
     {
         ArgumentNullException.ThrowIfNull(email);
         using var ms = new MemoryStream();
-        using var writer = new StreamWriter(ms, new UTF8Encoding(false));
+        using var writer = new StreamWriter(ms, new UTF8Encoding(false))
+        {
+            NewLine = "\r\n",
+        };
         WriteToWriter(writer, email, attachment);
         writer.Flush();
         return ms.ToArray();
