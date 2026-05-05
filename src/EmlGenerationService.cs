@@ -18,7 +18,7 @@ namespace Zipper
         /// <summary>
         /// Gets optional email category constraint.
         /// </summary>
-        public EmailTemplateSystem.EmailCategory? Category { get; init; }
+        public EmailCategory? Category { get; init; }
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ namespace Zipper
         public static EmlGenerationResult GenerateEmlContent(
             int fileIndex,
             int attachmentRate,
-            EmailTemplateSystem.EmailCategory? category = null)
+            EmailCategory? category = null)
         {
             var config = new EmlGenerationConfig
             {

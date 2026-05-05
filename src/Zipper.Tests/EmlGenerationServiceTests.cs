@@ -21,7 +21,7 @@ namespace Zipper
             {
                 FileIndex = 1,
                 AttachmentRate = 0,
-                Category = EmailTemplateSystem.EmailCategory.Business,
+                Category = EmailCategory.Business,
             };
 
             // Act
@@ -102,15 +102,15 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData(EmailTemplateSystem.EmailCategory.Business)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Personal)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Technical)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Marketing)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Legal)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Financial)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Notification)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Support)]
-        public void GenerateEmlContent_WithDifferentCategories_ReturnsCategorySpecificContent(EmailTemplateSystem.EmailCategory category)
+        [InlineData(EmailCategory.Business)]
+        [InlineData(EmailCategory.Personal)]
+        [InlineData(EmailCategory.Technical)]
+        [InlineData(EmailCategory.Marketing)]
+        [InlineData(EmailCategory.Legal)]
+        [InlineData(EmailCategory.Financial)]
+        [InlineData(EmailCategory.Notification)]
+        [InlineData(EmailCategory.Support)]
+        public void GenerateEmlContent_WithDifferentCategories_ReturnsCategorySpecificContent(EmailCategory category)
         {
             // Arrange
             var config = new EmlGenerationConfig
@@ -196,7 +196,7 @@ namespace Zipper
             // Arrange
             var fileIndex = 42;
             var attachmentRate = 75;
-            var category = EmailTemplateSystem.EmailCategory.Technical;
+            var category = EmailCategory.Technical;
 
             // Act - The two methods should behave similarly, though content may differ due to randomness
             var configResult = EmlGenerationService.GenerateEmlContent(
@@ -282,7 +282,7 @@ namespace Zipper
                 {
                     FileIndex = i,
                     AttachmentRate = 50,
-                    Category = (EmailTemplateSystem.EmailCategory)(i % 8),
+                    Category = (EmailCategory)(i % 8),
                 })
                 .ToList();
 
@@ -389,7 +389,7 @@ namespace Zipper
             {
                 FileIndex = 42,
                 AttachmentRate = 75,
-                Category = EmailTemplateSystem.EmailCategory.Business,
+                Category = EmailCategory.Business,
             };
 
             var config2 = config1 with { };

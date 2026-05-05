@@ -32,19 +32,19 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData(EmailTemplateSystem.EmailCategory.Business)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Personal)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Technical)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Marketing)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Legal)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Financial)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Notification)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Support)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Healthcare)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Education)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Ecommerce)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Travel)]
-        public void GetRandomTemplate_WithSpecificCategory_ReturnsCategorySpecificTemplates(EmailTemplateSystem.EmailCategory category)
+        [InlineData(EmailCategory.Business)]
+        [InlineData(EmailCategory.Personal)]
+        [InlineData(EmailCategory.Technical)]
+        [InlineData(EmailCategory.Marketing)]
+        [InlineData(EmailCategory.Legal)]
+        [InlineData(EmailCategory.Financial)]
+        [InlineData(EmailCategory.Notification)]
+        [InlineData(EmailCategory.Support)]
+        [InlineData(EmailCategory.Healthcare)]
+        [InlineData(EmailCategory.Education)]
+        [InlineData(EmailCategory.Ecommerce)]
+        [InlineData(EmailCategory.Travel)]
+        public void GetRandomTemplate_WithSpecificCategory_ReturnsCategorySpecificTemplates(EmailCategory category)
         {
             // Arrange
             const int recipientIndex = 10;
@@ -112,7 +112,7 @@ namespace Zipper
             {
                 RecipientIndex = 5,
                 SenderIndex = 10,
-                Category = EmailTemplateSystem.EmailCategory.Business,
+                Category = EmailCategory.Business,
                 TemplateIndex = 0,
                 SentDate = new DateTime(2023, 6, 15),
                 IsHighPriority = true,
@@ -168,7 +168,7 @@ namespace Zipper
             const int senderIndex = 2;
 
             // Act
-            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailTemplateSystem.EmailCategory.Business);
+            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailCategory.Business);
 
             // Assert
             Assert.NotNull(template);
@@ -191,7 +191,7 @@ namespace Zipper
             const int senderIndex = 2;
 
             // Act
-            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailTemplateSystem.EmailCategory.Healthcare);
+            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailCategory.Healthcare);
 
             // Assert
             Assert.NotNull(template);
@@ -213,7 +213,7 @@ namespace Zipper
             const int senderIndex = 2;
 
             // Act
-            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailTemplateSystem.EmailCategory.Education);
+            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailCategory.Education);
 
             // Assert
             Assert.NotNull(template);
@@ -234,7 +234,7 @@ namespace Zipper
             const int senderIndex = 2;
 
             // Act
-            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailTemplateSystem.EmailCategory.Ecommerce);
+            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailCategory.Ecommerce);
 
             // Assert
             Assert.NotNull(template);
@@ -255,7 +255,7 @@ namespace Zipper
             const int senderIndex = 2;
 
             // Act
-            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailTemplateSystem.EmailCategory.Travel);
+            var template = EmailTemplateSystem.GetRandomTemplate(recipientIndex, senderIndex, EmailCategory.Travel);
 
             // Assert
             Assert.NotNull(template);
@@ -274,10 +274,10 @@ namespace Zipper
             // Arrange
             var categories = new[]
             {
-                EmailTemplateSystem.EmailCategory.Healthcare,
-                EmailTemplateSystem.EmailCategory.Education,
-                EmailTemplateSystem.EmailCategory.Ecommerce,
-                EmailTemplateSystem.EmailCategory.Travel,
+                EmailCategory.Healthcare,
+                EmailCategory.Education,
+                EmailCategory.Ecommerce,
+                EmailCategory.Travel,
             };
 
             // Placeholders that SHOULD be replaced in body
@@ -311,9 +311,9 @@ namespace Zipper
         public void GetRandomTemplate_AllCategories_VarySentDateAppropriately()
         {
             // Arrange
-            var categories = Enum.GetValues<EmailTemplateSystem.EmailCategory>();
+            var categories = Enum.GetValues<EmailCategory>();
             var now = DateTime.Now;
-            var categoryDates = new System.Collections.Generic.Dictionary<EmailTemplateSystem.EmailCategory, TimeSpan>();
+            var categoryDates = new System.Collections.Generic.Dictionary<EmailCategory, TimeSpan>();
 
             // Act
             foreach (var category in categories)
@@ -327,19 +327,19 @@ namespace Zipper
             Assert.True(categoryDates.Count > 0);
 
             // Travel emails should potentially have a wider range (older dates possible)
-            var travelTime = categoryDates[EmailTemplateSystem.EmailCategory.Travel];
-            var supportTime = categoryDates[EmailTemplateSystem.EmailCategory.Support];
+            var travelTime = categoryDates[EmailCategory.Travel];
+            var supportTime = categoryDates[EmailCategory.Support];
 
             this.output.WriteLine($"Travel time difference: {travelTime.TotalDays:F1} days");
             this.output.WriteLine($"Support time difference: {supportTime.TotalDays:F1} days");
         }
 
         [Theory]
-        [InlineData(EmailTemplateSystem.EmailCategory.Healthcare)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Education)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Ecommerce)]
-        [InlineData(EmailTemplateSystem.EmailCategory.Travel)]
-        public void GetRandomTemplate_NewCategories_HaveAppropriateCcAndReplyToRates(EmailTemplateSystem.EmailCategory category)
+        [InlineData(EmailCategory.Healthcare)]
+        [InlineData(EmailCategory.Education)]
+        [InlineData(EmailCategory.Ecommerce)]
+        [InlineData(EmailCategory.Travel)]
+        public void GetRandomTemplate_NewCategories_HaveAppropriateCcAndReplyToRates(EmailCategory category)
         {
             // Arrange
             const int iterations = 100;
@@ -383,8 +383,8 @@ namespace Zipper
             // Act
             for (int i = 0; i < iterations; i++)
             {
-                var businessTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailTemplateSystem.EmailCategory.Business);
-                var marketingTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailTemplateSystem.EmailCategory.Marketing);
+                var businessTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailCategory.Business);
+                var marketingTemplate = EmailTemplateSystem.GetRandomTemplate(i + 1, i + 2, EmailCategory.Marketing);
 
                 if (!string.IsNullOrEmpty(businessTemplate.Cc))
                 {
@@ -411,7 +411,7 @@ namespace Zipper
             {
                 RecipientIndex = 1,
                 SenderIndex = 2,
-                Category = EmailTemplateSystem.EmailCategory.Business,
+                Category = EmailCategory.Business,
                 TemplateIndex = 0,
             };
 
