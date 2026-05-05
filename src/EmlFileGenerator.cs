@@ -16,15 +16,16 @@ internal sealed class EmlFileGenerator : IFileGenerator
 
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
-        var emlResult = EmlGenerationService.GenerateEmlContent(
-            (int)workItem.Index,
-            request.LoadFile.AttachmentRate);
+        var email = EmailFactory.Create(workItem, request, Random.Shared);
+        var attachmentInfo = EmailAttachmentPicker.Default.Pick(
+            workItem.Index, request.LoadFile.AttachmentRate, EmailAttachmentPicker.PlaceholderPool, Random.Shared);
+        var bytes = EmailSerializer.ToEml(email, attachmentInfo);
 
         return new GeneratedFileContent
         {
-            Content = emlResult.Content,
-            Attachment = emlResult.Attachment,
-            EmailTemplate = emlResult.Template,
+            Content = bytes,
+            Attachment = attachmentInfo != null ? (attachmentInfo.FileName, attachmentInfo.Content) : null,
+            EmailTemplate = email,
         };
     }
 }
