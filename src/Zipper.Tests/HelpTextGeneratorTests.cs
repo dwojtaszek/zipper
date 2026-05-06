@@ -40,26 +40,5 @@ namespace Zipper.Tests
                 errorOutput.Dispose();
             }
         }
-
-        [Fact]
-        public void Show_CommandLineValidatorDelegates()
-        {
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                CommandLineValidator.ShowUsage();
-
-                var output = errorOutput.ToString();
-                Assert.Contains("Error: Missing required arguments.", output);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
     }
 }

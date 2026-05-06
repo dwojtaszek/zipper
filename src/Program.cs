@@ -32,11 +32,10 @@ namespace Zipper
                 return 0;
             }
 
-            // Validate and parse command line arguments
-            var request = CommandLineValidator.ValidateAndParseArguments(args);
+            var request = Cli.Pipeline.Build(args);
             if (request == null)
             {
-                return 1; // Error already displayed by CommandLineValidator
+                return 1;
             }
 
             IGenerationMode mode = SelectMode(request);

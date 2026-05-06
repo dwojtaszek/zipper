@@ -3,11 +3,11 @@ using Xunit;
 namespace Zipper
 {
     [Collection("ConsoleTests")]
-    public class CommandLineValidatorTests : IDisposable
+    public class CliPipelineTests : IDisposable
     {
         private readonly string tempDir;
 
-        public CommandLineValidatorTests()
+        public CliPipelineTests()
         {
             this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(this.tempDir);
@@ -28,7 +28,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -64,7 +64,7 @@ namespace Zipper
             };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -85,7 +85,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithNullArgs_ShouldReturnNull()
         {
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(null!);
+            var result = Cli.Pipeline.Build(null!);
 
             // Assert
             Assert.Null(result);
@@ -98,7 +98,7 @@ namespace Zipper
             var args = new string[0];
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -111,7 +111,7 @@ namespace Zipper
             var args = new[] { "--count", "100", "--output-path", this.tempDir };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -124,7 +124,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--output-path", this.tempDir };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -137,7 +137,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -150,7 +150,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", string.Empty };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -163,7 +163,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "0" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -176,7 +176,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "101" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -189,7 +189,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "-1" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -202,7 +202,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "101" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -215,7 +215,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", "INVALID" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -228,7 +228,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", "INVALID" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -241,7 +241,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", "INVALID" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -254,7 +254,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--output-path", this.tempDir, "--target-zip-size", "10MB" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
@@ -273,7 +273,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", inputEncoding };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -293,7 +293,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", inputDistribution };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -312,7 +312,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", inputSize };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -334,39 +334,11 @@ namespace Zipper
             var args = new[] { "--type", inputType, "--count", "100", "--output-path", this.tempDir };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
             Assert.Equal(expectedType, result!.Output.FileType);
-        }
-
-        [Fact]
-        public void ShowUsage_ShouldDisplayUsageInformation()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                // Act
-                CommandLineValidator.ShowUsage();
-
-                // Assert
-                var output = errorOutput.ToString();
-                Assert.Contains("Error: Missing required arguments.", output);
-                Assert.Contains("Usage:", output);
-                Assert.Contains("--type <pdf|jpg|tiff|eml|docx|xlsx>", output);
-                Assert.Contains("--count <number>", output);
-                Assert.Contains("--output-path <directory>", output);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
         }
 
         [Fact]
@@ -376,7 +348,7 @@ namespace Zipper
             var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", "5-20" };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -402,7 +374,7 @@ namespace Zipper
                 var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.Null(result);
@@ -428,7 +400,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -448,7 +420,7 @@ namespace Zipper
                 var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.Null(result);
@@ -473,7 +445,7 @@ namespace Zipper
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--delimiter-column", input };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -494,7 +466,7 @@ namespace Zipper
             };
 
             // Act
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.NotNull(result);
@@ -516,7 +488,7 @@ namespace Zipper
                 var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.NotNull(result); // The valid args should still parse into a valid request
@@ -536,7 +508,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "50", "--output-path", this.tempDir };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.True(result!.LoadfileOnly);
@@ -553,7 +525,7 @@ namespace Zipper
                 "--multi-delim", "char:;", "--nested-delim", "char:\\",
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.Equal("\u0014", result!.Delimiters.ColumnDelimiter); // ASCII 20
@@ -571,7 +543,7 @@ namespace Zipper
                 "--quote-delim", "none",
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.Equal(string.Empty, result!.Delimiters.QuoteDelimiter);
@@ -582,7 +554,7 @@ namespace Zipper
         {
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--col-delim", "ascii:20" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -592,7 +564,7 @@ namespace Zipper
         {
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -602,7 +574,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -612,7 +584,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-types", "quotes" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -622,7 +594,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--target-zip-size", "100MB" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -632,7 +604,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--include-load-file" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -644,7 +616,7 @@ namespace Zipper
             {
                 var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", eol };
 
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 Assert.NotNull(result);
                 Assert.Equal(eol.ToUpperInvariant(), result!.Delimiters.EndOfLine.ToUpperInvariant());
@@ -656,7 +628,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LFCR" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -666,7 +638,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--col-delim", "20" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -678,7 +650,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", amount };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -690,7 +662,7 @@ namespace Zipper
         {
             var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -708,7 +680,7 @@ namespace Zipper
                 var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.Null(result);
@@ -735,7 +707,7 @@ namespace Zipper
                 var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.Null(result);
@@ -762,7 +734,7 @@ namespace Zipper
                 var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
 
                 // Act
-                var result = CommandLineValidator.ValidateAndParseArguments(args);
+                var result = Cli.Pipeline.Build(args);
 
                 // Assert
                 Assert.Null(result);
@@ -785,7 +757,7 @@ namespace Zipper
                 "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.True(result!.Chaos.ChaosMode);
@@ -808,7 +780,7 @@ namespace Zipper
                 "--count", "10", "--output-path", this.tempDir,
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -822,7 +794,7 @@ namespace Zipper
                 "--count", "10", "--output-path", this.tempDir,
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -836,7 +808,7 @@ namespace Zipper
                 "--count", "10", "--output-path", this.tempDir,
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.Null(result);
         }
@@ -850,7 +822,7 @@ namespace Zipper
                 "--count", "10", "--output-path", this.tempDir,
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.Equal("CLIENT001", result!.Bates?.Prefix);
@@ -870,7 +842,7 @@ namespace Zipper
                 "--count", "10", "--output-path", this.tempDir,
             };
 
-            var result = CommandLineValidator.ValidateAndParseArguments(args);
+            var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
             Assert.Equal(validPrefix, result!.Bates?.Prefix);
