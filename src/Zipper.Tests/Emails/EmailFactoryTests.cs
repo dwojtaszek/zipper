@@ -1,6 +1,6 @@
 using Xunit;
-using Zipper.Emails;
 using Xunit.Abstractions;
+using Zipper.Emails;
 
 namespace Zipper
 {
@@ -281,7 +281,6 @@ namespace Zipper
             Assert.Contains("recipient042@", EmailFactory.GenerateEmailAddress(42, "recipient"));
             Assert.Contains("sender001@", EmailFactory.GenerateEmailAddress(1, "sender"));
         }
-
 
         // Tests redistributed from EmailTemplateSystemTests
         [Fact]

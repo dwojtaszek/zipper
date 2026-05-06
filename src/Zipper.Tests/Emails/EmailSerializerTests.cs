@@ -1,6 +1,6 @@
 using System.Text;
-using Zipper.Emails;
 using Xunit;
+using Zipper.Emails;
 
 namespace Zipper
 {

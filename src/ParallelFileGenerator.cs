@@ -1,8 +1,8 @@
 using System.Buffers;
-using Zipper.Emails;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
+using Zipper.Emails;
 
 namespace Zipper
 {

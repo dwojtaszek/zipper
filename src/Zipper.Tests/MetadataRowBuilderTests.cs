@@ -1,7 +1,7 @@
 using Xunit;
 
-using Zipper.Emails;
 using Zipper.Config;
+using Zipper.Emails;
 
 namespace Zipper
 {

@@ -1,7 +1,5 @@
 using System.Text;
 
-using Zipper.Emails;
-
 namespace Zipper;
 
 internal class MetadataRowBuilder
