@@ -29,7 +29,7 @@ public class ProductionSetTests : IDisposable
     public void ProductionSet_RequiresBatesPrefix()
     {
         var args = new[] { "--production-set", "--count", "10", "--output-path", this.testOutputPath };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
         Assert.Null(request);
     }
 
@@ -37,7 +37,7 @@ public class ProductionSetTests : IDisposable
     public void ProductionSet_ConflictsWithLoadfileOnly()
     {
         var args = new[] { "--production-set", "--loadfile-only", "--count", "10", "--output-path", this.testOutputPath, "--bates-prefix", "TEST" };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
         Assert.Null(request);
     }
 
@@ -45,7 +45,7 @@ public class ProductionSetTests : IDisposable
     public void ProductionZip_RequiresProductionSet()
     {
         var args = new[] { "--production-zip", "--count", "10", "--output-path", this.testOutputPath, "--type", "pdf", "--bates-prefix", "TEST" };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
         Assert.Null(request);
     }
 
@@ -53,7 +53,7 @@ public class ProductionSetTests : IDisposable
     public void VolumeSize_RequiresProductionSet()
     {
         var args = new[] { "--volume-size", "100", "--count", "10", "--output-path", this.testOutputPath, "--type", "pdf", "--bates-prefix", "TEST" };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
         Assert.Null(request);
     }
 
@@ -66,7 +66,7 @@ public class ProductionSetTests : IDisposable
             "--bates-prefix", "PROD", "--bates-start", "1", "--bates-digits", "6",
             "--volume-size", "25", "--type", "pdf",
         };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
 
         Assert.NotNull(request);
         Assert.True(request.Production.ProductionSet);
@@ -84,7 +84,7 @@ public class ProductionSetTests : IDisposable
             "--production-set", "--count", "10", "--output-path", this.testOutputPath,
             "--bates-prefix", "TEST", "--type", "pdf",
         };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
 
         Assert.NotNull(request);
         Assert.Equal(5000, request.Production.VolumeSize);
@@ -98,7 +98,7 @@ public class ProductionSetTests : IDisposable
             "--production-set", "--count", "10", "--output-path", this.testOutputPath,
             "--bates-prefix", "TEST",
         };
-        var request = CommandLineValidator.ValidateAndParseArguments(args);
+        var request = Cli.Pipeline.Build(args);
 
         Assert.NotNull(request);
         Assert.Equal("pdf", request.Output.FileType);
