@@ -1,5 +1,4 @@
 using Xunit;
-using Xunit.Abstractions;
 using Zipper.Emails;
 using Xunit.Abstractions;
 
@@ -283,205 +282,206 @@ namespace Zipper
             Assert.Contains("sender001@", EmailFactory.GenerateEmailAddress(1, "sender"));
         }
 
-    
-    // Tests redistributed from EmailTemplateSystemTests
-    [Fact]
-    public void Create_BasicParameters_ReturnsValidEmail()
-    {
-        const int recipientIndex = 1;
-        const int senderIndex = 2;
 
-        var email = EmailFactory.Create(recipientIndex, senderIndex, null, new Random(42));
-
-        Assert.NotNull(email);
-        Assert.False(string.IsNullOrEmpty(email.To));
-        Assert.False(string.IsNullOrEmpty(email.From));
-        Assert.False(string.IsNullOrEmpty(email.Subject));
-        Assert.False(string.IsNullOrEmpty(email.Body));
-        Assert.True(email.SentDate <= DateTime.Now);
-    }
-
-    [Theory]
-    [InlineData(EmailCategory.Business)]
-    [InlineData(EmailCategory.Personal)]
-    [InlineData(EmailCategory.Technical)]
-    [InlineData(EmailCategory.Marketing)]
-    [InlineData(EmailCategory.Legal)]
-    [InlineData(EmailCategory.Financial)]
-    [InlineData(EmailCategory.Notification)]
-    [InlineData(EmailCategory.Support)]
-    [InlineData(EmailCategory.Healthcare)]
-    [InlineData(EmailCategory.Education)]
-    [InlineData(EmailCategory.Ecommerce)]
-    [InlineData(EmailCategory.Travel)]
-    public void Create_WithSpecificCategory_ReturnsCategorySpecificEmail(EmailCategory category)
-    {
-        const int recipientIndex = 10;
-        const int senderIndex = 20;
-
-        var email = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(99));
-
-        Assert.NotNull(email);
-        Assert.Contains($"recipient{recipientIndex:D3}@", email.To);
-        Assert.Contains($"sender{senderIndex:D3}@", email.From);
-        this.output.WriteLine($"Category: {category}, Subject: {email.Subject}");
-    }
-
-    [Fact]
-    public void Create_MultipleCalls_ReturnsVariedContent()
-    {
-        const int iterations = 50;
-        var subjects = new string[iterations];
-
-        for (int i = 0; i < iterations; i++)
+        // Tests redistributed from EmailTemplateSystemTests
+        [Fact]
+        public void Create_BasicParameters_ReturnsValidEmail()
         {
-            var email = EmailFactory.Create(i + 1, i + 2, null, Random.Shared);
-            subjects[i] = email.Subject;
+            const int recipientIndex = 1;
+            const int senderIndex = 2;
+
+            var email = EmailFactory.Create(recipientIndex, senderIndex, null, new Random(42));
+
+            Assert.NotNull(email);
+            Assert.False(string.IsNullOrEmpty(email.To));
+            Assert.False(string.IsNullOrEmpty(email.From));
+            Assert.False(string.IsNullOrEmpty(email.Subject));
+            Assert.False(string.IsNullOrEmpty(email.Body));
+            Assert.True(email.SentDate <= DateTime.Now);
         }
 
-        var uniqueSubjects = subjects.Distinct().Count();
-        Assert.True(uniqueSubjects > 1, "Expected multiple different subjects");
-        Assert.True(uniqueSubjects >= iterations * 0.3, $"Expected at least 30% variety, got {uniqueSubjects}/{iterations}");
-    }
-
-    [Fact]
-    public void Create_WithDifferentIndices_GeneratesUniqueAddresses()
-    {
-        const int iterations = 20;
-        var emailAddresses = new (string to, string from)[iterations];
-
-        for (int i = 0; i < iterations; i++)
+        [Theory]
+        [InlineData(EmailCategory.Business)]
+        [InlineData(EmailCategory.Personal)]
+        [InlineData(EmailCategory.Technical)]
+        [InlineData(EmailCategory.Marketing)]
+        [InlineData(EmailCategory.Legal)]
+        [InlineData(EmailCategory.Financial)]
+        [InlineData(EmailCategory.Notification)]
+        [InlineData(EmailCategory.Support)]
+        [InlineData(EmailCategory.Healthcare)]
+        [InlineData(EmailCategory.Education)]
+        [InlineData(EmailCategory.Ecommerce)]
+        [InlineData(EmailCategory.Travel)]
+        public void Create_WithSpecificCategory_ReturnsCategorySpecificEmail(EmailCategory category)
         {
-            var email = EmailFactory.Create(i, i * 2, null, new Random(i));
-            emailAddresses[i] = (email.To, email.From);
+            const int recipientIndex = 10;
+            const int senderIndex = 20;
+
+            var email = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(99));
+
+            Assert.NotNull(email);
+            Assert.Contains($"recipient{recipientIndex:D3}@", email.To);
+            Assert.Contains($"sender{senderIndex:D3}@", email.From);
+            this.output.WriteLine($"Category: {category}, Subject: {email.Subject}");
         }
 
-        var uniqueToAddresses = emailAddresses.Select(e => e.to).Distinct().Count();
-        var uniqueFromAddresses = emailAddresses.Select(e => e.from).Distinct().Count();
-
-        Assert.Equal(iterations, uniqueToAddresses);
-        Assert.Equal(iterations, uniqueFromAddresses);
-    }
-
-    [Fact]
-    public void CreateContextual_WithValidContext_ReturnsAppropriateEmail()
-    {
-        var context = new EmailContext
+        [Fact]
+        public void Create_MultipleCalls_ReturnsVariedContent()
         {
-            RecipientIndex = 5,
-            SenderIndex = 10,
-            Category = EmailCategory.Business,
-            TemplateIndex = 0,
-            SentDate = new DateTime(2023, 6, 15),
-            IsHighPriority = true,
-            RequestReadReceipt = true,
-        };
+            const int iterations = 50;
+            var subjects = new string[iterations];
 
-        var email = EmailFactory.CreateContextual(context, new Random(42));
-
-        Assert.NotNull(email);
-        Assert.Contains("recipient005@", email.To);
-        Assert.Contains("sender010@", email.From);
-        Assert.Equal(new DateTime(2023, 6, 15), email.SentDate);
-        Assert.True(email.IsHighPriority);
-        Assert.True(email.RequestReadReceipt);
-    }
-
-    [Fact]
-    public void EmailContext_RecordType_WorksCorrectly()
-    {
-        var context1 = new EmailContext
-        {
-            RecipientIndex = 1,
-            SenderIndex = 2,
-            Category = EmailCategory.Business,
-            TemplateIndex = 0,
-        };
-
-        var context2 = context1 with { };
-
-        Assert.Equal(context1.RecipientIndex, context2.RecipientIndex);
-        Assert.Equal(context1.SenderIndex, context2.SenderIndex);
-        Assert.Equal(context1.Category, context2.Category);
-        Assert.Equal(context1.TemplateIndex, context2.TemplateIndex);
-        Assert.True(context1 == context2);
-    }
-
-    [Fact]
-    public void Create_BusinessCategory_ContainsBusinessContent()
-    {
-        var email = EmailFactory.Create(1, 2, EmailCategory.Business, new Random(42));
-
-        Assert.NotNull(email);
-        Assert.True(
-            email.Subject.Contains("Business") ||
-            email.Subject.Contains("Contract") ||
-            email.Subject.Contains("Meeting") ||
-            email.Subject.Contains("Partnership") ||
-            email.Subject.Contains("Budget") ||
-            email.Subject.Contains("Review") ||
-            email.Subject.Contains("Proposal"),
-            $"Expected business-related subject, got: {email.Subject}");
-    }
-
-    [Theory]
-    [InlineData(EmailCategory.Healthcare)]
-    [InlineData(EmailCategory.Education)]
-    [InlineData(EmailCategory.Ecommerce)]
-    [InlineData(EmailCategory.Travel)]
-    public void Create_NewCategories_HaveRealisticPlaceholdersReplaced(EmailCategory category)
-    {
-        var bodyPlaceholders = new[]
-        {
-            "{recipient}", "{sender}", "{company}", "{department}", "{project}",
-            "{amount}", "{deadline}", "{meeting}", "{date}", "{place}", "{venue}",
-        };
-
-        for (int i = 0; i < 5; i++)
-        {
-            var email = EmailFactory.Create(i + 1, i + 2, category, new Random(i));
-            foreach (var placeholder in bodyPlaceholders)
+            for (int i = 0; i < iterations; i++)
             {
-                Assert.DoesNotContain(placeholder, email.Body);
+                var email = EmailFactory.Create(i + 1, i + 2, null, Random.Shared);
+                subjects[i] = email.Subject;
+            }
+
+            var uniqueSubjects = subjects.Distinct().Count();
+            Assert.True(uniqueSubjects > 1, "Expected multiple different subjects");
+            Assert.True(uniqueSubjects >= iterations * 0.3, $"Expected at least 30% variety, got {uniqueSubjects}/{iterations}");
+        }
+
+        [Fact]
+        public void Create_WithDifferentIndices_GeneratesUniqueAddresses()
+        {
+            const int iterations = 20;
+            var emailAddresses = new (string to, string from)[iterations];
+
+            for (int i = 0; i < iterations; i++)
+            {
+                var email = EmailFactory.Create(i, i * 2, null, new Random(i));
+                emailAddresses[i] = (email.To, email.From);
+            }
+
+            var uniqueToAddresses = emailAddresses.Select(e => e.to).Distinct().Count();
+            var uniqueFromAddresses = emailAddresses.Select(e => e.from).Distinct().Count();
+
+            Assert.Equal(iterations, uniqueToAddresses);
+            Assert.Equal(iterations, uniqueFromAddresses);
+        }
+
+        [Fact]
+        public void CreateContextual_WithValidContext_ReturnsAppropriateEmail()
+        {
+            var context = new EmailContext
+            {
+                RecipientIndex = 5,
+                SenderIndex = 10,
+                Category = EmailCategory.Business,
+                TemplateIndex = 0,
+                SentDate = new DateTime(2023, 6, 15),
+                IsHighPriority = true,
+                RequestReadReceipt = true,
+            };
+
+            var email = EmailFactory.CreateContextual(context, new Random(42));
+
+            Assert.NotNull(email);
+            Assert.Contains("recipient005@", email.To);
+            Assert.Contains("sender010@", email.From);
+            Assert.Equal(new DateTime(2023, 6, 15), email.SentDate);
+            Assert.True(email.IsHighPriority);
+            Assert.True(email.RequestReadReceipt);
+        }
+
+        [Fact]
+        public void EmailContext_RecordType_WorksCorrectly()
+        {
+            var context1 = new EmailContext
+            {
+                RecipientIndex = 1,
+                SenderIndex = 2,
+                Category = EmailCategory.Business,
+                TemplateIndex = 0,
+            };
+
+            var context2 = context1 with { };
+
+            Assert.Equal(context1.RecipientIndex, context2.RecipientIndex);
+            Assert.Equal(context1.SenderIndex, context2.SenderIndex);
+            Assert.Equal(context1.Category, context2.Category);
+            Assert.Equal(context1.TemplateIndex, context2.TemplateIndex);
+            Assert.True(context1 == context2);
+        }
+
+        [Fact]
+        public void Create_BusinessCategory_ContainsBusinessContent()
+        {
+            var email = EmailFactory.Create(1, 2, EmailCategory.Business, new Random(42));
+
+            Assert.NotNull(email);
+            Assert.True(
+                email.Subject.Contains("Business") ||
+                email.Subject.Contains("Contract") ||
+                email.Subject.Contains("Meeting") ||
+                email.Subject.Contains("Partnership") ||
+                email.Subject.Contains("Budget") ||
+                email.Subject.Contains("Review") ||
+                email.Subject.Contains("Proposal"),
+                $"Expected business-related subject, got: {email.Subject}");
+        }
+
+        [Theory]
+        [InlineData(EmailCategory.Healthcare)]
+        [InlineData(EmailCategory.Education)]
+        [InlineData(EmailCategory.Ecommerce)]
+        [InlineData(EmailCategory.Travel)]
+        public void Create_NewCategories_HaveRealisticPlaceholdersReplaced(EmailCategory category)
+        {
+            var bodyPlaceholders = new[]
+            {
+                "{recipient}", "{sender}", "{company}", "{department}", "{project}",
+                "{amount}", "{deadline}", "{meeting}", "{date}", "{place}", "{venue}",
+            };
+
+            for (int i = 0; i < 5; i++)
+            {
+                var email = EmailFactory.Create(i + 1, i + 2, category, new Random(i));
+                foreach (var placeholder in bodyPlaceholders)
+                {
+                    Assert.DoesNotContain(placeholder, email.Body);
+                }
             }
         }
-    }
 
-    [Fact]
-    public void Create_WithLargeIndices_HandlesCorrectly()
-    {
-        const int largeRecipientIndex = 999999;
-        const int largeSenderIndex = 888888;
-
-        var email = EmailFactory.Create(largeRecipientIndex, largeSenderIndex, null, new Random(1));
-
-        Assert.NotNull(email);
-        Assert.Contains($"recipient{largeRecipientIndex:D6}@", email.To);
-        Assert.Contains($"sender{largeSenderIndex:D6}@", email.From);
-    }
-
-    [Fact]
-    public void Create_BodyReplacements_AllPlaceholdersReplaced()
-    {
-        var commonPlaceholders = new[] { "{recipient}", "{sender}", "{date}", "{quarter}" };
-        var bodyOnlyPlaceholders = new[] { "{company}", "{department}", "{project}", "{amount}", "{deadline}", "{meeting}" };
-
-        for (int i = 0; i < 50; i++)
+        [Fact]
+        public void Create_WithLargeIndices_HandlesCorrectly()
         {
-            var email = EmailFactory.Create(i + 1, i + 2, null, new Random(i));
-            foreach (var placeholder in commonPlaceholders)
+            const int largeRecipientIndex = 999999;
+            const int largeSenderIndex = 888888;
+
+            var email = EmailFactory.Create(largeRecipientIndex, largeSenderIndex, null, new Random(1));
+
+            Assert.NotNull(email);
+            Assert.Contains($"recipient{largeRecipientIndex:D6}@", email.To);
+            Assert.Contains($"sender{largeSenderIndex:D6}@", email.From);
+        }
+
+        [Fact]
+        public void Create_BodyReplacements_AllPlaceholdersReplaced()
+        {
+            var commonPlaceholders = new[] { "{recipient}", "{sender}", "{date}", "{quarter}" };
+            var bodyOnlyPlaceholders = new[] { "{company}", "{department}", "{project}", "{amount}", "{deadline}", "{meeting}" };
+
+            for (int i = 0; i < 50; i++)
             {
-                Assert.DoesNotContain(placeholder, email.Subject);
-                Assert.DoesNotContain(placeholder, email.Body);
-            }
-            foreach (var placeholder in bodyOnlyPlaceholders)
-            {
-                Assert.DoesNotContain(placeholder, email.Body);
+                var email = EmailFactory.Create(i + 1, i + 2, null, new Random(i));
+                foreach (var placeholder in commonPlaceholders)
+                {
+                    Assert.DoesNotContain(placeholder, email.Subject);
+                    Assert.DoesNotContain(placeholder, email.Body);
+                }
+
+                foreach (var placeholder in bodyOnlyPlaceholders)
+                {
+                    Assert.DoesNotContain(placeholder, email.Body);
+                }
             }
         }
-    }
 
-    private static double ComputeBinomialChiSquare(int observed, int n, double expectedRate)
+        private static double ComputeBinomialChiSquare(int observed, int n, double expectedRate)
         {
             double expectedYes = n * expectedRate;
             double expectedNo = n * (1.0 - expectedRate);
