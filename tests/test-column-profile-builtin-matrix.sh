@@ -37,12 +37,35 @@ SEEDS=(42 1337)
 PASSED=0
 TOTAL=0
 
-# Extracts column names from the first line of a DAT load file, one per line.
-# DAT uses ASCII-20 (0x14) as column delimiter and ASCII-254 (0xfe, þ) as quote char.
-# Uses $'...' ANSI-C quoting so bash passes actual bytes to tr rather than literals.
+# Extracts column names (one per line) from the first line of a DAT load file.
+# DAT uses Unicode U+0014 (ASCII 20) as column delimiter and U+00FE (þ) as quote char.
+# Python handles UTF-8 multi-byte sequences correctly; shell tr/sed are unreliable here.
 extract_columns() {
+    python3 - "$1" <<'PYEOF'
+import sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    line = f.readline().rstrip('\r\n')
+for col in line.split('\u0014'):
+    print(col.strip('\u00fe'))
+PYEOF
+}
+
+# Counts rows where the number of fields differs from expected.
+count_bad_rows() {
     local dat_file="$1"
-    head -1 "$dat_file" | tr $'\x14' $'\n' | tr -d $'\xfe\r'
+    local expected_cols="$2"
+    python3 - "$dat_file" "$expected_cols" <<'PYEOF'
+import sys
+path, expected = sys.argv[1], int(sys.argv[2])
+bad = 0
+with open(path, encoding='utf-8') as f:
+    next(f)  # skip header
+    for line in f:
+        fields = line.rstrip('\r\n').split('\u0014')
+        if len(fields) != expected:
+            bad += 1
+print(bad)
+PYEOF
 }
 
 for profile in "${PROFILES[@]}"; do
@@ -84,12 +107,7 @@ for profile in "${PROFILES[@]}"; do
 
             # --- Assertion 2: Every row has the correct column count ---
             expected_col_count=$(wc -l < "$expected_file" | tr -d ' ')
-            # Skip header line; count fields per row (delimiter = ASCII 20)
-            bad_rows=$(tail -n +2 "$dat_file" | awk -F$'\x14' -v expected="$expected_col_count" '
-                BEGIN { bad = 0 }
-                NF > 0 && NF != expected { bad++ }
-                END { print bad }
-            ')
+            bad_rows=$(count_bad_rows "$dat_file" "$expected_col_count")
             if [[ "$bad_rows" -gt 0 ]]; then
                 print_error "${combo}: $bad_rows row(s) have wrong column count (expected $expected_col_count)"
             fi

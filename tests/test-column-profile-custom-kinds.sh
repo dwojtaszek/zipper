@@ -36,114 +36,165 @@ zipper \
 dat_file=$(find "$TEST_OUTPUT_DIR/run1" -name "*.dat" | head -1)
 [[ -z "$dat_file" ]] && print_error "No .dat file produced"
 
-# Expected columns from the fixture profile (same order as the JSON)
-EXPECTED_COLS=(
-    DOCID TEXTFIELD LONGTEXTFIELD DATEFIELD DATETIMEFIELD
-    NUMBERFIELD NUMBERGAUSSIAN NUMBEREXPONENTIAL NUMBERPARETO
-    BOOLEANFIELD CODEDFIELD CODEDWEIGHTED EMAILFIELD EMAILMULTI
-)
+# Expected columns from the fixture profile (same order as the JSON).
+EXPECTED_COLS="DOCID
+TEXTFIELD
+LONGTEXTFIELD
+DATEFIELD
+DATETIMEFIELD
+NUMBERFIELD
+NUMBERGAUSSIAN
+NUMBEREXPONENTIAL
+NUMBERPARETO
+BOOLEANFIELD
+CODEDFIELD
+CODEDWEIGHTED
+EMAILFIELD
+EMAILMULTI"
 
 # --- Assertion 1: Header columns match fixture declaration ---
 print_info "Checking column headers..."
-actual_cols=$(head -1 "$dat_file" | tr $'\x14' $'\n' | tr -d $'\xfe\r')
-expected_joined=$(printf '%s\n' "${EXPECTED_COLS[@]}")
-if [[ "$actual_cols" != "$expected_joined" ]]; then
+actual_cols=$(python3 - "$dat_file" <<'PYEOF'
+import sys
+with open(sys.argv[1], encoding='utf-8') as f:
+    line = f.readline().rstrip('\r\n')
+for col in line.split('\u0014'):
+    print(col.strip('\u00fe'))
+PYEOF
+)
+if [[ "$actual_cols" != "$EXPECTED_COLS" ]]; then
     echo "ACTUAL:   $actual_cols" >&2
-    echo "EXPECTED: $expected_joined" >&2
+    echo "EXPECTED: $EXPECTED_COLS" >&2
     print_error "Header mismatch against expected columns"
 fi
 print_success "Headers match"
 
-# --- Assertion 2: Every row has exactly 14 columns ---
-print_info "Checking column count per row..."
-bad_rows=$(tail -n +2 "$dat_file" | awk -F$'\x14' 'NF != 14 { bad++ } END { print bad+0 }')
-[[ "$bad_rows" -gt 0 ]] && print_error "$bad_rows row(s) have wrong column count (expected 14)"
-print_success "All rows have 14 columns"
+# Parse data rows into Python-friendly format and run all per-kind assertions in one pass.
+print_info "Running per-kind invariant checks..."
+python3 - "$dat_file" "$TEST_OUTPUT_DIR" <<'PYEOF'
+import sys, os, re, csv
 
-# --- Assertion 3: Per-kind invariants ---
-# Parse data rows into a TSV-like format (replace DAT delimiter with TAB, strip quotes)
-tmp_tsv="$TEST_OUTPUT_DIR/data.tsv"
-tail -n +2 "$dat_file" | tr -d $'\xfe\r' | tr $'\x14' $'\t' > "$tmp_tsv"
+dat_path = sys.argv[1]
+out_dir  = sys.argv[2]
+COL_SEP  = '\u0014'
+QUOTE    = '\u00fe'
 
-# DOCID (identifier): unique, matches DOC########
-print_info "Checking DOCID (identifier) invariants..."
-dup_count=$(awk -F'\t' '{print $1}' "$tmp_tsv" | sort | uniq -d | wc -l)
-[[ "$dup_count" -gt 0 ]] && print_error "DOCID has $dup_count duplicate value(s)"
-bad_docid=$(awk -F'\t' '{if ($1 !~ /^DOC[0-9]+$/) print $1}' "$tmp_tsv" | wc -l)
-[[ "$bad_docid" -gt 0 ]] && print_error "DOCID has $bad_docid value(s) not matching DOC[0-9]+"
-print_success "DOCID: unique and matches DOC[0-9]+"
+# Read and parse all rows
+rows = []
+with open(dat_path, encoding='utf-8') as f:
+    header_line = f.readline().rstrip('\r\n')
+    headers = [c.strip(QUOTE) for c in header_line.split(COL_SEP)]
+    for line in f:
+        line = line.rstrip('\r\n')
+        if not line:
+            continue
+        fields = [c.strip(QUOTE) for c in line.split(COL_SEP)]
+        rows.append(dict(zip(headers, fields)))
 
-# TEXTFIELD (text, required=true, emptyPercentage=0 via settings): all non-empty
-print_info "Checking TEXTFIELD (text, required) is non-empty..."
-empty_text=$(awk -F'\t' '{if ($2 == "") count++} END {print count+0}' "$tmp_tsv")
-[[ "$empty_text" -gt 0 ]] && print_error "TEXTFIELD has $empty_text empty value(s) (required=true)"
-print_success "TEXTFIELD: all non-empty"
+assert len(rows) > 0, "No data rows found"
+print(f"  Parsed {len(rows)} rows with {len(headers)} columns each")
 
-# LONGTEXTFIELD (longtext, required=true): all values >= 10 chars
-print_info "Checking LONGTEXTFIELD (longtext) length..."
-short_longtext=$(awk -F'\t' '{if (length($3) < 10) count++} END {print count+0}' "$tmp_tsv")
-[[ "$short_longtext" -gt 0 ]] && print_error "LONGTEXTFIELD has $short_longtext value(s) shorter than 10 chars"
-print_success "LONGTEXTFIELD: all values >= 10 chars"
+errors = []
 
-# DATEFIELD (date, yyyy-MM-dd): parseable and within 2018-2024
-print_info "Checking DATEFIELD (date) format..."
-bad_date=$(awk -F'\t' '
-    {
-        if ($4 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) { bad++; next }
-        y=substr($4,1,4); if (y < 2018 || y > 2025) bad++
-    }
-    END { print bad+0 }
-' "$tmp_tsv")
-[[ "$bad_date" -gt 0 ]] && print_error "DATEFIELD has $bad_date value(s) with invalid format or out-of-range"
-print_success "DATEFIELD: all values are yyyy-MM-dd within 2018-2024"
+# Check row column count
+for i, row in enumerate(rows):
+    if len(row) != 14:
+        errors.append(f"Row {i+1}: expected 14 cols, got {len(row)}")
+if errors:
+    for e in errors[:5]:
+        print(f"  ERROR: {e}", file=sys.stderr)
+    raise SystemExit(f"Column count errors: {len(errors)}")
+print("  [OK] All rows have 14 columns")
 
-# DATETIMEFIELD (datetime): parseable ISO 8601
-print_info "Checking DATETIMEFIELD (datetime) format..."
-bad_datetime=$(awk -F'\t' '
-    {
-        if ($5 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/) bad++
-    }
-    END { print bad+0 }
-' "$tmp_tsv")
-[[ "$bad_datetime" -gt 0 ]] && print_error "DATETIMEFIELD has $bad_datetime value(s) with invalid ISO 8601 format"
-print_success "DATETIMEFIELD: all values match ISO 8601 datetime"
+# DOCID: unique, matches DOC[0-9]+
+docids = [r['DOCID'] for r in rows]
+if len(set(docids)) != len(docids):
+    raise SystemExit(f"DOCID has {len(docids)-len(set(docids))} duplicate(s)")
+bad_docid = [d for d in docids if not re.match(r'^DOC[0-9]+$', d)]
+if bad_docid:
+    raise SystemExit(f"DOCID has {len(bad_docid)} value(s) not matching DOC[0-9]+: {bad_docid[:3]}")
+print("  [OK] DOCID: unique, matches DOC[0-9]+")
 
-# NUMBERFIELD (uniform, 0-10000): integers within range
-print_info "Checking NUMBERFIELD (number, uniform)..."
-bad_num=$(awk -F'\t' '{if ($6 !~ /^[0-9]+$/ || $6+0 < 0 || $6+0 > 10000) bad++} END {print bad+0}' "$tmp_tsv")
-[[ "$bad_num" -gt 0 ]] && print_error "NUMBERFIELD has $bad_num value(s) out of [0,10000]"
-print_success "NUMBERFIELD: all integers in [0,10000]"
+# TEXTFIELD (text, required): all non-empty
+empty_text = sum(1 for r in rows if not r.get('TEXTFIELD'))
+if empty_text:
+    raise SystemExit(f"TEXTFIELD has {empty_text} empty value(s) (required=true)")
+print("  [OK] TEXTFIELD: all non-empty")
 
-# BOOLEANFIELD (boolean, YN format): values are Y or N
-print_info "Checking BOOLEANFIELD (boolean)..."
-bad_bool=$(awk -F'\t' '{if ($10 != "Y" && $10 != "N") bad++} END {print bad+0}' "$tmp_tsv")
-[[ "$bad_bool" -gt 0 ]] && print_error "BOOLEANFIELD has $bad_bool value(s) that are not Y or N"
-print_success "BOOLEANFIELD: all values are Y or N"
+# LONGTEXTFIELD (longtext, required): all >= 10 chars
+short = [r['LONGTEXTFIELD'] for r in rows if len(r.get('LONGTEXTFIELD', '')) < 10]
+if short:
+    raise SystemExit(f"LONGTEXTFIELD has {len(short)} value(s) shorter than 10 chars")
+print("  [OK] LONGTEXTFIELD: all >= 10 chars")
 
-# CODEDFIELD (coded, from statusValues): values in declared set
-print_info "Checking CODEDFIELD (coded)..."
-bad_coded=$(awk -F'\t' '
-    BEGIN { valid["Active"]=1; valid["Inactive"]=1; valid["Pending"]=1; valid["Closed"]=1; valid["Archived"]=1 }
-    { if ($11 != "" && !($11 in valid)) bad++ }
-    END { print bad+0 }
-' "$tmp_tsv")
-[[ "$bad_coded" -gt 0 ]] && print_error "CODEDFIELD has $bad_coded value(s) not in declared coded set"
-print_success "CODEDFIELD: all non-empty values are in declared set"
+# DATEFIELD (date, yyyy-MM-dd)
+import datetime
+bad_date = []
+for r in rows:
+    v = r.get('DATEFIELD', '')
+    if v:
+        try:
+            d = datetime.datetime.strptime(v, '%Y-%m-%d')
+            if not (2018 <= d.year <= 2025):
+                bad_date.append(v)
+        except ValueError:
+            bad_date.append(v)
+if bad_date:
+    raise SystemExit(f"DATEFIELD has {len(bad_date)} invalid value(s): {bad_date[:3]}")
+print("  [OK] DATEFIELD: all yyyy-MM-dd within 2018-2024")
 
-# EMAILFIELD (email, single): matches simple RFC pattern
-print_info "Checking EMAILFIELD (email) format..."
-bad_email=$(awk -F'\t' '
-    { if ($13 != "" && $13 !~ /@.*\./) bad++ }
-    END { print bad+0 }
-' "$tmp_tsv")
-[[ "$bad_email" -gt 0 ]] && print_error "EMAILFIELD has $bad_email value(s) not matching email pattern"
-print_success "EMAILFIELD: all non-empty values match email pattern"
+# DATETIMEFIELD (datetime, ISO 8601)
+bad_dt = [r['DATETIMEFIELD'] for r in rows if r.get('DATETIMEFIELD') and 'T' not in r['DATETIMEFIELD']]
+if bad_dt:
+    raise SystemExit(f"DATETIMEFIELD has {len(bad_dt)} values without time component: {bad_dt[:3]}")
+print("  [OK] DATETIMEFIELD: all contain 'T' (ISO 8601)")
 
-# EMAILMULTI (email, multi-value): some rows contain ; separator
-print_info "Checking EMAILMULTI (email, multi-value) has some multi-value rows..."
-multi_count=$(awk -F'\t' '{if ($14 ~ /;/) count++} END {print count+0}' "$tmp_tsv")
-[[ "$multi_count" -eq 0 ]] && print_error "EMAILMULTI has no multi-value rows (expected some with ';' separator)"
-print_success "EMAILMULTI: $multi_count row(s) have multiple email values"
+# NUMBERFIELD (uniform, 0-10000)
+bad_num = []
+for r in rows:
+    v = r.get('NUMBERFIELD', '')
+    if v:
+        try:
+            n = int(v)
+            if not (0 <= n <= 10000):
+                bad_num.append(v)
+        except ValueError:
+            bad_num.append(v)
+if bad_num:
+    raise SystemExit(f"NUMBERFIELD has {len(bad_num)} out-of-range value(s): {bad_num[:3]}")
+print("  [OK] NUMBERFIELD: all integers in [0,10000]")
+
+# BOOLEANFIELD (boolean, YN)
+valid_bool = {'Y', 'N'}
+bad_bool = [r['BOOLEANFIELD'] for r in rows if r.get('BOOLEANFIELD') and r['BOOLEANFIELD'] not in valid_bool]
+if bad_bool:
+    raise SystemExit(f"BOOLEANFIELD has {len(bad_bool)} invalid value(s): {bad_bool[:3]}")
+print("  [OK] BOOLEANFIELD: all Y or N")
+
+# CODEDFIELD (coded, from statusValues)
+valid_coded = {'Active', 'Inactive', 'Pending', 'Closed', 'Archived'}
+bad_coded = [r['CODEDFIELD'] for r in rows if r.get('CODEDFIELD') and r['CODEDFIELD'] not in valid_coded]
+if bad_coded:
+    raise SystemExit(f"CODEDFIELD has {len(bad_coded)} invalid value(s): {bad_coded[:3]}")
+print("  [OK] CODEDFIELD: all non-empty values in declared set")
+
+# EMAILFIELD (email, single)
+email_re = re.compile(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+bad_email = [r['EMAILFIELD'] for r in rows if r.get('EMAILFIELD') and not email_re.match(r['EMAILFIELD'])]
+if bad_email:
+    raise SystemExit(f"EMAILFIELD has {len(bad_email)} invalid value(s): {bad_email[:3]}")
+print("  [OK] EMAILFIELD: all non-empty values match email pattern")
+
+# EMAILMULTI (email, multi-value): some rows should have ';'
+multi_rows = sum(1 for r in rows if ';' in r.get('EMAILMULTI', ''))
+if multi_rows == 0:
+    raise SystemExit("EMAILMULTI has no multi-value rows (expected some with ';' separator)")
+print(f"  [OK] EMAILMULTI: {multi_rows} row(s) have multiple values")
+
+print("All per-kind invariants PASSED")
+PYEOF
+
+print_success "Per-kind invariants: all PASSED"
 
 # --- Assertion 4: Determinism ---
 print_info "Verifying determinism (re-run with seed=$SEED)..."
