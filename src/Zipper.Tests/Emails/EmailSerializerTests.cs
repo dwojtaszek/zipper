@@ -206,192 +206,192 @@ namespace Zipper
             Assert.Contains("Content-Disposition: inline; filename=\"image.png\"", content);
         }
 
-    // Tests redistributed from EmailBuilderTests
-    [Fact]
-    public void ToEml_IncludesBccHeader_WhenSet()
-    {
-        var email = new Email
+        // Tests redistributed from EmailBuilderTests
+        [Fact]
+        public void ToEml_IncludesBccHeader_WhenSet()
         {
-            To = "to@example.com",
-            From = "from@example.com",
-            Subject = "BCC Test",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "BCC included.",
-            Cc = "cc@example.com",
-            Bcc = "bcc@example.com",
-        };
+            var email = new Email
+            {
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "BCC Test",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "BCC included.",
+                Cc = "cc@example.com",
+                Bcc = "bcc@example.com",
+            };
 
-        var result = EmailSerializer.ToEml(email, null);
+            var result = EmailSerializer.ToEml(email, null);
 
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("Cc: cc@example.com", content);
-        Assert.Contains("Bcc: bcc@example.com", content);
-    }
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("Cc: cc@example.com", content);
+            Assert.Contains("Bcc: bcc@example.com", content);
+        }
 
-    [Theory]
-    [InlineData("test.pdf", "application/pdf")]
-    [InlineData("document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
-    [InlineData("spreadsheet.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
-    [InlineData("image.jpg", "image/jpeg")]
-    [InlineData("image.png", "image/png")]
-    [InlineData("text.txt", "text/plain")]
-    [InlineData("unknown.xyz", "application/octet-stream")]
-    public void ToEml_DifferentFileTypes_CorrectContentType(string fileName, string expectedContentType)
-    {
-        var email = new Email
+        [Theory]
+        [InlineData("test.pdf", "application/pdf")]
+        [InlineData("document.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")]
+        [InlineData("spreadsheet.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+        [InlineData("image.jpg", "image/jpeg")]
+        [InlineData("image.png", "image/png")]
+        [InlineData("text.txt", "text/plain")]
+        [InlineData("unknown.xyz", "application/octet-stream")]
+        public void ToEml_DifferentFileTypes_CorrectContentType(string fileName, string expectedContentType)
         {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "File Type Test",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "Test file type detection",
-        };
-        var attachment = new EmailAttachment
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "File Type Test",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "Test file type detection",
+            };
+            var attachment = new EmailAttachment
+            {
+                FileName = fileName,
+                Content = new byte[] { 1, 2, 3, 4, 5 },
+            };
+
+            var result = EmailSerializer.ToEml(email, attachment);
+
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains(expectedContentType, content);
+        }
+
+        [Fact]
+        public void ToEml_WithCustomContentType_UsesCustomType()
         {
-            FileName = fileName,
-            Content = new byte[] { 1, 2, 3, 4, 5 },
-        };
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Custom Content Type",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "Test custom content type",
+            };
+            var attachment = new EmailAttachment
+            {
+                FileName = "custom.test",
+                Content = new byte[] { 1, 2, 3 },
+                ContentType = "application/custom-type",
+            };
 
-        var result = EmailSerializer.ToEml(email, attachment);
+            var result = EmailSerializer.ToEml(email, attachment);
 
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains(expectedContentType, content);
-    }
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("application/custom-type", content);
+        }
 
-    [Fact]
-    public void ToEml_WithCustomContentType_UsesCustomType()
-    {
-        var email = new Email
+        [Fact]
+        public void ToEml_LargeAttachment_HandlesCorrectly()
         {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "Custom Content Type",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "Test custom content type",
-        };
-        var attachment = new EmailAttachment
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Large Attachment",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "Email with large attachment",
+            };
+            var largeContent = new byte[1024 * 1024]; // 1MB
+            Random.Shared.NextBytes(largeContent);
+            var attachment = new EmailAttachment
+            {
+                FileName = "large.dat",
+                Content = largeContent,
+            };
+
+            var result = EmailSerializer.ToEml(email, attachment);
+
+            Assert.True(result.Length > largeContent.Length);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("base64", content.ToLowerInvariant());
+        }
+
+        [Fact]
+        public void ToEml_EmptyBodyAndSubject_CreatesValidEml()
         {
-            FileName = "custom.test",
-            Content = new byte[] { 1, 2, 3 },
-            ContentType = "application/custom-type",
-        };
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = string.Empty,
+                SentDate = new DateTime(2023, 1, 1),
+                Body = string.Empty,
+            };
 
-        var result = EmailSerializer.ToEml(email, attachment);
+            var result = EmailSerializer.ToEml(email, null);
 
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("application/custom-type", content);
-    }
+            Assert.NotNull(result);
+            Assert.True(result.Length > 0);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("Subject:", content);
+        }
 
-    [Fact]
-    public void ToEml_LargeAttachment_HandlesCorrectly()
-    {
-        var email = new Email
+        [Fact]
+        public void ToEml_DateTimeMinValue_HandlesGracefully()
         {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "Large Attachment",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "Email with large attachment",
-        };
-        var largeContent = new byte[1024 * 1024]; // 1MB
-        Random.Shared.NextBytes(largeContent);
-        var attachment = new EmailAttachment
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Date Test",
+                SentDate = DateTime.MinValue,
+                Body = "Test body",
+            };
+
+            var result = EmailSerializer.ToEml(email, null);
+
+            Assert.NotNull(result);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("Date:", content);
+        }
+
+        [Fact]
+        public void ToEml_ZeroLengthAttachment_HandlesGracefully()
         {
-            FileName = "large.dat",
-            Content = largeContent,
-        };
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Empty Attachment",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "Test",
+            };
+            var attachment = new EmailAttachment
+            {
+                FileName = "empty.txt",
+                Content = Array.Empty<byte>(),
+            };
 
-        var result = EmailSerializer.ToEml(email, attachment);
+            var result = EmailSerializer.ToEml(email, attachment);
 
-        Assert.True(result.Length > largeContent.Length);
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("base64", content.ToLowerInvariant());
-    }
+            Assert.NotNull(result);
+            var content = Encoding.UTF8.GetString(result);
+            Assert.Contains("multipart/mixed", content);
+        }
 
-    [Fact]
-    public void ToEml_EmptyBodyAndSubject_CreatesValidEml()
-    {
-        var email = new Email
+        [Fact]
+        public void ToEml_NullAttachmentFileName_HandlesGracefully()
         {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = string.Empty,
-            SentDate = new DateTime(2023, 1, 1),
-            Body = string.Empty,
-        };
+            var email = new Email
+            {
+                To = "test@example.com",
+                From = "sender@example.com",
+                Subject = "Null FileName",
+                SentDate = new DateTime(2024, 1, 1),
+                Body = "Test",
+            };
+            var attachment = new EmailAttachment
+            {
+                FileName = null!,
+                Content = new byte[] { 1, 2, 3 },
+            };
 
-        var result = EmailSerializer.ToEml(email, null);
+            var result = EmailSerializer.ToEml(email, attachment);
 
-        Assert.NotNull(result);
-        Assert.True(result.Length > 0);
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("Subject:", content);
-    }
-
-    [Fact]
-    public void ToEml_DateTimeMinValue_HandlesGracefully()
-    {
-        var email = new Email
-        {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "Date Test",
-            SentDate = DateTime.MinValue,
-            Body = "Test body",
-        };
-
-        var result = EmailSerializer.ToEml(email, null);
-
-        Assert.NotNull(result);
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("Date:", content);
-    }
-
-    [Fact]
-    public void ToEml_ZeroLengthAttachment_HandlesGracefully()
-    {
-        var email = new Email
-        {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "Empty Attachment",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "Test",
-        };
-        var attachment = new EmailAttachment
-        {
-            FileName = "empty.txt",
-            Content = Array.Empty<byte>(),
-        };
-
-        var result = EmailSerializer.ToEml(email, attachment);
-
-        Assert.NotNull(result);
-        var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("multipart/mixed", content);
-    }
-
-    [Fact]
-    public void ToEml_NullAttachmentFileName_HandlesGracefully()
-    {
-        var email = new Email
-        {
-            To = "test@example.com",
-            From = "sender@example.com",
-            Subject = "Null FileName",
-            SentDate = new DateTime(2024, 1, 1),
-            Body = "Test",
-        };
-        var attachment = new EmailAttachment
-        {
-            FileName = null!,
-            Content = new byte[] { 1, 2, 3 },
-        };
-
-        var result = EmailSerializer.ToEml(email, attachment);
-
-        Assert.NotNull(result);
-        Assert.True(result.Length > 0);
-    }
+            Assert.NotNull(result);
+            Assert.True(result.Length > 0);
+        }
     }
 }
