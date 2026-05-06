@@ -21,8 +21,7 @@ namespace Zipper
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"
-Benchmark error: {ex.Message}");
+                    Console.Error.WriteLine($"\nBenchmark error: {ex.Message}");
                     return 1;
                 }
             }
