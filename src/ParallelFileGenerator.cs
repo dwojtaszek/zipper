@@ -1,4 +1,5 @@
 using System.Buffers;
+using Zipper.Emails;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
@@ -198,7 +199,7 @@ namespace Zipper
             var fileContent = generated.Content;
             var attachment = generated.Attachment;
             var pageCount = generated.PageCount;
-            var emailTemplate = generated.EmailTemplate;
+            var email = generated.Email;
 
             var effectivePadding = paddingPerFile;
 
@@ -244,7 +245,7 @@ namespace Zipper
                     DataLength = (int)totalSize,
                     Attachment = attachment,
                     PageCount = pageCount,
-                    EmailTemplate = emailTemplate,
+                    Email = email,
                 };
             }
 
@@ -264,7 +265,7 @@ namespace Zipper
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
-                EmailTemplate = emailTemplate,
+                Email = email,
             };
         }
 
@@ -346,6 +347,6 @@ namespace Zipper
 
         public int PageCount { get; init; } = 1;
 
-        public EmailTemplate? EmailTemplate { get; init; }
+        public Email? Email { get; init; }
     }
 }

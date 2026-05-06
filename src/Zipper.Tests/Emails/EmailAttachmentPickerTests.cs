@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.Emails;
 using Xunit.Abstractions;
 
 namespace Zipper

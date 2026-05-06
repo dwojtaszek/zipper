@@ -162,8 +162,8 @@ gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --j
 | `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
 | `src/ProductionManifestWriter.cs` | `_manifest.json` production manifest writer |
 | `src/EmlGenerationService.cs` | Email Native File generation |
-| `src/EmailBuilder.cs` | MIME construction for Email Native Files |
-| `src/EmailTemplateSystem.cs` | Predefined email templates for test data generation |
+| `src/Emails/Email.cs` | Email domain record (`Zipper.Emails.Email`, replaces `EmailTemplate`) |
+| `src/Emails/EmailContext.cs` | Context record for contextual email generation |
 | `src/EmlFileGenerator.cs` | EML IFileGenerator implementation |
 | `src/PlaceholderFileGenerator.cs` | PDF/JPG/TIFF placeholder content generation |
 | `src/TiffFileGenerator.cs` | TIFF IFileGenerator implementation with multi-page support |

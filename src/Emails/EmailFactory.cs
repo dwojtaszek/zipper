@@ -1,4 +1,4 @@
-namespace Zipper;
+namespace Zipper.Emails;
 
 internal static class EmailFactory
 {
@@ -139,7 +139,7 @@ internal static class EmailFactory
         new("Car Rental Confirmation", "Hello {recipient},\n\nYour car rental has been confirmed for your upcoming trip to {project}.\n\nRental Details:\n• Confirmation Number: {case}\n• Pickup Date: {date}\n• Pickup Location: {place}\n• Vehicle: Compact Car\n• Daily Rate: {amount}\n• Rental Period: {rental_period} days\n\nIncluded Features:\n• Unlimited mileage\n• Basic insurance coverage\n• GPS navigation system\n• 24/7 roadside assistance\n\nRemember to bring your valid driver's license and credit card.\n\nEnjoy your journey!\n\n{company} Car Rentals"),
     };
 
-    internal static EmailTemplate Create(FileWorkItem item, FileGenerationRequest request, Random seeded)
+    internal static Email Create(FileWorkItem item, FileGenerationRequest request, Random seeded)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(request);
@@ -147,13 +147,13 @@ internal static class EmailFactory
         return Create((int)item.Index, (int)item.Index, category: null, seeded);
     }
 
-    internal static EmailTemplate Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)
+    internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)
     {
         ArgumentNullException.ThrowIfNull(random);
         var selectedCategory = category ?? GetRandomCategory(random);
         var templates = GetTemplatesForCategory(selectedCategory);
         var baseTemplate = templates[random.Next(templates.Count)];
-        return new EmailTemplate
+        return new Email
         {
             To = GenerateEmailAddress(recipientIndex, "recipient"),
             From = GenerateEmailAddress(senderIndex, "sender"),
@@ -167,12 +167,12 @@ internal static class EmailFactory
         };
     }
 
-    internal static EmailTemplate CreateContextual(EmailContext context, Random random)
+    internal static Email CreateContextual(EmailContext context, Random random)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(random);
         var baseTemplate = GetContextualBaseTemplate(context);
-        return new EmailTemplate
+        return new Email
         {
             To = GenerateEmailAddress(context.RecipientIndex, context.RecipientType ?? "recipient"),
             From = GenerateEmailAddress(context.SenderIndex, context.SenderType ?? "sender"),

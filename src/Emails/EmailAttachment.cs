@@ -1,18 +1,17 @@
-namespace Zipper
+namespace Zipper.Emails;
+
+/// <summary>
+/// Represents attachment information for emails.
+/// </summary>
+public record EmailAttachment
 {
-    /// <summary>
-    /// Represents attachment information for emails.
-    /// </summary>
-    public record AttachmentInfo
-    {
-        public string FileName { get; init; } = string.Empty;
+    public string FileName { get; init; } = string.Empty;
 
-        public byte[] Content { get; init; } = Array.Empty<byte>();
+    public byte[] Content { get; init; } = Array.Empty<byte>();
 
-        public string? ContentType { get; init; }
+    public string? ContentType { get; init; }
 
-        public string? ContentId { get; init; }
+    public string? ContentId { get; init; }
 
-        public bool IsInline { get; init; } = false;
-    }
+    public bool IsInline { get; init; } = false;
 }

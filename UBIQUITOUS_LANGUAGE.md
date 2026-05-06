@@ -20,9 +20,9 @@
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Email** | A **Native File** with File Type `eml`. Contains email metadata (To, From, Subject, Sent Date) and may have **Attachments**. | EML file, message |
+| **Email** | A **Native File** with File Type `eml`. Contains email metadata (To, From, Subject, Sent Date) and may have **Attachments**. Represented by `Zipper.Emails.Email`. | EML file, message |
 | **Email Metadata** | Intrinsic columns in the **Load File** for **Emails** (To, From, CC, Subject, Sent Date). Always included regardless of `--with-metadata` flag. | Email headers, email-specific columns |
-| **Attachment** | A **Native File** (any type) selected randomly from the generated set and embedded within an **Email** as binary content. The **Attachment Rate** determines what percentage of **Emails** have **Attachments**. | Enclosed file, embedded document |
+| **Attachment** | A **Native File** (any type) selected randomly from the generated set and embedded within an **Email** as binary content. The **Attachment Rate** determines what percentage of **Emails** have **Attachments**. Represented by `Zipper.Emails.EmailAttachment`. | Enclosed file, embedded document |
 | **Attachment Rate** | The percentage (0–100) of **Emails** that receive a random **Attachment**. Controlled by `--attachment-rate`. | Attachment probability, attachment percentage |
 
 ---

@@ -1,5 +1,7 @@
 using System.Text;
 
+using Zipper.Emails;
+
 namespace Zipper;
 
 internal class MetadataRowBuilder
@@ -55,7 +57,7 @@ internal class MetadataRowBuilder
 
     public string GetEmailTo(FileWorkItem workItem, FileData fileData)
     {
-        return fileData.EmailTemplate?.To ?? $"recipient{workItem.Index}@example.com";
+        return fileData.Email?.To ?? $"recipient{workItem.Index}@example.com";
     }
 
     public string GetEmailTo(FileWorkItem workItem)
@@ -65,7 +67,7 @@ internal class MetadataRowBuilder
 
     public string GetEmailFrom(FileWorkItem workItem, FileData fileData)
     {
-        return fileData.EmailTemplate?.From ?? $"sender{workItem.Index}@example.com";
+        return fileData.Email?.From ?? $"sender{workItem.Index}@example.com";
     }
 
     public string GetEmailFrom(FileWorkItem workItem)
@@ -75,7 +77,7 @@ internal class MetadataRowBuilder
 
     public string GetEmailSubject(FileWorkItem workItem, FileData fileData)
     {
-        return fileData.EmailTemplate?.Subject ?? $"Email Subject {workItem.Index}";
+        return fileData.Email?.Subject ?? $"Email Subject {workItem.Index}";
     }
 
     public string GetEmailSubject(FileWorkItem workItem)
@@ -85,7 +87,7 @@ internal class MetadataRowBuilder
 
     public string GetEmailSentDate(FileWorkItem workItem, FileData fileData)
     {
-        return fileData.EmailTemplate?.SentDate.ToString("yyyy-MM-dd HH:mm:ss") ?? this.now.AddDays(-this.random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        return fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss") ?? this.now.AddDays(-this.random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
     }
 
     public string GetEmailSentDate(FileWorkItem workItem)

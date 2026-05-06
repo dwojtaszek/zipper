@@ -1,4 +1,4 @@
-namespace Zipper;
+namespace Zipper.Emails;
 
 /// <summary>
 /// A reference to a generated native file that can be used as an email attachment.
@@ -22,8 +22,8 @@ internal interface IEmailAttachmentPicker
     /// <param name="attachmentRate">Attachment rate as a percentage (0–100).</param>
     /// <param name="pool">Pool of native files eligible to be attached.</param>
     /// <param name="seeded">Seeded random source for deterministic output.</param>
-    /// <returns>An <see cref="AttachmentInfo"/> for the chosen file, or null.</returns>
-    AttachmentInfo? Pick(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded);
+    /// <returns>An <see cref="EmailAttachment"/> for the chosen file, or null.</returns>
+    EmailAttachment? Pick(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded);
 }
 
 /// <summary>
@@ -45,7 +45,7 @@ internal sealed class EmailAttachmentPicker : IEmailAttachmentPicker
     };
 
     /// <inheritdoc/>
-    public AttachmentInfo? Pick(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded)
+    public EmailAttachment? Pick(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded)
     {
         ArgumentNullException.ThrowIfNull(pool);
         ArgumentNullException.ThrowIfNull(seeded);
@@ -77,7 +77,7 @@ internal sealed class EmailAttachmentPicker : IEmailAttachmentPicker
         }
 
         var chosen = candidates[seeded.Next(candidates.Count)];
-        return new AttachmentInfo
+        return new EmailAttachment
         {
             FileName = chosen.FileName,
             Content = chosen.Content,
