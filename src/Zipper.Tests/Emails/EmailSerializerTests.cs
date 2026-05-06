@@ -205,8 +205,6 @@ namespace Zipper
             Assert.Contains("Content-ID: <img-001>", content);
             Assert.Contains("Content-Disposition: inline; filename=\"image.png\"", content);
         }
-    }
-}
 
     // Tests redistributed from EmailBuilderTests
     [Fact]
@@ -394,5 +392,6 @@ namespace Zipper
 
         Assert.NotNull(result);
         Assert.True(result.Length > 0);
-        }
+    }
+    }
 }
