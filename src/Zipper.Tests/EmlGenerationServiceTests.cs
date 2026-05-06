@@ -1,6 +1,7 @@
 using System.Text;
 using Xunit;
 using Xunit.Abstractions;
+using Zipper.Emails;
 
 namespace Zipper
 {

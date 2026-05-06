@@ -35,7 +35,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
 
     /// <summary>
     /// Generates EML-specific column values for a file.
-    /// Uses actual EmailTemplate metadata when available for consistency with EML content.
+    /// Uses actual Email metadata when available for consistency with EML content.
     /// </summary>
     protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
     {

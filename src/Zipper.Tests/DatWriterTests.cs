@@ -1,6 +1,7 @@
 using System.Text;
 using Xunit;
 using Zipper.Config;
+using Zipper.Emails;
 using Zipper.LoadFiles;
 
 namespace Zipper
@@ -116,7 +117,7 @@ namespace Zipper
         {
             var request = DefaultRequest();
             request.Output = request.Output with { FileType = "eml" };
-            var template = new EmailTemplate
+            var template = new Email
             {
                 To = "test@example.com",
                 From = "sender@example.com",
@@ -137,7 +138,7 @@ namespace Zipper
                     },
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
-                    EmailTemplate = template,
+                    Email = template,
                 },
             };
 
@@ -247,7 +248,7 @@ namespace Zipper
                     },
                     Data = Encoding.UTF8.GetBytes("content"),
                     DataLength = 7,
-                    EmailTemplate = null,
+                    Email = null,
                 },
             };
 

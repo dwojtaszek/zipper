@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper;
 
 /// <summary>
@@ -18,7 +20,7 @@ internal record GeneratedFileContent
     /// <summary>
     /// Email template used to generate EML content, propagated to FileData for load file metadata consistency.
     /// </summary>
-    public EmailTemplate? EmailTemplate { get; init; }
+    public Email? Email { get; init; }
 
     /// <summary>
     /// Page count (populated for TIFF with page range).

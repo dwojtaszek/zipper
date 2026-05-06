@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper;
 
 /// <summary>
@@ -25,7 +27,7 @@ internal sealed class EmlFileGenerator : IFileGenerator
         {
             Content = bytes,
             Attachment = attachmentInfo != null ? (attachmentInfo.FileName, attachmentInfo.Content) : null,
-            EmailTemplate = email,
+            Email = email,
         };
     }
 }

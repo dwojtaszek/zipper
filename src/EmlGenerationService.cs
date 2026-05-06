@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper
 {
     /// <summary>
@@ -39,7 +41,7 @@ namespace Zipper
         /// Gets the email template used to generate this EML content.
         /// Propagated to FileData for load file metadata consistency.
         /// </summary>
-        public EmailTemplate? Template { get; init; }
+        public Email? Template { get; init; }
     }
 
     /// <summary>

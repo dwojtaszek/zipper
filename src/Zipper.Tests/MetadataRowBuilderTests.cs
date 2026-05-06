@@ -1,6 +1,7 @@
 using Xunit;
 
 using Zipper.Config;
+using Zipper.Emails;
 
 namespace Zipper
 {
@@ -119,11 +120,11 @@ namespace Zipper
         public void GetEmailTo_FromTemplate_UsesTemplate()
         {
             var builder = CreateBuilder();
-            var template = new EmailTemplate { To = "lawyer@firm.com" };
+            var template = new Email { To = "lawyer@firm.com" };
             var fileData = new FileData
             {
                 WorkItem = new FileWorkItem { Index = 1 },
-                EmailTemplate = template,
+                Email = template,
             };
             Assert.Equal("lawyer@firm.com", builder.GetEmailTo(fileData.WorkItem, fileData));
         }
@@ -159,7 +160,7 @@ namespace Zipper
         public void GetEmailSentDate_FromTemplate_UsesTemplate()
         {
             var builder = CreateBuilder();
-            var template = new EmailTemplate
+            var template = new Email
             {
                 To = "a@b.com",
                 SentDate = new DateTime(2025, 6, 15, 14, 30, 0, DateTimeKind.Utc),
@@ -167,7 +168,7 @@ namespace Zipper
             var fileData = new FileData
             {
                 WorkItem = new FileWorkItem { Index = 1 },
-                EmailTemplate = template,
+                Email = template,
             };
             Assert.Equal("2025-06-15 14:30:00", builder.GetEmailSentDate(fileData.WorkItem, fileData));
         }

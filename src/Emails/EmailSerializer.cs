@@ -1,10 +1,10 @@
 using System.Buffers;
 using System.Text;
 
-namespace Zipper;
+namespace Zipper.Emails;
 
 /// <summary>
-/// Serializes an <see cref="EmailTemplate"/> and optional attachment to EML bytes.
+/// Serializes an <see cref="Email"/> and optional attachment to EML bytes.
 /// </summary>
 internal static class EmailSerializer
 {
@@ -14,7 +14,7 @@ internal static class EmailSerializer
     /// <param name="email">Email metadata and body content.</param>
     /// <param name="attachment">Optional attachment.</param>
     /// <returns>Byte array representing the EML file content.</returns>
-    public static byte[] ToEml(EmailTemplate email, AttachmentInfo? attachment)
+    public static byte[] ToEml(Email email, EmailAttachment? attachment)
     {
         ArgumentNullException.ThrowIfNull(email);
         using var ms = new MemoryStream();
@@ -27,7 +27,7 @@ internal static class EmailSerializer
         return ms.ToArray();
     }
 
-    internal static void WriteToWriter(TextWriter writer, EmailTemplate email, AttachmentInfo? attachment)
+    internal static void WriteToWriter(TextWriter writer, Email email, EmailAttachment? attachment)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(email);
@@ -46,7 +46,7 @@ internal static class EmailSerializer
         }
     }
 
-    private static void BuildHeaders(TextWriter writer, EmailTemplate email, AttachmentInfo? attachment, string boundary)
+    private static void BuildHeaders(TextWriter writer, Email email, EmailAttachment? attachment, string boundary)
     {
         writer.WriteLine($"From: {email.From}");
         writer.WriteLine($"To: {email.To}");
@@ -88,7 +88,7 @@ internal static class EmailSerializer
         }
     }
 
-    private static void BuildMultipartContent(TextWriter writer, EmailTemplate email, AttachmentInfo attachment, string boundary)
+    private static void BuildMultipartContent(TextWriter writer, Email email, EmailAttachment attachment, string boundary)
     {
         writer.WriteLine($"--{boundary}");
         writer.WriteLine("Content-Type: text/plain; charset=utf-8");
@@ -167,7 +167,7 @@ internal static class EmailSerializer
         writer.WriteLine($"--{boundary}--");
     }
 
-    private static void BuildSimpleContent(TextWriter writer, EmailTemplate email)
+    private static void BuildSimpleContent(TextWriter writer, Email email)
     {
         writer.WriteLine("Content-Type: text/plain; charset=utf-8");
         writer.WriteLine("Content-Transfer-Encoding: 8bit");
@@ -180,7 +180,7 @@ internal static class EmailSerializer
         return "----=" + Guid.NewGuid().ToString("N");
     }
 
-    private static string GetContentType(AttachmentInfo attachment)
+    private static string GetContentType(EmailAttachment attachment)
     {
         if (!string.IsNullOrEmpty(attachment.ContentType))
         {
