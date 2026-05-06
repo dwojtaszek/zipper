@@ -115,8 +115,12 @@ namespace Zipper.Tests
 
         [Theory]
         [InlineData(0.5, 0.0)] // Middle probability
-        [InlineData(0.025, -1.96)] // Low probability
-        [InlineData(0.975, 1.96)] // High probability
+        [InlineData(0.025, -1.96)] // Low probability (central region)
+        [InlineData(0.975, 1.96)] // High probability (central region)
+        [InlineData(0.01, -2.326)] // Lower region (p < pLow)
+        [InlineData(0.001, -3.090)] // Lower region edge (clamped min)
+        [InlineData(0.99, 2.326)] // Upper region (p > pHigh)
+        [InlineData(0.999, 3.090)] // Upper region edge (clamped max)
         public void InverseNormalCDF_KnownProbabilities_ReturnsExpectedValues(double probability, double expectedApprox)
         {
             // Act
