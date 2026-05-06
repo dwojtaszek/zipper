@@ -1,0 +1,114 @@
+{
+  "name": "test-every-kind",
+  "description": "Custom profile exercising every Column Kind and Distribution Pattern",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "statusValues": {
+      "values": ["Active", "Inactive", "Pending", "Closed", "Archived"]
+    },
+    "categoryValues": {
+      "values": ["CategoryA", "CategoryB", "CategoryC", "CategoryD"],
+      "weights": [40, 30, 20, 10]
+    },
+    "authorValues": {
+      "count": 20,
+      "distribution": "pareto",
+      "prefix": "Author_"
+    }
+  },
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true
+    },
+    {
+      "name": "TEXTFIELD",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "LONGTEXTFIELD",
+      "type": "longtext",
+      "required": true
+    },
+    {
+      "name": "DATEFIELD",
+      "type": "date",
+      "required": true,
+      "dateRange": { "min": "2018-01-01", "max": "2024-12-31" }
+    },
+    {
+      "name": "DATETIMEFIELD",
+      "type": "datetime",
+      "required": true,
+      "dateRange": { "min": "2018-01-01", "max": "2024-12-31" }
+    },
+    {
+      "name": "NUMBERFIELD",
+      "type": "number",
+      "required": true,
+      "range": { "min": 0, "max": 10000 },
+      "distribution": "uniform"
+    },
+    {
+      "name": "NUMBERGAUSSIAN",
+      "type": "number",
+      "required": true,
+      "range": { "min": 100, "max": 9900 },
+      "distribution": "gaussian"
+    },
+    {
+      "name": "NUMBEREXPONENTIAL",
+      "type": "number",
+      "required": true,
+      "range": { "min": 0, "max": 5000 },
+      "distribution": "exponential"
+    },
+    {
+      "name": "NUMBERPARETO",
+      "type": "number",
+      "required": true,
+      "range": { "min": 0, "max": 50000 },
+      "distribution": "pareto"
+    },
+    {
+      "name": "BOOLEANFIELD",
+      "type": "boolean",
+      "required": true,
+      "truePercentage": 60,
+      "format": "YN"
+    },
+    {
+      "name": "CODEDFIELD",
+      "type": "coded",
+      "required": true,
+      "dataSource": "statusValues"
+    },
+    {
+      "name": "CODEDWEIGHTED",
+      "type": "coded",
+      "required": true,
+      "dataSource": "categoryValues"
+    },
+    {
+      "name": "EMAILFIELD",
+      "type": "email",
+      "required": true
+    },
+    {
+      "name": "EMAILMULTI",
+      "type": "email",
+      "required": true,
+      "multiValue": true,
+      "multiValueCount": { "min": 2, "max": 4 }
+    }
+  ]
+}

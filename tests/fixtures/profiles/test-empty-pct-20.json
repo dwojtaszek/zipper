@@ -1,0 +1,23 @@
+{
+  "name": "test-empty-pct-20",
+  "description": "Single-column profile for Empty Percentage chi-square testing at 20%",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "dateFormat": "yyyy-MM-dd"
+  },
+  "dataSources": {},
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true
+    },
+    {
+      "name": "TEXTFIELD",
+      "type": "text",
+      "emptyPercentage": 20
+    }
+  ]
+}

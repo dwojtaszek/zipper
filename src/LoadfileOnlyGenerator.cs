@@ -71,7 +71,9 @@ internal static class LoadfileOnlyGenerator
 
         ILoadFileWriter writer = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
             ? new LoadfileOnlyOptWriter()
-            : new LoadfileOnlyDatWriter();
+            : request.Metadata.ColumnProfile != null
+                ? new ProfileDrivenDatWriter()
+                : new LoadfileOnlyDatWriter();
 
         await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
