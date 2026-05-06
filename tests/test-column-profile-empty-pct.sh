@@ -32,7 +32,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 count_empties() {
     local dat_file="$1"
     local col="$2"
-    tail -n +2 "$dat_file" | tr '\xfe' '' | tr '\x14' '\t' | \
+    tail -n +2 "$dat_file" | tr -d $'\xfe\r' | tr $'\x14' $'\t' | \
         awk -F'\t' -v c="$col" '{if ($c == "") emp++} END {print emp+0}'
 }
 

@@ -11,6 +11,8 @@
 #   2. Every data row has the correct column count.
 #   3. Seeded output is deterministic (two runs with the same seed are byte-identical).
 #   4. Seed sensitivity: same profile + filetype, seed 42 vs 1337 → different bytes.
+#
+# Requires bash 3.2+ (compatible with macOS system bash).
 
 set -euo pipefail
 
@@ -35,11 +37,12 @@ SEEDS=(42 1337)
 PASSED=0
 TOTAL=0
 
-# Extracts column names from the first line of a DAT load file.
+# Extracts column names from the first line of a DAT load file, one per line.
 # DAT uses ASCII-20 (0x14) as column delimiter and ASCII-254 (0xfe, þ) as quote char.
+# Uses $'...' ANSI-C quoting so bash passes actual bytes to tr rather than literals.
 extract_columns() {
     local dat_file="$1"
-    head -1 "$dat_file" | tr '\x14' '\n' | tr -d '\xfe'
+    head -1 "$dat_file" | tr $'\x14' $'\n' | tr -d $'\xfe\r'
 }
 
 for profile in "${PROFILES[@]}"; do
@@ -47,9 +50,6 @@ for profile in "${PROFILES[@]}"; do
     if [[ ! -f "$expected_file" ]]; then
         print_error "Missing expected-headers fixture: $expected_file"
     fi
-
-    # Collect one reference run per (profile, filetype) pair for seed-sensitivity check
-    declare -A seed42_files
 
     for filetype in "${FILETYPES[@]}"; do
         for seed in "${SEEDS[@]}"; do
@@ -84,9 +84,9 @@ for profile in "${PROFILES[@]}"; do
 
             # --- Assertion 2: Every row has the correct column count ---
             expected_col_count=$(wc -l < "$expected_file" | tr -d ' ')
-            # Skip header line; for each data line count delimiters (cols = delimiters + 1)
-            bad_rows=$(tail -n +2 "$dat_file" | awk -v expected="$expected_col_count" '
-                BEGIN { FS = "\x14"; bad = 0 }
+            # Skip header line; count fields per row (delimiter = ASCII 20)
+            bad_rows=$(tail -n +2 "$dat_file" | awk -F$'\x14' -v expected="$expected_col_count" '
+                BEGIN { bad = 0 }
                 NF > 0 && NF != expected { bad++ }
                 END { print bad }
             ')
@@ -94,11 +94,8 @@ for profile in "${PROFILES[@]}"; do
                 print_error "${combo}: $bad_rows row(s) have wrong column count (expected $expected_col_count)"
             fi
 
-            # --- Assertion 3: Determinism — save path for second run ---
+            # --- Assertion 3: Determinism — re-run with same seed and compare ---
             if [[ "$seed" -eq 42 ]]; then
-                seed42_files["$filetype"]="$dat_file"
-
-                # Re-run with same seed and compare byte-for-byte
                 rerun_dir="${out_dir}_rerun"
                 mkdir -p "$rerun_dir"
                 zipper \
@@ -121,9 +118,8 @@ for profile in "${PROFILES[@]}"; do
 
         # --- Assertion 4: Seed sensitivity — seed=42 vs seed=1337 differ ---
         TOTAL=$((TOTAL + 1))
-        seed42_dat="${seed42_files[$filetype]}"
-        seed1337_dir="$TEST_OUTPUT_DIR/${profile}_${filetype}_seed1337"
-        seed1337_dat=$(find "$seed1337_dir" -name "*.dat" | head -1)
+        seed42_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed42" -name "*.dat" | head -1)
+        seed1337_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed1337" -name "*.dat" | head -1)
 
         if diff -q "$seed42_dat" "$seed1337_dat" > /dev/null 2>&1; then
             print_error "seed-sensitivity (${profile}/${filetype}): seed=42 and seed=1337 produced identical output"
@@ -131,9 +127,6 @@ for profile in "${PROFILES[@]}"; do
         print_success "seed-sensitivity (${profile}/${filetype}): seeds produce different bytes"
         PASSED=$((PASSED + 1))
     done
-
-    unset seed42_files
-    declare -A seed42_files
 done
 
 echo ""

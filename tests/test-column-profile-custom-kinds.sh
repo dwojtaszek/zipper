@@ -45,7 +45,7 @@ EXPECTED_COLS=(
 
 # --- Assertion 1: Header columns match fixture declaration ---
 print_info "Checking column headers..."
-actual_cols=$(head -1 "$dat_file" | tr '\x14' '\n' | tr -d '\xfe')
+actual_cols=$(head -1 "$dat_file" | tr $'\x14' $'\n' | tr -d $'\xfe\r')
 expected_joined=$(printf '%s\n' "${EXPECTED_COLS[@]}")
 if [[ "$actual_cols" != "$expected_joined" ]]; then
     echo "ACTUAL:   $actual_cols" >&2
@@ -56,18 +56,14 @@ print_success "Headers match"
 
 # --- Assertion 2: Every row has exactly 14 columns ---
 print_info "Checking column count per row..."
-bad_rows=$(tail -n +2 "$dat_file" | awk '
-    BEGIN { FS="\x14"; bad=0 }
-    NF != 14 { bad++ }
-    END { print bad }
-')
+bad_rows=$(tail -n +2 "$dat_file" | awk -F$'\x14' 'NF != 14 { bad++ } END { print bad+0 }')
 [[ "$bad_rows" -gt 0 ]] && print_error "$bad_rows row(s) have wrong column count (expected 14)"
 print_success "All rows have 14 columns"
 
 # --- Assertion 3: Per-kind invariants ---
 # Parse data rows into a TSV-like format (replace DAT delimiter with TAB, strip quotes)
 tmp_tsv="$TEST_OUTPUT_DIR/data.tsv"
-tail -n +2 "$dat_file" | tr '\xfe' '' | tr '\x14' '\t' > "$tmp_tsv"
+tail -n +2 "$dat_file" | tr -d $'\xfe\r' | tr $'\x14' $'\t' > "$tmp_tsv"
 
 # DOCID (identifier): unique, matches DOC########
 print_info "Checking DOCID (identifier) invariants..."
