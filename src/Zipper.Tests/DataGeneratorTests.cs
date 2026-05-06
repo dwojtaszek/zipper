@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Xunit;
 using Zipper.Profiles;
 
@@ -259,7 +258,6 @@ public class DataGeneratorTests
             },
         };
         var generator = new DataGenerator(profile, seed: 42);
-        var emailRegex = new System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$");
         var validCoded = new HashSet<string> { "Active", "Inactive", "Pending", "Closed", "Archived" };
         var validBool = new HashSet<string> { "Y", "N" };
 
@@ -275,7 +273,8 @@ public class DataGeneratorTests
             // date: yyyy-MM-dd format
             if (!string.IsNullOrEmpty(row["DATEFIELD"]))
             {
-                Assert.True(DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out _),
+                Assert.True(
+                    DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out _),
                     $"DATEFIELD '{row["DATEFIELD"]}' is not yyyy-MM-dd");
             }
 
@@ -307,7 +306,7 @@ public class DataGeneratorTests
             // email: matches pattern
             if (!string.IsNullOrEmpty(row["EMAILFIELD"]))
             {
-                Assert.Matches(emailRegex, row["EMAILFIELD"]);
+                Assert.Matches(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", row["EMAILFIELD"]);
             }
         }
     }
@@ -363,5 +362,4 @@ public class DataGeneratorTests
             Assert.InRange(observed, emptyPct - 5.0, emptyPct + 5.0);
         }
     }
-
 }

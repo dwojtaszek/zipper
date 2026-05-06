@@ -211,5 +211,4 @@ public class ColumnProfileTests
             Assert.Equal(profile.Columns[i].Name, columnNames[i]);
         }
     }
-
 }
