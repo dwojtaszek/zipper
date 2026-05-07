@@ -192,42 +192,26 @@ namespace Zipper
         }
 
         [Fact]
-        public void GenerateEmlContent_BackwardCompatibilityMethod_WorksSameAsConfigMethod()
+        public void GenerateEmlContent_WithAllParameters_ProducesValidResult()
         {
             // Arrange
-            var fileIndex = 42;
-            var attachmentRate = 75;
-            var category = EmailCategory.Technical;
+            var config = new EmlGenerationConfig
+            {
+                FileIndex = 42,
+                AttachmentRate = 75,
+                Category = EmailCategory.Technical,
+            };
 
-            // Act - The two methods should behave similarly, though content may differ due to randomness
-            var configResult = EmlGenerationService.GenerateEmlContent(
-                new EmlGenerationConfig
-                {
-                    FileIndex = fileIndex,
-                    AttachmentRate = attachmentRate,
-                    Category = category,
-                });
+            // Act
+            var result = EmlGenerationService.GenerateEmlContent(config);
 
-            var directResult = EmlGenerationService.GenerateEmlContent(
-                fileIndex,
-                attachmentRate,
-                category);
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.Content.Length > 0);
 
-            // Assert - Both should produce valid EML content (not necessarily identical due to randomness)
-            Assert.NotNull(configResult);
-            Assert.NotNull(directResult);
-            Assert.True(configResult.Content.Length > 0);
-            Assert.True(directResult.Content.Length > 0);
-
-            // Both methods should use the same config parameters
-            var configContent = Encoding.UTF8.GetString(configResult.Content);
-            var directContent = Encoding.UTF8.GetString(directResult.Content);
-
-            // Both should contain valid email structure
-            Assert.Contains("From:", configContent);
-            Assert.Contains("To:", configContent);
-            Assert.Contains("From:", directContent);
-            Assert.Contains("To:", directContent);
+            var content = Encoding.UTF8.GetString(result.Content);
+            Assert.Contains("From:", content);
+            Assert.Contains("To:", content);
         }
 
         [Fact]
