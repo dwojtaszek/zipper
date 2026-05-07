@@ -266,5 +266,95 @@ namespace Zipper
             Assert.NotNull(result);
             Assert.NotEmpty(result);
         }
+
+        [Fact]
+        public void Constructor_ShouldSetFileType()
+        {
+            // Arrange & Act
+            var generator = new OfficeFileGenerator("docx");
+
+            // Assert
+            Assert.Equal("docx", generator.FileType);
+        }
+
+        [Fact]
+        public void IsPlaceholderBased_ShouldReturnFalse()
+        {
+            // Arrange
+            var generator = new OfficeFileGenerator("docx");
+
+            // Act & Assert
+            Assert.False(generator.IsPlaceholderBased);
+        }
+
+        [Fact]
+        public void RequiresSequentialProcessing_ShouldReturnFalse()
+        {
+            // Arrange
+            var generator = new OfficeFileGenerator("docx");
+            var request = new FileGenerationRequest();
+
+            // Act
+            var result = generator.RequiresSequentialProcessing(request);
+
+            // Assert
+            Assert.False(result);
+        }
+
+        [Fact]
+        public void Generate_WithDocx_ShouldReturnValidGeneratedFileContent()
+        {
+            // Arrange
+            var generator = new OfficeFileGenerator("docx");
+            var workItem = new FileWorkItem { Index = 1 };
+            var request = new FileGenerationRequest();
+
+            // Act
+            var result = generator.Generate(workItem, request);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotEmpty(result.Content);
+
+            using var stream = new MemoryStream(result.Content);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            Assert.NotNull(archive);
+        }
+
+        [Fact]
+        public void Generate_WithXlsx_ShouldReturnValidGeneratedFileContent()
+        {
+            // Arrange
+            var generator = new OfficeFileGenerator("xlsx");
+            var workItem = new FileWorkItem { Index = 1 };
+            var request = new FileGenerationRequest();
+
+            // Act
+            var result = generator.Generate(workItem, request);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.NotEmpty(result.Content);
+
+            using var stream = new MemoryStream(result.Content);
+            using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+            Assert.NotNull(archive);
+        }
+
+        [Fact]
+        public void Generate_ShouldMatchStaticGenerateContent()
+        {
+            // Arrange
+            var generator = new OfficeFileGenerator("docx");
+            var workItem = new FileWorkItem { Index = 5 };
+            var request = new FileGenerationRequest();
+
+            // Act
+            var instanceResult = generator.Generate(workItem, request);
+            var staticResult = OfficeFileGenerator.GenerateContent("docx", workItem);
+
+            // Assert
+            Assert.Equal(staticResult, instanceResult.Content);
+        }
     }
 }

@@ -20,8 +20,7 @@ internal static class FileGeneratorFactory
         {
             "pdf" or "jpg" or "jpeg" or "png" or "bmp" or "txt" => new PlaceholderFileGenerator(lower),
             "eml" => new EmlFileGenerator(),
-            "docx" => new OfficeFileGeneratorAdapter(lower),
-            "xlsx" => new OfficeFileGeneratorAdapter(lower),
+            "docx" or "xlsx" => new OfficeFileGenerator(lower),
             "tiff" => new TiffFileGenerator(request),
             _ => null,
         };

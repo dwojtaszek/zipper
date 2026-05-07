@@ -3,10 +3,11 @@ using System.IO.Compression;
 namespace Zipper;
 
 /// <summary>
-/// Generates Microsoft Office format documents (DOCX, XLSX)
+/// Generates Microsoft Office format documents (DOCX, XLSX).
+/// Implements <see cref="IFileGenerator"/> directly for pipeline use.
 /// Pre-computes minimal valid Office files at static init for O(1) generation.
 /// </summary>
-internal static class OfficeFileGenerator
+internal sealed class OfficeFileGenerator : IFileGenerator
 {
     /// <summary>
     /// Pre-computed minimal valid DOCX document.
@@ -17,6 +18,25 @@ internal static class OfficeFileGenerator
     /// Pre-computed minimal valid XLSX spreadsheet.
     /// </summary>
     private static readonly byte[] PrecomputedXlsx = CreateMinimalXlsx();
+
+    public OfficeFileGenerator(string fileType)
+    {
+        this.FileType = fileType;
+    }
+
+    public string FileType { get; }
+
+    public bool IsPlaceholderBased => false;
+
+    public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
+
+    public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
+    {
+        return new GeneratedFileContent
+        {
+            Content = GenerateContent(this.FileType, workItem),
+        };
+    }
 
     /// <summary>
     /// Returns a pre-computed minimal DOCX document.
@@ -76,11 +96,11 @@ internal static class OfficeFileGenerator
 
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, false))
         {
-            var contentTypes = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
-                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
-                "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
-                "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-wordprocessingml.document.main+xml\"/>" +
+            var contentTypes = "<?xml version="1.0" encoding="UTF-8" standalone="yes"?>" +
+                "<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">" +
+                "<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>" +
+                "<Default Extension="xml" ContentType="application/xml"/>" +
+                "<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-wordprocessingml.document.main+xml"/>" +
                 "</Types>";
 
             var contentTypesEntry = archive.CreateEntry("[Content_Types].xml");
@@ -90,9 +110,9 @@ internal static class OfficeFileGenerator
                 contentTypesStream.Write(contentTypesBytes, 0, contentTypesBytes.Length);
             }
 
-            var rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
-                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"/word/document.xml\"/>" +
+            var rels = "<?xml version="1.0" encoding="UTF-8" standalone="yes"?>" +
+                "<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">" +
+                "<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="/word/document.xml"/>" +
                 "</Relationships>";
 
             var relsEntry = archive.CreateEntry("_rels/.rels");
@@ -102,8 +122,8 @@ internal static class OfficeFileGenerator
                 relsStream.Write(relsBytes, 0, relsBytes.Length);
             }
 
-            var documentXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
+            var documentXml = "<?xml version="1.0" encoding="UTF-8" standalone="yes"?>" +
+                "<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">" +
                 "<w:body>" +
                 "<w:p><w:r><w:t>This is a sample document for eDiscovery testing.</w:t></w:r></w:p>" +
                 "</w:body>" +
