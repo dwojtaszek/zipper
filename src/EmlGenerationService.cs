@@ -74,27 +74,5 @@ namespace Zipper
                 Template = email,
             };
         }
-
-        /// <summary>
-        /// Generates EML content using explicit parameters for backward compatibility.
-        /// </summary>
-        /// <param name="fileIndex">Index of the file being generated.</param>
-        /// <param name="attachmentRate">Attachment rate as percentage (0-100).</param>
-        /// <param name="category">Optional email category constraint.</param>
-        /// <returns>EML generation result with content and optional attachment.</returns>
-        public static EmlGenerationResult GenerateEmlContent(
-            int fileIndex,
-            int attachmentRate,
-            EmailCategory? category = null)
-        {
-            var config = new EmlGenerationConfig
-            {
-                FileIndex = fileIndex,
-                AttachmentRate = attachmentRate,
-                Category = category,
-            };
-
-            return GenerateEmlContent(config);
-        }
     }
 }
