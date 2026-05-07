@@ -168,8 +168,7 @@ gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --j
 | `src/PlaceholderFileGenerator.cs` | PDF/JPG/TIFF placeholder content generation |
 | `src/TiffFileGenerator.cs` | TIFF IFileGenerator implementation with multi-page support |
 | `src/TiffMultiPageGenerator.cs` | TIFF page count metadata + placeholder content (static helper) |
-| `src/OfficeFileGenerator.cs` | DOCX/XLSX Native File generation |
-| `src/OfficeFileGeneratorAdapter.cs` | Adapts OfficeFileGenerator to IFileGenerator |
+| `src/OfficeFileGenerator.cs` | DOCX/XLSX Native File generation; implements IFileGenerator directly |
 | `src/PlaceholderFiles.cs` | Pre-computed byte content for PDF, JPG, TIFF |
 | `src/BatesNumberGenerator.cs` | Bates Number generation |
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |

@@ -3,10 +3,11 @@ using System.IO.Compression;
 namespace Zipper;
 
 /// <summary>
-/// Generates Microsoft Office format documents (DOCX, XLSX)
+/// Generates Microsoft Office format documents (DOCX, XLSX).
+/// Implements <see cref="IFileGenerator"/> directly for pipeline use.
 /// Pre-computes minimal valid Office files at static init for O(1) generation.
 /// </summary>
-internal static class OfficeFileGenerator
+internal sealed class OfficeFileGenerator : IFileGenerator
 {
     /// <summary>
     /// Pre-computed minimal valid DOCX document.
@@ -17,6 +18,25 @@ internal static class OfficeFileGenerator
     /// Pre-computed minimal valid XLSX spreadsheet.
     /// </summary>
     private static readonly byte[] PrecomputedXlsx = CreateMinimalXlsx();
+
+    public OfficeFileGenerator(string fileType)
+    {
+        this.FileType = fileType;
+    }
+
+    public string FileType { get; }
+
+    public bool IsPlaceholderBased => false;
+
+    public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
+
+    public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
+    {
+        return new GeneratedFileContent
+        {
+            Content = GenerateContent(this.FileType, workItem),
+        };
+    }
 
     /// <summary>
     /// Returns a pre-computed minimal DOCX document.
