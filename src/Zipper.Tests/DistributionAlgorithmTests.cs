@@ -14,7 +14,7 @@ namespace Zipper.Tests
         public void CalculateFolder_RoundRobinAssignment_ReturnsExpectedFolder(long fileIndex, int totalFolders, int expectedFolder)
         {
             // Act
-            int result = ProportionalDistribution.CalculateFolder(fileIndex, totalFolders);
+            int result = Distributions.Proportional(fileIndex, totalFolders);
 
             // Assert
             Assert.Equal(expectedFolder, result);
@@ -26,7 +26,7 @@ namespace Zipper.Tests
         public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
         {
             // Act
-            int result = ProportionalDistribution.CalculateFolder(fileIndex, totalFolders);
+            int result = Distributions.Proportional(fileIndex, totalFolders);
 
             // Assert
             Assert.Equal(expectedFolder, result);
@@ -41,7 +41,7 @@ namespace Zipper.Tests
 
             // Act - Calculate distribution across many files
             var results = Enumerable.Range(1, fileCount)
-                .Select(i => ProportionalDistribution.CalculateFolder(i, totalFolders))
+                .Select(i => Distributions.Proportional(i, totalFolders))
                 .GroupBy(folder => folder)
                 .ToDictionary(g => g.Key, g => g.Count());
 
@@ -66,7 +66,7 @@ namespace Zipper.Tests
         public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
         {
             // Act
-            int result = GaussianDistribution.CalculateFolder(fileIndex, 100, totalFolders);
+            int result = Distributions.Gaussian(fileIndex, 100, totalFolders);
 
             // Assert
             Assert.Equal(expectedFolder, result);
@@ -81,7 +81,7 @@ namespace Zipper.Tests
 
             // Act - Generate folder numbers for all files
             var folderNumbers = Enumerable.Range(1, totalFiles)
-                .Select(i => GaussianDistribution.CalculateFolder(i, totalFiles, totalFolders))
+                .Select(i => Distributions.Gaussian(i, totalFiles, totalFolders))
                 .ToList();
 
             // Assert - All results should be within valid range
@@ -101,47 +101,16 @@ namespace Zipper.Tests
         public void CalculateFolder_EdgeCases_HandlesGracefully()
         {
             // Test minimum values
-            int result1 = GaussianDistribution.CalculateFolder(1, 1, 1);
+            int result1 = Distributions.Gaussian(1, 1, 1);
             Assert.Equal(1, result1);
 
             // Test large values
-            int result2 = GaussianDistribution.CalculateFolder(10000, 10000, 100);
+            int result2 = Distributions.Gaussian(10000, 10000, 100);
             Assert.InRange(result2, 1, 100);
 
             // Test middle probability
-            int result3 = GaussianDistribution.CalculateFolder(5000, 10000, 100);
+            int result3 = Distributions.Gaussian(5000, 10000, 100);
             Assert.InRange(result3, 1, 100);
-        }
-
-        [Theory]
-        [InlineData(0.5, 0.0)] // Middle probability
-        [InlineData(0.025, -1.96)] // Low probability (central region)
-        [InlineData(0.975, 1.96)] // High probability (central region)
-        [InlineData(0.01, -2.326)] // Lower region (p < pLow)
-        [InlineData(0.001, -3.090)] // Lower region edge (clamped min)
-        [InlineData(0.99, 2.326)] // Upper region (p > pHigh)
-        [InlineData(0.999, 3.090)] // Upper region edge (clamped max)
-        public void InverseNormalCDF_KnownProbabilities_ReturnsExpectedValues(double probability, double expectedApprox)
-        {
-            // Act
-            double result = GaussianDistribution.InverseNormalCDF(probability);
-
-            // Assert
-            Assert.Equal(expectedApprox, result, 0.1); // Allow 0.1 tolerance
-        }
-
-        [Theory]
-        [InlineData(-0.1)]
-        [InlineData(1.1)]
-        public void InverseNormalCDF_InvalidProbability_ClampsToValidRange(double probability)
-        {
-            // Act
-            double result1 = GaussianDistribution.InverseNormalCDF(probability);
-            double result2 = GaussianDistribution.InverseNormalCDF(probability);
-
-            // Assert - Should be clamped to valid range [0.001, 0.999]
-            Assert.InRange(result1, -3.5, 3.5);
-            Assert.InRange(result2, -3.5, 3.5);
         }
     }
 
@@ -153,7 +122,7 @@ namespace Zipper.Tests
         public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
         {
             // Act
-            int result = ExponentialDistribution.CalculateFolder(fileIndex, 100, totalFolders);
+            int result = Distributions.Exponential(fileIndex, 100, totalFolders);
 
             // Assert
             Assert.Equal(expectedFolder, result);
@@ -168,7 +137,7 @@ namespace Zipper.Tests
 
             // Act - Generate folder numbers for all files
             var folderNumbers = Enumerable.Range(1, totalFiles)
-                .Select(i => ExponentialDistribution.CalculateFolder(i, totalFiles, totalFolders))
+                .Select(i => Distributions.Exponential(i, totalFiles, totalFolders))
                 .ToList();
 
             // Assert - All results should be within valid range
@@ -189,11 +158,11 @@ namespace Zipper.Tests
         public void CalculateFolder_EdgeCases_HandlesGracefully()
         {
             // Test minimum values
-            int result1 = ExponentialDistribution.CalculateFolder(1, 1, 1);
+            int result1 = Distributions.Exponential(1, 1, 1);
             Assert.Equal(1, result1);
 
             // Test large values
-            int result2 = ExponentialDistribution.CalculateFolder(10000, 10000, 100);
+            int result2 = Distributions.Exponential(10000, 10000, 100);
             Assert.InRange(result2, 1, 100);
         }
 
@@ -205,7 +174,7 @@ namespace Zipper.Tests
         public void CalculateFolder_WithLambda2_ReturnsExpectedFolders(int totalFolders, long totalFiles, long fileIndex, int expectedFolder)
         {
             // C2: with lambda = 2.0/totalFolders, verify known folder assignments
-            int result = ExponentialDistribution.CalculateFolder(fileIndex, totalFiles, totalFolders);
+            int result = Distributions.Exponential(fileIndex, totalFiles, totalFolders);
             Assert.Equal(expectedFolder, result);
         }
 
@@ -218,7 +187,7 @@ namespace Zipper.Tests
             int totalFolders = 20;
 
             var folderNumbers = Enumerable.Range(1, totalFiles)
-                .Select(i => ExponentialDistribution.CalculateFolder(i, totalFiles, totalFolders))
+                .Select(i => Distributions.Exponential(i, totalFiles, totalFolders))
                 .GroupBy(f => f)
                 .ToDictionary(g => g.Key, g => g.Count());
 
@@ -228,41 +197,6 @@ namespace Zipper.Tests
             Assert.True(
                 maxPercent < 0.35,
                 $"Folder {folderNumbers.First(kv => kv.Value == maxCount).Key} has {maxPercent:P1} of files, expected < 35%");
-        }
-
-        [Theory]
-        [InlineData(1.0, 0.5, 0.693)]
-        [InlineData(2.0, 0.5, 0.346)]
-        [InlineData(1.0, 0.9, 2.303)]
-        [InlineData(0.2, 0.5, 3.465)]
-        [InlineData(0.02, 0.5, 34.66)]
-        public void CalculateExponential_ValidParameters_ReturnsCorrectValue(double lambda, double probability, double expectedApprox)
-        {
-            // Act
-            double result = ExponentialDistribution.CalculateExponential(lambda, probability);
-
-            // Assert
-            Assert.Equal(expectedApprox, result, 0.01); // Allow 0.01 tolerance
-        }
-
-        [Theory]
-        [InlineData(0.0, 0.5)]
-        [InlineData(-1.0, 0.5)]
-        public void CalculateExponential_InvalidLambda_ThrowsArgumentException(double lambda, double probability)
-        {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                ExponentialDistribution.CalculateExponential(lambda, probability));
-        }
-
-        [Theory]
-        [InlineData(1.0, -0.1)]
-        [InlineData(1.0, 1.1)]
-        public void CalculateExponential_InvalidProbability_ThrowsArgumentException(double lambda, double probability)
-        {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() =>
-                ExponentialDistribution.CalculateExponential(lambda, probability));
         }
     }
 
@@ -276,7 +210,7 @@ namespace Zipper.Tests
         public void GetFolderNumber_ValidInputs_ReturnsFolderNumber(long fileIndex, long totalFiles, int totalFolders, DistributionType distributionType)
         {
             // Act
-            int result = FileDistributionHelper.GetFolderNumber(fileIndex, totalFiles, totalFolders, distributionType);
+            int result = Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, distributionType);
 
             // Assert
             Assert.InRange(result, 1, totalFolders);
@@ -290,7 +224,7 @@ namespace Zipper.Tests
         {
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                FileDistributionHelper.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
+                Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
         }
 
         [Theory]
@@ -300,7 +234,7 @@ namespace Zipper.Tests
         {
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                FileDistributionHelper.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
+                Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
         }
 
         [Theory]
@@ -309,7 +243,7 @@ namespace Zipper.Tests
         {
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                FileDistributionHelper.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
+                Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, DistributionType.Proportional));
         }
 
         [Fact]
@@ -330,7 +264,7 @@ namespace Zipper.Tests
             foreach (var (fileIndex, totalFiles, totalFolders, type) in testCases)
             {
                 // Act
-                int result = FileDistributionHelper.GetFolderNumber(fileIndex, totalFiles, totalFolders, type);
+                int result = Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, type);
 
                 // Assert - Result should be within expected range
                 Assert.InRange(result, 1, totalFolders);

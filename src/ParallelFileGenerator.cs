@@ -135,7 +135,7 @@ namespace Zipper
                 {
                     for (long i = 1; i <= fileCount; i++)
                     {
-                        var folderNumber = FileDistributionHelper.GetFolderNumber(i, fileCount, folders, distribution);
+                        var folderNumber = Distributions.GetFolderNumber(i, fileCount, folders, distribution);
                         var folderName = $"folder_{folderNumber:D3}";
                         var fileName = $"{i:D8}.{fileType}";
                         var filePathInZip = $"{folderName}/{fileName}";
