@@ -39,15 +39,15 @@ internal class OptWriter : LoadFileWriterBase
                 await WriteProductionSetAsync(stream, request, processedFiles);
                 break;
             default:
-            {
-                // Use leaveOpen: true to avoid disposing the caller's stream
-                await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
-                await WriteStandardRowsAsync(writer, request, processedFiles);
+                {
+                    // Use leaveOpen: true to avoid disposing the caller's stream
+                    await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
+                    await WriteStandardRowsAsync(writer, request, processedFiles);
 
-                // Flush to ensure data is written
-                await writer.FlushAsync();
-                break;
-            }
+                    // Flush to ensure data is written
+                    await writer.FlushAsync();
+                    break;
+                }
         }
     }
 
