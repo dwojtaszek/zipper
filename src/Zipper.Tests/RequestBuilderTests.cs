@@ -177,6 +177,17 @@ namespace Zipper.Tests
         }
 
         [Fact]
+        public void Build_Encoding_PreservesNormalizedInputName()
+        {
+            var parsed = CreateParsedArgs();
+            parsed.Encoding = "UTF-16";
+
+            var result = RequestBuilder.Build(parsed);
+
+            Assert.Equal("UTF-16", result.LoadFile.Encoding);
+        }
+
+        [Fact]
         public void ParseSize_ValidSizes_ReturnsBytes()
         {
             Assert.Equal(1024, RequestBuilder.ParseSize("1KB"));
