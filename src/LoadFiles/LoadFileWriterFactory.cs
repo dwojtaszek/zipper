@@ -17,7 +17,6 @@ internal static class LoadFileWriterFactory
             LoadFileFormat.Dat => new DatWriter(),
             LoadFileFormat.Opt => new OptWriter(),
             LoadFileFormat.Csv => new CsvWriter(),
-            LoadFileFormat.Xml => new XmlLoadFileWriter(),
             LoadFileFormat.EdrmXml => new XmlLoadFileWriter(), // EDRM XML uses same writer
             LoadFileFormat.Concordance => new ConcordanceWriter(),
             _ => new DatWriter(),

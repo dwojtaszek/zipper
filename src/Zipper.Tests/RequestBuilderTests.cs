@@ -212,7 +212,7 @@ namespace Zipper.Tests
             Assert.Equal(LoadFileFormat.Dat, RequestBuilder.GetLoadFileFormat("dat"));
             Assert.Equal(LoadFileFormat.Opt, RequestBuilder.GetLoadFileFormat("opt"));
             Assert.Equal(LoadFileFormat.Csv, RequestBuilder.GetLoadFileFormat("csv"));
-            Assert.Equal(LoadFileFormat.Xml, RequestBuilder.GetLoadFileFormat("xml"));
+            Assert.Equal(LoadFileFormat.EdrmXml, RequestBuilder.GetLoadFileFormat("xml"));
             Assert.Equal(LoadFileFormat.EdrmXml, RequestBuilder.GetLoadFileFormat("edrm-xml"));
             Assert.Equal(LoadFileFormat.Concordance, RequestBuilder.GetLoadFileFormat("concordance"));
         }

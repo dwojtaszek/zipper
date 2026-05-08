@@ -392,7 +392,7 @@ namespace Zipper
         [InlineData("dat", LoadFileFormat.Dat)]
         [InlineData("opt", LoadFileFormat.Opt)]
         [InlineData("csv", LoadFileFormat.Csv)]
-        [InlineData("xml", LoadFileFormat.Xml)]
+        [InlineData("xml", LoadFileFormat.EdrmXml)]
         [InlineData("concordance", LoadFileFormat.Concordance)]
         public void ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly(string format, LoadFileFormat expected)
         {

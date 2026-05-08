@@ -215,7 +215,7 @@ public static class RequestBuilder
             "DAT" => LoadFileFormat.Dat,
             "OPT" => LoadFileFormat.Opt,
             "CSV" => LoadFileFormat.Csv,
-            "XML" => LoadFileFormat.Xml,
+            "XML" => LoadFileFormat.EdrmXml,
             "EDRMXML" => LoadFileFormat.EdrmXml,
             "CONCORDANCE" => LoadFileFormat.Concordance,
             _ => null,
