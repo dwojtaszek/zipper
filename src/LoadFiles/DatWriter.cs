@@ -54,8 +54,8 @@ internal class DatWriter : LoadFileWriterBase
         List<FileData> processedFiles)
     {
         // Defensive guards to prevent IndexOutOfRangeException when delimiters are unset
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '';
-        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : 'þ';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
 
         await writer.WriteLineAsync(BuildStandardHeader(request, colDelim, quote));
 
@@ -108,8 +108,8 @@ internal class DatWriter : LoadFileWriterBase
     {
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         var eolString = GetEolString(request.Delimiters.EndOfLine);
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '';
-        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : 'þ';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
         bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
         using var memStream = new MemoryStream();
@@ -178,8 +178,8 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         List<FileData> processedFiles)
     {
-        var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "" : request.Delimiters.ColumnDelimiter;
-        var quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "þ" : request.Delimiters.QuoteDelimiter;
+        var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "\u0014" : request.Delimiters.ColumnDelimiter;
+        var quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "\u00fe" : request.Delimiters.QuoteDelimiter;
         var eol = GetEolString(request.Delimiters.EndOfLine);
 
         await using var writer = CreateWriter(stream, request);
