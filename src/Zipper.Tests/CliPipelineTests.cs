@@ -36,7 +36,7 @@ namespace Zipper
             Assert.Equal(100, result.Output.FileCount);
             Assert.Equal("pdf", result.Output.FileType);
             Assert.Equal(1, result.Output.Folders);
-            Assert.Equal("Unicode (UTF-8)", result.LoadFile.Encoding);
+            Assert.Equal("UTF-8", result.LoadFile.Encoding);
             Assert.Equal(DistributionType.Proportional, result.LoadFile.Distribution);
             Assert.False(result.Metadata.WithMetadata);
             Assert.False(result.Output.WithText);
@@ -72,7 +72,7 @@ namespace Zipper
             Assert.Equal(500, result.Output.FileCount);
             Assert.Equal("jpg", result.Output.FileType);
             Assert.Equal(5, result.Output.Folders);
-            Assert.Equal("Unicode", result.LoadFile.Encoding);
+            Assert.Equal("UTF-16", result.LoadFile.Encoding);
             Assert.Equal(DistributionType.Gaussian, result.LoadFile.Distribution);
             Assert.True(result.Metadata.WithMetadata);
             Assert.True(result.Output.WithText);
@@ -261,12 +261,12 @@ namespace Zipper
         }
 
         [Theory]
-        [InlineData("UTF-8", "Unicode (UTF-8)")]
-        [InlineData("utf-8", "Unicode (UTF-8)")]
-        [InlineData("UTF-16", "Unicode")]
-        [InlineData("utf-16", "Unicode")]
-        [InlineData("ANSI", "Western European (Windows)")]
-        [InlineData("ansi", "Western European (Windows)")]
+        [InlineData("UTF-8", "UTF-8")]
+        [InlineData("utf-8", "UTF-8")]
+        [InlineData("UTF-16", "UTF-16")]
+        [InlineData("utf-16", "UTF-16")]
+        [InlineData("ANSI", "ANSI")]
+        [InlineData("ansi", "ANSI")]
         public void ValidateAndParseArguments_WithValidEncodings_ShouldReturnValidRequest(string inputEncoding, string expectedEncoding)
         {
             // Arrange
