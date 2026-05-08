@@ -226,7 +226,7 @@ namespace Zipper
             // Arrange
             var request = this.CreateTestRequest();
             var fileData = this.CreateTestFileData();
-            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Xml);
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.EdrmXml);
             var outputPath = Path.Combine(this.tempDir, "test.xml");
 
             // Act
@@ -327,7 +327,7 @@ namespace Zipper
             Assert.Equal("CSV", csvWriter.FormatName);
             Assert.Equal(".csv", csvWriter.FileExtension);
 
-            var xmlWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Xml);
+            var xmlWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.EdrmXml);
             Assert.IsType<XmlLoadFileWriter>(xmlWriter);
             Assert.Equal("XML", xmlWriter.FormatName);
             Assert.Equal(".xml", xmlWriter.FileExtension);
