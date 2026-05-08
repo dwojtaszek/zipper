@@ -21,7 +21,7 @@
     "opt": "DATA/loadfile.opt"
   },
   "settings": {
-    "encoding": "Unicode (UTF-8)",
+    "encoding": "UTF-8",
     "columnDelimiter": "ascii:20",
     "quoteDelimiter": "char:\u00FE",
     "seed": 42
