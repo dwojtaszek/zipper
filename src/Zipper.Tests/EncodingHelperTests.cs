@@ -88,5 +88,21 @@ namespace Zipper
             Assert.NotNull(encoding);
             Assert.Equal("us-ascii", encoding!.BodyName);
         }
+
+        [Fact]
+        public void GetEncoding_WithUnicode_ReturnsNull()
+        {
+            // UNICODE was an undocumented synonym; use UTF-16 instead.
+            var encoding = EncodingHelper.GetEncoding("UNICODE");
+            Assert.Null(encoding);
+        }
+
+        [Fact]
+        public void GetEncoding_WithWesternEuropeanWindows_ReturnsNull()
+        {
+            // Undocumented synonym removed; use WINDOWS-1252 or ANSI instead.
+            var encoding = EncodingHelper.GetEncoding("WESTERN EUROPEAN (WINDOWS)");
+            Assert.Null(encoding);
+        }
     }
 }
