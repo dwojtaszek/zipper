@@ -20,7 +20,9 @@ internal static class EncodingHelper
             "ANSI" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
             "UTF-16" => Encoding.Unicode,
             "UTF-16LE" => Encoding.Unicode,
+            "UNICODE" => Encoding.Unicode,
             "WINDOWS-1252" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
+            "WESTERN EUROPEAN (WINDOWS)" => CodePagesEncodingProvider.Instance.GetEncoding(1252),
             "ASCII" => Encoding.ASCII,
             _ => null,
         };
