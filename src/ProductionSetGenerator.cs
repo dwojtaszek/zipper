@@ -111,7 +111,7 @@ internal static class ProductionSetGenerator
 
         // Write DAT load file
         var datPath = Path.Combine(dataDir, "loadfile.dat");
-        var datWriter = new LoadFiles.ProductionSetDatWriter();
+        var datWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, LoadFiles.WriterMode.ProductionSet);
         await using (var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
             await datWriter.WriteAsync(datStream, request, fileDataList);
@@ -119,7 +119,7 @@ internal static class ProductionSetGenerator
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
-        var optWriter = new LoadFiles.ProductionSetOptWriter();
+        var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
         await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
             await optWriter.WriteAsync(optStream, request, fileDataList);

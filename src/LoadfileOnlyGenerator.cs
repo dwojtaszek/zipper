@@ -70,10 +70,10 @@ internal static class LoadfileOnlyGenerator
         }
 
         ILoadFileWriter writer = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
-            ? new LoadfileOnlyOptWriter()
+            ? LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.LoadfileOnly)
             : request.Metadata.ColumnProfile != null
                 ? new ProfileDrivenDatWriter()
-                : new LoadfileOnlyDatWriter();
+                : LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, WriterMode.LoadfileOnly);
 
         await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {

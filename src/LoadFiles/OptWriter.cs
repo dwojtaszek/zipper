@@ -3,31 +3,55 @@ using System.Text;
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Writes OPT (Opticon) format load files — comma-separated, no header, 7-column standard.
-/// Opticon specification: BatesNumber,Volume,ImagePath,DocBreak(Y/blank),FolderBreak,BoxBreak,PageCount
+/// Writes OPT (Opticon) format load files.
+/// Supports Standard, Loadfile-Only, and Production Set output modes.
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
-    public override string FormatName => "OPT";
+    private readonly WriterMode mode;
+
+    internal OptWriter(WriterMode mode = WriterMode.Standard)
+    {
+        this.mode = mode;
+    }
+
+    public override string FormatName => this.mode switch
+    {
+        WriterMode.LoadfileOnly => "OPT (Image)",
+        WriterMode.ProductionSet => "Production Set OPT",
+        _ => "OPT",
+    };
 
     public override string FileExtension => ".opt";
 
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
+        List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Zipper.EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
+        switch (this.mode)
+        {
+            case WriterMode.LoadfileOnly:
+                await WriteLoadfileOnlyAsync(stream, request, chaosEngine);
+                break;
+            case WriterMode.ProductionSet:
+                await WriteProductionSetAsync(stream, request, processedFiles);
+                break;
+            default:
+                {
+                    // Use leaveOpen: true to avoid disposing the caller's stream
+                    await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
+                    await WriteStandardRowsAsync(writer, request, processedFiles);
 
-        await WriteRowsAsync(writer, request, processedFiles);
-
-        // Flush to ensure data is written
-        await writer.FlushAsync();
+                    // Flush to ensure data is written
+                    await writer.FlushAsync();
+                    break;
+                }
+        }
     }
 
-    private static async Task WriteRowsAsync(
+    private static async Task WriteStandardRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
         System.Collections.Generic.List<FileData> processedFiles)
@@ -88,5 +112,81 @@ internal class OptWriter : LoadFileWriterBase
         {
             await writer.WriteAsync(buffer.ToString());
         }
+    }
+
+    private static async Task WriteLoadfileOnlyAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        ChaosEngine? chaosEngine)
+    {
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var eolString = GetEolString(request.Delimiters.EndOfLine);
+
+        using var memStream = new MemoryStream();
+
+#pragma warning disable S2245
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
+#pragma warning restore S2245
+
+        var buffer = new StringBuilder();
+
+        for (long i = 1; i <= request.Output.FileCount; i++)
+        {
+            long lineNumber = i;
+            string batesId = $"IMG{i:D8}";
+            string volume = "VOL001";
+            string imagePath = $"IMAGES\\{batesId}.tif";
+            string docBreak = "Y";
+            string folderBreak = string.Empty;
+            string boxBreak = string.Empty;
+            int pageCount = random.Next(1, 11);
+
+            string line = $"{batesId},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
+
+            line = ApplyChaosInterception(chaosEngine, lineNumber, line, batesId);
+
+            buffer.Append(line);
+            buffer.Append(eolString);
+
+            if (buffer.Length > 1000 * 200)
+            {
+                var batchBytes = encoding.GetBytes(buffer.ToString());
+                await memStream.WriteAsync(batchBytes);
+                buffer.Clear();
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            var remainingBytes = encoding.GetBytes(buffer.ToString());
+            await memStream.WriteAsync(remainingBytes);
+        }
+
+        memStream.Position = 0;
+        await memStream.CopyToAsync(stream);
+    }
+
+    private static async Task WriteProductionSetAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        List<FileData> processedFiles)
+    {
+        var eol = GetEolString(request.Delimiters.EndOfLine);
+        await using var writer = CreateWriter(stream, request);
+
+        foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
+        {
+            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+            var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
+                .Replace(Path.DirectorySeparatorChar, '\\');
+
+            var docBreak = "Y";
+            var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
+
+            await writer.WriteAsync(line + eol);
+        }
+
+        await writer.FlushAsync();
     }
 }

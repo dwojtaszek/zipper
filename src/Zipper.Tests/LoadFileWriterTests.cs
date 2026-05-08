@@ -559,7 +559,7 @@ namespace Zipper
                 LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
-            var writer = new LoadfileOnlyDatWriter();
+            var writer = new DatWriter(WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, new List<FileData>());
 
@@ -589,7 +589,7 @@ namespace Zipper
                 LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
-            var writer = new LoadfileOnlyOptWriter();
+            var writer = new OptWriter(WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, new List<FileData>());
 
@@ -627,7 +627,7 @@ namespace Zipper
             long totalLines = request.Output.FileCount + 1;
             var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
 
-            var writer = new LoadfileOnlyDatWriter();
+            var writer = new DatWriter(WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, new List<FileData>(), chaos);
 
@@ -675,7 +675,7 @@ namespace Zipper
                 });
             }
 
-            var writer = new ProductionSetDatWriter();
+            var writer = new DatWriter(WriterMode.ProductionSet);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, files);
 
@@ -726,7 +726,7 @@ namespace Zipper
                 });
             }
 
-            var writer = new ProductionSetOptWriter();
+            var writer = new OptWriter(WriterMode.ProductionSet);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, files);
 
@@ -759,7 +759,7 @@ namespace Zipper
                 LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
                 Delimiters = new DelimiterConfig { EndOfLine = string.Empty },
             };
-            var writer = new LoadfileOnlyDatWriter();
+            var writer = new DatWriter(WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, new List<FileData>());
 
