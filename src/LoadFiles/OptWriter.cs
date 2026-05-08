@@ -8,14 +8,14 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
-    private readonly WriterMode _mode;
+    private readonly WriterMode mode;
 
     internal OptWriter(WriterMode mode = WriterMode.Standard)
     {
-        _mode = mode;
+        this.mode = mode;
     }
 
-    public override string FormatName => _mode switch
+    public override string FormatName => this.mode switch
     {
         WriterMode.LoadfileOnly => "OPT (Image)",
         WriterMode.ProductionSet => "Production Set OPT",
@@ -30,7 +30,7 @@ internal class OptWriter : LoadFileWriterBase
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
-        switch (_mode)
+        switch (this.mode)
         {
             case WriterMode.LoadfileOnly:
                 await WriteLoadfileOnlyAsync(stream, request, chaosEngine);
