@@ -196,9 +196,9 @@ internal class DatWriter : LoadFileWriterBase
             var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
 
-            var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\');
+            var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
             var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
-            var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\');
+            var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
             var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;

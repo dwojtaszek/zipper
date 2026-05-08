@@ -177,7 +177,7 @@ internal class OptWriter : LoadFileWriterBase
             var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                .Replace(Path.DirectorySeparatorChar, '\');
+                .Replace(Path.DirectorySeparatorChar, '\\');
 
             var docBreak = "Y";
             var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
