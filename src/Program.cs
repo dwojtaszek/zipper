@@ -44,22 +44,16 @@ namespace Zipper
 
         /// <summary>
         /// Picks the appropriate generation mode based on flags on the request.
-        /// Production Set takes precedence over Loadfile-Only for backward compatibility
-        /// with the previous dispatch order in <c>Main</c>.
+        /// The CLI validator ensures LoadfileOnly and ProductionSet are mutually exclusive.
         /// </summary>
         internal static IGenerationMode SelectMode(FileGenerationRequest request)
         {
-            if (request.LoadfileOnly)
+            return (request.LoadfileOnly, request.Production.ProductionSet) switch
             {
-                return new LoadfileOnlyMode();
-            }
-
-            if (request.Production.ProductionSet)
-            {
-                return new ProductionSetMode();
-            }
-
-            return new StandardMode();
+                (true, _) => new LoadfileOnlyMode(),
+                (_, true) => new ProductionSetMode(),
+                _ => new StandardMode(),
+            };
         }
     }
 }

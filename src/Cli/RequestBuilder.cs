@@ -101,15 +101,9 @@ public static class RequestBuilder
             nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
         }
 
-        var encodingName = encoding?.EncodingName ?? "UTF-8";
-        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
-        {
-            var lfEncoding = EncodingHelper.GetEncoding(parsed.Encoding);
-            if (lfEncoding != null)
-            {
-                encodingName = parsed.Encoding.ToUpperInvariant();
-            }
-        }
+        var encodingName = (encoding != null && !string.IsNullOrEmpty(parsed.Encoding))
+            ? parsed.Encoding.ToUpperInvariant()
+            : "UTF-8";
 
         return new FileGenerationRequest
         {
