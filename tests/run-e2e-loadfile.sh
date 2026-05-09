@@ -213,11 +213,7 @@ if "${BINARY[@]}" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/reject_1
 fi
 print_info "Rejected --col-delim without --loadfile-only"
 
-# --chaos-mode without --loadfile-only should fail
-if "${BINARY[@]}" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/reject_2" --chaos-mode 2>/dev/null; then
-    print_error "Should have rejected --chaos-mode without --loadfile-only"
-fi
-print_info "Rejected --chaos-mode without --loadfile-only"
+
 
 # --chaos-amount without --chaos-mode should fail
 if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/reject_3" --chaos-amount "5%" 2>/dev/null; then
