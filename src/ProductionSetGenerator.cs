@@ -119,6 +119,9 @@ internal static class ProductionSetGenerator
             await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
         }
 
+        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, datTotalLines, datChaosEngine?.Anomalies);
+        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson);
+
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
         var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
@@ -128,6 +131,11 @@ internal static class ProductionSetGenerator
         {
             await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine);
         }
+
+        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, optTotalLines, optChaosEngine?.Anomalies);
+
+        // Save OPT properties with a slightly different name to avoid overwriting DAT properties
+        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson);
 
         // Write manifest
         var batesStart = BatesNumberGenerator.Generate(batesConfig, 0);

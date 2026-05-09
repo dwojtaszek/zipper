@@ -208,12 +208,6 @@ public static class CliValidator
             }
         }
 
-        if (parsed.ChaosMode && !parsed.LoadfileOnly)
-        {
-            Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
-            return false;
-        }
-
         if (parsed.ChaosMode)
         {
             var currentFormat = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;

@@ -225,35 +225,8 @@ internal class DatWriter : LoadFileWriterBase
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var workItem = fileData.WorkItem;
-                var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-                var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                    .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
-
-                var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-                var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
-                var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
-
-#pragma warning disable S2245
-                var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
-#pragma warning restore S2245
-                var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-                var builder = new MetadataRowBuilder(request, random, now);
-
-                var fields = new[]
-                {
-                    batesNumber,
-                    batesNumber,
-                    workItem.FolderName,
-                    nativePath,
-                    textPath,
-                    imagesPath,
-                    builder.GetCustodian(),
-                    builder.GetDateCreated(),
-                    fileData.DataLength.ToString(),
-                    request.Output.FileType.ToUpperInvariant(),
-                };
-                await writer.WriteAsync(string.Join(col, fields.Select(f => $"{quote}{f}{quote}")) + eol);
+                var dataRow = BuildProductionSetRow(fileData, request, col, quote);
+                await writer.WriteAsync(dataRow + eol);
             }
 
             await writer.FlushAsync();
@@ -270,39 +243,47 @@ internal class DatWriter : LoadFileWriterBase
             long lineNumber = rowIdx + 2;
             var workItem = fileData.WorkItem;
             var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-            var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
 
-            var nPath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-            var tPath = nPath.Replace($".{request.Output.FileType}", ".txt");
-            var iPath = imgPath.Replace(Path.DirectorySeparatorChar, '\\');
-
-#pragma warning disable S2245
-            var rowRandom = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
-#pragma warning restore S2245
-            var rowNow = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-            var rowBuilder = new MetadataRowBuilder(request, rowRandom, rowNow);
-
-            var rowFields = new[]
-            {
-                batesNum,
-                batesNum,
-                workItem.FolderName,
-                nPath,
-                tPath,
-                iPath,
-                rowBuilder.GetCustodian(),
-                rowBuilder.GetDateCreated(),
-                fileData.DataLength.ToString(),
-                request.Output.FileType.ToUpperInvariant(),
-            };
-
-            var dataRow = string.Join(col, rowFields.Select(f => $"{quote}{f}{quote}"));
+            var dataRow = BuildProductionSetRow(fileData, request, col, quote);
             rows.Add((lineNumber, batesNum, dataRow));
             rowIdx++;
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
+    }
+
+    private static string BuildProductionSetRow(FileData fileData, FileGenerationRequest request, string col, string quote)
+    {
+        var workItem = fileData.WorkItem;
+        var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+        var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+            .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
+
+        var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+        var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
+        var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
+
+#pragma warning disable S2245
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
+#pragma warning restore S2245
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var builder = new MetadataRowBuilder(request, random, now);
+
+        var fields = new[]
+        {
+            batesNumber,
+            batesNumber,
+            workItem.FolderName,
+            nativePath,
+            textPath,
+            imagesPath,
+            builder.GetCustodian(),
+            builder.GetDateCreated(),
+            fileData.DataLength.ToString(),
+            request.Output.FileType.ToUpperInvariant(),
+        };
+
+        return string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
     }
 
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)

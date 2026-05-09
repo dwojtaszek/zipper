@@ -573,7 +573,7 @@ namespace Zipper
         {
             var request = DefaultRequest();
             request.Metadata = request.Metadata with { Seed = 42 };
-            request.Bates = new Config.BatesNumberConfig
+            request.Bates = new BatesNumberConfig
             {
                 Prefix = "TEST",
                 Start = 1,

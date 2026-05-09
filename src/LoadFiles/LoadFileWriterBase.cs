@@ -178,7 +178,6 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         }
 
         return false;
-        return false;
     }
 
     /// <summary>

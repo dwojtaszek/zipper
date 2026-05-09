@@ -186,7 +186,7 @@ internal class OptWriter : LoadFileWriterBase
                     .Replace(Path.DirectorySeparatorChar, '\\');
 
                 var docBreak = "Y";
-                var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
+                var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,,1";
 
                 await writer.WriteAsync(line + eol);
             }
@@ -208,7 +208,7 @@ internal class OptWriter : LoadFileWriterBase
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
                 .Replace(Path.DirectorySeparatorChar, '\\');
 
-            var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,1";
+            var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,,1";
             rows.Add((lineNumber, batesNum, optLine));
             rowIdx++;
         }

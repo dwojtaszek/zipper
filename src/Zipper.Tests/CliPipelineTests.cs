@@ -560,13 +560,14 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndParseArguments_ChaosMode_WithoutLoadfileOnly_ShouldReturnNull()
+        public void ValidateAndParseArguments_ChaosMode_WithoutLoadfileOnly_ShouldSucceed()
         {
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
 
             var result = Cli.Pipeline.Build(args);
 
-            Assert.Null(result);
+            Assert.NotNull(result);
+            Assert.True(result!.Chaos.ChaosMode);
         }
 
         [Fact]

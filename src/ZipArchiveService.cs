@@ -95,8 +95,19 @@ namespace Zipper
                 if (request.Output.IncludeLoadFile)
                 {
                     var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
-                    using var loadFileStream = loadFileEntry.Open();
-                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, chaosEngine);
+                    using (var loadFileStream = loadFileEntry.Open())
+                    {
+                        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, chaosEngine);
+                    }
+
+                    // Write audit file to ZIP
+                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, totalChaosLines, chaosEngine?.Anomalies);
+                    var propertiesEntry = archive.CreateEntry(actualLoadFileName + "_properties.json", CompressionLevel.Optimal);
+                    using (var propertiesStream = propertiesEntry.Open())
+                    using (var propertiesWriter = new StreamWriter(propertiesStream))
+                    {
+                        await propertiesWriter.WriteAsync(auditJson);
+                    }
 
                     // Return path within the ZIP archive when load file is included
                     actualLoadFilePath = actualLoadFileName;
@@ -107,6 +118,10 @@ namespace Zipper
                     await using var fileStream = new FileStream(currentFilePath, FileMode.Create);
                     await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine);
                     await fileStream.FlushAsync();
+
+                    // Write audit file to disk
+                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalChaosLines, chaosEngine?.Anomalies);
+                    await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson);
 
                     actualLoadFilePath = currentFilePath;
                 }

@@ -87,7 +87,7 @@ namespace Zipper.Tests
             // Assert
             Assert.True(File.Exists(zipPath));
             using var archive = ZipFile.OpenRead(zipPath);
-            Assert.Equal(4, archive.Entries.Count); // 3 PDF files + 1 load file
+            Assert.Equal(5, archive.Entries.Count); // 3 PDF files + 1 load file + 1 properties file
 
             var loadEntry = archive.GetEntry("load.dat");
             Assert.NotNull(loadEntry);
@@ -225,8 +225,8 @@ namespace Zipper.Tests
             Assert.True(File.Exists(zipPath));
             using var archive = ZipFile.OpenRead(zipPath);
 
-            // Should have: 2 PDF files + 2 text files + 1 load file = 5 total files
-            Assert.Equal(5, archive.Entries.Count);
+            // Should have: 2 PDF files + 2 text files + 1 load file + 1 properties file = 6 total files
+            Assert.Equal(6, archive.Entries.Count);
 
             var pdfEntries = archive.Entries.Where(e => e.FullName.EndsWith(".pdf")).ToList();
             var textEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt")).ToList();
