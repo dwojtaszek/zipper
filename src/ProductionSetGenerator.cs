@@ -109,20 +109,24 @@ internal static class ProductionSetGenerator
 
         Console.WriteLine();
 
-        // Write DAT load file
+        // Write DAT load file — construct ChaosEngine per format (stateful; one instance per writer)
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var datWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, LoadFiles.WriterMode.ProductionSet);
+        long datTotalLines = fileDataList.Count + 1; // header + data rows
+        var datChaosEngine = BuildChaosEngine(request, datTotalLines, LoadFileFormat.Dat);
         await using (var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
-            await datWriter.WriteAsync(datStream, request, fileDataList);
+            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
         }
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
         var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
+        long optTotalLines = fileDataList.Count; // OPT has no header row
+        var optChaosEngine = BuildChaosEngine(request, optTotalLines, LoadFileFormat.Opt);
         await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
-            await optWriter.WriteAsync(optStream, request, fileDataList);
+            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine);
         }
 
         // Write manifest
@@ -155,6 +159,48 @@ internal static class ProductionSetGenerator
             VolumeCount = volumeCount,
             GenerationTime = stopwatch.Elapsed,
         };
+    }
+
+    /// <summary>
+    /// Builds a ChaosEngine for the given format, or returns null if chaos is not enabled.
+    /// A fresh instance must be created per format because ChaosEngine is stateful.
+    /// </summary>
+    private static ChaosEngine? BuildChaosEngine(FileGenerationRequest request, long totalLines, LoadFileFormat format)
+    {
+        if (!request.Chaos.ChaosMode)
+        {
+            return null;
+        }
+
+        string? resolvedTypes = request.Chaos.ChaosTypes;
+        string? resolvedAmount = request.Chaos.ChaosAmount;
+
+        if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
+        {
+            var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
+            if (scenario != null)
+            {
+                resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
+                if (string.IsNullOrEmpty(resolvedAmount))
+                {
+                    resolvedAmount = scenario.DefaultAmount;
+                }
+            }
+        }
+
+        var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+        string chaosColDelim = format == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter ?? "\u0014";
+        string chaosQuoteDelim = format == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter ?? "\u00fe";
+
+        return new ChaosEngine(
+            totalLines,
+            resolvedAmount,
+            resolvedTypes,
+            format,
+            chaosColDelim,
+            chaosQuoteDelim,
+            eolString,
+            request.Metadata.Seed);
     }
 }
 

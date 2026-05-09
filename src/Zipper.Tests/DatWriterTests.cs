@@ -390,5 +390,240 @@ namespace Zipper
                 DataLength = 7,
             };
         }
+
+        // ---- Chaos engine tests ----
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaosQuotes_OutputDiffersFromBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            // Baseline (no chaos)
+            using var baseStream = new MemoryStream();
+            var baseWriter = new DatWriter();
+            await baseWriter.WriteAsync(baseStream, request, files);
+            var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
+
+            // With chaos — target every line with quotes type
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "quotes",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            var chaosWriter = new DatWriter();
+            await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
+
+            Assert.NotEqual(baseOutput, chaosOutput);
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaosMixedDelimiters_OutputDiffersFromBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            using var baseStream = new MemoryStream();
+            await new DatWriter().WriteAsync(baseStream, request, files);
+            var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "mixed-delimiters",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
+
+            Assert.NotEqual(baseOutput, chaosOutput);
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaosColumns_OutputDiffersFromBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            using var baseStream = new MemoryStream();
+            await new DatWriter().WriteAsync(baseStream, request, files);
+            var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "columns",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
+
+            Assert.NotEqual(baseOutput, chaosOutput);
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaosEol_OutputDiffersFromBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            using var baseStream = new MemoryStream();
+            await new DatWriter().WriteAsync(baseStream, request, files);
+            var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "eol",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
+
+            Assert.NotEqual(baseOutput, chaosOutput);
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaosEncoding_InjectsInvalidBytes()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            using var baseStream = new MemoryStream();
+            await new DatWriter().WriteAsync(baseStream, request, files);
+            var baseBytes = baseStream.ToArray();
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosBytes = chaosStream.ToArray();
+
+            // Encoding anomaly injects extra bytes between lines — output must be longer
+            Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_WithChaos_Determinism_SameSeedProducesSameOutput()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 20).Select(i => MakeFileData(i)).ToList();
+
+            static ChaosEngine MakeEngine(int count) => new ChaosEngine(
+                totalLines: count + 1,
+                chaosAmount: "50%",
+                chaosTypes: null,
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var stream1 = new MemoryStream();
+            await new DatWriter().WriteAsync(stream1, request, files, MakeEngine(files.Count));
+
+            using var stream2 = new MemoryStream();
+            await new DatWriter().WriteAsync(stream2, request, files, MakeEngine(files.Count));
+
+            Assert.Equal(stream1.ToArray(), stream2.ToArray());
+        }
+
+        [Fact]
+        public async Task WriteAsync_ProductionSet_WithChaosQuotes_OutputDiffersFromBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            request.Bates = new Config.BatesNumberConfig
+            {
+                Prefix = "TEST",
+                Start = 1,
+                Digits = 6,
+                Increment = 1,
+            };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            using var baseStream = new MemoryStream();
+            var baseWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            await baseWriter.WriteAsync(baseStream, request, files);
+            var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: files.Count + 1,
+                chaosAmount: "100%",
+                chaosTypes: "quotes",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            var chaosWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
+            var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
+
+            Assert.NotEqual(baseOutput, chaosOutput);
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_NullChaosEngine_SameOutputAsBaseline()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
+
+            // Passing null explicitly should produce identical output to no-arg call
+            using var stream1 = new MemoryStream();
+            await new DatWriter().WriteAsync(stream1, request, files, null);
+
+            using var stream2 = new MemoryStream();
+            await new DatWriter().WriteAsync(stream2, request, files);
+
+            Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
+        }
+
+
     }
 }

@@ -86,11 +86,17 @@ namespace Zipper
                 var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
                 var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
+                // Build a fresh ChaosEngine per format (engines are stateful; sharing across formats is incorrect)
+                long totalChaosLines = format == LoadFileFormat.Opt
+                    ? processedFiles.Count
+                    : processedFiles.Count + 1;
+                var chaosEngine = BuildChaosEngine(request, totalChaosLines, format);
+
                 if (request.Output.IncludeLoadFile)
                 {
                     var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                     using var loadFileStream = loadFileEntry.Open();
-                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, null);
+                    await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, chaosEngine);
 
                     // Return path within the ZIP archive when load file is included
                     actualLoadFilePath = actualLoadFileName;
@@ -99,7 +105,7 @@ namespace Zipper
                 {
                     var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
                     await using var fileStream = new FileStream(currentFilePath, FileMode.Create);
-                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles, null);
+                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine);
                     await fileStream.FlushAsync();
 
                     actualLoadFilePath = currentFilePath;
@@ -107,6 +113,48 @@ namespace Zipper
             }
 
             return actualLoadFilePath;
+        }
+
+        /// <summary>
+        /// Builds a ChaosEngine for the given request and format, or returns null if chaos is not enabled.
+        /// A fresh instance must be created per format because ChaosEngine is stateful.
+        /// </summary>
+        private static ChaosEngine? BuildChaosEngine(FileGenerationRequest request, long totalLines, LoadFileFormat format)
+        {
+            if (!request.Chaos.ChaosMode)
+            {
+                return null;
+            }
+
+            string? resolvedTypes = request.Chaos.ChaosTypes;
+            string? resolvedAmount = request.Chaos.ChaosAmount;
+
+            if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
+            {
+                var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
+                if (scenario != null)
+                {
+                    resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
+                    if (string.IsNullOrEmpty(resolvedAmount))
+                    {
+                        resolvedAmount = scenario.DefaultAmount;
+                    }
+                }
+            }
+
+            var eolString = LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+            string chaosColDelim = format == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter ?? "\u0014";
+            string chaosQuoteDelim = format == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter ?? "\u00fe";
+
+            return new ChaosEngine(
+                totalLines,
+                resolvedAmount,
+                resolvedTypes,
+                format,
+                chaosColDelim,
+                chaosQuoteDelim,
+                eolString,
+                request.Metadata.Seed);
         }
 
         /// <summary>

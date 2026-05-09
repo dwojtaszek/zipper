@@ -36,10 +36,10 @@ internal class DatWriter : LoadFileWriterBase
                 await WriteLoadfileOnlyAsync(stream, request, chaosEngine);
                 break;
             case WriterMode.ProductionSet:
-                await WriteProductionSetAsync(stream, request, processedFiles);
+                await WriteProductionSetAsync(stream, request, processedFiles, chaosEngine);
                 break;
             default:
-                await WriteStandardAsync(stream, request, processedFiles);
+                await WriteStandardAsync(stream, request, processedFiles, chaosEngine);
                 break;
         }
     }
@@ -91,14 +91,73 @@ internal class DatWriter : LoadFileWriterBase
     private static async Task WriteStandardAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles)
+        List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null)
     {
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
-        // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
-        await WriteContentAsync(writer, request, processedFiles);
-        await writer.FlushAsync();
+        if (chaosEngine == null)
+        {
+            // Use leaveOpen: true to avoid disposing the caller's stream
+            await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
+            await WriteContentAsync(writer, request, processedFiles);
+            await writer.FlushAsync();
+            return;
+        }
+
+        // Chaos path: use MemoryStream for raw byte control (required for encoding anomaly injection)
+        var eolString = GetEolString(request.Delimiters.EndOfLine);
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+
+        using var memStream = new MemoryStream();
+
+        // Write header (line 1)
+        var header = BuildStandardHeader(request, colDelim, quote);
+        header = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
+        await memStream.WriteAsync(encoding.GetBytes(header + eolString));
+
+#pragma warning disable S2245
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
+#pragma warning restore S2245
+        var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+        var builder = new MetadataRowBuilder(request, random, now);
+
+        var sortedFiles = processedFiles.OrderBy(f => f.WorkItem.Index).ToList();
+        var buffer = new StringBuilder();
+
+        for (int i = 0; i < sortedFiles.Count; i++)
+        {
+            long lineNumber = i + 2; // header is line 1, first data row is line 2
+            var fileData = sortedFiles[i];
+            var recordId = builder.GetControlNumber(fileData.WorkItem);
+            var line = BuildStandardRow(fileData, request, colDelim, quote, builder);
+            line = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
+            buffer.Append(line);
+            buffer.Append(eolString);
+
+            // Flush and inject encoding anomaly between this line and the next
+            if (i < sortedFiles.Count - 1)
+            {
+                var bufferedBytes = encoding.GetBytes(buffer.ToString());
+                await memStream.WriteAsync(bufferedBytes);
+                buffer.Clear();
+                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
+            }
+            else if (buffer.Length > 200_000)
+            {
+                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                buffer.Clear();
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+        }
+
+        memStream.Position = 0;
+        await memStream.CopyToAsync(stream);
     }
 
     private static async Task WriteLoadfileOnlyAsync(
@@ -176,53 +235,132 @@ internal class DatWriter : LoadFileWriterBase
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles)
+        List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null)
     {
         var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "\u0014" : request.Delimiters.ColumnDelimiter;
         var quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "\u00fe" : request.Delimiters.QuoteDelimiter;
         var eol = GetEolString(request.Delimiters.EndOfLine);
 
-        await using var writer = CreateWriter(stream, request);
-
-        // Header
-        var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
-        await writer.WriteAsync(string.Join(col, headers.Select(h => $"{quote}{h}{quote}")) + eol);
-
-        // Data rows
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        if (chaosEngine == null)
         {
-            var workItem = fileData.WorkItem;
-            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-            var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
+            await using var writer = CreateWriter(stream, request);
 
-            var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-            var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
-            var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
+            // Header
+            var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+            await writer.WriteAsync(string.Join(col, headers.Select(h => $"{quote}{h}{quote}")) + eol);
+
+            // Data rows
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            {
+                var workItem = fileData.WorkItem;
+                var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+                var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                    .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
+
+                var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+                var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
+                var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
-            var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
+                var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
 #pragma warning restore S2245
-            var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-            var builder = new MetadataRowBuilder(request, random, now);
+                var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+                var builder = new MetadataRowBuilder(request, random, now);
 
-            var fields = new[]
+                var fields = new[]
+                {
+                    batesNumber,
+                    batesNumber,
+                    workItem.FolderName,
+                    nativePath,
+                    textPath,
+                    imagesPath,
+                    builder.GetCustodian(),
+                    builder.GetDateCreated(),
+                    fileData.DataLength.ToString(),
+                    request.Output.FileType.ToUpperInvariant(),
+                };
+                await writer.WriteAsync(string.Join(col, fields.Select(f => $"{quote}{f}{quote}")) + eol);
+            }
+
+            await writer.FlushAsync();
+            return;
+        }
+
+        // Chaos path: use MemoryStream for raw byte control (required for encoding anomaly injection)
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        using var memStream = new MemoryStream();
+
+        // Write header (line 1)
+        var hdrs = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+        var headerLine = string.Join(col, hdrs.Select(h => $"{quote}{h}{quote}"));
+        headerLine = ApplyChaosInterception(chaosEngine, 1, headerLine, "HEADER");
+        await memStream.WriteAsync(encoding.GetBytes(headerLine + eol));
+
+        var sortedFiles = processedFiles.OrderBy(f => f.WorkItem.Index).ToList();
+        var sbuf = new StringBuilder();
+
+        for (int i = 0; i < sortedFiles.Count; i++)
+        {
+            long lineNumber = i + 2; // header is line 1
+            var fileData = sortedFiles[i];
+            var workItem = fileData.WorkItem;
+            var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+            var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
+
+            var nPath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+            var tPath = nPath.Replace($".{request.Output.FileType}", ".txt");
+            var iPath = imgPath.Replace(Path.DirectorySeparatorChar, '\\');
+
+#pragma warning disable S2245
+            var rowRandom = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
+#pragma warning restore S2245
+            var rowNow = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+            var rowBuilder = new MetadataRowBuilder(request, rowRandom, rowNow);
+
+            var rowFields = new[]
             {
-                batesNumber,
-                batesNumber,
+                batesNum,
+                batesNum,
                 workItem.FolderName,
-                nativePath,
-                textPath,
-                imagesPath,
-                builder.GetCustodian(),
-                builder.GetDateCreated(),
+                nPath,
+                tPath,
+                iPath,
+                rowBuilder.GetCustodian(),
+                rowBuilder.GetDateCreated(),
                 fileData.DataLength.ToString(),
                 request.Output.FileType.ToUpperInvariant(),
             };
-            await writer.WriteAsync(string.Join(col, fields.Select(f => $"{quote}{f}{quote}")) + eol);
+
+            var dataRow = string.Join(col, rowFields.Select(f => $"{quote}{f}{quote}"));
+            dataRow = ApplyChaosInterception(chaosEngine, lineNumber, dataRow, batesNum);
+            sbuf.Append(dataRow);
+            sbuf.Append(eol);
+
+            // Flush and inject encoding anomaly between this line and the next
+            if (i < sortedFiles.Count - 1)
+            {
+                var bufferedBytes = encoding.GetBytes(sbuf.ToString());
+                await memStream.WriteAsync(bufferedBytes);
+                sbuf.Clear();
+                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
+            }
+            else if (sbuf.Length > 200_000)
+            {
+                await memStream.WriteAsync(encoding.GetBytes(sbuf.ToString()));
+                sbuf.Clear();
+            }
         }
 
-        await writer.FlushAsync();
+        if (sbuf.Length > 0)
+        {
+            await memStream.WriteAsync(encoding.GetBytes(sbuf.ToString()));
+        }
+
+        memStream.Position = 0;
+        await memStream.CopyToAsync(stream);
     }
 
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)
