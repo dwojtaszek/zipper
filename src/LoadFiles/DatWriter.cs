@@ -105,17 +105,10 @@ internal class DatWriter : LoadFileWriterBase
             return;
         }
 
-        // Chaos path: use MemoryStream for raw byte control (required for encoding anomaly injection)
+        // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
         var eolString = GetEolString(request.Delimiters.EndOfLine);
         char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
         char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
-
-        using var memStream = new MemoryStream();
-
-        // Write header (line 1)
-        var header = BuildStandardHeader(request, colDelim, quote);
-        header = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
-        await memStream.WriteAsync(encoding.GetBytes(header + eolString));
 
 #pragma warning disable S2245
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
@@ -123,41 +116,20 @@ internal class DatWriter : LoadFileWriterBase
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var builder = new MetadataRowBuilder(request, random, now);
 
-        var sortedFiles = processedFiles.OrderBy(f => f.WorkItem.Index).ToList();
-        var buffer = new StringBuilder();
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote)));
 
-        for (int i = 0; i < sortedFiles.Count; i++)
+        int rowIdx = 0;
+        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            long lineNumber = i + 2; // header is line 1, first data row is line 2
-            var fileData = sortedFiles[i];
+            long lineNumber = rowIdx + 2;
             var recordId = builder.GetControlNumber(fileData.WorkItem);
             var line = BuildStandardRow(fileData, request, colDelim, quote, builder);
-            line = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
-            buffer.Append(line);
-            buffer.Append(eolString);
-
-            // Flush and inject encoding anomaly between this line and the next
-            if (i < sortedFiles.Count - 1)
-            {
-                var bufferedBytes = encoding.GetBytes(buffer.ToString());
-                await memStream.WriteAsync(bufferedBytes);
-                buffer.Clear();
-                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
-            }
-            else if (buffer.Length > 200_000)
-            {
-                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
-            }
+            rows.Add((lineNumber, recordId, line));
+            rowIdx++;
         }
 
-        if (buffer.Length > 0)
-        {
-            await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-        }
-
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
+        await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
     }
 
     private static async Task WriteLoadfileOnlyAsync(
@@ -241,16 +213,16 @@ internal class DatWriter : LoadFileWriterBase
         var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "\u0014" : request.Delimiters.ColumnDelimiter;
         var quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "\u00fe" : request.Delimiters.QuoteDelimiter;
         var eol = GetEolString(request.Delimiters.EndOfLine);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+
+        var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+        var headerLine = string.Join(col, headers.Select(h => $"{quote}{h}{quote}"));
 
         if (chaosEngine == null)
         {
             await using var writer = CreateWriter(stream, request);
+            await writer.WriteAsync(headerLine + eol);
 
-            // Header
-            var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
-            await writer.WriteAsync(string.Join(col, headers.Select(h => $"{quote}{h}{quote}")) + eol);
-
-            // Data rows
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
                 var workItem = fileData.WorkItem;
@@ -288,23 +260,14 @@ internal class DatWriter : LoadFileWriterBase
             return;
         }
 
-        // Chaos path: use MemoryStream for raw byte control (required for encoding anomaly injection)
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        using var memStream = new MemoryStream();
+        // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        rows.Add((1, "HEADER", headerLine));
 
-        // Write header (line 1)
-        var hdrs = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
-        var headerLine = string.Join(col, hdrs.Select(h => $"{quote}{h}{quote}"));
-        headerLine = ApplyChaosInterception(chaosEngine, 1, headerLine, "HEADER");
-        await memStream.WriteAsync(encoding.GetBytes(headerLine + eol));
-
-        var sortedFiles = processedFiles.OrderBy(f => f.WorkItem.Index).ToList();
-        var sbuf = new StringBuilder();
-
-        for (int i = 0; i < sortedFiles.Count; i++)
+        int rowIdx = 0;
+        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            long lineNumber = i + 2; // header is line 1
-            var fileData = sortedFiles[i];
+            long lineNumber = rowIdx + 2;
             var workItem = fileData.WorkItem;
             var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
@@ -335,32 +298,11 @@ internal class DatWriter : LoadFileWriterBase
             };
 
             var dataRow = string.Join(col, rowFields.Select(f => $"{quote}{f}{quote}"));
-            dataRow = ApplyChaosInterception(chaosEngine, lineNumber, dataRow, batesNum);
-            sbuf.Append(dataRow);
-            sbuf.Append(eol);
-
-            // Flush and inject encoding anomaly between this line and the next
-            if (i < sortedFiles.Count - 1)
-            {
-                var bufferedBytes = encoding.GetBytes(sbuf.ToString());
-                await memStream.WriteAsync(bufferedBytes);
-                sbuf.Clear();
-                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
-            }
-            else if (sbuf.Length > 200_000)
-            {
-                await memStream.WriteAsync(encoding.GetBytes(sbuf.ToString()));
-                sbuf.Clear();
-            }
+            rows.Add((lineNumber, batesNum, dataRow));
+            rowIdx++;
         }
 
-        if (sbuf.Length > 0)
-        {
-            await memStream.WriteAsync(encoding.GetBytes(sbuf.ToString()));
-        }
-
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
+        await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)

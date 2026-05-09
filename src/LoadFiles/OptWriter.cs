@@ -171,9 +171,6 @@ internal class OptWriter : LoadFileWriterBase
         FileGenerationRequest request,
         List<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
-        Stream stream,
-        FileGenerationRequest request,
-        List<FileData> processedFiles)
     {
         var eol = GetEolString(request.Delimiters.EndOfLine);
 
@@ -198,64 +195,24 @@ internal class OptWriter : LoadFileWriterBase
             return;
         }
 
-        // Chaos path: use MemoryStream for raw byte control (required for encoding anomaly injection)
+        // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        using var memStream = new MemoryStream();
-        var sortedWorkItems = processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem).ToList();
-        var buffer = new System.Text.StringBuilder();
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
-        for (int i = 0; i < sortedWorkItems.Count; i++)
+        int rowIdx = 0;
+        foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
         {
-            long lineNumber = i + 1; // OPT has no header; first row is line 1
-            var workItem = sortedWorkItems[i];
+            long lineNumber = rowIdx + 1; // OPT has no header; first row is line 1
             var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
                 .Replace(Path.DirectorySeparatorChar, '\\');
 
             var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,1";
-            optLine = ApplyChaosInterception(chaosEngine, lineNumber, optLine, batesNum);
-            buffer.Append(optLine);
-            buffer.Append(eol);
-
-            if (i < sortedWorkItems.Count - 1)
-            {
-                var bufferedBytes = encoding.GetBytes(buffer.ToString());
-                await memStream.WriteAsync(bufferedBytes);
-                buffer.Clear();
-                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
-            }
-            else if (buffer.Length > 200_000)
-            {
-                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
-            }
+            rows.Add((lineNumber, batesNum, optLine));
+            rowIdx++;
         }
 
-        if (buffer.Length > 0)
-        {
-            await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-        }
-
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
-    }
-        var eol = GetEolString(request.Delimiters.EndOfLine);
-        await using var writer = CreateWriter(stream, request);
-
-        foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
-        {
-            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-            var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                .Replace(Path.DirectorySeparatorChar, '\\');
-
-            var docBreak = "Y";
-            var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
-
-            await writer.WriteAsync(line + eol);
-        }
-
-        await writer.FlushAsync();
+        await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 }

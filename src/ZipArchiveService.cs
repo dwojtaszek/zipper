@@ -90,7 +90,7 @@ namespace Zipper
                 long totalChaosLines = format == LoadFileFormat.Opt
                     ? processedFiles.Count
                     : processedFiles.Count + 1;
-                var chaosEngine = BuildChaosEngine(request, totalChaosLines, format);
+                var chaosEngine = ChaosEngineBuilder.Build(request, totalChaosLines, format);
 
                 if (request.Output.IncludeLoadFile)
                 {
@@ -113,48 +113,6 @@ namespace Zipper
             }
 
             return actualLoadFilePath;
-        }
-
-        /// <summary>
-        /// Builds a ChaosEngine for the given request and format, or returns null if chaos is not enabled.
-        /// A fresh instance must be created per format because ChaosEngine is stateful.
-        /// </summary>
-        private static ChaosEngine? BuildChaosEngine(FileGenerationRequest request, long totalLines, LoadFileFormat format)
-        {
-            if (!request.Chaos.ChaosMode)
-            {
-                return null;
-            }
-
-            string? resolvedTypes = request.Chaos.ChaosTypes;
-            string? resolvedAmount = request.Chaos.ChaosAmount;
-
-            if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
-            {
-                var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
-                if (scenario != null)
-                {
-                    resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
-                    if (string.IsNullOrEmpty(resolvedAmount))
-                    {
-                        resolvedAmount = scenario.DefaultAmount;
-                    }
-                }
-            }
-
-            var eolString = LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
-            string chaosColDelim = format == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter ?? "\u0014";
-            string chaosQuoteDelim = format == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter ?? "\u00fe";
-
-            return new ChaosEngine(
-                totalLines,
-                resolvedAmount,
-                resolvedTypes,
-                format,
-                chaosColDelim,
-                chaosQuoteDelim,
-                eolString,
-                request.Metadata.Seed);
         }
 
         /// <summary>
