@@ -624,6 +624,5 @@ namespace Zipper
             Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
         }
 
-
     }
 }
