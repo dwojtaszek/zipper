@@ -15,14 +15,14 @@ internal static class ColumnValueGeneratorRegistry
         "identifier", "text", "longtext", "date", "datetime", "number", "boolean", "coded", "email",
 
         // Legacy metadata kinds (--with-metadata path)
-        "folderCustodian", "indexCustodian", "legacyDateSent", "legacyDateCreated", "legacyAuthor",
-        "fileDataSize", "randomFileSize",
+        "foldercustodian", "indexcustodian", "legacydatesent", "legacydatecreated", "legacyauthor",
+        "filedatasize", "randomfilesize",
 
         // EML column kinds
-        "emailTo", "emailFrom", "emailSubject", "emailSentDate", "emailAttachment",
+        "emailto", "emailfrom", "emailsubject", "emailsentdate", "emailattachment",
 
         // Synthetic email column kinds (loadfile-only / no FileData)
-        "syntheticEmailTo", "syntheticEmailFrom", "syntheticEmailSubject", "syntheticEmailSentDate",
+        "syntheticemailto", "syntheticemailfrom", "syntheticemailsubject", "syntheticemailsentdate",
     };
 
     public static bool IsKnownType(string type) => KnownTypes.Contains(type);

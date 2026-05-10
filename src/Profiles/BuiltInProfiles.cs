@@ -190,10 +190,10 @@ public static class BuiltInProfiles
         DataSources = new Dictionary<string, DataSourceConfig>(),
         Columns = new List<ColumnDefinition>
         {
-            new() { Name = "CUSTODIAN", Type = "folderCustodian", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DATESENT", Type = "legacyDateSent", Required = true, EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "legacyAuthor", Required = true, EmptyPercentage = 0 },
-            new() { Name = "FILESIZE", Type = "fileDataSize", Required = true, EmptyPercentage = 0 },
+            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
         },
     };
 
@@ -211,15 +211,15 @@ public static class BuiltInProfiles
         DataSources = new Dictionary<string, DataSourceConfig>(),
         Columns = new List<ColumnDefinition>
         {
-            new() { Name = "CUSTODIAN", Type = "folderCustodian", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DATESENT", Type = "legacyDateSent", Required = true, EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "legacyAuthor", Required = true, EmptyPercentage = 0 },
-            new() { Name = "FILESIZE", Type = "fileDataSize", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILTO", Type = "emailTo", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILFROM", Type = "emailFrom", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILSUBJECT", Type = "emailSubject", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILSENTDATE", Type = "emailSentDate", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILATTACHMENT", Type = "emailAttachment", Required = true, EmptyPercentage = 0 },
+            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILTO", Type = "emailto", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILFROM", Type = "emailfrom", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSUBJECT", Type = "emailsubject", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSENTDATE", Type = "emailsentdate", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILATTACHMENT", Type = "emailattachment", Required = true, EmptyPercentage = 0 },
         },
     };
 
@@ -262,7 +262,7 @@ public static class BuiltInProfiles
             new() { Name = "EMAILTO", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 1, Max = 10 }, EmptyPercentage = 30 },
             new() { Name = "EMAILCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 15 }, EmptyPercentage = 50 },
             new() { Name = "EMAILBCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 3 }, EmptyPercentage = 90 },
-            new() { Name = "EMAILSUBJECT", Type = "text", Generator = "emailSubject", EmptyPercentage = 30 },
+            new() { Name = "EMAILSUBJECT", Type = "text", Generator = "emailsubject", EmptyPercentage = 30 },
             new() { Name = "CONVERSATIONID", Type = "text", EmptyPercentage = 50 },
             new() { Name = "MESSAGEID", Type = "text", EmptyPercentage = 50 },
 
