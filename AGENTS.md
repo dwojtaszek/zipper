@@ -151,7 +151,7 @@ Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`.
 |------|---------|
 | `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
-| `src/FileGenerationRequest.cs` | Configuration object (40+ properties) shared across pipeline |
+| `src/FileGenerationRequest.cs` | Configuration root — 8 sub-configs (`Output`, `Metadata`, `LoadFile`, `Delimiters`, `Bates`, `Tiff`, `Chaos`, `Production`) + `LoadfileOnly` flag. Flat access guarded by `FGR_FLAT_ACCESS` analyzer |
 | `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher (errors → exit codes) |
 | `src/StandardMode.cs` / `LoadfileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
 | `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
