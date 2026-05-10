@@ -23,12 +23,11 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// <returns></returns>
     protected static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
     {
-        var builder = new MetadataRowBuilder(request, random, now);
         return new MetadataColumns
         {
-            Custodian = builder.GetCustodian(workItem.FolderNumber),
-            DateSent = builder.GetDateSent(),
-            Author = builder.GetAuthor(),
+            Custodian = $"Custodian {workItem.FolderNumber}",
+            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd"),
+            Author = $"Author {random.Next(1, 100):D3}",
             FileSize = fileData.DataLength,
         };
     }
@@ -39,14 +38,14 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     /// </summary>
     protected static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
     {
-        var builder = new MetadataRowBuilder(request, random, now);
         return new EmlColumns
         {
-            To = builder.GetEmailTo(workItem, fileData),
-            From = builder.GetEmailFrom(workItem, fileData),
-            Subject = builder.GetEmailSubject(workItem, fileData),
-            SentDate = builder.GetEmailSentDate(workItem, fileData),
-            Attachment = builder.GetEmailAttachment(fileData),
+            To = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com",
+            From = fileData.Email?.From ?? $"sender{workItem.Index}@example.com",
+            Subject = fileData.Email?.Subject ?? $"Email Subject {workItem.Index}",
+            SentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss")
+                ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss"),
+            Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
         };
     }
 
@@ -118,6 +117,41 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     }
 
     /// <summary>
+    /// Appends a quoted or unquoted field value to the StringBuilder.
+    /// </summary>
+    internal static void AppendField(System.Text.StringBuilder sb, string value, char quote, bool hasQuote)
+    {
+        if (hasQuote)
+        {
+            sb.Append(quote);
+            sb.Append(value);
+            sb.Append(quote);
+        }
+        else
+        {
+            sb.Append(value);
+        }
+    }
+
+    /// <summary>
+    /// Replaces newline characters in a field value with the configured newline delimiter.
+    /// </summary>
+    internal static string SanitizeField(string value, string newlineDelimiter)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        return value.Replace("
+", newlineDelimiter)
+                    .Replace("
+", newlineDelimiter)
+                    .Replace("
+", newlineDelimiter);
+    }
+
+        /// <summary>
     /// Gets the end-of-line string from the configured EOL specifier.
     /// </summary>
     internal static string GetEolString(string eol) => eol?.ToUpperInvariant() switch

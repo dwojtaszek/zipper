@@ -170,10 +170,59 @@ public static class BuiltInProfiles
             "standard" => Standard,
             "litigation" => Litigation,
             "full" => Full,
+            "legacywithmetadata" => LegacyWithMetadata,
+            "legacyeml" => LegacyEml,
             _ => null,
         };
     }
 
+
+    /// <summary>
+    /// Gets the legacy metadata pseudo-profile activated by --with-metadata on non-EML files.
+    /// Four fixed columns: CUSTODIAN (folder-based), DATESENT, AUTHOR, FILESIZE.
+    /// </summary>
+    public static ColumnProfile LegacyWithMetadata { get; } = new()
+    {
+        Name = "legacyWithMetadata",
+        Description = "Legacy --with-metadata pseudo-profile (non-EML)",
+        Version = "1.0",
+        FieldNamingConvention = "UPPERCASE",
+        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+        DataSources = new Dictionary<string, DataSourceConfig>(),
+        Columns = new List<ColumnDefinition>
+        {
+            new() { Name = "CUSTODIAN", Type = "folderCustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacyDateSent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyAuthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "fileDataSize", Required = true, EmptyPercentage = 0 },
+        },
+    };
+
+    /// <summary>
+    /// Gets the legacy EML pseudo-profile for EML files.
+    /// Includes metadata columns plus five email columns read from fileData.Email.
+    /// </summary>
+    public static ColumnProfile LegacyEml { get; } = new()
+    {
+        Name = "legacyEml",
+        Description = "Legacy EML pseudo-profile with metadata + email columns",
+        Version = "1.0",
+        FieldNamingConvention = "UPPERCASE",
+        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+        DataSources = new Dictionary<string, DataSourceConfig>(),
+        Columns = new List<ColumnDefinition>
+        {
+            new() { Name = "CUSTODIAN", Type = "folderCustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacyDateSent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyAuthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "fileDataSize", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILTO", Type = "emailTo", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILFROM", Type = "emailFrom", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSUBJECT", Type = "emailSubject", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSENTDATE", Type = "emailSentDate", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILATTACHMENT", Type = "emailAttachment", Required = true, EmptyPercentage = 0 },
+        },
+    };
     private static List<ColumnDefinition> CreateLitigationColumns()
     {
         var columns = new List<ColumnDefinition>
