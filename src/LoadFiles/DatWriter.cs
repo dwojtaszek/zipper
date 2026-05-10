@@ -59,18 +59,16 @@ internal class DatWriter : LoadFileWriterBase
 
         await writer.WriteLineAsync(BuildStandardHeader(request, colDelim, quote));
 
-#pragma warning disable S2245
-        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
-#pragma warning restore S2245
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-        var builder = new MetadataRowBuilder(request, random, now);
+        var generator = GetEffectiveProfileGenerator(request, now);
 
         var buffer = new StringBuilder();
         int rowCount = 0;
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            var line = BuildStandardRow(fileData, request, colDelim, quote, builder);
+            var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
+            var line = BuildStandardRow(fileData, request, colDelim, quote, profileValues);
             buffer.AppendLine(line);
             rowCount++;
 
@@ -110,11 +108,10 @@ internal class DatWriter : LoadFileWriterBase
         char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
         char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
 
-#pragma warning disable S2245
-        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
-#pragma warning restore S2245
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-        var builder = new MetadataRowBuilder(request, random, now);
+        var generator = GetEffectiveProfileGenerator(request, now);
+
+        var generator = GetEffectiveProfileGenerator(request, now);
 
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
         rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote)));
@@ -123,8 +120,9 @@ internal class DatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             long lineNumber = rowIdx + 2;
-            var recordId = builder.GetControlNumber(fileData.WorkItem);
-            var line = BuildStandardRow(fileData, request, colDelim, quote, builder);
+            var recordId = $"DOC{fileData.WorkItem.Index:D8}";
+            var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
+            var line = BuildStandardRow(fileData, request, colDelim, quote, profileValues);
             rows.Add((lineNumber, recordId, line));
             rowIdx++;
         }
@@ -160,15 +158,14 @@ internal class DatWriter : LoadFileWriterBase
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
-        var builder = new MetadataRowBuilder(request, random, now);
         var buffer = new StringBuilder();
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
-            string recordId = builder.GetControlNumber(i);
+            string recordId = $"DOC{i:D8}";
 
-            var line = BuildLoadfileOnlyRow(i, recordId, colDelim, quote, hasQuote, builder);
+            var line = BuildLoadfileOnlyRow(i, recordId, colDelim, quote, hasQuote, now, random);
 
             line = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
 
@@ -267,7 +264,9 @@ internal class DatWriter : LoadFileWriterBase
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
 #pragma warning restore S2245
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-        var builder = new MetadataRowBuilder(request, random, now);
+        var maxCustodians = Math.Max(2, request.Metadata.CustodianCountOverride ?? 10);
+        var custodianProd = $"Custodian {random.Next(1, maxCustodians + 1)}";
+        var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd");
 
         var fields = new[]
         {
@@ -277,13 +276,26 @@ internal class DatWriter : LoadFileWriterBase
             nativePath,
             textPath,
             imagesPath,
-            builder.GetCustodian(),
-            builder.GetDateCreated(),
+            custodianProd,
+            dateCreated,
             fileData.DataLength.ToString(),
             request.Output.FileType.ToUpperInvariant(),
         };
 
         return string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
+    }
+
+    private static Zipper.Profiles.DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
+    {
+        var profile = request.Metadata.ColumnProfile;
+        if (profile == null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+        {
+            profile = request.Output.IsEml
+                ? Zipper.Profiles.BuiltInProfiles.LegacyEml
+                : Zipper.Profiles.BuiltInProfiles.LegacyWithMetadata;
+        }
+
+        return profile != null ? new Zipper.Profiles.DataGenerator(profile, request.Metadata.Seed, now) : null;
     }
 
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)
@@ -324,36 +336,36 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
-        MetadataRowBuilder builder)
+        System.Collections.Generic.Dictionary<string, string>? profileValues)
     {
         var workItem = fileData.WorkItem;
-        var docId = MetadataRowBuilder.SanitizeField(builder.GetControlNumber(workItem), request.Delimiters.NewlineDelimiter);
+        var docId = SanitizeField($"DOC{workItem.Index:D8}", request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
-        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{MetadataRowBuilder.SanitizeField(workItem.FilePathInZip, request.Delimiters.NewlineDelimiter)}{quote}");
+        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{SanitizeField(workItem.FilePathInZip, request.Delimiters.NewlineDelimiter)}{quote}");
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            var custodian = MetadataRowBuilder.SanitizeField(builder.GetCustodian(workItem.FolderNumber), request.Delimiters.NewlineDelimiter);
-            var dateSent = builder.GetDateSent();
-            var author = MetadataRowBuilder.SanitizeField(builder.GetAuthor(), request.Delimiters.NewlineDelimiter);
-            var fileSize = builder.GetFileSize(fileData);
+            var custodian = SanitizeField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, request.Delimiters.NewlineDelimiter);
+            var dateSent = profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty;
+            var author = SanitizeField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, request.Delimiters.NewlineDelimiter);
+            var fileSize = profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString();
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var to = MetadataRowBuilder.SanitizeField(builder.GetEmailTo(workItem, fileData), request.Delimiters.NewlineDelimiter);
-            var from = MetadataRowBuilder.SanitizeField(builder.GetEmailFrom(workItem, fileData), request.Delimiters.NewlineDelimiter);
-            var subject = MetadataRowBuilder.SanitizeField(builder.GetEmailSubject(workItem, fileData), request.Delimiters.NewlineDelimiter);
-            var sentDate = builder.GetEmailSentDate(workItem, fileData);
-            var attachment = MetadataRowBuilder.SanitizeField(builder.GetEmailAttachment(fileData), request.Delimiters.NewlineDelimiter);
+            var to = SanitizeField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", request.Delimiters.NewlineDelimiter);
+            var from = SanitizeField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", request.Delimiters.NewlineDelimiter);
+            var subject = SanitizeField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", request.Delimiters.NewlineDelimiter);
+            var sentDate = profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty;
+            var attachment = SanitizeField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, request.Delimiters.NewlineDelimiter);
             sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
         }
 
         if (request.Bates != null)
         {
-            sb.Append($"{colDelim}{quote}{builder.GetBatesNumber(workItem)}{quote}");
+            sb.Append($"{colDelim}{quote}{BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)}{quote}");
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
@@ -363,7 +375,11 @@ internal class DatWriter : LoadFileWriterBase
 
         if (request.Output.WithText)
         {
-            sb.Append($"{colDelim}{quote}{builder.GetTextPath(workItem)}{quote}");
+            var sourceSuffix = $".{request.Output.FileType}";
+            var textPath = workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
+                ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
+                : workItem.FilePathInZip;
+            sb.Append($"{colDelim}{quote}{textPath}{quote}");
         }
 
         return sb.ToString();
@@ -375,27 +391,27 @@ internal class DatWriter : LoadFileWriterBase
         bool hasQuote)
     {
         var sb = new StringBuilder();
-        MetadataRowBuilder.AppendField(sb, "Control Number", quote, hasQuote);
+        AppendField(sb, "Control Number", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "File Path", quote, hasQuote);
+        AppendField(sb, "File Path", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "Custodian", quote, hasQuote);
+        AppendField(sb, "Custodian", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "Date Sent", quote, hasQuote);
+        AppendField(sb, "Date Sent", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "Author", quote, hasQuote);
+        AppendField(sb, "Author", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "File Size", quote, hasQuote);
+        AppendField(sb, "File Size", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "EmailSubject", quote, hasQuote);
+        AppendField(sb, "EmailSubject", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "EmailFrom", quote, hasQuote);
+        AppendField(sb, "EmailFrom", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "EmailTo", quote, hasQuote);
+        AppendField(sb, "EmailTo", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "EmailSentDate", quote, hasQuote);
+        AppendField(sb, "EmailSentDate", quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, "ExtractedText", quote, hasQuote);
+        AppendField(sb, "ExtractedText", quote, hasQuote);
 
         return sb.ToString();
     }
@@ -406,38 +422,42 @@ internal class DatWriter : LoadFileWriterBase
         char colDelim,
         char quote,
         bool hasQuote,
-        MetadataRowBuilder builder)
+        DateTime now,
+        Random random)
     {
-        var workItem = new FileWorkItem { Index = index };
         var sb = new StringBuilder();
-        var custodian = builder.GetCustodianByIndex(index);
-        var dateSent = builder.GetDateSent();
-        var author = builder.GetAuthor();
-        var fileSize = builder.GetFileSize();
+        var custodian = $"Custodian {(index % 10) + 1}";
+        var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
+        var author = $"Author {random.Next(1, 100):D3}";
+        var fileSize = random.Next(1024, 10485760).ToString();
+        var emailSubject = $"Email Subject {index}";
+        var emailFrom = $"sender{index}@example.com";
+        var emailTo = $"recipient{index}@example.com";
+        var emailSentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
         var filePath = $"NATIVES\\{(index % 50) + 1:D3}\\{recordId}.pdf";
         var extractedText = $"Sample extracted text content for document {recordId}.";
 
-        MetadataRowBuilder.AppendField(sb, recordId, quote, hasQuote);
+        AppendField(sb, recordId, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, filePath, quote, hasQuote);
+        AppendField(sb, filePath, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, custodian, quote, hasQuote);
+        AppendField(sb, custodian, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, dateSent, quote, hasQuote);
+        AppendField(sb, dateSent, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, author, quote, hasQuote);
+        AppendField(sb, author, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, fileSize, quote, hasQuote);
+        AppendField(sb, fileSize, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailSubject(workItem), quote, hasQuote);
+        AppendField(sb, emailSubject, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailFrom(workItem), quote, hasQuote);
+        AppendField(sb, emailFrom, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailTo(workItem), quote, hasQuote);
+        AppendField(sb, emailTo, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, builder.GetEmailSentDate(workItem), quote, hasQuote);
+        AppendField(sb, emailSentDate, quote, hasQuote);
         sb.Append(colDelim);
-        MetadataRowBuilder.AppendField(sb, extractedText, quote, hasQuote);
+        AppendField(sb, extractedText, quote, hasQuote);
 
         return sb.ToString();
     }
