@@ -170,9 +170,58 @@ public static class BuiltInProfiles
             "standard" => Standard,
             "litigation" => Litigation,
             "full" => Full,
+            "legacywithmetadata" => LegacyWithMetadata,
+            "legacyeml" => LegacyEml,
             _ => null,
         };
     }
+
+    /// <summary>
+    /// Gets the legacy metadata pseudo-profile activated by --with-metadata on non-EML files.
+    /// Four fixed columns: CUSTODIAN (folder-based), DATESENT, AUTHOR, FILESIZE.
+    /// </summary>
+    public static ColumnProfile LegacyWithMetadata { get; } = new()
+    {
+        Name = "legacyWithMetadata",
+        Description = "Legacy --with-metadata pseudo-profile (non-EML)",
+        Version = "1.0",
+        FieldNamingConvention = "UPPERCASE",
+        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+        DataSources = new Dictionary<string, DataSourceConfig>(),
+        Columns = new List<ColumnDefinition>
+        {
+            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
+        },
+    };
+
+    /// <summary>
+    /// Gets the legacy EML pseudo-profile for EML files.
+    /// Includes metadata columns plus five email columns read from fileData.Email.
+    /// </summary>
+    public static ColumnProfile LegacyEml { get; } = new()
+    {
+        Name = "legacyEml",
+        Description = "Legacy EML pseudo-profile with metadata + email columns",
+        Version = "1.0",
+        FieldNamingConvention = "UPPERCASE",
+        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+        DataSources = new Dictionary<string, DataSourceConfig>(),
+        Columns = new List<ColumnDefinition>
+        {
+            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
+            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
+            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILTO", Type = "emailto", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILFROM", Type = "emailfrom", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSUBJECT", Type = "emailsubject", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILSENTDATE", Type = "emailsentdate", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILATTACHMENT", Type = "emailattachment", Required = true, EmptyPercentage = 0 },
+        },
+    };
 
     private static List<ColumnDefinition> CreateLitigationColumns()
     {
@@ -213,7 +262,7 @@ public static class BuiltInProfiles
             new() { Name = "EMAILTO", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 1, Max = 10 }, EmptyPercentage = 30 },
             new() { Name = "EMAILCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 15 }, EmptyPercentage = 50 },
             new() { Name = "EMAILBCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 3 }, EmptyPercentage = 90 },
-            new() { Name = "EMAILSUBJECT", Type = "text", Generator = "emailSubject", EmptyPercentage = 30 },
+            new() { Name = "EMAILSUBJECT", Type = "text", Generator = "emailsubject", EmptyPercentage = 30 },
             new() { Name = "CONVERSATIONID", Type = "text", EmptyPercentage = 50 },
             new() { Name = "MESSAGEID", Type = "text", EmptyPercentage = 50 },
 

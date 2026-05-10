@@ -99,7 +99,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
                 sb.Append(colDelim);
             }
 
-            MetadataRowBuilder.AppendField(sb, name, quote, hasQuote);
+            AppendField(sb, name, quote, hasQuote);
             first = false;
         }
 
@@ -123,7 +123,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             }
 
             var value = values.TryGetValue(name, out var v) ? v : string.Empty;
-            MetadataRowBuilder.AppendField(sb, value, quote, hasQuote);
+            AppendField(sb, value, quote, hasQuote);
             first = false;
         }
 

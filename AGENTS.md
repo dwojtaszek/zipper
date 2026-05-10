@@ -158,7 +158,7 @@ gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --j
 | `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
-| `src/MetadataRowBuilder.cs` | Assembles metadata rows from profiles + generation context |
+| `src/Profiles/Generation/` | Column value generators registry: `IColumnValueGenerator`, `ColumnGenerationContext`, per-Kind generators, legacy metadata generators (see ADR-0004) |
 | `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
 | `src/ProductionManifestWriter.cs` | `_manifest.json` production manifest writer |
 | `src/EmlGenerationService.cs` | Email Native File generation |

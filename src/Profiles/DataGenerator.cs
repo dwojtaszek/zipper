@@ -1,99 +1,133 @@
+using Zipper.Profiles.Generation;
+
 namespace Zipper.Profiles;
 
 /// <summary>
-/// Generates data values based on column profile definitions.
+/// Generates column values for a document using a ColumnProfile and registered IColumnValueGenerators.
 /// </summary>
 internal class DataGenerator
 {
     private readonly ColumnProfile profile;
     private readonly Random random;
-    private readonly Dictionary<string, List<string>> generatedDataSources;
+    private readonly Dictionary<string, List<string>> dataSources;
     private readonly Dictionary<string, int[]> distributionIndices;
+    private readonly Dictionary<string, IColumnValueGenerator> columnGenerators;
+    private readonly DateTime now;
     private int documentIndex;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DataGenerator"/> class.
-    /// </summary>
-    /// <param name="profile">The column profile to use for generation.</param>
-    /// <param name="seed">Optional random seed for reproducible output.</param>
-    public DataGenerator(ColumnProfile profile, int? seed = null)
+    public DataGenerator(ColumnProfile profile, int? seed = null, DateTime? now = null)
     {
         this.profile = profile;
-#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
+#pragma warning disable S2245
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        this.generatedDataSources = new Dictionary<string, List<string>>();
+        this.dataSources = new Dictionary<string, List<string>>();
         this.distributionIndices = new Dictionary<string, int[]>();
-
+        this.columnGenerators = new Dictionary<string, IColumnValueGenerator>();
+        this.now = now ?? DateTime.UtcNow;
         this.InitializeDataSources();
+        this.InitializeColumnGenerators();
     }
 
-    /// <summary>
-    /// Generates column values for a document.
-    /// </summary>
-    /// <param name="workItem">The file work item.</param>
-    /// <param name="fileData">The file data.</param>
-    /// <returns>Dictionary of column names to values.</returns>
     public Dictionary<string, string> GenerateRow(FileWorkItem workItem, FileData fileData)
     {
         this.documentIndex++;
-        var row = new Dictionary<string, string>();
-
-        foreach (var column in this.profile.Columns)
+        var ctx = new ColumnGenerationContext
         {
-            var value = this.GenerateColumnValue(column, workItem, fileData);
-            row[column.Name] = value;
+            NativeFileIndex = workItem.Index,
+            FolderNumber = workItem.FolderNumber,
+            DocumentIndex = this.documentIndex,
+            Seeded = this.random,
+            Now = this.now,
+            FileData = fileData,
+        };
+        var row = new Dictionary<string, string>(this.profile.Columns.Count);
+        foreach (var col in this.profile.Columns)
+        {
+            var emptyPct = col.EmptyPercentage ?? this.profile.Settings.EmptyValuePercentage;
+            if (!col.Required && this.random.Next(100) < emptyPct)
+            {
+                row[col.Name] = string.Empty;
+                continue;
+            }
+
+            row[col.Name] = this.columnGenerators.TryGetValue(col.Name, out var gen)
+                ? gen.Generate(ctx with { ProfileColumn = col })
+                : string.Empty;
         }
 
         return row;
     }
 
-    /// <summary>
-    /// Gets the column names in order.
-    /// </summary>
-    /// <returns>Enumerable of column names.</returns>
     public IEnumerable<string> GetColumnNames() => this.profile.Columns.Select(c => c.Name);
 
     private void InitializeDataSources()
     {
-        foreach (var (sourceName, config) in this.profile.DataSources)
+        foreach (var (name, cfg) in this.profile.DataSources)
         {
-            var values = new List<string>();
-
-            if (config.Values != null && config.Values.Count > 0)
+            var vals = cfg.Values?.Count > 0
+                ? new List<string>(cfg.Values)
+                : Enumerable.Range(1, cfg.Count).Select(i => $"{cfg.Prefix}{i}").ToList();
+            this.dataSources[name] = vals;
+            if (cfg.Distribution == "pareto" || cfg.Distribution == "weighted")
             {
-                values.AddRange(config.Values);
-            }
-            else
-            {
-                for (int i = 1; i <= config.Count; i++)
-                {
-                    values.Add($"{config.Prefix}{i}");
-                }
-            }
-
-            this.generatedDataSources[sourceName] = values;
-
-            if (config.Distribution == "pareto" || config.Distribution == "weighted")
-            {
-                this.distributionIndices[sourceName] = this.PrecomputeDistributionIndices(values.Count, config);
+                this.distributionIndices[name] = this.PrecomputeIndices(vals.Count, cfg);
             }
         }
     }
 
-    private int[] PrecomputeDistributionIndices(int count, DataSourceConfig config)
+    private void InitializeColumnGenerators()
+    {
+        foreach (var col in this.profile.Columns)
+        {
+            this.columnGenerators[col.Name] = this.CreateGenerator(col);
+        }
+    }
+
+    private IColumnValueGenerator CreateGenerator(ColumnDefinition col)
+    {
+        var ds = !string.IsNullOrEmpty(col.DataSource) && this.dataSources.TryGetValue(col.DataSource, out var v) ? v : null;
+        this.distributionIndices.TryGetValue(col.DataSource ?? string.Empty, out var di);
+        return col.Type.ToLowerInvariant() switch
+        {
+            "identifier" => new IdentifierGenerator(),
+            "text" => new TextGenerator(col, ds, di),
+            "longtext" => new LongTextGenerator(col),
+            "date" => new DateGenerator(col, this.profile.Settings),
+            "datetime" => new DateTimeColumnGenerator(col, this.profile.Settings),
+            "number" => new NumberGenerator(col),
+            "boolean" => new BooleanGenerator(col),
+            "coded" => new CodedGenerator(ds ?? new List<string>(), di, col, this.profile.Settings),
+            "email" => new EmailAddressGenerator(col, this.profile.Settings),
+            "foldercustodian" => new LegacyFolderCustodianGenerator(),
+            "indexcustodian" => new LegacyIndexCustodianGenerator(),
+            "legacydatesent" => new LegacyDateSentGenerator(),
+            "legacydatecreated" => new LegacyDateCreatedGenerator(),
+            "legacyauthor" => new LegacyAuthorGenerator(),
+            "filedatasize" => new LegacyFileSizeFromDataGenerator(),
+            "randomfilesize" => new LegacyRandomFileSizeGenerator(),
+            "emailto" => new LegacyEmailToGenerator(),
+            "emailfrom" => new LegacyEmailFromGenerator(),
+            "emailsubject" => new LegacyEmailSubjectGenerator(),
+            "emailsentdate" => new LegacyEmailSentDateGenerator(),
+            "emailattachment" => new LegacyEmailAttachmentGenerator(),
+            "syntheticemailto" => new LegacySyntheticEmailToGenerator(),
+            "syntheticemailfrom" => new LegacySyntheticEmailFromGenerator(),
+            "syntheticemailsubject" => new LegacySyntheticEmailSubjectGenerator(),
+            "syntheticemailsentdate" => new LegacySyntheticEmailSentDateGenerator(),
+            _ => new TextGenerator(col, ds, di),
+        };
+    }
+
+    private int[] PrecomputeIndices(int count, DataSourceConfig cfg)
     {
         var indices = new int[1000];
-
-        if (config.Distribution == "weighted" && config.Weights != null && config.Weights.Count > 0)
+        if (cfg.Distribution == "weighted" && cfg.Weights?.Count > 0)
         {
-            var totalWeight = config.Weights.Sum();
-
-            // Guard against zero/negative total weight
-            if (totalWeight <= 0)
+            var total = cfg.Weights.Sum();
+            if (total <= 0)
             {
-                // Fallback to uniform distribution
-                for (int i = 0; i < indices.Length; i++)
+                for (int i = 0; i < 1000; i++)
                 {
                     indices[i] = this.random.Next(count);
                 }
@@ -101,14 +135,14 @@ internal class DataGenerator
                 return indices;
             }
 
-            for (int i = 0; i < indices.Length; i++)
+            for (int i = 0; i < 1000; i++)
             {
-                var r = this.random.Next(totalWeight);
-                var cumulative = 0;
-                for (int j = 0; j < config.Weights.Count && j < count; j++)
+                var r = this.random.Next(total);
+                var cum = 0;
+                for (int j = 0; j < cfg.Weights.Count && j < count; j++)
                 {
-                    cumulative += config.Weights[j];
-                    if (r < cumulative)
+                    cum += cfg.Weights[j];
+                    if (r < cum)
                     {
                         indices[i] = j;
                         break;
@@ -118,293 +152,13 @@ internal class DataGenerator
         }
         else
         {
-            var topCount = Math.Max(1, count / 5);
-            for (int i = 0; i < indices.Length; i++)
+            var top = Math.Max(1, count / 5);
+            for (int i = 0; i < 1000; i++)
             {
-                if (this.random.NextDouble() < 0.8)
-                {
-                    indices[i] = this.random.Next(topCount);
-                }
-                else
-                {
-                    indices[i] = this.random.Next(count);
-                }
+                indices[i] = this.random.NextDouble() < 0.8 ? this.random.Next(top) : this.random.Next(count);
             }
         }
 
         return indices;
-    }
-
-    private string GenerateColumnValue(ColumnDefinition column, FileWorkItem workItem, FileData fileData)
-    {
-        var emptyPct = column.EmptyPercentage ?? this.profile.Settings.EmptyValuePercentage;
-        if (!column.Required && this.random.Next(100) < emptyPct)
-        {
-            return string.Empty;
-        }
-
-        return column.Type.ToLowerInvariant() switch
-        {
-            "identifier" => this.GenerateIdentifier(workItem),
-            "text" => this.GenerateText(column, workItem, fileData),
-            "longtext" => this.GenerateLongText(column),
-            "date" => this.GenerateDate(column),
-            "datetime" => this.GenerateDateTime(column),
-            "number" => this.GenerateNumber(column, fileData),
-            "boolean" => this.GenerateBoolean(column),
-            "coded" => this.GenerateCoded(column),
-            "email" => this.GenerateEmail(column),
-            _ => string.Empty,
-        };
-    }
-
-    private string GenerateIdentifier(FileWorkItem workItem)
-    {
-        return $"DOC{workItem.Index:D8}";
-    }
-
-    private string GenerateText(ColumnDefinition column, FileWorkItem workItem, FileData fileData)
-    {
-        if (column.Name.Equals("FILEPATH", StringComparison.OrdinalIgnoreCase))
-        {
-            return workItem.FilePathInZip;
-        }
-
-        if (column.Name.Equals("FILENAME", StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetFileName(workItem.FilePathInZip);
-        }
-
-        if (column.Name.Equals("FILEEXT", StringComparison.OrdinalIgnoreCase))
-        {
-            return Path.GetExtension(workItem.FilePathInZip).TrimStart('.');
-        }
-
-        if (!string.IsNullOrEmpty(column.DataSource) && this.generatedDataSources.TryGetValue(column.DataSource, out var values))
-        {
-            return this.GetValueFromDataSource(column.DataSource, values);
-        }
-
-        if (!string.IsNullOrEmpty(column.Generator))
-        {
-            return this.GenerateFromGenerator(column.Generator, column);
-        }
-
-        return $"Value_{this.documentIndex}_{column.Name}";
-    }
-
-    private string GenerateLongText(ColumnDefinition column)
-    {
-        if (column.Generator == "loremParagraphs")
-        {
-            var minParagraphs = 1;
-            var maxParagraphs = 3;
-
-            if (column.GeneratorParams != null)
-            {
-                if (column.GeneratorParams.TryGetValue("min", out var minObj))
-                {
-                    minParagraphs = Convert.ToInt32(minObj);
-                }
-
-                if (column.GeneratorParams.TryGetValue("max", out var maxObj))
-                {
-                    maxParagraphs = Convert.ToInt32(maxObj);
-                }
-            }
-
-            var paragraphCount = this.random.Next(minParagraphs, maxParagraphs + 1);
-            return string.Join(" ", Enumerable.Range(0, paragraphCount).Select(_ => LoremIpsum.GetParagraph(this.random)));
-        }
-
-        if (column.Generator == "reviewNote")
-        {
-            return ReviewNotes.GetRandomNote(this.random);
-        }
-
-        return LoremIpsum.GetParagraph(this.random);
-    }
-
-    private string GenerateDate(ColumnDefinition column)
-    {
-        var minDate = DateTime.Parse(column.DateRange?.Min ?? "2020-01-01");
-        var maxDate = DateTime.Parse(column.DateRange?.Max ?? "2024-12-31");
-        var range = (maxDate - minDate).Days;
-
-        // Handle edge case where min == max (range is 0)
-        var date = range <= 0 ? minDate : minDate.AddDays(this.random.Next(range + 1));
-        var format = column.Format ?? this.profile.Settings.DateFormat;
-        return date.ToString(format);
-    }
-
-    private string GenerateDateTime(ColumnDefinition column)
-    {
-        var minDate = DateTime.Parse(column.DateRange?.Min ?? "2020-01-01");
-        var maxDate = DateTime.Parse(column.DateRange?.Max ?? "2024-12-31");
-        var range = (maxDate - minDate).Days;
-
-        // Handle edge case where min == max (range is 0)
-        var date = range <= 0
-            ? minDate.AddHours(this.random.Next(24)).AddMinutes(this.random.Next(60))
-            : minDate.AddDays(this.random.Next(range + 1)).AddHours(this.random.Next(24)).AddMinutes(this.random.Next(60));
-        var format = column.Format ?? this.profile.Settings.DateTimeFormat;
-        return date.ToString(format);
-    }
-
-    private string GenerateNumber(ColumnDefinition column, FileData fileData)
-    {
-        if (column.Name.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase))
-        {
-            return fileData.DataLength.ToString();
-        }
-
-        if (column.Name.Equals("PAGECOUNT", StringComparison.OrdinalIgnoreCase))
-        {
-            return fileData.PageCount.ToString();
-        }
-
-        var min = column.Range?.Min ?? 0;
-        var max = column.Range?.Max ?? 1000;
-
-        // Handle invalid range where max < min
-        if (max < min)
-        {
-            return min.ToString();
-        }
-
-        // Handle case where min == max
-        if (max == min)
-        {
-            return min.ToString();
-        }
-
-        if (column.Distribution == "exponential")
-        {
-            var lambda = 3.0 / (max - min);
-            var value = min + (int)(-Math.Log(1 - this.random.NextDouble()) / lambda);
-            return Math.Min(value, max).ToString();
-        }
-
-        // Guard against overflow when max is int.MaxValue
-        if (max == int.MaxValue)
-        {
-            return (min + (long)(this.random.NextDouble() * ((long)max - min + 1))).ToString();
-        }
-
-        return this.random.Next(min, max + 1).ToString();
-    }
-
-    private string GenerateBoolean(ColumnDefinition column)
-    {
-        var truePct = column.TruePercentage ?? 50;
-        var value = this.random.Next(100) < truePct;
-
-        return column.Format?.ToLowerInvariant() switch
-        {
-            "yn" => value ? "Y" : "N",
-            "truefalse" => value ? "True" : "False",
-            "10" => value ? "1" : "0",
-            _ => value ? "Y" : "N",
-        };
-    }
-
-    private string GenerateCoded(ColumnDefinition column)
-    {
-        if (string.IsNullOrEmpty(column.DataSource) || !this.generatedDataSources.TryGetValue(column.DataSource, out var values))
-        {
-            return string.Empty;
-        }
-
-        if (column.MultiValue)
-        {
-            var min = column.MultiValueCount?.Min ?? 1;
-            var max = column.MultiValueCount?.Max ?? 3;
-            var count = this.random.Next(min, max + 1);
-
-            if (count == 0)
-            {
-                return string.Empty;
-            }
-
-            var selected = new HashSet<string>();
-            while (selected.Count < count && selected.Count < values.Count)
-            {
-                selected.Add(this.GetValueFromDataSource(column.DataSource, values));
-            }
-
-            return string.Join(this.profile.Settings.MultiValueDelimiter, selected);
-        }
-
-        return this.GetValueFromDataSource(column.DataSource, values);
-    }
-
-    private string GenerateEmail(ColumnDefinition column)
-    {
-        if (column.MultiValue)
-        {
-            var min = column.MultiValueCount?.Min ?? 1;
-            var max = column.MultiValueCount?.Max ?? 3;
-            var count = this.random.Next(min, max + 1);
-
-            if (count == 0)
-            {
-                return string.Empty;
-            }
-
-            var emails = Enumerable.Range(0, count).Select(_ => this.GenerateSingleEmail()).ToList();
-            return string.Join(this.profile.Settings.MultiValueDelimiter, emails);
-        }
-
-        return this.GenerateSingleEmail();
-    }
-
-    private string GenerateSingleEmail()
-    {
-        var domains = new[] { "example.com", "company.org", "corp.net", "business.io", "enterprise.co" };
-        var firstName = Names.FirstNamesLower[this.random.Next(Names.FirstNamesLower.Length)];
-        var lastName = Names.LastNamesLower[this.random.Next(Names.LastNamesLower.Length)];
-        var domain = domains[this.random.Next(domains.Length)];
-        return $"{firstName}.{lastName}@{domain}";
-    }
-
-    private string GetValueFromDataSource(string sourceName, List<string> values)
-    {
-        if (this.distributionIndices.TryGetValue(sourceName, out var indices))
-        {
-            var idx = indices[this.documentIndex % indices.Length];
-            return values[idx % values.Count];
-        }
-
-        return values[this.random.Next(values.Count)];
-    }
-
-    private string GenerateFromGenerator(string generator, ColumnDefinition column)
-    {
-        return generator.ToLowerInvariant() switch
-        {
-            "emailsubject" => EmailSubjects.GetRandom(this.random),
-            "md5hash" => this.GenerateHash(32),
-            "sha1hash" => this.GenerateHash(40),
-            "sha256hash" => this.GenerateHash(64),
-            "reviewnote" => ReviewNotes.GetRandomNote(this.random),
-            "encoding" => Encodings.GetRandom(this.random),
-            "timezone" => TimeZones.GetRandom(this.random),
-            _ => $"Generated_{generator}_{this.documentIndex}",
-        };
-    }
-
-    private string GenerateHash(int length)
-    {
-        const string chars = "0123456789abcdef";
-
-        // All hash types (md5=32, sha1=40, sha256=64) use lengths ≤ 256,
-        // so we can safely use stackalloc for efficiency.
-        Span<char> buffer = stackalloc char[length];
-        for (int i = 0; i < length; i++)
-        {
-            buffer[i] = chars[this.random.Next(chars.Length)];
-        }
-
-        return new string(buffer);
     }
 }
