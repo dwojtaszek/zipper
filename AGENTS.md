@@ -9,6 +9,23 @@
 
 ---
 
+## Agent Behavior
+
+### Tone
+- Push back on bad ideas, unreasonable expectations, and mistakes. Do not be deferential.
+- Flag when you don't know something. Stop and ask for clarification when uncertain.
+- If you disagree, even on gut feeling, say so.
+
+### Testing & Debugging
+- NEVER test just mocked behavior. Tests must verify real outcomes.
+- Fix all tests that fail, even if your change didn't break them.
+- Always root cause bugs. Never fix just the symptom. Never implement a workaround.
+- If you cannot find the root cause, stop and compile what you've learned.
+
+**See also:** `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
+
+---
+
 ## How To Use This File
 
 - This file is the agent workflow guide. Product behavior → [Requirements.md](Requirements.md). User-facing usage → [README.md](README.md). Domain terms → [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md).
@@ -103,12 +120,9 @@ Run adversarial review before marking work as complete. Treat findings as bugs, 
 
 ## SonarCloud & External Checks
 
-After CI completes on a PR, SonarCloud posts a comment with a link to new issues. These are NOT surfaced as GitHub check failures — they must be fetched manually with the public API.
-
-### How to retrieve SonarCloud issues for a PR
+SonarCloud issues are NOT surfaced as GitHub check failures — fetch manually (no auth required):
 
 ```bash
-# Fetch all new SonarCloud issues for a PR
 curl -s "https://sonarcloud.io/api/issues/search?componentKeys=dwojtaszek_zipper&pullRequest=NNN&statuses=OPEN,CONFIRMED&ps=50" | python3 -c "
 import json,sys
 data = json.load(sys.stdin)
@@ -120,20 +134,12 @@ for i in data['issues']:
 "
 ```
 
-This API does not require authentication. Issues are ordered by severity: `BLOCKER` first, then `MAJOR`, `MINOR`, `INFO`.
+Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`.
 
-### GitHub code scanning alerts (alternative)
-
-```bash
-gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --jq '.[] | {rule: .rule.id, severity: .rule.security_severity_level, path: .most_recent_instance.location.path, line: .most_recent_instance.location.start_line, message: .most_recent_instance.message.text}'
-```
-
-### Other GitHub checks
-
-- **CodeRabbit** comments are review-quality suggestions; address blocking issues, treat nitpicks as optional.
-- **factory-droid** errors are bot infrastructure — retry, do not block merge.
-- **CodeQL** failures (via `gh pr checks`) block merge and must be fixed.
-- **Goldens** check compares Zipper CLI output against `tests/goldens/fixtures/`. Drift can be pre-existing (date-sensitive seeds); regenerate with `ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture`.
+- **CodeRabbit**: address blocking issues, nitpicks optional.
+- **factory-droid**: bot infra errors — retry, don't block merge.
+- **CodeQL**: failures block merge — must fix.
+- **Goldens**: `ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture` to regenerate.
 
 ---
 
@@ -146,38 +152,24 @@ gh api "repos/dwojtaszek/zipper/code-scanning/alerts?ref=refs/pull/NNN/head" --j
 | `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
 | `src/FileGenerationRequest.cs` | Configuration object (40+ properties) shared across pipeline |
-| `src/IGenerationMode.cs` | Mode interface — one RunAsync per generation strategy |
-| `src/GenerationRunner.cs` | Dispatches IGenerationMode, handles errors → exit codes |
-| `src/StandardMode.cs` | Standard mode adapter (wraps ParallelFileGenerator) |
-| `src/LoadfileOnlyMode.cs` | Loadfile-Only mode adapter (wraps LoadfileOnlyGenerator) |
-| `src/ProductionSetMode.cs` | Production Set mode adapter (wraps ProductionSetGenerator) |
-| `src/IFileGenerator.cs` | File generator interface — one implementation per file type |
-| `src/FileGeneratorFactory.cs` | Creates IFileGenerator by file type, eliminates string dispatch |
+| `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher (errors → exit codes) |
+| `src/StandardMode.cs` / `LoadfileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
+| `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
 | `src/ParallelFileGenerator.cs` | Channel-based producer-consumer pipeline (standard mode) |
 | `src/ZipArchiveService.cs` | Archive creation + Load File writing (consumer side) |
 | `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
-| `src/Profiles/Generation/` | Column value generators registry: `IColumnValueGenerator`, `ColumnGenerationContext`, per-Kind generators, legacy metadata generators (see ADR-0004) |
-| `src/LoadfileAuditWriter.cs` | `_properties.json` audit file writer |
-| `src/ProductionManifestWriter.cs` | `_manifest.json` production manifest writer |
-| `src/EmlGenerationService.cs` | Email Native File generation |
-| `src/Emails/Email.cs` | Email domain record (`Zipper.Emails.Email`, replaces `EmailTemplate`) |
-| `src/Emails/EmailContext.cs` | Context record for contextual email generation |
-| `src/EmlFileGenerator.cs` | EML IFileGenerator implementation |
-| `src/PlaceholderFileGenerator.cs` | PDF/JPG/TIFF placeholder content generation |
-| `src/TiffFileGenerator.cs` | TIFF IFileGenerator implementation with multi-page support |
-| `src/TiffMultiPageGenerator.cs` | TIFF page count metadata + placeholder content (static helper) |
-| `src/OfficeFileGenerator.cs` | DOCX/XLSX Native File generation; implements IFileGenerator directly |
-| `src/PlaceholderFiles.cs` | Pre-computed byte content for PDF, JPG, TIFF |
-| `src/BatesNumberGenerator.cs` | Bates Number generation |
+| `src/Profiles/Generation/` | Column value generators — `IColumnValueGenerator`, per-Kind generators (see ADR-0004) |
+| `src/Emails/` | Email domain model (`Email`, `EmailContext` records) |
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
+| `src/LoadfileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
 | `src/Zipper.Tests/` | Unit tests |
-| `src/Zipper.Analyzers/` | Roslyn analyzer — `FGR_FLAT_ACCESS` diagnostic (Info severity); escalates to Error in F4 (#213) |
-| `src/Zipper.Analyzers.Tests/` | Unit tests for Roslyn analyzers |
+| `src/Zipper.Analyzers/` | Roslyn analyzer — `FGR_FLAT_ACCESS` diagnostic |
 | `tests/` | E2E test scripts |
 
+Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `OfficeFileGenerator.cs`, `PlaceholderFileGenerator.cs`, `BatesNumberGenerator.cs`) live in `src/` — grep by type.
 
 ---
 
