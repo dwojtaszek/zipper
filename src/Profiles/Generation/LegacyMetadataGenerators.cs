@@ -1,7 +1,5 @@
 namespace Zipper.Profiles.Generation;
 
-// ——— Custodian generators ———
-
 /// <summary>Folder-number-based custodian: "Custodian {folderNumber}".</summary>
 internal sealed class LegacyFolderCustodianGenerator : IColumnValueGenerator
 {
@@ -13,8 +11,6 @@ internal sealed class LegacyIndexCustodianGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"Custodian {(context.NativeFileIndex % 10) + 1}";
 }
-
-// ——— Date generators ———
 
 /// <summary>Legacy DateSent: random date within 365 days before Now.</summary>
 internal sealed class LegacyDateSentGenerator : IColumnValueGenerator
@@ -30,15 +26,11 @@ internal sealed class LegacyDateCreatedGenerator : IColumnValueGenerator
         context.Now.AddDays(-context.Seeded.Next(1, 730)).ToString("yyyy-MM-dd");
 }
 
-// ——— Author ———
-
 /// <summary>Legacy Author: "Author NNN" from random 1-99.</summary>
 internal sealed class LegacyAuthorGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"Author {context.Seeded.Next(1, 100):D3}";
 }
-
-// ——— FileSize generators ———
 
 /// <summary>FileSize from actual FileData.DataLength.</summary>
 internal sealed class LegacyFileSizeFromDataGenerator : IColumnValueGenerator
@@ -51,8 +43,6 @@ internal sealed class LegacyRandomFileSizeGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => context.Seeded.Next(1024, 10485760).ToString();
 }
-
-// ——— Email column generators (read from fileData.Email) ———
 
 /// <summary>EmailTo column: reads fileData.Email.To; falls back to synthetic.</summary>
 internal sealed class LegacyEmailToGenerator : IColumnValueGenerator
@@ -90,23 +80,25 @@ internal sealed class LegacyEmailAttachmentGenerator : IColumnValueGenerator
         context.FileData?.Attachment.HasValue == true ? context.FileData.Attachment.Value.filename : string.Empty;
 }
 
-// ——— Synthetic email generators (no FileData, index-based) ———
-
+/// <summary>Synthetic EmailTo: index-based for loadfile-only mode.</summary>
 internal sealed class LegacySyntheticEmailToGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"recipient{context.NativeFileIndex}@example.com";
 }
 
+/// <summary>Synthetic EmailFrom: index-based for loadfile-only mode.</summary>
 internal sealed class LegacySyntheticEmailFromGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"sender{context.NativeFileIndex}@example.com";
 }
 
+/// <summary>Synthetic EmailSubject: index-based for loadfile-only mode.</summary>
 internal sealed class LegacySyntheticEmailSubjectGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"Email Subject {context.NativeFileIndex}";
 }
 
+/// <summary>Synthetic EmailSentDate: random within 30 days of Now.</summary>
 internal sealed class LegacySyntheticEmailSentDateGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>

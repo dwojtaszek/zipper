@@ -143,12 +143,9 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             return value;
         }
 
-        return value.Replace("
-", newlineDelimiter)
-                    .Replace("
-", newlineDelimiter)
-                    .Replace("
-", newlineDelimiter);
+        return value.Replace("\r\n", newlineDelimiter)
+                    .Replace("\n", newlineDelimiter)
+                    .Replace("\r", newlineDelimiter);
     }
 
         /// <summary>

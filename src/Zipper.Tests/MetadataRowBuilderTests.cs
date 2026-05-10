@@ -1,7 +1,5 @@
 using Xunit;
-using Zipper.Config;
 using Zipper.Emails;
-using Zipper.Profiles;
 using Zipper.Profiles.Generation;
 
 namespace Zipper

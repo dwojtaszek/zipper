@@ -176,7 +176,6 @@ public static class BuiltInProfiles
         };
     }
 
-
     /// <summary>
     /// Gets the legacy metadata pseudo-profile activated by --with-metadata on non-EML files.
     /// Four fixed columns: CUSTODIAN (folder-based), DATESENT, AUTHOR, FILESIZE.
