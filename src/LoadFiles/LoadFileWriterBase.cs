@@ -179,6 +179,55 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
 
         return false;
     }
+
+    /// <summary>
+    /// Writes a sequence of pre-built lines to a stream, applying chaos interception and encoding-anomaly
+    /// byte injection between lines. Uses a MemoryStream to guarantee correct byte ordering when raw
+    /// anomaly bytes must be inserted between text lines.
+    /// </summary>
+    /// <param name="stream">Destination stream.</param>
+    /// <param name="encoding">Encoding used to convert line text to bytes.</param>
+    /// <param name="eolString">End-of-line sequence appended after each line.</param>
+    /// <param name="rows">Pre-built rows: (1-based line number, record ID for audit, line text before chaos).</param>
+    /// <param name="chaosEngine">The chaos engine to apply.</param>
+    protected static async Task WriteRowsWithChaosAsync(
+        Stream stream,
+        System.Text.Encoding encoding,
+        string eolString,
+        System.Collections.Generic.IReadOnlyList<(long LineNumber, string RecordId, string Line)> rows,
+        ChaosEngine chaosEngine)
+    {
+        using var memStream = new System.IO.MemoryStream();
+        var buffer = new System.Text.StringBuilder();
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var (lineNumber, recordId, originalLine) = rows[i];
+            var line = ApplyChaosInterception(chaosEngine, lineNumber, originalLine, recordId);
+            buffer.Append(line);
+            buffer.Append(eolString);
+
+            if (i < rows.Count - 1)
+            {
+                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                buffer.Clear();
+                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
+            }
+            else if (buffer.Length > 200_000)
+            {
+                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                buffer.Clear();
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+        }
+
+        memStream.Position = 0;
+        await memStream.CopyToAsync(stream);
+    }
 }
 
 /// <summary>

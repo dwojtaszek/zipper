@@ -36,7 +36,7 @@ internal class OptWriter : LoadFileWriterBase
                 await WriteLoadfileOnlyAsync(stream, request, chaosEngine);
                 break;
             case WriterMode.ProductionSet:
-                await WriteProductionSetAsync(stream, request, processedFiles);
+                await WriteProductionSetAsync(stream, request, processedFiles, chaosEngine);
                 break;
             default:
                 {
@@ -169,24 +169,50 @@ internal class OptWriter : LoadFileWriterBase
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles)
+        List<FileData> processedFiles,
+        ChaosEngine? chaosEngine = null)
     {
         var eol = GetEolString(request.Delimiters.EndOfLine);
-        await using var writer = CreateWriter(stream, request);
 
+        if (chaosEngine == null)
+        {
+            await using var writer = CreateWriter(stream, request);
+
+            foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
+            {
+                var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+                var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                    .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
+                    .Replace(Path.DirectorySeparatorChar, '\\');
+
+                var docBreak = "Y";
+                var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,,1";
+
+                await writer.WriteAsync(line + eol);
+            }
+
+            await writer.FlushAsync();
+            return;
+        }
+
+        // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+
+        int rowIdx = 0;
         foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
         {
-            var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-            var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+            long lineNumber = rowIdx + 1; // OPT has no header; first row is line 1
+            var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+            var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
                 .Replace(Path.DirectorySeparatorChar, '\\');
 
-            var docBreak = "Y";
-            var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,1";
-
-            await writer.WriteAsync(line + eol);
+            var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,,1";
+            rows.Add((lineNumber, batesNum, optLine));
+            rowIdx++;
         }
 
-        await writer.FlushAsync();
+        await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 }

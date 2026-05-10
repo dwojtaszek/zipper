@@ -30,7 +30,20 @@ internal static class LoadfileAuditWriter
         IReadOnlyList<ChaosAnomaly>? anomalies = null)
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
+        var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies);
+        await File.WriteAllTextAsync(propertiesPath, json);
+        return propertiesPath;
+    }
 
+    /// <summary>
+    /// Generates the properties JSON string without writing to disk.
+    /// </summary>
+    public static string GenerateAuditJson(
+        string outputPath,
+        FileGenerationRequest request,
+        long totalRecords,
+        IReadOnlyList<ChaosAnomaly>? anomalies = null)
+    {
         var formatName = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
             ? "OPT (Image)"
             : "DAT (Metadata)";
@@ -71,9 +84,7 @@ internal static class LoadfileAuditWriter
             },
         };
 
-        var json = JsonSerializer.Serialize(audit, JsonOptions);
-        await File.WriteAllTextAsync(propertiesPath, json);
-        return propertiesPath;
+        return JsonSerializer.Serialize(audit, JsonOptions);
     }
 
     private static string FormatDelimiter(string delimiter)
