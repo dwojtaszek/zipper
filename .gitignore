@@ -23,6 +23,10 @@ TODO.md
 
 # Claude Code
 .claude/
+!.claude/skills/test-driven-development/
+!.claude/skills/testing-anti-patterns/
+!.claude/skills/systematic-debugging/
+!.claude/skills/root-cause-tracing/
 
 # Test Results
 **/TestResults/

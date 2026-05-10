@@ -22,7 +22,7 @@
 - Always root cause bugs. Never fix just the symptom. Never implement a workaround.
 - If you cannot find the root cause, stop and compile what you've learned.
 
-**See also:** `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
+**See also:** `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
 
 ---
 
