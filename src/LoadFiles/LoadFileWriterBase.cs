@@ -148,7 +148,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
                     .Replace("\r", newlineDelimiter);
     }
 
-        /// <summary>
+    /// <summary>
     /// Gets the end-of-line string from the configured EOL specifier.
     /// </summary>
     internal static string GetEolString(string eol) => eol?.ToUpperInvariant() switch
