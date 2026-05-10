@@ -111,8 +111,6 @@ internal class DatWriter : LoadFileWriterBase
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var generator = GetEffectiveProfileGenerator(request, now);
 
-        var generator = GetEffectiveProfileGenerator(request, now);
-
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
         rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote)));
 
