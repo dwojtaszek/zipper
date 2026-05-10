@@ -222,6 +222,7 @@ public static class BuiltInProfiles
             new() { Name = "EMAILATTACHMENT", Type = "emailAttachment", Required = true, EmptyPercentage = 0 },
         },
     };
+
     private static List<ColumnDefinition> CreateLitigationColumns()
     {
         var columns = new List<ColumnDefinition>
