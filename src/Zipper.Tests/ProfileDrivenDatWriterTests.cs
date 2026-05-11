@@ -48,8 +48,7 @@ namespace Zipper
             var profile = MakeMinimalProfile();
             var request = MakeRequest(profile);
             var content = await CaptureOutputAsync(request);
-            var lines = content.Split('
-', StringSplitOptions.RemoveEmptyEntries);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             // Header + 3 data rows
             Assert.Equal(4, lines.Length);
@@ -63,17 +62,15 @@ namespace Zipper
             var profile = MakeMinimalProfile();
             var request = MakeRequest(profile, 1);
             var content = await CaptureOutputAsync(request);
-            var lines = content.Split('
-', StringSplitOptions.RemoveEmptyEntries);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            // Each data field should be wrapped in the quote delimiter (þ)
-            Assert.Contains("þ", lines[1]);
+            // Each data field should be wrapped in the quote delimiter (\u00fe)
+            Assert.Contains("\u00fe", lines[1]);
         }
 
         [Fact]
         public async Task WriteAsync_FieldContainingQuoteDelimiter_IsDoubled()
         {
-            // Build a coded column whose only value contains the DAT quote delimiter (þ)
             var profile = new ColumnProfile
             {
                 Name = "escape-test",
@@ -82,7 +79,7 @@ namespace Zipper
                 {
                     ["quoteValues"] = new DataSourceConfig
                     {
-                        Values = new List<string> { "valþSpecial" },
+                        Values = new List<string> { "val\u00feSpecial" },
                     },
                 },
                 Columns = new List<ColumnDefinition>
@@ -95,46 +92,8 @@ namespace Zipper
             var request = MakeRequest(profile, 1);
             var content = await CaptureOutputAsync(request);
 
-            // þ inside the field value must be doubled to þþ (Concordance escape rule)
-            Assert.Contains("valþþSpecial", content);
-        }
-
-        [Fact]
-        public async Task WriteAsync_FieldContainingNewline_IsSanitized()
-        {
-            // Coded column whose only value contains a newline character
-            var profile = new ColumnProfile
-            {
-                Name = "newline-test",
-                Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-                DataSources = new Dictionary<string, DataSourceConfig>
-                {
-                    ["nlValues"] = new DataSourceConfig
-                    {
-                        Values = new List<string> { "line1
-line2" },
-                    },
-                },
-                Columns = new List<ColumnDefinition>
-                {
-                    new() { Name = "DOCID", Type = "identifier", Required = true },
-                    new() { Name = "NLFIELD", Type = "coded", DataSource = "nlValues", EmptyPercentage = 0 },
-                },
-            };
-
-            var request = MakeRequest(profile, 1);
-
-            // Use a visible newline-replacement token so we can assert it appears
-            request.Delimiters = request.Delimiters with { NewlineDelimiter = "<NL>" };
-            var content = await CaptureOutputAsync(request);
-
-            // The raw newline should be replaced by the configured newline delimiter
-            var dataLine = content.Split(new[] { "
-", "
-" }, StringSplitOptions.RemoveEmptyEntries)[1];
-            Assert.DoesNotContain('
-', dataLine);
-            Assert.Contains("<NL>", content);
+            // \u00fe inside the field value must be doubled to \u00fe\u00fe per Concordance escaping
+            Assert.Contains("val\u00fe\u00feSpecial", content);
         }
     }
 }

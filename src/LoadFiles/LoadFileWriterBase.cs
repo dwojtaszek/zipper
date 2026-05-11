@@ -116,7 +116,6 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         return field;
     }
 
-
     /// <summary>
     /// Escapes a field value for Concordance DAT format using the configured quote delimiter,
     /// and sanitizes embedded newlines using the configured newline delimiter.
@@ -134,6 +133,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
 
         return SanitizeField(EscapeDatField(field, quoteDelimiter), newlineDelimiter);
     }
+
     /// <summary>
     /// Appends a quoted or unquoted field value to the StringBuilder.
     /// </summary>
