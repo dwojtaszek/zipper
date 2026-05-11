@@ -280,7 +280,7 @@ internal class DatWriter : LoadFileWriterBase
             request.Output.FileType.ToUpperInvariant(),
         };
 
-        return string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
+        return string.Join(col, fields.Select(f => $"{quote}{EscapeDatField(f, quote[0], request.Delimiters.NewlineDelimiter)}{quote}"));
     }
 
     private static Zipper.Profiles.DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
@@ -337,27 +337,27 @@ internal class DatWriter : LoadFileWriterBase
         System.Collections.Generic.Dictionary<string, string>? profileValues)
     {
         var workItem = fileData.WorkItem;
-        var docId = SanitizeField($"DOC{workItem.Index:D8}", request.Delimiters.NewlineDelimiter);
+        var docId = EscapeDatField($"DOC{workItem.Index:D8}", quote, request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
-        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{SanitizeField(workItem.FilePathInZip, request.Delimiters.NewlineDelimiter)}{quote}");
+        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter)}{quote}");
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            var custodian = SanitizeField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, request.Delimiters.NewlineDelimiter);
+            var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
             var dateSent = profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty;
-            var author = SanitizeField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, request.Delimiters.NewlineDelimiter);
+            var author = EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
             var fileSize = profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString();
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var to = SanitizeField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", request.Delimiters.NewlineDelimiter);
-            var from = SanitizeField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", request.Delimiters.NewlineDelimiter);
-            var subject = SanitizeField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", request.Delimiters.NewlineDelimiter);
+            var to = EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var from = EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var subject = EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
             var sentDate = profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty;
-            var attachment = SanitizeField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, request.Delimiters.NewlineDelimiter);
+            var attachment = EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
             sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
         }
 

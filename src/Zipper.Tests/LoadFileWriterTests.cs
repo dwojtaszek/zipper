@@ -790,6 +790,82 @@ namespace Zipper
                 writer.WriteAsync(stream, request, fileData));
         }
 
+        [Fact]
+        public async Task DatWriter_StandardRow_FieldWithQuoteDelimiter_IsDoubled()
+        {
+            var request = this.CreateTestRequest();
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folderþX/file.pdf",
+                    },
+                    Data = Array.Empty<byte>(),
+                },
+            };
+            var writer = new DatWriter();
+            var outputPath = Path.Combine(this.tempDir, "test_escape.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var output = await File.ReadAllTextAsync(outputPath);
+
+            // þ inside the path must be doubled to þþ per Concordance escaping
+            Assert.Contains("folderþþX/file.pdf", output);
+        }
+
+        [Fact]
+        public async Task DatWriter_ProductionSetRow_FieldWithQuoteDelimiter_IsDoubled()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileCount = 1,
+                    FileType = "pdf",
+                    OutputPath = this.tempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+            };
+
+            // File path contains þ — it appears in the native/text/image path fields
+            var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST00000001.pdf",
+                        FilePathInZip = "NATIVES/VOL001/fileþX.pdf",
+                    },
+                    DataLength = 1024,
+                },
+            };
+
+            var writer = new DatWriter(WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, files);
+
+            stream.Position = 0;
+            var output = Encoding.UTF8.GetString(stream.ToArray());
+
+            // The þ in the path must be doubled to þþ
+            Assert.Contains("fileþþX.pdf", output);
+        }
+
         private class CancelingStream : Stream
         {
             public override bool CanRead => false;
