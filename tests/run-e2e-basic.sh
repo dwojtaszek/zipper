@@ -14,7 +14,7 @@ TEST_OUTPUT_DIR="./results/e2e-basic"
 PROJECT="src/Zipper.csproj"
 
 # Dynamically locate the built framework directory
-BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" | head -n 1)
+BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit)
 [[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
 
 # --- Helper Functions ---
@@ -53,7 +53,7 @@ function verify_output() {
   local zip_file
   zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
   local dat_file
-  dat_file=$(find "$test_dir" -name "*.dat")
+  dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
 
   [[ -z "$zip_file" ]] && print_error "No .zip file found in $test_dir"
   [[ -z "$dat_file" ]] && print_error "No .dat file found in $test_dir"
@@ -99,7 +99,7 @@ function verify_output() {
     if [[ "$file_type" = "eml" ]]; then
       txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
-      txt_count=$(echo "$zip_listing" | grep -c "\.txt")
+      txt_count=$(echo "$zip_listing" | grep -c "\.txt" || true)
     fi
     [[ "$txt_count" -ne "$expected_count" ]] && \
       print_error "Zip .txt count: expected $expected_count, got $txt_count"
@@ -119,7 +119,7 @@ function verify_load_file_included() {
 
     # No separate .dat should exist
     local dat_file
-    dat_file=$(find "$test_dir" -name "*.dat")
+    dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
     [[ -n "$dat_file" ]] && print_error "Found separate .dat file — should be inside zip"
 
     local zip_listing
@@ -203,7 +203,7 @@ print_success "Test 4: Load file in zip — PASSED"
 
 # 5. Bates numbering (feature-specific)
 run_test "Bates numbering" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_bates" --bates-prefix "SMOKE" --bates-start 1 --bates-digits 8
-dat_file=$(find "$TEST_OUTPUT_DIR/pdf_bates" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/pdf_bates" -name "*.dat" -print -quit)
 [[ -z "$dat_file" ]] && print_error "No .dat file found for Bates test"
 grep -q "SMOKE00000001" "$dat_file" || print_error "Bates number SMOKE00000001 not found"
 grep -q "SMOKE00000010" "$dat_file" || print_error "Bates number SMOKE00000010 not found"

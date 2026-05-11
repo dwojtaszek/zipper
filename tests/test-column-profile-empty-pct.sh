@@ -63,7 +63,7 @@ for seed in 1 42 99 1337; do
         --loadfile-only \
         --output-path "$out_dir"
 
-    dat_file=$(find "$out_dir" -name "*.dat" | head -1)
+    dat_file=$(find "$out_dir" -name "*.dat" -print -quit)
     [[ -z "$dat_file" ]] && print_error "No .dat file produced (seed=$seed)"
 
     empties=$(count_empties "$dat_file")
@@ -99,7 +99,7 @@ zipper \
     --seed 42 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct0"
 
-dat_0=$(find "$TEST_OUTPUT_DIR/pct0" -name "*.dat" | head -1)
+dat_0=$(find "$TEST_OUTPUT_DIR/pct0" -name "*.dat" -print -quit)
 empties_0=$(count_empties "$dat_0")
 [[ "$empties_0" -ne 0 ]] && print_error "EmptyPercentage=0: expected 0 empties, got $empties_0"
 print_success "EmptyPercentage=0: exactly 0 empty values"
@@ -128,7 +128,7 @@ zipper \
     --seed 42 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct100"
 
-dat_100=$(find "$TEST_OUTPUT_DIR/pct100" -name "*.dat" | head -1)
+dat_100=$(find "$TEST_OUTPUT_DIR/pct100" -name "*.dat" -print -quit)
 empties_100=$(count_empties "$dat_100")
 [[ "$empties_100" -ne "$COUNT" ]] && print_error "EmptyPercentage=100: expected $COUNT empties, got $empties_100"
 print_success "EmptyPercentage=100: all $COUNT values are empty"
@@ -157,7 +157,7 @@ zipper \
     --seed 42 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct10"
 
-dat_10=$(find "$TEST_OUTPUT_DIR/pct10" -name "*.dat" | head -1)
+dat_10=$(find "$TEST_OUTPUT_DIR/pct10" -name "*.dat" -print -quit)
 empties_10=$(count_empties "$dat_10")
 print_info "EmptyPercentage=10: observed $empties_10 empty out of $COUNT"
 if ! bash "$CHI_SQ" "$empties_10" "$COUNT" "0.10" "$SIGNIFICANCE"; then
@@ -189,7 +189,7 @@ zipper \
     --seed 42 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct50"
 
-dat_50=$(find "$TEST_OUTPUT_DIR/pct50" -name "*.dat" | head -1)
+dat_50=$(find "$TEST_OUTPUT_DIR/pct50" -name "*.dat" -print -quit)
 empties_50=$(count_empties "$dat_50")
 print_info "EmptyPercentage=50: observed $empties_50 empty out of $COUNT"
 if ! bash "$CHI_SQ" "$empties_50" "$COUNT" "0.50" "$SIGNIFICANCE"; then

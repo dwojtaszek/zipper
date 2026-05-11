@@ -159,8 +159,8 @@ validate_results() {
 
     print_info "Validating generated files..."
 
-    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" | head -1)
-    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" | head -1)
+    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit)
+    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit)
 
     if [ -z "$zip_file" ]; then
         print_error "No .zip file found"

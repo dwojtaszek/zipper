@@ -145,8 +145,8 @@ run_scenario_1_external_utf8() {
     local duration=$((end_time - start_time))
 
     # Validate results
-    local zip_file=$(find "$scenario_dir" -name "*.zip" | head -1)
-    local dat_file=$(find "$scenario_dir" -name "*.dat" | head -1)
+    local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
+    local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
     local dat_size=$(stat -c%s "$dat_file")
     local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
 
@@ -178,7 +178,7 @@ run_scenario_2_embedded_utf8() {
     local duration=$((end_time - start_time))
 
     # Validate results
-    local zip_file=$(find "$scenario_dir" -name "*.zip" | head -1)
+    local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
     local zip_size=$(stat -c%s "$zip_file")
     local zip_size_mb=$(echo "scale=2; $zip_size / 1024^2" | bc)
 
@@ -186,7 +186,7 @@ run_scenario_2_embedded_utf8() {
     local temp_dir=$(mktemp -d)
     trap "rm -rf $temp_dir" RETURN
     unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null
-    local embedded_dat=$(find "$temp_dir" -name "*.dat" | head -1)
+    local embedded_dat=$(find "$temp_dir" -name "*.dat" -print -quit)
     local dat_size=$(stat -c%s "$embedded_dat")
     local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
 
@@ -218,8 +218,8 @@ run_scenario_3_external_utf16() {
     local duration=$((end_time - start_time))
 
     # Validate results
-    local zip_file=$(find "$scenario_dir" -name "*.zip" | head -1)
-    local dat_file=$(find "$scenario_dir" -name "*.dat" | head -1)
+    local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
+    local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
     local dat_size=$(stat -c%s "$dat_file")
     local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
 
@@ -250,8 +250,8 @@ run_scenario_4_external_ansi() {
     local duration=$((end_time - start_time))
 
     # Validate results
-    local zip_file=$(find "$scenario_dir" -name "*.zip" | head -1)
-    local dat_file=$(find "$scenario_dir" -name "*.dat" | head -1)
+    local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
+    local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
     local dat_size=$(stat -c%s "$dat_file")
     local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
 
@@ -272,31 +272,31 @@ analyze_performance() {
     local ansi_external_size=0
 
     # Scenario 1: UTF-8 External
-    local dat_file=$(find "$OUTPUT_DIR/scenario1_external_utf8" -name "*.dat" | head -1)
+    local dat_file=$(find "$OUTPUT_DIR/scenario1_external_utf8" -name "*.dat" -print -quit)
     if [ -n "$dat_file" ]; then
         utf8_external_size=$(stat -c%s "$dat_file")
     fi
 
     # Scenario 2: UTF-8 Embedded
-    local zip_file=$(find "$OUTPUT_DIR/scenario2_embedded_utf8" -name "*.zip" | head -1)
+    local zip_file=$(find "$OUTPUT_DIR/scenario2_embedded_utf8" -name "*.zip" -print -quit)
     if [ -n "$zip_file" ]; then
         local temp_dir=$(mktemp -d)
         trap "rm -rf $temp_dir" RETURN
         unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null
-        local embedded_dat=$(find "$temp_dir" -name "*.dat" | head -1)
+        local embedded_dat=$(find "$temp_dir" -name "*.dat" -print -quit)
         if [ -n "$embedded_dat" ]; then
             utf8_embedded_size=$(stat -c%s "$embedded_dat")
         fi
     fi
 
     # Scenario 3: UTF-16 External
-    dat_file=$(find "$OUTPUT_DIR/scenario3_external_utf16" -name "*.dat" | head -1)
+    dat_file=$(find "$OUTPUT_DIR/scenario3_external_utf16" -name "*.dat" -print -quit)
     if [ -n "$dat_file" ]; then
         utf16_external_size=$(stat -c%s "$dat_file")
     fi
 
     # Scenario 4: ANSI External
-    dat_file=$(find "$OUTPUT_DIR/scenario4_external_ansi" -name "*.dat" | head -1)
+    dat_file=$(find "$OUTPUT_DIR/scenario4_external_ansi" -name "*.dat" -print -quit)
     if [ -n "$dat_file" ]; then
         ansi_external_size=$(stat -c%s "$dat_file")
     fi
@@ -335,7 +335,7 @@ analyze_performance() {
     local expected_lines=$((FILE_COUNT + 1))  # +1 for header
 
     for scenario in "scenario1_external_utf8" "scenario3_external_utf16" "scenario4_external_ansi"; do
-        local dat_file=$(find "$OUTPUT_DIR/$scenario" -name "*.dat" | head -1)
+        local dat_file=$(find "$OUTPUT_DIR/$scenario" -name "*.dat" -print -quit)
         if [ -n "$dat_file" ]; then
             local line_count=$(wc -l < "$dat_file")
             if [ "$line_count" -eq "$expected_lines" ]; then

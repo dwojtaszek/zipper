@@ -182,7 +182,7 @@ for format in "dat" "opt" "csv" "xml"; do
     "xml") ext="xml" ;;
   esac
 
-  load_file=$(find "$TEST_OUTPUT_DIR/test5_$format" -name "*.$ext")
+  load_file=$(find "$TEST_OUTPUT_DIR/test5_$format" -name "*.$ext" -print -quit)
 
   if [[ -z "$load_file" ]]; then
     print_error "Test 5: No .$ext file found for format $format"

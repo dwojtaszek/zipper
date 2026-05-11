@@ -91,7 +91,7 @@ for profile in "${PROFILES[@]}"; do
                 --loadfile-only \
                 --output-path "$out_dir"
 
-            dat_file=$(find "$out_dir" -name "*.dat" | head -1)
+            dat_file=$(find "$out_dir" -name "*.dat" -print -quit)
             [[ -z "$dat_file" ]] && print_error "${combo}: No .dat file produced"
 
             # --- Assertion 1: Column headers match profile declaration in order ---
@@ -124,7 +124,7 @@ for profile in "${PROFILES[@]}"; do
                     --loadfile-only \
                     --output-path "$rerun_dir"
 
-                rerun_dat=$(find "$rerun_dir" -name "*.dat" | head -1)
+                rerun_dat=$(find "$rerun_dir" -name "*.dat" -print -quit)
                 if ! diff -q "$dat_file" "$rerun_dat" > /dev/null 2>&1; then
                     print_error "${combo}: Output is not deterministic — two runs with seed=42 differ"
                 fi
@@ -136,8 +136,8 @@ for profile in "${PROFILES[@]}"; do
 
         # --- Assertion 4: Seed sensitivity — seed=42 vs seed=1337 differ ---
         TOTAL=$((TOTAL + 1))
-        seed42_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed42" -name "*.dat" | head -1)
-        seed1337_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed1337" -name "*.dat" | head -1)
+        seed42_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed42" -name "*.dat" -print -quit)
+        seed1337_dat=$(find "$TEST_OUTPUT_DIR/${profile}_${filetype}_seed1337" -name "*.dat" -print -quit)
 
         if diff -q "$seed42_dat" "$seed1337_dat" > /dev/null 2>&1; then
             print_error "seed-sensitivity (${profile}/${filetype}): seed=42 and seed=1337 produced identical output"

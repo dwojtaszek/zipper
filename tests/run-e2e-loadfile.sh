@@ -14,7 +14,7 @@ TEST_OUTPUT_DIR="./results/e2e-loadfile"
 PROJECT="src/Zipper.csproj"
 
 # Dynamically locate the built framework directory
-BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" 2>/dev/null | head -n 1)
+BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit 2>/dev/null)
 [[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
 
 # --- Helper Functions ---
@@ -72,7 +72,7 @@ TOTAL=$((TOTAL + 1))
 run_test "DAT loadfile-only" \
     --loadfile-only --count 100 --output-path "$TEST_OUTPUT_DIR/dat_basic"
 
-dat_file=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*.dat" -print -quit)
 [[ -z "$dat_file" ]] && print_error "No .dat file found"
 
 # Verify line count (header + 100 data rows)
@@ -86,7 +86,7 @@ zip_count=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*.zip" -print -quit | wc -l
 print_info "No ZIP file created (correct)"
 
 # Verify properties JSON
-props_file=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*_properties.json")
+props_file=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found"
 grep -q '"format"' "$props_file" || print_error "Properties JSON missing Format field"
 grep -q '"totalRecords"' "$props_file" || print_error "Properties JSON missing TotalRecords field"
@@ -103,7 +103,7 @@ TOTAL=$((TOTAL + 1))
 run_test "OPT loadfile-only" \
     --loadfile-only --loadfile-format opt --count 50 --output-path "$TEST_OUTPUT_DIR/opt_basic"
 
-opt_file=$(find "$TEST_OUTPUT_DIR/opt_basic" -name "*.opt")
+opt_file=$(find "$TEST_OUTPUT_DIR/opt_basic" -name "*.opt" -print -quit)
 [[ -z "$opt_file" ]] && print_error "No .opt file found"
 
 # Verify no header (OPT has no header row)
@@ -135,7 +135,7 @@ run_test "Custom delimiters" \
     --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/dat_custom_delim" \
     --col-delim "char:|" --quote-delim "char:\"" --eol LF
 
-dat_file=$(find "$TEST_OUTPUT_DIR/dat_custom_delim" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/dat_custom_delim" -name "*.dat" -print -quit)
 [[ -z "$dat_file" ]] && print_error "No .dat file found"
 
 # Verify pipe delimiter is present
@@ -159,7 +159,7 @@ run_test "Chaos mode" \
     --loadfile-only --count 200 --output-path "$TEST_OUTPUT_DIR/dat_chaos" \
     --chaos-mode --chaos-amount "5%" --seed 42
 
-props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos" -name "*_properties.json")
+props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found for chaos test"
 
 # Verify chaos section in properties JSON
@@ -185,7 +185,7 @@ run_test "Chaos with type filter" \
     --loadfile-only --count 100 --output-path "$TEST_OUTPUT_DIR/dat_chaos_typed" \
     --chaos-mode --chaos-amount "10" --chaos-types "quotes,columns" --seed 42
 
-props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos_typed" -name "*_properties.json")
+props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos_typed" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found"
 
 # Verify only specified types appear
@@ -259,8 +259,8 @@ run_test "Deterministic run 1" \
 run_test "Deterministic run 2" \
     --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/seed_run2" --seed 999
 
-dat1=$(find "$TEST_OUTPUT_DIR/seed_run1" -name "*.dat")
-dat2=$(find "$TEST_OUTPUT_DIR/seed_run2" -name "*.dat")
+dat1=$(find "$TEST_OUTPUT_DIR/seed_run1" -name "*.dat" -print -quit)
+dat2=$(find "$TEST_OUTPUT_DIR/seed_run2" -name "*.dat" -print -quit)
 [[ -z "$dat1" ]] && print_error "No .dat file found for seed_run1"
 [[ -z "$dat2" ]] && print_error "No .dat file found for seed_run2"
 

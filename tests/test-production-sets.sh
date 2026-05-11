@@ -46,7 +46,7 @@ zipper \
   --volume-size 3
 
 # Find production dir
-prod_dir=$(find "$TEST_OUTPUT_DIR/test1" -type d -name "PRODUCTION_*" | head -n 1)
+prod_dir=$(find "$TEST_OUTPUT_DIR/test1" -type d -name "PRODUCTION_*" -print -quit)
 
 if [[ -z "$prod_dir" ]]; then
   print_error "Test 1: No production directory found."
@@ -64,8 +64,8 @@ if [[ ! -f "$prod_dir/DATA/loadfile.opt" ]]; then print_error "Missing OPT load 
 if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
 
 # Verify volumes (10 docs / 3 = 4 volumes)
-vol1=$(find "$prod_dir/NATIVES" -name "VOL001")
-vol4=$(find "$prod_dir/NATIVES" -name "VOL004")
+vol1=$(find "$prod_dir/NATIVES" -name "VOL001" -print -quit)
+vol4=$(find "$prod_dir/NATIVES" -name "VOL004" -print -quit)
 if [[ -z "$vol1" ]]; then print_error "Missing VOL001"; fi
 if [[ -z "$vol4" ]]; then print_error "Missing VOL004"; fi
 
@@ -88,14 +88,14 @@ zipper \
   --output-path "$TEST_OUTPUT_DIR/test2" \
   --bates-prefix "ZIP"
 
-zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" | head -n 1)
+zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No ZIP archive generated."
 fi
 
 # Make sure manifest exists and matches
-prod_dir=$(find "$TEST_OUTPUT_DIR/test2" -type d -name "PRODUCTION_*" | head -n 1)
+prod_dir=$(find "$TEST_OUTPUT_DIR/test2" -type d -name "PRODUCTION_*" -print -quit)
 if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
 
 print_success "Test Case 2: Production ZIP passed"

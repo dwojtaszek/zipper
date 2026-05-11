@@ -258,7 +258,7 @@ for format in "dat" "opt" "csv" "xml" "concordance"; do
     "concordance") ext="dat" ;;
   esac
 
-  load_file=$(find "$TEST_OUTPUT_DIR/test6_$format" -name "*.$ext")
+  load_file=$(find "$TEST_OUTPUT_DIR/test6_$format" -name "*.$ext" -print -quit)
 
   if [[ -z "$load_file" ]]; then
     print_error "Test 6: No .$ext file found for format $format"

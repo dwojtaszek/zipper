@@ -18,14 +18,6 @@ FILE_COUNT=20 # Use a consistent number of files for most tests
 # Shared binary resolver: builds once, exposes the `zipper` function.
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
-# Keep ZIPPER_CMD available for any eval/exec call sites that reference it.
-if [[ -n "${_ZIPPER_BIN:-}" ]] && [[ -x "${_ZIPPER_BIN}" ]]; then
-    ZIPPER_CMD="${_ZIPPER_BIN}"
-else
-    # Fallback WITHOUT --no-build: if the helper's build failed, dotnet run
-    # needs to be able to compile on demand.
-    ZIPPER_CMD="dotnet run -c Release --project $REPO_ROOT/src/Zipper.csproj --"
-fi
 
 # Clean up function
 cleanup() {
@@ -92,7 +84,7 @@ verify_attachments() {
     fi
 
     local attachment_dat_count
-    attachment_dat_count=$(tail -n +2 "$dat_file" | cut -d$'\024' -f"$attachment_col_index" | grep -c -v '^þþ$')
+    attachment_dat_count=$(tail -n +2 "$dat_file" | cut -d$'\024' -f"$attachment_col_index" | grep -c -v '^þþ$' || true)
     
     local attachment_zip_count
     # Robustly get filenames and count attachments
@@ -201,7 +193,7 @@ run_test() {
 
             if [[ "$check_attachments" = true ]]; then
                 local eml_count
-                eml_count=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$' | grep -c '\.eml$')
+                eml_count=$(unzip -l "$archive_file" | awk '/[0-9][0-9]:[0-9][0-9]/ {print $4}' | grep -v '/$' | grep -c '\.eml$' || true)
                 if ! verify_attachments "$dat_file" "$archive_file" "$attachment_rate" "$eml_count"; then
                     all_checks_passed=false
                 fi

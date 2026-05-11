@@ -84,7 +84,7 @@ function verify_output() {
   print_info ".dat file header is correct."
 
   # Verify file count in zip
-  local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+  local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type" || true)
   if [ "$zip_file_count" -ne "$expected_count" ]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
   fi
@@ -98,7 +98,7 @@ function verify_output() {
       txt_count=$(unzip -l "$zip_file" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       # For other file types, count all text files
-      txt_count=$(unzip -l "$zip_file" | strings | grep -c "\.txt")
+      txt_count=$(unzip -l "$zip_file" | strings | grep -c "\.txt" || true)
     fi
     if [ "$txt_count" -ne "$expected_count" ]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
@@ -148,7 +148,7 @@ function verify_eml_output() {
 
   # Verify that some attachments are listed in the .dat file
   # We check for more than 2 because the header has "Attachment"
-  local attachment_count=$($dat_content_cmd < "$dat_file" | grep -c "attachment")
+  local attachment_count=$($dat_content_cmd < "$dat_file" | grep -c "attachment" || true)
   if [ "$attachment_count" -lt 2 ]; then
     print_error "No attachments found in .dat file, but they were expected."
   fi
@@ -229,7 +229,7 @@ function verify_load_file_included() {
     trap "rm -rf $temp_dir" RETURN
 
     unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null
-    local extracted_dat=$(find "$temp_dir" -name "*.dat" | head -1)
+    local extracted_dat=$(find "$temp_dir" -name "*.dat" -print -quit)
 
     local dat_content_cmd="cat"
     if [ "$encoding" = "UTF-16" ]; then
@@ -258,7 +258,7 @@ function verify_load_file_included() {
     print_info ".dat file header is correct."
 
     # Verify file count in zip (excluding the .dat file)
-    local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type")
+    local zip_file_count=$(unzip -l "$zip_file" | strings | grep -c "\.$file_type" || true)
     if [ "$zip_file_count" -ne "$expected_count" ]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     fi
