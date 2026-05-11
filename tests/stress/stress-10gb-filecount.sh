@@ -25,7 +25,7 @@
 # - Provides clear runtime expectations
 # =============================================================================
 
-set -e  # Exit on any error
+set -euo pipefail  # Exit on any error, use unset variable as error, and fail on pipe failures
 
 # --- Check Required Utilities ---
 check_required_utilities() {

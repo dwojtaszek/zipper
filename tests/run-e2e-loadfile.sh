@@ -6,7 +6,7 @@
 # Covers: DAT loadfile-only, OPT loadfile-only, custom delimiters, EOL,
 #         chaos mode, properties JSON, dependency rejection.
 
-set -e
+set -euo pipefail
 
 # --- Configuration ---
 
@@ -81,7 +81,7 @@ line_count=$(wc -l < "$dat_file" | tr -d ' ')
 print_info "DAT line count OK ($line_count)"
 
 # Verify no ZIP was created
-zip_count=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*.zip" | wc -l)
+zip_count=$(find "$TEST_OUTPUT_DIR/dat_basic" -name "*.zip" -print -quit | wc -l)
 [[ "$zip_count" -ne 0 ]] && print_error "Expected no .zip file in loadfile-only mode"
 print_info "No ZIP file created (correct)"
 

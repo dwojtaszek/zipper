@@ -6,7 +6,7 @@
 # Covers: PDF, EML, TIFF, Bates numbering, load-file-in-zip
 # Full suite: run-tests.sh (17 cases + 8 standalone suites)
 
-set -e
+set -euo pipefail
 
 # --- Configuration ---
 
@@ -51,7 +51,7 @@ function verify_output() {
   print_info "Verifying output in $test_dir"
 
   local zip_file
-  zip_file=$(find "$test_dir" -name "*.zip")
+  zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
   local dat_file
   dat_file=$(find "$test_dir" -name "*.dat")
 
@@ -114,7 +114,7 @@ function verify_load_file_included() {
     local file_type="$4"
 
     local zip_file
-    zip_file=$(find "$test_dir" -name "*.zip")
+    zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     [[ -z "$zip_file" ]] && print_error "No .zip file found in $test_dir"
 
     # No separate .dat should exist
@@ -183,7 +183,7 @@ run_test "EML with attachments" --type eml --count 10 --output-path "$TEST_OUTPU
 verify_output "$TEST_OUTPUT_DIR/eml_attach" 10 "Control Number,File Path,To,From,Subject" "eml" "false"
 
 # Explicitly verify attachments are in the zip
-zip_file=$(find "$TEST_OUTPUT_DIR/eml_attach" -name "*.zip")
+zip_file=$(find "$TEST_OUTPUT_DIR/eml_attach" -name "*.zip" -print -quit)
 zip_listing=$(unzip -l "$zip_file")
 attachment_count=$(echo "$zip_listing" | grep -c "attachment\.") || true
 [[ "$attachment_count" -eq 0 ]] && print_error "Expected attachments in zip but found none"

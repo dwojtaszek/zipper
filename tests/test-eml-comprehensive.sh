@@ -3,7 +3,7 @@
 # Constitutional Requirement: Must test ALL EML functionality scenarios
 # Tests both Windows and Unix compatibility for EML feature implementation
 
-# set -e # Exit on any error - disabled for better debugging
+set -euo pipefail
 
 echo "========================================"
 echo "Comprehensive EML Test Suite - Unix"
@@ -120,7 +120,7 @@ verify_attachments() {
 
 # Main test function
 run_test() {
-    ((TEST_COUNT++))
+    TEST_COUNT=$((TEST_COUNT + 1))
     local test_name="$1"
     local command_args="$2"
     local expected_headers=("${@:3}") # All args from 3rd onwards are headers
@@ -160,9 +160,9 @@ run_test() {
         echo "  ✓ Command executed successfully."
         
         local archive_file
-        archive_file=$(find "$test_path" -name "archive_*.zip")
+        archive_file=$(find "$test_path" -name "archive_*.zip" -print -quit) || true
         local dat_file
-        dat_file=$(find "$test_path" -name "archive_*.dat")
+        dat_file=$(find "$test_path" -name "archive_*.dat" -print -quit) || true
 
         if [[ -z "$archive_file" ]]; then
             echo "  ✗ Test FAILED. Archive file not created."
@@ -209,7 +209,7 @@ run_test() {
 
             if [[ "$all_checks_passed" = true ]]; then
                 echo "✓ Test $TEST_COUNT PASSED"
-                ((PASSED_COUNT++))
+                PASSED_COUNT=$((PASSED_COUNT + 1))
             else
                 echo "✗ Test $TEST_COUNT FAILED due to verification errors."
             fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # --- Test Configuration ---
 
@@ -58,8 +58,8 @@ function verify_output() {
 
   print_info "Verifying output in $test_dir (Encoding: $encoding)"
 
-  local zip_file=$(find "$test_dir" -name "*.zip")
-  local dat_file=$(find "$test_dir" -name "*.dat")
+  local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
+  local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
 
   if [[ -z "$zip_file" ]]; then
     print_error "No .zip file found in $test_dir"
@@ -143,8 +143,8 @@ function verify_eml_output() {
 
   verify_output "$@"
 
-  local dat_file=$(find "$test_dir" -name "*.dat")
-  local zip_file=$(find "$test_dir" -name "*.zip")
+  local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
+  local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
 
   # Get zip listing once (already cached in verify_output, but we need it here too)
   local zip_listing
@@ -199,7 +199,7 @@ function verify_zip_size() {
     local target_size_bytes=$((target_size_mb * 1024 * 1024))
     local tolerance_bytes=$((target_size_bytes / 10)) # 10%
 
-    local zip_file=$(find "$test_dir" -name "*.zip")
+    local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
     fi
@@ -236,13 +236,13 @@ function verify_load_file_included() {
 
     print_info "Verifying load file included in zip archive (Encoding: $encoding)"
 
-    local zip_file=$(find "$test_dir" -name "*.zip")
+    local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
     fi
 
     # Verify no separate .dat file in output directory
-    local dat_file=$(find "$test_dir" -name "*.dat")
+    local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
     if [[ -n "$dat_file" ]]; then
         print_error "Found separate .dat file in output directory, but --include-load-file was specified"
     fi
@@ -416,8 +416,8 @@ print_success "Test Case 17 passed."
 # Test Case 18: CSV load file format (non-DAT format inline validation)
 run_test_case "Test Case 18: CSV load file format" --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/pdf_csv" --load-file-format csv
 csv_dir="$TEST_OUTPUT_DIR/pdf_csv"
-csv_zip=$(find "$csv_dir" -name "*.zip")
-csv_file=$(find "$csv_dir" -name "*.csv")
+csv_zip=$(find "$csv_dir" -name "*.zip" -print -quit)
+csv_file=$(find "$csv_dir" -name "*.csv" -print -quit)
 if [[ -z "$csv_zip" ]]; then
   print_error "Test 18: No .zip file found"
 fi
@@ -432,8 +432,8 @@ print_success "Test Case 18 passed."
 # Test Case 19: OPT load file format (non-DAT format inline validation)
 run_test_case "Test Case 19: OPT load file format" --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/pdf_opt" --load-file-format opt
 opt_dir="$TEST_OUTPUT_DIR/pdf_opt"
-opt_zip=$(find "$opt_dir" -name "*.zip")
-opt_file=$(find "$opt_dir" -name "*.opt")
+opt_zip=$(find "$opt_dir" -name "*.zip" -print -quit)
+opt_file=$(find "$opt_dir" -name "*.opt" -print -quit)
 if [[ -z "$opt_zip" ]]; then
   print_error "Test 19: No .zip file found"
 fi

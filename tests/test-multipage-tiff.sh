@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
@@ -50,8 +50,8 @@ zipper \
   --output-path "$TEST_OUTPUT_DIR/test1"
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
@@ -79,8 +79,8 @@ zipper \
   --tiff-pages "1-20"
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No .zip file found"
@@ -122,8 +122,8 @@ zipper \
   --tiff-pages "5-10"
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 3: No .zip file found"
@@ -162,8 +162,8 @@ zipper \
   --bates-digits 8
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 4: No .zip file found"
@@ -221,8 +221,8 @@ zipper \
   --tiff-pages "1-50"
 
 # Extract page counts from both runs
-dat_file_a=$(find "$TEST_OUTPUT_DIR/test5a" -name "*.dat")
-dat_file_b=$(find "$TEST_OUTPUT_DIR/test5b" -name "*.dat")
+dat_file_a=$(find "$TEST_OUTPUT_DIR/test5a" -name "*.dat" -print -quit)
+dat_file_b=$(find "$TEST_OUTPUT_DIR/test5b" -name "*.dat" -print -quit)
 
 # Extract page counts using the helper function (handles DAT format delimiter correctly)
 page_counts_a=$(tail -n +2 "$dat_file_a" | while IFS= read -r line; do extract_page_count "$line"; done)

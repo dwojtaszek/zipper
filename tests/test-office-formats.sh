@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
@@ -45,8 +45,8 @@ zipper \
   --folders 3
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
@@ -79,8 +79,8 @@ zipper \
   --folders 2
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No .zip file found"
@@ -113,7 +113,7 @@ zipper \
   --with-metadata
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat" -print -quit)
 
 # Check for metadata columns
 first_line=$(head -n 1 "$dat_file")
@@ -148,7 +148,7 @@ zipper \
   --bates-digits 10
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat" -print -quit)
 
 # Check for Bates Number column
 first_line=$(head -n 1 "$dat_file")
@@ -212,7 +212,7 @@ zipper \
   --output-path "$TEST_OUTPUT_DIR/test6"
 
 # Extract one DOCX file and verify it's a valid ZIP
-zip_file=$(find "$TEST_OUTPUT_DIR/test6" -name "*.zip")
+zip_file=$(find "$TEST_OUTPUT_DIR/test6" -name "*.zip" -print -quit)
 
 # Get the first DOCX file from the archive
 docx_filename=$(unzip -l "$zip_file" | grep "\.docx" | head -n 1 | awk '{print $4}')
