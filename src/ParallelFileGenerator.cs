@@ -275,7 +275,7 @@ namespace Zipper
             return await ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultReader);
         }
 
-        private long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
+        internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
         {
             var estimatedBaseSize = this.EstimateCompressedSize(baseSize, fileCount, withText);
             if (estimatedBaseSize >= targetSize)

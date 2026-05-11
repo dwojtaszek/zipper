@@ -1,0 +1,9 @@
+{
+  "_methodology": "Each scenario run 10x on main (commit f62cd02). Tolerance = max(|actual - target| / target) * 1.5 (50% headroom over observed max).",
+  "10MB_100_pdf": 0.0031,
+  "100MB_1000_pdf": 0.0031,
+  "100MB_500_eml": 0.0083,
+  "100MB_500_tiff": 0.0122,
+  "500MB_5000_pdf": 0.005,
+  "1GB_10000_pdf": 0.005
+}

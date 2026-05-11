@@ -487,5 +487,17 @@ namespace Zipper
                     },
                 }));
         }
+
+        [Theory]
+        [InlineData(10_485_760, 1000, 100, false, 102_857)]
+        [InlineData(104_857_600, 1000, 1000, false, 102_857)]
+        [InlineData(104_857_600, 1000, 500, false, 207_715)]
+        public void CalculatePaddingPerFile_AtKnownInputs_ProducesPinnedValue(
+            long targetSize, int baseSize, long fileCount, bool withText, long expectedPadding)
+        {
+            var generator = new ParallelFileGenerator();
+            var result = generator.CalculatePaddingPerFile(targetSize, baseSize, fileCount, withText);
+            Assert.Equal(expectedPadding, result);
+        }
     }
 }

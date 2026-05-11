@@ -544,6 +544,10 @@ print_info "Running column-profile empty-percentage tests..."
 bash ./tests/test-column-profile-empty-pct.sh
 print_success "Column-profile empty-percentage tests passed."
 
+print_info "Running target-zip-size accuracy tests..."
+bash ./tests/test-target-zip-size.sh
+print_success "Target-zip-size accuracy tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then
