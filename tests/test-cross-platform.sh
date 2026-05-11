@@ -3,7 +3,7 @@
 # Cross-platform compatibility test script for Zipper
 # This script tests core functionality across different platforms
 
-set -e
+set -euo pipefail
 
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"

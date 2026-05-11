@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
@@ -47,8 +47,8 @@ zipper \
   --bates-digits 8
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
@@ -87,7 +87,7 @@ zipper \
   --bates-digits 6
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.dat" -print -quit)
 
 if ! grep -q "CLIENT001000100" "$dat_file"; then
   print_error "Test 2: Bates number 'CLIENT001000100' not found in .dat file"
@@ -112,7 +112,7 @@ zipper \
   --bates-digits 8
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.dat" -print -quit)
 
 if ! grep -q "IMG00000001" "$dat_file"; then
   print_error "Test 3: Bates number 'IMG00000001' not found in .dat file"
@@ -133,7 +133,7 @@ zipper \
   --bates-digits 10
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat" -print -quit)
 
 if ! grep -q "DOCX0000000500" "$dat_file"; then
   print_error "Test 4: Bates number 'DOCX0000000500' not found in .dat file"

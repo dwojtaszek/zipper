@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
@@ -45,8 +45,8 @@ zipper \
   --load-file-format opt
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip")
-opt_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.opt")
+zip_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.zip" -print -quit)
+opt_file=$(find "$TEST_OUTPUT_DIR/test1" -name "*.opt" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 1: No .zip file found"
@@ -86,8 +86,8 @@ zipper \
   --load-file-format csv
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip")
-csv_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.csv")
+zip_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.zip" -print -quit)
+csv_file=$(find "$TEST_OUTPUT_DIR/test2" -name "*.csv" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No .zip file found"
@@ -128,8 +128,8 @@ zipper \
   --load-file-format xml
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip")
-xml_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.xml")
+zip_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.zip" -print -quit)
+xml_file=$(find "$TEST_OUTPUT_DIR/test3" -name "*.xml" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 3: No .zip file found"
@@ -175,8 +175,8 @@ zipper \
   --load-file-format concordance
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip")
-concordance_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.zip" -print -quit)
+concordance_file=$(find "$TEST_OUTPUT_DIR/test4" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 4: No .zip file found"
@@ -210,8 +210,8 @@ zipper \
   --load-file-format dat
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.dat" -print -quit)
 
 if [[ -z "$zip_file" ]]; then
   print_error "Test 5: No .zip file found"
@@ -285,8 +285,8 @@ zipper \
   --delimiter-quote "^"
 
 # Verify output
-zip_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.zip")
-dat_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.dat")
+zip_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.dat" -print -quit)
 
 if [[ -z "$dat_file" ]]; then
   print_error "Test 7: No .dat file found"
@@ -317,7 +317,7 @@ zipper \
   --delimiter-quote "254"
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test8" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test8" -name "*.dat" -print -quit)
 
 if [[ -z "$dat_file" ]]; then
   print_error "Test 8: No .dat file found"
@@ -349,7 +349,7 @@ zipper \
   --delimiter-column "|"
 
 # Verify output
-dat_file=$(find "$TEST_OUTPUT_DIR/test9" -name "*.dat")
+dat_file=$(find "$TEST_OUTPUT_DIR/test9" -name "*.dat" -print -quit)
 
 if [[ -z "$dat_file" ]]; then
   print_error "Test 9: No .dat file found"

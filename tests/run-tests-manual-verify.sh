@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
+# Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
+set -euo pipefail
 
 # --- Test Configuration ---
 
@@ -47,8 +47,8 @@ function verify_output() {
 
   print_info "Verifying output in $test_dir (Encoding: $encoding)"
 
-  local zip_file=$(find "$test_dir" -name "*.zip")
-  local dat_file=$(find "$test_dir" -name "*.dat")
+  local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
+  local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
 
   if [ -z "$zip_file" ]; then
     print_error "No .zip file found in $test_dir"
@@ -125,7 +125,7 @@ function verify_eml_output() {
 
   verify_output "$@"
 
-  local dat_file=$(find "$test_dir" -name "*.dat")
+  local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
   local dat_content_cmd="cat"
   if [ "$encoding" = "UTF-16" ]; then
     dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
@@ -134,7 +134,7 @@ function verify_eml_output() {
   fi
 
   # Verify that attachment files are actually present in the ZIP archive
-  local zip_file=$(find "$test_dir" -name "*.zip")
+  local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
   local attachment_files=$(unzip -l "$zip_file" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
 
   # Count EML files to calculate expected attachments (50% attachment rate)
@@ -174,7 +174,7 @@ function verify_zip_size() {
     local target_size_bytes=$((target_size_mb * 1024 * 1024))
     local tolerance_bytes=$((target_size_bytes / 10)) # 10%
 
-    local zip_file=$(find "$test_dir" -name "*.zip")
+    local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [ -z "$zip_file" ]; then
         print_error "No .zip file found in $test_dir"
     fi
@@ -206,13 +206,13 @@ function verify_load_file_included() {
 
     print_info "Verifying load file included in zip archive (Encoding: $encoding)"
 
-    local zip_file=$(find "$test_dir" -name "*.zip")
+    local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [ -z "$zip_file" ]; then
         print_error "No .zip file found in $test_dir"
     fi
 
     # Verify no separate .dat file in output directory
-    local dat_file=$(find "$test_dir" -name "*.dat")
+    local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
     if [ -n "$dat_file" ]; then
         print_error "Found separate .dat file in output directory, but --include-load-file was specified"
     fi
