@@ -94,7 +94,8 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 7. Run adversarial review before marking work complete (see Adversarial Review section below)
 8. Commit and create PR
 9. Monitor CI until all checks pass; fix failures before requesting review
-10. Check SonarCloud issues on the PR after CI completes (see SonarCloud & External Checks below)
+10. Check SonarCloud issues on the PR after CI completes (see SonarCloud & External Checks below). Fix all BLOCKER and MAJOR issues before merge
+11. Address CodeRabbit review comments (blocking issues required, nitpicks optional)
 
 **Test location:** `src/Zipper.Tests/`.
 
