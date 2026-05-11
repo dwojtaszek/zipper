@@ -22,7 +22,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
         // Concordance DAT format uses request.Delimiters.ColumnDelimiter with DAT escaping (þ quote char doubled)
         // Default column delimiter is ASCII 20 (DC4), quote delimiter is ASCII 254 (þ)
-        char fieldDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : ',';
+        char fieldDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
         char quoteDelim = '\u00fe'; // ASCII 254 — Concordance standard quote character
 
 #pragma warning disable S2245

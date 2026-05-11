@@ -67,7 +67,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             };
 
             var values = generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote);
+            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
             buffer.Append(line);
             buffer.Append(eolString);
 
@@ -111,7 +111,8 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
         List<string> columnNames,
         char colDelim,
         char quote,
-        bool hasQuote)
+        bool hasQuote,
+        string newlineDelimiter)
     {
         var sb = new StringBuilder();
         bool first = true;
@@ -123,7 +124,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             }
 
             var value = values.TryGetValue(name, out var v) ? v : string.Empty;
-            AppendField(sb, value, quote, hasQuote);
+            AppendField(sb, EscapeDatField(value, quote, newlineDelimiter), quote, hasQuote);
             first = false;
         }
 

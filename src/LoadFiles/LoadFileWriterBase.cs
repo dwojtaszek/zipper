@@ -117,6 +117,24 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     }
 
     /// <summary>
+    /// Escapes a field value for Concordance DAT format using the configured quote delimiter,
+    /// and sanitizes embedded newlines using the configured newline delimiter.
+    /// </summary>
+    /// <param name="field">Field value to escape.</param>
+    /// <param name="quoteDelimiter">The quote delimiter character (e.g., ASCII 254 þ).</param>
+    /// <param name="newlineDelimiter">The newline replacement string.</param>
+    /// <returns>Escaped and sanitized field value.</returns>
+    protected static string EscapeDatField(string field, char quoteDelimiter, string newlineDelimiter)
+    {
+        if (string.IsNullOrEmpty(field))
+        {
+            return string.Empty;
+        }
+
+        return SanitizeField(EscapeDatField(field, quoteDelimiter), newlineDelimiter);
+    }
+
+    /// <summary>
     /// Appends a quoted or unquoted field value to the StringBuilder.
     /// </summary>
     internal static void AppendField(System.Text.StringBuilder sb, string value, char quote, bool hasQuote)
