@@ -39,14 +39,14 @@ print_info "T1: Standard mode — chaos DAT must differ from no-chaos baseline"
 
 zipper --type pdf --count 200 --seed 42 \
     --output-path "$TEST_OUTPUT_DIR/baseline"
-BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline" -name "*.dat" | head -1)
+BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline" -name "*.dat" -print -quit)
 [[ -z "$BASELINE_DAT" ]] && print_error "No baseline DAT file generated"
 
 zipper --type pdf --count 200 --seed 42 \
     --chaos-mode --chaos-types quotes --chaos-amount "10%" \
     --output-path "$TEST_OUTPUT_DIR/chaos_run1"
-CHAOS_DAT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "*.dat" | head -1)
-CHAOS_PROPERTIES=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$PROPERTIES_NAME" | head -1)
+CHAOS_DAT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "*.dat" -print -quit)
+CHAOS_PROPERTIES=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$PROPERTIES_NAME" -print -quit)
 [[ -z "$CHAOS_DAT" ]] && print_error "No chaos DAT file generated"
 [[ -z "$CHAOS_PROPERTIES" ]] && print_error "No chaos properties generated"
 
@@ -72,8 +72,8 @@ print_info "T2: Standard mode — determinism (same seed → same output)"
 zipper --type pdf --count 200 --seed 42 \
     --chaos-mode --chaos-types quotes --chaos-amount "10%" \
     --output-path "$TEST_OUTPUT_DIR/chaos_run2"
-CHAOS_DAT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "*.dat" | head -1)
-CHAOS_PROPERTIES2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$PROPERTIES_NAME" | head -1)
+CHAOS_DAT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "*.dat" -print -quit)
+CHAOS_PROPERTIES2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$PROPERTIES_NAME" -print -quit)
 [[ -z "$CHAOS_DAT2" ]] && print_error "No chaos DAT2 file generated"
 [[ -z "$CHAOS_PROPERTIES2" ]] && print_error "No chaos properties2 generated"
 
@@ -95,7 +95,7 @@ for TYPE in mixed-delimiters quotes columns eol encoding; do
         --chaos-mode --chaos-types "$TYPE" --chaos-amount "10%" \
         --output-path "$OUT_DIR"
 
-    TYPE_DAT=$(find "$OUT_DIR" -name "*.dat" | head -1)
+    TYPE_DAT=$(find "$OUT_DIR" -name "*.dat" -print -quit)
     [[ -z "$TYPE_DAT" ]] && print_error "No DAT for chaos type: $TYPE"
 
     if cmp -s "$BASELINE_DAT" "$TYPE_DAT"; then
@@ -117,7 +117,7 @@ zipper --type pdf --count 200 --seed 42 \
     --include-load-file \
     --output-path "$TEST_OUTPUT_DIR/chaos_run3"
 
-CHAOS_ZIP=$(find "$TEST_OUTPUT_DIR/chaos_run3" -name "*.zip" | head -1)
+CHAOS_ZIP=$(find "$TEST_OUTPUT_DIR/chaos_run3" -name "*.zip" -print -quit)
 [[ -z "$CHAOS_ZIP" ]] && print_error "No ZIP archive generated"
 
 # Check ZIP contents

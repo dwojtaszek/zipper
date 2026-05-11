@@ -42,8 +42,8 @@ print_info "T1: Production-set mode — chaos DAT/OPT and properties must differ
 zipper --type pdf --count 100 --seed 42 \
     --production-set --bates-prefix CHAOS \
     --output-path "$TEST_OUTPUT_DIR/baseline"
-BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline" -name "$DAT_NAME" | head -1)
-BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline" -name "$OPT_NAME" | head -1)
+BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline" -name "$DAT_NAME" -print -quit)
+BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline" -name "$OPT_NAME" -print -quit)
 [[ -z "$BASELINE_DAT" ]] && print_error "No baseline production-set DAT generated"
 [[ -z "$BASELINE_OPT" ]] && print_error "No baseline production-set OPT generated"
 
@@ -51,9 +51,9 @@ zipper --type pdf --count 100 --seed 42 \
     --production-set --bates-prefix CHAOS \
     --chaos-mode --chaos-types quotes --chaos-amount "10%" \
     --output-path "$TEST_OUTPUT_DIR/chaos_run1"
-CHAOS_DAT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$DAT_NAME" | head -1)
-CHAOS_OPT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$OPT_NAME" | head -1)
-CHAOS_PROPERTIES=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$PROPERTIES_NAME" | head -1)
+CHAOS_DAT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$DAT_NAME" -print -quit)
+CHAOS_OPT=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$OPT_NAME" -print -quit)
+CHAOS_PROPERTIES=$(find "$TEST_OUTPUT_DIR/chaos_run1" -name "$PROPERTIES_NAME" -print -quit)
 [[ -z "$CHAOS_DAT" ]] && print_error "No chaos production-set DAT generated"
 [[ -z "$CHAOS_OPT" ]] && print_error "No chaos production-set OPT generated"
 [[ -z "$CHAOS_PROPERTIES" ]] && print_error "No chaos properties generated"
@@ -84,9 +84,9 @@ zipper --type pdf --count 100 --seed 42 \
     --production-set --bates-prefix CHAOS \
     --chaos-mode --chaos-types quotes --chaos-amount "10%" \
     --output-path "$TEST_OUTPUT_DIR/chaos_run2"
-CHAOS_DAT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$DAT_NAME" | head -1)
-CHAOS_OPT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$OPT_NAME" | head -1)
-CHAOS_PROPERTIES2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$PROPERTIES_NAME" | head -1)
+CHAOS_DAT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$DAT_NAME" -print -quit)
+CHAOS_OPT2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$OPT_NAME" -print -quit)
+CHAOS_PROPERTIES2=$(find "$TEST_OUTPUT_DIR/chaos_run2" -name "$PROPERTIES_NAME" -print -quit)
 [[ -z "$CHAOS_DAT2" ]] && print_error "No chaos DAT2 for production-set"
 [[ -z "$CHAOS_OPT2" ]] && print_error "No chaos OPT2 for production-set"
 [[ -z "$CHAOS_PROPERTIES2" ]] && print_error "No chaos properties2 for production-set"
@@ -110,8 +110,8 @@ print_info "T3: No-chaos production-set baseline is stable across two runs"
 zipper --type pdf --count 100 --seed 42 \
     --production-set --bates-prefix CHAOS \
     --output-path "$TEST_OUTPUT_DIR/baseline2"
-BASELINE2_DAT=$(find "$TEST_OUTPUT_DIR/baseline2" -name "$DAT_NAME" | head -1)
-BASELINE2_OPT=$(find "$TEST_OUTPUT_DIR/baseline2" -name "$OPT_NAME" | head -1)
+BASELINE2_DAT=$(find "$TEST_OUTPUT_DIR/baseline2" -name "$DAT_NAME" -print -quit)
+BASELINE2_OPT=$(find "$TEST_OUTPUT_DIR/baseline2" -name "$OPT_NAME" -print -quit)
 [[ -z "$BASELINE2_DAT" ]] && print_error "No second baseline DAT"
 [[ -z "$BASELINE2_OPT" ]] && print_error "No second baseline OPT"
 

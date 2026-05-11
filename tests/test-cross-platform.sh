@@ -60,8 +60,8 @@ test_basic_functionality() {
     zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/basic_pdf"
 
     # Check for .zip and .dat files (Zipper uses timestamped archive names)
-    local zip_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.zip" 2>/dev/null | head -1)
-    local dat_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.dat" 2>/dev/null | head -1)
+    local zip_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.zip" -print -quit 2>/dev/null)
+    local dat_file=$(find "$TEST_OUTPUT_DIR/basic_pdf" -name "*.dat" -print -quit 2>/dev/null)
 
     if [[ -n "$zip_file" ]] && [[ -n "$dat_file" ]]; then
         print_success "Basic PDF generation completed"
@@ -74,8 +74,8 @@ test_basic_functionality() {
     print_info "Test 2: Basic EML generation"
     zipper --type eml --count 3 --output-path "$TEST_OUTPUT_DIR/basic_eml"
 
-    zip_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.zip" 2>/dev/null | head -1)
-    dat_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.dat" 2>/dev/null | head -1)
+    zip_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.zip" -print -quit 2>/dev/null)
+    dat_file=$(find "$TEST_OUTPUT_DIR/basic_eml" -name "*.dat" -print -quit 2>/dev/null)
 
     if [[ -n "$zip_file" ]] && [[ -n "$dat_file" ]]; then
         print_success "Basic EML generation completed"
@@ -97,9 +97,9 @@ test_basic_functionality() {
     zipper --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/ansi" --encoding ANSI
 
     # Check all files exist (Zipper creates subdirectories with timestamped archives)
-    local utf8_zip=$(find "$TEST_OUTPUT_DIR/utf8" -name "*.zip" 2>/dev/null | head -1)
-    local utf16_zip=$(find "$TEST_OUTPUT_DIR/utf16" -name "*.zip" 2>/dev/null | head -1)
-    local ansi_zip=$(find "$TEST_OUTPUT_DIR/ansi" -name "*.zip" 2>/dev/null | head -1)
+    local utf8_zip=$(find "$TEST_OUTPUT_DIR/utf8" -name "*.zip" -print -quit 2>/dev/null)
+    local utf16_zip=$(find "$TEST_OUTPUT_DIR/utf16" -name "*.zip" -print -quit 2>/dev/null)
+    local ansi_zip=$(find "$TEST_OUTPUT_DIR/ansi" -name "*.zip" -print -quit 2>/dev/null)
 
     if [[ -n "$utf8_zip" ]] && [[ -n "$utf16_zip" ]] && [[ -n "$ansi_zip" ]]; then
         print_success "All encoding tests completed"
@@ -114,7 +114,7 @@ test_basic_functionality() {
     for dist in "proportional" "gaussian" "exponential"; do
         zipper --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/dist_${dist}" --folders 3 --distribution "$dist"
 
-        local dist_zip=$(find "$TEST_OUTPUT_DIR/dist_${dist}" -name "*.zip" 2>/dev/null | head -1)
+        local dist_zip=$(find "$TEST_OUTPUT_DIR/dist_${dist}" -name "*.zip" -print -quit 2>/dev/null)
         if [[ -n "$dist_zip" ]]; then
             print_success "${dist} distribution test completed"
         else
@@ -145,8 +145,8 @@ test_refactored_components() {
     # Verify all tests (Zipper creates subdirectories with timestamped archives)
     local tests=("metadata" "text" "eml_attachments")
     for test in "${tests[@]}"; do
-        local test_zip=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.zip" 2>/dev/null | head -1)
-        local test_dat=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.dat" 2>/dev/null | head -1)
+        local test_zip=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.zip" -print -quit 2>/dev/null)
+        local test_dat=$(find "$TEST_OUTPUT_DIR/${test}" -name "*.dat" -print -quit 2>/dev/null)
         if [[ -n "$test_zip" ]] && [[ -n "$test_dat" ]]; then
             print_success "${test} test completed"
         else
@@ -168,8 +168,8 @@ test_filesystem_compatibility() {
     for path in "${test_paths[@]}"; do
         zipper --type pdf --count 2 --output-path "$path"
 
-        local path_zip=$(find "$path" -name "*.zip" 2>/dev/null | head -1)
-        local path_dat=$(find "$path" -name "*.dat" 2>/dev/null | head -1)
+        local path_zip=$(find "$path" -name "*.zip" -print -quit 2>/dev/null)
+        local path_dat=$(find "$path" -name "*.dat" -print -quit 2>/dev/null)
         if [[ -n "$path_zip" ]] && [[ -n "$path_dat" ]]; then
             print_success "Path compatibility test: '$path'"
         else
@@ -182,8 +182,8 @@ test_filesystem_compatibility() {
     print_info "Testing special characters"
     zipper --folders 1 --distribution proportional --type pdf --count 2 --output-path "$TEST_OUTPUT_DIR/special"
 
-    local special_zip=$(find "$TEST_OUTPUT_DIR/special" -name "*.zip" 2>/dev/null | head -1)
-    local special_dat=$(find "$TEST_OUTPUT_DIR/special" -name "*.dat" 2>/dev/null | head -1)
+    local special_zip=$(find "$TEST_OUTPUT_DIR/special" -name "*.zip" -print -quit 2>/dev/null)
+    local special_dat=$(find "$TEST_OUTPUT_DIR/special" -name "*.dat" -print -quit 2>/dev/null)
     if [[ -n "$special_zip" ]] && [[ -n "$special_dat" ]]; then
         print_success "Special characters test completed"
     else
@@ -212,8 +212,8 @@ test_performance() {
     fi
 
     # Verify output (Zipper creates subdirectories with timestamped archives)
-    local perf_zip=$(find "$TEST_OUTPUT_DIR/perf" -name "*.zip" 2>/dev/null | head -1)
-    local perf_dat=$(find "$TEST_OUTPUT_DIR/perf" -name "*.dat" 2>/dev/null | head -1)
+    local perf_zip=$(find "$TEST_OUTPUT_DIR/perf" -name "*.zip" -print -quit 2>/dev/null)
+    local perf_dat=$(find "$TEST_OUTPUT_DIR/perf" -name "*.dat" -print -quit 2>/dev/null)
     if [[ -n "$perf_zip" ]] && [[ -n "$perf_dat" ]]; then
         print_success "Performance test output verified"
     else

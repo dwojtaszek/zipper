@@ -33,7 +33,7 @@ zipper \
     --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/run1"
 
-dat_file=$(find "$TEST_OUTPUT_DIR/run1" -name "*.dat" | head -1)
+dat_file=$(find "$TEST_OUTPUT_DIR/run1" -name "*.dat" -print -quit)
 [[ -z "$dat_file" ]] && print_error "No .dat file produced"
 
 # Expected columns from the fixture profile (same order as the JSON).
@@ -206,7 +206,7 @@ zipper \
     --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/run2"
 
-dat_file2=$(find "$TEST_OUTPUT_DIR/run2" -name "*.dat" | head -1)
+dat_file2=$(find "$TEST_OUTPUT_DIR/run2" -name "*.dat" -print -quit)
 if ! diff -q "$dat_file" "$dat_file2" > /dev/null 2>&1; then
     print_error "Determinism check failed: two runs with seed=$SEED differ"
 fi

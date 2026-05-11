@@ -70,13 +70,13 @@ print_success "Golden fixture schema validation — PASSED"
 # ---------------------------------------------------------------------------
 print_info "Generating no-chaos DAT baseline (seed 42, count 500)..."
 zipper --loadfile-only --count 500 --output-path "$TEST_OUTPUT_DIR/baseline_dat" --seed 42
-BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline_dat" -name "*.dat" | head -1)
+BASELINE_DAT=$(find "$TEST_OUTPUT_DIR/baseline_dat" -name "*.dat" -print -quit)
 [[ -z "$BASELINE_DAT" ]] && print_error "No baseline DAT file generated"
 
 print_info "Generating no-chaos OPT baseline (seed 42, count 500)..."
 zipper --loadfile-only --loadfile-format opt --count 500 \
     --output-path "$TEST_OUTPUT_DIR/baseline_opt" --seed 42
-BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline_opt" -name "*.opt" | head -1)
+BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline_opt" -name "*.opt" -print -quit)
 [[ -z "$BASELINE_OPT" ]] && print_error "No baseline OPT file generated"
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ while IFS= read -r TYPE; do
     zipper --loadfile-only --count 500 --output-path "$OUT_DIR/run1" \
         --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
 
-    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" | head -1)
+    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
     [[ -z "$PROPS" ]] && print_error "No _properties.json for type: $TYPE"
 
     # B3: schema
@@ -134,7 +134,7 @@ while IFS= read -r TYPE; do
     [[ -n "$BAD_LINES" ]] && print_error "Line number out of [1,$MAX_LINE] for type: $TYPE: $BAD_LINES"
 
     # Baseline diff: chaos file must differ from no-chaos baseline
-    CHAOS_DAT=$(find "$OUT_DIR/run1" -name "*.dat" | head -1)
+    CHAOS_DAT=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
     if cmp -s "$BASELINE_DAT" "$CHAOS_DAT" 2>/dev/null; then
         print_error "Chaos DAT identical to baseline for type: $TYPE — anomaly not injected?"
     fi
@@ -142,8 +142,8 @@ while IFS= read -r TYPE; do
     # Determinism: run 2 must produce byte-identical output
     zipper --loadfile-only --count 500 --output-path "$OUT_DIR/run2" \
         --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
-    CHAOS_DAT2=$(find "$OUT_DIR/run2" -name "*.dat" | head -1)
-    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" | head -1)
+    CHAOS_DAT2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
+    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_DAT" "$CHAOS_DAT2" \
         || print_error "Determinism failed (DAT differs) for type: $TYPE"
     # Compare _properties.json content excluding fileName (which contains a timestamp)
@@ -176,7 +176,7 @@ while IFS= read -r TYPE; do
         --output-path "$OUT_DIR/run1" \
         --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
 
-    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" | head -1)
+    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
     [[ -z "$PROPS" ]] && print_error "No _properties.json for OPT type: $TYPE"
 
     validate_properties_json "$PROPS"
@@ -206,7 +206,7 @@ while IFS= read -r TYPE; do
         | .[]?' "$PROPS" 2>/dev/null || true)
     [[ -n "$BAD_LINES" ]] && print_error "Line number out of [1,$MAX_LINE] for OPT type: $TYPE"
 
-    CHAOS_OPT=$(find "$OUT_DIR/run1" -name "*.opt" | head -1)
+    CHAOS_OPT=$(find "$OUT_DIR/run1" -name "*.opt" -print -quit)
     if cmp -s "$BASELINE_OPT" "$CHAOS_OPT" 2>/dev/null; then
         print_error "Chaos OPT identical to baseline for type: $TYPE — anomaly not injected?"
     fi
@@ -214,8 +214,8 @@ while IFS= read -r TYPE; do
     zipper --loadfile-only --loadfile-format opt --count 500 \
         --output-path "$OUT_DIR/run2" \
         --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
-    CHAOS_OPT2=$(find "$OUT_DIR/run2" -name "*.opt" | head -1)
-    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" | head -1)
+    CHAOS_OPT2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
+    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_OPT" "$CHAOS_OPT2" \
         || print_error "Determinism failed (OPT differs) for type: $TYPE"
     PROPS_CANONICAL=$(jq 'del(.fileName)' "$PROPS")
@@ -254,7 +254,7 @@ while IFS= read -r SCENARIO; do
         --output-path "$OUT_DIR/run1" \
         --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 $FORMAT_FLAG
 
-    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" | head -1)
+    PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
     [[ -z "$PROPS" ]] && print_error "No _properties.json for scenario: $SCENARIO"
 
     validate_properties_json "$PROPS"
@@ -278,14 +278,14 @@ while IFS= read -r SCENARIO; do
         --output-path "$OUT_DIR/run2" \
         --chaos-mode --chaos-scenario "$SCENARIO" --seed 42 $FORMAT_FLAG
 
-    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" | head -1)
+    PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
 
     if [[ "$FMT" == "opt" ]]; then
-        FILE1=$(find "$OUT_DIR/run1" -name "*.opt" | head -1)
-        FILE2=$(find "$OUT_DIR/run2" -name "*.opt" | head -1)
+        FILE1=$(find "$OUT_DIR/run1" -name "*.opt" -print -quit)
+        FILE2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
     else
-        FILE1=$(find "$OUT_DIR/run1" -name "*.dat" | head -1)
-        FILE2=$(find "$OUT_DIR/run2" -name "*.dat" | head -1)
+        FILE1=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
+        FILE2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
     fi
     cmp -s "$FILE1" "$FILE2" \
         || print_error "Determinism failed (load file differs) for scenario: $SCENARIO"

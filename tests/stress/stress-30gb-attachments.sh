@@ -183,8 +183,8 @@ validate_results() {
 
     print_info "Validating attachment-heavy archive..."
 
-    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" | head -1)
-    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" | head -1)
+    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit)
+    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit)
 
     if [ -z "$zip_file" ]; then
         print_error "No .zip file found"
@@ -266,7 +266,7 @@ validate_results() {
     fi
 
     # Check for attachment entries in DAT file
-    local attachment_entries=$(grep -c "attachment" "$dat_file" | head -1)
+    local attachment_entries=$(grep -c "attachment" "$dat_file" || true)
     if [ "$attachment_entries" -gt "$EML_COUNT" ]; then
         print_success "Attachment entries found in load file: $(printf "%'d" $attachment_entries)"
     else
