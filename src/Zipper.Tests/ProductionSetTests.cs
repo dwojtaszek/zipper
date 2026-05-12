@@ -461,4 +461,52 @@ public class ProductionSetTests : IDisposable
         var doc = System.Text.Json.JsonDocument.Parse(json);
         Assert.Equal(fileCount, doc.RootElement.GetProperty("totalRecords").GetInt64());
     }
+
+    [Fact]
+    public async Task ProductionSet_OnFailure_CleansUpPartialOutput()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // Directory permissions don't prevent file creation on Windows
+        }
+
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 10,
+                    FileType = "pdf",
+                },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "FAIL", Start = 1, Digits = 8 },
+            };
+
+            // Make the NATIVES dir read-only after structure creation to trigger failure mid-write
+            // We need to hook into the directory creation — use a path that will fail
+            // Simpler: use an invalid file type that will throw during generation
+            request.Output = request.Output with { FileType = "INVALID_TYPE_THAT_DOES_NOT_EXIST" };
+
+            await Assert.ThrowsAnyAsync<Exception>(async () =>
+            {
+                await ProductionSetGenerator.GenerateAsync(request);
+            });
+
+            // Verify: no PRODUCTION_* directory should remain
+            var productionDirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");
+            Assert.Empty(productionDirs);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
 }

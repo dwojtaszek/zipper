@@ -21,6 +21,32 @@ internal static class ProductionSetGenerator
         var productionName = $"PRODUCTION_{DateTime.Now:yyyyMMdd_HHmmss}";
         var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
+        try
+        {
+            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch);
+        }
+        catch
+        {
+            // Clean up partial output on failure
+            if (Directory.Exists(productionPath))
+            {
+                try
+                {
+                    Directory.Delete(productionPath, true);
+                }
+                catch
+                {
+                    // Best-effort cleanup; don't mask the original exception
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private static async Task<ProductionSetResult> GenerateCoreAsync(
+        FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch)
+    {
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
         var nativesDir = Path.Combine(productionPath, "NATIVES");
