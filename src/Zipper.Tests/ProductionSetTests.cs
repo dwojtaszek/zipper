@@ -447,4 +447,18 @@ public class ProductionSetTests : IDisposable
         Assert.Contains("DOCID", datContent);
         Assert.Equal(4, datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
     }
+
+    [Fact]
+    public async Task ProductionSet_AuditFile_TotalRecordsEqualsFileCount()
+    {
+        const int fileCount = 6;
+        var request = this.CreateTestRequest(count: fileCount);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datPropsPath = Path.Combine(result.ProductionPath, "DATA", "loadfile_properties.json");
+        Assert.True(File.Exists(datPropsPath));
+        var json = await File.ReadAllTextAsync(datPropsPath);
+        var doc = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal(fileCount, doc.RootElement.GetProperty("totalRecords").GetInt64());
+    }
 }
