@@ -24,10 +24,39 @@ namespace Zipper
             Assert.Contains("From: sender@example.com", content);
             Assert.Contains("To: recipient@example.com", content);
             Assert.Contains("Subject: RFC 2822 Test", content);
-            Assert.Contains("Date:", content);
+            Assert.Contains("Date: Fri, 15 Mar 2024 10:30:00", content);
             Assert.Contains("MIME-Version: 1.0", content);
             Assert.Contains("Content-Type: text/plain; charset=utf-8", content);
             Assert.Contains("Content-Transfer-Encoding: 8bit", content);
+        }
+
+        [Fact]
+        public void ToEml_DateHeader_UsesEnglishAbbreviationsRegardlessOfLocale()
+        {
+            var originalCulture = Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
+
+                var email = new Email
+                {
+                    To = "test@example.com",
+                    From = "sender@example.com",
+                    Subject = "Locale test",
+                    SentDate = new DateTime(2024, 1, 15, 14, 0, 0), // Monday, January
+                    Body = "Body.",
+                };
+
+                var result = EmailSerializer.ToEml(email, null);
+                var content = Encoding.UTF8.GetString(result);
+
+                // Must use English abbreviations per RFC 2822
+                Assert.Contains("Date: Mon, 15 Jan 2024 14:00:00", content);
+            }
+            finally
+            {
+                Thread.CurrentThread.CurrentCulture = originalCulture;
+            }
         }
 
         [Fact]
