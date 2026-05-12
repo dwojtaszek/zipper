@@ -1,0 +1,139 @@
+name: Perf Guard
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+
+jobs:
+  perf-guard:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish Release binary
+        run: dotnet publish src/Zipper.csproj -c Release -o publish-bin
+
+      - name: Run perf measurements (5 runs)
+        run: |
+          mkdir -p results
+          for i in $(seq 1 5); do
+            ./tests/perf/measure.sh ./publish-bin/Zipper > "results/run_${i}.json"
+          done
+
+      - name: Compare against baselines
+        id: compare
+        run: |
+          python3 <<'SCRIPT'
+          import json, sys, os
+
+          baselines = json.load(open("tests/perf/baselines.json"))
+          scenarios = [k for k in baselines if not k.startswith("_")]
+
+          # Collect all runs
+          runs = []
+          for i in range(1, 6):
+              runs.append(json.load(open(f"results/run_{i}.json")))
+
+          # Compute median per scenario/metric
+          def median(values):
+              s = sorted(values)
+              n = len(s)
+              return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+
+          results = {}
+          for sc in scenarios:
+              walls = [r[sc]["wall_s"] for r in runs]
+              rsss = [r[sc]["rss_kb"] for r in runs]
+              results[sc] = {"wall_s": median(walls), "rss_kb": median(rsss)}
+
+          # Compare
+          wall_threshold = 1.25
+          rss_threshold = 1.20
+          failed = False
+          rows = []
+
+          for sc in scenarios:
+              bw = baselines[sc]["wall_s"]
+              br = baselines[sc]["rss_kb"]
+              mw = results[sc]["wall_s"]
+              mr = results[sc]["rss_kb"]
+              rw = mw / bw if bw > 0 else 0
+              rr = mr / br if br > 0 else 0
+              sw = "✅" if rw <= wall_threshold else "❌"
+              sr = "✅" if rr <= rss_threshold else "❌"
+              if rw > wall_threshold or rr > rss_threshold:
+                  failed = True
+              rows.append(f"| {sc} | wall_s | {bw:.2f} | {mw:.2f} | {rw:.2f}× | {sw} |")
+              rows.append(f"| {sc} | rss_kb | {br} | {mr:.0f} | {rr:.2f}× | {sr} |")
+
+          table = "| Scenario | Metric | Baseline | Measured | Ratio | Status |\n"
+          table += "|----------|--------|----------|----------|-------|--------|\n"
+          table += "\n".join(rows)
+
+          # Write outputs
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"failed={'true' if failed else 'false'}\n")
+              f.write(f"table<<EOF\n{table}\nEOF\n")
+
+          # Write measured results for artifact
+          with open("results/measured.json", "w") as f:
+              json.dump(results, f, indent=2)
+
+          if failed:
+              print("❌ Performance regression detected!", file=sys.stderr)
+              sys.exit(1)
+          else:
+              print("✅ All scenarios within thresholds.")
+          SCRIPT
+
+      - name: Upload measurement artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-measurements
+          path: results/
+
+      - name: Post PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const table = `${{ steps.compare.outputs.table }}`;
+            const failed = '${{ steps.compare.outputs.failed }}' === 'true';
+            const header = failed
+              ? '## ❌ Performance Regression Detected'
+              : '## ✅ Performance Guard Passed';
+            const body = `${header}\n\n${table}\n\n` +
+              `_Thresholds: wall ≤ 1.25×, RSS ≤ 1.20× baseline. Median of 5 runs._`;
+            const marker = '<!-- perf-guard-comment -->';
+            const fullBody = `${marker}\n${body}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }

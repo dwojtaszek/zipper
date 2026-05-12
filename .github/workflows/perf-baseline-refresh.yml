@@ -1,0 +1,108 @@
+name: Perf Baseline Refresh
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'  # Monday 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish Release binary
+        run: dotnet publish src/Zipper.csproj -c Release -o publish-bin
+
+      - name: Run perf measurements (5 runs, take max)
+        run: |
+          mkdir -p results
+          for i in $(seq 1 5); do
+            ./tests/perf/measure.sh ./publish-bin/Zipper > "results/run_${i}.json"
+          done
+
+      - name: Check drift and update baselines
+        id: drift
+        run: |
+          python3 <<'SCRIPT'
+          import json, sys, os
+          from datetime import date
+
+          baselines = json.load(open("tests/perf/baselines.json"))
+          scenarios = [k for k in baselines if not k.startswith("_")]
+
+          # Collect all runs, take max per scenario
+          runs = []
+          for i in range(1, 6):
+              runs.append(json.load(open(f"results/run_{i}.json")))
+
+          new_baselines = {}
+          for sc in scenarios:
+              walls = [r[sc]["wall_s"] for r in runs]
+              rsss = [r[sc]["rss_kb"] for r in runs]
+              new_baselines[sc] = {"wall_s": max(walls), "rss_kb": max(rsss)}
+
+          # Check drift (>= 5% in either direction on any metric)
+          drifted = False
+          rows = []
+          for sc in scenarios:
+              for metric in ["wall_s", "rss_kb"]:
+                  old = baselines[sc][metric]
+                  new = new_baselines[sc][metric]
+                  ratio = new / old if old > 0 else 0
+                  drift_pct = abs(ratio - 1.0) * 100
+                  if drift_pct >= 5:
+                      drifted = True
+                  rows.append(f"| {sc} | {metric} | {old} | {new} | {ratio:.2f}× | {drift_pct:.1f}% |")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"drifted={'true' if drifted else 'false'}\n")
+
+          if not drifted:
+              print("Baselines in range (< 5% drift). No refresh needed.")
+              sys.exit(0)
+
+          # Write new baselines
+          today = date.today().isoformat()
+          output = {
+              "_captured_on": f"ubuntu-latest (5-run max, {today})",
+              "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
+          }
+          for sc in scenarios:
+              output[sc] = new_baselines[sc]
+
+          with open("tests/perf/baselines.json", "w") as f:
+              json.dump(output, f, indent=2)
+              f.write("\n")
+
+          # Write PR body
+          table = "| Scenario | Metric | Old | New | Ratio | Drift |\n"
+          table += "|----------|--------|-----|-----|-------|-------|\n"
+          table += "\n".join(rows)
+
+          with open("results/pr_body.md", "w") as f:
+              f.write(f"## Perf Baseline Refresh ({today})\n\n")
+              f.write(f"{table}\n\n")
+              f.write("### Review Checklist\n\n")
+              f.write("- [ ] Drift is expected (infra change, runtime update, etc.)\n")
+              f.write("- [ ] No unintentional regression introduced\n")
+
+          print(f"Drift detected. Updating baselines.")
+          SCRIPT
+
+      - name: Create Pull Request
+        if: steps.drift.outputs.drifted == 'true'
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c # v6
+        with:
+          branch: perf/baseline-refresh-${{ github.run_id }}
+          title: 'chore: refresh perf baselines'
+          body-path: results/pr_body.md
+          labels: perf,automated
+          commit-message: 'chore: refresh perf baselines'
