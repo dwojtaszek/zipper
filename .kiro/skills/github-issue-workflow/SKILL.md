@@ -146,18 +146,21 @@ If issues are found:
 
 ### 9. Address Review Comments
 
-Watch for PR comments:
+**Do not merge until all review comments are addressed.** Check for comments after CI completes:
 ```bash
 gh pr view <pr-number> --comments
+gh pr view <pr-number> --json reviews --jq '.reviews[] | select(.state == "COMMENTED" or .state == "CHANGES_REQUESTED") | {author: .author.login, state: .state}'
 ```
 
 For each review comment:
-- Address the feedback
-- Commit changes
-- Push to the same branch
-- Reply to the comment indicating it's addressed
+- Fix actionable issues (blocking comments are required, nitpicks are optional but preferred)
+- Commit changes and push to the same branch
+- **Reply to the comment on GitHub** indicating it's addressed (or explain why it was skipped):
+  ```bash
+  gh pr comment <pr-number> --body "Addressed CodeRabbit feedback: <summary of what was fixed>"
+  ```
 
-**Stale reviews after force-push:** CodeRabbit and other bots review the commit at push time. After amending and force-pushing, their comments may reference code that no longer exists. Before acting on a review comment, verify it still applies to the current code. Skip comments that were already addressed by the amend.
+**Stale reviews after force-push:** CodeRabbit and other bots review the commit at push time. After amending and force-pushing, their comments may reference code that no longer exists. Before acting on a review comment, verify it still applies to the current code. Skip comments that were already addressed by the amend — but still reply acknowledging them.
 
 ### 10. Merge on Green
 
