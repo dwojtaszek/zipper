@@ -81,20 +81,38 @@ namespace Zipper
                 // Wait for all producers to complete, wrapped in a task that ensures completion
                 var allProducersTask = Task.WhenAll(producerTasks);
 
+                // Race producers against consumer — if consumer faults, unblock producers
                 Exception? producerException = null;
                 try
                 {
-                    await allProducersTask;
+                    var completed = await Task.WhenAny(allProducersTask, consumerTask);
+                    if (completed == consumerTask && consumerTask.IsFaulted)
+                    {
+                        // Consumer died — complete channel with its exception to unblock producers
+                        resultChannel.Writer.TryComplete(consumerTask.Exception);
+                        try
+                        {
+                            await allProducersTask;
+                        }
+                        catch
+                        {
+                            // Producers will get ChannelClosedException — expected
+                        }
+                    }
+                    else
+                    {
+                        // Producers finished first (normal path)
+                        await allProducersTask;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    // Capture exception — must await consumer before rethrowing
                     producerException = ex;
                 }
                 finally
                 {
                     // Signal production done so consumer can drain and exit
-                    resultChannel.Writer.Complete(null);
+                    resultChannel.Writer.TryComplete(null);
                 }
 
                 // Always wait for consumer (releases zip file handles)
