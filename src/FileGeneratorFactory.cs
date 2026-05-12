@@ -9,7 +9,7 @@ internal static class FileGeneratorFactory
     /// <summary>
     /// Creates an <see cref="IFileGenerator"/> for the specified file type.
     /// </summary>
-    /// <param name="fileType">The file type (e.g. "pdf", "eml", "docx", "xlsx", "tiff").</param>
+    /// <param name="fileType">The file type: "pdf", "jpg", "tiff", "eml", "docx", "xlsx".</param>
     /// <param name="request">The generation request for context-dependent generators.</param>
     /// <returns>A file generator for the specified type, or null if the type is unknown.</returns>
     internal static IFileGenerator? Create(string fileType, FileGenerationRequest request)
@@ -18,7 +18,7 @@ internal static class FileGeneratorFactory
 
         return lower switch
         {
-            "pdf" or "jpg" or "jpeg" or "png" or "bmp" or "txt" => new PlaceholderFileGenerator(lower),
+            "pdf" or "jpg" => new PlaceholderFileGenerator(lower),
             "eml" => new EmlFileGenerator(),
             "docx" or "xlsx" => new OfficeFileGenerator(lower),
             "tiff" => new TiffFileGenerator(request),
@@ -32,7 +32,6 @@ internal static class FileGeneratorFactory
     internal static bool IsKnownType(string fileType)
     {
         var lower = fileType.ToLowerInvariant();
-        return lower is "pdf" or "jpg" or "jpeg" or "png" or "bmp" or "txt"
-            or "eml" or "docx" or "xlsx" or "tiff";
+        return lower is "pdf" or "jpg" or "eml" or "docx" or "xlsx" or "tiff";
     }
 }

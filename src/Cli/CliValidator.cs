@@ -27,6 +27,12 @@ public static class CliValidator
             return false;
         }
 
+        if (!string.IsNullOrEmpty(parsed.FileType) && !FileGeneratorFactory.IsKnownType(parsed.FileType))
+        {
+            Console.Error.WriteLine($"Error: Unsupported file type '{parsed.FileType}'. Supported types: pdf, jpg, tiff, eml, docx, xlsx.");
+            return false;
+        }
+
         if (!parsed.Count.HasValue)
         {
             Console.Error.WriteLine("Error: --count is required.");

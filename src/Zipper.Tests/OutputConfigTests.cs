@@ -17,10 +17,6 @@ namespace Zipper.Tests
         [InlineData("docx", "docx")]
         [InlineData("xlsx", "xlsx")]
         [InlineData("jpg", "jpg")]
-        [InlineData("jpeg", "jpeg")]
-        [InlineData("png", "png")]
-        [InlineData("bmp", "bmp")]
-        [InlineData("txt", "txt")]
         public void FileTypeLower_ReturnsLowercaseFileType(string fileType, string expected)
         {
             // Arrange
