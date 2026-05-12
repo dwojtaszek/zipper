@@ -14,7 +14,7 @@ internal static class EmailSerializer
     /// <param name="email">Email metadata and body content.</param>
     /// <param name="attachment">Optional attachment.</param>
     /// <returns>Byte array representing the EML file content.</returns>
-    public static byte[] ToEml(Email email, EmailAttachment? attachment)
+    public static byte[] ToEml(Email email, EmailAttachment? attachment, Random? seeded = null)
     {
         ArgumentNullException.ThrowIfNull(email);
         using var ms = new MemoryStream();
@@ -22,17 +22,17 @@ internal static class EmailSerializer
         {
             NewLine = "\r\n",
         };
-        WriteToWriter(writer, email, attachment);
+        WriteToWriter(writer, email, attachment, seeded);
         writer.Flush();
         return ms.ToArray();
     }
 
-    internal static void WriteToWriter(TextWriter writer, Email email, EmailAttachment? attachment)
+    internal static void WriteToWriter(TextWriter writer, Email email, EmailAttachment? attachment, Random? seeded = null)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(email);
 
-        var boundary = attachment != null ? GenerateBoundary() : string.Empty;
+        var boundary = attachment != null ? GenerateBoundary(seeded) : string.Empty;
 
         BuildHeaders(writer, email, attachment, boundary);
 
@@ -175,8 +175,13 @@ internal static class EmailSerializer
         writer.WriteLine(email.Body);
     }
 
-    private static string GenerateBoundary()
+    private static string GenerateBoundary(Random? seeded)
     {
+        if (seeded != null)
+        {
+            return $"----={seeded.Next():x8}{seeded.Next():x8}{seeded.Next():x8}{seeded.Next():x8}";
+        }
+
         return "----=" + Guid.NewGuid().ToString("N");
     }
 

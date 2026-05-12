@@ -1,7 +1,7 @@
 {
   "fileName": "archive.dat",
   "format": "DAT (Metadata)",
-  "totalRecords": 1001,
+  "totalRecords": 1000,
   "properties": {
     "encoding": "UTF-8",
     "lineEnding": "CRLF",
