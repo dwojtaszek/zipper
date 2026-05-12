@@ -441,5 +441,76 @@ namespace Zipper
             Assert.False(ColumnProfileLoader.IsBuiltInProfile("custom-profile"));
             Assert.False(ColumnProfileLoader.IsBuiltInProfile("NonExistent"));
         }
+
+        [Fact]
+        public void Validate_WithInvalidDateRangeMin_ThrowsInvalidOperationException()
+        {
+            var profile = CreateMinimalProfile();
+            profile.Columns.Add(new ColumnDefinition
+            {
+                Name = "BadDate",
+                Type = "date",
+                DateRange = new DateRangeConfig { Min = "not-a-date", Max = "2024-12-31" },
+            });
+
+            var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
+            Assert.Contains("BadDate", ex.Message);
+            Assert.Contains("DateRange.Min", ex.Message);
+        }
+
+        [Fact]
+        public void Validate_WithInvalidDateRangeMax_ThrowsInvalidOperationException()
+        {
+            var profile = CreateMinimalProfile();
+            profile.Columns.Add(new ColumnDefinition
+            {
+                Name = "BadMax",
+                Type = "date",
+                DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "garbage" },
+            });
+
+            var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
+            Assert.Contains("BadMax", ex.Message);
+            Assert.Contains("DateRange.Max", ex.Message);
+        }
+
+        [Fact]
+        public void Validate_WithMinGreaterThanMax_ThrowsInvalidOperationException()
+        {
+            var profile = CreateMinimalProfile();
+            profile.Columns.Add(new ColumnDefinition
+            {
+                Name = "Inverted",
+                Type = "date",
+                DateRange = new DateRangeConfig { Min = "2025-01-01", Max = "2020-01-01" },
+            });
+
+            var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
+            Assert.Contains("Inverted", ex.Message);
+            Assert.Contains("greater than", ex.Message);
+        }
+
+        [Fact]
+        public void Validate_WithLegacyColumnKind_DoesNotThrow()
+        {
+            var profile = CreateMinimalProfile();
+            profile.Columns.Add(new ColumnDefinition { Name = "Custodian", Type = "foldercustodian" });
+            profile.Columns.Add(new ColumnDefinition { Name = "Size", Type = "filedatasize" });
+
+            ColumnProfileLoader.Validate(profile); // Should not throw
+        }
+
+        private static ColumnProfile CreateMinimalProfile()
+        {
+            return new ColumnProfile
+            {
+                Name = "test",
+                Columns = new List<ColumnDefinition>
+                {
+                    new() { Name = "DOCID", Type = "identifier" },
+                },
+                DataSources = new Dictionary<string, DataSourceConfig>(),
+            };
+        }
     }
 }
