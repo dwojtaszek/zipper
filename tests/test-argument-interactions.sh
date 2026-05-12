@@ -1,0 +1,113 @@
+#!/bin/bash
+# E2E test: CLI argument-interaction conflict rejection
+# Verifies that documented conflicts/dependencies in README.md are enforced.
+
+set -euo pipefail
+
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
+
+PASSED=0
+FAILED=0
+TEMP_DIR=$(mktemp -d)
+
+function print_info() { local msg="$1"; echo -e "\033[44m[ INFO ]\033[0m $msg"; }
+function print_success() { local msg="$1"; echo -e "\033[42m[ SUCCESS ]\033[0m $msg"; }
+function print_error() { local msg="$1"; echo -e "\033[41m[ ERROR ]\033[0m $msg" >&2; }
+
+cleanup() { rm -rf "$TEMP_DIR"; }
+trap cleanup EXIT
+
+# Assert command exits non-zero (rejected)
+assert_rejected() {
+    local desc="$1"
+    shift
+    if zipper "$@" --output-path "$TEMP_DIR/out_$$" > /dev/null 2>&1; then
+        print_error "FAIL: $desc (expected rejection, got success)"
+        FAILED=$((FAILED + 1))
+    else
+        print_info "PASS: $desc"
+        PASSED=$((PASSED + 1))
+    fi
+}
+
+# Assert command exits zero (accepted)
+assert_accepted() {
+    local desc="$1"
+    shift
+    if zipper "$@" --output-path "$TEMP_DIR/out_$$" > /dev/null 2>&1; then
+        print_info "PASS: $desc"
+        PASSED=$((PASSED + 1))
+    else
+        print_error "FAIL: $desc (expected success, got rejection)"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+print_info "=== CLI Argument Interaction Tests ==="
+
+# --- Conflicts ---
+
+assert_rejected "--loadfile-only + --include-load-file" \
+    --loadfile-only --count 5 --include-load-file
+
+assert_rejected "--loadfile-only + --target-zip-size" \
+    --loadfile-only --count 5 --target-zip-size 10MB
+
+assert_rejected "--production-set + --loadfile-only" \
+    --production-set --loadfile-only --count 5 --bates-prefix TEST
+
+assert_rejected "--chaos-scenario + --chaos-types" \
+    --loadfile-only --count 5 --chaos-mode --chaos-scenario full-chaos --chaos-types quotes
+
+# --- Chaos dependencies ---
+
+assert_rejected "--chaos-mode without --loadfile-only" \
+    --type pdf --count 5 --chaos-mode
+
+assert_rejected "--chaos-amount without --chaos-mode" \
+    --loadfile-only --count 5 --chaos-amount "5%"
+
+assert_rejected "--chaos-types without --chaos-mode" \
+    --loadfile-only --count 5 --chaos-types quotes
+
+assert_rejected "--chaos-scenario without --chaos-mode" \
+    --loadfile-only --count 5 --chaos-scenario full-chaos
+
+# --- Delimiter dependencies ---
+
+assert_rejected "--col-delim without --loadfile-only" \
+    --type pdf --count 5 --col-delim "char:|"
+
+assert_rejected "--quote-delim without --loadfile-only" \
+    --type pdf --count 5 --quote-delim "char:\""
+
+assert_rejected "--newline-delim without --loadfile-only" \
+    --type pdf --count 5 --newline-delim "ascii:174"
+
+# --- Production set dependencies ---
+
+assert_rejected "--production-set without --bates-prefix" \
+    --production-set --count 5
+
+assert_rejected "--production-zip without --production-set" \
+    --type pdf --count 5 --production-zip
+
+assert_rejected "--volume-size without --production-set" \
+    --type pdf --count 5 --volume-size 100
+
+# --- Other dependencies ---
+
+assert_rejected "--target-zip-size without --count" \
+    --type pdf --target-zip-size 10MB
+
+# --- Summary ---
+
+echo ""
+TOTAL=$((PASSED + FAILED))
+if [[ "$FAILED" -eq 0 ]]; then
+    print_success "All argument interaction tests passed! ($PASSED/$TOTAL)"
+else
+    print_error "Argument interaction tests: $FAILED/$TOTAL FAILED"
+    exit 1
+fi

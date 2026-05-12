@@ -548,6 +548,10 @@ print_info "Running target-zip-size accuracy tests..."
 bash ./tests/test-target-zip-size.sh
 print_success "Target-zip-size accuracy tests passed."
 
+print_info "Running argument-interaction conflict tests..."
+bash ./tests/test-argument-interactions.sh
+print_success "Argument-interaction conflict tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then
