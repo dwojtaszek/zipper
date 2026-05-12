@@ -386,5 +386,54 @@ namespace Zipper.Tests
             var optLines = (await optStream.ReadToEndAsync()).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(3, optLines.Length); // Opticon: no header, 3 rows
         }
+
+        [Fact]
+        public async Task CreateArchiveAsync_AuditFile_TotalRecordsEqualsFileCount()
+        {
+            // Arrange
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            const int fileCount = 7;
+
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = fileCount,
+                    Concurrency = 1,
+                    IncludeLoadFile = false,
+                },
+            };
+
+            var testFiles = new List<FileData>();
+            for (int i = 0; i < fileCount; i++)
+            {
+                testFiles.Add(this.CreateTestFileData(i));
+            }
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            foreach (var file in testFiles)
+            {
+                await channel.Writer.WriteAsync(file);
+            }
+
+            channel.Writer.Complete();
+
+            // Act
+            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+            // Assert — audit file totalRecords should equal fileCount, not fileCount+1
+            var propertiesPath = loadPath + "_properties.json";
+            Assert.True(File.Exists(propertiesPath));
+            var json = await File.ReadAllTextAsync(propertiesPath);
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(fileCount, doc.RootElement.GetProperty("totalRecords").GetInt64());
+
+            // Cleanup
+            Directory.Delete(tempDir, true);
+        }
     }
 }

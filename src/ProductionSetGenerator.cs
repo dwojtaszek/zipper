@@ -119,7 +119,7 @@ internal static class ProductionSetGenerator
             await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
         }
 
-        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, datTotalLines, datChaosEngine?.Anomalies);
+        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, fileDataList.Count, datChaosEngine?.Anomalies);
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson);
 
         // Write OPT load file
