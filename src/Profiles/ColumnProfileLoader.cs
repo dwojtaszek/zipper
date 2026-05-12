@@ -123,16 +123,30 @@ public static class ColumnProfileLoader
         }
 
         // Validate column types
-        var validTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "identifier", "text", "longtext", "date", "datetime", "number", "boolean", "coded", "email",
-        };
-
         foreach (var column in profile.Columns)
         {
-            if (!validTypes.Contains(column.Type))
+            if (!Generation.ColumnValueGeneratorRegistry.IsKnownType(column.Type))
             {
-                throw new InvalidOperationException($"Column '{column.Name}' has invalid type '{column.Type}'. Valid types: {string.Join(", ", validTypes)}");
+                throw new InvalidOperationException($"Column '{column.Name}' has invalid type '{column.Type}'. Valid types: {string.Join(", ", Generation.ColumnValueGeneratorRegistry.KnownTypes)}");
+            }
+        }
+
+        // Validate date ranges
+        foreach (var column in profile.Columns.Where(c => c.DateRange != null))
+        {
+            if (!DateTime.TryParse(column.DateRange!.Min, out var minDate))
+            {
+                throw new InvalidOperationException($"Column '{column.Name}' has invalid DateRange.Min '{column.DateRange.Min}'. Must be a valid date string.");
+            }
+
+            if (!DateTime.TryParse(column.DateRange.Max, out var maxDate))
+            {
+                throw new InvalidOperationException($"Column '{column.Name}' has invalid DateRange.Max '{column.DateRange.Max}'. Must be a valid date string.");
+            }
+
+            if (minDate > maxDate)
+            {
+                throw new InvalidOperationException($"Column '{column.Name}' has DateRange.Min ({column.DateRange.Min}) greater than DateRange.Max ({column.DateRange.Max}).");
             }
         }
 
