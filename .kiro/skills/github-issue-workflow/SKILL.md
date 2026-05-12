@@ -130,6 +130,15 @@ else:
 
 **Fix all BLOCKER and MAJOR issues before merge.** MINOR and INFO are optional.
 
+**Quality gate vs. code issues:** The SonarCloud check can fail even with zero code issues. Common non-issue causes:
+- **Security hotspots** (e.g., unpinned GitHub Actions dependencies) — fix by pinning to full commit SHA: `uses: owner/action@<full-sha> # vN`
+- **Coverage gate** — may not be actionable for test-only or infra PRs; not a merge blocker if no code issues exist
+
+Check the quality gate details if the check fails but no issues are found:
+```bash
+curl -s "https://sonarcloud.io/api/qualitygates/project_status?projectKey=dwojtaszek_zipper&pullRequest=<pr-number>" | python3 -m json.tool
+```
+
 If issues are found:
 1. Fix locally
 2. Amend commit and force push
@@ -148,6 +157,8 @@ For each review comment:
 - Push to the same branch
 - Reply to the comment indicating it's addressed
 
+**Stale reviews after force-push:** CodeRabbit and other bots review the commit at push time. After amending and force-pushing, their comments may reference code that no longer exists. Before acting on a review comment, verify it still applies to the current code. Skip comments that were already addressed by the amend.
+
 ### 10. Merge on Green
 
 When all checks pass and reviews are complete:
@@ -165,9 +176,14 @@ gh pr merge <pr-number> --merge --delete-branch
 
 - **Issue not found**: Report to user, ask for guidance
 - **Branch exists**: Ask user whether to delete and recreate or use different name
+- **Merged PR cannot be reopened**: Create a follow-up branch from main (e.g., `fix/ISSUE-NNN-followup`) and open a new PR instead
 - **CI repeatedly fails**: Diagnose root cause, ask user for guidance if stuck
 - **Review requests major changes**: Implement changes, do not argue with reviewers
 - **Merge conflicts**: Rebase onto main and resolve
+
+## Best Practices
+
+- **Pin third-party GitHub Actions to full commit SHAs** with a version comment. SonarCloud flags `uses: action@vN` as a security hotspot. Use: `uses: owner/action@<full-sha> # vN`. Look up SHAs via: `curl -s "https://api.github.com/repos/OWNER/REPO/git/ref/tags/vN" | jq .object.sha`
 
 ## Example Session
 
