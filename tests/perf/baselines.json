@@ -1,16 +1,16 @@
 {
-  "_captured_on": "local (5-run max). Re-capture on ubuntu-latest after first CI run.",
+  "_captured_on": "ubuntu-latest (5-run max, 2026-05-12)",
   "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
   "pdf_50k": {
-    "wall_s": 1.86,
-    "rss_kb": 110116
+    "wall_s": 2.09,
+    "rss_kb": 124384
   },
   "eml_20k": {
-    "wall_s": 2.28,
-    "rss_kb": 120012
+    "wall_s": 2.07,
+    "rss_kb": 125344
   },
   "loadfile_200k": {
-    "wall_s": 2.49,
-    "rss_kb": 59616
+    "wall_s": 2.48,
+    "rss_kb": 76124
   }
 }
