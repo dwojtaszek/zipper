@@ -22,26 +22,30 @@ trap cleanup EXIT
 assert_rejected() {
     local desc="$1"
     shift
-    if zipper "$@" --output-path "$TEMP_DIR/out_$$" > /dev/null 2>&1; then
+    local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
         print_error "FAIL: $desc (expected rejection, got success)"
         FAILED=$((FAILED + 1))
     else
         print_info "PASS: $desc"
         PASSED=$((PASSED + 1))
     fi
+    rm -rf "$out_path" 2>/dev/null || true
 }
 
 # Assert command exits zero (accepted)
 assert_accepted() {
     local desc="$1"
     shift
-    if zipper "$@" --output-path "$TEMP_DIR/out_$$" > /dev/null 2>&1; then
+    local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
         print_info "PASS: $desc"
         PASSED=$((PASSED + 1))
     else
         print_error "FAIL: $desc (expected success, got rejection)"
         FAILED=$((FAILED + 1))
     fi
+    rm -rf "$out_path" 2>/dev/null || true
 }
 
 print_info "=== CLI Argument Interaction Tests ==="
