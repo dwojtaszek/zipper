@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Globalization;
 using System.Text;
 
 namespace Zipper.Emails;
@@ -62,7 +63,7 @@ internal static class EmailSerializer
         }
 
         writer.WriteLine($"Subject: {email.Subject}");
-        writer.WriteLine($"Date: {email.SentDate:ddd, dd MMM yyyy HH:mm:ss zzz}");
+        writer.WriteLine($"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
         writer.WriteLine("MIME-Version: 1.0");
 
         if (email.IsHighPriority)
