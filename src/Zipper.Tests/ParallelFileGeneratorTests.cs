@@ -499,5 +499,64 @@ namespace Zipper
             var result = generator.CalculatePaddingPerFile(targetSize, baseSize, fileCount, withText);
             Assert.Equal(expectedPadding, result);
         }
+
+        [Fact(Timeout = 10000)]
+        public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
+        {
+            // Windows ReadOnly attribute on directories doesn't prevent file creation
+            if (OperatingSystem.IsWindows())
+            {
+                return;
+            }
+
+            var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                // Make directory read-only so zip file creation fails inside the consumer
+                File.SetAttributes(outputPath, FileAttributes.ReadOnly);
+                if (!OperatingSystem.IsWindows())
+                {
+                    // On Linux, directory write permission controls file creation
+                    System.Diagnostics.Process.Start("chmod", $"555 {outputPath}")?.WaitForExit();
+                }
+
+                var generator = new ParallelFileGenerator();
+
+                // This should throw (not hang) because the consumer cannot create the zip
+                await Assert.ThrowsAnyAsync<Exception>(async () =>
+                {
+                    await generator.GenerateFilesAsync(new FileGenerationRequest
+                    {
+                        Output = new OutputConfig
+                        {
+                            OutputPath = outputPath,
+                            FileCount = 100,
+                            FileType = "pdf",
+                            Folders = 2,
+                            Concurrency = 4,
+                        },
+                    });
+                });
+            }
+            finally
+            {
+                // Restore permissions before cleanup
+                if (!OperatingSystem.IsWindows())
+                {
+                    System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
+                }
+                else
+                {
+                    File.SetAttributes(outputPath, FileAttributes.Normal);
+                }
+
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
     }
 }
