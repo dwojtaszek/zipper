@@ -14,10 +14,6 @@ public class FileGeneratorFactoryTests
     [Theory]
     [InlineData("pdf", typeof(PlaceholderFileGenerator))]
     [InlineData("jpg", typeof(PlaceholderFileGenerator))]
-    [InlineData("jpeg", typeof(PlaceholderFileGenerator))]
-    [InlineData("png", typeof(PlaceholderFileGenerator))]
-    [InlineData("bmp", typeof(PlaceholderFileGenerator))]
-    [InlineData("txt", typeof(PlaceholderFileGenerator))]
     [InlineData("eml", typeof(EmlFileGenerator))]
     [InlineData("docx", typeof(OfficeFileGenerator))]
     [InlineData("xlsx", typeof(OfficeFileGenerator))]
@@ -44,6 +40,10 @@ public class FileGeneratorFactoryTests
     [InlineData("unknown")]
     [InlineData("mp3")]
     [InlineData("")]
+    [InlineData("jpeg")]
+    [InlineData("png")]
+    [InlineData("bmp")]
+    [InlineData("txt")]
     public void Create_UnknownType_ReturnsNull(string fileType)
     {
         var generator = FileGeneratorFactory.Create(fileType, MinimalRequest());
@@ -52,10 +52,13 @@ public class FileGeneratorFactoryTests
 
     [Theory]
     [InlineData("pdf", true)]
+    [InlineData("jpg", true)]
     [InlineData("eml", true)]
     [InlineData("tiff", true)]
     [InlineData("docx", true)]
     [InlineData("xlsx", true)]
+    [InlineData("jpeg", false)]
+    [InlineData("png", false)]
     [InlineData("unknown", false)]
     [InlineData("mp3", false)]
     public void IsKnownType_ReturnsExpected(string fileType, bool expected)
