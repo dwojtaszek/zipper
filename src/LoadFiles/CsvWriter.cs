@@ -18,7 +18,8 @@ internal class CsvWriter : LoadFileWriterBase
         ChaosEngine? chaosEngine = null)
     {
         // Use leaveOpen: true to avoid disposing the caller's stream
-        await using var writer = new StreamWriter(stream, Encoding.UTF8, leaveOpen: true);
+        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
 
 #pragma warning disable S2245
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;

@@ -23,6 +23,8 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         {
             Async = true,
             Indent = true,
+
+            // Intentionally UTF-8: EDRM XML schema requires UTF-8 per the XML declaration.
             Encoding = Encoding.UTF8,
             CloseOutput = false,
         };

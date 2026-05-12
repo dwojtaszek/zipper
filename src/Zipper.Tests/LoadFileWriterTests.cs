@@ -915,5 +915,57 @@ namespace Zipper
                 throw new OperationCanceledException();
             }
         }
+
+        [Fact]
+        public async Task CsvWriter_WithUtf16Encoding_ProducesUtf16Output()
+        {
+            var request = this.CreateTestRequest();
+            request.LoadFile = request.LoadFile with { Encoding = "UTF-16" };
+            var fileData = this.CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
+            var outputPath = Path.Combine(this.tempDir, "test_utf16.csv");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var bytes = await File.ReadAllBytesAsync(outputPath);
+
+            // UTF-16 LE BOM: FF FE
+            Assert.True(bytes.Length >= 2);
+            Assert.Equal(0xFF, bytes[0]);
+            Assert.Equal(0xFE, bytes[1]);
+
+            // Verify content is readable as UTF-16
+            var content = await File.ReadAllTextAsync(outputPath, System.Text.Encoding.Unicode);
+            Assert.Contains("Control Number", content);
+        }
+
+        [Fact]
+        public async Task CsvWriter_WithAnsiEncoding_ProducesAnsiOutput()
+        {
+            var request = this.CreateTestRequest();
+            request.LoadFile = request.LoadFile with { Encoding = "ANSI" };
+            var fileData = this.CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
+            var outputPath = Path.Combine(this.tempDir, "test_ansi.csv");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var bytes = await File.ReadAllBytesAsync(outputPath);
+
+            // ANSI (Windows-1252) has no BOM — first byte should be ASCII
+            Assert.True(bytes[0] < 0x80 || bytes[0] >= 0x80); // Not UTF-16 BOM
+            Assert.NotEqual(0xFF, bytes[0]);
+
+            // Verify content is readable as Windows-1252
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            var content = System.Text.Encoding.GetEncoding(1252).GetString(bytes);
+            Assert.Contains("Control Number", content);
+        }
     }
 }
