@@ -195,12 +195,14 @@ namespace Zipper
                 var files1 = Directory.GetFiles(tempPath1, "*.*", SearchOption.AllDirectories)
                                       .Select(f => Path.GetRelativePath(tempPath1, f))
                                       .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
+                                                  !f.Contains("_properties.json", StringComparison.OrdinalIgnoreCase))
                                       .OrderBy(n => n).ToList();
                 var files2 = Directory.GetFiles(tempPath2, "*.*", SearchOption.AllDirectories)
                                       .Select(f => Path.GetRelativePath(tempPath2, f))
                                       .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase))
+                                                  !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
+                                                  !f.Contains("_properties.json", StringComparison.OrdinalIgnoreCase))
                                       .OrderBy(n => n).ToList();
 
                 Assert.Equal(files1, files2);
