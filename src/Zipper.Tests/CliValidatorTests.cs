@@ -171,11 +171,11 @@ namespace Zipper.Tests
         }
 
         [Fact]
-        public void Validate_ChaosMode_WithoutLoadfileOnly_ReturnsTrue()
+        public void Validate_ChaosMode_WithoutLoadfileOnly_ReturnsFalse()
         {
             var args = CreateValidArgs();
             args.ChaosMode = true;
-            Assert.True(CliValidator.Validate(args));
+            Assert.False(CliValidator.Validate(args));
         }
 
         [Fact]
