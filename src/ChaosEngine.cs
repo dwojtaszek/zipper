@@ -11,8 +11,8 @@ namespace Zipper;
 /// </remarks>
 internal class ChaosEngine
 {
-    private static readonly string[] DatChaosTypes = { "mixed-delimiters", "quotes", "columns", "eol", "encoding" };
-    private static readonly string[] OptChaosTypes = { "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid" };
+    private static readonly string[] DatChaosTypes = ChaosAnomalyTypes.Dat.ToArray();
+    private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
     private static readonly char[] AlternativeDelimiters = { ',', '\t', '|' };
 
     private readonly HashSet<long> targetLines;

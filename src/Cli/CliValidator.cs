@@ -357,10 +357,8 @@ public static class CliValidator
 
         if (!string.IsNullOrEmpty(parsed.ChaosTypes))
         {
-            var validDat = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "mixed-delimiters", "quotes", "columns", "eol", "encoding" };
-            var validOpt = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid" };
             var format = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
-            var validTypes = format == LoadFileFormat.Opt ? validOpt : validDat;
+            var validTypes = new HashSet<string>(ChaosAnomalyTypes.ForFormat(format), StringComparer.OrdinalIgnoreCase);
             var types = parsed.ChaosTypes.Split(',');
             foreach (var t in types)
             {
