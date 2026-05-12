@@ -35,9 +35,10 @@ internal sealed class CodedGenerator : IColumnValueGenerator
             }
 
             var selected = new HashSet<string>();
+            selected.Add(this.PickValue(context));
             while (selected.Count < count && selected.Count < this.values.Count)
             {
-                selected.Add(this.PickValue(context));
+                selected.Add(this.values[context.Seeded.Next(this.values.Count)]);
             }
 
             return string.Join(this.multiValueDelimiter, selected);
