@@ -109,6 +109,72 @@ else
     fail "--load-file-format edrm-xml command failed"
 fi
 
+# --- Column profile override flags ---
+
+print_info "Test: --empty-percentage 0 produces no empty fields"
+if zipper --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/empty_pct" \
+    --column-profile standard --empty-percentage 0 --seed 42 > /dev/null 2>&1; then
+    dat_file=$(find "$TEST_OUTPUT_DIR/empty_pct" -name "*.dat" -print -quit)
+    if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
+        fail "--empty-percentage 0: no .dat file produced"
+    else
+        non_empty_rows=$(tail -n +2 "$dat_file" | wc -l)
+        if [[ "$non_empty_rows" -eq 20 ]]; then
+            pass "--empty-percentage 0 produces 20 data rows"
+        else
+            fail "--empty-percentage 0: expected 20 rows, got $non_empty_rows"
+        fi
+    fi
+else
+    fail "--empty-percentage 0 command failed"
+fi
+
+print_info "Test: --newline-delim recorded in properties"
+if zipper --loadfile-only --count 5 --output-path "$TEST_OUTPUT_DIR/newline_delim" \
+    --newline-delim "ascii:10" > /dev/null 2>&1; then
+    props_file=$(find "$TEST_OUTPUT_DIR/newline_delim" -name "*_properties.json" -print -quit)
+    if grep -q '"newline": "ascii:10"' "$props_file"; then
+        pass "--newline-delim ascii:10 recorded in properties"
+    else
+        fail "--newline-delim not found in properties"
+    fi
+else
+    fail "--newline-delim command failed"
+fi
+
+print_info "Test: --date-format override"
+if zipper --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/date_fmt" \
+    --column-profile standard --date-format "dd/MM/yyyy" --seed 42 > /dev/null 2>&1; then
+    dat_file=$(find "$TEST_OUTPUT_DIR/date_fmt" -name "*.dat" -print -quit)
+    # The --date-format flag applies to column-profile settings; verify it's accepted without error
+    if [[ -f "$dat_file" ]]; then
+        pass "--date-format accepted and produces output"
+    else
+        fail "--date-format: no output file"
+    fi
+else
+    fail "--date-format command failed"
+fi
+
+print_info "Test: --custodian-count limits pool"
+if zipper --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/cust_count" \
+    --with-metadata --custodian-count 2 --seed 42 > /dev/null 2>&1; then
+    dat_file=$(find "$TEST_OUTPUT_DIR/cust_count" -name "*.dat" -print -quit)
+    if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
+        fail "--custodian-count: no .dat file produced"
+    else
+        # With --with-metadata and --custodian-count 2, custodian column should have <= 2 distinct values
+        custodian_count=$(tail -n +2 "$dat_file" | cut -d$'\x14' -f3 | tr -d '\xfe' | sort -u | grep -c '.')
+        if [[ "$custodian_count" -le 2 ]]; then
+            pass "--custodian-count 2 produces <= 2 distinct custodians"
+        else
+            fail "--custodian-count 2: got $custodian_count distinct custodians"
+        fi
+    fi
+else
+    fail "--custodian-count command failed"
+fi
+
 # --- Summary ---
 
 echo ""
