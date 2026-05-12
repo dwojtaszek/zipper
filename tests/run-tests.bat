@@ -458,4 +458,49 @@ if errorlevel 1 (
 )
 call :print_success "Loadfile-only tests passed."
 
+REM Test 13: Argument interaction conflict tests
+call :print_info "Running argument-interaction conflict tests..."
+call .\tests\test-argument-interactions.bat
+if errorlevel 1 (
+    echo [ ERROR ] Argument interaction tests failed.
+    exit /b 1
+)
+call :print_success "Argument-interaction tests passed."
+
+REM Test 14: CLI coverage gap tests
+call :print_info "Running CLI coverage gap tests..."
+call .\tests\test-cli-coverage-gaps.bat
+if errorlevel 1 (
+    echo [ ERROR ] CLI coverage gap tests failed.
+    exit /b 1
+)
+call :print_success "CLI coverage gap tests passed."
+
+REM Test 15: Target-zip-size smoke tests
+call :print_info "Running target-zip-size smoke tests..."
+call .\tests\test-target-zip-size.bat
+if errorlevel 1 (
+    echo [ ERROR ] Target-zip-size tests failed.
+    exit /b 1
+)
+call :print_success "Target-zip-size tests passed."
+
+REM Test 16: Chaos anomaly coverage tests
+call :print_info "Running chaos anomaly coverage tests..."
+call .\tests\test-chaos-anomaly-coverage.bat
+if errorlevel 1 (
+    echo [ ERROR ] Chaos anomaly coverage tests failed.
+    exit /b 1
+)
+call :print_success "Chaos anomaly coverage tests passed."
+
+REM Test 17: Column profile built-in matrix tests
+call :print_info "Running column profile matrix tests..."
+call .\tests\test-column-profile-builtin-matrix.bat
+if errorlevel 1 (
+    echo [ ERROR ] Column profile matrix tests failed.
+    exit /b 1
+)
+call :print_success "Column profile matrix tests passed."
+
 call :print_success "All tests passed successfully!"
