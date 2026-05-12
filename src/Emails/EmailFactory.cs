@@ -144,10 +144,18 @@ internal static class EmailFactory
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(seeded);
-        return Create((int)item.Index, (int)item.Index, category: null, seeded);
+        var referenceDate = request.Metadata.Seed.HasValue
+            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Local)
+            : DateTime.Now;
+        return Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
     }
 
     internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)
+    {
+        return Create(recipientIndex, senderIndex, category, random, DateTime.Now);
+    }
+
+    internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random, DateTime referenceDate)
     {
         ArgumentNullException.ThrowIfNull(random);
         var selectedCategory = category ?? GetRandomCategory(random);
@@ -157,9 +165,9 @@ internal static class EmailFactory
         {
             To = GenerateEmailAddress(recipientIndex, "recipient"),
             From = GenerateEmailAddress(senderIndex, "sender"),
-            Subject = GenerateSubject(baseTemplate.Subject, recipientIndex, senderIndex, random),
-            Body = GenerateBody(baseTemplate.Body, recipientIndex, senderIndex, random),
-            SentDate = GenerateSentDate(selectedCategory, random),
+            Subject = GenerateSubject(baseTemplate.Subject, recipientIndex, senderIndex, random, referenceDate),
+            Body = GenerateBody(baseTemplate.Body, recipientIndex, senderIndex, random, referenceDate),
+            SentDate = GenerateSentDate(selectedCategory, random, referenceDate),
             Cc = GenerateCcAddresses(selectedCategory, recipientIndex, random),
             IsHighPriority = ShouldBeHighPriority(selectedCategory, random),
             RequestReadReceipt = ShouldRequestReadReceipt(selectedCategory, random),
@@ -171,14 +179,15 @@ internal static class EmailFactory
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(random);
+        var referenceDate = DateTime.Now;
         var baseTemplate = GetContextualBaseTemplate(context);
         return new Email
         {
             To = GenerateEmailAddress(context.RecipientIndex, context.RecipientType ?? "recipient"),
             From = GenerateEmailAddress(context.SenderIndex, context.SenderType ?? "sender"),
-            Subject = GenerateSubject(baseTemplate.Subject, context.RecipientIndex, context.SenderIndex, random),
-            Body = GenerateBody(baseTemplate.Body, context.RecipientIndex, context.SenderIndex, random),
-            SentDate = context.SentDate ?? GenerateSentDate(context.Category, random),
+            Subject = GenerateSubject(baseTemplate.Subject, context.RecipientIndex, context.SenderIndex, random, referenceDate),
+            Body = GenerateBody(baseTemplate.Body, context.RecipientIndex, context.SenderIndex, random, referenceDate),
+            SentDate = context.SentDate ?? GenerateSentDate(context.Category, random, referenceDate),
             Cc = GenerateCcAddresses(context.Category, context.RecipientIndex, random),
             IsHighPriority = context.IsHighPriority ?? ShouldBeHighPriority(context.Category, random),
             RequestReadReceipt = context.RequestReadReceipt ?? ShouldRequestReadReceipt(context.Category, random),
@@ -225,7 +234,7 @@ internal static class EmailFactory
         return templates[context.TemplateIndex % templates.Count];
     }
 
-    private static Dictionary<string, string> BuildReplacements(int recipientIndex, int senderIndex, Random random)
+    private static Dictionary<string, string> BuildReplacements(int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
         return new Dictionary<string, string>
         {
@@ -234,26 +243,26 @@ internal static class EmailFactory
             ["{case}"] = $"CASE{recipientIndex:D6}",
             ["{invoice}"] = $"INV{recipientIndex:D6}",
             ["{ticket}"] = $"TKT{recipientIndex:D6}",
-            ["{date}"] = DateTime.Now.AddDays(-random.Next(1, 30)).ToString("MMM dd, yyyy"),
+            ["{date}"] = referenceDate.AddDays(-random.Next(1, 30)).ToString("MMM dd, yyyy"),
             ["{course}"] = $"Course {(recipientIndex % 100) + 1}",
             ["{project}"] = $"Project {(recipientIndex % 50) + 1}",
             ["{quarter}"] = $"Q{random.Next(1, 5)}",
             ["{company}"] = $"Company {(senderIndex % 100) + 1}",
             ["{department}"] = GetRandomDepartment(random),
             ["{amount}"] = $"${random.Next(100, 50000):N2}",
-            ["{deadline}"] = DateTime.Now.AddDays(random.Next(1, 90)).ToString("MMM dd, yyyy"),
-            ["{meeting}"] = DateTime.Now.AddDays(random.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
+            ["{deadline}"] = referenceDate.AddDays(random.Next(1, 90)).ToString("MMM dd, yyyy"),
+            ["{meeting}"] = referenceDate.AddDays(random.Next(1, 14)).ToString("MMM dd, yyyy 'at' HH:mm"),
             ["{place}"] = GetRandomPlace(random),
             ["{venue}"] = GetRandomVenue(random),
             ["{website}"] = GetRandomWebsite(random),
             ["{service}"] = GetRandomService(random),
-            ["{reset_link}"] = $"https://example.com/reset?token={Guid.NewGuid():N}",
+            ["{reset_link}"] = $"https://example.com/reset?token={random.Next():x8}{random.Next():x8}",
             ["{growth}"] = $"{random.Next(5, 25)}",
             ["{payment}"] = $"{random.Next(25, 500):N2}",
             ["{account}"] = $"ACC{random.Next(100000, 999999):D6}",
             ["{start_time}"] = $"{random.Next(0, 12):D2}:00 {(random.Next(0, 2) == 0 ? "AM" : "PM")}",
             ["{end_time}"] = $"{random.Next(13, 23):D2}:00 {(random.Next(0, 2) == 0 ? "PM" : "AM")}",
-            ["{month}"] = DateTime.Now.AddMonths(-random.Next(0, 12)).ToString("MMMM"),
+            ["{month}"] = referenceDate.AddMonths(-random.Next(0, 12)).ToString("MMMM"),
             ["{gpa}"] = $"3.{random.Next(4, 9)}",
             ["{courses_completed}"] = $"{random.Next(3, 6)}",
             ["{attendance}"] = $"{random.Next(85, 100)}",
@@ -278,17 +287,17 @@ internal static class EmailFactory
         return result;
     }
 
-    private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random)
+    private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
-        return ApplyReplacements(baseSubject, BuildReplacements(recipientIndex, senderIndex, random));
+        return ApplyReplacements(baseSubject, BuildReplacements(recipientIndex, senderIndex, random, referenceDate));
     }
 
-    private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, Random random)
+    private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
-        return ApplyReplacements(baseBody, BuildReplacements(recipientIndex, senderIndex, random));
+        return ApplyReplacements(baseBody, BuildReplacements(recipientIndex, senderIndex, random, referenceDate));
     }
 
-    private static DateTime GenerateSentDate(EmailCategory category, Random random)
+    private static DateTime GenerateSentDate(EmailCategory category, Random random, DateTime referenceDate)
     {
         var baseDaysAgo = category switch
         {
@@ -307,7 +316,7 @@ internal static class EmailFactory
             _ => random.Next(1, 30),
         };
 
-        return DateTime.Now.AddDays(-baseDaysAgo).AddHours(random.Next(-23, 24)).AddMinutes(random.Next(-59, 60));
+        return referenceDate.AddDays(-baseDaysAgo).AddHours(random.Next(-23, 24)).AddMinutes(random.Next(-59, 60));
     }
 
     private static string? GenerateCcAddresses(EmailCategory category, int recipientIndex, Random random)

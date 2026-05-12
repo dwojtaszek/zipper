@@ -21,12 +21,13 @@ namespace Zipper
             const int senderIndex = 7;
             const EmailCategory category = EmailCategory.Business;
             const int seed = 42;
+            var referenceDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Local);
 
             // Act
-            var t1 = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(seed));
-            var t2 = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(seed));
+            var t1 = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(seed), referenceDate);
+            var t2 = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(seed), referenceDate);
 
-            // Assert — all fields except SentDate (which uses DateTime.Now as base) must be identical
+            // Assert — all fields must be byte-identical
             Assert.Equal(t1.To, t2.To);
             Assert.Equal(t1.From, t2.From);
             Assert.Equal(t1.Subject, t2.Subject);
@@ -35,10 +36,7 @@ namespace Zipper
             Assert.Equal(t1.ReplyTo, t2.ReplyTo);
             Assert.Equal(t1.IsHighPriority, t2.IsHighPriority);
             Assert.Equal(t1.RequestReadReceipt, t2.RequestReadReceipt);
-
-            // SentDate offset from now must match (same seed → same day/hour/minute adjustments)
-            var diff = Math.Abs((t1.SentDate - t2.SentDate).TotalSeconds);
-            Assert.True(diff < 5, $"SentDate differed by {diff:F1}s between two calls with the same seed");
+            Assert.Equal(t1.SentDate, t2.SentDate);
         }
 
         [Theory]
