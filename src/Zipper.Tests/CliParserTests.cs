@@ -117,5 +117,80 @@ namespace Zipper.Tests
             var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "not-a-number", "--output-path", "/tmp" });
             Assert.Null(result);
         }
+
+        [Fact]
+        public void Parse_InvalidFolders_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--folders", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidAttachmentRate_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--attachment-rate", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidBatesStart_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--bates-start", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidBatesDigits_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--bates-digits", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidSeed_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--seed", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidEmptyPercentage_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--empty-percentage", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidCustodianCount_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--custodian-count", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_InvalidVolumeSize_ReturnsNull()
+        {
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--volume-size", "notanumber" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_ChaosListNotConsumedAsValueForPrecedingArg()
+        {
+            // Before fix: --chaos-list would be consumed as the value for --type.
+            // After fix: TryGetValue returns false (--chaos-list is parameterless),
+            // so --type fails with a missing-value error and Parse returns null.
+            var result = CliParser.Parse(new[] { "--type", "--chaos-list" });
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public void Parse_BenchmarkNotConsumedAsValueForPrecedingArg()
+        {
+            // --benchmark is a parameterless flag; it must not be consumed as a value
+            // for a preceding option such as --type.
+            var result = CliParser.Parse(new[] { "--type", "--benchmark" });
+            Assert.Null(result);
+        }
     }
 }
