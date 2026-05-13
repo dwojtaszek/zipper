@@ -187,6 +187,13 @@ gh pr merge <pr-number> --merge --delete-branch
 ## Best Practices
 
 - **Pin third-party GitHub Actions to full commit SHAs** with a version comment. SonarCloud flags `uses: action@vN` as a security hotspot. Use: `uses: owner/action@<full-sha> # vN`. Look up SHAs via: `curl -s "https://api.github.com/repos/OWNER/REPO/git/ref/tags/vN" | jq .object.sha`
+- **Always use a branch + PR**, even for trivial fixes. Never push directly to main.
+- **Close tracking/design issues with comments** when the tracked work is complete, rather than implementing unnecessary artifacts.
+- **macOS `sed` compatibility**: Use `tr` instead of `sed 's/\xNN//g'` for hex byte removal. macOS sed doesn't support `\x` escapes.
+- **Windows `.bat` arg forwarding**: `%1..%9` truncates after 9 args. Use delayed expansion with `!ARGS!` for full argument passthrough.
+- **Golden fixture regeneration**: When code changes affect output (e.g., deterministic seed fixes), regenerate goldens with `ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture`.
+- **`set -euo pipefail` implications**: Audit `grep -c` (exit 1 on zero matches → add `|| true`), `find | head` (SIGPIPE → use `-print -quit`), and `((var++))` (exit 1 when var is 0 → use `VAR=$((VAR + 1))`).
+- **Perf-guard baselines**: Local baselines ≠ CI baselines. Commit local values as starting point, then trigger the refresh workflow to calibrate for CI runners.
 
 ## Example Session
 

@@ -161,6 +161,11 @@ Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`.
 | `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
+| `src/ChaosAnomalyTypes.cs` | Canonical catalog of DAT/OPT anomaly type names |
+| `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning (no I/O) |
+| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model |
+| `src/LoadFiles/ILoadFileSerializer.cs` | Interface for format-specific record serialization |
+| `src/LoadFiles/DatSerializer.cs` | DAT format serializer (implements ILoadFileSerializer) |
 | `src/Profiles/Generation/` | Column value generators — `IColumnValueGenerator`, per-Kind generators (see ADR-0004) |
 | `src/Emails/` | Email domain model (`Email`, `EmailContext` records) |
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
@@ -188,11 +193,12 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 
 ### Standard Pipeline
 
-`ParallelFileGenerator` uses `System.Threading.Channels` for a 3-stage pipeline:
+`ParallelFileGenerator` uses `System.Threading.Channels` for a producer-consumer pipeline:
 
 1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. Bounded channel provides backpressure.
-2. **Generation**: N concurrent producers generate file data and write to result channel. Email with Attachments or Extracted Text forces `Concurrency = 1`.
+2. **Generation**: N concurrent producers generate file data and write to result channel. All file types run in parallel.
 3. **Archive writing**: Single consumer (`ZipArchiveService`) writes ZIP entries, then writes Load Files via `ILoadFileWriter` implementations.
+4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.
 
 ### Chaos Engine (Loadfile-Only Mode only)
 
