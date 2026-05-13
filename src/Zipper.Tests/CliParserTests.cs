@@ -192,6 +192,5 @@ namespace Zipper.Tests
             var result = CliParser.Parse(new[] { "--type", "--benchmark" });
             Assert.Null(result);
         }
-
     }
 }
