@@ -18,8 +18,6 @@ internal sealed class PlaceholderFileGenerator : IFileGenerator
         this.content = PlaceholderFiles.GetContent(fileType);
     }
 
-    public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
-
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         return new GeneratedFileContent { Content = this.content };

@@ -288,20 +288,6 @@ namespace Zipper
         }
 
         [Fact]
-        public void RequiresSequentialProcessing_ShouldReturnFalse()
-        {
-            // Arrange
-            var generator = new OfficeFileGenerator("docx");
-            var request = new FileGenerationRequest();
-
-            // Act
-            var result = generator.RequiresSequentialProcessing(request);
-
-            // Assert
-            Assert.False(result);
-        }
-
-        [Fact]
         public void Generate_WithDocx_ShouldReturnValidGeneratedFileContent()
         {
             // Arrange
