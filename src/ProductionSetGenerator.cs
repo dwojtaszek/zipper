@@ -61,10 +61,9 @@ internal static class ProductionSetGenerator
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
 #pragma warning restore S2245
-        var batesConfig = request.Bates
-            ?? throw new InvalidOperationException("Production set requires Bates configuration. Specify --bates-prefix.");
 
-        // Calculate volume distribution
+        // Plan document layout (no I/O)
+        var plans = ProductionSetPlanner.Plan(request);
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
@@ -81,44 +80,30 @@ internal static class ProductionSetGenerator
         var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
             ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
 
-        // Generate files and collect records for load files
+        // Generate files using the plan
         var fileDataList = new List<FileData>();
 
-        for (long i = 0; i < request.Output.FileCount; i++)
+        foreach (var plan in plans)
         {
-            int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
-            var volName = $"VOL{volumeIndex:D3}";
-            var batesNumber = BatesNumberGenerator.Generate(batesConfig, i);
-
-            var nativeExt = request.Output.FileTypeLower;
-            var nativeRelPath = Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}");
-            var textRelPath = Path.Combine("TEXT", volName, $"{batesNumber}.txt");
-            var imageRelPath = Path.Combine("IMAGES", volName, $"{batesNumber}.tif");
-
-            // Write native file
-            var nativeFullPath = Path.Combine(productionPath, nativeRelPath);
             var workItem = new FileWorkItem
             {
-                Index = i + 1,
-                FolderNumber = volumeIndex,
-                FolderName = volName,
-                FileName = $"{batesNumber}.{nativeExt}",
-                FilePathInZip = nativeRelPath,
+                Index = plan.Index + 1,
+                FolderNumber = plan.VolumeIndex,
+                FolderName = plan.VolumeName,
+                FileName = $"{plan.BatesNumber}.{request.Output.FileTypeLower}",
+                FilePathInZip = plan.NativeRelPath,
             };
             var generated = fileGenerator.Generate(workItem, request);
             var nativeContent = generated.Content;
 
-            await File.WriteAllBytesAsync(nativeFullPath, nativeContent);
+            await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent);
 
-            // Write text file
-            var textFullPath = Path.Combine(productionPath, textRelPath);
-            var textContent = $"Extracted text for document {batesNumber}. " +
+            var textContent = $"Extracted text for document {plan.BatesNumber}. " +
                               Profiles.LoremIpsum.GetParagraph(random);
-            await File.WriteAllTextAsync(textFullPath, textContent, encoding);
+            await File.WriteAllTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding);
 
             // Write placeholder TIFF image (single-pixel stub)
-            var imageFullPath = Path.Combine(productionPath, imageRelPath);
-            await File.WriteAllBytesAsync(imageFullPath, PlaceholderFiles.GetContent("tiff"));
+            await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff"));
 
             fileDataList.Add(new FileData
             {
@@ -127,9 +112,9 @@ internal static class ProductionSetGenerator
             });
 
             // Progress reporting
-            if ((i + 1) % 1000 == 0 || i == request.Output.FileCount - 1)
+            if ((plan.Index + 1) % 1000 == 0 || plan.Index == request.Output.FileCount - 1)
             {
-                Console.Write($"\r  Progress: {i + 1:N0} / {request.Output.FileCount:N0} documents");
+                Console.Write($"\r  Progress: {plan.Index + 1:N0} / {request.Output.FileCount:N0} documents");
             }
         }
 
@@ -164,8 +149,8 @@ internal static class ProductionSetGenerator
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson);
 
         // Write manifest
-        var batesStart = BatesNumberGenerator.Generate(batesConfig, 0);
-        var batesEnd = BatesNumberGenerator.Generate(batesConfig, request.Output.FileCount - 1);
+        var batesStart = plans[0].BatesNumber;
+        var batesEnd = plans[^1].BatesNumber;
         var manifestPath = await ProductionManifestWriter.WriteAsync(
             productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed);
 
