@@ -35,7 +35,7 @@ namespace Zipper
             }
 
             // Use parallel file generator for improved performance
-            using var generator = new ParallelFileGenerator();
+            var generator = new ParallelFileGenerator();
 
             var result = await generator.GenerateFilesAsync(request);
 

@@ -9,7 +9,7 @@ namespace Zipper
     /// <summary>
     /// Generates files in parallel with controlled concurrency and memory pooling.
     /// </summary>
-    public class ParallelFileGenerator : IDisposable
+    public class ParallelFileGenerator
     {
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
 
@@ -64,12 +64,11 @@ namespace Zipper
                 });
 
                 // Start the consumer task to write the archive concurrently
-                var consumerTask = this.WriteArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
+                var consumerTask = ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
 
                 // Generate files in parallel (producers)
-                using var semaphore = new SemaphoreSlim(request.Output.Concurrency);
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(semaphore, workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator))
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -173,27 +172,19 @@ namespace Zipper
             return channel.Reader;
         }
 
-        private async Task ProcessFileWorkAsync(SemaphoreSlim semaphore, ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator)
+        private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator)
         {
             long filesProcessed = 0;
 
             await foreach (var workItem in reader.ReadAllAsync())
             {
-                await semaphore.WaitAsync();
-                try
-                {
-                    var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
-                    await writer.WriteAsync(fileData);
+                var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+                await writer.WriteAsync(fileData);
 
-                    filesProcessed++;
-                    if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
-                    {
-                        this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
-                    }
-                }
-                finally
+                filesProcessed++;
+                if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
                 {
-                    semaphore.Release();
+                    this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
                 }
             }
 
@@ -281,12 +272,6 @@ namespace Zipper
             };
         }
 
-        private async Task<string> WriteArchiveAsync(string zipFilePath, string loadFileName, string loadFilePath, FileGenerationRequest request, ChannelReader<FileData> resultReader)
-        {
-            // Delegate to new ZipArchiveService for actual ZIP creation
-            return await ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultReader);
-        }
-
         internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
         {
             var estimatedBaseSize = this.EstimateCompressedSize(baseSize, fileCount, withText);
@@ -312,10 +297,6 @@ namespace Zipper
             }
 
             return baseSize * count;
-        }
-
-        public void Dispose()
-        {
         }
 
         private static void RethrowIfNotNull(Exception? ex)

@@ -44,7 +44,7 @@ namespace Zipper
 
                 var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
 
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
                     Output = new OutputConfig
@@ -100,7 +100,7 @@ namespace Zipper
 
                 // Parallel generation
                 sw.Restart();
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
                 {
                     Output = new OutputConfig
@@ -210,7 +210,7 @@ namespace Zipper
                 {
                     var sw = Stopwatch.StartNew();
 
-                    using var generator = new ParallelFileGenerator();
+                    var generator = new ParallelFileGenerator();
                     var request = new FileGenerationRequest
                     {
                         Output = new OutputConfig
