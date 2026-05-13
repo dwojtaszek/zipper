@@ -271,7 +271,7 @@ namespace Zipper
 
             try
             {
-                using (var generator = new ParallelFileGenerator())
+                var generator = new ParallelFileGenerator();
                 {
                     var task = generator.GenerateFilesAsync(new FileGenerationRequest
                     {
@@ -310,7 +310,7 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
                     generator.GenerateFilesAsync(new FileGenerationRequest
                     {
@@ -343,7 +343,7 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
                     Output = new OutputConfig
@@ -378,7 +378,7 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                     generator.GenerateFilesAsync(new FileGenerationRequest
                     {
@@ -411,7 +411,7 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
                     Output = new OutputConfig
@@ -444,7 +444,7 @@ namespace Zipper
 
             try
             {
-                using var generator = new ParallelFileGenerator();
+                var generator = new ParallelFileGenerator();
                 var result = await generator.GenerateFilesAsync(new FileGenerationRequest
                 {
                     Output = new OutputConfig
@@ -474,7 +474,7 @@ namespace Zipper
         [Fact]
         public async Task GenerateFilesAsync_NullOutputPath_ThrowsArgumentNullException()
         {
-            using var generator = new ParallelFileGenerator();
+            var generator = new ParallelFileGenerator();
             await Assert.ThrowsAsync<ArgumentNullException>(() =>
                 generator.GenerateFilesAsync(new FileGenerationRequest
                 {
