@@ -156,8 +156,8 @@
       },
       "System.Text.Encoding.CodePages": {
         "type": "Transitive",
-        "resolved": "10.0.7",
-        "contentHash": "jVwqeYm6ihKbC8+f9dC+VGlWb6areYWTi+3aHuawZXazkiVs3DxQTNeiMYbcZ/H+JzVkPXfkLUUzUFPQneobFg=="
+        "resolved": "10.0.8",
+        "contentHash": "WU6i/0KsH43ZeNCXVpm8JGwaj5Chs4Sup2Mwj9JSq62jzSyJQFqoarTpUhXQ+tXCXsUoVTHhxw+1ZhFm20rrmg=="
       },
       "xunit.abstractions": {
         "type": "Transitive",
@@ -205,7 +205,7 @@
           "ClosedXML": "[0.105.0, )",
           "DocumentFormat.OpenXml": "[3.5.1, )",
           "SixLabors.ImageSharp": "[3.1.12, )",
-          "System.Text.Encoding.CodePages": "[10.0.7, )"
+          "System.Text.Encoding.CodePages": "[10.0.8, )"
         }
       }
     }
