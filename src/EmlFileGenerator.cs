@@ -14,7 +14,7 @@ internal sealed class EmlFileGenerator : IFileGenerator
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         var random = request.Metadata.Seed.HasValue
-            ? new Random(request.Metadata.Seed.Value + (int)workItem.Index)
+            ? new Random(unchecked((int)(request.Metadata.Seed.Value + workItem.Index)))
             : Random.Shared;
 
         var email = EmailFactory.Create(workItem, request, random);

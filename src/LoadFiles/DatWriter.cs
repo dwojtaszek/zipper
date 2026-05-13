@@ -259,7 +259,7 @@ internal class DatWriter : LoadFileWriterBase
         var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
-        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + (int)workItem.Index) : Random.Shared;
+        var random = request.Metadata.Seed.HasValue ? new Random(unchecked((int)(request.Metadata.Seed.Value + workItem.Index))) : Random.Shared;
 #pragma warning restore S2245
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var maxCustodians = Math.Max(2, request.Metadata.CustodianCountOverride ?? 10);

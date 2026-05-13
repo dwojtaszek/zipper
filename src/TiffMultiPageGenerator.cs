@@ -57,7 +57,7 @@ internal static class TiffMultiPageGenerator
         // to ensure deterministic page counts for testing, while avoiding
         // shared state contention.
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
-        var random = new Random((seed ?? 0) + (int)fileIndex);
+        var random = new Random(unchecked((int)((seed ?? 0) + fileIndex)));
 #pragma warning restore S2245
         return random.Next(clampedMin, clampedMax + 1);
     }
