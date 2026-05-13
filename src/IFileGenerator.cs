@@ -47,12 +47,6 @@ internal interface IFileGenerator
     bool IsPlaceholderBased { get; }
 
     /// <summary>
-    /// Whether this generator requires sequential processing (non-parallel).
-    /// EML generators with attachments/text require this for ZIP entry safety.
-    /// </summary>
-    bool RequiresSequentialProcessing(FileGenerationRequest request);
-
-    /// <summary>
     /// Generates file content for the given work item and request configuration.
     /// </summary>
     GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request);

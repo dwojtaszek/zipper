@@ -28,8 +28,6 @@ internal sealed class OfficeFileGenerator : IFileGenerator
 
     public bool IsPlaceholderBased => false;
 
-    public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
-
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         return new GeneratedFileContent

@@ -11,11 +11,6 @@ internal sealed class EmlFileGenerator : IFileGenerator
 
     public bool IsPlaceholderBased => false;
 
-    public bool RequiresSequentialProcessing(FileGenerationRequest request)
-    {
-        return request.Output.WithText || request.LoadFile.AttachmentRate > 0;
-    }
-
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         var random = request.Metadata.Seed.HasValue

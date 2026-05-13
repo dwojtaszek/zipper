@@ -16,8 +16,6 @@ internal sealed class TiffFileGenerator : IFileGenerator
         this.hasPageRange = request.Tiff.PageRange.HasValue;
     }
 
-    public bool RequiresSequentialProcessing(FileGenerationRequest request) => false;
-
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
     {
         if (!this.hasPageRange)

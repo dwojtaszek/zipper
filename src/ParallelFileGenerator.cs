@@ -38,12 +38,6 @@ namespace Zipper
                 var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
                     ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
 
-                // For EML files, use sequential processing to avoid ZIP entry creation conflicts
-                if (fileGenerator.RequiresSequentialProcessing(request))
-                {
-                    request.Output = request.Output with { Concurrency = 1 }; // Force sequential processing
-                }
-
                 Directory.CreateDirectory(request.Output.OutputPath);
 
                 var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
