@@ -175,6 +175,21 @@ else
     fail "--custodian-count command failed"
 fi
 
+# --- --with-families flag ---
+
+print_info "Test: --with-families accepted with EML + attachments"
+if zipper --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/families" \
+    --with-families --attachment-rate 50 > /dev/null 2>&1; then
+    dat_file=$(find "$TEST_OUTPUT_DIR/families" -name "*.dat" -print -quit)
+    if [[ -n "$dat_file" && -s "$dat_file" ]]; then
+        pass "--with-families accepted and produces output"
+    else
+        fail "--with-families: no .dat file produced"
+    fi
+else
+    fail "--with-families command failed"
+fi
+
 # --- Summary ---
 
 echo ""
