@@ -63,9 +63,18 @@ public static class CliParser
 
                     break;
                 case "--folders":
-                    if (TryGetValue(args, i, out var foldersStr) && int.TryParse(foldersStr, out var folders))
+                    if (TryGetValue(args, i, out var foldersStr))
                     {
-                        parsed.Folders = folders;
+                        if (int.TryParse(foldersStr, out var folders))
+                        {
+                            parsed.Folders = folders;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --folders: '{foldersStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -93,9 +102,18 @@ public static class CliParser
                     parsed.WithText = true;
                     break;
                 case "--attachment-rate":
-                    if (TryGetValue(args, i, out var attRateStr) && int.TryParse(attRateStr, out var attachmentRate))
+                    if (TryGetValue(args, i, out var attRateStr))
                     {
-                        parsed.AttachmentRate = attachmentRate;
+                        if (int.TryParse(attRateStr, out var attachmentRate))
+                        {
+                            parsed.AttachmentRate = attachmentRate;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --attachment-rate: '{attRateStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -128,17 +146,35 @@ public static class CliParser
 
                     break;
                 case "--bates-start":
-                    if (TryGetValue(args, i, out var batesStartStr) && long.TryParse(batesStartStr, out var batesStart))
+                    if (TryGetValue(args, i, out var batesStartStr))
                     {
-                        parsed.BatesStart = batesStart;
+                        if (long.TryParse(batesStartStr, out var batesStart))
+                        {
+                            parsed.BatesStart = batesStart;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
                     break;
                 case "--bates-digits":
-                    if (TryGetValue(args, i, out var batesDigitsStr) && int.TryParse(batesDigitsStr, out var batesDigits))
+                    if (TryGetValue(args, i, out var batesDigitsStr))
                     {
-                        parsed.BatesDigits = batesDigits;
+                        if (int.TryParse(batesDigitsStr, out var batesDigits))
+                        {
+                            parsed.BatesDigits = batesDigits;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --bates-digits: '{batesDigitsStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -160,9 +196,18 @@ public static class CliParser
 
                     break;
                 case "--seed":
-                    if (TryGetValue(args, i, out var seedStr) && int.TryParse(seedStr, out var seed))
+                    if (TryGetValue(args, i, out var seedStr))
                     {
-                        parsed.Seed = seed;
+                        if (int.TryParse(seedStr, out var seed))
+                        {
+                            parsed.Seed = seed;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --seed: '{seedStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -176,17 +221,35 @@ public static class CliParser
 
                     break;
                 case "--empty-percentage":
-                    if (TryGetValue(args, i, out var emptyPctStr) && int.TryParse(emptyPctStr, out var emptyPct))
+                    if (TryGetValue(args, i, out var emptyPctStr))
                     {
-                        parsed.EmptyPercentage = emptyPct;
+                        if (int.TryParse(emptyPctStr, out var emptyPct))
+                        {
+                            parsed.EmptyPercentage = emptyPct;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --empty-percentage: '{emptyPctStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
                     break;
                 case "--custodian-count":
-                    if (TryGetValue(args, i, out var custCountStr) && int.TryParse(custCountStr, out var custCount))
+                    if (TryGetValue(args, i, out var custCountStr))
                     {
-                        parsed.CustodianCount = custCount;
+                        if (int.TryParse(custCountStr, out var custCount))
+                        {
+                            parsed.CustodianCount = custCount;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --custodian-count: '{custCountStr}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -216,6 +279,11 @@ public static class CliParser
                         parsed.DelimiterColumn = delCol;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --delimiter-column requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--delimiter-quote":
@@ -223,6 +291,11 @@ public static class CliParser
                     {
                         parsed.DelimiterQuote = delQuote;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --delimiter-quote requires a value.");
+                        return null;
                     }
 
                     break;
@@ -335,9 +408,18 @@ public static class CliParser
                     parsed.ProductionZip = true;
                     break;
                 case "--volume-size":
-                    if (TryGetValue(args, i, out var volumeSizeVal) && int.TryParse(volumeSizeVal, out var volumeSize))
+                    if (TryGetValue(args, i, out var volumeSizeVal))
                     {
-                        parsed.VolumeSize = volumeSize;
+                        if (int.TryParse(volumeSizeVal, out var volumeSize))
+                        {
+                            parsed.VolumeSize = volumeSize;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --volume-size: '{volumeSizeVal}'");
+                            return null;
+                        }
+
                         i++;
                     }
 
@@ -370,17 +452,6 @@ public static class CliParser
             return false;
         }
 
-        return arg.ToLowerInvariant() switch
-        {
-            "--with-metadata" => true,
-            "--with-text" => true,
-            "--include-load-file" => true,
-            "--with-families" => true,
-            "--loadfile-only" => true,
-            "--chaos-mode" => true,
-            "--production-set" => true,
-            "--production-zip" => true,
-            _ => false,
-        };
+        return CliOptions.ParameterlessFlags.Contains(arg);
     }
 }
