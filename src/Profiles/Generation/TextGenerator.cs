@@ -4,10 +4,10 @@ internal sealed class TextGenerator : IColumnValueGenerator
 {
     private readonly string colName;
     private readonly string? generatorName;
-    private readonly List<string>? dataSourceValues;
+    private readonly string[]? dataSourceValues;
     private readonly int[]? distributionIndices;
 
-    public TextGenerator(ColumnDefinition col, List<string>? dataSourceValues, int[]? distributionIndices)
+    public TextGenerator(ColumnDefinition col, string[]? dataSourceValues, int[]? distributionIndices)
     {
         this.colName = col.Name;
         this.generatorName = col.Generator;
@@ -37,10 +37,10 @@ internal sealed class TextGenerator : IColumnValueGenerator
             if (this.distributionIndices != null)
             {
                 var idx = this.distributionIndices[context.DocumentIndex % this.distributionIndices.Length];
-                return this.dataSourceValues[idx % this.dataSourceValues.Count];
+                return this.dataSourceValues[idx % this.dataSourceValues.Length];
             }
 
-            return this.dataSourceValues[context.Seeded.Next(this.dataSourceValues.Count)];
+            return this.dataSourceValues[context.Seeded.Next(this.dataSourceValues.Length)];
         }
 
         if (!string.IsNullOrEmpty(this.generatorName))

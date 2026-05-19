@@ -36,7 +36,7 @@ public class CodedGeneratorTests
     [Fact(Timeout = 2000)]
     public async Task Generate_MultiValue_Weighted_CompletesAndReturnsDistinctValues()
     {
-        var values = new List<string> { "Alpha", "Beta", "Gamma", "Delta" };
+        var values = new string[] { "Alpha", "Beta", "Gamma", "Delta" };
         var indices = WeightedIndices(100);
         var col = MultiValueColumn(min: 2, max: 3);
         var generator = new CodedGenerator(values, indices, col, DefaultSettings());
@@ -51,7 +51,7 @@ public class CodedGeneratorTests
     [Fact(Timeout = 2000)]
     public async Task Generate_MultiValue_Pareto_CompletesAndReturnsDistinctValues()
     {
-        var values = new List<string> { "Red", "Green", "Blue", "Yellow" };
+        var values = new string[] { "Red", "Green", "Blue", "Yellow" };
 
         // Pareto-like: heavily skewed toward index 0
         var indices = Enumerable.Range(0, 200).Select(i => i < 180 ? 0 : 1).ToArray();
@@ -68,7 +68,7 @@ public class CodedGeneratorTests
     [Fact]
     public void Generate_SingleValue_Weighted_UsesDocumentIndexPath()
     {
-        var values = new List<string> { "One", "Two", "Three" };
+        var values = new string[] { "One", "Two", "Three" };
         var indices = new[] { 2, 0, 1 };
         var col = new ColumnDefinition { Name = "Test", Type = "coded", MultiValue = false };
         var generator = new CodedGenerator(values, indices, col, DefaultSettings());
