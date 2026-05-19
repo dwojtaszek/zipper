@@ -62,6 +62,17 @@ public static class CliValidator
 
     private static bool ValidateOptional(ParsedArguments parsed)
     {
+        return ValidateBasicLimits(parsed) &&
+               ValidateFormattingAndProfiles(parsed) &&
+               ValidateBates(parsed) &&
+               ValidateLoadFileOnly(parsed) &&
+               ValidateChaos(parsed) &&
+               ValidateProduction(parsed) &&
+               ValidateDelimiters(parsed);
+    }
+
+    private static bool ValidateBasicLimits(ParsedArguments parsed)
+    {
         if (!string.IsNullOrEmpty(parsed.TargetZipSize) && !parsed.Count.HasValue)
         {
             Console.Error.WriteLine("Error: --target-zip-size requires --count to be specified.");
@@ -80,6 +91,32 @@ public static class CliValidator
             return false;
         }
 
+        if (!string.IsNullOrEmpty(parsed.TargetZipSize))
+        {
+            if (RequestBuilder.ParseSize(parsed.TargetZipSize) == null)
+            {
+                Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
+                return false;
+            }
+        }
+
+        if (parsed.EmptyPercentage.HasValue && (parsed.EmptyPercentage.Value < 0 || parsed.EmptyPercentage.Value > 100))
+        {
+            Console.Error.WriteLine("Error: Empty percentage must be between 0 and 100.");
+            return false;
+        }
+
+        if (parsed.CustodianCount.HasValue && (parsed.CustodianCount.Value < 1 || parsed.CustodianCount.Value > 1000))
+        {
+            Console.Error.WriteLine("Error: Custodian count must be between 1 and 1000.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateFormattingAndProfiles(ParsedArguments parsed)
+    {
         if (!string.IsNullOrEmpty(parsed.Encoding) && RequestBuilder.GetEncodingFromName(parsed.Encoding) == null)
         {
             Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
@@ -92,15 +129,6 @@ public static class CliValidator
             return false;
         }
 
-        if (!string.IsNullOrEmpty(parsed.TargetZipSize))
-        {
-            if (RequestBuilder.ParseSize(parsed.TargetZipSize) == null)
-            {
-                Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
-                return false;
-            }
-        }
-
         if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
         {
             if (RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) == null)
@@ -110,6 +138,59 @@ public static class CliValidator
             }
         }
 
+        if (!string.IsNullOrEmpty(parsed.TiffPagesRange))
+        {
+            if (TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange) == null)
+            {
+                Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.ColumnProfile))
+        {
+            if (!ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile) && !File.Exists(parsed.ColumnProfile))
+            {
+                Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.");
+                Console.Error.WriteLine($"       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
+        {
+            var formats = parsed.LoadFileFormats.Split(',');
+            foreach (var fmt in formats)
+            {
+                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) == null)
+                {
+                    Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml.");
+                    return false;
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.DatDelimiters))
+        {
+            var delim = parsed.DatDelimiters.ToLowerInvariant();
+            if (delim != "standard" && delim != "csv")
+            {
+                Console.Error.WriteLine("Error: DAT delimiters must be 'standard' or 'csv'.");
+                return false;
+            }
+        }
+
+        if (parsed.WithMetadata && !string.IsNullOrEmpty(parsed.ColumnProfile))
+        {
+            Console.Error.WriteLine("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.");
+            parsed.WithMetadata = false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateBates(ParsedArguments parsed)
+    {
         if (parsed.BatesStart.HasValue && parsed.BatesStart.Value < 0)
         {
             Console.Error.WriteLine("Error: Bates start number must be non-negative.");
@@ -143,66 +224,11 @@ public static class CliValidator
             }
         }
 
-        if (!string.IsNullOrEmpty(parsed.TiffPagesRange))
-        {
-            if (TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange) == null)
-            {
-                Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");
-                return false;
-            }
-        }
+        return true;
+    }
 
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile))
-        {
-            if (!ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile) && !File.Exists(parsed.ColumnProfile))
-            {
-                Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.");
-                Console.Error.WriteLine($"       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
-                return false;
-            }
-        }
-
-        if (parsed.EmptyPercentage.HasValue && (parsed.EmptyPercentage.Value < 0 || parsed.EmptyPercentage.Value > 100))
-        {
-            Console.Error.WriteLine("Error: Empty percentage must be between 0 and 100.");
-            return false;
-        }
-
-        if (parsed.CustodianCount.HasValue && (parsed.CustodianCount.Value < 1 || parsed.CustodianCount.Value > 1000))
-        {
-            Console.Error.WriteLine("Error: Custodian count must be between 1 and 1000.");
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
-        {
-            var formats = parsed.LoadFileFormats.Split(',');
-            foreach (var fmt in formats)
-            {
-                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) == null)
-                {
-                    Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml.");
-                    return false;
-                }
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parsed.DatDelimiters))
-        {
-            var delim = parsed.DatDelimiters.ToLowerInvariant();
-            if (delim != "standard" && delim != "csv")
-            {
-                Console.Error.WriteLine("Error: DAT delimiters must be 'standard' or 'csv'.");
-                return false;
-            }
-        }
-
-        if (parsed.WithMetadata && !string.IsNullOrEmpty(parsed.ColumnProfile))
-        {
-            Console.Error.WriteLine("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.");
-            parsed.WithMetadata = false;
-        }
-
+    private static bool ValidateLoadFileOnly(ParsedArguments parsed)
+    {
         var loadfileOnlyArgs = new[] { parsed.Eol, parsed.ColDelim, parsed.QuoteDelim, parsed.NewlineDelim, parsed.MultiDelim, parsed.NestedDelim };
         var loadfileOnlyNames = new[] { "--eol", "--col-delim", "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim" };
         for (int idx = 0; idx < loadfileOnlyArgs.Length; idx++)
@@ -214,6 +240,33 @@ public static class CliValidator
             }
         }
 
+        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.TargetZipSize))
+        {
+            Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
+            return false;
+        }
+
+        if (parsed.LoadfileOnly && parsed.IncludeLoadFile)
+        {
+            Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
+            return false;
+        }
+
+        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
+        {
+            var enc = EncodingHelper.GetEncoding(parsed.Encoding);
+            if (enc == null)
+            {
+                Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ValidateChaos(ParsedArguments parsed)
+    {
         if (parsed.ChaosMode)
         {
             if (!parsed.LoadfileOnly)
@@ -272,18 +325,35 @@ public static class CliValidator
             }
         }
 
-        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.TargetZipSize))
+        if (!string.IsNullOrEmpty(parsed.ChaosAmount))
         {
-            Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
-            return false;
+            if (!IsValidChaosAmount(parsed.ChaosAmount))
+            {
+                Console.Error.WriteLine("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').");
+                return false;
+            }
         }
 
-        if (parsed.LoadfileOnly && parsed.IncludeLoadFile)
+        if (!string.IsNullOrEmpty(parsed.ChaosTypes))
         {
-            Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
-            return false;
+            var format = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
+            var validTypes = new HashSet<string>(ChaosAnomalyTypes.ForFormat(format), StringComparer.OrdinalIgnoreCase);
+            var types = parsed.ChaosTypes.Split(',');
+            foreach (var t in types)
+            {
+                if (!validTypes.Contains(t.Trim()))
+                {
+                    Console.Error.WriteLine($"Error: Invalid chaos type '{t.Trim()}'. Valid types for {format}: {string.Join(", ", validTypes)}");
+                    return false;
+                }
+            }
         }
 
+        return true;
+    }
+
+    private static bool ValidateProduction(ParsedArguments parsed)
+    {
         if (parsed.ProductionSet)
         {
             if (parsed.LoadfileOnly)
@@ -317,6 +387,11 @@ public static class CliValidator
             return false;
         }
 
+        return true;
+    }
+
+    private static bool ValidateDelimiters(ParsedArguments parsed)
+    {
         if (!string.IsNullOrEmpty(parsed.Eol))
         {
             var eolUpper = parsed.Eol.ToUpperInvariant();
@@ -344,40 +419,6 @@ public static class CliValidator
         {
             Console.Error.WriteLine("Error: --quote-delim must use 'ascii:<N>', 'char:<c>', or 'none'.");
             return false;
-        }
-
-        if (!string.IsNullOrEmpty(parsed.ChaosAmount))
-        {
-            if (!IsValidChaosAmount(parsed.ChaosAmount))
-            {
-                Console.Error.WriteLine("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').");
-                return false;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parsed.ChaosTypes))
-        {
-            var format = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
-            var validTypes = new HashSet<string>(ChaosAnomalyTypes.ForFormat(format), StringComparer.OrdinalIgnoreCase);
-            var types = parsed.ChaosTypes.Split(',');
-            foreach (var t in types)
-            {
-                if (!validTypes.Contains(t.Trim()))
-                {
-                    Console.Error.WriteLine($"Error: Invalid chaos type '{t.Trim()}'. Valid types for {format}: {string.Join(", ", validTypes)}");
-                    return false;
-                }
-            }
-        }
-
-        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
-        {
-            var enc = EncodingHelper.GetEncoding(parsed.Encoding);
-            if (enc == null)
-            {
-                Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
-                return false;
-            }
         }
 
         return true;
