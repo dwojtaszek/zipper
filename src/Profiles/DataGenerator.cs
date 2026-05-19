@@ -9,7 +9,7 @@ internal class DataGenerator
 {
     private readonly ColumnProfile profile;
     private readonly Random random;
-    private readonly Dictionary<string, List<string>> dataSources;
+    private readonly Dictionary<string, string[]> dataSources;
     private readonly Dictionary<string, int[]> distributionIndices;
     private readonly Dictionary<string, IColumnValueGenerator> columnGenerators;
     private readonly DateTime now;
@@ -21,7 +21,7 @@ internal class DataGenerator
 #pragma warning disable S2245
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        this.dataSources = new Dictionary<string, List<string>>();
+        this.dataSources = new Dictionary<string, string[]>();
         this.distributionIndices = new Dictionary<string, int[]>();
         this.columnGenerators = new Dictionary<string, IColumnValueGenerator>();
         this.now = now ?? DateTime.UtcNow;
@@ -65,13 +65,13 @@ internal class DataGenerator
     {
         foreach (var (name, cfg) in this.profile.DataSources)
         {
-            var vals = cfg.Values?.Count > 0
-                ? new List<string>(cfg.Values)
-                : Enumerable.Range(1, cfg.Count).Select(i => $"{cfg.Prefix}{i}").ToList();
+            var vals = (cfg.Values?.Count > 0
+                ? cfg.Values
+                : Enumerable.Range(1, cfg.Count).Select(i => $"{cfg.Prefix}{i}")).ToArray();
             this.dataSources[name] = vals;
             if (cfg.Distribution == "pareto" || cfg.Distribution == "weighted")
             {
-                this.distributionIndices[name] = this.PrecomputeIndices(vals.Count, cfg);
+                this.distributionIndices[name] = this.PrecomputeIndices(vals.Length, cfg);
             }
         }
     }
@@ -97,7 +97,7 @@ internal class DataGenerator
             "datetime" => new DateTimeColumnGenerator(col, this.profile.Settings),
             "number" => new NumberGenerator(col),
             "boolean" => new BooleanGenerator(col),
-            "coded" => new CodedGenerator(ds ?? new List<string>(), di, col, this.profile.Settings),
+            "coded" => new CodedGenerator(ds ?? Array.Empty<string>(), di, col, this.profile.Settings),
             "email" => new EmailAddressGenerator(col, this.profile.Settings),
             "foldercustodian" => new LegacyFolderCustodianGenerator(),
             "indexcustodian" => new LegacyIndexCustodianGenerator(),

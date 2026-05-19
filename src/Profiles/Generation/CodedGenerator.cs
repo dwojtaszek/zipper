@@ -2,14 +2,14 @@ namespace Zipper.Profiles.Generation;
 
 internal sealed class CodedGenerator : IColumnValueGenerator
 {
-    private readonly List<string> values;
+    private readonly string[] values;
     private readonly int[]? distributionIndices;
     private readonly bool multiValue;
     private readonly int multiValueMin;
     private readonly int multiValueMax;
     private readonly string multiValueDelimiter;
 
-    public CodedGenerator(List<string> values, int[]? distributionIndices, ColumnDefinition col, ProfileSettings settings)
+    public CodedGenerator(string[] values, int[]? distributionIndices, ColumnDefinition col, ProfileSettings settings)
     {
         this.values = values;
         this.distributionIndices = distributionIndices;
@@ -21,7 +21,7 @@ internal sealed class CodedGenerator : IColumnValueGenerator
 
     public string Generate(ColumnGenerationContext context)
     {
-        if (this.values.Count == 0)
+        if (this.values.Length == 0)
         {
             return string.Empty;
         }
@@ -36,9 +36,9 @@ internal sealed class CodedGenerator : IColumnValueGenerator
 
             var selected = new HashSet<string>();
             selected.Add(this.PickValue(context));
-            while (selected.Count < count && selected.Count < this.values.Count)
+            while (selected.Count < count && selected.Count < this.values.Length)
             {
-                selected.Add(this.values[context.Seeded.Next(this.values.Count)]);
+                selected.Add(this.values[context.Seeded.Next(this.values.Length)]);
             }
 
             return string.Join(this.multiValueDelimiter, selected);
@@ -52,9 +52,9 @@ internal sealed class CodedGenerator : IColumnValueGenerator
         if (this.distributionIndices != null)
         {
             var idx = this.distributionIndices[context.DocumentIndex % this.distributionIndices.Length];
-            return this.values[idx % this.values.Count];
+            return this.values[idx % this.values.Length];
         }
 
-        return this.values[context.Seeded.Next(this.values.Count)];
+        return this.values[context.Seeded.Next(this.values.Length)];
     }
 }
