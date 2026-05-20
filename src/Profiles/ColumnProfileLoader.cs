@@ -75,6 +75,17 @@ public static class ColumnProfileLoader
             throw new InvalidOperationException("Column profile must have a name.");
         }
 
+        if (profile.FieldNamingConvention != null)
+        {
+            var convention = profile.FieldNamingConvention.ToUpperInvariant();
+            if (convention != "UPPERCASE" && convention != "PASCALCASE" && convention != "LOWERCASE" && convention != "SNAKE_CASE")
+            {
+                throw new InvalidOperationException(
+                    $"Column profile '{profile.Name}' has an invalid fieldNamingConvention '{profile.FieldNamingConvention}'. " +
+                    "Valid conventions are: UPPERCASE, PascalCase, lowercase, snake_case.");
+            }
+        }
+
         // Null guards
         if (profile.Columns == null || profile.Columns.Count == 0)
         {

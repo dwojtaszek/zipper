@@ -185,7 +185,7 @@ public static class BuiltInProfiles
         Name = "legacyWithMetadata",
         Description = "Legacy --with-metadata pseudo-profile (non-EML)",
         Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
+        FieldNamingConvention = null,
         Settings = new ProfileSettings { EmptyValuePercentage = 0 },
         DataSources = new Dictionary<string, DataSourceConfig>(),
         Columns = new List<ColumnDefinition>
@@ -206,7 +206,7 @@ public static class BuiltInProfiles
         Name = "legacyEml",
         Description = "Legacy EML pseudo-profile with metadata + email columns",
         Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
+        FieldNamingConvention = null,
         Settings = new ProfileSettings { EmptyValuePercentage = 0 },
         DataSources = new Dictionary<string, DataSourceConfig>(),
         Columns = new List<ColumnDefinition>

@@ -1,5 +1,6 @@
 using System.Text;
 using Zipper.Profiles;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -35,8 +36,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
         var columnNames = generator.GetColumnNames().ToList();
 
         // Write header row
-        var header = BuildProfileHeader(columnNames, colDelim, quote, hasQuote);
-        await stream.WriteAsync(encoding.GetBytes(header + eolString));
+        var header = BuildProfileHeader(columnNames, colDelim, quote, hasQuote, profile.FieldNamingConvention);
 
         // Separate Random for synthetic file sizes / page counts so it does not
         // interleave with the DataGenerator's own seeded random stream.
@@ -46,41 +46,79 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             : new Random();
 #pragma warning restore S2245
 
-        var fileType = request.Output.FileTypeLower;
-        var buffer = new StringBuilder();
-
-        for (long i = 1; i <= request.Output.FileCount; i++)
+        if (chaosEngine == null)
         {
-            var folderNum = (int)((i - 1) % 50) + 1;
-            var workItem = new FileWorkItem
+            await stream.WriteAsync(encoding.GetBytes(header + eolString));
+
+            var fileType = request.Output.FileTypeLower;
+            var buffer = new StringBuilder();
+
+            for (long i = 1; i <= request.Output.FileCount; i++)
             {
-                Index = i,
-                FolderNumber = folderNum,
-                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-            };
+                var folderNum = (int)((i - 1) % 50) + 1;
+                var workItem = new FileWorkItem
+                {
+                    Index = i,
+                    FolderNumber = folderNum,
+                    FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+                };
 
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                DataLength = rowRandom.Next(1024, 10_485_760),
-                PageCount = rowRandom.Next(1, 11),
-            };
+                var fileData = new FileData
+                {
+                    WorkItem = workItem,
+                    DataLength = rowRandom.Next(1024, 10_485_760),
+                    PageCount = rowRandom.Next(1, 11),
+                };
 
-            var values = generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
-            buffer.Append(line);
-            buffer.Append(eolString);
+                var values = generator.GenerateRow(workItem, fileData);
+                var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+                buffer.Append(line);
+                buffer.Append(eolString);
 
-            if (buffer.Length > 200_000)
+                if (buffer.Length > 200_000)
+                {
+                    await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                    buffer.Clear();
+                }
+            }
+
+            if (buffer.Length > 0)
             {
                 await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
             }
         }
-
-        if (buffer.Length > 0)
+        else
         {
-            await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+            var rows = new List<(long LineNumber, string RecordId, string Line)>();
+            rows.Add((1, "HEADER", header));
+
+            var fileType = request.Output.FileTypeLower;
+            for (long i = 1; i <= request.Output.FileCount; i++)
+            {
+                long lineNumber = i + 1;
+                var recordId = $"DOC{i:D8}";
+
+                var folderNum = (int)((i - 1) % 50) + 1;
+                var workItem = new FileWorkItem
+                {
+                    Index = i,
+                    FolderNumber = folderNum,
+                    FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+                };
+
+                var fileData = new FileData
+                {
+                    WorkItem = workItem,
+                    DataLength = rowRandom.Next(1024, 10_485_760),
+                    PageCount = rowRandom.Next(1, 11),
+                };
+
+                var values = generator.GenerateRow(workItem, fileData);
+                var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+                rows.Add((lineNumber, recordId, line));
+            }
+
+            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
         }
     }
 
@@ -88,7 +126,8 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
         List<string> columnNames,
         char colDelim,
         char quote,
-        bool hasQuote)
+        bool hasQuote,
+        string? namingConvention)
     {
         var sb = new StringBuilder();
         bool first = true;
@@ -99,7 +138,8 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
                 sb.Append(colDelim);
             }
 
-            AppendField(sb, name, quote, hasQuote);
+            var finalName = NamingConventionHelper.ApplyConvention(name, namingConvention);
+            AppendField(sb, finalName, quote, hasQuote);
             first = false;
         }
 
