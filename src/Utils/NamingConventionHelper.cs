@@ -24,8 +24,10 @@ internal static class NamingConventionHelper
             return name;
         }
 
-        return Cache.GetOrAdd((name, convention), key =>
-            key.Convention?.ToUpperInvariant() switch
+        var normalizedConvention = convention?.Trim().ToUpperInvariant();
+
+        return Cache.GetOrAdd((name, normalizedConvention), key =>
+            key.Convention switch
             {
                 "LOWERCASE" => key.Name.ToLowerInvariant(),
                 "UPPERCASE" => key.Name.ToUpperInvariant(),

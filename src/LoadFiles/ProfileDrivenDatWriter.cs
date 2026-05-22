@@ -48,6 +48,12 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
 
         if (chaosEngine == null)
         {
+            var preamble = encoding.GetPreamble();
+            if (preamble.Length > 0)
+            {
+                await stream.WriteAsync(preamble, 0, preamble.Length);
+            }
+
             await stream.WriteAsync(encoding.GetBytes(header + eolString));
 
             var fileType = request.Output.FileTypeLower;

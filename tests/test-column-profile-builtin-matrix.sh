@@ -43,7 +43,7 @@ TOTAL=0
 extract_columns() {
     python3 - "$1" <<'PYEOF'
 import sys
-with open(sys.argv[1], encoding='utf-8') as f:
+with open(sys.argv[1], encoding='utf-8-sig') as f:
     line = f.readline().rstrip('\r\n')
 for col in line.split('\u0014'):
     print(col.strip('\u00fe'))
@@ -58,7 +58,7 @@ count_bad_rows() {
 import sys
 path, expected = sys.argv[1], int(sys.argv[2])
 bad = 0
-with open(path, encoding='utf-8') as f:
+with open(path, encoding='utf-8-sig') as f:
     next(f)  # skip header
     for line in f:
         fields = line.rstrip('\r\n').split('\u0014')

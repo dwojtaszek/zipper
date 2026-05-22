@@ -141,6 +141,11 @@ internal class DatWriter : LoadFileWriterBase
         bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
         using var memStream = new MemoryStream();
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await memStream.WriteAsync(preamble, 0, preamble.Length);
+        }
 
         // Build header
         var header = BuildLoadfileOnlyHeader(colDelim, quote, hasQuote, request.Metadata.ColumnProfile?.FieldNamingConvention);

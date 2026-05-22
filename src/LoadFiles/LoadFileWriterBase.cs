@@ -247,6 +247,12 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         ChaosEngine chaosEngine)
     {
         using var memStream = new System.IO.MemoryStream();
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await memStream.WriteAsync(preamble, 0, preamble.Length);
+        }
+
         var buffer = new System.Text.StringBuilder();
 
         for (int i = 0; i < rows.Count; i++)

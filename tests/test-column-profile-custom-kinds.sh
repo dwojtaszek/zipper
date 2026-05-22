@@ -56,7 +56,7 @@ EMAILMULTI"
 print_info "Checking column headers..."
 actual_cols=$(python3 - "$dat_file" <<'PYEOF'
 import sys
-with open(sys.argv[1], encoding='utf-8') as f:
+with open(sys.argv[1], encoding='utf-8-sig') as f:
     line = f.readline().rstrip('\r\n')
 for col in line.split('\u0014'):
     print(col.strip('\u00fe'))
@@ -81,7 +81,7 @@ QUOTE    = '\u00fe'
 
 # Read and parse all rows
 rows = []
-with open(dat_path, encoding='utf-8') as f:
+with open(dat_path, encoding='utf-8-sig') as f:
     header_line = f.readline().rstrip('\r\n')
     headers = [c.strip(QUOTE) for c in header_line.split(COL_SEP)]
     for line in f:
