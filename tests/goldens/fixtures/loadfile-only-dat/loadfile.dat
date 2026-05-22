@@ -1,4 +1,4 @@
-þControl NumberþþFile PathþþCustodianþþDate SentþþAuthorþþFile SizeþþEmailSubjectþþEmailFromþþEmailToþþEmailSentDateþþExtractedTextþ
+﻿þControl NumberþþFile PathþþCustodianþþDate SentþþAuthorþþFile SizeþþEmailSubjectþþEmailFromþþEmailToþþEmailSentDateþþExtractedTextþ
 þDOC00000001þþNATIVES\002\DOC00000001.pdfþþCustodian 2þþ2024-10-23þþAuthor 043þþ8645754þþEmail Subject 1þþsender1@example.comþþrecipient1@example.comþþ2024-12-10 00:00:00þþSample extracted text content for document DOC00000001.þ
 þDOC00000002þþNATIVES\003\DOC00000002.pdfþþCustodian 3þþ2024-05-20þþAuthor 014þþ1809274þþEmail Subject 2þþsender2@example.comþþrecipient2@example.comþþ2024-12-31 00:00:00þþSample extracted text content for document DOC00000002.þ
 þDOC00000003þþNATIVES\004\DOC00000003.pdfþþCustodian 4þþ2024-09-14þþAuthor 013þþ10185047þþEmail Subject 3þþsender3@example.comþþrecipient3@example.comþþ2024-12-30 00:00:00þþSample extracted text content for document DOC00000003.þ
