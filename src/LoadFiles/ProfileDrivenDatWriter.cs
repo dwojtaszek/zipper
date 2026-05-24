@@ -46,41 +46,43 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             : new Random();
 #pragma warning restore S2245
 
+        var context = new ProfileWriterContext(
+            stream,
+            request,
+            encoding,
+            eolString,
+            colDelim,
+            quote,
+            hasQuote,
+            generator,
+            columnNames,
+            header,
+            rowRandom);
+
         if (chaosEngine == null)
         {
-            await this.WriteWithoutChaosAsync(stream, request, encoding, eolString, colDelim, quote, hasQuote, generator, columnNames, header, rowRandom);
+            await this.WriteWithoutChaosAsync(context);
         }
         else
         {
-            await this.WriteWithChaosAsync(stream, request, encoding, eolString, colDelim, quote, hasQuote, generator, columnNames, header, rowRandom, chaosEngine);
+            await this.WriteWithChaosAsync(context, chaosEngine);
         }
     }
 
-    private async Task WriteWithoutChaosAsync(
-        Stream stream,
-        FileGenerationRequest request,
-        Encoding encoding,
-        string eolString,
-        char colDelim,
-        char quote,
-        bool hasQuote,
-        DataGenerator generator,
-        List<string> columnNames,
-        string header,
-        Random rowRandom)
+    private async Task WriteWithoutChaosAsync(ProfileWriterContext context)
     {
-        var preamble = encoding.GetPreamble();
+        var preamble = context.Encoding.GetPreamble();
         if (preamble.Length > 0)
         {
-            await stream.WriteAsync(preamble, 0, preamble.Length);
+            await context.Stream.WriteAsync(preamble, 0, preamble.Length);
         }
 
-        await stream.WriteAsync(encoding.GetBytes(header + eolString));
+        await context.Stream.WriteAsync(context.Encoding.GetBytes(context.Header + context.EolString));
 
-        var fileType = request.Output.FileTypeLower;
+        var fileType = context.Request.Output.FileTypeLower;
         var buffer = new StringBuilder();
 
-        for (long i = 1; i <= request.Output.FileCount; i++)
+        for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
             var folderNum = (int)((i - 1) % 50) + 1;
             var workItem = new FileWorkItem
@@ -93,47 +95,35 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             var fileData = new FileData
             {
                 WorkItem = workItem,
-                DataLength = rowRandom.Next(1024, 10_485_760),
-                PageCount = rowRandom.Next(1, 11),
+                DataLength = context.RowRandom.Next(1024, 10_485_760),
+                PageCount = context.RowRandom.Next(1, 11),
             };
 
-            var values = generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+            var values = context.Generator.GenerateRow(workItem, fileData);
+            var line = BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
             buffer.Append(line);
-            buffer.Append(eolString);
+            buffer.Append(context.EolString);
 
             if (buffer.Length > 200_000)
             {
-                await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                await context.Stream.WriteAsync(context.Encoding.GetBytes(buffer.ToString()));
                 buffer.Clear();
             }
         }
 
         if (buffer.Length > 0)
         {
-            await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+            await context.Stream.WriteAsync(context.Encoding.GetBytes(buffer.ToString()));
         }
     }
 
-    private async Task WriteWithChaosAsync(
-        Stream stream,
-        FileGenerationRequest request,
-        Encoding encoding,
-        string eolString,
-        char colDelim,
-        char quote,
-        bool hasQuote,
-        DataGenerator generator,
-        List<string> columnNames,
-        string header,
-        Random rowRandom,
-        ChaosEngine chaosEngine)
+    private async Task WriteWithChaosAsync(ProfileWriterContext context, ChaosEngine chaosEngine)
     {
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
-        rows.Add((1, "HEADER", header));
+        rows.Add((1, "HEADER", context.Header));
 
-        var fileType = request.Output.FileTypeLower;
-        for (long i = 1; i <= request.Output.FileCount; i++)
+        var fileType = context.Request.Output.FileTypeLower;
+        for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             var recordId = $"DOC{i:D8}";
@@ -149,17 +139,30 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             var fileData = new FileData
             {
                 WorkItem = workItem,
-                DataLength = rowRandom.Next(1024, 10_485_760),
-                PageCount = rowRandom.Next(1, 11),
+                DataLength = context.RowRandom.Next(1024, 10_485_760),
+                PageCount = context.RowRandom.Next(1, 11),
             };
 
-            var values = generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+            var values = context.Generator.GenerateRow(workItem, fileData);
+            var line = BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
             rows.Add((lineNumber, recordId, line));
         }
 
-        await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
+        await WriteRowsWithChaosAsync(context.Stream, context.Encoding, context.EolString, rows, chaosEngine);
     }
+
+    private sealed record ProfileWriterContext(
+        Stream Stream,
+        FileGenerationRequest Request,
+        Encoding Encoding,
+        string EolString,
+        char ColDelim,
+        char Quote,
+        bool HasQuote,
+        DataGenerator Generator,
+        List<string> ColumnNames,
+        string Header,
+        Random RowRandom);
 
     private static string BuildProfileHeader(
         List<string> columnNames,
