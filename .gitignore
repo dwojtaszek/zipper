@@ -7,6 +7,11 @@ grot.sh
 in-memoria.db
 **/results/
 
+# Environment variables
+.env
+.env.*
+!.env.example
+
 # gemini-cli settings
 .gemini/
 
@@ -41,3 +46,13 @@ TODO.md
 # Coverage
 coverage*
 publish-bin/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE configs
+.idea/
+.vscode/
+*.swp
+*.swo

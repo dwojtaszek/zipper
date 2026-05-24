@@ -227,6 +227,7 @@ jobs:
           name: Release ${{ steps.tag_step.outputs.tag }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             artifacts/zipper-win-x64/zipper-win-x64.exe
             artifacts/zipper-linux-x64/zipper-linux-x64
