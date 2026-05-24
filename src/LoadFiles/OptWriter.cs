@@ -123,6 +123,11 @@ internal class OptWriter : LoadFileWriterBase
         var eolString = GetEolString(request.Delimiters.EndOfLine);
 
         using var memStream = new MemoryStream();
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await memStream.WriteAsync(preamble, 0, preamble.Length);
+        }
 
 #pragma warning disable S2245
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();

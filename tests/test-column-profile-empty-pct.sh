@@ -35,7 +35,7 @@ import sys
 COL_SEP = '\u0014'
 QUOTE   = '\u00fe'
 empty = 0
-with open(sys.argv[1], encoding='utf-8') as f:
+with open(sys.argv[1], encoding='utf-8-sig') as f:
     next(f)  # skip header
     for line in f:
         line = line.rstrip('\r\n')

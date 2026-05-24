@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -140,9 +141,14 @@ internal class DatWriter : LoadFileWriterBase
         bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
         using var memStream = new MemoryStream();
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await memStream.WriteAsync(preamble, 0, preamble.Length);
+        }
 
         // Build header
-        var header = BuildLoadfileOnlyHeader(colDelim, quote, hasQuote);
+        var header = BuildLoadfileOnlyHeader(colDelim, quote, hasQuote, request.Metadata.ColumnProfile?.FieldNamingConvention);
 
         // Apply chaos to header (line 1)
         header = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
@@ -210,8 +216,10 @@ internal class DatWriter : LoadFileWriterBase
         var eol = GetEolString(request.Delimiters.EndOfLine);
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
+        var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
-        var headerLine = string.Join(col, headers.Select(h => $"{quote}{h}{quote}"));
+        var finalHeaders = headers.Select(h => NamingConventionHelper.ApplyConvention(h, namingConvention));
+        var headerLine = string.Join(col, finalHeaders.Select(h => $"{quote}{h}{quote}"));
 
         if (chaosEngine == null)
         {
@@ -298,32 +306,33 @@ internal class DatWriter : LoadFileWriterBase
 
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)
     {
+        var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var sb = new StringBuilder();
-        sb.Append($"{quote}Control Number{quote}{colDelim}{quote}File Path{quote}");
+        sb.Append($"{quote}{NamingConventionHelper.ApplyConvention("Control Number", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("File Path", namingConvention)}{quote}");
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            sb.Append($"{colDelim}{quote}Custodian{quote}{colDelim}{quote}Date Sent{quote}{colDelim}{quote}Author{quote}{colDelim}{quote}File Size{quote}");
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Custodian", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Date Sent", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Author", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("File Size", namingConvention)}{quote}");
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            sb.Append($"{colDelim}{quote}To{quote}{colDelim}{quote}From{quote}{colDelim}{quote}Subject{quote}{colDelim}{quote}Sent Date{quote}{colDelim}{quote}Attachment{quote}");
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("To", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("From", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Subject", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Sent Date", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Attachment", namingConvention)}{quote}");
         }
 
         if (request.Bates != null)
         {
-            sb.Append($"{colDelim}{quote}Bates Number{quote}");
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Bates Number", namingConvention)}{quote}");
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            sb.Append($"{colDelim}{quote}Page Count{quote}");
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Page Count", namingConvention)}{quote}");
         }
 
         if (request.Output.WithText)
         {
-            sb.Append($"{colDelim}{quote}Extracted Text{quote}");
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Extracted Text", namingConvention)}{quote}");
         }
 
         return sb.ToString();
@@ -386,30 +395,31 @@ internal class DatWriter : LoadFileWriterBase
     private static string BuildLoadfileOnlyHeader(
         char colDelim,
         char quote,
-        bool hasQuote)
+        bool hasQuote,
+        string? namingConvention)
     {
         var sb = new StringBuilder();
-        AppendField(sb, "Control Number", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("Control Number", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "File Path", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("File Path", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Custodian", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("Custodian", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Date Sent", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("Date Sent", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "Author", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("Author", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "File Size", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("File Size", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailSubject", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("EmailSubject", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailFrom", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("EmailFrom", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailTo", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("EmailTo", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "EmailSentDate", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("EmailSentDate", namingConvention), quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, "ExtractedText", quote, hasQuote);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("ExtractedText", namingConvention), quote, hasQuote);
 
         return sb.ToString();
     }

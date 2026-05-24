@@ -1,5 +1,6 @@
 using System.Text;
 using Zipper.Profiles;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -35,8 +36,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
         var columnNames = generator.GetColumnNames().ToList();
 
         // Write header row
-        var header = BuildProfileHeader(columnNames, colDelim, quote, hasQuote);
-        await stream.WriteAsync(encoding.GetBytes(header + eolString));
+        var header = BuildProfileHeader(columnNames, colDelim, quote, hasQuote, profile.FieldNamingConvention);
 
         // Separate Random for synthetic file sizes / page counts so it does not
         // interleave with the DataGenerator's own seeded random stream.
@@ -46,49 +46,117 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             : new Random();
 #pragma warning restore S2245
 
-        var fileType = request.Output.FileTypeLower;
+        var context = new ProfileWriterContext(
+            stream,
+            request,
+            encoding,
+            eolString,
+            colDelim,
+            quote,
+            hasQuote,
+            generator,
+            columnNames,
+            header,
+            rowRandom);
+
+        if (chaosEngine == null)
+        {
+            await this.WriteWithoutChaosAsync(context);
+        }
+        else
+        {
+            await this.WriteWithChaosAsync(context, chaosEngine);
+        }
+    }
+
+    private async Task WriteWithoutChaosAsync(ProfileWriterContext context)
+    {
+        var preamble = context.Encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await context.Stream.WriteAsync(preamble, 0, preamble.Length);
+        }
+
+        await context.Stream.WriteAsync(context.Encoding.GetBytes(context.Header + context.EolString));
+
         var buffer = new StringBuilder();
 
-        for (long i = 1; i <= request.Output.FileCount; i++)
+        for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
-            var folderNum = (int)((i - 1) % 50) + 1;
-            var workItem = new FileWorkItem
-            {
-                Index = i,
-                FolderNumber = folderNum,
-                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-            };
-
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                DataLength = rowRandom.Next(1024, 10_485_760),
-                PageCount = rowRandom.Next(1, 11),
-            };
-
-            var values = generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+            var line = GenerateRowLine(context, i);
             buffer.Append(line);
-            buffer.Append(eolString);
+            buffer.Append(context.EolString);
 
             if (buffer.Length > 200_000)
             {
-                await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                await context.Stream.WriteAsync(context.Encoding.GetBytes(buffer.ToString()));
                 buffer.Clear();
             }
         }
 
         if (buffer.Length > 0)
         {
-            await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+            await context.Stream.WriteAsync(context.Encoding.GetBytes(buffer.ToString()));
         }
     }
+
+    private async Task WriteWithChaosAsync(ProfileWriterContext context, ChaosEngine chaosEngine)
+    {
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        rows.Add((1, "HEADER", context.Header));
+
+        for (long i = 1; i <= context.Request.Output.FileCount; i++)
+        {
+            long lineNumber = i + 1;
+            var recordId = $"DOC{i:D8}";
+            var line = GenerateRowLine(context, i);
+            rows.Add((lineNumber, recordId, line));
+        }
+
+        await WriteRowsWithChaosAsync(context.Stream, context.Encoding, context.EolString, rows, chaosEngine);
+    }
+
+    private static string GenerateRowLine(ProfileWriterContext context, long i)
+    {
+        var fileType = context.Request.Output.FileTypeLower;
+        var folderNum = (int)((i - 1) % 50) + 1;
+        var workItem = new FileWorkItem
+        {
+            Index = i,
+            FolderNumber = folderNum,
+            FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+        };
+
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            DataLength = context.RowRandom.Next(1024, 10_485_760),
+            PageCount = context.RowRandom.Next(1, 11),
+        };
+
+        var values = context.Generator.GenerateRow(workItem, fileData);
+        return BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
+    }
+
+    private sealed record ProfileWriterContext(
+        Stream Stream,
+        FileGenerationRequest Request,
+        Encoding Encoding,
+        string EolString,
+        char ColDelim,
+        char Quote,
+        bool HasQuote,
+        DataGenerator Generator,
+        List<string> ColumnNames,
+        string Header,
+        Random RowRandom);
 
     private static string BuildProfileHeader(
         List<string> columnNames,
         char colDelim,
         char quote,
-        bool hasQuote)
+        bool hasQuote,
+        string? namingConvention)
     {
         var sb = new StringBuilder();
         bool first = true;
@@ -99,7 +167,8 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
                 sb.Append(colDelim);
             }
 
-            AppendField(sb, name, quote, hasQuote);
+            var finalName = NamingConventionHelper.ApplyConvention(name, namingConvention);
+            AppendField(sb, finalName, quote, hasQuote);
             first = false;
         }
 

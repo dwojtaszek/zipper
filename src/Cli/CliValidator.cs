@@ -229,6 +229,36 @@ public static class CliValidator
 
     private static bool ValidateLoadFileOnly(ParsedArguments parsed)
     {
+        if (!ValidateLoadFileOnlyDelimiters(parsed))
+        {
+            return false;
+        }
+
+        if (parsed.LoadfileOnly)
+        {
+            if (!string.IsNullOrEmpty(parsed.TargetZipSize))
+            {
+                Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
+                return false;
+            }
+
+            if (parsed.IncludeLoadFile)
+            {
+                Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
+                return false;
+            }
+
+            if (!ValidateLoadFileOnlyFormatAndEncoding(parsed))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ValidateLoadFileOnlyDelimiters(ParsedArguments parsed)
+    {
         var loadfileOnlyArgs = new[] { parsed.Eol, parsed.ColDelim, parsed.QuoteDelim, parsed.NewlineDelim, parsed.MultiDelim, parsed.NestedDelim };
         var loadfileOnlyNames = new[] { "--eol", "--col-delim", "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim" };
         for (int idx = 0; idx < loadfileOnlyArgs.Length; idx++)
@@ -240,24 +270,27 @@ public static class CliValidator
             }
         }
 
-        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.TargetZipSize))
-        {
-            Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
-            return false;
-        }
+        return true;
+    }
 
-        if (parsed.LoadfileOnly && parsed.IncludeLoadFile)
-        {
-            Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
-            return false;
-        }
-
-        if (parsed.LoadfileOnly && !string.IsNullOrEmpty(parsed.Encoding))
+    private static bool ValidateLoadFileOnlyFormatAndEncoding(ParsedArguments parsed)
+    {
+        if (!string.IsNullOrEmpty(parsed.Encoding))
         {
             var enc = EncodingHelper.GetEncoding(parsed.Encoding);
             if (enc == null)
             {
                 Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
+        {
+            var currentFormat = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) ?? LoadFileFormat.Dat;
+            if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
+            {
+                Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
                 return false;
             }
         }

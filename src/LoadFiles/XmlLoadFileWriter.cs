@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -72,20 +73,21 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         Random random,
         DateTime now)
     {
+        var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var docElement = new XElement(
             "document",
-            new XElement("controlNumber", GenerateDocumentId(workItem)),
-            new XElement("filePath", workItem.FilePathInZip));
+            new XElement(NamingConventionHelper.ApplyConvention("controlNumber", namingConvention), GenerateDocumentId(workItem)),
+            new XElement(NamingConventionHelper.ApplyConvention("filePath", namingConvention), workItem.FilePathInZip));
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
                 "metadata",
-                new XElement("custodian", metadata.Custodian),
-                new XElement("dateSent", metadata.DateSent),
-                new XElement("author", metadata.Author),
-                new XElement("fileSize", metadata.FileSize)));
+                new XElement(NamingConventionHelper.ApplyConvention("custodian", namingConvention), metadata.Custodian),
+                new XElement(NamingConventionHelper.ApplyConvention("dateSent", namingConvention), metadata.DateSent),
+                new XElement(NamingConventionHelper.ApplyConvention("author", namingConvention), metadata.Author),
+                new XElement(NamingConventionHelper.ApplyConvention("fileSize", namingConvention), metadata.FileSize)));
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
@@ -93,26 +95,26 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             var eml = GenerateEmlValues(workItem, fileData, random, now, request);
             docElement.Add(new XElement(
                 "email",
-                new XElement("to", eml.To),
-                new XElement("from", eml.From),
-                new XElement("subject", eml.Subject),
-                new XElement("sentDate", eml.SentDate),
-                new XElement("attachment", eml.Attachment)));
+                new XElement(NamingConventionHelper.ApplyConvention("to", namingConvention), eml.To),
+                new XElement(NamingConventionHelper.ApplyConvention("from", namingConvention), eml.From),
+                new XElement(NamingConventionHelper.ApplyConvention("subject", namingConvention), eml.Subject),
+                new XElement(NamingConventionHelper.ApplyConvention("sentDate", namingConvention), eml.SentDate),
+                new XElement(NamingConventionHelper.ApplyConvention("attachment", namingConvention), eml.Attachment)));
         }
 
         if (request.Bates != null)
         {
-            docElement.Add(new XElement("batesNumber", GenerateBatesNumber(request, workItem)));
+            docElement.Add(new XElement(NamingConventionHelper.ApplyConvention("batesNumber", namingConvention), GenerateBatesNumber(request, workItem)));
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            docElement.Add(new XElement("pageCount", fileData.PageCount));
+            docElement.Add(new XElement(NamingConventionHelper.ApplyConvention("pageCount", namingConvention), fileData.PageCount));
         }
 
         if (request.Output.WithText)
         {
-            docElement.Add(new XElement("extractedTextPath", GenerateTextPath(request, workItem)));
+            docElement.Add(new XElement(NamingConventionHelper.ApplyConvention("extractedTextPath", namingConvention), GenerateTextPath(request, workItem)));
         }
 
         return docElement;

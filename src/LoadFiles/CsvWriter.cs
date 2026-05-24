@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -35,31 +36,49 @@ internal class CsvWriter : LoadFileWriterBase
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request)
     {
-        var headers = new System.Collections.Generic.List<string> { "Control Number", "File Path" };
+        var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
+        var headers = new System.Collections.Generic.List<string>
+        {
+            NamingConventionHelper.ApplyConvention("Control Number", namingConvention),
+            NamingConventionHelper.ApplyConvention("File Path", namingConvention)
+        };
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            headers.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
+            headers.AddRange(new[]
+            {
+                NamingConventionHelper.ApplyConvention("Custodian", namingConvention),
+                NamingConventionHelper.ApplyConvention("Date Sent", namingConvention),
+                NamingConventionHelper.ApplyConvention("Author", namingConvention),
+                NamingConventionHelper.ApplyConvention("File Size", namingConvention)
+            });
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            headers.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
+            headers.AddRange(new[]
+            {
+                NamingConventionHelper.ApplyConvention("To", namingConvention),
+                NamingConventionHelper.ApplyConvention("From", namingConvention),
+                NamingConventionHelper.ApplyConvention("Subject", namingConvention),
+                NamingConventionHelper.ApplyConvention("Sent Date", namingConvention),
+                NamingConventionHelper.ApplyConvention("Attachment", namingConvention)
+            });
         }
 
         if (request.Bates != null)
         {
-            headers.Add("Bates Number");
+            headers.Add(NamingConventionHelper.ApplyConvention("Bates Number", namingConvention));
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            headers.Add("Page Count");
+            headers.Add(NamingConventionHelper.ApplyConvention("Page Count", namingConvention));
         }
 
         if (request.Output.WithText)
         {
-            headers.Add("Extracted Text");
+            headers.Add(NamingConventionHelper.ApplyConvention("Extracted Text", namingConvention));
         }
 
         return writer.WriteLineAsync(string.Join(",", headers));

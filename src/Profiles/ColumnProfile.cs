@@ -29,7 +29,7 @@ public class ColumnProfile
     /// Gets or sets the field naming convention (UPPERCASE, PascalCase, lowercase).
     /// </summary>
     [JsonPropertyName("fieldNamingConvention")]
-    public string FieldNamingConvention { get; set; } = "UPPERCASE";
+    public string? FieldNamingConvention { get; set; }
 
     /// <summary>
     /// Gets or sets the profile settings.

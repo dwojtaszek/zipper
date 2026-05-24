@@ -384,14 +384,15 @@ Based on the above research, the following requirements apply to the Zipper Load
 | `litigation` | 48 | Full litigation support |
 | `full` | 138 | Maximum field coverage |
 
-- **REQ-067**: Custom profile files shall follow a JSON schema with the following structure:
+
+- **REQ-121**: The column profile system shall support a `fieldNamingConvention` property (UPPERCASE, PascalCase, lowercase, snake_case) to control the casing of headers in the generated Load Files. If not specified, the original names defined in the profile or internal defaults shall be preserved.
 
 ```json
 {
   "name": "profile-name",
   "description": "Profile description",
   "version": "1.0",
-  "fieldNamingConvention": "UPPERCASE|PascalCase|lowercase",
+  "fieldNamingConvention": "UPPERCASE|PascalCase|lowercase|snake_case",
   "settings": {
     "emptyValuePercentage": 15,
     "multiValueDelimiter": ";",
