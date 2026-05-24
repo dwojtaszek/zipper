@@ -175,17 +175,17 @@ jobs:
         if: matrix.coverage == true
         run: |
           if [[ -f TestResults/test-results.xml ]]; then
-            python3 -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('TestResults/test-results.xml')
-tests = [(t.get('classname',''), t.get('name',''), float(t.get('time',0))) for t in tree.iter() if t.tag == 'testcase' and float(t.get('time',0)) > 0.5]
-tests.sort(key=lambda x: -x[2])
-print('Slowest tests (>0.5s):')
-for cls, name, secs in tests[:20]:
-    print(f'  {secs:.2f}s  {cls}.{name}')
-if not tests:
-    print('All tests under 0.5s')
-" || true
+            python3 <<'SCRIPT'
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('TestResults/test-results.xml')
+          tests = [(t.get('classname',''), t.get('name',''), float(t.get('time',0))) for t in tree.iter() if t.tag == 'testcase' and float(t.get('time',0)) > 0.5]
+          tests.sort(key=lambda x: -x[2])
+          print('Slowest tests (>0.5s):')
+          for cls, name, secs in tests[:20]:
+              print(f'  {secs:.2f}s  {cls}.{name}')
+          if not tests:
+              print('All tests under 0.5s')
+          SCRIPT
           fi
 
       - name: Cache reportgenerator tool (Linux)
