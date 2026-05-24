@@ -21,7 +21,7 @@ in-memoria.db
 .qwen/
 
 # GitHub App credentials
-gha-creds-*.jsonspec-kit/
+gha-creds-*.json
 
 # TODO files
 *-todo.md
