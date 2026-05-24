@@ -212,3 +212,11 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 - C# 12 (net8.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
 - **No copyright headers** — do not add `// <copyright ...>` to any files
+
+### Test Naming Convention
+
+Test classes and methods follow the pattern:
+- **Class:** `{Subject}Tests` (e.g., `BatesNumberGeneratorTests`, `ChaosEngineTests`)
+- **Method:** `{Method}_{Scenario}_{Expected}` (e.g., `Generate_WithCustomPrefix_ShouldIncludePrefix`)
+
+This convention is enforced by code review and the existing test corpus. All new tests must follow it.
