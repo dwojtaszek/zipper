@@ -79,28 +79,11 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
 
         await context.Stream.WriteAsync(context.Encoding.GetBytes(context.Header + context.EolString));
 
-        var fileType = context.Request.Output.FileTypeLower;
         var buffer = new StringBuilder();
 
         for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
-            var folderNum = (int)((i - 1) % 50) + 1;
-            var workItem = new FileWorkItem
-            {
-                Index = i,
-                FolderNumber = folderNum,
-                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-            };
-
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                DataLength = context.RowRandom.Next(1024, 10_485_760),
-                PageCount = context.RowRandom.Next(1, 11),
-            };
-
-            var values = context.Generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
+            var line = GenerateRowLine(context, i);
             buffer.Append(line);
             buffer.Append(context.EolString);
 
@@ -122,33 +105,37 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
         rows.Add((1, "HEADER", context.Header));
 
-        var fileType = context.Request.Output.FileTypeLower;
         for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             var recordId = $"DOC{i:D8}";
-
-            var folderNum = (int)((i - 1) % 50) + 1;
-            var workItem = new FileWorkItem
-            {
-                Index = i,
-                FolderNumber = folderNum,
-                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-            };
-
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                DataLength = context.RowRandom.Next(1024, 10_485_760),
-                PageCount = context.RowRandom.Next(1, 11),
-            };
-
-            var values = context.Generator.GenerateRow(workItem, fileData);
-            var line = BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
+            var line = GenerateRowLine(context, i);
             rows.Add((lineNumber, recordId, line));
         }
 
         await WriteRowsWithChaosAsync(context.Stream, context.Encoding, context.EolString, rows, chaosEngine);
+    }
+
+    private static string GenerateRowLine(ProfileWriterContext context, long i)
+    {
+        var fileType = context.Request.Output.FileTypeLower;
+        var folderNum = (int)((i - 1) % 50) + 1;
+        var workItem = new FileWorkItem
+        {
+            Index = i,
+            FolderNumber = folderNum,
+            FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+        };
+
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            DataLength = context.RowRandom.Next(1024, 10_485_760),
+            PageCount = context.RowRandom.Next(1, 11),
+        };
+
+        var values = context.Generator.GenerateRow(workItem, fileData);
+        return BuildProfileRow(values, context.ColumnNames, context.ColDelim, context.Quote, context.HasQuote, context.Request.Delimiters.NewlineDelimiter);
     }
 
     private sealed record ProfileWriterContext(

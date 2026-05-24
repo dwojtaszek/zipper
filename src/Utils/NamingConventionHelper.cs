@@ -44,12 +44,14 @@ internal static class NamingConventionHelper
             return name;
         }
 
+        var timeout = TimeSpan.FromSeconds(1);
+
         // First, normalize by inserting spaces before uppercase letters (if not already there)
         // e.g., "DocID" -> "Doc ID", "CustodianName" -> "Custodian Name"
-        var normalized = Regex.Replace(name, @"([a-z0-9])([A-Z])", "$1 $2");
-        normalized = Regex.Replace(normalized, @"([A-Z])([A-Z][a-z])", "$1 $2");
+        var normalized = Regex.Replace(name, @"([a-z0-9])([A-Z])", "$1 $2", RegexOptions.None, timeout);
+        normalized = Regex.Replace(normalized, @"([A-Z])([A-Z][a-z])", "$1 $2", RegexOptions.None, timeout);
 
-        var words = Regex.Split(normalized, @"[\s_-]+");
+        var words = Regex.Split(normalized, @"[\s_-]+", RegexOptions.None, timeout);
         var sb = new StringBuilder();
         foreach (var word in words)
         {
@@ -73,11 +75,13 @@ internal static class NamingConventionHelper
             return name;
         }
 
+        var timeout = TimeSpan.FromSeconds(1);
+
         // Handle "DocID" -> "doc_id", "CustodianName" -> "custodian_name"
-        var result = Regex.Replace(name, @"([a-z0-9])([A-Z])", "$1_$2");
-        result = Regex.Replace(result, @"([A-Z])([A-Z][a-z])", "$1_$2");
+        var result = Regex.Replace(name, @"([a-z0-9])([A-Z])", "$1_$2", RegexOptions.None, timeout);
+        result = Regex.Replace(result, @"([A-Z])([A-Z][a-z])", "$1_$2", RegexOptions.None, timeout);
 
         // Convert to lowercase and collapse consecutive spaces, hyphens, and underscores into a single underscore
-        return Regex.Replace(result.ToLowerInvariant(), @"[\s_-]+", "_");
+        return Regex.Replace(result.ToLowerInvariant(), @"[\s_-]+", "_", RegexOptions.None, timeout);
     }
 }
