@@ -65,7 +65,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - uses: eifinger/actionlint-action@v4
+      - uses: eifinger/actionlint-action@v1.10.2
         with:
           actionlint_flags: -shellcheck= .github/workflows/*.yml
       - uses: actions/setup-dotnet@v5
