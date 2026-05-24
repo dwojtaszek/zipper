@@ -16,7 +16,8 @@ in-memoria.db
 .gemini/
 
 # AI agent directories
-.factory/
+.factory/*
+!.factory/skills/
 .qwen/
 
 # GitHub App credentials
