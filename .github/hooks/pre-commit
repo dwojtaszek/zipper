@@ -81,6 +81,22 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # ──────────────────────────────────────────────────
+# 1b. actionlint — validate GitHub Actions workflow YAML
+# ──────────────────────────────────────────────────
+STAGED_YAML=()
+while IFS= read -r f; do
+    [[ -n "$f" && "$f" == .github/workflows/*.yml ]] && STAGED_YAML+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [[ ${#STAGED_YAML[@]} -gt 0 ]] && command -v actionlint >/dev/null 2>&1; then
+    echo "▶ Running actionlint on ${#STAGED_YAML[@]} workflow file(s)..."
+    if ! actionlint "${STAGED_YAML[@]}"; then
+        echo "❌ actionlint found issues in workflow files. Commit aborted." >&2
+        exit 1
+    fi
+fi
+
+# ──────────────────────────────────────────────────
 # 2. dotnet format — scoped to staged C# files only
 # ──────────────────────────────────────────────────
 STAGED_CS=()

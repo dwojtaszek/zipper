@@ -65,6 +65,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
+      - name: Lint workflow YAML with actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest /usr/local/bin
+          actionlint .github/workflows/*.yml
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
