@@ -1,0 +1,3947 @@
+{
+  "/home/dom/Downloads/repos/zipper/global.json": {
+    "mtime": 1779656121.5505757,
+    "ast_hash": "e001e1762c3786cd23a024d685a78c35",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/stylecop.json": {
+    "mtime": 1775622987.7091007,
+    "ast_hash": "a31cf57e244d0c14cc4b0c70d88198a8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/setup-hook.sh": {
+    "mtime": 1776882813.4554262,
+    "ast_hash": "35426ee9bead8e64fc844034044f26dd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/skills-lock.json": {
+    "mtime": 1777666328.6066458,
+    "ast_hash": "88e7f9e0da795250301a5923b9d5459c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/settings.json": {
+    "mtime": 1771711142.8324523,
+    "ast_hash": "f67946c31e1edd169233f45f210d57a9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/settings.local.json": {
+    "mtime": 1777012286.3448622,
+    "ast_hash": "bebe2f33e18af5375c182ce281e7b815",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/handle-large-tasks/nori.json": {
+    "mtime": 1771711142.8068728,
+    "ast_hash": "df7e029c9905222eea985fb6fa2ae97b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/autonomous-issue-resolution/nori.json": {
+    "mtime": 1778521243.420159,
+    "ast_hash": "6cf1bccad8345314e444cf4d1a11de06",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/testing-anti-patterns/nori.json": {
+    "mtime": 1778406289.7129548,
+    "ast_hash": "b8dbd48a66f1420d4379477170e683cb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/root-cause-tracing/nori.json": {
+    "mtime": 1778406289.712081,
+    "ast_hash": "2cdbf6b584924046269218937a2af864",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/writing-plans/nori.json": {
+    "mtime": 1771711142.8301861,
+    "ast_hash": "d4cf00b543bfca81a3fab8413fdcb2a0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/creating-debug-tests-and-iterating/nori.json": {
+    "mtime": 1771711142.8004873,
+    "ast_hash": "cf9b1282ced600747c8a949bec488ffb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/systematic-debugging/nori.json": {
+    "mtime": 1778406289.7124066,
+    "ast_hash": "61da3ad689a0d2e1b56b91041eefaaed",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/using-git-worktrees/nori.json": {
+    "mtime": 1771711142.8210113,
+    "ast_hash": "c6498392f6ed29c85561044fb1c687b2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/test-driven-development/nori.json": {
+    "mtime": 1778406289.712782,
+    "ast_hash": "dfbde90b3e0519c433269529b93a7d52",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.opencode/package.json": {
+    "mtime": 1777869780.491721,
+    "ast_hash": "e44201eac87b95a389d0d20a323be6ef",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/graph.json": {
+    "mtime": 1779224760.6537793,
+    "ast_hash": "44281b6f5950871988872b57285553a8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/raw/build.py": {
+    "mtime": 1779224760.654144,
+    "ast_hash": "b835855c0f6ada427b1cbabf73470d4f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/raw/analyze.py": {
+    "mtime": 1779224760.6537793,
+    "ast_hash": "5e296206840c58ec5ffa57505943bfef",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/raw/cluster.py": {
+    "mtime": 1779224760.654144,
+    "ast_hash": "bdc707bb73ee0f3068051b839abf01fc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/parser.py": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "21efea30bab7cca650e151c6f89fd1d7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/api.py": {
+    "mtime": 1779224760.6522486,
+    "ast_hash": "87566a9c77684f4f4530fa4420eee640",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/processor.py": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "cb01f05a605c74b45e245be1bd6ef8ae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/storage.py": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "8b191483593ebfa793bf827c9cf27207",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/validator.py": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "afe84a35939f084aa88c0c1fd0f227ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/graph.json": {
+    "mtime": 1779224760.6525676,
+    "ast_hash": "1446618cb9853639ffc87ee417d6d905",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/exceptions.py": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "1c7c959133d39f49ca5036deb8745311",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/models.py": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "88e275491dc5e78e168a31d882f35a44",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/client.py": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "ed8321bf745a4a775dbf64beb644dc35",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/utils.py": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "e43257d477fdb95f7a8b34502c9b937e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/transport.py": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "b6f8740b5a13c964bdd74d5402e77c43",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/raw/auth.py": {
+    "mtime": 1779224760.6525676,
+    "ast_hash": "debed2562023af12c4e0924dc14147c2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/karpathy-repos/graph.json": {
+    "mtime": 1779224760.6534038,
+    "ast_hash": "abd61650d0de043cd554766be1de6ead",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/manifest.json": {
+    "mtime": 1779224760.6610386,
+    "ast_hash": "fe48291973b839b4a121260446f956a0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/graph.json": {
+    "mtime": 1779224760.6600387,
+    "ast_hash": "a9b79c479294fc5c216b9b2b681d2203",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/watch.py": {
+    "mtime": 1779224760.6460385,
+    "ast_hash": "54be3dccb2bc3e9d1591a1c97248dfdd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/export.py": {
+    "mtime": 1779224760.6410384,
+    "ast_hash": "f106d1520adac59ec7332a5677f42e6a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/report.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "c4901db5a4c7cb0b7b19c79dcf42f669",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/google_workspace.py": {
+    "mtime": 1779224760.6420386,
+    "ast_hash": "b3ae1a004b0e9ffe6cbb3bf2056bb7b3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/__main__.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "ceab3a674393721b49cb839282f99822",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/serve.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "b24aaac18b00301c8f8d4cb5173215c7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/extract.py": {
+    "mtime": 1779224760.6420386,
+    "ast_hash": "bd8bf01322dbdb9474eed11d67eec874",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/tree_html.py": {
+    "mtime": 1779224760.6460385,
+    "ast_hash": "4ca7dcab7c1d3209e1b1753d8aabd378",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/manifest.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "55144c02f06a65f3ed6d4dc27f368d64",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/validate.py": {
+    "mtime": 1779224760.6460385,
+    "ast_hash": "7554867aab56c5e734d71311e72b40ca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/build.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "cf683c6480199d7f1e4a7f4340338767",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/global_graph.py": {
+    "mtime": 1779224760.6420386,
+    "ast_hash": "337dd8760b1f71be633f76099d19c08e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/wiki.py": {
+    "mtime": 1779224760.6460385,
+    "ast_hash": "ddefb8029a4c9a8190d12d552410b3be",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/hooks.py": {
+    "mtime": 1779224760.6420386,
+    "ast_hash": "02ce46275d1928c58a79d620ffe8f8c4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/security.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "5599b81e2fa53a218fec5843b6fa6684",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/cache.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "d5b3232273903b26622472ca28360368",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/benchmark.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "c6bf8b8b89b6f774df0e54eebac78aa2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/detect.py": {
+    "mtime": 1779224760.6410384,
+    "ast_hash": "517d6683a1d02a494333f2a7598ddf0d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/__init__.py": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "0952695e95c3bf4f0f014fd99ffce7d1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/llm.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "a5bcdef444c9df658119d3efdea7e67f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/ingest.py": {
+    "mtime": 1779224760.6420386,
+    "ast_hash": "aea82ac8205ebe32b4cf9b0d76227f02",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/analyze.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "caf9c6cb64d14db51cc17568cc428284",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/callflow_html.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "cee9a24348b69a09cec3983fa8656073",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/prs.py": {
+    "mtime": 1779224760.6430385,
+    "ast_hash": "2dc34936458740760f4ffbc03bbca3b8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/dedup.py": {
+    "mtime": 1779224760.6410384,
+    "ast_hash": "26af47e256966af84b2611b4a4eda7d8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/transcribe.py": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "faac44f47560572a5ec40b72577d91f0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/cluster.py": {
+    "mtime": 1779224760.64031,
+    "ast_hash": "094a1c0d49630c05e883a2cf6adaaf94",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_google_workspace.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "e2051fe2f01020be6faecd8db5365246",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_watch.py": {
+    "mtime": 1779224760.6510386,
+    "ast_hash": "d1ef18bbe95f94867bd6670a167b0576",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_dedup.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "5b547064b1b9d0e30ca4ec1e354819ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_install_strings.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "23ca73022e39cf4a2200dd2a2d171c79",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_ingest.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "cf1cbec0881b30e24d7eee4d77fc1df0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_explain_cli.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "0cd42950c90984b9aaf1fa75418e4257",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_astro_extraction.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "7ec3913e42e3282389476e86ff56fda9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_claude_md.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "397054297299c51b3839c758c9d0ee27",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_chunking.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "423db0d4cbaa2db65bd7a419280a53b4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_cache.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "f95c80b6cb2fc2a9137d865a29397313",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_ollama.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "796d4f3a8f8936783af0f6f82873149b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_incremental.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "fe514089210da4c9d47be8fdc6177014",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_cli_export.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "a9f60472a702486dcd5aa1470936bd19",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/bench_extract.py": {
+    "mtime": 1779224760.647444,
+    "ast_hash": "135580b43f822e71956d42e71ca6315f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_llm_backends.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "cc45b90aa4f9607e7650727cbd4ddc3e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_transcribe.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "14e0b3718cda2e24410c26e7b88c31fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_global_graph.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "59432ac334051461272701f50810182d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_build.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "ba56195d33a9d186358a37b6789aa853",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_query_cli.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "14ffd12cd436f02fea434f7e13cd86ec",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_path_cli.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "80cd72719c4bcc00fcfbe88d922cb663",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_validate.py": {
+    "mtime": 1779224760.6510386,
+    "ast_hash": "8814414512b97bb6b16c547d72e1a8e1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_languages.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "25c1c87c8a1c28d6d165e311731ca293",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_security.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "2261af6fc07e97ce8d3eb99204445cab",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_hypergraph.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "1d00bbd5af35c6c0023230d29f950afe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_rationale.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "5eee71a60e9d5e9a268091a3c2cd7451",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_install_upgrade.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "d48ef82ecc2d473767e9d8967f1c83bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_wiki.py": {
+    "mtime": 1779224760.6510386,
+    "ast_hash": "447c5231d5fcdbd6505d83e177e178da",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_pascal.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "f6b80257cd3f437f03cfa6011d718c5e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_serve.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "47ac973131f126f9b65c206691fc2a4b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_benchmark.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "ebd0e1f422ae1e3b73b9349d3a9efb72",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_semantic_similarity.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "15f538f89a2a4d8cf2488b43ecb355bb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_cluster.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "e78eaa0810394cf4d36c567a3ff3e700",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/__init__.py": {
+    "mtime": 1779224760.6460385,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_analyze.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "f16a47fb304f1051124daf0091fdd2f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_import_extension_resolution.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "e0e378ea78bf1fcbf41cf3bd519e64e8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_claude_cli_backend.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "4dea12d347a842fac7e0fef77229da21",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_charmap_encoding.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "60951f23cd962aa673bf3196e34c83a4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_export.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "829198aa275d80fcc1cfbb590a5686db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_extract.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "a778eb2edfe807eb7b5e30b6e12041c3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_callflow_html.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "4b8a7cec5ea4d3d9be316952abe4ced1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_report.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "27772006d6b1d2ccb25e7f9298f936ca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_confidence.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "5bfa88dee39cd6e11c04b886c83b5f53",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_install.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "7c5b4d88d4151fba6f81efd13603907c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_multilang.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "44f79829fb974786fa887e5a2237f605",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_pipeline.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "e0d142cae89a8c14d75f2cc7b0e671db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_prs.py": {
+    "mtime": 1779224760.6500387,
+    "ast_hash": "b768e0c7664677ec2d63ff60ab7e81ae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_detect.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "fb2db633301ed1429c491a684d0497be",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/test_hooks.py": {
+    "mtime": 1779224760.6490386,
+    "ast_hash": "ef685132297bf10a8ec707636e595b77",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_php_listen.php": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "5cd5ff268d733aa7c22aea7eaeb67672",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.sh": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "5a200a9dd62157675d0fabf0507872e1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.sql": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "55836840117e9437c727e44a145fb3cb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.cs": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "c860dacab57bd6126839dea8a7618100",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.scala": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "4a93e200e56dc72387117f198dbb53c3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.pas": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "c653a2f471266f9eaa8f9a5ad3027889",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_calls.py": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "74c57bfaf8163167f1cc0d3254a2e33d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.rs": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "2e54c09a533d34386ad02119156506bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.json": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "d31d04b254323a62bf3a362bb6eefdbb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.php": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "f83d77579839df87cfcf0a2b46b4e62a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.zig": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "a266e376f765a6bef5ddc000e04b0898",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.cpp": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "4a165665f229bd85e699424c1e443075",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.dfm": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "99bde5b15919440b38edaa4b742eea0a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.groovy": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "2250c3ae65dd5d7d1e87fea09709f237",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.f90": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "c6d5f24ab641fa20fa216ce503387d55",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.java": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "ae11b99aecf79ae8315a06ee71d529fd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.m": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "de973632d50625d5d20edd42f9af7ec2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_php_config.php": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "482b26ed1756b6a320400275f2f3a7d0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.jl": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "297455fff25e936fcb5e741d9ecc7d88",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_spock.groovy": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "71513c595397cc9dca0e86c8f46056e9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.kt": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "c928946a8a8c8281f55628d5e2da4759",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_php_container.php": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "ffaad71d135085277081f114ee44de0e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.c": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "d955c883368b708e4f85499b32cd400d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.ps1": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "db5387ee9f8caa679bae4a7fef931e45",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_tsconfig.json": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "bf3bf40adb7758075915463bd43d995b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.rb": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "179100a29facc568ff1c833e1dd54878",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_php_static_prop.php": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "7e2a863e5680ce62fac745d2c1a2464c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.tsx": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "13c071e559211a99a4b48174c31f4b61",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_alter_fk.sql": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "05c662d0ecff4887cd3cb4ef33b21473",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/cjs_require.js": {
+    "mtime": 1779224760.647444,
+    "ast_hash": "0acf74af24d36e7fdb1059d08bbcd4e9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.py": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "593ed7c2da295ecd2147456aac236981",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/dynamic_import.ts": {
+    "mtime": 1779224760.6477113,
+    "ast_hash": "cc09d28cc01031fca5318eb84af0936c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.ts": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "fa5cf1c58b5c75a4c98b85a58a1e428d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.swift": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "5c7a22f601d9a67bc6ccabe3021f7da5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/extraction.json": {
+    "mtime": 1779224760.6477113,
+    "ast_hash": "3d3a3cbe0e39447c8a3a07398525e606",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.lfm": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "318b67ec178b488777a27bb87c90fe70",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_schema_qualified.sql": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "62d82daca5179757089cdd69bfd4e5a7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.go": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "327859f90edc491ef84b21c1986096f0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample_preprocessed.F90": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "ae9ee8e877df81cfb89a5e813bc56a9a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.luau": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "b8ab779b73b3da32047fa5b2cb7330c0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.lpk": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "40382a5a22dd5a8da7ab230a1b200249",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.ex": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "6bd40cf265a29bac177752e55ed5016f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/typescript_advanced.ts": {
+    "mtime": 1779224760.6480386,
+    "ast_hash": "3a5170de64f08dfe89bfed3662bbe1ba",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/crate_b/src/lib.rs": {
+    "mtime": 1779224760.6477113,
+    "ast_hash": "0b13352dec4ffa03068dbdcbc960b097",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/crate_a/src/lib.rs": {
+    "mtime": 1779224760.6476111,
+    "ast_hash": "1c8623929fa9dd45e3384942a611b627",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260519_232558.dat_properties.json": {
+    "mtime": 1779633724.5337214,
+    "ast_hash": "e0379d940acf0c941750f6fe20c3f54d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260520_062151.dat_properties.json": {
+    "mtime": 1779633724.5337214,
+    "ast_hash": "5dac674eae1ac8f511db879ef5436ce0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/EmlFileGenerator.cs": {
+    "mtime": 1778644285.4969318,
+    "ast_hash": "fa9169bded5db15c9cc9b9801eb2a1ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PerformanceConstants.cs": {
+    "mtime": 1775622987.7061267,
+    "ast_hash": "3dd2b4b3d8781665ec614bd260eac10d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ContentTypeHelper.cs": {
+    "mtime": 1777225786.272958,
+    "ast_hash": "c30ba17f981ed78c3445a281a2309f6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/BatesNumberGenerator.cs": {
+    "mtime": 1777666328.6066458,
+    "ast_hash": "64ead8d15ea46e0288014851a2a1b611",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ChaosEngine.cs": {
+    "mtime": 1778613204.7945337,
+    "ast_hash": "dc36c8658cbd8f51da6cb0a9748d304d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/EncodingHelper.cs": {
+    "mtime": 1775622987.7041008,
+    "ast_hash": "ba8c282bb8087c80a599983e1c3fc5c1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/TiffFileGenerator.cs": {
+    "mtime": 1778642570.712366,
+    "ast_hash": "7fded1b15b0b14e3b6ec0c76434b6ce3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadfileAuditWriter.cs": {
+    "mtime": 1778404870.641245,
+    "ast_hash": "0d4d65bccafdb91bf3c3f10e5a66c475",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PlaceholderFiles.cs": {
+    "mtime": 1775622987.7061267,
+    "ast_hash": "f7e8442078425a0d0e4edd58e9b1446c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/OfficeFileGenerator.cs": {
+    "mtime": 1778642570.712366,
+    "ast_hash": "0e5405d3524fb32f921c1f017a31b3b3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ProductionSetGenerator.cs": {
+    "mtime": 1778645488.3304954,
+    "ast_hash": "aa484f87008c3b5edeff7644a794c00b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/packages.lock.json": {
+    "mtime": 1779656223.0504751,
+    "ast_hash": "41be181afe3103ebda3b2caf85e2fb7b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Program.cs": {
+    "mtime": 1778258309.7153242,
+    "ast_hash": "4c4591458cb7ba0f34e4022b0d8d09fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PerformanceBenchmarkRunner.cs": {
+    "mtime": 1778643486.1731071,
+    "ast_hash": "fd7d6492422f9634d416850220928e58",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/TiffMultiPageGenerator.cs": {
+    "mtime": 1778644285.4969318,
+    "ast_hash": "a89dced63ae0c60f76a4f576d5526c5b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ProductionSetPlanner.cs": {
+    "mtime": 1778645488.3304954,
+    "ast_hash": "82d45ee2307aa2f8d2baf102aae7907a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFileFormat.cs": {
+    "mtime": 1778213999.99137,
+    "ast_hash": "d91fef0614722ce46e0cc8dbb3153c83",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ChaosAnomalyTypes.cs": {
+    "mtime": 1778613204.7945337,
+    "ast_hash": "b3799b687927487fbd2cdbe5564e64fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/FileGeneratorFactory.cs": {
+    "mtime": 1778611977.164215,
+    "ast_hash": "534da492bfb65be5176a2d15a07ada8b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/StandardMode.cs": {
+    "mtime": 1778643486.1731071,
+    "ast_hash": "71e0bace4fced559b473e60bf4104478",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PlaceholderFileGenerator.cs": {
+    "mtime": 1778642570.712366,
+    "ast_hash": "d857e51bef6023a9344391bfcd625b13",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/GenerationRunner.cs": {
+    "mtime": 1777713897.2167888,
+    "ast_hash": "aa9a038f0c022b211ca7a725c63d5021",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ParallelFileGenerator.cs": {
+    "mtime": 1778643486.1731071,
+    "ast_hash": "d7a442506c3dea32804795fc93f912fa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/IGenerationMode.cs": {
+    "mtime": 1777713897.2167888,
+    "ast_hash": "f9d1bed30fce10fbba7a3ccf4774aff6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ChaosEngineBuilder.cs": {
+    "mtime": 1778404870.6398313,
+    "ast_hash": "709ea0418efb73f44bc88a62f24e9188",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ChaosScenario.cs": {
+    "mtime": 1776886066.2142563,
+    "ast_hash": "b95d1696c0d8369873eca1493a1b886d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ChaosAnomaly.cs": {
+    "mtime": 1775622987.7041008,
+    "ast_hash": "d12b9ea737de0e6880269d92d95998ba",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PathValidator.cs": {
+    "mtime": 1775622987.7061267,
+    "ast_hash": "78148205910fd3552f5efc0dbf3e588a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ProductionManifestWriter.cs": {
+    "mtime": 1777927784.1293254,
+    "ast_hash": "956276b79f732dee4428c4e44d720402",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/PerformanceMonitor.cs": {
+    "mtime": 1775622987.7061267,
+    "ast_hash": "855acadbf8fec6332fe8dd6b06fbaa53",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ProductionSetMode.cs": {
+    "mtime": 1777927784.1295965,
+    "ast_hash": "07872ca89fff0a2b95976c85b229d2d7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Distributions.cs": {
+    "mtime": 1778172656.7077541,
+    "ast_hash": "14b2e2f1f6dd27e51243e6a5742d7b27",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadfileOnlyGenerator.cs": {
+    "mtime": 1778258309.7153242,
+    "ast_hash": "b3bd2a0c9906913ce1fd348d7b028c58",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/IFileGenerator.cs": {
+    "mtime": 1778642570.7120016,
+    "ast_hash": "6af6a31f23aab68fa42803b8d7d4ffa4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadfileOnlyMode.cs": {
+    "mtime": 1777927784.1286907,
+    "ast_hash": "89e24880b2c1e17f59e903773a8e2558",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/FileGenerationRequest.cs": {
+    "mtime": 1777928684.7151089,
+    "ast_hash": "792da8c8f484ff9442cd28d4dc14b97a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/ZipArchiveService.cs": {
+    "mtime": 1778561257.342484,
+    "ast_hash": "dc23d5132d39ec9dc185e524e30be0ad",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailAttachmentPicker.cs": {
+    "mtime": 1778097235.9847043,
+    "ast_hash": "9159cfac42d811493759139e465b4f69",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/Email.cs": {
+    "mtime": 1778097235.9845264,
+    "ast_hash": "fbe0b704eae5e34401f420004bdd8fcd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailSerializer.cs": {
+    "mtime": 1778565126.3616986,
+    "ast_hash": "d4a0e3b85be4561c2127caa8beb7c762",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailCategory.cs": {
+    "mtime": 1778097235.9847846,
+    "ast_hash": "4cc481febb2ecd94f5e86f52282ba6c3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailFactory.cs": {
+    "mtime": 1778562714.0259216,
+    "ast_hash": "8bf011e0dd219174e903d0d037d16443",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailAttachment.cs": {
+    "mtime": 1778097235.9846103,
+    "ast_hash": "cd72838e7bd8a5dee39f0905a6698974",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Emails/EmailContext.cs": {
+    "mtime": 1778097235.9848433,
+    "ast_hash": "2bdf2331905e3aaa055a05e282725269",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/MetadataRowBuilderTests.cs": {
+    "mtime": 1778404870.645245,
+    "ast_hash": "d28692c4f818f3408269894ec08d5795",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/FileGenerationRequestTests.cs": {
+    "mtime": 1777928684.7187583,
+    "ast_hash": "9c896b71a772902d69fb59026587b1f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ProfileDrivenDatWriterTests.cs": {
+    "mtime": 1778478525.7272043,
+    "ast_hash": "ce1497700be81196bee740b3dfcb3349",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/DatWriterTests.cs": {
+    "mtime": 1778404870.644245,
+    "ast_hash": "7084956c96b37f2ae0fda137a00eb66e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/StaticDataTests.cs": {
+    "mtime": 1775622987.7091007,
+    "ast_hash": "c4412ce5644b1f0c25b192800ed4be4f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/LoremIpsumDataTests.cs": {
+    "mtime": 1777807627.2647874,
+    "ast_hash": "e878550bc9b377af0e889021b6b25f75",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/GenerationRunnerTests.cs": {
+    "mtime": 1777928684.7189965,
+    "ast_hash": "09b91f1fe5b40c5d222e175e9ecc12db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ProductionSetTests.cs": {
+    "mtime": 1778581607.5827377,
+    "ast_hash": "4ecc726cf8584967248a0be8a7d27eaa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/PerformanceBenchmarkRunnerTests.cs": {
+    "mtime": 1777666443.9381268,
+    "ast_hash": "53760b771e1350028096616f3fabafa3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/TimeZoneDataTests.cs": {
+    "mtime": 1777807627.2647874,
+    "ast_hash": "aac40b3036b1e4ab60d98dd9faa8111d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/TiffMultiPageGeneratorTests.cs": {
+    "mtime": 1775622987.7091007,
+    "ast_hash": "8cb7257dadd09b9dc158fd86335796c5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/OutputConfigTests.cs": {
+    "mtime": 1778611977.1652153,
+    "ast_hash": "27b0cdc29e1525632c2cf60ec15460c6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ParallelFileGeneratorTests.cs": {
+    "mtime": 1778643486.1731071,
+    "ast_hash": "0ba6aa1a4678efab397982ba26cb6cb0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ContentTypeHelperTests.cs": {
+    "mtime": 1777225786.273958,
+    "ast_hash": "eea4cb4772d78ecc7ba85eb62339ce9f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/RequestBuilderTests.cs": {
+    "mtime": 1778258309.716324,
+    "ast_hash": "cacef8033fe0fe8e964a91ce1f021432",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/CliPipelineTests.cs": {
+    "mtime": 1778555135.6647506,
+    "ast_hash": "41a6899caed0335833bc4b4aec0da0c1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ReviewNoteDataTests.cs": {
+    "mtime": 1777807627.2647874,
+    "ast_hash": "8af1dbdaaca68d22e6b896cfa703df94",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/packages.lock.json": {
+    "mtime": 1779656223.0104752,
+    "ast_hash": "01dbd8798ebd5a1f2a2094d1a05bd7fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/PerformanceMonitorTests.cs": {
+    "mtime": 1775622987.7081008,
+    "ast_hash": "242591c184dd9d8027fe6873cab6980c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ColumnProfileTests.cs": {
+    "mtime": 1778097235.9869058,
+    "ast_hash": "c8414e55142ef708bab48fd859ec5c0f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/LoadfileOnlyGeneratorTests.cs": {
+    "mtime": 1777928684.719633,
+    "ast_hash": "2f5bfdf9a559dd5848312d0a7b9b180e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/FieldNamingTests.cs": {
+    "mtime": 1779616928.4027483,
+    "ast_hash": "8c40fc57ee145802ed6b40370bcbea39",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/CliParserTests.cs": {
+    "mtime": 1778639643.7551737,
+    "ast_hash": "bb9436877d8b7b78e8ee4e13ada675a2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/EmailSubjectDataTests.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "87e16416493b3749e045a326f21e005a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/BatesNumberGeneratorTests.cs": {
+    "mtime": 1775622987.7074218,
+    "ast_hash": "73d7283b95fb4a61c68fbaae4e349dd9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/NameDataTests.cs": {
+    "mtime": 1777807627.2647874,
+    "ast_hash": "16fd1b12e06035e3679e46e0edb3b804",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/DataGeneratorTests.cs": {
+    "mtime": 1778097235.9871688,
+    "ast_hash": "60bfd40f343e878b6e2887b5c1c21117",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ChaosEngineTests.cs": {
+    "mtime": 1777816857.8261807,
+    "ast_hash": "5d65b72455ce4737df95e7b768c9468c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ColumnProfileLoaderTests.cs": {
+    "mtime": 1778580812.4873111,
+    "ast_hash": "84441dfce9489dd67f3cb30692ff5304",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/LoadFileWriterTests.cs": {
+    "mtime": 1778567639.2592733,
+    "ast_hash": "dfc3b86d84d9712c1c485d2115d2d6c7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ZipArchiveServiceTests.cs": {
+    "mtime": 1778561257.343484,
+    "ast_hash": "deebda4c3156366303dfd0af2d62015b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/OfficeFileGeneratorTests.cs": {
+    "mtime": 1778642570.712366,
+    "ast_hash": "e246e97ac822d8b62a35ee089e45b591",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/PerformanceConstantsTests.cs": {
+    "mtime": 1775622987.7081008,
+    "ast_hash": "49a1806e2c113949f4126111cd38ad14",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/FileGeneratorFactoryTests.cs": {
+    "mtime": 1778611977.1652153,
+    "ast_hash": "65fdcac8eb8ca6513af453e91de72145",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ChaosScenarioTests.cs": {
+    "mtime": 1776886066.2152562,
+    "ast_hash": "55c56323409bd5c7aa145bc24bead993",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/HelpTextGeneratorTests.cs": {
+    "mtime": 1778097235.9878988,
+    "ast_hash": "e3eed38b7d47298814b831883dac8f15",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/CliValidatorTests.cs": {
+    "mtime": 1778555135.6647506,
+    "ast_hash": "f0f06d229fad2d1624bf6993e5d36fb9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/TiffConfigTests.cs": {
+    "mtime": 1777874656.3458073,
+    "ast_hash": "d502b95d39d292329013aa61938437d3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/PathValidatorTests.cs": {
+    "mtime": 1777666328.6084228,
+    "ast_hash": "6e34dcc297300315a9f9e65be44c4bca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/DistributionAlgorithmTests.cs": {
+    "mtime": 1778172656.708384,
+    "ast_hash": "2101d5f74e09d87a9e227eec8ff5f0e8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/PlaceholderFilesTests.cs": {
+    "mtime": 1777666328.6084228,
+    "ast_hash": "1dc8718de5f1b7c1f4017b7cabe0fdc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ProgramTests.cs": {
+    "mtime": 1778565181.7027276,
+    "ast_hash": "beab8b6d56af2e695461ef9314c75f32",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/ChaosAnomalyTypesTests.cs": {
+    "mtime": 1778613204.7945337,
+    "ast_hash": "f52425b737768a6191211612e84f5b77",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/EncodingDataTests.cs": {
+    "mtime": 1777807627.2647874,
+    "ast_hash": "302d31b0447573ef8f77e719723b769b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/EncodingHelperTests.cs": {
+    "mtime": 1777212902.9519942,
+    "ast_hash": "df4991a8d6d018fedea2bf4f9f188ce0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/IntegrationTests.cs": {
+    "mtime": 1777666328.6084228,
+    "ast_hash": "7ef26a1c1fbeddbd139421dd5512599c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/MetadataConfigTests.cs": {
+    "mtime": 1777874656.3454738,
+    "ast_hash": "23e5905d52db383e1d63832bdd7785f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Emails/EmailFactoryTests.cs": {
+    "mtime": 1778562714.0259216,
+    "ast_hash": "81a9e3661863b11915c4b3558ed683ee",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Emails/EmlFileGeneratorDeterminismTests.cs": {
+    "mtime": 1778562714.0259216,
+    "ast_hash": "d983954ab8b24480e15c4d6566086ea6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Emails/EmailAttachmentPickerTests.cs": {
+    "mtime": 1778097235.9874153,
+    "ast_hash": "cc8a2eaff858793e9274a3dc350e60c8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Emails/EmailSerializerTests.cs": {
+    "mtime": 1778565126.3616986,
+    "ast_hash": "06dcc452d46324218f0452dd2392f447",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/LoadFiles/DatSerializerTests.cs": {
+    "mtime": 1778641657.1049538,
+    "ast_hash": "4153de70df31e67114d588a92652975f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Debug/net8.0/Zipper.runtimeconfig.json": {
+    "mtime": 1779656239.5944586,
+    "ast_hash": "c7caee3101f0cdc1b219f9199c139ee6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Debug/net8.0/Zipper.Tests.runtimeconfig.json": {
+    "mtime": 1779656244.287454,
+    "ast_hash": "0311511ab4cf577e86fd8cbb1527dedb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Debug/net8.0/Zipper.Tests.deps.json": {
+    "mtime": 1779656244.239454,
+    "ast_hash": "da8344e9437695c946cf8bab077e8792",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Debug/net8.0/Zipper.deps.json": {
+    "mtime": 1779656239.5494587,
+    "ast_hash": "81e0ef11a4bf5172903f7819b5c3a355",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/Zipper.runtimeconfig.json": {
+    "mtime": 1779430512.578653,
+    "ast_hash": "a63a69b415681459c104dd5d11f8e21d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/Zipper.Tests.runtimeconfig.json": {
+    "mtime": 1779430559.2575407,
+    "ast_hash": "ded1441739fad34e1ed98e0f97d5448f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/Zipper.Tests.deps.json": {
+    "mtime": 1779430559.207541,
+    "ast_hash": "bf36c3b426f65d6e842d308da5825a36",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/Zipper.deps.json": {
+    "mtime": 1779430512.5276532,
+    "ast_hash": "72a16499d0a68786430a05dc52ba96a3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/publish/Zipper.runtimeconfig.json": {
+    "mtime": 1777095618.380754,
+    "ast_hash": "a63a69b415681459c104dd5d11f8e21d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/publish/Zipper.Tests.runtimeconfig.json": {
+    "mtime": 1776886412.5594172,
+    "ast_hash": "ded1441739fad34e1ed98e0f97d5448f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/publish/coverlet.collector.deps.json": {
+    "mtime": 1776380144.0,
+    "ast_hash": "01a493fb7ae53225e177555c2d08ba57",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/publish/Zipper.Tests.deps.json": {
+    "mtime": 1777095620.2277472,
+    "ast_hash": "1ddcd84e89cf549bb1d6777818a87742",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Profiles/Generation/CodedGeneratorTests.cs": {
+    "mtime": 1779225884.363626,
+    "ast_hash": "e2750b0ccdad518a5db3a8a82d553ee4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/Profiles/Generation/ColumnValueGeneratorRegistryTests.cs": {
+    "mtime": 1778404870.6464252,
+    "ast_hash": "14f249f2f0992894fe806daa607cea61",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/project.assets.json": {
+    "mtime": 1779656223.008475,
+    "ast_hash": "21f77d96206cac213a1eea2dd2186f26",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Zipper.Tests.csproj.nuget.dgspec.json": {
+    "mtime": 1779656223.011475,
+    "ast_hash": "4f2cbc5fddc9f440d23f36bda522b9eb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Debug/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1776837199.6446767,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Debug/net8.0/Zipper.Tests.AssemblyInfo.cs": {
+    "mtime": 1779656152.0425456,
+    "ast_hash": "c90dccee6093e4088eb228b272f33108",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Debug/net8.0/Zipper.Tests.sourcelink.json": {
+    "mtime": 1779656152.0875454,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Debug/net8.0/Zipper.Tests.GlobalUsings.g.cs": {
+    "mtime": 1776837199.574677,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/Zipper.Tests.deps.json": {
+    "mtime": 1779430559.3568962,
+    "ast_hash": "bf36c3b426f65d6e842d308da5825a36",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1776837217.0516202,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/Zipper.Tests.AssemblyInfo.cs": {
+    "mtime": 1779430552.8475564,
+    "ast_hash": "6e06f489e199aada7e8653d3350ec3b6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/Zipper.Tests.sourcelink.json": {
+    "mtime": 1779430552.903556,
+    "ast_hash": "5393c75d8970afb2bf32b46e3b11f294",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/Zipper.Tests.GlobalUsings.g.cs": {
+    "mtime": 1776837211.922637,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/ProfileDrivenDatWriter.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "5c57abdb44ac2f105118dfd7addfa881",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/WriterMode.cs": {
+    "mtime": 1778258309.714037,
+    "ast_hash": "bcf45501be9fa8d5a9af6856ddc3f849",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/CsvWriter.cs": {
+    "mtime": 1779616928.4007483,
+    "ast_hash": "94cea963373ba0bbb4238d584bfdb862",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/ILoadFileWriter.cs": {
+    "mtime": 1777698701.7737417,
+    "ast_hash": "d7b49311f4d55a7ed24c6964dd8a5fa0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/XmlLoadFileWriter.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "379fed998d26ecbb1b99389e9f4ef9c9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/DatSerializer.cs": {
+    "mtime": 1778641657.1039538,
+    "ast_hash": "ea87515f0310e0ebdff176551fcef43a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/ILoadFileSerializer.cs": {
+    "mtime": 1778641657.1039538,
+    "ast_hash": "68b57aa0b223b4c2d61b9c3072b25e1d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/ConcordanceWriter.cs": {
+    "mtime": 1778478525.7272043,
+    "ast_hash": "48ddba67bedb67e8be28b316550a2428",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/LoadFileWriterFactory.cs": {
+    "mtime": 1778258309.714037,
+    "ast_hash": "7714448d2ef9cfd4ef85a899aced5ce0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/LoadFileWriterBase.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "be9231a0579c0bd0c2a2eefa95533e3d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/DatWriter.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "cfbedef5052f1dfb8d70b884001b3c35",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/OptWriter.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "74ccede56bc639f39c77c03c07857dab",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/LoadFiles/LoadFileRecord.cs": {
+    "mtime": 1778641657.1039538,
+    "ast_hash": "847f75bbabe3feff15990d08d8381047",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Debug/net8.0/Zipper.runtimeconfig.json": {
+    "mtime": 1779656239.5944586,
+    "ast_hash": "c7caee3101f0cdc1b219f9199c139ee6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Debug/net8.0/Zipper.deps.json": {
+    "mtime": 1779656239.5494587,
+    "ast_hash": "81e0ef11a4bf5172903f7819b5c3a355",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Release/net8.0/Zipper.runtimeconfig.json": {
+    "mtime": 1779656299.9203987,
+    "ast_hash": "55ffa1bd8eb79ba7e6174d61d7f4002b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Release/net8.0/Zipper.deps.json": {
+    "mtime": 1779656299.8593988,
+    "ast_hash": "81e0ef11a4bf5172903f7819b5c3a355",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Release/net8.0/linux-x64/Zipper.runtimeconfig.json": {
+    "mtime": 1779633743.726671,
+    "ast_hash": "a63a69b415681459c104dd5d11f8e21d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/bin/Release/net8.0/linux-x64/Zipper.deps.json": {
+    "mtime": 1779633743.686671,
+    "ast_hash": "72a16499d0a68786430a05dc52ba96a3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Utils/NamingConventionHelper.cs": {
+    "mtime": 1779616928.4027483,
+    "ast_hash": "4b5798648c0b2b3989b17d6eadb0c4d7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/BuiltInProfiles.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "70b41961c2d33f296e39834efe932d81",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/ColumnProfileLoader.cs": {
+    "mtime": 1779616928.4027483,
+    "ast_hash": "e147a122531555114936a28d444b7cca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/DataGenerator.cs": {
+    "mtime": 1779225884.362626,
+    "ast_hash": "6d3aa77c35c69983ed037ba32be09b0e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/ColumnProfile.cs": {
+    "mtime": 1779616928.4017482,
+    "ast_hash": "21a3393952c73aef2f6514d9453b04d2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/ReviewNoteData.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "40fc05e3ffa55580492396165e2eed11",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/TimeZoneData.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "425a17f1a6448e8577dde0708d0d2651",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/EncodingData.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "f340e9aa32a25d166c2509f32a214d59",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/LoremIpsumData.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "966e921fb6de1610985af9526d98373e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/NameData.cs": {
+    "mtime": 1777807627.2645085,
+    "ast_hash": "e035c3b05fa05d1ec4ff2039755fbe1f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Data/EmailSubjectData.cs": {
+    "mtime": 1777807627.2637875,
+    "ast_hash": "cab62ed151c879d7250819ef1ed25736",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/DateGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "9ad120ed9ad57c2632c7436ca4d602ca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/LegacyMetadataGenerators.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "a671abf2e7eee75680dc3288dbc32a98",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/NumberGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "910819c51caa77047bb45f3083f6128a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/TextGenerator.cs": {
+    "mtime": 1779225884.362626,
+    "ast_hash": "3be19b9d34b81bd7dc6b827d8c0c6d06",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/IColumnValueGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "dd71b98427ebf524af08d62e13b4da04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/ColumnGenerationContext.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "7433214e46433cd694b0a73414ee281b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/CodedGenerator.cs": {
+    "mtime": 1779225884.362626,
+    "ast_hash": "014bb5a80669a8f173dda6fb3778e273",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/IdentifierGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "1d3bb12cadd13d3ed482266383122d69",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/BooleanGenerator.cs": {
+    "mtime": 1778404870.642245,
+    "ast_hash": "2f114df1de5a5b21106ecaa5bc9e9099",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/LongTextGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "3c663cef8815c27b7eae8e7f831a64f4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/DateTimeColumnGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "5f4e2bba310a208ec355aaae1d92cb20",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/EmailAddressGenerator.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "8d49f352435ad675e74c4f685f5ccc45",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Profiles/Generation/ColumnValueGeneratorRegistry.cs": {
+    "mtime": 1778404870.6436422,
+    "ast_hash": "18c23be089e715412ba0f2834a932903",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/project.assets.json": {
+    "mtime": 1779656223.048475,
+    "ast_hash": "f83f08a5f498541a5c2c7fff500d64f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Zipper.csproj.nuget.dgspec.json": {
+    "mtime": 1779656223.0510354,
+    "ast_hash": "7c1346c10118dce4a362330a4747ed2b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Debug/net8.0/Zipper.sourcelink.json": {
+    "mtime": 1779656146.0385516,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Debug/net8.0/Zipper.GlobalUsings.g.cs": {
+    "mtime": 1776837199.0706787,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Debug/net8.0/Zipper.AssemblyInfo.cs": {
+    "mtime": 1777870071.1276925,
+    "ast_hash": "67e8b9ff4d5d0a36b5a4afcff355cbd5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Debug/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1776837199.1426783,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/Zipper.sourcelink.json": {
+    "mtime": 1779656294.5224042,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/Zipper.GlobalUsings.g.cs": {
+    "mtime": 1776837212.1006362,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/Zipper.AssemblyInfo.cs": {
+    "mtime": 1776837212.2896357,
+    "ast_hash": "fb453802dcf8ce415062f22d4b0fb562",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1776837212.2776358,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/Zipper.sourcelink.json": {
+    "mtime": 1779647169.672233,
+    "ast_hash": "e3d2afea883c78c45f99ddc9e9af2ca9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/Zipper.GlobalUsings.g.cs": {
+    "mtime": 1777095616.6567605,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/Zipper.AssemblyInfo.cs": {
+    "mtime": 1777095616.9247594,
+    "ast_hash": "fb453802dcf8ce415062f22d4b0fb562",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/Zipper.deps.json": {
+    "mtime": 1779633743.9226704,
+    "ast_hash": "b6357fbd593650414b2b114b973af43b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1777095616.8457596,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/HelpTextGenerator.cs": {
+    "mtime": 1777700998.939957,
+    "ast_hash": "f6f1db8ef44fbd3bec0240f4e4265013",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/CliOptions.cs": {
+    "mtime": 1778639643.7541738,
+    "ast_hash": "a4c7008cd1556995d98e399d27d2cc04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/ParsedArguments.cs": {
+    "mtime": 1777700998.939957,
+    "ast_hash": "f3de0cb929b210f8fa77a45f326ba0bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/CliArgument.cs": {
+    "mtime": 1777700998.9387832,
+    "ast_hash": "6574664a44593351ff4ec4f44eef52f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/CliValidator.cs": {
+    "mtime": 1779616928.4007483,
+    "ast_hash": "5cf20099934c913cc753f10576033b5e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/CliParser.cs": {
+    "mtime": 1778639643.7551737,
+    "ast_hash": "3e6fcfb43724ee557fd9c539bde11b7d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/RequestBuilder.cs": {
+    "mtime": 1778258309.7123241,
+    "ast_hash": "008215dc6d69d9e7a1e8436494160394",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Cli/Pipeline.cs": {
+    "mtime": 1778097235.9844615,
+    "ast_hash": "3507c597aa5c119ad0b3cd461601aef8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/FgrFlatAccessAnalyzer.cs": {
+    "mtime": 1777928684.717737,
+    "ast_hash": "8a28c2c459d080a00b241c2d5d044cee",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/bin/Debug/netstandard2.0/Zipper.Analyzers.deps.json": {
+    "mtime": 1779633704.7817736,
+    "ast_hash": "c1850a6a44299a5399d6743239c50ad4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/bin/Release/netstandard2.0/Zipper.Analyzers.deps.json": {
+    "mtime": 1779633727.9947124,
+    "ast_hash": "c1850a6a44299a5399d6743239c50ad4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/project.assets.json": {
+    "mtime": 1779633703.796776,
+    "ast_hash": "995489c4d221206cf878c048a4725cb1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Zipper.Analyzers.csproj.nuget.dgspec.json": {
+    "mtime": 1779656221.8904762,
+    "ast_hash": "fe7d88d09d401f8238d4dc8d00673743",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Debug/netstandard2.0/Zipper.Analyzers.GlobalUsings.g.cs": {
+    "mtime": 1777869955.692101,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Debug/netstandard2.0/Zipper.Analyzers.sourcelink.json": {
+    "mtime": 1779656142.384555,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Debug/netstandard2.0/Zipper.Analyzers.AssemblyInfo.cs": {
+    "mtime": 1777870070.677694,
+    "ast_hash": "04906bbd406b1637fb8da80442edf632",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Debug/netstandard2.0/.NETStandard,Version=v2.0.AssemblyAttributes.cs": {
+    "mtime": 1777869955.7701006,
+    "ast_hash": "1919df738091e444476353a256f592a2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/Zipper.Analyzers.GlobalUsings.g.cs": {
+    "mtime": 1777870236.0161092,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/Zipper.Analyzers.sourcelink.json": {
+    "mtime": 1779656291.705407,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/Zipper.Analyzers.AssemblyInfo.cs": {
+    "mtime": 1777870236.2301242,
+    "ast_hash": "93ca15056a1940735bd81e344fb00eaa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/Zipper.Analyzers.deps.json": {
+    "mtime": 1779430552.083558,
+    "ast_hash": "897aea44739532fedb9e178a5c0591a9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/.NETStandard,Version=v2.0.AssemblyAttributes.cs": {
+    "mtime": 1777870236.2161083,
+    "ast_hash": "1919df738091e444476353a256f592a2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/ChaosConfig.cs": {
+    "mtime": 1777704050.1179166,
+    "ast_hash": "2dfdffabe1bb5ba1e41a8e3e59214f3f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/MetadataConfig.cs": {
+    "mtime": 1777874656.3418982,
+    "ast_hash": "27e4a54d0bb41bf6f116102b73e3c29f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/OutputConfig.cs": {
+    "mtime": 1777874656.342398,
+    "ast_hash": "e326e35fbb3fc0b3cd08a57c08980e1f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/TiffConfig.cs": {
+    "mtime": 1777874656.342582,
+    "ast_hash": "e12df6d2e0423bb2f79a62c772b27c16",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/ProductionConfig.cs": {
+    "mtime": 1777704050.1187465,
+    "ast_hash": "a6b3a438268aa25aafc7495174642c68",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/LoadFileConfig.cs": {
+    "mtime": 1777704050.1187465,
+    "ast_hash": "82ca1014c17eb4267f7f524bf0abca88",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Config/DelimiterConfig.cs": {
+    "mtime": 1777704050.1187465,
+    "ast_hash": "83e7698986b3d259d077c665035acf61",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/FgrFlatAccessAnalyzerTests.cs": {
+    "mtime": 1777928684.7172337,
+    "ast_hash": "1c243c8be218f86d4236d212d5f25cd2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Debug/net8.0/Zipper.Analyzers.Tests.runtimeconfig.json": {
+    "mtime": 1779656192.6375053,
+    "ast_hash": "0311511ab4cf577e86fd8cbb1527dedb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Debug/net8.0/Zipper.Analyzers.Tests.deps.json": {
+    "mtime": 1779656192.5915053,
+    "ast_hash": "ec84208bb9e4a36456cb8f3db78e336f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Release/net8.0/Zipper.Analyzers.Tests.runtimeconfig.json": {
+    "mtime": 1779430557.5865448,
+    "ast_hash": "ded1441739fad34e1ed98e0f97d5448f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Release/net8.0/Zipper.Analyzers.Tests.deps.json": {
+    "mtime": 1779430557.433545,
+    "ast_hash": "6168131a1d900f846714251a40c644b2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/project.assets.json": {
+    "mtime": 1779656187.5185103,
+    "ast_hash": "8ddcfb984aae1be9b37fc0a772b1e2e7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Zipper.Analyzers.Tests.csproj.nuget.dgspec.json": {
+    "mtime": 1779656221.9211729,
+    "ast_hash": "c429b70b7b88862e1f4205a5afab49eb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.AssemblyInfo.cs": {
+    "mtime": 1779656146.0505514,
+    "ast_hash": "8d90489603e9b7360cf8319769b60ab8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.sourcelink.json": {
+    "mtime": 1779656146.1325514,
+    "ast_hash": "74e691d7f4a6436621ba0708f4c151f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.GlobalUsings.g.cs": {
+    "mtime": 1777869955.5611014,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1777869958.3610916,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.AssemblyInfo.cs": {
+    "mtime": 1779430552.4405572,
+    "ast_hash": "871748bccabebfebe26a5e30bdec2a9d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.sourcelink.json": {
+    "mtime": 1779430552.495557,
+    "ast_hash": "5393c75d8970afb2bf32b46e3b11f294",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.GlobalUsings.g.cs": {
+    "mtime": 1777870236.046109,
+    "ast_hash": "70500239e348e01027b65982f5792ea0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs": {
+    "mtime": 1777870236.7081068,
+    "ast_hash": "bdad2027e716340f0ce100f8bf692fbc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.deps.json": {
+    "mtime": 1779430558.283543,
+    "ast_hash": "6168131a1d900f846714251a40c644b2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/test-empty-pct-0.json": {
+    "mtime": 1779656395.3153043,
+    "ast_hash": "fb1b1c1282d6cf5a11ac86acdf861e11",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/test-empty-pct-10.json": {
+    "mtime": 1779656395.8563037,
+    "ast_hash": "b2b81dbc8726d99edfcb7f5693263f08",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/test-empty-pct-50.json": {
+    "mtime": 1779656396.1423035,
+    "ast_hash": "e375f0a162226d2d79e2903e75ca866c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/test-empty-pct-100.json": {
+    "mtime": 1779656395.5843039,
+    "ast_hash": "3785a705edf75509235cf306cd75dc18",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net10.0/any/appsettings.json": {
+    "mtime": 1776706938.0,
+    "ast_hash": "d339c36a6aa1e5dbe78fb70f78499d4d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net10.0/any/ReportGenerator.runtimeconfig.json": {
+    "mtime": 1776707052.0,
+    "ast_hash": "6110cfb00873d527111598476bcbea54",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net10.0/any/ReportGenerator.deps.json": {
+    "mtime": 1776707080.0,
+    "ast_hash": "7231625c9ef178670c1b1ab1230d3e59",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net8.0/any/appsettings.json": {
+    "mtime": 1776706938.0,
+    "ast_hash": "d339c36a6aa1e5dbe78fb70f78499d4d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net8.0/any/ReportGenerator.runtimeconfig.json": {
+    "mtime": 1776707052.0,
+    "ast_hash": "82442e957cf634f3ffe3684ebfdaef66",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net8.0/any/ReportGenerator.deps.json": {
+    "mtime": 1776707072.0,
+    "ast_hash": "74ec7f57c09a453efb31d249066bad40",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net9.0/any/appsettings.json": {
+    "mtime": 1776706938.0,
+    "ast_hash": "d339c36a6aa1e5dbe78fb70f78499d4d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net9.0/any/ReportGenerator.runtimeconfig.json": {
+    "mtime": 1776707052.0,
+    "ast_hash": "f4521514a1d76d8de903703f1a8d4c96",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/tools/net9.0/any/ReportGenerator.deps.json": {
+    "mtime": 1776707076.0,
+    "ast_hash": "fd25dc9b5b788829cb54d89c5c8f791f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/hooks/pre-push": {
+    "mtime": 1777157977.9786642,
+    "ast_hash": "7afb5221334c6f236aafa1b0639789cf",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/hooks/post-commit": {
+    "mtime": 1776882813.454426,
+    "ast_hash": "07e5483b11cf4c5a974b5c8aeb54d02e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/hooks/pre-commit": {
+    "mtime": 1779634223.226414,
+    "ast_hash": "ff7f8f38de442eb3235c49a27a2db40e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/run-tests.sh": {
+    "mtime": 1778602543.216207,
+    "ast_hash": "f647c1ea87a97c32f0d4e462a58a25ba",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-column-profile-custom-kinds.sh": {
+    "mtime": 1779616928.4047482,
+    "ast_hash": "f6dd3a659609f5038e4359647888695f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-target-zip-size.sh": {
+    "mtime": 1778531840.5510073,
+    "ast_hash": "01068dc6a3199fb682a3dba0d96da936",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/run-tests-manual-verify.sh": {
+    "mtime": 1778529176.2150705,
+    "ast_hash": "101194bface07a0e604f080573942f6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/run-e2e-basic.sh": {
+    "mtime": 1778529176.2140706,
+    "ast_hash": "0cd39fa838048968ffeb6155656711e2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-multipage-tiff.sh": {
+    "mtime": 1778528542.1759064,
+    "ast_hash": "53b913a3b18cb5286d7da0462ee970e3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-cross-platform.sh": {
+    "mtime": 1778529176.2190704,
+    "ast_hash": "8ce08d76e507c9ccdf0c404a85bafbf8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-load-file-formats.sh": {
+    "mtime": 1778529176.2190704,
+    "ast_hash": "33092e9252d52bbabfac4dd62513ae94",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-build-matrix.sh": {
+    "mtime": 1778528542.1920455,
+    "ast_hash": "d77a2ed33499ac86916320d17a3aca3e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-argument-interactions.sh": {
+    "mtime": 1778584137.0528922,
+    "ast_hash": "eb461bed3b1c1335573cbdd426600927",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-workflow-validation.sh": {
+    "mtime": 1778528542.1946375,
+    "ast_hash": "5e7e727c28286dd420f050b2ca1927ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-eml-comprehensive.sh": {
+    "mtime": 1778529176.2190704,
+    "ast_hash": "00b489ddad41149f9bb54883a2cf0938",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-chaos-anomaly-coverage.sh": {
+    "mtime": 1778529176.2170703,
+    "ast_hash": "0b6c16b21a6c1fc2ff934a9084df6720",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-path-traversal-security.sh": {
+    "mtime": 1778528542.209721,
+    "ast_hash": "f7099819ddb949d8b1828b7208234934",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/_zipper-cli.sh": {
+    "mtime": 1778529176.2140706,
+    "ast_hash": "fefd2b18659c6b78f83d7dcad1f364f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-column-profile-empty-pct.sh": {
+    "mtime": 1779616928.4047482,
+    "ast_hash": "8c7d648169aaff72b1492d744cf34c43",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-bates-numbering.sh": {
+    "mtime": 1778528542.2209163,
+    "ast_hash": "d870a593cea2f6b8695c66232c4bc871",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/run-tests-optimized.sh": {
+    "mtime": 1778529176.2150705,
+    "ast_hash": "e971650f1802a568e0b797a31faa53ee",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-unified-workflow.sh": {
+    "mtime": 1778528542.2422547,
+    "ast_hash": "39f1b7e6bc4418ed8dbb2c81dda76341",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-cli-coverage-gaps.sh": {
+    "mtime": 1778640065.6191146,
+    "ast_hash": "3b232fb9990d38b62dde76d23cf68465",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/run-e2e-loadfile.sh": {
+    "mtime": 1779616928.4047482,
+    "ast_hash": "80c8435710e6e2ce3d5b20484f635254",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-artifact-handling.sh": {
+    "mtime": 1778528542.2486377,
+    "ast_hash": "008d7402dd0057409e2a72cdca03ab51",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-production-sets.sh": {
+    "mtime": 1778529176.2200704,
+    "ast_hash": "6586b72f0bf8841bebf235a4a7a18690",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-column-profile-builtin-matrix.sh": {
+    "mtime": 1779616928.4047482,
+    "ast_hash": "f09b39e9d78aa3a69ffbd20f0112ffe0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/test-office-formats.sh": {
+    "mtime": 1778529176.2190704,
+    "ast_hash": "55398ce88a5549da3d5a818cab1bcff9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/run-goldens.sh": {
+    "mtime": 1778528542.1446376,
+    "ast_hash": "8b49ac231c78ddad8dde515829e637f7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/lib/chi-square.sh": {
+    "mtime": 1778528542.1491199,
+    "ast_hash": "795a9dfe7e41b3924420674eae3ea796",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/lib/diff-loadfile.sh": {
+    "mtime": 1778528542.1529794,
+    "ast_hash": "b5d46712c574fb479f48fc48b8d82d61",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/lib/validate-properties-json.sh": {
+    "mtime": 1778528542.1556375,
+    "ast_hash": "d880abc778f091d68feeccb29d5a5162",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/lib/sha-manifest.sh": {
+    "mtime": 1778528542.1602416,
+    "ast_hash": "75b8b47a02828a7751d0a440500aaf66",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/xlsx-basic/archive.json": {
+    "mtime": 1779479964.9911687,
+    "ast_hash": "9e17b73928f664f65ae0bd6be12ec6fa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-dat/loadfile_properties.json": {
+    "mtime": 1779479965.2700362,
+    "ast_hash": "234811742848784c9e1f28251a8b96ef",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/jpg-folders-gaussian/archive.json": {
+    "mtime": 1779479961.599148,
+    "ast_hash": "207e65c58d72c9d72d8b19218e2431d1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-full/archive.json": {
+    "mtime": 1779479961.1379225,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/tiff-multipage/archive.json": {
+    "mtime": 1779479962.0424569,
+    "ast_hash": "23923f9c68840e73ae1834e1f0325e16",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-text/archive.json": {
+    "mtime": 1779479960.6484394,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/docx-basic/archive.json": {
+    "mtime": 1779479964.0142508,
+    "ast_hash": "9e17b73928f664f65ae0bd6be12ec6fa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-metadata/archive.json": {
+    "mtime": 1779479960.1876678,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-full/archive.json": {
+    "mtime": 1779479963.0111403,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-attachments/archive.json": {
+    "mtime": 1779479962.4827027,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-opt/loadfile_properties.json": {
+    "mtime": 1779479965.5361512,
+    "ast_hash": "8fb6c08dc8d07fb355aafaa5ff8310f1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-basic/archive.json": {
+    "mtime": 1779479959.754748,
+    "ast_hash": "89a1c998b0b95004584d4fcbc711c515",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/production-set/PRODUCTION/_manifest.json": {
+    "mtime": 1779479991.163595,
+    "ast_hash": "234f827ebfff40eeb0d81e6817484102",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/production-set/PRODUCTION/DATA/loadfile.opt_properties.json": {
+    "mtime": 1779479991.3590956,
+    "ast_hash": "8e792b2a0d90015f7be99bcc1dd004c7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/production-set/PRODUCTION/DATA/loadfile_properties.json": {
+    "mtime": 1779479991.345344,
+    "ast_hash": "eb9c4e8e11310ee3cc640c7d73eee6fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/properties.schema.json": {
+    "mtime": 1777816857.8274612,
+    "ast_hash": "7684bdb6204dbfc58ce382886ea793e0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/target-zip-size-tolerances.json": {
+    "mtime": 1778531840.5510073,
+    "ast_hash": "b526e1ae919f04f0a473cde8b5a087c5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/test-every-kind.json": {
+    "mtime": 1778097235.9893897,
+    "ast_hash": "be15ec054ad0af331bb573f9f0d234e2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/test-empty-pct-20.json": {
+    "mtime": 1778097235.9892323,
+    "ast_hash": "b170bd53b4215721bd8b04403e42d898",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/perf/measure.sh": {
+    "mtime": 1778553495.0031059,
+    "ast_hash": "d2ee1d4c6281e8bd4528a7f62baa7e48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/perf/baselines.json": {
+    "mtime": 1778555646.8255913,
+    "ast_hash": "8514f02d4c8585854e41929d20f4f608",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/stress/stress-30gb-attachments.sh": {
+    "mtime": 1778529176.2170703,
+    "ast_hash": "c2616297e04cfd207c88c35cf7ac2dca",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/stress/stress-10gb-filecount.sh": {
+    "mtime": 1778529176.2160704,
+    "ast_hash": "8a4d654cb3f7898901647f22a245f01c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/stress/stress-large-loadfile.sh": {
+    "mtime": 1778529176.2170703,
+    "ast_hash": "c490341965310af283964d8a402d8390",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/stress/run-stress-tests.sh": {
+    "mtime": 1778528542.235394,
+    "ast_hash": "f80e1d05871e0db1f2251776369edcf2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.config/dotnet-tools.json": {
+    "mtime": 1778529727.9645393,
+    "ast_hash": "2b58fd1ced5fdcc5f6534288dc9785f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.antigravitycli/98386c59-2da9-4371-b6b9-7932895e5936.json": {
+    "mtime": 1779625664.7541955,
+    "ast_hash": "c0e4782a3a907b0ee08ce456b9653d21",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/README.md": {
+    "mtime": 1779226833.1388533,
+    "ast_hash": "61c61e09262c8574ae8c428019a7ee53",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.coderabbit.yaml": {
+    "mtime": 1775622987.7021008,
+    "ast_hash": "1a55e7096d965767e2a1ff62bf9dc51f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/UBIQUITOUS_LANGUAGE.md": {
+    "mtime": 1778582794.4340427,
+    "ast_hash": "bca1f3e8bcbf8b3e5734c00693de45f0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/AGENTS.md": {
+    "mtime": 1779625098.3526697,
+    "ast_hash": "71e1e47d0e86c5ea99b62d2c3643b0f0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/CHANGELOG.md": {
+    "mtime": 1778097235.9839578,
+    "ast_hash": "88e2eeb4aae075ebdd46993a01929d77",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/CLAUDE.md": {
+    "mtime": 1777202710.0898461,
+    "ast_hash": "0dfe8e83471faccde6066815b7a8f3d6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/Requirements.md": {
+    "mtime": 1779616928.4007483,
+    "ast_hash": "045c6de3ad975049fc267dcfcfd813aa",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/commands/nori-init-docs.md": {
+    "mtime": 1771711142.8566122,
+    "ast_hash": "e4d78a5e73837743b121f31308a457a1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/handle-large-tasks/SKILL.md": {
+    "mtime": 1771711142.8056252,
+    "ast_hash": "5d461fb0fdec8aceef1fd8d31becdd6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/autonomous-issue-resolution/SKILL.md": {
+    "mtime": 1778521336.176153,
+    "ast_hash": "366eeb1654807f9ca859bfab9fd7f0ac",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/testing-anti-patterns/SKILL.md": {
+    "mtime": 1778406289.7129548,
+    "ast_hash": "d52417134f6e6dbbaf2b594cf3c01f40",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/root-cause-tracing/SKILL.md": {
+    "mtime": 1778406289.7117534,
+    "ast_hash": "3045f8bd6624fb16967f707ed9542337",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/writing-plans/SKILL.md": {
+    "mtime": 1771711142.829746,
+    "ast_hash": "0559458924f5455bace2eab8a5e58c3d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/creating-debug-tests-and-iterating/SKILL.md": {
+    "mtime": 1771711142.800233,
+    "ast_hash": "19af9327907eed777211c604afd83b2b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/systematic-debugging/SKILL.md": {
+    "mtime": 1778406289.7124066,
+    "ast_hash": "1e5bc33e1884c29f820826ff38ec0a80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/using-git-worktrees/SKILL.md": {
+    "mtime": 1771711142.82061,
+    "ast_hash": "61e9fcb249e22ebe703bb3e4c1f08c3d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/skills/test-driven-development/SKILL.md": {
+    "mtime": 1778406289.712711,
+    "ast_hash": "82a04bcbc93093fc414944419509aef5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-code-reviewer.md": {
+    "mtime": 1771711142.8586252,
+    "ast_hash": "5c29d86e7969fef2b9d7408ecb0c8b6a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-codebase-locator.md": {
+    "mtime": 1771711142.8606253,
+    "ast_hash": "b03b9bf35d5c1b0087f09a85cdb017b4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-codebase-analyzer.md": {
+    "mtime": 1771711142.859625,
+    "ast_hash": "dfa3c35fc7c3f7d2f7eb8d9ebe326cf9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-web-search-researcher.md": {
+    "mtime": 1771711142.8616252,
+    "ast_hash": "407bd093500c70617dc62e185b45ce88",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-change-documenter.md": {
+    "mtime": 1778405726.8906758,
+    "ast_hash": "107e73ab5525774f8a91fec8f1cc5b58",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-codebase-pattern-finder.md": {
+    "mtime": 1771711142.8606253,
+    "ast_hash": "ffc576dd5d88176aa68a6fd37043b350",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.claude/agents/nori-initial-documenter.md": {
+    "mtime": 1778405739.2137003,
+    "ast_hash": "1253997dc4cfe75bda877087fbe45b8b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.kiro/skills/github-issue-workflow/SKILL.md": {
+    "mtime": 1778646713.9622808,
+    "ast_hash": "3fdf47f583c50238bce48bd80026549f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/SECURITY.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "7f52ed346edf95413a63d4303bfed8e0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/README.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "81b66c58df7ac31878035a846a2eda60",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/ARCHITECTURE.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "8f19a0313d4012123f39bb72f286db86",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/AGENTS.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "f07b9404a71a45b783c9ebe550db4459",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/CHANGELOG.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "29ae2931d269520aeb76207c11ef17e8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/README.md": {
+    "mtime": 1779224760.6537793,
+    "ast_hash": "6ff08dd64ccef57058fcb850df7ed536",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/GRAPH_REPORT.md": {
+    "mtime": 1779224760.6534038,
+    "ast_hash": "5573a6537adda124a4f3dfa319b4b917",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/review.md": {
+    "mtime": 1779224760.654144,
+    "ast_hash": "1ff38ab46526bddae260b6c524bb507a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/README.md": {
+    "mtime": 1779224760.6521652,
+    "ast_hash": "97830758f1c4c54f010a9ff976f625d7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/architecture.md": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "45d939d3f3f0b6ed071f159f2470d96f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/example/raw/notes.md": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "1d54a92e595b7a3ed0ac5aa948a0f935",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/README.md": {
+    "mtime": 1779224760.6525676,
+    "ast_hash": "55efb26bf30d3e3538ae09cc4896c09e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/GRAPH_REPORT.md": {
+    "mtime": 1779224760.6523015,
+    "ast_hash": "f0b3ddfd3f35ca7126db7c10563af9f3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/httpx/review.md": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "4cb710d1f8770c465eb263d63b36bf69",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/karpathy-repos/README.md": {
+    "mtime": 1779224760.6534038,
+    "ast_hash": "7dcd5db4d3b535fd61c00d8cee99566c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/karpathy-repos/GRAPH_REPORT.md": {
+    "mtime": 1779224760.6529768,
+    "ast_hash": "2d0b4f3371b3f58e54c88225c82b9402",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/karpathy-repos/review.md": {
+    "mtime": 1779224760.6534038,
+    "ast_hash": "0978e0bd396d642a4db24ccb92f17d6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/README.md": {
+    "mtime": 1779224760.654545,
+    "ast_hash": "6cf597e9c172b846257c0330c3f6d642",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/GRAPH_REPORT.md": {
+    "mtime": 1779224760.654144,
+    "ast_hash": "ed7f19bc62d5628ad51b59a55a985147",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/graph.html": {
+    "mtime": 1779224760.6570387,
+    "ast_hash": "ff7fd9d83bfb901b6096d8e4a24298a2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/rsl-siege-manager/review.md": {
+    "mtime": 1779224760.6610386,
+    "ast_hash": "55b3cbd1666150735213f71ac8ddca87",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-trae.md": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "e2cf2928df63013fec9b89b24aa77b21",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill.md": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "d03bd3b98c97110ec2dd0abc1b8dd654",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-claw.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "cb40efafec0a307db43b92c58a9e4c84",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-codex.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "68fa7d8195f3f92476fe0a1ec808a054",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-vscode.md": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "71f0a6f0cedfc4e68f588a0d66368b03",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-droid.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "931d2aee57cabb349a58c991b98f4b73",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-windows.md": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "9e59689c14f1a006f314436e5eb833b7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-opencode.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "70ca49d1133520c44ef174322b1a7ce4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-kiro.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "a5e446d0b79feb7f17da1a4cc884f2eb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-aider.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "d74a8348201854da7724a6ed32fe4c22",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-copilot.md": {
+    "mtime": 1779224760.6440384,
+    "ast_hash": "494b99a3d0fb956bba299071c2084060",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/graphify/skill-pi.md": {
+    "mtime": 1779224760.6450386,
+    "ast_hash": "96f4ff8c751cab5d210cc2cacf7926dd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/.github/FUNDING.yml": {
+    "mtime": 1779224760.636379,
+    "ast_hash": "6cbc649204a1574ea7143f8147a4fb2e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/.github/workflows/ci.yml": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "f4e4eaaaf35ac00e6f4b05683a9ac883",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/how-it-works.md": {
+    "mtime": 1779224760.637877,
+    "ast_hash": "53644f34497e3aa15aa0a19e66ba840a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/docker-mcp-sqlite.md": {
+    "mtime": 1779224760.636964,
+    "ast_hash": "97f57f05955e2e8636c59658c22ab8f3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/superpowers/plans/2026-05-04-incremental-updates-dedup.md": {
+    "mtime": 1779224760.638048,
+    "ast_hash": "406850f6e314f4e027fa94fb8fead3b7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/superpowers/specs/2026-05-04-incremental-updates-dedup-design.md": {
+    "mtime": 1779224760.638048,
+    "ast_hash": "47f54fcf05613642ca88b77988c777a6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.pl-PL.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "8cfffe0acb529d72ab6d82a6bdd160f5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.zh-TW.md": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "bd749c7afbe9d6908ff9f9a223549fd4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.th-TH.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "42ae341c141a837415d99aa86d11f146",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.nl-NL.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "e1f61ba2c29244a51ec75032cd51471c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.es-ES.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "ec6a9a35f10b6081a0b3d3da1a2eb28b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.ja-JP.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "9d86adad69083a57f9cbf547a728de49",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.ru-RU.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "7564b310305bc7bf89b22e1bea4790ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.sv-SE.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "89daf6196ace6f4a5eda42a35f0817e3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.ko-KR.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "09486308eec2a500071aafb8dfe2ed01",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.pt-BR.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "ac97e4d275149676f89614c7bb4aaa85",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.da-DK.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "c7ae424dc04163d24c272564c5968f8f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.no-NO.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "c59672be0d18e8b2a66f537195a3c335",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.fi-FI.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "862557249ce0f10a0c6c53c157c6f6ae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.id-ID.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "00757295392f7a6492881c53a1fd126c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.tr-TR.md": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "d158e80878a9c759c8679dbcb2606ea9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.ar-SA.md": {
+    "mtime": 1779224760.638048,
+    "ast_hash": "c3e193b6b65efad66a68db47f72d808d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.it-IT.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "381de4145f1eeda64a6d8fa1e8c4650b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.cs-CZ.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "8f2c3b3e6daa8c7f00d8f08332dec5c9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.zh-CN.md": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "c1b95d1ece4708f99403dd14a6fde778",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.hi-IN.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "dd613593793944f3db0628ad19d99bdd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.hu-HU.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "663d11c6dcfc4f31addac795c664a427",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.el-GR.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "f7022aed3517672e0055ad316d77800d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.vi-VN.md": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "e2f4ea044cf69f5ade5ba5da2ae40c24",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.de-DE.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "1b1224354beee099d6c836d2e7530e8f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.fr-FR.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "c757d4657a68478d63e861931eb6412d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.uk-UA.md": {
+    "mtime": 1779224760.6390386,
+    "ast_hash": "19a311c1f79079143570faf3596c46fe",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/translations/README.ro-RO.md": {
+    "mtime": 1779224760.6384592,
+    "ast_hash": "53d1e4502297270bd5c8571c480e51ad",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/sample.md": {
+    "mtime": 1779224760.6479304,
+    "ast_hash": "0743d4fee74f186429cbb16fd311f8ed",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/tests/fixtures/deploy_guide.md": {
+    "mtime": 1779224760.6477113,
+    "ast_hash": "de6e51ec8ba81d1c16a53657cfe17396",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.agents/rules/antigravity-rtk-rules.md": {
+    "mtime": 1777202710.0898461,
+    "ast_hash": "deaea76da3af6227ae9fbbc63416d7cf",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.agents/rules/graphify.md": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "f1e53ecc9194573d3c28fc116c743a2e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.agents/workflows/graphify.md": {
+    "mtime": 1779633724.5357215,
+    "ast_hash": "afa1ffc01aa56ac681c7335686f44767",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/bin/Release/net8.0/publish/ThirdPartyNotices.txt": {
+    "mtime": 1776762794.0,
+    "ast_hash": "e3169e88398973942e40bc47212c51d5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Debug/net8.0/Zipper.Tests.csproj.FileListAbsolute.txt": {
+    "mtime": 1779624636.92599,
+    "ast_hash": "71774e65e83d68c27f2954ab70378b8e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/Zipper.Tests.csproj.FileListAbsolute.txt": {
+    "mtime": 1776837219.882611,
+    "ast_hash": "fe8b2f4758bed71af0d360c6499b6231",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/PublishOutputs.ac591760d7.txt": {
+    "mtime": 1777872998.1944318,
+    "ast_hash": "b089bd292f76afe9241d86bc8c7d125e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/PublishOutputs.67f9107d58.txt": {
+    "mtime": 1777095620.4587464,
+    "ast_hash": "e0055ce1f5288c0cc13ae0381e119cb7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Tests/obj/Release/net8.0/PublishOutputs.b28afbc132.txt": {
+    "mtime": 1779430559.4291215,
+    "ast_hash": "1836772c1fa3d7cf7f5272403cff9661",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Debug/net8.0/Zipper.csproj.FileListAbsolute.txt": {
+    "mtime": 1777870072.5716875,
+    "ast_hash": "371aafa58f2dc8a9d1f143507a171184",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/Zipper.csproj.FileListAbsolute.txt": {
+    "mtime": 1776837216.864621,
+    "ast_hash": "104a126fbd0d7184f195c5293b89445c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/PublishOutputs.1be7d1f9b0.txt": {
+    "mtime": 1778562156.9946935,
+    "ast_hash": "eab0735243d22cd3a7e203e4e2e3b5f2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/PublishOutputs.ac591760d7.txt": {
+    "mtime": 1777872994.277444,
+    "ast_hash": "0a64d940574fca038e2004a505e8591b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/PublishOutputs.4b54cec2a9.txt": {
+    "mtime": 1777699410.5518115,
+    "ast_hash": "222c12eff8c62555df452669c1cd3c82",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/PublishOutputs.b28afbc132.txt": {
+    "mtime": 1779647171.943227,
+    "ast_hash": "bf6489c368fb60245240aa0f98bea4d7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/obj/Release/net8.0/linux-x64/Zipper.csproj.FileListAbsolute.txt": {
+    "mtime": 1777095618.4087539,
+    "ast_hash": "0cfbbf1c751b204049e778caf597bd72",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Debug/netstandard2.0/Zipper.Analyzers.csproj.FileListAbsolute.txt": {
+    "mtime": 1777870070.8976934,
+    "ast_hash": "17263194096971694d26cdb7c81d8ed4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/PublishOutputs.ac591760d7.txt": {
+    "mtime": 1777872989.9194577,
+    "ast_hash": "6ffd928a5b662db24b96494254259c3c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/Zipper.Analyzers.csproj.FileListAbsolute.txt": {
+    "mtime": 1777870236.4271076,
+    "ast_hash": "32fae54705fcdd91de4b716e7b82b3d6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/PublishOutputs.b28afbc132.txt": {
+    "mtime": 1779430552.090558,
+    "ast_hash": "8ae466dcc61f638a922f962a27a014e1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.csproj.FileListAbsolute.txt": {
+    "mtime": 1779225892.6696005,
+    "ast_hash": "ba3970d7d609f18075fc9cdffe836a59",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/PublishOutputs.ac591760d7.txt": {
+    "mtime": 1777872991.2494535,
+    "ast_hash": "c7fbf2c97f701c30218713af976fd7c0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/PublishOutputs.b28afbc132.txt": {
+    "mtime": 1779430558.4800916,
+    "ast_hash": "9687bfc7d4a2c74f38faa995563ba5f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.csproj.FileListAbsolute.txt": {
+    "mtime": 1779430557.6939976,
+    "ast_hash": "a4386d203966e4c3de72bc63e10d7775",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/Readme.txt": {
+    "mtime": 1776706938.0,
+    "ast_hash": "522a8125974b0488c1623fed7a92acd1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/LICENSE.txt": {
+    "mtime": 1776706938.0,
+    "ast_hash": "84c6b0ddb7a1efa0d6c17ffdafab35ee",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/Readme.md": {
+    "mtime": 1776706938.0,
+    "ast_hash": "8acc0c199de940f77c414746f83e0669",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/dependabot.yml": {
+    "mtime": 1779620948.2409186,
+    "ast_hash": "ed5cbd5711ae046ef439d8638338e839",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/hooks/README.md": {
+    "mtime": 1776882813.454426,
+    "ast_hash": "ef370d36d102bda8f12d138b39d1c225",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/workflows/perf-baseline-refresh.yml": {
+    "mtime": 1779225884.361626,
+    "ast_hash": "d0cbe5515c855c766d7e5e9251ff6bc5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/workflows/pr.yml": {
+    "mtime": 1779647549.345221,
+    "ast_hash": "e61ea021384d1046edbfaee553ba186d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/workflows/build-and-test.yml": {
+    "mtime": 1779634223.2274141,
+    "ast_hash": "edf2b44f15e27ebc33206bde4298ab13",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/workflows/perf-guard.yml": {
+    "mtime": 1779225884.361626,
+    "ast_hash": "fa093a275f1a92070d2db45c81ce4965",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/refactor/2026-05-arch-pass.md": {
+    "mtime": 1778646215.284004,
+    "ast_hash": "abac7b966ae89ebdb160dfbc0429a2e5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/adr/ADR-0006-three-mode-pipeline.md": {
+    "mtime": 1778646215.284004,
+    "ast_hash": "26134afba930211faecdf3d8f4ffac62",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/adr/ADR-0005-email-aggregate.md": {
+    "mtime": 1778646215.284004,
+    "ast_hash": "eb61edda305c1fbb892ca704f9a44a8b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/adr/ADR-0004-unified-column-generation.md": {
+    "mtime": 1778646215.283004,
+    "ast_hash": "04631c5772fc4acbaa0be664fad8670d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/README.md": {
+    "mtime": 1777796962.1334565,
+    "ast_hash": "99c15d1f1c5db0d9c749a71184207d1c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/xlsx-basic/sha-manifest.txt": {
+    "mtime": 1779479964.9786544,
+    "ast_hash": "a9b2bdb1453c14615462897ac64acfae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/xlsx-basic/tree.txt": {
+    "mtime": 1779479964.9636543,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-dat/sha-manifest.txt": {
+    "mtime": 1779616928.4037483,
+    "ast_hash": "189fc24e8d02dbc69a225af7586e6db6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-dat/tree.txt": {
+    "mtime": 1779479965.2376537,
+    "ast_hash": "d1f802f0c7763672613543c759d96a86",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/jpg-folders-gaussian/sha-manifest.txt": {
+    "mtime": 1779479961.584662,
+    "ast_hash": "6039dbc9e9ef7ae90a8fdb292e2d99a3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/jpg-folders-gaussian/tree.txt": {
+    "mtime": 1779479961.5256622,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-full/sha-manifest.txt": {
+    "mtime": 1779479961.124663,
+    "ast_hash": "db090379bfd5733eb199e8f2ce35c063",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-full/tree.txt": {
+    "mtime": 1779479961.0996633,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/tiff-multipage/sha-manifest.txt": {
+    "mtime": 1779479962.027661,
+    "ast_hash": "945b39455d43ae8e51201b26468a8f8b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/tiff-multipage/tree.txt": {
+    "mtime": 1779479962.0106611,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-text/sha-manifest.txt": {
+    "mtime": 1779479960.6336641,
+    "ast_hash": "6742f4ee5a9329af98bef8510b6786f1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-text/tree.txt": {
+    "mtime": 1779479960.6146643,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/docx-basic/sha-manifest.txt": {
+    "mtime": 1779479964.0006566,
+    "ast_hash": "bf6c458ee4713f4370feec8bdbe04698",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/docx-basic/tree.txt": {
+    "mtime": 1779479963.9866567,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-metadata/sha-manifest.txt": {
+    "mtime": 1779479960.1736653,
+    "ast_hash": "08468c54834b9f10f779c392e58e4bcb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-metadata/tree.txt": {
+    "mtime": 1779479960.1566653,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-full/sha-manifest.txt": {
+    "mtime": 1779479962.9936588,
+    "ast_hash": "0225fd7bb47d619ee99897e6fbb5b6dd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-full/tree.txt": {
+    "mtime": 1779479962.975659,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-attachments/sha-manifest.txt": {
+    "mtime": 1779479962.46966,
+    "ast_hash": "0789e383ce5de5fc7ac8c2eff1823795",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/eml-attachments/tree.txt": {
+    "mtime": 1779479962.4486601,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-opt/sha-manifest.txt": {
+    "mtime": 1779616928.4047482,
+    "ast_hash": "d8acb148e07d0f85e19862e606b07288",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/loadfile-only-opt/tree.txt": {
+    "mtime": 1779479965.506653,
+    "ast_hash": "98d5d1209d849fbbea7ff4a003fde3cb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-basic/sha-manifest.txt": {
+    "mtime": 1779479959.7366662,
+    "ast_hash": "342b0b0b7f20759c4bcf2be500e17b78",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/pdf-basic/tree.txt": {
+    "mtime": 1779479959.7196662,
+    "ast_hash": "5b60f2ac5aea510c91cf1d53b9646692",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/production-set/sha-manifest.txt": {
+    "mtime": 1779479991.114595,
+    "ast_hash": "5edbeb5c51cf8aabb22d50ae3e4b9fe9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/goldens/fixtures/production-set/tree.txt": {
+    "mtime": 1779479966.0121489,
+    "ast_hash": "2fb09deb1946d2e90ce90f87c5e69013",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/chaos-scenarios.txt": {
+    "mtime": 1777816857.8274612,
+    "ast_hash": "0bec8a75a04b3690c7db60fbfbc9cfe6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/chaos-anomaly-types.txt": {
+    "mtime": 1777816857.8261807,
+    "ast_hash": "9f339d8e75406d6314efb5ea31c9322e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/expected-headers/litigation.txt": {
+    "mtime": 1778097235.9887877,
+    "ast_hash": "8e9eca5f741158249f06005d17f4ee67",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/expected-headers/standard.txt": {
+    "mtime": 1778097235.989084,
+    "ast_hash": "89c24a55877ca7713572a23df621a678",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/expected-headers/full.txt": {
+    "mtime": 1778097235.9886367,
+    "ast_hash": "97af02b8af39fc560a86661f11829010",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/fixtures/profiles/expected-headers/minimal.txt": {
+    "mtime": 1778097235.9889288,
+    "ast_hash": "3a49051c529bc923f2481f40112b4614",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/perf/README.md": {
+    "mtime": 1778553495.002462,
+    "ast_hash": "1a3e57aaea2a71014c7fed03f55ca00b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/tests/stress/README.md": {
+    "mtime": 1762670801.2092094,
+    "ast_hash": "d8a9c6652e8546cefa8759138bed7ebb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/documents/Work/Zipper/orchestrator-design-2026-05.md": {
+    "mtime": 1778645862.2451,
+    "ast_hash": "983fb2d2665b1f56e508a22fdb6bc305",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/worked/mixed-corpus/raw/attention_notes.md": {
+    "mtime": 1779224760.654144,
+    "ast_hash": "9d6a5c77396725c564a2db7e850a2c8e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/logo-icon.svg": {
+    "mtime": 1779224760.637877,
+    "ast_hash": "d599ecc974285c70dbf5d4fc53d9632e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/graphify_audit/docs/logo-text.svg": {
+    "mtime": 1779224760.637877,
+    "ast_hash": "7dbb208e36d257cae7848dc804291733",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.dotnet-tools/.nuget/packages/dotnet-reportgenerator-globaltool/5.5.6/icon.png": {
+    "mtime": 1776706938.0,
+    "ast_hash": "a56f9edf6f4e292bb5f7f3dcf12803f1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/assets/dist.png": {
+    "mtime": 1775622987.7031147,
+    "ast_hash": "88927d2b6e8039aa9f9d32946d304c07",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260522_220030.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "5da924ebecf7ef2e667787cb7efd0849",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260522_053120.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "a43656cf940017a09443642621d5d09d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260524_091815.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "a6c47aec21d755640dff01492028970d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260522_075848.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "b48212ea73f34c6376ae20f201f9265e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260521_222051.dat_properties.json": {
+    "mtime": 1779633724.5337214,
+    "ast_hash": "923e208e1ecbbb067435eaa18ae1498c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260524_084401.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "9be36e93de8dd44f0f117035ec1f41e9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260522_075656.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "f1af0b4971484959ed21b415b19a8e67",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260522_054245.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "443963628aad8ef0cab604d43aa14f48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260524_092925.dat_properties.json": {
+    "mtime": 1779633724.5347216,
+    "ast_hash": "4fb086d13c4ecf66544a56024ef5bfbd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/qa-results/skill-updates.json": {
+    "mtime": 1779633725.0347202,
+    "ast_hash": "8b3f054227ed05a84c1d5c35199daf88",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.factory/skills/qa/SKILL.md": {
+    "mtime": 1779627645.375803,
+    "ast_hash": "867cd220bd88235dcc3b4dd0b5cebe7d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.factory/skills/qa/.install-progress.yaml": {
+    "mtime": 1779627645.3753836,
+    "ast_hash": "b593d61c6f7f9afffcbc9377375ed89a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.factory/skills/qa/config.yaml": {
+    "mtime": 1779627645.375803,
+    "ast_hash": "350652553ee3bcb90f367c6169970370",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.factory/skills/qa/REPORT-TEMPLATE.md": {
+    "mtime": 1779627645.375803,
+    "ast_hash": "c2917c592dfb9e4e8724939924cfa7b1",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.factory/skills/qa-cli/SKILL.md": {
+    "mtime": 1779627645.3753836,
+    "ast_hash": "8b69cb3f9ceb04e564ab250f24e68605",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/pull_request_template.md": {
+    "mtime": 1779621851.5498376,
+    "ast_hash": "125ff23738e52dfd5f93eee928e8ea41",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/ISSUE_TEMPLATE/bug.md": {
+    "mtime": 1779621851.5486379,
+    "ast_hash": "5a66424abac0012accd51f62b4aa31af",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/.github/ISSUE_TEMPLATE/feature.md": {
+    "mtime": 1779621851.5498376,
+    "ast_hash": "e8960c05a9a6fe4e89dc2ab8ba871020",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/architecture.md": {
+    "mtime": 1779621851.5498376,
+    "ast_hash": "b625ffd8dfd14893d1fa69b826396d03",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/docs/dependency-policy.md": {
+    "mtime": 1779621851.5498376,
+    "ast_hash": "15ed0ae00af07cf5fc34a7f2048e4232",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/qa-results/report.md": {
+    "mtime": 1779633725.0337203,
+    "ast_hash": "2489977bfcc021e0ae78c2f61f4df368",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/..\\mixed\\path/archive_20260524_225851.dat_properties.json": {
+    "mtime": 1779656331.833367,
+    "ast_hash": "6164c598c0617008741dccd53c0ea1ff",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/bates-numbering/test4/archive_20260524_225830.dat_properties.json": {
+    "mtime": 1779656311.1493876,
+    "ast_hash": "7ceff74055ad6da50db403ff45ad7025",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/bates-numbering/test1/archive_20260524_225829.dat_properties.json": {
+    "mtime": 1779656309.6963892,
+    "ast_hash": "a5c05ccefc3682af2172bec76f8ec0ae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/bates-numbering/test3/archive_20260524_225830.dat_properties.json": {
+    "mtime": 1779656310.2973886,
+    "ast_hash": "7ceff74055ad6da50db403ff45ad7025",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/bates-numbering/test2/archive_20260524_225829.dat_properties.json": {
+    "mtime": 1779656310.0013888,
+    "ast_hash": "b868042ff33e704e1e732cf9eb0f83fc",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/_manifest.json": {
+    "mtime": 1779656311.4933872,
+    "ast_hash": "75fe31e890fe161d0dede31548c87542",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/DATA/loadfile.opt_properties.json": {
+    "mtime": 1779656311.4703875,
+    "ast_hash": "0914db17be9744e74e2394f3a111753a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/DATA/loadfile_properties.json": {
+    "mtime": 1779656311.4653873,
+    "ast_hash": "0b53659b9e55dff8f5b6e230dd8c6f1c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/_manifest.json": {
+    "mtime": 1779656311.803387,
+    "ast_hash": "30285045486e4fbd4ac9019234d5e7fb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/DATA/loadfile.opt_properties.json": {
+    "mtime": 1779656311.792387,
+    "ast_hash": "b711b6f1478c50c5b1c83fc229ee4a6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/DATA/loadfile_properties.json": {
+    "mtime": 1779656311.786387,
+    "ast_hash": "1f1880cec3e23acf8af5e3877f449db0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test5a/archive_20260524_225833.dat_properties.json": {
+    "mtime": 1779656313.714385,
+    "ast_hash": "618a362d1c7b819402ca8b42a0db625e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test5b/archive_20260524_225833.dat_properties.json": {
+    "mtime": 1779656314.0213847,
+    "ast_hash": "618a362d1c7b819402ca8b42a0db625e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test4/archive_20260524_225833.dat_properties.json": {
+    "mtime": 1779656313.3583856,
+    "ast_hash": "a64113bb59eab5cdf5ec1c944a86143c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test1/archive_20260524_225831.dat_properties.json": {
+    "mtime": 1779656312.1293867,
+    "ast_hash": "f3de3e9f4e4b001a1b73db96f16926ac",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test3/archive_20260524_225832.dat_properties.json": {
+    "mtime": 1779656312.932386,
+    "ast_hash": "38fe23cb1802104ae643239ec2a9cb6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/multipage-tiff/test2/archive_20260524_225832.dat_properties.json": {
+    "mtime": 1779656312.4853864,
+    "ast_hash": "38fe23cb1802104ae643239ec2a9cb6b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/target-zip-size/10MB_100_pdf/archive_20260524_225956.dat_properties.json": {
+    "mtime": 1779656397.1203024,
+    "ast_hash": "e6b8acef533af5a4a79d372ebf48b219",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/target-zip-size/100MB_500_tiff/archive_20260524_230024.dat_properties.json": {
+    "mtime": 1779656427.3872724,
+    "ast_hash": "169feae9eb9b35847fe9ef16db82a9ec",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/target-zip-size/100MB_500_eml/archive_20260524_230013.dat_properties.json": {
+    "mtime": 1779656416.545283,
+    "ast_hash": "8f925b6f16d9520d6c083f334b26f0c4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/target-zip-size/100MB_1000_pdf/archive_20260524_225958.dat_properties.json": {
+    "mtime": 1779656401.2212982,
+    "ast_hash": "966c9e054f7765269562e9dbcf268235",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-custom-kinds/run1/loadfile_20260524_225953_properties.json": {
+    "mtime": 1779656393.7583058,
+    "ast_hash": "add6584be6198ec99a7f2db2329b6702",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-custom-kinds/run2/loadfile_20260524_225954_properties.json": {
+    "mtime": 1779656394.1353054,
+    "ast_hash": "f8bc42beca856496a8535239875c7f61",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_eml_seed42/loadfile_20260524_225941_properties.json": {
+    "mtime": 1779656382.0063174,
+    "ast_hash": "0d4d8c625ba62bba75e67d00c2c80846",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_docx_seed1337/loadfile_20260524_225940_properties.json": {
+    "mtime": 1779656380.283319,
+    "ast_hash": "d0aedb155f564f603452d48c2a4bd602",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_docx_seed42/loadfile_20260524_225947_properties.json": {
+    "mtime": 1779656387.518312,
+    "ast_hash": "435a05bed90272000853aeee67182b80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_pdf_seed42/loadfile_20260524_225937_properties.json": {
+    "mtime": 1779656377.6753216,
+    "ast_hash": "c53d8778d49f1ffb98d9643bd3979cb4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_docx_seed42/loadfile_20260524_225951_properties.json": {
+    "mtime": 1779656391.8883076,
+    "ast_hash": "a992a508f7345cefea62c8d886d72fc0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_xlsx_seed1337/loadfile_20260524_225953_properties.json": {
+    "mtime": 1779656393.366306,
+    "ast_hash": "94271feb299947ec6b631e8f9d1a4ac8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_docx_seed42/loadfile_20260524_225939_properties.json": {
+    "mtime": 1779656379.8243196,
+    "ast_hash": "8123d1a3a53713c44527e120014ab16c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_eml_seed42_rerun/loadfile_20260524_225942_properties.json": {
+    "mtime": 1779656382.2493172,
+    "ast_hash": "22eec5ed3d7b6bb0beef2d719b98b18c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_xlsx_seed42_rerun/loadfile_20260524_225948_properties.json": {
+    "mtime": 1779656388.6443107,
+    "ast_hash": "eb4bc526a6d1ff0db915ead34213b1d2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_tiff_seed1337/loadfile_20260524_225939_properties.json": {
+    "mtime": 1779656379.5843198,
+    "ast_hash": "8123d1a3a53713c44527e120014ab16c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_tiff_seed42/loadfile_20260524_225946_properties.json": {
+    "mtime": 1779656386.6513128,
+    "ast_hash": "b9eec2214822419684ecfd206c5b9714",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_xlsx_seed42_rerun/loadfile_20260524_225940_properties.json": {
+    "mtime": 1779656380.7773187,
+    "ast_hash": "d0aedb155f564f603452d48c2a4bd602",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_docx_seed42/loadfile_20260524_225943_properties.json": {
+    "mtime": 1779656383.482316,
+    "ast_hash": "02b20aa82f22fe207271053c6aa41073",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_pdf_seed1337/loadfile_20260524_225938_properties.json": {
+    "mtime": 1779656378.162321,
+    "ast_hash": "82df737184f3e293407036a08c46bc04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_xlsx_seed1337/loadfile_20260524_225948_properties.json": {
+    "mtime": 1779656388.8563106,
+    "ast_hash": "eb4bc526a6d1ff0db915ead34213b1d2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_pdf_seed42/loadfile_20260524_225941_properties.json": {
+    "mtime": 1779656381.247318,
+    "ast_hash": "0d4d8c625ba62bba75e67d00c2c80846",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_tiff_seed42/loadfile_20260524_225939_properties.json": {
+    "mtime": 1779656379.1043203,
+    "ast_hash": "8123d1a3a53713c44527e120014ab16c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_eml_seed42_rerun/loadfile_20260524_225950_properties.json": {
+    "mtime": 1779656390.3993092,
+    "ast_hash": "a1005d466cb091938cb228d7ce857020",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_xlsx_seed42_rerun/loadfile_20260524_225944_properties.json": {
+    "mtime": 1779656384.489315,
+    "ast_hash": "e3117f88034024e4281c59baab2bd40f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_eml_seed42_rerun/loadfile_20260524_225938_properties.json": {
+    "mtime": 1779656378.6533208,
+    "ast_hash": "82df737184f3e293407036a08c46bc04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_tiff_seed42_rerun/loadfile_20260524_225939_properties.json": {
+    "mtime": 1779656379.35732,
+    "ast_hash": "8123d1a3a53713c44527e120014ab16c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_docx_seed1337/loadfile_20260524_225947_properties.json": {
+    "mtime": 1779656388.0323114,
+    "ast_hash": "435a05bed90272000853aeee67182b80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_pdf_seed1337/loadfile_20260524_225945_properties.json": {
+    "mtime": 1779656385.527314,
+    "ast_hash": "28f274f4415391568a041b3f764f72bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_pdf_seed42/loadfile_20260524_225944_properties.json": {
+    "mtime": 1779656385.0073144,
+    "ast_hash": "e3117f88034024e4281c59baab2bd40f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_eml_seed42/loadfile_20260524_225938_properties.json": {
+    "mtime": 1779656378.400321,
+    "ast_hash": "82df737184f3e293407036a08c46bc04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_xlsx_seed42_rerun/loadfile_20260524_225952_properties.json": {
+    "mtime": 1779656393.1063063,
+    "ast_hash": "55b059131e0fbdd10894cbe43f062e48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_pdf_seed1337/loadfile_20260524_225941_properties.json": {
+    "mtime": 1779656381.7153177,
+    "ast_hash": "0d4d8c625ba62bba75e67d00c2c80846",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_xlsx_seed42/loadfile_20260524_225944_properties.json": {
+    "mtime": 1779656384.2393153,
+    "ast_hash": "e3117f88034024e4281c59baab2bd40f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_pdf_seed42_rerun/loadfile_20260524_225937_properties.json": {
+    "mtime": 1779656377.9203215,
+    "ast_hash": "c53d8778d49f1ffb98d9643bd3979cb4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_pdf_seed1337/loadfile_20260524_225949_properties.json": {
+    "mtime": 1779656389.7543097,
+    "ast_hash": "aa61ad9c4ae7b561ba66d927eee9850a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_docx_seed42_rerun/loadfile_20260524_225943_properties.json": {
+    "mtime": 1779656383.7423158,
+    "ast_hash": "02b20aa82f22fe207271053c6aa41073",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_eml_seed1337/loadfile_20260524_225950_properties.json": {
+    "mtime": 1779656390.636309,
+    "ast_hash": "a1005d466cb091938cb228d7ce857020",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_xlsx_seed42/loadfile_20260524_225948_properties.json": {
+    "mtime": 1779656388.3483112,
+    "ast_hash": "eb4bc526a6d1ff0db915ead34213b1d2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_xlsx_seed1337/loadfile_20260524_225944_properties.json": {
+    "mtime": 1779656384.6943147,
+    "ast_hash": "e3117f88034024e4281c59baab2bd40f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_docx_seed42_rerun/loadfile_20260524_225947_properties.json": {
+    "mtime": 1779656387.8033116,
+    "ast_hash": "435a05bed90272000853aeee67182b80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_tiff_seed42/loadfile_20260524_225942_properties.json": {
+    "mtime": 1779656382.7513165,
+    "ast_hash": "22eec5ed3d7b6bb0beef2d719b98b18c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_docx_seed42_rerun/loadfile_20260524_225952_properties.json": {
+    "mtime": 1779656392.2103074,
+    "ast_hash": "55b059131e0fbdd10894cbe43f062e48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_tiff_seed1337/loadfile_20260524_225951_properties.json": {
+    "mtime": 1779656391.5653079,
+    "ast_hash": "a992a508f7345cefea62c8d886d72fc0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_eml_seed42/loadfile_20260524_225945_properties.json": {
+    "mtime": 1779656385.8183136,
+    "ast_hash": "28f274f4415391568a041b3f764f72bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_eml_seed42/loadfile_20260524_225949_properties.json": {
+    "mtime": 1779656390.0793095,
+    "ast_hash": "aa61ad9c4ae7b561ba66d927eee9850a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_tiff_seed1337/loadfile_20260524_225943_properties.json": {
+    "mtime": 1779656383.2363162,
+    "ast_hash": "02b20aa82f22fe207271053c6aa41073",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_tiff_seed42_rerun/loadfile_20260524_225942_properties.json": {
+    "mtime": 1779656383.0213163,
+    "ast_hash": "22eec5ed3d7b6bb0beef2d719b98b18c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_tiff_seed42_rerun/loadfile_20260524_225951_properties.json": {
+    "mtime": 1779656391.279308,
+    "ast_hash": "a992a508f7345cefea62c8d886d72fc0",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_eml_seed1337/loadfile_20260524_225938_properties.json": {
+    "mtime": 1779656378.8583205,
+    "ast_hash": "82df737184f3e293407036a08c46bc04",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_pdf_seed42_rerun/loadfile_20260524_225949_properties.json": {
+    "mtime": 1779656389.49731,
+    "ast_hash": "aa61ad9c4ae7b561ba66d927eee9850a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_xlsx_seed42/loadfile_20260524_225952_properties.json": {
+    "mtime": 1779656392.8213067,
+    "ast_hash": "55b059131e0fbdd10894cbe43f062e48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_eml_seed1337/loadfile_20260524_225946_properties.json": {
+    "mtime": 1779656386.3343132,
+    "ast_hash": "b9eec2214822419684ecfd206c5b9714",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_pdf_seed42/loadfile_20260524_225949_properties.json": {
+    "mtime": 1779656389.1783102,
+    "ast_hash": "aa61ad9c4ae7b561ba66d927eee9850a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_eml_seed1337/loadfile_20260524_225942_properties.json": {
+    "mtime": 1779656382.473317,
+    "ast_hash": "22eec5ed3d7b6bb0beef2d719b98b18c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_pdf_seed42_rerun/loadfile_20260524_225941_properties.json": {
+    "mtime": 1779656381.508318,
+    "ast_hash": "0d4d8c625ba62bba75e67d00c2c80846",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_pdf_seed42_rerun/loadfile_20260524_225945_properties.json": {
+    "mtime": 1779656385.2913141,
+    "ast_hash": "28f274f4415391568a041b3f764f72bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_eml_seed42_rerun/loadfile_20260524_225945_properties.json": {
+    "mtime": 1779656386.0903134,
+    "ast_hash": "28f274f4415391568a041b3f764f72bd",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_xlsx_seed42/loadfile_20260524_225940_properties.json": {
+    "mtime": 1779656380.5383189,
+    "ast_hash": "d0aedb155f564f603452d48c2a4bd602",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_tiff_seed42_rerun/loadfile_20260524_225946_properties.json": {
+    "mtime": 1779656386.9423125,
+    "ast_hash": "b9eec2214822419684ecfd206c5b9714",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_docx_seed1337/loadfile_20260524_225952_properties.json": {
+    "mtime": 1779656392.482307,
+    "ast_hash": "55b059131e0fbdd10894cbe43f062e48",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_docx_seed42_rerun/loadfile_20260524_225939_properties.json": {
+    "mtime": 1779656380.0623193,
+    "ast_hash": "8123d1a3a53713c44527e120014ab16c",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/litigation_tiff_seed1337/loadfile_20260524_225947_properties.json": {
+    "mtime": 1779656387.1813123,
+    "ast_hash": "435a05bed90272000853aeee67182b80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/full_tiff_seed42/loadfile_20260524_225950_properties.json": {
+    "mtime": 1779656390.9463086,
+    "ast_hash": "a1005d466cb091938cb228d7ce857020",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/standard_docx_seed1337/loadfile_20260524_225943_properties.json": {
+    "mtime": 1779656383.9673154,
+    "ast_hash": "02b20aa82f22fe207271053c6aa41073",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-matrix/minimal_xlsx_seed1337/loadfile_20260524_225940_properties.json": {
+    "mtime": 1779656380.9633183,
+    "ast_hash": "d0aedb155f564f603452d48c2a4bd602",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test4/archive_20260524_225842.dat_properties.json": {
+    "mtime": 1779656322.8603761,
+    "ast_hash": "678f42fb6cb7a8b5cfec21b28b59cf74",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test1/archive_20260524_225841.opt_properties.json": {
+    "mtime": 1779656321.970377,
+    "ast_hash": "ad306d7a3f99f6dba0961501a218f95e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test6_xml/archive_20260524_225844.xml_properties.json": {
+    "mtime": 1779656324.2493746,
+    "ast_hash": "e985b9d70c0d684adedff3e13f1191ef",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test6_opt/archive_20260524_225843.opt_properties.json": {
+    "mtime": 1779656323.6873753,
+    "ast_hash": "a9242973f29129eda972662e3841186a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test5/archive_20260524_225843.dat_properties.json": {
+    "mtime": 1779656323.1293757,
+    "ast_hash": "00eb30029f162c2b852dfddec9480a07",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test9/archive_20260524_225845.dat_properties.json": {
+    "mtime": 1779656325.4303734,
+    "ast_hash": "2bc4503c5b49e6e02ac2a300bc79644e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test3/archive_20260524_225842.xml_properties.json": {
+    "mtime": 1779656322.5633764,
+    "ast_hash": "2c60c175e71b7112bb9590e27eef68cb",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test8/archive_20260524_225845.dat_properties.json": {
+    "mtime": 1779656325.104374,
+    "ast_hash": "5a7a4abfb838f42883d4a873f65e42ef",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test7/archive_20260524_225844.dat_properties.json": {
+    "mtime": 1779656324.820374,
+    "ast_hash": "f91f06e80e83e3953e41b9a7e0a5daa3",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test6_csv/archive_20260524_225843.csv_properties.json": {
+    "mtime": 1779656323.952375,
+    "ast_hash": "e47c3c1806b702a7d3cf0ca576f7a0c8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test6_concordance/archive_20260524_225844.dat_properties.json": {
+    "mtime": 1779656324.5153744,
+    "ast_hash": "df9a7085ced5028297ec5dd4f19410f6",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test2/archive_20260524_225842.csv_properties.json": {
+    "mtime": 1779656322.2663767,
+    "ast_hash": "5a4a68090cb82151ecccc53041185df2",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/load-file-formats/test6_dat/archive_20260524_225843.dat_properties.json": {
+    "mtime": 1779656323.4173756,
+    "ast_hash": "ccbaae265573b255a5a43dfaa9cd8ea5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct20_seed1337/loadfile_20260524_225955_properties.json": {
+    "mtime": 1779656395.2553043,
+    "ast_hash": "d67adf843781fa540aa1582945aa98db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct10/loadfile_20260524_225956_properties.json": {
+    "mtime": 1779656396.0923035,
+    "ast_hash": "7b87310ae0727a25a52b0f33dc02406d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct100/loadfile_20260524_225955_properties.json": {
+    "mtime": 1779656395.8073037,
+    "ast_hash": "d67adf843781fa540aa1582945aa98db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct20_seed42/loadfile_20260524_225954_properties.json": {
+    "mtime": 1779656394.688305,
+    "ast_hash": "f35bafb2683d9697dd6fc61a0d16f82f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct20_seed99/loadfile_20260524_225954_properties.json": {
+    "mtime": 1779656394.9753046,
+    "ast_hash": "f35bafb2683d9697dd6fc61a0d16f82f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct0/loadfile_20260524_225955_properties.json": {
+    "mtime": 1779656395.535304,
+    "ast_hash": "d67adf843781fa540aa1582945aa98db",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct50/loadfile_20260524_225956_properties.json": {
+    "mtime": 1779656396.398303,
+    "ast_hash": "7b87310ae0727a25a52b0f33dc02406d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/column-profile-empty-pct/pct20_seed1/loadfile_20260524_225954_properties.json": {
+    "mtime": 1779656394.3923051,
+    "ast_hash": "f35bafb2683d9697dd6fc61a0d16f82f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test4/archive_20260524_225836.dat_properties.json": {
+    "mtime": 1779656317.3913815,
+    "ast_hash": "6b0fcd46e1207c2fe012aa2a4a872c5b",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test1/archive_20260524_225834.dat_properties.json": {
+    "mtime": 1779656314.9343839,
+    "ast_hash": "cdfb8b9212ad593f4d325c3108423975",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test6/archive_20260524_225840.dat_properties.json": {
+    "mtime": 1779656321.6363773,
+    "ast_hash": "0c979d59e79d54680d80a35661445931",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test3/archive_20260524_225835.dat_properties.json": {
+    "mtime": 1779656316.5953822,
+    "ast_hash": "3bcf6648140f109e2ed15a3874f898f5",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test5_opt/archive_20260524_225838.opt_properties.json": {
+    "mtime": 1779656319.0433798,
+    "ast_hash": "87b6c26bfac1fea3cc7c0ee614293525",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test5_dat/archive_20260524_225837.dat_properties.json": {
+    "mtime": 1779656318.2213807,
+    "ast_hash": "5aeeba46542e12ba1783f26a36ebcc80",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test5_xml/archive_20260524_225840.xml_properties.json": {
+    "mtime": 1779656320.7433782,
+    "ast_hash": "dfb5cf94879cf55de7ab98bc983d696a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test5_csv/archive_20260524_225839.csv_properties.json": {
+    "mtime": 1779656319.907379,
+    "ast_hash": "a34aa8cb2b6fb0f8dfa79729f548e0e4",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/office-formats/test2/archive_20260524_225835.dat_properties.json": {
+    "mtime": 1779656315.7993832,
+    "ast_hash": "16661b57f85649c34a3aaf2af1b3e0bf",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL004/PROD00000010.txt": {
+    "mtime": 1779656311.3923874,
+    "ast_hash": "54433777862d22ed6d6067656f06eec8",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL001/PROD00000003.txt": {
+    "mtime": 1779656311.3893874,
+    "ast_hash": "004f628b7df6ef73465c28071c24442e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL001/PROD00000002.txt": {
+    "mtime": 1779656311.3883874,
+    "ast_hash": "37b32800dfec71cb3153250e74396715",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL001/PROD00000001.txt": {
+    "mtime": 1779656311.3873875,
+    "ast_hash": "0835d0ef607b0e931b19cb8f6a50f682",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL002/PROD00000006.txt": {
+    "mtime": 1779656311.3903875,
+    "ast_hash": "27cf787200bbfbe2320639e0a7c71ab7",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL002/PROD00000004.txt": {
+    "mtime": 1779656311.3893874,
+    "ast_hash": "b922b99dfb4af23c7fab5b7890eea9a9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL002/PROD00000005.txt": {
+    "mtime": 1779656311.3903875,
+    "ast_hash": "1b39741bb76db742f618d1d7447588ce",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL003/PROD00000009.txt": {
+    "mtime": 1779656311.3913875,
+    "ast_hash": "50ff415ba3aa2fb5bab17bd1dd9ff3ae",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL003/PROD00000007.txt": {
+    "mtime": 1779656311.3913875,
+    "ast_hash": "edce553bcf5ee88a39bc1fddf36f5928",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/TEXT/VOL003/PROD00000008.txt": {
+    "mtime": 1779656311.3913875,
+    "ast_hash": "f3b68bd0287a2663557127b95ec3133f",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/TEXT/VOL001/ZIP00000003.txt": {
+    "mtime": 1779656311.732387,
+    "ast_hash": "0c088127563935240d8ffe13e6ebc91a",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/TEXT/VOL001/ZIP00000002.txt": {
+    "mtime": 1779656311.7313871,
+    "ast_hash": "12e6959096cb5b064b831ddec68d0d28",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/TEXT/VOL001/ZIP00000005.txt": {
+    "mtime": 1779656311.732387,
+    "ast_hash": "5639fd1688cc29742e118d5aabbe521d",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/TEXT/VOL001/ZIP00000004.txt": {
+    "mtime": 1779656311.732387,
+    "ast_hash": "d960012b859e5af01548cc415e276a2e",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/TEXT/VOL001/ZIP00000001.txt": {
+    "mtime": 1779656311.7303872,
+    "ast_hash": "f34cc6bf8b5637b65f2046bf29820262",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL004/PROD00000010.pdf": {
+    "mtime": 1779656311.3923874,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL001/PROD00000001.pdf": {
+    "mtime": 1779656311.3823874,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL001/PROD00000002.pdf": {
+    "mtime": 1779656311.3883874,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL001/PROD00000003.pdf": {
+    "mtime": 1779656311.3893874,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL002/PROD00000004.pdf": {
+    "mtime": 1779656311.3893874,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL002/PROD00000006.pdf": {
+    "mtime": 1779656311.3903875,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL002/PROD00000005.pdf": {
+    "mtime": 1779656311.3903875,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL003/PROD00000007.pdf": {
+    "mtime": 1779656311.3903875,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL003/PROD00000009.pdf": {
+    "mtime": 1779656311.3913875,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test1/PRODUCTION_20260524_225831/NATIVES/VOL003/PROD00000008.pdf": {
+    "mtime": 1779656311.3913875,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/NATIVES/VOL001/ZIP00000001.pdf": {
+    "mtime": 1779656311.7273872,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/NATIVES/VOL001/ZIP00000002.pdf": {
+    "mtime": 1779656311.7313871,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/NATIVES/VOL001/ZIP00000003.pdf": {
+    "mtime": 1779656311.7313871,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/NATIVES/VOL001/ZIP00000005.pdf": {
+    "mtime": 1779656311.732387,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  },
+  "/home/dom/Downloads/repos/zipper/results/production-sets/test2/PRODUCTION_20260524_225831/NATIVES/VOL001/ZIP00000004.pdf": {
+    "mtime": 1779656311.732387,
+    "ast_hash": "9c331b6f558aa870d0914e60d5455dc9",
+    "semantic_hash": ""
+  }
+}

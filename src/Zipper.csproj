@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -30,6 +30,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.8" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.27" />
   </ItemGroup>
 
   <ItemGroup>

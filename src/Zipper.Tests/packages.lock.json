@@ -105,6 +105,11 @@
         "resolved": "18.5.1",
         "contentHash": "vMFDR1ZjqzzgKmM0zrPie7Gv9Y+ZppjODB5Quzu9Eq0TlIusUfUCYFPEawO91zQuqwzvdFbJSU7WHNtjStffJQ=="
       },
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Transitive",
+        "resolved": "8.0.27",
+        "contentHash": "rQi9TxifHRnXP7lVRZH05DxD2/XGbJp12q0ozcbrlBlBnyyzssFTH/2vLhtKWUp2CT1qVscTrcYTFiwTyKPKRg=="
+      },
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
         "resolved": "18.5.1",
@@ -210,6 +215,7 @@
         "dependencies": {
           "ClosedXML": "[0.105.0, )",
           "DocumentFormat.OpenXml": "[3.5.1, )",
+          "Microsoft.NET.ILLink.Tasks": "[8.0.27, )",
           "SixLabors.ImageSharp": "[3.1.12, )",
           "System.Text.Encoding.CodePages": "[10.0.8, )"
         }

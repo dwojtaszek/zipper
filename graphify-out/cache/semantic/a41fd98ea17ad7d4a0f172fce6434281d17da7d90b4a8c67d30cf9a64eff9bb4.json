@@ -1,0 +1,1 @@
+{"nodes": [{"id": "tiff_config", "label": "TiffConfig", "file_type": "code", "source_file": "src/Config/TiffConfig.cs"}], "edges": [{"source": "tiff_config", "target": "output_config", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "src/Config/TiffConfig.cs"}], "hyperedges": []}

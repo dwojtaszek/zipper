@@ -1,0 +1,1 @@
+{"nodes": [{"id": "output_config", "label": "OutputConfig", "file_type": "code", "source_file": "src/Config/OutputConfig.cs"}], "edges": [{"source": "output_config", "target": "performance_constants", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "src/Config/OutputConfig.cs"}], "hyperedges": []}

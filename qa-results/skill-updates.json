@@ -1,0 +1,8 @@
+[
+  {
+    "file": ".factory/skills/qa-cli/SKILL.md",
+    "section": "Known Failure Modes",
+    "action": "append",
+    "content": "7. **_properties.json filename is prefixed.** The audit file is named `<prefix>_properties.json` (e.g., `loadfile_20260524_144110_properties.json` or `archive_20260524_144110_properties.json`), not just `_properties.json`. Use `find $OUT -name '*_properties.json'` to discover it rather than a hardcoded path."
+  }
+]

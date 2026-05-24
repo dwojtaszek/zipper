@@ -1,0 +1,53 @@
+You are a graphify extraction subagent. Read the files listed and extract a knowledge graph fragment.
+Output ONLY valid JSON matching the schema below - no explanation, no markdown fences, no preamble.
+
+Files (chunk 09 of 12):
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers/obj/Release/netstandard2.0/.NETStandard,Version=v2.0.AssemblyAttributes.cs
+/home/dom/Downloads/repos/zipper/src/Config/ChaosConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/MetadataConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/OutputConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/TiffConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/ProductionConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/LoadFileConfig.cs
+/home/dom/Downloads/repos/zipper/src/Config/DelimiterConfig.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/FgrFlatAccessAnalyzerTests.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Debug/net8.0/Zipper.Analyzers.Tests.runtimeconfig.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Debug/net8.0/Zipper.Analyzers.Tests.deps.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Release/net8.0/Zipper.Analyzers.Tests.runtimeconfig.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/bin/Release/net8.0/Zipper.Analyzers.Tests.deps.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/project.assets.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Zipper.Analyzers.Tests.csproj.nuget.dgspec.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.AssemblyInfo.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.sourcelink.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/Zipper.Analyzers.Tests.GlobalUsings.g.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Debug/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.AssemblyInfo.cs
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.sourcelink.json
+/home/dom/Downloads/repos/zipper/src/Zipper.Analyzers.Tests/obj/Release/net8.0/Zipper.Analyzers.Tests.GlobalUsings.g.cs
+
+Rules:
+- EXTRACTED: relationship explicit in source (import, call, citation, "see §3.2")
+- INFERRED: reasonable inference (shared data structure, implied dependency)
+- AMBIGUOUS: uncertain - flag for review, do not omit
+
+Code files: focus on semantic edges AST cannot find (call relationships, shared data, arch patterns).
+  Do not re-extract imports - AST already has those.
+Doc/paper files: extract named concepts, entities, citations. For rationale (WHY decisions were made, trade-offs, design intent): store as a `rationale` attribute on the relevant concept node. Use `file_type:"rationale"` for concept-like nodes (ideas, principles, mechanisms, design patterns). `file_type` MUST be one of exactly: `code`, `document`, `paper`, `image`, `rationale`, `concept`.
+Code files: when adding `calls` edges, source MUST be the caller, target MUST be the callee. Never reverse.
+
+Semantic similarity: if two concepts in this chunk solve same problem without structural link, add `semantically_similar_to` edge marked INFERRED with confidence_score 0.6-0.95.
+
+Hyperedges: if 3+ nodes participate in shared concept/flow/pattern not captured by pairwise edges, add hyperedge. Max 3 per chunk.
+
+confidence_score REQUIRED on every edge:
+- EXTRACTED: 1.0
+- INFERRED: 0.95, 0.85, 0.75, 0.65, or 0.55 (never 0.5)
+- AMBIGUOUS: 0.1-0.3
+
+Node ID format: lowercase, only `[a-z0-9_]`, no dots/slashes. Format `{parent_dir}_{filename}_{entity}`. CRITICAL: never append chunk numbers or suffixes to IDs.
+
+Schema:
+{"nodes":[{"id":"...","label":"...","file_type":"code|document|paper|image|rationale|concept","source_file":"relative/path","source_location":null,"source_url":null,"captured_at":null,"author":null,"contributor":null}],"edges":[{"source":"...","target":"...","relation":"calls|implements|references|cites|conceptually_related_to|shares_data_with|semantically_similar_to|rationale_for","confidence":"EXTRACTED|INFERRED|AMBIGUOUS","confidence_score":1.0,"source_file":"relative/path","source_location":null,"weight":1.0}],"hyperedges":[{"id":"...","label":"...","nodes":["..."],"relation":"participate_in|implement|form","confidence":"EXTRACTED|INFERRED","confidence_score":0.75,"source_file":"relative/path"}],"input_tokens":0,"output_tokens":0}
+
+Write the JSON to disk using the Write tool at this exact absolute path:
+/home/dom/Downloads/repos/zipper/graphify-out/.graphify_chunk_09.json
