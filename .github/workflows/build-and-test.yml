@@ -45,7 +45,7 @@ jobs:
             VERSION="$major.$minor.$NEW_PATCH-dev"
             echo "Version from bump: $VERSION (latest tag: $LATEST_TAG)"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   lint:
     needs: prepare
@@ -215,7 +215,7 @@ jobs:
 
           git tag "$NEW_TAG"
           git push origin "$NEW_TAG"
-          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         if: steps.tag_step.outputs.tag != ''

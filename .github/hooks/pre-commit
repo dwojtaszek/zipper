@@ -80,6 +80,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+
 # ──────────────────────────────────────────────────
 # 2. dotnet format — scoped to staged C# files only
 # ──────────────────────────────────────────────────
