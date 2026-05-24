@@ -12,6 +12,10 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);SA0001;EnableGenerateDocumentationFile</NoWarn>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Test isolation: parallelize across test classes by default -->
+    <ParallelizeTestCollections>true</ParallelizeTestCollections>
+    <!-- Test performance: emit detailed timing via JUnit logger -->
+    <VSTestResultsDirectory>$(MSBuildProjectDirectory)/TestResults</VSTestResultsDirectory>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +38,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="JunitXml.TestLogger" Version="4.1.0" />
   </ItemGroup>
 
   <ItemGroup>
