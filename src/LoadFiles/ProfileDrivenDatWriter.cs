@@ -48,84 +48,117 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
 
         if (chaosEngine == null)
         {
-            var preamble = encoding.GetPreamble();
-            if (preamble.Length > 0)
-            {
-                await stream.WriteAsync(preamble, 0, preamble.Length);
-            }
-
-            await stream.WriteAsync(encoding.GetBytes(header + eolString));
-
-            var fileType = request.Output.FileTypeLower;
-            var buffer = new StringBuilder();
-
-            for (long i = 1; i <= request.Output.FileCount; i++)
-            {
-                var folderNum = (int)((i - 1) % 50) + 1;
-                var workItem = new FileWorkItem
-                {
-                    Index = i,
-                    FolderNumber = folderNum,
-                    FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-                };
-
-                var fileData = new FileData
-                {
-                    WorkItem = workItem,
-                    DataLength = rowRandom.Next(1024, 10_485_760),
-                    PageCount = rowRandom.Next(1, 11),
-                };
-
-                var values = generator.GenerateRow(workItem, fileData);
-                var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
-                buffer.Append(line);
-                buffer.Append(eolString);
-
-                if (buffer.Length > 200_000)
-                {
-                    await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                    buffer.Clear();
-                }
-            }
-
-            if (buffer.Length > 0)
-            {
-                await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-            }
+            await this.WriteWithoutChaosAsync(stream, request, encoding, eolString, colDelim, quote, hasQuote, generator, columnNames, header, rowRandom);
         }
         else
         {
-            var rows = new List<(long LineNumber, string RecordId, string Line)>();
-            rows.Add((1, "HEADER", header));
-
-            var fileType = request.Output.FileTypeLower;
-            for (long i = 1; i <= request.Output.FileCount; i++)
-            {
-                long lineNumber = i + 1;
-                var recordId = $"DOC{i:D8}";
-
-                var folderNum = (int)((i - 1) % 50) + 1;
-                var workItem = new FileWorkItem
-                {
-                    Index = i,
-                    FolderNumber = folderNum,
-                    FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
-                };
-
-                var fileData = new FileData
-                {
-                    WorkItem = workItem,
-                    DataLength = rowRandom.Next(1024, 10_485_760),
-                    PageCount = rowRandom.Next(1, 11),
-                };
-
-                var values = generator.GenerateRow(workItem, fileData);
-                var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
-                rows.Add((lineNumber, recordId, line));
-            }
-
-            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
+            await this.WriteWithChaosAsync(stream, request, encoding, eolString, colDelim, quote, hasQuote, generator, columnNames, header, rowRandom, chaosEngine);
         }
+    }
+
+    private async Task WriteWithoutChaosAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        Encoding encoding,
+        string eolString,
+        char colDelim,
+        char quote,
+        bool hasQuote,
+        DataGenerator generator,
+        List<string> columnNames,
+        string header,
+        Random rowRandom)
+    {
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await stream.WriteAsync(preamble, 0, preamble.Length);
+        }
+
+        await stream.WriteAsync(encoding.GetBytes(header + eolString));
+
+        var fileType = request.Output.FileTypeLower;
+        var buffer = new StringBuilder();
+
+        for (long i = 1; i <= request.Output.FileCount; i++)
+        {
+            var folderNum = (int)((i - 1) % 50) + 1;
+            var workItem = new FileWorkItem
+            {
+                Index = i,
+                FolderNumber = folderNum,
+                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+            };
+
+            var fileData = new FileData
+            {
+                WorkItem = workItem,
+                DataLength = rowRandom.Next(1024, 10_485_760),
+                PageCount = rowRandom.Next(1, 11),
+            };
+
+            var values = generator.GenerateRow(workItem, fileData);
+            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+            buffer.Append(line);
+            buffer.Append(eolString);
+
+            if (buffer.Length > 200_000)
+            {
+                await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+                buffer.Clear();
+            }
+        }
+
+        if (buffer.Length > 0)
+        {
+            await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+        }
+    }
+
+    private async Task WriteWithChaosAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        Encoding encoding,
+        string eolString,
+        char colDelim,
+        char quote,
+        bool hasQuote,
+        DataGenerator generator,
+        List<string> columnNames,
+        string header,
+        Random rowRandom,
+        ChaosEngine chaosEngine)
+    {
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        rows.Add((1, "HEADER", header));
+
+        var fileType = request.Output.FileTypeLower;
+        for (long i = 1; i <= request.Output.FileCount; i++)
+        {
+            long lineNumber = i + 1;
+            var recordId = $"DOC{i:D8}";
+
+            var folderNum = (int)((i - 1) % 50) + 1;
+            var workItem = new FileWorkItem
+            {
+                Index = i,
+                FolderNumber = folderNum,
+                FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileType}",
+            };
+
+            var fileData = new FileData
+            {
+                WorkItem = workItem,
+                DataLength = rowRandom.Next(1024, 10_485_760),
+                PageCount = rowRandom.Next(1, 11),
+            };
+
+            var values = generator.GenerateRow(workItem, fileData);
+            var line = BuildProfileRow(values, columnNames, colDelim, quote, hasQuote, request.Delimiters.NewlineDelimiter);
+            rows.Add((lineNumber, recordId, line));
+        }
+
+        await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
     }
 
     private static string BuildProfileHeader(
