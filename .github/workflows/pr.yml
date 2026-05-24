@@ -66,8 +66,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: eifinger/actionlint-action@v1.10.2
-        with:
-          actionlint_flags: -shellcheck= .github/workflows/*.yml
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json
