@@ -82,6 +82,7 @@ internal class OptWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var workItem = fileData.WorkItem;
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
 
             // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,FolderBreak,BoxBreak,PageCount
             string batesNumber = request.Bates != null
@@ -99,6 +100,15 @@ internal class OptWriter : LoadFileWriterBase
 
             buffer.AppendLine(line);
             rowCount++;
+
+            if (hasAttachment)
+            {
+                string childBates = $"{batesNumber}_A001";
+                string childImagePath = $"IMAGES\\{childBates}.tif";
+                var childLine = $"{childBates},{volume},{childImagePath},Y,,,{1}";
+                buffer.AppendLine(childLine);
+                rowCount++;
+            }
 
             if (rowCount >= 1000)
             {
@@ -183,8 +193,9 @@ internal class OptWriter : LoadFileWriterBase
         {
             await using var writer = CreateWriter(stream, request);
 
-            foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
+            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
+                var workItem = fileData.WorkItem;
                 var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
                 var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                     .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
@@ -194,6 +205,15 @@ internal class OptWriter : LoadFileWriterBase
                 var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,,1";
 
                 await writer.WriteAsync(line + eol);
+
+                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+                if (hasAttachment)
+                {
+                    var childBates = $"{batesNumber}_A001";
+                    var childImagePath = Path.Combine("IMAGES", workItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+                    var childLine = $"{childBates},{workItem.FolderName},{childImagePath},Y,,,1";
+                    await writer.WriteAsync(childLine + eol);
+                }
             }
 
             await writer.FlushAsync();
@@ -204,18 +224,26 @@ internal class OptWriter : LoadFileWriterBase
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
-        int rowIdx = 0;
-        foreach (var workItem in processedFiles.OrderBy(f => f.WorkItem.Index).Select(f => f.WorkItem))
+        long currentLineNumber = 1;
+        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            long lineNumber = rowIdx + 1; // OPT has no header; first row is line 1
+            var workItem = fileData.WorkItem;
             var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
             var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                 .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
                 .Replace(Path.DirectorySeparatorChar, '\\');
 
             var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,,1";
-            rows.Add((lineNumber, batesNum, optLine));
-            rowIdx++;
+            rows.Add((currentLineNumber++, batesNum, optLine));
+
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+            if (hasAttachment)
+            {
+                var childBates = $"{batesNum}_A001";
+                var childImagePath = Path.Combine("IMAGES", workItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+                var childLine = $"{childBates},{workItem.FolderName},{childImagePath},Y,,,1";
+                rows.Add((currentLineNumber++, childBates, childLine));
+            }
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);

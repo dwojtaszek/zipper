@@ -967,5 +967,113 @@ namespace Zipper
             var content = System.Text.Encoding.GetEncoding(1252).GetString(bytes);
             Assert.Contains("Control Number", content);
         }
+
+        [Fact]
+        public async Task DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows()
+        {
+            var request = this.CreateTestRequest("eml");
+            request.Metadata = request.Metadata with { WithFamilies = true };
+
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/00000001.eml"
+                    },
+                    Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                    DataLength = 100
+                }
+            };
+
+            var writer = new DatWriter();
+            var outputPath = Path.Combine(this.tempDir, "test_families_standard.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // Assert Header + 1 Parent row + 1 Child row = 3 lines
+            Assert.Equal(3, lines.Length);
+
+            // Check that family columns are in header
+            Assert.Contains("BEGATTACH", lines[0]);
+            Assert.Contains("ENDATTACH", lines[0]);
+            Assert.Contains("PARENTDOCID", lines[0]);
+
+            // Parent row assertions (no parent doc id, begattach/endattach cover the family)
+            var parentLine = lines[1];
+            Assert.Contains("DOC00000001", parentLine);
+            Assert.Contains("DOC00000001_A001", parentLine); // ENDATTACH
+
+            // Child row assertions
+            var childLine = lines[2];
+            Assert.Contains("DOC00000001_A001", childLine); // Control Number
+            Assert.Contains("DOC00000001", childLine); // PARENTDOCID
+        }
+
+        [Fact]
+        public async Task DatWriter_WithFamilies_ProductionSetMode_IncludesFamilyColumnsAndRows()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileCount = 1,
+                    FileType = "eml",
+                    OutputPath = this.tempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" }
+            };
+
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST00000001.eml",
+                        FilePathInZip = "NATIVES\\VOL001\\TEST00000001.eml"
+                    },
+                    Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                    DataLength = 100
+                }
+            };
+
+            var writer = new DatWriter(WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, fileData);
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(3, lines.Length);
+            Assert.Contains("BEGATTACH", lines[0]);
+            Assert.Contains("ENDATTACH", lines[0]);
+            Assert.Contains("PARENTDOCID", lines[0]);
+
+            // Parent row
+            Assert.Contains("TEST00000001", lines[1]);
+            Assert.Contains("TEST00000001_A001", lines[1]); // ENDATTACH
+
+            // Child row
+            Assert.Contains("TEST00000001_A001", lines[2]);
+            Assert.Contains("TEST00000001", lines[2]); // PARENTDOCID
+        }
     }
 }

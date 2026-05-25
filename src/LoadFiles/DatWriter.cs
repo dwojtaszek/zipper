@@ -69,9 +69,51 @@ internal class DatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            var line = BuildStandardRow(fileData, request, colDelim, quote, profileValues);
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+
+            string parentId = request.Bates != null
+                ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
+                : $"DOC{fileData.WorkItem.Index:D8}";
+
+            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+            string begAttach = parentId;
+            string endAttach = childId;
+            string parentDocId = string.Empty;
+
+            var line = BuildStandardRow(
+                fileData,
+                request,
+                colDelim,
+                quote,
+                profileValues,
+                begAttach: begAttach,
+                endAttach: endAttach,
+                parentDocId: parentDocId);
+
             buffer.AppendLine(line);
             rowCount++;
+
+            if (hasAttachment)
+            {
+                var attach = fileData.Attachment!.Value;
+                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
+                var childLine = BuildStandardRow(
+                    fileData,
+                    request,
+                    colDelim,
+                    quote,
+                    profileValues,
+                    docIdOverride: childId,
+                    filePathOverride: attachmentPath,
+                    fileSizeOverride: attach.content.Length.ToString(),
+                    isChild: true,
+                    begAttach: begAttach,
+                    endAttach: endAttach,
+                    parentDocId: parentId);
+
+                buffer.AppendLine(childLine);
+                rowCount++;
+            }
 
             if (rowCount >= 1000)
             {
@@ -115,15 +157,53 @@ internal class DatWriter : LoadFileWriterBase
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
         rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote)));
 
-        int rowIdx = 0;
+        long currentLineNumber = 2;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            long lineNumber = rowIdx + 2;
-            var recordId = $"DOC{fileData.WorkItem.Index:D8}";
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            var line = BuildStandardRow(fileData, request, colDelim, quote, profileValues);
-            rows.Add((lineNumber, recordId, line));
-            rowIdx++;
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+
+            string parentId = request.Bates != null
+                ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
+                : $"DOC{fileData.WorkItem.Index:D8}";
+
+            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+            string begAttach = parentId;
+            string endAttach = childId;
+            string parentDocId = string.Empty;
+
+            var line = BuildStandardRow(
+                fileData,
+                request,
+                colDelim,
+                quote,
+                profileValues,
+                begAttach: begAttach,
+                endAttach: endAttach,
+                parentDocId: parentDocId);
+
+            rows.Add((currentLineNumber++, parentId, line));
+
+            if (hasAttachment)
+            {
+                var attach = fileData.Attachment!.Value;
+                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
+                var childLine = BuildStandardRow(
+                    fileData,
+                    request,
+                    colDelim,
+                    quote,
+                    profileValues,
+                    docIdOverride: childId,
+                    filePathOverride: attachmentPath,
+                    fileSizeOverride: attach.content.Length.ToString(),
+                    isChild: true,
+                    begAttach: begAttach,
+                    endAttach: endAttach,
+                    parentDocId: parentId);
+
+                rows.Add((currentLineNumber++, childId, childLine));
+            }
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
@@ -217,7 +297,12 @@ internal class DatWriter : LoadFileWriterBase
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
-        var headers = new[] { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+        var headers = new List<string> { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+        if (request.Metadata.WithFamilies)
+        {
+            headers.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
+        }
+
         var finalHeaders = headers.Select(h => NamingConventionHelper.ApplyConvention(h, namingConvention));
         var headerLine = string.Join(col, finalHeaders.Select(h => $"{quote}{h}{quote}"));
 
@@ -228,8 +313,42 @@ internal class DatWriter : LoadFileWriterBase
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var dataRow = BuildProductionSetRow(fileData, request, col, quote);
+                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+                string parentBates = BatesNumberGenerator.Generate(request.Bates!, fileData.WorkItem.Index - 1);
+                string childBates = hasAttachment ? $"{parentBates}_A001" : parentBates;
+
+                string begAttach = parentBates;
+                string endAttach = childBates;
+                string parentDocId = string.Empty;
+
+                var dataRow = BuildProductionSetRow(fileData, request, col, quote, begAttach: begAttach, endAttach: endAttach, parentDocId: parentDocId);
                 await writer.WriteAsync(dataRow + eol);
+
+                if (hasAttachment)
+                {
+                    var attach = fileData.Attachment!.Value;
+                    var childExt = Path.GetExtension(attach.filename);
+                    var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
+                    var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
+                    var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+
+                    var childRow = BuildProductionSetRow(
+                        fileData,
+                        request,
+                        col,
+                        quote,
+                        batesNumberOverride: childBates,
+                        nativePathOverride: childNativePath,
+                        textPathOverride: childTextPath,
+                        imagePathOverride: childImagePath,
+                        fileSizeOverride: attach.content.Length.ToString(),
+                        isChild: true,
+                        begAttach: begAttach,
+                        endAttach: endAttach,
+                        parentDocId: parentBates);
+
+                    await writer.WriteAsync(childRow + eol);
+                }
             }
 
             await writer.FlushAsync();
@@ -240,30 +359,72 @@ internal class DatWriter : LoadFileWriterBase
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
         rows.Add((1, "HEADER", headerLine));
 
-        int rowIdx = 0;
+        long currentLineNumber = 2;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            long lineNumber = rowIdx + 2;
-            var workItem = fileData.WorkItem;
-            var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+            string parentBates = BatesNumberGenerator.Generate(request.Bates!, fileData.WorkItem.Index - 1);
+            string childBates = hasAttachment ? $"{parentBates}_A001" : parentBates;
 
-            var dataRow = BuildProductionSetRow(fileData, request, col, quote);
-            rows.Add((lineNumber, batesNum, dataRow));
-            rowIdx++;
+            string begAttach = parentBates;
+            string endAttach = childBates;
+            string parentDocId = string.Empty;
+
+            var dataRow = BuildProductionSetRow(fileData, request, col, quote, begAttach: begAttach, endAttach: endAttach, parentDocId: parentDocId);
+            rows.Add((currentLineNumber++, parentBates, dataRow));
+
+            if (hasAttachment)
+            {
+                var attach = fileData.Attachment!.Value;
+                var childExt = Path.GetExtension(attach.filename);
+                var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
+                var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
+                var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+
+                var childRow = BuildProductionSetRow(
+                    fileData,
+                    request,
+                    col,
+                    quote,
+                    batesNumberOverride: childBates,
+                    nativePathOverride: childNativePath,
+                    textPathOverride: childTextPath,
+                    imagePathOverride: childImagePath,
+                    fileSizeOverride: attach.content.Length.ToString(),
+                    isChild: true,
+                    begAttach: begAttach,
+                    endAttach: endAttach,
+                    parentDocId: parentBates);
+
+                rows.Add((currentLineNumber++, childBates, childRow));
+            }
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 
-    private static string BuildProductionSetRow(FileData fileData, FileGenerationRequest request, string col, string quote)
+    private static string BuildProductionSetRow(
+        FileData fileData,
+        FileGenerationRequest request,
+        string col,
+        string quote,
+        string? batesNumberOverride = null,
+        string? nativePathOverride = null,
+        string? textPathOverride = null,
+        string? imagePathOverride = null,
+        string? fileSizeOverride = null,
+        bool isChild = false,
+        string? begAttach = null,
+        string? endAttach = null,
+        string? parentDocId = null)
     {
         var workItem = fileData.WorkItem;
-        var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-        var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+        var batesNumber = batesNumberOverride ?? BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+        var imagePath = imagePathOverride ?? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
             .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
 
-        var nativePath = workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-        var textPath = nativePath.Replace($".{request.Output.FileType}", ".txt");
+        var nativePath = nativePathOverride ?? workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+        var textPath = textPathOverride ?? nativePath.Replace($".{request.Output.FileType}", ".txt");
         var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
@@ -274,7 +435,10 @@ internal class DatWriter : LoadFileWriterBase
         var custodianProd = $"Custodian {random.Next(1, maxCustodians + 1)}";
         var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd");
 
-        var fields = new[]
+        var fileSize = fileSizeOverride ?? fileData.DataLength.ToString();
+        var fileType = isChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : request.Output.FileType.ToUpperInvariant();
+
+        var fields = new List<string>
         {
             batesNumber,
             batesNumber,
@@ -284,9 +448,19 @@ internal class DatWriter : LoadFileWriterBase
             imagesPath,
             custodianProd,
             dateCreated,
-            fileData.DataLength.ToString(),
-            request.Output.FileType.ToUpperInvariant(),
+            fileSize,
+            fileType,
         };
+
+        if (request.Metadata.WithFamilies)
+        {
+            fields.AddRange(new[]
+            {
+                begAttach ?? string.Empty,
+                endAttach ?? string.Empty,
+                parentDocId ?? string.Empty,
+            });
+        }
 
         return string.Join(col, fields.Select(f => $"{quote}{EscapeDatField(f, quote[0], request.Delimiters.NewlineDelimiter)}{quote}"));
     }
@@ -335,6 +509,11 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Extracted Text", namingConvention)}{quote}");
         }
 
+        if (request.Metadata.WithFamilies)
+        {
+            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("BEGATTACH", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("ENDATTACH", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("PARENTDOCID", namingConvention)}{quote}");
+        }
+
         return sb.ToString();
     }
 
@@ -343,50 +522,75 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
-        System.Collections.Generic.Dictionary<string, string>? profileValues)
+        System.Collections.Generic.Dictionary<string, string>? profileValues,
+        string? docIdOverride = null,
+        string? filePathOverride = null,
+        string? fileSizeOverride = null,
+        bool isChild = false,
+        string? begAttach = null,
+        string? endAttach = null,
+        string? parentDocId = null)
     {
         var workItem = fileData.WorkItem;
-        var docId = EscapeDatField($"DOC{workItem.Index:D8}", quote, request.Delimiters.NewlineDelimiter);
+        var docId = docIdOverride ?? EscapeDatField($"DOC{workItem.Index:D8}", quote, request.Delimiters.NewlineDelimiter);
+        var filePath = filePathOverride ?? EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
-        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter)}{quote}");
+        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePath}{quote}");
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var dateSent = profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty;
-            var author = EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var fileSize = profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString();
+            var dateSent = isChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
+            var author = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+            var fileSize = fileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var to = EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var from = EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var subject = EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
-            var sentDate = profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty;
-            var attachment = EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+            var to = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var from = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var subject = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
+            var sentDate = isChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
+            var attachment = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
             sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
         }
 
         if (request.Bates != null)
         {
-            sb.Append($"{colDelim}{quote}{BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)}{quote}");
+            var batesVal = docIdOverride ?? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1);
+            sb.Append($"{colDelim}{quote}{batesVal}{quote}");
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            sb.Append($"{colDelim}{quote}{fileData.PageCount}{quote}");
+            var pageCount = isChild ? 1 : fileData.PageCount;
+            sb.Append($"{colDelim}{quote}{pageCount}{quote}");
         }
 
         if (request.Output.WithText)
         {
-            var sourceSuffix = $".{request.Output.FileType}";
-            var textPath = workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
-                ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
-                : workItem.FilePathInZip;
+            string textPath;
+            if (isChild)
+            {
+                var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment!.Value.filename)}.txt";
+                textPath = $"{workItem.FolderName}/{workItem.Index}_{attachmentTextFileName}";
+            }
+            else
+            {
+                var sourceSuffix = $".{request.Output.FileType}";
+                textPath = workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
+                    ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
+                    : workItem.FilePathInZip;
+            }
+
             sb.Append($"{colDelim}{quote}{textPath}{quote}");
+        }
+
+        if (request.Metadata.WithFamilies)
+        {
+            sb.Append($"{colDelim}{quote}{begAttach ?? string.Empty}{quote}{colDelim}{quote}{endAttach ?? string.Empty}{quote}{colDelim}{quote}{parentDocId ?? string.Empty}{quote}");
         }
 
         return sb.ToString();

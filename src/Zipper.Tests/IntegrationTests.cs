@@ -208,5 +208,43 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public async Task Main_WithEmlFamiliesAndAttachments_ShouldCreateFamilyColumnsAndRows()
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                var args = new[] { "--type", "eml", "--count", "5", "--output-path", tempDir, "--attachment-rate", "100", "--with-families", "--seed", "42" };
+                var result = await Program.Main(args);
+
+                Assert.Equal(0, result);
+
+                var datFile = Directory.GetFiles(tempDir, "*.dat").FirstOrDefault();
+                Assert.NotNull(datFile);
+
+                var content = await File.ReadAllTextAsync(datFile!);
+
+                // Assert family columns are in header
+                var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                Assert.True(lines.Length > 0);
+                var header = lines[0];
+                Assert.Contains("BEGATTACH", header);
+                Assert.Contains("ENDATTACH", header);
+                Assert.Contains("PARENTDOCID", header);
+
+                // Assert there are more rows than emails since there are child attachment rows
+                Assert.True(lines.Length > 6);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, true);
+                }
+            }
+        }
     }
 }
