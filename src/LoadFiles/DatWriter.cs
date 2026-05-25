@@ -86,9 +86,7 @@ internal class DatWriter : LoadFileWriterBase
                 colDelim,
                 quote,
                 profileValues,
-                begAttach: begAttach,
-                endAttach: endAttach,
-                parentDocId: parentDocId);
+                new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
 
             buffer.AppendLine(line);
             rowCount++;
@@ -103,13 +101,16 @@ internal class DatWriter : LoadFileWriterBase
                     colDelim,
                     quote,
                     profileValues,
-                    docIdOverride: childId,
-                    filePathOverride: attachmentPath,
-                    fileSizeOverride: attach.content.Length.ToString(),
-                    isChild: true,
-                    begAttach: begAttach,
-                    endAttach: endAttach,
-                    parentDocId: parentId);
+                    new RowBuildContext
+                    {
+                        IdOverride = childId,
+                        FilePathOverride = attachmentPath,
+                        FileSizeOverride = attach.content.Length.ToString(),
+                        IsChild = true,
+                        BegAttach = begAttach,
+                        EndAttach = endAttach,
+                        ParentDocId = parentId
+                    });
 
                 buffer.AppendLine(childLine);
                 rowCount++;
@@ -178,9 +179,7 @@ internal class DatWriter : LoadFileWriterBase
                 colDelim,
                 quote,
                 profileValues,
-                begAttach: begAttach,
-                endAttach: endAttach,
-                parentDocId: parentDocId);
+                new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
 
             rows.Add((currentLineNumber++, parentId, line));
 
@@ -194,13 +193,16 @@ internal class DatWriter : LoadFileWriterBase
                     colDelim,
                     quote,
                     profileValues,
-                    docIdOverride: childId,
-                    filePathOverride: attachmentPath,
-                    fileSizeOverride: attach.content.Length.ToString(),
-                    isChild: true,
-                    begAttach: begAttach,
-                    endAttach: endAttach,
-                    parentDocId: parentId);
+                    new RowBuildContext
+                    {
+                        IdOverride = childId,
+                        FilePathOverride = attachmentPath,
+                        FileSizeOverride = attach.content.Length.ToString(),
+                        IsChild = true,
+                        BegAttach = begAttach,
+                        EndAttach = endAttach,
+                        ParentDocId = parentId
+                    });
 
                 rows.Add((currentLineNumber++, childId, childLine));
             }
@@ -321,7 +323,7 @@ internal class DatWriter : LoadFileWriterBase
                 string endAttach = childBates;
                 string parentDocId = string.Empty;
 
-                var dataRow = BuildProductionSetRow(fileData, request, col, quote, begAttach: begAttach, endAttach: endAttach, parentDocId: parentDocId);
+                var dataRow = BuildProductionSetRow(fileData, request, col, quote, new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
                 await writer.WriteAsync(dataRow + eol);
 
                 if (hasAttachment)
@@ -337,15 +339,18 @@ internal class DatWriter : LoadFileWriterBase
                         request,
                         col,
                         quote,
-                        batesNumberOverride: childBates,
-                        nativePathOverride: childNativePath,
-                        textPathOverride: childTextPath,
-                        imagePathOverride: childImagePath,
-                        fileSizeOverride: attach.content.Length.ToString(),
-                        isChild: true,
-                        begAttach: begAttach,
-                        endAttach: endAttach,
-                        parentDocId: parentBates);
+                        new RowBuildContext
+                        {
+                            IdOverride = childBates,
+                            NativePathOverride = childNativePath,
+                            TextPathOverride = childTextPath,
+                            ImagePathOverride = childImagePath,
+                            FileSizeOverride = attach.content.Length.ToString(),
+                            IsChild = true,
+                            BegAttach = begAttach,
+                            EndAttach = endAttach,
+                            ParentDocId = parentBates
+                        });
 
                     await writer.WriteAsync(childRow + eol);
                 }
@@ -370,7 +375,7 @@ internal class DatWriter : LoadFileWriterBase
             string endAttach = childBates;
             string parentDocId = string.Empty;
 
-            var dataRow = BuildProductionSetRow(fileData, request, col, quote, begAttach: begAttach, endAttach: endAttach, parentDocId: parentDocId);
+            var dataRow = BuildProductionSetRow(fileData, request, col, quote, new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
             rows.Add((currentLineNumber++, parentBates, dataRow));
 
             if (hasAttachment)
@@ -386,15 +391,18 @@ internal class DatWriter : LoadFileWriterBase
                     request,
                     col,
                     quote,
-                    batesNumberOverride: childBates,
-                    nativePathOverride: childNativePath,
-                    textPathOverride: childTextPath,
-                    imagePathOverride: childImagePath,
-                    fileSizeOverride: attach.content.Length.ToString(),
-                    isChild: true,
-                    begAttach: begAttach,
-                    endAttach: endAttach,
-                    parentDocId: parentBates);
+                    new RowBuildContext
+                    {
+                        IdOverride = childBates,
+                        NativePathOverride = childNativePath,
+                        TextPathOverride = childTextPath,
+                        ImagePathOverride = childImagePath,
+                        FileSizeOverride = attach.content.Length.ToString(),
+                        IsChild = true,
+                        BegAttach = begAttach,
+                        EndAttach = endAttach,
+                        ParentDocId = parentBates
+                    });
 
                 rows.Add((currentLineNumber++, childBates, childRow));
             }
@@ -408,23 +416,15 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         string col,
         string quote,
-        string? batesNumberOverride = null,
-        string? nativePathOverride = null,
-        string? textPathOverride = null,
-        string? imagePathOverride = null,
-        string? fileSizeOverride = null,
-        bool isChild = false,
-        string? begAttach = null,
-        string? endAttach = null,
-        string? parentDocId = null)
+        RowBuildContext context)
     {
         var workItem = fileData.WorkItem;
-        var batesNumber = batesNumberOverride ?? BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-        var imagePath = imagePathOverride ?? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+        var batesNumber = context.IdOverride ?? BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+        var imagePath = context.ImagePathOverride ?? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
             .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif");
 
-        var nativePath = nativePathOverride ?? workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
-        var textPath = textPathOverride ?? nativePath.Replace($".{request.Output.FileType}", ".txt");
+        var nativePath = context.NativePathOverride ?? workItem.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+        var textPath = context.TextPathOverride ?? nativePath.Replace($".{request.Output.FileType}", ".txt");
         var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
 
 #pragma warning disable S2245
@@ -435,8 +435,8 @@ internal class DatWriter : LoadFileWriterBase
         var custodianProd = $"Custodian {random.Next(1, maxCustodians + 1)}";
         var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd");
 
-        var fileSize = fileSizeOverride ?? fileData.DataLength.ToString();
-        var fileType = isChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : request.Output.FileType.ToUpperInvariant();
+        var fileSize = context.FileSizeOverride ?? fileData.DataLength.ToString();
+        var fileType = context.IsChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : request.Output.FileType.ToUpperInvariant();
 
         var fields = new List<string>
         {
@@ -456,9 +456,9 @@ internal class DatWriter : LoadFileWriterBase
         {
             fields.AddRange(new[]
             {
-                begAttach ?? string.Empty,
-                endAttach ?? string.Empty,
-                parentDocId ?? string.Empty,
+                context.BegAttach ?? string.Empty,
+                context.EndAttach ?? string.Empty,
+                context.ParentDocId ?? string.Empty,
             });
         }
 
@@ -523,17 +523,11 @@ internal class DatWriter : LoadFileWriterBase
         char colDelim,
         char quote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
-        string? docIdOverride = null,
-        string? filePathOverride = null,
-        string? fileSizeOverride = null,
-        bool isChild = false,
-        string? begAttach = null,
-        string? endAttach = null,
-        string? parentDocId = null)
+        RowBuildContext context)
     {
         var workItem = fileData.WorkItem;
-        var docId = docIdOverride ?? EscapeDatField($"DOC{workItem.Index:D8}", quote, request.Delimiters.NewlineDelimiter);
-        var filePath = filePathOverride ?? EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter);
+        var docId = context.IdOverride ?? EscapeDatField($"DOC{workItem.Index:D8}", quote, request.Delimiters.NewlineDelimiter);
+        var filePath = context.FilePathOverride ?? EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
         sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePath}{quote}");
@@ -541,38 +535,38 @@ internal class DatWriter : LoadFileWriterBase
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var dateSent = isChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
-            var author = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var fileSize = fileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
+            var dateSent = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
+            var author = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+            var fileSize = context.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
             sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var to = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var from = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var subject = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
-            var sentDate = isChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
-            var attachment = isChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+            var to = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var from = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+            var subject = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
+            var sentDate = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
+            var attachment = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
             sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
         }
 
         if (request.Bates != null)
         {
-            var batesVal = docIdOverride ?? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1);
+            var batesVal = context.IdOverride ?? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1);
             sb.Append($"{colDelim}{quote}{batesVal}{quote}");
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            var pageCount = isChild ? 1 : fileData.PageCount;
+            var pageCount = context.IsChild ? 1 : fileData.PageCount;
             sb.Append($"{colDelim}{quote}{pageCount}{quote}");
         }
 
         if (request.Output.WithText)
         {
             string textPath;
-            if (isChild)
+            if (context.IsChild)
             {
                 var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment!.Value.filename)}.txt";
                 textPath = $"{workItem.FolderName}/{workItem.Index}_{attachmentTextFileName}";
@@ -590,7 +584,7 @@ internal class DatWriter : LoadFileWriterBase
 
         if (request.Metadata.WithFamilies)
         {
-            sb.Append($"{colDelim}{quote}{begAttach ?? string.Empty}{quote}{colDelim}{quote}{endAttach ?? string.Empty}{quote}{colDelim}{quote}{parentDocId ?? string.Empty}{quote}");
+            sb.Append($"{colDelim}{quote}{context.BegAttach ?? string.Empty}{quote}{colDelim}{quote}{context.EndAttach ?? string.Empty}{quote}{colDelim}{quote}{context.ParentDocId ?? string.Empty}{quote}");
         }
 
         return sb.ToString();
@@ -672,5 +666,28 @@ internal class DatWriter : LoadFileWriterBase
         AppendField(sb, extractedText, quote, hasQuote);
 
         return sb.ToString();
+    }
+
+    private sealed class RowBuildContext
+    {
+        public string? IdOverride { get; init; }
+
+        public string? FilePathOverride { get; init; }
+
+        public string? NativePathOverride { get; init; }
+
+        public string? TextPathOverride { get; init; }
+
+        public string? ImagePathOverride { get; init; }
+
+        public string? FileSizeOverride { get; init; }
+
+        public bool IsChild { get; init; }
+
+        public string? BegAttach { get; init; }
+
+        public string? EndAttach { get; init; }
+
+        public string? ParentDocId { get; init; }
     }
 }
