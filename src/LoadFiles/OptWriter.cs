@@ -278,9 +278,19 @@ internal class OptWriter : LoadFileWriterBase
         bool isProductionSet)
     {
         var workItem = fileData.WorkItem;
-        string batesNumber = isProductionSet
-            ? BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1)
-            : (request.Bates != null ? GenerateBatesNumber(request, workItem) : GenerateDocumentId(workItem));
+        string batesNumber;
+        if (isProductionSet)
+        {
+            batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+        }
+        else if (request.Bates != null)
+        {
+            batesNumber = GenerateBatesNumber(request, workItem);
+        }
+        else
+        {
+            batesNumber = GenerateDocumentId(workItem);
+        }
 
         string volume = isProductionSet ? workItem.FolderName : "VOL001";
 
