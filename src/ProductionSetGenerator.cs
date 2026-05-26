@@ -109,7 +109,28 @@ internal static class ProductionSetGenerator
             {
                 WorkItem = workItem,
                 DataLength = nativeContent.Length,
+                Attachment = generated.Attachment,
+                PageCount = generated.PageCount,
+                Email = generated.Email,
             });
+
+            if (request.Metadata.WithFamilies && request.Output.IsEml && generated.Attachment.HasValue)
+            {
+                var attach = generated.Attachment.Value;
+                var childBates = $"{plan.BatesNumber}_A001";
+                var childExt = Path.GetExtension(attach.filename);
+
+                var childNativeRelPath = Path.Combine("NATIVES", plan.VolumeName, $"{childBates}{childExt}");
+                var childTextRelPath = Path.Combine("TEXT", plan.VolumeName, $"{childBates}.txt");
+                var childImageRelPath = Path.Combine("IMAGES", plan.VolumeName, $"{childBates}.tif");
+
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, childNativeRelPath), attach.content);
+
+                var childTextContent = $"Extracted text for attachment {childBates}.";
+                await File.WriteAllTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding);
+
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff"));
+            }
 
             // Progress reporting
             if ((plan.Index + 1) % 1000 == 0 || plan.Index == request.Output.FileCount - 1)
@@ -120,30 +141,36 @@ internal static class ProductionSetGenerator
 
         Console.WriteLine();
 
+        long totalRecords = fileDataList.Count;
+        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        {
+            totalRecords += fileDataList.Count(f => f.Attachment.HasValue);
+        }
+
         // Write DAT load file — build a fresh ChaosEngine per format (engines are stateful)
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var datWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, LoadFiles.WriterMode.ProductionSet);
-        long datTotalLines = fileDataList.Count + 1; // header + data rows
+        long datTotalLines = totalRecords + 1; // header + data rows
         var datChaosEngine = ChaosEngineBuilder.Build(request, datTotalLines, LoadFileFormat.Dat);
         await using (var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
             await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
         }
 
-        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, fileDataList.Count, datChaosEngine?.Anomalies);
+        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, totalRecords, datChaosEngine?.Anomalies);
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson);
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
         var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
-        long optTotalLines = fileDataList.Count; // OPT has no header row
+        long optTotalLines = totalRecords; // OPT has no header row
         var optChaosEngine = ChaosEngineBuilder.Build(request, optTotalLines, LoadFileFormat.Opt);
         await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
             await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine);
         }
 
-        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, optTotalLines, optChaosEngine?.Anomalies);
+        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, totalRecords, optChaosEngine?.Anomalies);
 
         // Save OPT properties with a slightly different name to avoid overwriting DAT properties
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson);
