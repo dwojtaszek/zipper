@@ -7,6 +7,8 @@
 3. **Surgical changes:** Don't touch adjacent code, match existing style, no drive-by refactors. Output complete files — no placeholders or ellipses.
 4. **Goal-driven execution:** Define verifiable success criteria before starting. Loop until met. Include error handling.
 
+**When Principles conflict, the lower-numbered Principle wins.**
+
 ---
 
 ## Agent Behavior
@@ -16,6 +18,12 @@
 - Flag when you don't know something. Stop and ask for clarification when uncertain.
 - If you disagree, even on gut feeling, say so.
 
+**Push-back examples:**
+- "You asked for a config flag, but this is a single-use case — YAGNI. Here's the simpler alternative."
+- "That refactor touches 12 files but the issue only affects 1. I'll fix just the root cause and note the rest as tech debt."
+- "The test you're asking me to delete covers a real edge case. I'll fix the test instead."
+- "I can't verify this works without running the E2E suite. I'll run it before marking complete."
+
 ### Testing & Debugging
 - NEVER test just mocked behavior. Tests must verify real outcomes.
 - Fix all tests that fail, even if your change didn't break them.
@@ -23,6 +31,28 @@
 - If you cannot find the root cause, stop and compile what you've learned.
 
 **See also:** `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
+
+### When Stuck
+
+If you've spent significant effort without progress, follow this protocol before asking for help:
+
+1. **State what you're trying to do** in one sentence.
+2. **List what you've tried** — approaches, hypotheses, and why each failed.
+3. **Identify the gap** — what specifically is unknown or blocking? (Missing domain knowledge? Unclear requirement? Tool limitation?)
+4. **Propose next steps** — what would you try if you had to continue alone?
+
+Output format:
+
+```
+Goal: <one sentence>
+Tried:
+- <approach 1> → <why it failed>
+- <approach 2> → <why it failed>
+Gap: <what's unknown>
+Next: <what you'd try next>
+```
+
+Do not silently skip blocked work or switch to adjacent tasks. A stuck report is more valuable than a partial solution to the wrong problem.
 
 ---
 
@@ -60,23 +90,21 @@ tests/run-tests.bat    # Windows
 
 ## Critical Rules
 
-### IMPORTANT
-**Domain Language:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all code, comments, documentation, and reviews. Grep the file before writing docs/PRs; flag non-canonical terms in review.
+**When rules conflict, Principles override Critical Rules.** Among Critical Rules, the order below determines priority — higher wins.
 
-### CAUTION
-**Requirement IDs are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
+1. **Domain Language:** Read and follow [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for all code, comments, documentation, and reviews. Grep the file before writing docs/PRs; flag non-canonical terms in review. *Canonical terminology is non-negotiable — even when a non-canonical term seems simpler, Domain Language wins over Simplicity First.*
 
-### CAUTION
-**Test coverage must never decrease.** The only thing worse than a failing test is a reduction in test coverage. Fix failing tests — don't delete them. If a test is wrong, replace it with a correct one covering the same behavior. Never remove test files to make a test run green.
+2. **Requirement IDs are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
 
-### IMPORTANT
-**Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
+3. **Test coverage must not decrease in substance.** Every removed or modified test must be replaced with a test that covers the same or a stricter behavioral contract. If no behavioral contract was being tested (e.g., a test that only asserted line execution), a behavior-coverage replacement is required. Never remove test files to make a test run green. *When this conflicts with Surgical Changes (e.g., fixing a pre-existing failing test requires touching adjacent code), Surgical Changes wins — but flag the conflict.*
+
+4. **Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
 1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
 2. `Requirements.md` — add or revise requirements (never renumber)
 3. `UBIQUITOUS_LANGUAGE.md` — if domain terms change
 4. E2E scripts — both `.sh` and `.bat` for new coverage
 
-Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement.
+Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement. *When this conflicts with Simplicity First (e.g., a trivial code change triggers a 4-doc update cascade), Simplicity First wins — but flag the conflict and note which docs are out of sync.*
 
 ---
 
@@ -91,11 +119,12 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 4. Read the issue body; refresh labels, comments, and linked blockers before coding
 5. Write a failing test first (TDD), then implement the fix
 6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
-7. Run adversarial review before marking work complete (see Adversarial Review section below)
+7. Run adversarial review before marking work complete (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
 8. Commit and create PR
-9. Monitor CI until all checks pass; fix failures before requesting review
-10. Check SonarCloud issues on the PR after CI completes (see SonarCloud & External Checks below). Fix all BLOCKER and MAJOR issues before merge
+9. Monitor CI until all checks pass; fix failures before requesting review. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
+10. Check SonarCloud issues on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge
 11. Address CodeRabbit review comments (blocking issues required, nitpicks optional)
+12. Merge after all checks pass and reviews are addressed
 
 **Test location:** `src/Zipper.Tests/`.
 
@@ -105,42 +134,35 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 
 ## Adversarial Review
 
-Always use a subagent to perform adversarial review.
+Always use a subagent to perform adversarial review before marking work complete. Treat findings as bugs, not suggestions.
 
-**Techniques:**
+**Dispatch format:**
 
-- **Fresh eyes:** "Look at this again with fresh eyes."
-- **Subagent review:** Dispatch a review subagent with no knowledge of how the code was built.
-- **Cross-model:** Use a different, if available, model for review than for coding.
-- **Competition:** Ask two subagents to review the work. Tell them whomever finds the most serious issues gets five points (or a cookie). The reward details don't matter — the competitive framing does.
+```
+Review the changes in <branch/file list> against the original request: <request summary>.
+
+Check all of the following:
+1. Correctness: Does the code do what was asked? Are there edge cases missed?
+2. Spec compliance: Does it match Requirements.md and the issue body exactly?
+3. Side effects: Were any adjacent files, formatting, or unrelated code changed?
+4. Test quality: Do tests verify real behavior, not mocks? Do they cover edge cases?
+5. Security: Any new attack surface, unsafe input handling, or exposed secrets?
+6. Performance: Any new allocations in hot paths? O(n) where O(1) was possible?
+7. Domain language: Are all terms canonical per UBIQUITOUS_LANGUAGE.md?
+
+Be harsh. I'll be disappointed if you don't find at least one significant problem.
+```
+
+**Techniques to increase rigor:**
+- **Cross-model:** Use a different model for review than for coding, if available.
+- **Competition:** Ask two subagents to review; the one that finds the most serious issues wins.
 - **Set expectations:** "I'll be disappointed if they don't find at least N significant problems."
-
-Run adversarial review before marking work as complete. Treat findings as bugs, not suggestions.
 
 ---
 
 ## SonarCloud & External Checks
 
-SonarCloud issues are NOT surfaced as GitHub check failures — fetch manually (no auth required):
-
-```bash
-curl -s "https://sonarcloud.io/api/issues/search?componentKeys=dwojtaszek_zipper&pullRequest=NNN&statuses=OPEN,CONFIRMED&ps=50" | python3 -c "
-import json,sys
-data = json.load(sys.stdin)
-for i in data['issues']:
-    f = i['component'].split(':')[1]
-    print(f'{i[\"severity\"]:10s} {i[\"rule\"]:25s} L{i[\"line\"]:4d}  {f}')
-    print(f'  {i[\"message\"]}')
-    print()
-"
-```
-
-Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`.
-
-- **CodeRabbit**: address blocking issues, nitpicks optional.
-- **factory-droid**: bot infra errors — retry, don't block merge.
-- **CodeQL**: failures block merge — must fix.
-- **Goldens**: `ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture` to regenerate.
+See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedures. Fix all BLOCKER and MAJOR issues before merge.
 
 ---
 
@@ -152,27 +174,27 @@ Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`.
 |------|---------|
 | `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
-| `src/FileGenerationRequest.cs` | Configuration root — 8 sub-configs (`Output`, `Metadata`, `LoadFile`, `Delimiters`, `Bates`, `Tiff`, `Chaos`, `Production`) + `LoadfileOnly` flag. Flat access guarded by `FGR_FLAT_ACCESS` analyzer |
-| `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher (errors → exit codes) |
+| `src/FileGenerationRequest.cs` | Configuration root (8 sub-configs + `LoadfileOnly` flag) |
+| `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher |
 | `src/StandardMode.cs` / `LoadfileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
 | `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
-| `src/ParallelFileGenerator.cs` | Channel-based producer-consumer pipeline (standard mode) |
-| `src/ZipArchiveService.cs` | Archive creation + Load File writing (consumer side) |
-| `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation (DAT/OPT) + Chaos |
+| `src/ParallelFileGenerator.cs` | Standard mode file generation pipeline |
+| `src/ZipArchiveService.cs` | Archive creation + Load File writing |
+| `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
-| `src/ChaosEngine.cs` | Chaos Anomaly injection engine (Floyd's algorithm) |
-| `src/ChaosAnomalyTypes.cs` | Canonical catalog of DAT/OPT anomaly type names |
-| `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning (no I/O) |
+| `src/ChaosEngine.cs` | Chaos anomaly injection |
+| `src/ChaosAnomalyTypes.cs` | Canonical anomaly type catalog |
+| `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning |
 | `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model |
-| `src/LoadFiles/ILoadFileSerializer.cs` | Interface for format-specific record serialization |
-| `src/LoadFiles/DatSerializer.cs` | DAT format serializer (implements ILoadFileSerializer) |
-| `src/Profiles/Generation/` | Column value generators — `IColumnValueGenerator`, per-Kind generators (see ADR-0004) |
-| `src/Emails/` | Email domain model (`Email`, `EmailContext` records) |
+| `src/LoadFiles/ILoadFileSerializer.cs` | Format-specific record serialization interface |
+| `src/LoadFiles/DatSerializer.cs` | DAT format serializer |
+| `src/Profiles/Generation/` | Column value generators |
+| `src/Emails/` | Email domain model |
 | `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/LoadfileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
 | `src/Zipper.Tests/` | Unit tests |
-| `src/Zipper.Analyzers/` | Roslyn analyzer — `FGR_FLAT_ACCESS` diagnostic |
+| `src/Zipper.Analyzers/` | Roslyn analyzers |
 | `tests/` | E2E test scripts |
 
 Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `OfficeFileGenerator.cs`, `PlaceholderFileGenerator.cs`, `BatesNumberGenerator.cs`) live in `src/` — grep by type.
@@ -181,28 +203,7 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 
 ## Architecture
 
-### Three Generation Modes
-
-`Program.cs` uses `SelectMode(request)` → `IGenerationMode` → `GenerationRunner.RunAsync()` to dispatch to one of three strategies:
-
-| Mode | Trigger | Adapter | Generator |
-|------|---------|---------|-----------|
-| **Standard** | default | `StandardMode` | `ParallelFileGenerator.GenerateFilesAsync()` → Archive (.zip) + Load File |
-| **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyMode` | `LoadfileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit |
-| **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
-
-### Standard Pipeline
-
-`ParallelFileGenerator` uses `System.Threading.Channels` for a producer-consumer pipeline:
-
-1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. Bounded channel provides backpressure.
-2. **Generation**: N concurrent producers generate file data and write to result channel. All file types run in parallel.
-3. **Archive writing**: Single consumer (`ZipArchiveService`) writes ZIP entries, then writes Load Files via `ILoadFileWriter` implementations.
-4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.
-
-### Chaos Engine (Loadfile-Only Mode only)
-
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesid`. Tracked in `_properties.json` via `LoadfileAuditWriter`.
+See [docs/architecture.md](docs/architecture.md) for mode dispatch, pipeline design, and component diagrams.
 
 ---
 

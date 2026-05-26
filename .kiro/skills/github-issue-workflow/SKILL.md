@@ -70,6 +70,10 @@ Closes #<issue-number>"
 
 Types: `fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`
 
+### 5.5. Run Adversarial Review
+
+Before pushing, run adversarial review per AGENTS.md (required for changes touching logic, error handling, or public contracts; self-review suffices for trivial changes).
+
 ### 6. Push and Create PR
 
 ```bash
@@ -78,15 +82,19 @@ git push -u origin <branch-name>
 
 ```bash
 gh pr create --title "<type>: <description>" --body "
-## Summary
-<Brief summary of changes>
+## Description
+<What does this PR change and why?>
 
-## Changes
-- <Change 1>
-- <Change 2>
+## Type of Change
+- [x] <type>
 
-## Testing
-- <How this was tested>
+## Testing Done
+- [ ] Unit tests pass (\`dotnet test src/Zipper.Tests/Zipper.Tests.csproj\`)
+- [ ] E2E tests pass (\`bash tests/run-tests.sh\`)
+- [ ] Lint clean (\`dotnet format --verify-no-changes src/\`)
+
+## Affected Requirements
+<List REQ-XXX or FR-XXX identifiers impacted, or \"None\" if not applicable>
 
 Closes #<issue-number>
 "
@@ -188,6 +196,7 @@ gh pr merge <pr-number> --merge --delete-branch
 
 - **Pin third-party GitHub Actions to full commit SHAs** with a version comment. SonarCloud flags `uses: action@vN` as a security hotspot. Use: `uses: owner/action@<full-sha> # vN`. Look up SHAs via: `curl -s "https://api.github.com/repos/OWNER/REPO/git/ref/tags/vN" | jq .object.sha`
 - **Always use a branch + PR**, even for trivial fixes. Never push directly to main.
+- **When rules conflict**, follow AGENTS.md Critical Rules priority order (Principles override Critical Rules; among Critical Rules, higher-numbered priority wins).
 - **Close tracking/design issues with comments** when the tracked work is complete, rather than implementing unnecessary artifacts.
 - **macOS `sed` compatibility**: Use `tr` instead of `sed 's/\xNN//g'` for hex byte removal. macOS sed doesn't support `\x` escapes.
 - **Windows `.bat` arg forwarding**: `%1..%9` truncates after 9 args. Use delayed expansion with `!ARGS!` for full argument passthrough.
