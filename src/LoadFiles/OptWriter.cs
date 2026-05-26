@@ -109,23 +109,10 @@ internal class OptWriter : LoadFileWriterBase
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            var workItem = fileData.WorkItem;
             bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+            var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: false);
 
-            // Opticon 7-column format: BatesNumber,Volume,ImagePath,DocBreak,FolderBreak,BoxBreak,PageCount
-            string batesNumber = request.Bates != null
-                ? GenerateBatesNumber(request, workItem)
-                : GenerateDocumentId(workItem);
-            string volume = "VOL001";
-            string imagePath = $"IMAGES\\{batesNumber}.tif";
-            string docBreak = "Y";
-            string folderBreak = string.Empty;
-            string boxBreak = string.Empty;
-            int pageCount = request.Tiff.ShouldIncludePageCount(request.Output) ? fileData.PageCount : 1;
-
-            // Comma-separated, no header — Opticon standard
-            var line = $"{batesNumber},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
-
+            var line = BuildOptRow(batesNumber, volume, imagePath, pageCount);
             buffer.AppendLine(line);
             rowCount++;
 
@@ -133,7 +120,7 @@ internal class OptWriter : LoadFileWriterBase
             {
                 string childBates = $"{batesNumber}_A001";
                 string childImagePath = $"IMAGES\\{childBates}.tif";
-                var childLine = $"{childBates},{volume},{childImagePath},Y,,,{1}";
+                var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
                 buffer.AppendLine(childLine);
                 rowCount++;
             }
@@ -238,21 +225,17 @@ internal class OptWriter : LoadFileWriterBase
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                var workItem = fileData.WorkItem;
-                var batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-                var imagePath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                    .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                    .Replace(Path.DirectorySeparatorChar, '\\');
+                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+                var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: true);
 
-                var docBreak = "Y";
-                var line = $"{batesNumber},{workItem.FolderName},{imagePath},{docBreak},,,1";
-
+                var line = BuildOptRow(batesNumber, volume, imagePath, pageCount);
                 await writer.WriteAsync(line + eol);
 
-                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
                 if (hasAttachment)
                 {
-                    var childLine = BuildProductionSetChildRow(batesNumber, workItem.FolderName);
+                    string childBates = $"{batesNumber}_A001";
+                    string childImagePath = Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+                    var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
                     await writer.WriteAsync(childLine + eol);
                 }
             }
@@ -268,20 +251,18 @@ internal class OptWriter : LoadFileWriterBase
         long currentLineNumber = 1;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            var workItem = fileData.WorkItem;
-            var batesNum = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-            var imgPath = workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                .Replace(Path.DirectorySeparatorChar, '\\');
+            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+            var (batesNum, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: true);
 
-            var optLine = $"{batesNum},{workItem.FolderName},{imgPath},Y,,,1";
+            var optLine = BuildOptRow(batesNum, volume, imagePath, pageCount);
             rows.Add((currentLineNumber++, batesNum, optLine));
 
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
             if (hasAttachment)
             {
-                var childLine = BuildProductionSetChildRow(batesNum, workItem.FolderName);
-                rows.Add((currentLineNumber++, $"{batesNum}_A001", childLine));
+                string childBates = $"{batesNum}_A001";
+                string childImagePath = Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+                var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
+                rows.Add((currentLineNumber++, childBates, childLine));
             }
         }
 
@@ -289,15 +270,36 @@ internal class OptWriter : LoadFileWriterBase
     }
 
     /// <summary>
-    /// Builds a single OPT child row for the production set output mode.
+    /// Gets the metadata row data elements for a given file.
     /// </summary>
-    /// <param name="batesNumber">The parent Bates number.</param>
-    /// <param name="folderName">The relative folder name.</param>
-    /// <returns>A formatted OPT row string.</returns>
-    private static string BuildProductionSetChildRow(string batesNumber, string folderName)
+    private static (string BatesNumber, string Volume, string ImagePath, int PageCount) GetRowData(
+        FileData fileData,
+        FileGenerationRequest request,
+        bool isProductionSet)
     {
-        var childBates = $"{batesNumber}_A001";
-        var childImagePath = Path.Combine("IMAGES", folderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-        return $"{childBates},{folderName},{childImagePath},Y,,,1";
+        var workItem = fileData.WorkItem;
+        string batesNumber = isProductionSet
+            ? BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1)
+            : (request.Bates != null ? GenerateBatesNumber(request, workItem) : GenerateDocumentId(workItem));
+
+        string volume = isProductionSet ? workItem.FolderName : "VOL001";
+
+        string imagePath = isProductionSet
+            ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
+                .Replace(Path.DirectorySeparatorChar, '\\')
+            : $"IMAGES\\{batesNumber}.tif";
+
+        int pageCount = !isProductionSet && request.Tiff.ShouldIncludePageCount(request.Output) ? fileData.PageCount : 1;
+
+        return (batesNumber, volume, imagePath, pageCount);
+    }
+
+    /// <summary>
+    /// Builds a single OPT row formatted string.
+    /// </summary>
+    private static string BuildOptRow(string batesNumber, string volume, string imagePath, int pageCount)
+    {
+        return $"{batesNumber},{volume},{imagePath},Y,,,{pageCount}";
     }
 }
