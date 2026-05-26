@@ -8,13 +8,23 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal class OptWriter : LoadFileWriterBase
 {
+    /// <summary>
+    /// The writer mode.
+    /// </summary>
     private readonly WriterMode mode;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OptWriter"/> class with the specified mode.
+    /// </summary>
+    /// <param name="mode">The writer mode to use.</param>
     internal OptWriter(WriterMode mode = WriterMode.Standard)
     {
         this.mode = mode;
     }
 
+    /// <summary>
+    /// Gets the name of the load file format.
+    /// </summary>
     public override string FormatName => this.mode switch
     {
         WriterMode.LoadfileOnly => "OPT (Image)",
@@ -22,8 +32,19 @@ internal class OptWriter : LoadFileWriterBase
         _ => "OPT",
     };
 
+    /// <summary>
+    /// Gets the standard file extension for the load file, including the leading dot.
+    /// </summary>
     public override string FileExtension => ".opt";
 
+    /// <summary>
+    /// Writes the OPT load file to the specified stream based on the current writer mode.
+    /// </summary>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="request">The file generation request containing settings.</param>
+    /// <param name="processedFiles">The list of file data processed during generation.</param>
+    /// <param name="chaosEngine">The optional chaos engine to introduce synthetic errors.</param>
+    /// <returns>A task representing the asynchronous write operation.</returns>
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -51,6 +72,13 @@ internal class OptWriter : LoadFileWriterBase
         }
     }
 
+    /// <summary>
+    /// Writes the load file using the standard mode.
+    /// </summary>
+    /// <param name="writer">The output stream writer.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="processedFiles">The processed files data.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteStandardRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
@@ -124,6 +152,13 @@ internal class OptWriter : LoadFileWriterBase
         }
     }
 
+    /// <summary>
+    /// Writes the load file using the loadfile-only mode.
+    /// </summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="chaosEngine">The optional chaos engine.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteLoadfileOnlyAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -181,6 +216,14 @@ internal class OptWriter : LoadFileWriterBase
         await memStream.CopyToAsync(stream);
     }
 
+    /// <summary>
+    /// Writes the load file using the production set mode.
+    /// </summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="processedFiles">The processed files data.</param>
+    /// <param name="chaosEngine">The optional chaos engine.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,

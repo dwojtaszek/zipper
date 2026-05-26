@@ -9,13 +9,23 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal class DatWriter : LoadFileWriterBase
 {
+    /// <summary>
+    /// The writer mode (e.g. Standard, LoadfileOnly, ProductionSet).
+    /// </summary>
     private readonly WriterMode mode;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DatWriter"/> class with the specified mode.
+    /// </summary>
+    /// <param name="mode">The writer mode to use.</param>
     internal DatWriter(WriterMode mode = WriterMode.Standard)
     {
         this.mode = mode;
     }
 
+    /// <summary>
+    /// Gets the name of the load file format.
+    /// </summary>
     public override string FormatName => this.mode switch
     {
         WriterMode.LoadfileOnly => "DAT (Metadata)",
@@ -23,8 +33,19 @@ internal class DatWriter : LoadFileWriterBase
         _ => "DAT",
     };
 
+    /// <summary>
+    /// Gets the standard file extension for the load file, including the leading dot.
+    /// </summary>
     public override string FileExtension => ".dat";
 
+    /// <summary>
+    /// Writes the load file to the specified stream based on the current writer mode.
+    /// </summary>
+    /// <param name="stream">The stream to write to.</param>
+    /// <param name="request">The file generation request containing settings.</param>
+    /// <param name="processedFiles">The list of file data processed during generation.</param>
+    /// <param name="chaosEngine">The optional chaos engine to introduce synthetic errors.</param>
+    /// <returns>A task representing the asynchronous write operation.</returns>
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -89,6 +110,14 @@ internal class DatWriter : LoadFileWriterBase
         }
     }
 
+    /// <summary>
+    /// Writes the load file using the standard mode, writing to the stream with optional chaos injection.
+    /// </summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="processedFiles">The processed files data.</param>
+    /// <param name="chaosEngine">The optional chaos engine.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteStandardAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -130,6 +159,13 @@ internal class DatWriter : LoadFileWriterBase
         await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
     }
 
+    /// <summary>
+    /// Writes the load file using the loadfile-only mode.
+    /// </summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="chaosEngine">The optional chaos engine.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteLoadfileOnlyAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -206,6 +242,14 @@ internal class DatWriter : LoadFileWriterBase
         await memStream.CopyToAsync(stream);
     }
 
+    /// <summary>
+    /// Writes the load file using the production set mode.
+    /// </summary>
+    /// <param name="stream">The output stream.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="processedFiles">The processed files data.</param>
+    /// <param name="chaosEngine">The optional chaos engine.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,
@@ -440,6 +484,12 @@ internal class DatWriter : LoadFileWriterBase
         return string.Join(col, fields.Select(f => $"{quote}{EscapeDatField(f, quote[0], request.Delimiters.NewlineDelimiter)}{quote}"));
     }
 
+    /// <summary>
+    /// Gets the effective profile generator to use for populating metadata fields.
+    /// </summary>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="now">The effective date/time reference.</param>
+    /// <returns>A data generator instance or null if no profile should be used.</returns>
     private static Zipper.Profiles.DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
     {
         var profile = request.Metadata.ColumnProfile;
@@ -453,6 +503,13 @@ internal class DatWriter : LoadFileWriterBase
         return profile != null ? new Zipper.Profiles.DataGenerator(profile, request.Metadata.Seed, now) : null;
     }
 
+    /// <summary>
+    /// Builds the header line for a standard DAT load file.
+    /// </summary>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="colDelim">The column delimiter character.</param>
+    /// <param name="quote">The quote character.</param>
+    /// <returns>The formatted header string.</returns>
     private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)
     {
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
@@ -575,6 +632,14 @@ internal class DatWriter : LoadFileWriterBase
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Builds the header line for a loadfile-only DAT load file.
+    /// </summary>
+    /// <param name="colDelim">The column delimiter character.</param>
+    /// <param name="quote">The quote character.</param>
+    /// <param name="hasQuote">A value indicating whether quotes should be applied.</param>
+    /// <param name="namingConvention">The naming convention for fields.</param>
+    /// <returns>The formatted header string.</returns>
     private static string BuildLoadfileOnlyHeader(
         char colDelim,
         char quote,
@@ -607,6 +672,17 @@ internal class DatWriter : LoadFileWriterBase
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Builds a row line for a loadfile-only DAT load file.
+    /// </summary>
+    /// <param name="index">The 1-based index of the document.</param>
+    /// <param name="recordId">The record ID of the document.</param>
+    /// <param name="colDelim">The column delimiter character.</param>
+    /// <param name="quote">The quote character.</param>
+    /// <param name="hasQuote">A value indicating whether quotes should be applied.</param>
+    /// <param name="now">The current timestamp reference.</param>
+    /// <param name="random">The random number generator.</param>
+    /// <returns>The formatted row string.</returns>
     private static string BuildLoadfileOnlyRow(
         long index,
         string recordId,
