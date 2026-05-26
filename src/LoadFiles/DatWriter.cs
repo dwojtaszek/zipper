@@ -69,50 +69,9 @@ internal class DatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-
-            string parentId = request.Bates != null
-                ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
-                : $"DOC{fileData.WorkItem.Index:D8}";
-
-            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
-            string begAttach = parentId;
-            string endAttach = childId;
-            string parentDocId = string.Empty;
-
-            var line = BuildStandardRow(
-                fileData,
-                request,
-                colDelim,
-                quote,
-                profileValues,
-                new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
-
-            buffer.AppendLine(line);
-            rowCount++;
-
-            if (hasAttachment)
+            foreach (var (_, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, profileValues))
             {
-                var attach = fileData.Attachment!.Value;
-                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
-                var childLine = BuildStandardRow(
-                    fileData,
-                    request,
-                    colDelim,
-                    quote,
-                    profileValues,
-                    new RowBuildContext
-                    {
-                        IdOverride = childId,
-                        FilePathOverride = attachmentPath,
-                        FileSizeOverride = attach.content.Length.ToString(),
-                        IsChild = true,
-                        BegAttach = begAttach,
-                        EndAttach = endAttach,
-                        ParentDocId = parentId
-                    });
-
-                buffer.AppendLine(childLine);
+                buffer.AppendLine(rowLine);
                 rowCount++;
             }
 
@@ -162,49 +121,9 @@ internal class DatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-
-            string parentId = request.Bates != null
-                ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
-                : $"DOC{fileData.WorkItem.Index:D8}";
-
-            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
-            string begAttach = parentId;
-            string endAttach = childId;
-            string parentDocId = string.Empty;
-
-            var line = BuildStandardRow(
-                fileData,
-                request,
-                colDelim,
-                quote,
-                profileValues,
-                new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
-
-            rows.Add((currentLineNumber++, parentId, line));
-
-            if (hasAttachment)
+            foreach (var (recordId, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, profileValues))
             {
-                var attach = fileData.Attachment!.Value;
-                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
-                var childLine = BuildStandardRow(
-                    fileData,
-                    request,
-                    colDelim,
-                    quote,
-                    profileValues,
-                    new RowBuildContext
-                    {
-                        IdOverride = childId,
-                        FilePathOverride = attachmentPath,
-                        FileSizeOverride = attach.content.Length.ToString(),
-                        IsChild = true,
-                        BegAttach = begAttach,
-                        EndAttach = endAttach,
-                        ParentDocId = parentId
-                    });
-
-                rows.Add((currentLineNumber++, childId, childLine));
+                rows.Add((currentLineNumber++, recordId, rowLine));
             }
         }
 
@@ -315,44 +234,9 @@ internal class DatWriter : LoadFileWriterBase
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-                string parentBates = BatesNumberGenerator.Generate(request.Bates!, fileData.WorkItem.Index - 1);
-                string childBates = hasAttachment ? $"{parentBates}_A001" : parentBates;
-
-                string begAttach = parentBates;
-                string endAttach = childBates;
-                string parentDocId = string.Empty;
-
-                var dataRow = BuildProductionSetRow(fileData, request, col, quote, new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
-                await writer.WriteAsync(dataRow + eol);
-
-                if (hasAttachment)
+                foreach (var (_, rowLine) in BuildProductionSetRowsForFile(fileData, request, col, quote))
                 {
-                    var attach = fileData.Attachment!.Value;
-                    var childExt = Path.GetExtension(attach.filename);
-                    var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
-                    var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
-                    var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-
-                    var childRow = BuildProductionSetRow(
-                        fileData,
-                        request,
-                        col,
-                        quote,
-                        new RowBuildContext
-                        {
-                            IdOverride = childBates,
-                            NativePathOverride = childNativePath,
-                            TextPathOverride = childTextPath,
-                            ImagePathOverride = childImagePath,
-                            FileSizeOverride = attach.content.Length.ToString(),
-                            IsChild = true,
-                            BegAttach = begAttach,
-                            EndAttach = endAttach,
-                            ParentDocId = parentBates
-                        });
-
-                    await writer.WriteAsync(childRow + eol);
+                    await writer.WriteAsync(rowLine + eol);
                 }
             }
 
@@ -367,48 +251,113 @@ internal class DatWriter : LoadFileWriterBase
         long currentLineNumber = 2;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-            string parentBates = BatesNumberGenerator.Generate(request.Bates!, fileData.WorkItem.Index - 1);
-            string childBates = hasAttachment ? $"{parentBates}_A001" : parentBates;
-
-            string begAttach = parentBates;
-            string endAttach = childBates;
-            string parentDocId = string.Empty;
-
-            var dataRow = BuildProductionSetRow(fileData, request, col, quote, new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
-            rows.Add((currentLineNumber++, parentBates, dataRow));
-
-            if (hasAttachment)
+            foreach (var (recordId, rowLine) in BuildProductionSetRowsForFile(fileData, request, col, quote))
             {
-                var attach = fileData.Attachment!.Value;
-                var childExt = Path.GetExtension(attach.filename);
-                var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
-                var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
-                var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-
-                var childRow = BuildProductionSetRow(
-                    fileData,
-                    request,
-                    col,
-                    quote,
-                    new RowBuildContext
-                    {
-                        IdOverride = childBates,
-                        NativePathOverride = childNativePath,
-                        TextPathOverride = childTextPath,
-                        ImagePathOverride = childImagePath,
-                        FileSizeOverride = attach.content.Length.ToString(),
-                        IsChild = true,
-                        BegAttach = begAttach,
-                        EndAttach = endAttach,
-                        ParentDocId = parentBates
-                    });
-
-                rows.Add((currentLineNumber++, childBates, childRow));
+                rows.Add((currentLineNumber++, recordId, rowLine));
             }
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
+    }
+
+    private static IEnumerable<(string RecordId, string Line)> BuildStandardRowsForFile(
+        FileData fileData,
+        FileGenerationRequest request,
+        char colDelim,
+        char quote,
+        System.Collections.Generic.Dictionary<string, string>? profileValues)
+    {
+        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+
+        string parentId = request.Bates != null
+            ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
+            : $"DOC{fileData.WorkItem.Index:D8}";
+
+        string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+        string begAttach = parentId;
+        string endAttach = childId;
+        string parentDocId = string.Empty;
+
+        var line = BuildStandardRow(
+            fileData,
+            request,
+            colDelim,
+            quote,
+            profileValues,
+            new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
+
+        yield return (parentId, line);
+
+        if (hasAttachment)
+        {
+            var attach = fileData.Attachment!.Value;
+            var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
+            var childLine = BuildStandardRow(
+                fileData,
+                request,
+                colDelim,
+                quote,
+                profileValues,
+                new RowBuildContext
+                {
+                    IdOverride = childId,
+                    FilePathOverride = attachmentPath,
+                    FileSizeOverride = attach.content.Length.ToString(),
+                    IsChild = true,
+                    BegAttach = begAttach,
+                    EndAttach = endAttach,
+                    ParentDocId = parentId
+                });
+
+            yield return (childId, childLine);
+        }
+    }
+
+    private static IEnumerable<(string RecordId, string Line)> BuildProductionSetRowsForFile(
+        FileData fileData,
+        FileGenerationRequest request,
+        string col,
+        string quote)
+    {
+        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+        string parentBates = BatesNumberGenerator.Generate(request.Bates!, fileData.WorkItem.Index - 1);
+        string childBates = hasAttachment ? $"{parentBates}_A001" : parentBates;
+
+        string begAttach = parentBates;
+        string endAttach = childBates;
+        string parentDocId = string.Empty;
+
+        var dataRow = BuildProductionSetRow(fileData, request, col, quote, new RowBuildContext { BegAttach = begAttach, EndAttach = endAttach, ParentDocId = parentDocId });
+        yield return (parentBates, dataRow);
+
+        if (hasAttachment)
+        {
+            var attach = fileData.Attachment!.Value;
+            var childExt = Path.GetExtension(attach.filename);
+            var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
+            var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
+            var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+
+            var childRow = BuildProductionSetRow(
+                fileData,
+                request,
+                col,
+                quote,
+                new RowBuildContext
+                {
+                    IdOverride = childBates,
+                    NativePathOverride = childNativePath,
+                    TextPathOverride = childTextPath,
+                    ImagePathOverride = childImagePath,
+                    FileSizeOverride = attach.content.Length.ToString(),
+                    IsChild = true,
+                    BegAttach = begAttach,
+                    EndAttach = endAttach,
+                    ParentDocId = parentBates
+                });
+
+            yield return (childBates, childRow);
+        }
     }
 
     private static string BuildProductionSetRow(

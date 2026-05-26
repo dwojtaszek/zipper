@@ -209,9 +209,7 @@ internal class OptWriter : LoadFileWriterBase
                 bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
                 if (hasAttachment)
                 {
-                    var childBates = $"{batesNumber}_A001";
-                    var childImagePath = Path.Combine("IMAGES", workItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-                    var childLine = $"{childBates},{workItem.FolderName},{childImagePath},Y,,,1";
+                    var childLine = BuildProductionSetChildRow(batesNumber, workItem.FolderName);
                     await writer.WriteAsync(childLine + eol);
                 }
             }
@@ -239,13 +237,18 @@ internal class OptWriter : LoadFileWriterBase
             bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
             if (hasAttachment)
             {
-                var childBates = $"{batesNum}_A001";
-                var childImagePath = Path.Combine("IMAGES", workItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-                var childLine = $"{childBates},{workItem.FolderName},{childImagePath},Y,,,1";
-                rows.Add((currentLineNumber++, childBates, childLine));
+                var childLine = BuildProductionSetChildRow(batesNum, workItem.FolderName);
+                rows.Add((currentLineNumber++, $"{batesNum}_A001", childLine));
             }
         }
 
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
+    }
+
+    private static string BuildProductionSetChildRow(string batesNumber, string folderName)
+    {
+        var childBates = $"{batesNumber}_A001";
+        var childImagePath = Path.Combine("IMAGES", folderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+        return $"{childBates},{folderName},{childImagePath},Y,,,1";
     }
 }
