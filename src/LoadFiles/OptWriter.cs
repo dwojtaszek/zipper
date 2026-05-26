@@ -245,6 +245,12 @@ internal class OptWriter : LoadFileWriterBase
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 
+    /// <summary>
+    /// Builds a single OPT child row for the production set output mode.
+    /// </summary>
+    /// <param name="batesNumber">The parent Bates number.</param>
+    /// <param name="folderName">The relative folder name.</param>
+    /// <returns>A formatted OPT row string.</returns>
     private static string BuildProductionSetChildRow(string batesNumber, string folderName)
     {
         var childBates = $"{batesNumber}_A001";

@@ -260,6 +260,15 @@ internal class DatWriter : LoadFileWriterBase
         await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
     }
 
+    /// <summary>
+    /// Builds standard load file rows (parent and optional child attachments) for a single file.
+    /// </summary>
+    /// <param name="fileData">The generated file data.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="colDelim">The column delimiter character.</param>
+    /// <param name="quote">The quote character.</param>
+    /// <param name="profileValues">The custom metadata profile values.</param>
+    /// <returns>A collection of generated load file rows containing record ID and row string.</returns>
     private static IEnumerable<(string RecordId, string Line)> BuildStandardRowsForFile(
         FileData fileData,
         FileGenerationRequest request,
@@ -313,6 +322,14 @@ internal class DatWriter : LoadFileWriterBase
         }
     }
 
+    /// <summary>
+    /// Builds production set load file rows (parent and optional child attachments) for a single file.
+    /// </summary>
+    /// <param name="fileData">The generated file data.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="col">The column delimiter string.</param>
+    /// <param name="quote">The quote string.</param>
+    /// <returns>A collection of generated load file rows containing record ID and row string.</returns>
     private static IEnumerable<(string RecordId, string Line)> BuildProductionSetRowsForFile(
         FileData fileData,
         FileGenerationRequest request,
@@ -360,6 +377,15 @@ internal class DatWriter : LoadFileWriterBase
         }
     }
 
+    /// <summary>
+    /// Builds a single DAT row for the production set output mode.
+    /// </summary>
+    /// <param name="fileData">The generated file data.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="col">The column delimiter.</param>
+    /// <param name="quote">The quote delimiter.</param>
+    /// <param name="context">The row context containing optional overrides and family boundaries.</param>
+    /// <returns>A formatted DAT row string.</returns>
     private static string BuildProductionSetRow(
         FileData fileData,
         FileGenerationRequest request,
@@ -466,6 +492,16 @@ internal class DatWriter : LoadFileWriterBase
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Builds a single DAT row for the standard output mode.
+    /// </summary>
+    /// <param name="fileData">The generated file data.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="colDelim">The column delimiter character.</param>
+    /// <param name="quote">The quote character.</param>
+    /// <param name="profileValues">The custom metadata profile values.</param>
+    /// <param name="context">The row context containing optional overrides and family boundaries.</param>
+    /// <returns>A formatted DAT row string.</returns>
     private static string BuildStandardRow(
         FileData fileData,
         FileGenerationRequest request,
@@ -617,26 +653,59 @@ internal class DatWriter : LoadFileWriterBase
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Context object containing optional overrides and family boundary information for building a load file row.
+    /// </summary>
     private sealed class RowBuildContext
     {
+        /// <summary>
+        /// Gets the override value for the document control number or Bates number.
+        /// </summary>
         public string? IdOverride { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the relative file path.
+        /// </summary>
         public string? FilePathOverride { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the native path.
+        /// </summary>
         public string? NativePathOverride { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the extracted text path.
+        /// </summary>
         public string? TextPathOverride { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the image path.
+        /// </summary>
         public string? ImagePathOverride { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the file size in bytes.
+        /// </summary>
         public string? FileSizeOverride { get; init; }
 
+        /// <summary>
+        /// Gets a value indicating whether the row represents a child attachment document.
+        /// </summary>
         public bool IsChild { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the BEGATTACH family field.
+        /// </summary>
         public string? BegAttach { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the ENDATTACH family field.
+        /// </summary>
         public string? EndAttach { get; init; }
 
+        /// <summary>
+        /// Gets the override value for the PARENTDOCID family field.
+        /// </summary>
         public string? ParentDocId { get; init; }
     }
 }
