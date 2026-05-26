@@ -10,6 +10,8 @@ What does this PR change and why?
 - [ ] Test coverage
 - [ ] Documentation
 - [ ] CI/Build
+- [ ] Chore / Maintenance
+- [ ] Dependency update
 
 ## Testing Done
 

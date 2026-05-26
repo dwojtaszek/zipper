@@ -9,7 +9,7 @@ description: >
 
 # QA Orchestrator
 
-**SCOPE: This skill performs manual/functional QA only -- verifying that the application actually works by running the CLI and checking output files. Do NOT run or report on CI checks, linting, dotnet format, unit tests, or any static analysis. Those are handled by separate workflows.**
+**SCOPE: This skill performs manual/functional QA only -- verifying that the application actually works by running the CLI and checking output files. Do NOT run or report on CI checks, linting, dotnet format, unit tests, or any static analysis. Those are handled by separate workflows. Unit tests + lint are still required per AGENTS.md workflow step 6 after every code change -- run those separately before invoking this skill.**
 
 ## Step 1: Load Configuration
 
