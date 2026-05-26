@@ -109,27 +109,17 @@ internal class OptWriter : LoadFileWriterBase
 
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-            var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: false);
-
-            var line = BuildOptRow(batesNumber, volume, imagePath, pageCount);
-            buffer.AppendLine(line);
-            rowCount++;
-
-            if (hasAttachment)
+            foreach (var (_, line) in BuildOptRowsForFile(fileData, request, isProductionSet: false))
             {
-                string childBates = $"{batesNumber}_A001";
-                string childImagePath = $"IMAGES\\{childBates}.tif";
-                var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
-                buffer.AppendLine(childLine);
+                buffer.AppendLine(line);
                 rowCount++;
-            }
 
-            if (rowCount >= 1000)
-            {
-                await writer.WriteAsync(buffer.ToString());
-                buffer.Clear();
-                rowCount = 0;
+                if (rowCount >= 1000)
+                {
+                    await writer.WriteAsync(buffer.ToString());
+                    buffer.Clear();
+                    rowCount = 0;
+                }
             }
         }
 
@@ -225,18 +215,9 @@ internal class OptWriter : LoadFileWriterBase
 
             foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
             {
-                bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-                var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: true);
-
-                var line = BuildOptRow(batesNumber, volume, imagePath, pageCount);
-                await writer.WriteAsync(line + eol);
-
-                if (hasAttachment)
+                foreach (var (_, line) in BuildOptRowsForFile(fileData, request, isProductionSet: true))
                 {
-                    string childBates = $"{batesNumber}_A001";
-                    string childImagePath = Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-                    var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
-                    await writer.WriteAsync(childLine + eol);
+                    await writer.WriteAsync(line + eol);
                 }
             }
 
@@ -251,18 +232,9 @@ internal class OptWriter : LoadFileWriterBase
         long currentLineNumber = 1;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
-            bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-            var (batesNum, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet: true);
-
-            var optLine = BuildOptRow(batesNum, volume, imagePath, pageCount);
-            rows.Add((currentLineNumber++, batesNum, optLine));
-
-            if (hasAttachment)
+            foreach (var (recordId, line) in BuildOptRowsForFile(fileData, request, isProductionSet: true))
             {
-                string childBates = $"{batesNum}_A001";
-                string childImagePath = Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
-                var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
-                rows.Add((currentLineNumber++, childBates, childLine));
+                rows.Add((currentLineNumber++, recordId, line));
             }
         }
 
@@ -303,6 +275,31 @@ internal class OptWriter : LoadFileWriterBase
         int pageCount = !isProductionSet && request.Tiff.ShouldIncludePageCount(request.Output) ? fileData.PageCount : 1;
 
         return (batesNumber, volume, imagePath, pageCount);
+    }
+
+    /// <summary>
+    /// Builds the OPT rows (parent and optional child attachments) for a single file.
+    /// </summary>
+    private static IEnumerable<(string RecordId, string Line)> BuildOptRowsForFile(
+        FileData fileData,
+        FileGenerationRequest request,
+        bool isProductionSet)
+    {
+        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+        var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet);
+
+        var parentLine = BuildOptRow(batesNumber, volume, imagePath, pageCount);
+        yield return (batesNumber, parentLine);
+
+        if (hasAttachment)
+        {
+            string childBates = $"{batesNumber}_A001";
+            string childImagePath = isProductionSet
+                ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\')
+                : $"IMAGES\\{childBates}.tif";
+            var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
+            yield return (childBates, childLine);
+        }
     }
 
     /// <summary>
