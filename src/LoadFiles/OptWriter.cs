@@ -144,22 +144,14 @@ internal class OptWriter : LoadFileWriterBase
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         var eolString = GetEolString(request.Delimiters.EndOfLine);
 
-        using var memStream = new MemoryStream();
-        var preamble = encoding.GetPreamble();
-        if (preamble.Length > 0)
-        {
-            await memStream.WriteAsync(preamble, 0, preamble.Length);
-        }
-
 #pragma warning disable S2245
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
-        var buffer = new StringBuilder();
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
-            long lineNumber = i;
             string batesId = $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
@@ -169,28 +161,24 @@ internal class OptWriter : LoadFileWriterBase
             int pageCount = random.Next(1, 11);
 
             string line = $"{batesId},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
-
-            line = ApplyChaosInterception(chaosEngine, lineNumber, line, batesId);
-
-            buffer.Append(line);
-            buffer.Append(eolString);
-
-            if (buffer.Length > 1000 * 200)
-            {
-                var batchBytes = encoding.GetBytes(buffer.ToString());
-                await memStream.WriteAsync(batchBytes);
-                buffer.Clear();
-            }
+            rows.Add((i, batesId, line));
         }
 
-        if (buffer.Length > 0)
+        if (chaosEngine == null)
         {
-            var remainingBytes = encoding.GetBytes(buffer.ToString());
-            await memStream.WriteAsync(remainingBytes);
-        }
+            // Simple path: write directly using StreamWriter
+            await using var writer = CreateWriter(stream, request);
+            foreach (var (_, _, line) in rows)
+            {
+                await writer.WriteAsync(line + eolString);
+            }
 
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
+            await writer.FlushAsync();
+        }
+        else
+        {
+            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
+        }
     }
 
     /// <summary>

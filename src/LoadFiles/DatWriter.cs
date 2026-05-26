@@ -177,21 +177,8 @@ internal class DatWriter : LoadFileWriterBase
         char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
         bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
-        using var memStream = new MemoryStream();
-        var preamble = encoding.GetPreamble();
-        if (preamble.Length > 0)
-        {
-            await memStream.WriteAsync(preamble, 0, preamble.Length);
-        }
-
         // Build header
         var header = BuildLoadfileOnlyHeader(colDelim, quote, hasQuote, request.Metadata.ColumnProfile?.FieldNamingConvention);
-
-        // Apply chaos to header (line 1)
-        header = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
-
-        var headerBytes = encoding.GetBytes(header + eolString);
-        await memStream.WriteAsync(headerBytes);
 
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
@@ -199,47 +186,32 @@ internal class DatWriter : LoadFileWriterBase
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
-        var buffer = new StringBuilder();
+        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        rows.Add((1, "HEADER", header));
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             string recordId = $"DOC{i:D8}";
-
             var line = BuildLoadfileOnlyRow(i, recordId, colDelim, quote, hasQuote, now, random);
-
-            line = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
-
-            buffer.Append(line);
-            buffer.Append(eolString);
-
-            // Handle encoding anomalies between lines
-            if (chaosEngine != null && i < request.Output.FileCount)
-            {
-                // Flush current buffer first
-                var bufferedBytes = encoding.GetBytes(buffer.ToString());
-                await memStream.WriteAsync(bufferedBytes);
-                buffer.Clear();
-
-                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
-            }
-
-            if (buffer.Length > 1000 * 200)
-            {
-                var batchBytes = encoding.GetBytes(buffer.ToString());
-                await memStream.WriteAsync(batchBytes);
-                buffer.Clear();
-            }
+            rows.Add((lineNumber, recordId, line));
         }
 
-        if (buffer.Length > 0)
+        if (chaosEngine == null)
         {
-            var remainingBytes = encoding.GetBytes(buffer.ToString());
-            await memStream.WriteAsync(remainingBytes);
-        }
+            // Simple path: write directly using StreamWriter
+            await using var writer = CreateWriter(stream, request);
+            foreach (var (_, _, line) in rows)
+            {
+                await writer.WriteAsync(line + eolString);
+            }
 
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
+            await writer.FlushAsync();
+        }
+        else
+        {
+            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
+        }
     }
 
     /// <summary>
