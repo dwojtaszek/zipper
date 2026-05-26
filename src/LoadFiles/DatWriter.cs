@@ -574,24 +574,8 @@ internal class DatWriter : LoadFileWriterBase
         var sb = new StringBuilder();
         sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePath}{quote}");
 
-        if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
-        {
-            var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var dateSent = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
-            var author = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            var fileSize = context.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
-            sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
-        }
-
-        if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
-        {
-            var to = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var from = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
-            var subject = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
-            var sentDate = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
-            var attachment = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
-            sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
-        }
+        AppendMetadataColumns(sb, fileData, request, colDelim, quote, profileValues, context);
+        AppendEmailColumns(sb, fileData, request, colDelim, quote, profileValues, context);
 
         if (request.Bates != null)
         {
@@ -605,24 +589,7 @@ internal class DatWriter : LoadFileWriterBase
             sb.Append($"{colDelim}{quote}{pageCount}{quote}");
         }
 
-        if (request.Output.WithText)
-        {
-            string textPath;
-            if (context.IsChild)
-            {
-                var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment!.Value.filename)}.txt";
-                textPath = $"{workItem.FolderName}/{workItem.Index}_{attachmentTextFileName}";
-            }
-            else
-            {
-                var sourceSuffix = $".{request.Output.FileType}";
-                textPath = workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
-                    ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
-                    : workItem.FilePathInZip;
-            }
-
-            sb.Append($"{colDelim}{quote}{textPath}{quote}");
-        }
+        AppendTextColumn(sb, fileData, request, colDelim, quote, context);
 
         if (request.Metadata.WithFamilies)
         {
@@ -630,6 +597,92 @@ internal class DatWriter : LoadFileWriterBase
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Appends the general metadata columns to the standard row.
+    /// </summary>
+    private static void AppendMetadataColumns(
+        StringBuilder sb,
+        FileData fileData,
+        FileGenerationRequest request,
+        char colDelim,
+        char quote,
+        System.Collections.Generic.Dictionary<string, string>? profileValues,
+        RowBuildContext context)
+    {
+        if (!request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+        {
+            return;
+        }
+
+        var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+        var dateSent = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
+        var author = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+        var fileSize = context.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
+
+        sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
+    }
+
+    /// <summary>
+    /// Appends the EML email-specific metadata columns to the standard row.
+    /// </summary>
+    private static void AppendEmailColumns(
+        StringBuilder sb,
+        FileData fileData,
+        FileGenerationRequest request,
+        char colDelim,
+        char quote,
+        System.Collections.Generic.Dictionary<string, string>? profileValues,
+        RowBuildContext context)
+    {
+        if (!request.Metadata.ShouldIncludeEmlColumns(request.Output))
+        {
+            return;
+        }
+
+        var workItem = fileData.WorkItem;
+        var to = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+        var from = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
+        var subject = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {workItem.Index}", quote, request.Delimiters.NewlineDelimiter);
+        var sentDate = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
+        var attachment = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
+
+        sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
+    }
+
+    /// <summary>
+    /// Appends the extracted text path column to the standard row if enabled.
+    /// </summary>
+    private static void AppendTextColumn(
+        StringBuilder sb,
+        FileData fileData,
+        FileGenerationRequest request,
+        char colDelim,
+        char quote,
+        RowBuildContext context)
+    {
+        if (!request.Output.WithText)
+        {
+            return;
+        }
+
+        var workItem = fileData.WorkItem;
+        string textPath;
+        if (context.IsChild)
+        {
+            var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment!.Value.filename)}.txt";
+            textPath = $"{workItem.FolderName}/{workItem.Index}_{attachmentTextFileName}";
+        }
+        else
+        {
+            var sourceSuffix = $".{request.Output.FileType}";
+            textPath = workItem.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
+                ? workItem.FilePathInZip[..^sourceSuffix.Length] + ".txt"
+                : workItem.FilePathInZip;
+        }
+
+        sb.Append($"{colDelim}{quote}{textPath}{quote}");
     }
 
     /// <summary>
