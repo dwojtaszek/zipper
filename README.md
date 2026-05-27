@@ -71,7 +71,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--include-load-file`: Includes the generated Load File in the root of the output Archive instead of as a separate file
 - `--load-file-format <dat|opt|csv|edrm-xml>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`) and `concordance` (alias for `dat`). Available formats:
   - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
-  - `opt`: Opticon format - comma-separated, page-level image references
+  - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types unless explicitly requested otherwise)
   - `csv`: Comma-separated values format with RFC 4180 escaping
   - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
 - `--load-file-formats <format1,format2,...>`: Generate multiple Load File formats simultaneously (e.g., `dat,opt,csv`)

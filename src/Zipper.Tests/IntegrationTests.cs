@@ -210,6 +210,52 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task Main_WithAutoOptGeneration_ForTiffAndJpg_CreatesBothDatAndOpt()
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                // 1. Run for --type tiff
+                var argsTiff = new[] { "--type", "tiff", "--count", "5", "--output-path", tempDir };
+                var resultTiff = await Program.Main(argsTiff);
+                Assert.Equal(0, resultTiff);
+
+                // Should write load files to output directory (not in zip)
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                var optFiles = Directory.GetFiles(tempDir, "*.opt");
+
+                Assert.Single(datFiles);
+                Assert.Single(optFiles);
+
+                // Clean up files in tempDir
+                foreach (var file in Directory.GetFiles(tempDir))
+                {
+                    File.Delete(file);
+                }
+
+                // 2. Run for --type jpg
+                var argsJpg = new[] { "--type", "jpg", "--count", "5", "--output-path", tempDir };
+                var resultJpg = await Program.Main(argsJpg);
+                Assert.Equal(0, resultJpg);
+
+                datFiles = Directory.GetFiles(tempDir, "*.dat");
+                optFiles = Directory.GetFiles(tempDir, "*.opt");
+
+                Assert.Single(datFiles);
+                Assert.Single(optFiles);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                {
+                    Directory.Delete(tempDir, true);
+                }
+            }
+        }
+
+        [Fact]
         public async Task Main_WithEmlFamiliesAndAttachments_ShouldCreateFamilyColumnsAndRows()
         {
             var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());

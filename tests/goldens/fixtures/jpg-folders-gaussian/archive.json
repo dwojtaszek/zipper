@@ -1,16 +1,16 @@
 {
-  "fileName": "archive.dat",
-  "format": "DAT (Metadata)",
+  "fileName": "archive.opt",
+  "format": "OPT (Image)",
   "totalRecords": 1000,
   "properties": {
     "encoding": "UTF-8",
     "lineEnding": "CRLF",
     "delimiters": {
-      "column": "ascii:20",
-      "quote": "ascii:254",
-      "newline": "ascii:174",
-      "multiValue": "char:;",
-      "nestedValue": "char:\\"
+      "column": "char:,",
+      "quote": "none",
+      "newline": "none",
+      "multiValue": "none",
+      "nestedValue": "none"
     }
   },
   "chaosMode": {

@@ -196,105 +196,124 @@ internal class OptWriter : LoadFileWriterBase
         ChaosEngine? chaosEngine = null)
     {
         var eol = GetEolString(request.Delimiters.EndOfLine);
-
-        if (chaosEngine == null)
-        {
-            await using var writer = CreateWriter(stream, request);
-
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
-            {
-                foreach (var (_, line) in BuildOptRowsForFile(fileData, request, isProductionSet: true))
-                {
-                    await writer.WriteAsync(line + eol);
-                }
-            }
-
-            await writer.FlushAsync();
-            return;
-        }
-
-        // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
-        long currentLineNumber = 1;
+        int rowIdx = 0;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             foreach (var (recordId, line) in BuildOptRowsForFile(fileData, request, isProductionSet: true))
             {
-                rows.Add((currentLineNumber++, recordId, line));
+                long lineNumber = rowIdx + 1;
+                rows.Add((lineNumber, recordId, line));
+                rowIdx++;
             }
         }
 
-        await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
-    }
+        if (chaosEngine == null)
+        {
+            await using var writer = CreateWriter(stream, request);
+            foreach (var row in rows)
+            {
+                await writer.WriteAsync(row.Line + eol);
+            }
 
-    /// <summary>
-    /// Gets the metadata row data elements for a given file.
-    /// </summary>
-    private static (string BatesNumber, string Volume, string ImagePath, int PageCount) GetRowData(
-        FileData fileData,
-        FileGenerationRequest request,
-        bool isProductionSet)
-    {
-        var workItem = fileData.WorkItem;
-        string batesNumber;
-        if (isProductionSet)
-        {
-            batesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
-        }
-        else if (request.Bates != null)
-        {
-            batesNumber = GenerateBatesNumber(request, workItem);
+            await writer.FlushAsync();
         }
         else
         {
-            batesNumber = GenerateDocumentId(workItem);
+            await WriteRowsWithChaosAsync(stream, encoding, eol, rows, chaosEngine);
         }
-
-        string volume = isProductionSet ? workItem.FolderName : "VOL001";
-
-        string imagePath = isProductionSet
-            ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                .Replace(Path.DirectorySeparatorChar, '\\')
-            : $"IMAGES\\{batesNumber}.tif";
-
-        int pageCount = !isProductionSet && request.Tiff.ShouldIncludePageCount(request.Output) ? fileData.PageCount : 1;
-
-        return (batesNumber, volume, imagePath, pageCount);
     }
 
     /// <summary>
-    /// Builds the OPT rows (parent and optional child attachments) for a single file.
+    /// Builds the OPT rows (parent pages and optional child attachments) for a single file.
     /// </summary>
+    /// <param name="fileData">The file data.</param>
+    /// <param name="request">The file generation request.</param>
+    /// <param name="isProductionSet">A value indicating whether this is for production set mode.</param>
+    /// <returns>A sequence of tuples containing the record ID and the formatted line.</returns>
     private static IEnumerable<(string RecordId, string Line)> BuildOptRowsForFile(
         FileData fileData,
         FileGenerationRequest request,
         bool isProductionSet)
     {
-        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-        var (batesNumber, volume, imagePath, pageCount) = GetRowData(fileData, request, isProductionSet);
+        var workItem = fileData.WorkItem;
+        string baseBatesNumber;
+        if (isProductionSet)
+        {
+            baseBatesNumber = BatesNumberGenerator.Generate(request.Bates!, workItem.Index - 1);
+        }
+        else if (request.Bates != null)
+        {
+            baseBatesNumber = GenerateBatesNumber(request, workItem);
+        }
+        else
+        {
+            baseBatesNumber = GenerateDocumentId(workItem);
+        }
 
-        var parentLine = BuildOptRow(batesNumber, volume, imagePath, pageCount);
-        yield return (batesNumber, parentLine);
+        string volume = isProductionSet ? workItem.FolderName : "VOL001";
+
+        string baseImagePath = isProductionSet
+            ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
+                .Replace(Path.DirectorySeparatorChar, '\\')
+            : $"IMAGES\\{baseBatesNumber}.tif";
+
+        int actualPages = request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, fileData.PageCount) : 1;
+        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+
+        // Generate parent pages
+        foreach (var entry in GeneratePageEntries(baseBatesNumber, baseImagePath, actualPages))
+        {
+            var parentLine = $"{entry.Bates},{volume},{entry.ImagePath},{entry.DocBreak},,,{entry.PageCountStr}";
+            yield return (entry.Bates, parentLine);
+        }
 
         if (hasAttachment)
         {
-            string childBates = $"{batesNumber}_A001";
+            string childBates = $"{baseBatesNumber}_A001";
             string childImagePath = isProductionSet
                 ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\')
                 : $"IMAGES\\{childBates}.tif";
-            var childLine = BuildOptRow(childBates, volume, childImagePath, 1);
+            var childLine = $"{childBates},{volume},{childImagePath},Y,,,1";
             yield return (childBates, childLine);
         }
     }
 
     /// <summary>
-    /// Builds a single OPT row formatted string.
+    /// Generates page-level metadata entries for a multi-page file or single-page file.
     /// </summary>
-    private static string BuildOptRow(string batesNumber, string volume, string imagePath, int pageCount)
+    /// <param name="baseBates">The base Bates number or Control Number.</param>
+    /// <param name="baseImagePath">The base image relative path.</param>
+    /// <param name="actualPages">The actual page count of the file.</param>
+    /// <returns>A sequence of page-level metadata entries.</returns>
+    private static System.Collections.Generic.IEnumerable<(string Bates, string ImagePath, string DocBreak, string PageCountStr)> GeneratePageEntries(
+        string baseBates,
+        string baseImagePath,
+        int actualPages)
     {
-        return $"{batesNumber},{volume},{imagePath},Y,,,{pageCount}";
+        if (actualPages > 1)
+        {
+            var ext = Path.GetExtension(baseImagePath);
+            var pathWithoutExt = baseImagePath.Length >= ext.Length
+                ? baseImagePath.Substring(0, baseImagePath.Length - ext.Length)
+                : baseImagePath;
+
+            for (int pageIdx = 1; pageIdx <= actualPages; pageIdx++)
+            {
+                var pageBates = $"{baseBates}_{pageIdx:D3}";
+                var pageImagePath = $"{pathWithoutExt}_{pageIdx:D3}{ext}";
+                var docBreak = pageIdx == 1 ? "Y" : string.Empty;
+                var pageCountStr = pageIdx == 1 ? actualPages.ToString() : string.Empty;
+
+                yield return (pageBates, pageImagePath, docBreak, pageCountStr);
+            }
+        }
+        else
+        {
+            yield return (baseBates, baseImagePath, "Y", "1");
+        }
     }
 }

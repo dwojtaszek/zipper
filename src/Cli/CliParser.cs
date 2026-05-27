@@ -133,6 +133,7 @@ public static class CliParser
                     if (TryGetValue(args, i, out var loadFmt))
                     {
                         parsed.LoadFileFormat = loadFmt;
+                        parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
 
@@ -261,6 +262,7 @@ public static class CliParser
                     if (TryGetValue(args, i, out var loadFmts))
                     {
                         parsed.LoadFileFormats = loadFmts;
+                        parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
 
@@ -319,6 +321,7 @@ public static class CliParser
                     if (TryGetValue(args, i, out var lfFmt))
                     {
                         parsed.LoadFileFormat = lfFmt;
+                        parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
 

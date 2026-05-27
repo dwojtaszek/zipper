@@ -157,20 +157,22 @@ internal static class ProductionSetGenerator
             await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
         }
 
-        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, totalRecords, datChaosEngine?.Anomalies);
+        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, totalRecords, datChaosEngine?.Anomalies, LoadFileFormat.Dat);
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson);
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
         var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
-        long optTotalLines = totalRecords; // OPT has no header row
+        long optTotalLines = fileDataList.Sum(f =>
+            (request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
+            + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0));
         var optChaosEngine = ChaosEngineBuilder.Build(request, optTotalLines, LoadFileFormat.Opt);
         await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
         {
             await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine);
         }
 
-        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, totalRecords, optChaosEngine?.Anomalies);
+        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, optTotalLines, optChaosEngine?.Anomalies, LoadFileFormat.Opt);
 
         // Save OPT properties with a slightly different name to avoid overwriting DAT properties
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson);

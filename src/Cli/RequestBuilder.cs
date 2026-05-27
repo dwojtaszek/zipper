@@ -42,6 +42,14 @@ public static class RequestBuilder
                 .Select(f => f!.Value)
                 .ToList();
         }
+        else if (!parsed.IsLoadFileFormatExplicit)
+        {
+            var fileType = (parsed.FileType ?? "pdf").ToLowerInvariant();
+            if (fileType == "tiff" || fileType == "jpg")
+            {
+                multiFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
+            }
+        }
 
         string columnDelim = "\u0014";
         string quoteDelim = "\u00fe";
