@@ -22,15 +22,17 @@ internal static class LoadfileAuditWriter
     /// <param name="request">File generation request.</param>
     /// <param name="totalRecords">Total records written.</param>
     /// <param name="anomalies">List of chaos anomalies (empty if chaos disabled).</param>
+    /// <param name="format">The explicit load file format.</param>
     /// <returns>Path to the generated properties file.</returns>
     public static async Task<string> WriteAsync(
         string outputPath,
         FileGenerationRequest request,
         long totalRecords,
-        IReadOnlyList<ChaosAnomaly>? anomalies = null)
+        IReadOnlyList<ChaosAnomaly>? anomalies = null,
+        LoadFileFormat? format = null)
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
-        var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies);
+        var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies, format);
         await File.WriteAllTextAsync(propertiesPath, json);
         return propertiesPath;
     }
@@ -38,15 +40,47 @@ internal static class LoadfileAuditWriter
     /// <summary>
     /// Generates the properties JSON string without writing to disk.
     /// </summary>
+    /// <param name="outputPath">Path to the generated load file.</param>
+    /// <param name="request">File generation request.</param>
+    /// <param name="totalRecords">Total records written.</param>
+    /// <param name="anomalies">List of chaos anomalies.</param>
+    /// <param name="format">The explicit load file format.</param>
+    /// <returns>The properties JSON string.</returns>
     public static string GenerateAuditJson(
         string outputPath,
         FileGenerationRequest request,
         long totalRecords,
-        IReadOnlyList<ChaosAnomaly>? anomalies = null)
+        IReadOnlyList<ChaosAnomaly>? anomalies = null,
+        LoadFileFormat? format = null)
     {
-        var formatName = request.LoadFile.LoadFileFormat == LoadFileFormat.Opt
+        var activeFormat = format ?? request.LoadFile.LoadFileFormat;
+        var formatName = activeFormat == LoadFileFormat.Opt
             ? "OPT (Image)"
             : "DAT (Metadata)";
+
+        AuditDelimiters delimiters;
+        if (activeFormat == LoadFileFormat.Opt)
+        {
+            delimiters = new AuditDelimiters
+            {
+                Column = "char:,",
+                Quote = "none",
+                Newline = "none",
+                MultiValue = "none",
+                NestedValue = "none",
+            };
+        }
+        else
+        {
+            delimiters = new AuditDelimiters
+            {
+                Column = FormatDelimiter(request.Delimiters.ColumnDelimiter),
+                Quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "none" : FormatDelimiter(request.Delimiters.QuoteDelimiter),
+                Newline = FormatDelimiter(request.Delimiters.NewlineDelimiter),
+                MultiValue = FormatDelimiter(request.Delimiters.MultiValueDelimiter),
+                NestedValue = FormatDelimiter(request.Delimiters.NestedValueDelimiter),
+            };
+        }
 
         var audit = new AuditDocument
         {
@@ -57,14 +91,7 @@ internal static class LoadfileAuditWriter
             {
                 Encoding = request.LoadFile.Encoding,
                 LineEnding = request.Delimiters.EndOfLine,
-                Delimiters = new AuditDelimiters
-                {
-                    Column = FormatDelimiter(request.Delimiters.ColumnDelimiter),
-                    Quote = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? "none" : FormatDelimiter(request.Delimiters.QuoteDelimiter),
-                    Newline = FormatDelimiter(request.Delimiters.NewlineDelimiter),
-                    MultiValue = FormatDelimiter(request.Delimiters.MultiValueDelimiter),
-                    NestedValue = FormatDelimiter(request.Delimiters.NestedValueDelimiter),
-                },
+                Delimiters = delimiters,
             },
             ChaosMode = new AuditChaosMode
             {

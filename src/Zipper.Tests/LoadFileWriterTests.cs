@@ -65,6 +65,86 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task OptWriter_WithMultiPageTiff_ProducesCorrectPageLevelSuffixesAndDocumentBreaks()
+        {
+            // Arrange
+            var request = this.CreateTestRequest("tiff");
+            request.Tiff = request.Tiff with { PageRange = (1, 10) }; // Enable page count column/page-level range
+
+            var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/file_00000001.tiff",
+                    },
+                    PageCount = 3, // Multi-page TIFF (3 pages)
+                },
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 2,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/file_00000002.tiff",
+                    },
+                    PageCount = 1, // Single-page TIFF (1 page)
+                }
+            };
+
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
+            var outputPath = Path.Combine(this.tempDir, "test_multipage.opt");
+
+            // Act
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, files);
+            }
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Assert
+            // 3 pages for first doc + 1 page for second doc = 4 lines total
+            Assert.Equal(4, lines.Length);
+
+            // Line 1: First doc, page 1 (break = Y, pageCount = 3)
+            var parts1 = lines[0].Split(',');
+            Assert.Equal("DOC00000001_001", parts1[0]);
+            Assert.Equal("VOL001", parts1[1]);
+            Assert.Equal("IMAGES\\DOC00000001_001.tif", parts1[2]);
+            Assert.Equal("Y", parts1[3]);
+            Assert.Equal("3", parts1[6]);
+
+            // Line 2: First doc, page 2 (break = empty, pageCount = empty)
+            var parts2 = lines[1].Split(',');
+            Assert.Equal("DOC00000001_002", parts2[0]);
+            Assert.Equal("VOL001", parts2[1]);
+            Assert.Equal("IMAGES\\DOC00000001_002.tif", parts2[2]);
+            Assert.Equal(string.Empty, parts2[3]);
+            Assert.Equal(string.Empty, parts2[6]);
+
+            // Line 3: First doc, page 3 (break = empty, pageCount = empty)
+            var parts3 = lines[2].Split(',');
+            Assert.Equal("DOC00000001_003", parts3[0]);
+            Assert.Equal("VOL001", parts3[1]);
+            Assert.Equal("IMAGES\\DOC00000001_003.tif", parts3[2]);
+            Assert.Equal(string.Empty, parts3[3]);
+            Assert.Equal(string.Empty, parts3[6]);
+
+            // Line 4: Second doc, page 1 (single-page doc, break = Y, pageCount = 1, no page suffix)
+            var parts4 = lines[3].Split(',');
+            Assert.Equal("DOC00000002", parts4[0]);
+            Assert.Equal("VOL001", parts4[1]);
+            Assert.Equal("IMAGES\\DOC00000002.tif", parts4[2]);
+            Assert.Equal("Y", parts4[3]);
+            Assert.Equal("1", parts4[6]);
+        }
+
+        [Fact]
         public async Task DatWriter_ShouldWriteValidDatFormat()
         {
             // Arrange

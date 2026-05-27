@@ -87,11 +87,14 @@ namespace Zipper
                 var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
                 // Build a fresh ChaosEngine per format (engines are stateful; sharing across formats is incorrect)
+                long totalRecords = format == LoadFileFormat.Opt
+                    ? processedFiles.Sum(f => request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
+                    : processedFiles.Count;
+
                 long totalChaosLines = format == LoadFileFormat.Opt
-                    ? processedFiles.Count
-                    : processedFiles.Count + 1;
+                    ? totalRecords
+                    : totalRecords + 1;
                 var chaosEngine = ChaosEngineBuilder.Build(request, totalChaosLines, format);
-                long totalRecords = processedFiles.Count;
 
                 if (request.Output.IncludeLoadFile)
                 {
@@ -102,7 +105,7 @@ namespace Zipper
                     }
 
                     // Write audit file to ZIP
-                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, totalRecords, chaosEngine?.Anomalies);
+                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, totalRecords, chaosEngine?.Anomalies, format);
                     var propertiesEntry = archive.CreateEntry(actualLoadFileName + "_properties.json", CompressionLevel.Optimal);
                     using (var propertiesStream = propertiesEntry.Open())
                     using (var propertiesWriter = new StreamWriter(propertiesStream))
@@ -121,7 +124,7 @@ namespace Zipper
                     await fileStream.FlushAsync();
 
                     // Write audit file to disk
-                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies);
+                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies, format);
                     await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson);
 
                     actualLoadFilePath = currentFilePath;

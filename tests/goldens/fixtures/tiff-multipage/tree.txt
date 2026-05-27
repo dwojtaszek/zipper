@@ -1,3 +1,4 @@
 ./archive.dat
 ./archive.json
+./archive.opt
 ./archive.zip
