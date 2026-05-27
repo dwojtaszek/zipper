@@ -69,6 +69,47 @@ if exist "%TEST_OUTPUT_DIR%\edrm_xml\*.xml" (
     set /a FAILED+=1
 )
 
+echo [ INFO ] Test: --with-families accepted with EML + attachments
+%ZIPPER_CMD% --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\families" --with-families --attachment-rate 50 2> "%TEMP%\no_warn.txt" >nul
+findstr /C:"Warning: --with-families is only meaningful" "%TEMP%\no_warn.txt" >nul 2>&1
+if errorlevel 1 (
+    if exist "%TEST_OUTPUT_DIR%\families\*.dat" (
+        echo [ INFO ] PASS: --with-families accepted without warning
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --with-families (no output produced)
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --with-families incorrectly emitted warning for valid config
+    set /a FAILED+=1
+)
+del "%TEMP%\no_warn.txt" 2>nul
+
+echo [ INFO ] Test: --with-families warning emitted without --type eml
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn1" --with-families 2> "%TEMP%\warn1.txt" >nul
+findstr /C:"Warning: --with-families is only meaningful" "%TEMP%\warn1.txt" >nul 2>&1
+if not errorlevel 1 (
+    echo [ INFO ] PASS: --with-families warning emitted for non-eml type
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --with-families warning not emitted for non-eml type
+    set /a FAILED+=1
+)
+del "%TEMP%\warn1.txt" 2>nul
+
+echo [ INFO ] Test: --with-families warning emitted with --attachment-rate 0
+%ZIPPER_CMD% --type eml --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn2" --with-families --attachment-rate 0 2> "%TEMP%\warn2.txt" >nul
+findstr /C:"Warning: --with-families is only meaningful" "%TEMP%\warn2.txt" >nul 2>&1
+if not errorlevel 1 (
+    echo [ INFO ] PASS: --with-families warning emitted for attachment-rate 0
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --with-families warning not emitted for attachment-rate 0
+    set /a FAILED+=1
+)
+del "%TEMP%\warn2.txt" 2>nul
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 

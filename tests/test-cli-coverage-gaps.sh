@@ -178,17 +178,51 @@ fi
 # --- --with-families flag ---
 
 print_info "Test: --with-families accepted with EML + attachments"
+err_file=$(mktemp)
 if zipper --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/families" \
-    --with-families --attachment-rate 50 > /dev/null 2>&1; then
+    --with-families --attachment-rate 50 2> "$err_file"; then
     dat_file=$(find "$TEST_OUTPUT_DIR/families" -name "*.dat" -print -quit)
     if [[ -n "$dat_file" && -s "$dat_file" ]]; then
-        pass "--with-families accepted and produces output"
+        if ! grep -q "Warning: --with-families is only meaningful" "$err_file"; then
+            pass "--with-families accepted and does not emit warning"
+        else
+            fail "--with-families incorrectly emitted warning for valid config"
+        fi
     else
         fail "--with-families: no .dat file produced"
     fi
 else
     fail "--with-families command failed"
 fi
+rm -f "$err_file"
+
+print_info "Test: --with-families warning emitted without --type eml"
+err_file=$(mktemp)
+if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/families-warn1" \
+    --with-families 2> "$err_file"; then
+    if grep -q "Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "$err_file"; then
+        pass "--with-families warning emitted for non-eml type"
+    else
+        fail "--with-families warning NOT emitted for non-eml type"
+    fi
+else
+    fail "--with-families non-eml type command failed"
+fi
+rm -f "$err_file"
+
+print_info "Test: --with-families warning emitted with --attachment-rate 0"
+err_file=$(mktemp)
+if zipper --type eml --count 5 --output-path "$TEST_OUTPUT_DIR/families-warn2" \
+    --with-families --attachment-rate 0 2> "$err_file"; then
+    if grep -q "Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "$err_file"; then
+        pass "--with-families warning emitted for attachment-rate 0"
+    else
+        fail "--with-families warning NOT emitted for attachment-rate 0"
+    fi
+else
+    fail "--with-families attachment-rate 0 command failed"
+fi
+rm -f "$err_file"
 
 # --- Summary ---
 

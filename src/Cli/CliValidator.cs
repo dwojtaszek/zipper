@@ -68,7 +68,23 @@ public static class CliValidator
                ValidateLoadFileOnly(parsed) &&
                ValidateChaos(parsed) &&
                ValidateProduction(parsed) &&
-               ValidateDelimiters(parsed);
+               ValidateDelimiters(parsed) &&
+               ValidateFamilies(parsed);
+    }
+
+    private static bool ValidateFamilies(ParsedArguments parsed)
+    {
+        if (parsed.WithFamilies)
+        {
+            if (string.IsNullOrEmpty(parsed.FileType) ||
+                !parsed.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase) ||
+                parsed.AttachmentRate <= 0)
+            {
+                Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
+            }
+        }
+
+        return true;
     }
 
     private static bool ValidateBasicLimits(ParsedArguments parsed)

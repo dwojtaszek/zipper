@@ -390,5 +390,83 @@ namespace Zipper.Tests
             Assert.False(CliValidator.IsValidChaosAmount("0%"));
             Assert.False(CliValidator.IsValidChaosAmount("-5"));
         }
+
+        [Fact]
+        public void Validate_WithFamiliesWithoutEml_EmitsWarning()
+        {
+            var args = CreateValidArgs();
+            args.FileType = "pdf";
+            args.WithFamilies = true;
+            args.AttachmentRate = 50;
+
+            var originalError = Console.Error;
+            using (var errWriter = new StringWriter())
+            {
+                Console.SetError(errWriter);
+                try
+                {
+                    var result = CliValidator.Validate(args);
+                    Assert.True(result);
+                    var output = errWriter.ToString();
+                    Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output);
+                }
+                finally
+                {
+                    Console.SetError(originalError);
+                }
+            }
+        }
+
+        [Fact]
+        public void Validate_WithFamiliesWithEmlAndAttachmentRateZero_EmitsWarning()
+        {
+            var args = CreateValidArgs();
+            args.FileType = "eml";
+            args.WithFamilies = true;
+            args.AttachmentRate = 0;
+
+            var originalError = Console.Error;
+            using (var errWriter = new StringWriter())
+            {
+                Console.SetError(errWriter);
+                try
+                {
+                    var result = CliValidator.Validate(args);
+                    Assert.True(result);
+                    var output = errWriter.ToString();
+                    Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output);
+                }
+                finally
+                {
+                    Console.SetError(originalError);
+                }
+            }
+        }
+
+        [Fact]
+        public void Validate_WithFamiliesWithEmlAndAttachmentRatePositive_DoesNotEmitWarning()
+        {
+            var args = CreateValidArgs();
+            args.FileType = "eml";
+            args.WithFamilies = true;
+            args.AttachmentRate = 50;
+
+            var originalError = Console.Error;
+            using (var errWriter = new StringWriter())
+            {
+                Console.SetError(errWriter);
+                try
+                {
+                    var result = CliValidator.Validate(args);
+                    Assert.True(result);
+                    var output = errWriter.ToString();
+                    Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output);
+                }
+                finally
+                {
+                    Console.SetError(originalError);
+                }
+            }
+        }
     }
 }
