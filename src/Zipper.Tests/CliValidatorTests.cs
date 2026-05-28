@@ -468,5 +468,30 @@ namespace Zipper.Tests
                 }
             }
         }
+
+        [Fact]
+        public void Validate_WithFamiliesAndLoadfileOnly_EmitsWarning()
+        {
+            var args = CreateValidArgs();
+            args.WithFamilies = true;
+            args.LoadfileOnly = true;
+
+            var originalError = Console.Error;
+            using (var errWriter = new StringWriter())
+            {
+                Console.SetError(errWriter);
+                try
+                {
+                    var result = CliValidator.Validate(args);
+                    Assert.True(result);
+                    var output = errWriter.ToString();
+                    Assert.Contains("Warning: --with-families has no effect in --loadfile-only mode.", output);
+                }
+                finally
+                {
+                    Console.SetError(originalError);
+                }
+            }
+        }
     }
 }

@@ -108,7 +108,17 @@ if not errorlevel 1 (
     echo [ ERROR ] FAIL: --with-families warning not emitted for attachment-rate 0
     set /a FAILED+=1
 )
-del "%TEMP%\warn2.txt" 2>nul
+echo [ INFO ] Test: --with-families warning emitted with --loadfile-only
+%ZIPPER_CMD% --type eml --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn3" --with-families --attachment-rate 50 --loadfile-only 2> "%TEMP%\warn3.txt" >nul
+findstr /C:"Warning: --with-families has no effect" "%TEMP%\warn3.txt" >nul 2>&1
+if not errorlevel 1 (
+    echo [ INFO ] PASS: --with-families warning emitted for loadfile-only mode
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --with-families warning not emitted for loadfile-only mode
+    set /a FAILED+=1
+)
+del "%TEMP%\warn3.txt" 2>nul
 
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"

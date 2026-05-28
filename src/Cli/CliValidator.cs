@@ -76,7 +76,11 @@ public static class CliValidator
     {
         if (parsed.WithFamilies)
         {
-            if (string.IsNullOrEmpty(parsed.FileType) ||
+            if (parsed.LoadfileOnly)
+            {
+                Console.Error.WriteLine("Warning: --with-families has no effect in --loadfile-only mode.");
+            }
+            else if (string.IsNullOrEmpty(parsed.FileType) ||
                 !parsed.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase) ||
                 parsed.AttachmentRate <= 0)
             {
