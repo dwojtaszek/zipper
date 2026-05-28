@@ -68,7 +68,32 @@ public static class CliValidator
                ValidateLoadFileOnly(parsed) &&
                ValidateChaos(parsed) &&
                ValidateProduction(parsed) &&
-               ValidateDelimiters(parsed);
+               ValidateDelimiters(parsed) &&
+               ValidateFamilies(parsed);
+    }
+
+    /// <summary>
+    /// Validates the --with-families option and warns if used in unsupported contexts.
+    /// </summary>
+    /// <param name="parsed">The parsed command-line arguments.</param>
+    /// <returns>True since it emits a soft warning but does not reject execution.</returns>
+    private static bool ValidateFamilies(ParsedArguments parsed)
+    {
+        if (parsed.WithFamilies)
+        {
+            if (parsed.LoadfileOnly)
+            {
+                Console.Error.WriteLine("Warning: --with-families has no effect in --loadfile-only mode.");
+            }
+            else if (string.IsNullOrEmpty(parsed.FileType) ||
+                !parsed.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase) ||
+                parsed.AttachmentRate <= 0)
+            {
+                Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
+            }
+        }
+
+        return true;
     }
 
     private static bool ValidateBasicLimits(ParsedArguments parsed)
