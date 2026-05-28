@@ -57,3 +57,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Path-traversal E2E test artifacts
+*mixed*
+/..\\*
+**/..\\*
