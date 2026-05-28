@@ -72,6 +72,11 @@ public static class CliValidator
                ValidateFamilies(parsed);
     }
 
+    /// <summary>
+    /// Validates the --with-families option and warns if used in unsupported contexts.
+    /// </summary>
+    /// <param name="parsed">The parsed command-line arguments.</param>
+    /// <returns>True since it emits a soft warning but does not reject execution.</returns>
     private static bool ValidateFamilies(ParsedArguments parsed)
     {
         if (parsed.WithFamilies)
