@@ -241,6 +241,9 @@ namespace Zipper
                     }
                 }
 
+                var hashBytes = MD5.HashData(data);
+                var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
                 return new FileData
                 {
                     WorkItem = workItem,
@@ -249,6 +252,7 @@ namespace Zipper
                     Attachment = attachment,
                     PageCount = pageCount,
                     Email = email,
+                    Hash = hash,
                 };
             }
 
@@ -260,15 +264,20 @@ namespace Zipper
                 RandomNumberGenerator.Fill(paddingSpan);
             }
 
+            var finalMemory = memoryOwner.Memory[..(int)totalSize];
+            var finalHashBytes = MD5.HashData(finalMemory.Span);
+            var finalHash = Convert.ToHexString(finalHashBytes).ToLowerInvariant();
+
             return new FileData
             {
                 WorkItem = workItem,
-                Data = memoryOwner.Memory[..(int)totalSize],
+                Data = finalMemory,
                 DataLength = (int)totalSize,
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
                 PageCount = pageCount,
                 Email = email,
+                Hash = finalHash,
             };
         }
 
@@ -341,5 +350,7 @@ namespace Zipper
         public int PageCount { get; init; } = 1;
 
         public Email? Email { get; init; }
+
+        public string Hash { get; init; } = string.Empty;
     }
 }

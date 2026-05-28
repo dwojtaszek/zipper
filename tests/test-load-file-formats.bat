@@ -104,15 +104,21 @@ if errorlevel 1 (
   exit /b 1
 )
 
-findstr /C:"<documents>" "!XML_FILE!" >nul
+findstr /C:"<Root DataInterchangeType=" "!XML_FILE!" >nul
 if errorlevel 1 (
-  echo [ ERROR ] Test 3: Root element ^<documents^> not found
+  echo [ ERROR ] Test 3: Root element ^<Root DataInterchangeType=...^> not found
   exit /b 1
 )
 
-findstr /C:"<document>" "!XML_FILE!" >nul
+findstr /C:"<Documents>" "!XML_FILE!" >nul
 if errorlevel 1 (
-  echo [ ERROR ] Test 3: ^<document^> element not found
+  echo [ ERROR ] Test 3: Plural wrapper ^<Documents^> not found
+  exit /b 1
+)
+
+findstr /C:"<Document DocID=" "!XML_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 3: ^<Document DocID=...^> element not found
   exit /b 1
 )
 
