@@ -10,6 +10,8 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal class XmlLoadFileWriter : LoadFileWriterBase
 {
+    private const string FieldElement = "Field";
+
     public override string FormatName => "XML";
 
     public override string FileExtension => ".xml";
@@ -101,9 +103,11 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         // Extracted Text file reference if applicable
         if (request.Output.WithText)
         {
+#pragma warning disable S4790 // Cryptographic algorithms should be robust
             var textHash = string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
                 ? Convert.ToHexString(System.Security.Cryptography.MD5.HashData(PlaceholderFiles.EmlExtractedText)).ToLowerInvariant()
                 : Convert.ToHexString(System.Security.Cryptography.MD5.HashData(PlaceholderFiles.ExtractedText)).ToLowerInvariant();
+#pragma warning restore S4790
 
             var textFileSize = string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
                 ? PlaceholderFiles.EmlExtractedText.Length
@@ -129,36 +133,36 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         {
             var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
 
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("Custodian", namingConvention)), metadata.Custodian));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("DateSent", namingConvention)), metadata.DateSent));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("Author", namingConvention)), metadata.Author));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("FileSize", namingConvention)), metadata.FileSize));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Custodian", namingConvention)), metadata.Custodian));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("DateSent", namingConvention)), metadata.DateSent));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Author", namingConvention)), metadata.Author));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("FileSize", namingConvention)), metadata.FileSize));
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             var eml = GenerateEmlValues(workItem, fileData, random, now, request);
 
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("To", namingConvention)), eml.To));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("From", namingConvention)), eml.From));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("Subject", namingConvention)), eml.Subject));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("SentDate", namingConvention)), eml.SentDate));
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("Attachment", namingConvention)), eml.Attachment));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("To", namingConvention)), eml.To));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("From", namingConvention)), eml.From));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Subject", namingConvention)), eml.Subject));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("SentDate", namingConvention)), eml.SentDate));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Attachment", namingConvention)), eml.Attachment));
         }
 
         if (request.Bates != null)
         {
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("BatesNumber", namingConvention)), GenerateBatesNumber(request, workItem)));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("BatesNumber", namingConvention)), GenerateBatesNumber(request, workItem)));
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("PageCount", namingConvention)), fileData.PageCount));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("PageCount", namingConvention)), fileData.PageCount));
         }
 
         if (request.Output.WithText)
         {
-            fieldsElement.Add(new XElement("Field", new XAttribute("Name", NamingConventionHelper.ApplyConvention("ExtractedTextPath", namingConvention)), GenerateTextPath(request, workItem)));
+            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("ExtractedTextPath", namingConvention)), GenerateTextPath(request, workItem)));
         }
 
         if (fieldsElement.HasElements)
