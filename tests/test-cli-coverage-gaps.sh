@@ -100,7 +100,7 @@ fi
 print_info "Test: --load-file-format edrm-xml"
 if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/edrm_xml" --load-file-format edrm-xml > /dev/null 2>&1; then
     xml_file=$(find "$TEST_OUTPUT_DIR/edrm_xml" -name "*.xml" -print -quit)
-    if [[ -n "$xml_file" ]] && grep -q '<documents>' "$xml_file"; then
+    if [[ -n "$xml_file" ]] && grep -q '<Root' "$xml_file"; then
         pass "--load-file-format edrm-xml produces valid XML"
     else
         fail "--load-file-format edrm-xml: no valid XML found"

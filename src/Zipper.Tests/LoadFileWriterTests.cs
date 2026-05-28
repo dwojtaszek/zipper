@@ -49,15 +49,22 @@ namespace Zipper
             var fileList = new List<FileData>();
             for (int i = 1; i <= count; i++)
             {
+                var contentBytes = Encoding.UTF8.GetBytes($"Test content {i}");
+                var hashBytes = System.Security.Cryptography.MD5.HashData(contentBytes);
+                var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+
                 fileList.Add(new FileData
                 {
                     WorkItem = new FileWorkItem
                     {
                         Index = i,
                         FolderNumber = 1,
+                        FileName = $"file_{i:D8}.pdf",
                         FilePathInZip = $"folder_001/file_{i:D8}.pdf",
                     },
-                    Data = Encoding.UTF8.GetBytes($"Test content {i}"),
+                    Data = contentBytes,
+                    DataLength = contentBytes.Length,
+                    Hash = hash,
                 });
             }
 
@@ -305,6 +312,7 @@ namespace Zipper
         {
             // Arrange
             var request = this.CreateTestRequest();
+            request.Output = request.Output with { WithText = true }; // Ensure we test extracted text reference too
             var fileData = this.CreateTestFileData();
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.EdrmXml);
             var outputPath = Path.Combine(this.tempDir, "test.xml");
@@ -317,10 +325,23 @@ namespace Zipper
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            // Assert - Note: XDocument includes XML declaration, but we write directly to stream
-            Assert.Contains("<documents>", content);
-            Assert.Contains("<document>", content);
-            Assert.Contains("<controlNumber>DOC00000001</controlNumber>", content);
+            // Assert
+            Assert.Contains("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>", content.ToLowerInvariant());
+            Assert.Contains("<Root DataInterchangeType=\"Export\" MajorVersion=\"1\" MinorVersion=\"2\">", content);
+            Assert.Contains("<Batch>", content);
+            Assert.Contains("<Documents>", content);
+            Assert.Contains("<Document DocID=\"DOC00000001\">", content);
+            Assert.Contains("<Files>", content);
+            Assert.Contains("<File FileType=\"Native\">", content);
+            Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.pdf\" FileName=\"file_00000001.pdf\" FileSize=\"14\" Hash=\"", content);
+            Assert.Contains("<File FileType=\"Text\">", content);
+            Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.txt\" FileName=\"file_00000001.txt\" FileSize=\"41\" Hash=\"", content);
+            Assert.Contains("<Fields>", content);
+            Assert.Contains("<Field Name=\"Custodian\">Custodian 1</Field>", content);
+            Assert.Contains("</Document>", content);
+            Assert.Contains("</Documents>", content);
+            Assert.Contains("</Batch>", content);
+            Assert.Contains("</Root>", content);
         }
 
         [Fact]
