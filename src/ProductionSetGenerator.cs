@@ -103,7 +103,23 @@ internal static class ProductionSetGenerator
             await File.WriteAllTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding);
 
             // Write placeholder TIFF image (single-pixel stub)
-            await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff"));
+            if (generated.PageCount > 1)
+            {
+                var imageExt = Path.GetExtension(plan.ImageRelPath);
+                var imagePathWithoutExt = plan.ImageRelPath.Length >= imageExt.Length
+                    ? plan.ImageRelPath.Substring(0, plan.ImageRelPath.Length - imageExt.Length)
+                    : plan.ImageRelPath;
+
+                for (int pageIdx = 1; pageIdx <= generated.PageCount; pageIdx++)
+                {
+                    var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
+                    await File.WriteAllBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff"));
+                }
+            }
+            else
+            {
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff"));
+            }
 
             fileDataList.Add(new FileData
             {

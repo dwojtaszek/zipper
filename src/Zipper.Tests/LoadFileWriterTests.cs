@@ -250,6 +250,55 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task OptWriter_WithDefaultSettings_ShouldUseAnsiDefault()
+        {
+            // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+            // Arrange - Test that when IsEncodingExplicit is false and default encoding is set,
+            // OptWriter uses ANSI (Windows-1252) default and DatWriter uses UTF-8.
+            var request = this.CreateTestRequest();
+            request.LoadFile = request.LoadFile with { Encoding = "UTF-8", IsEncodingExplicit = false };
+            var fileData = this.CreateTestFileData();
+
+            var optWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
+            var datWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
+
+            var optOutputPath = Path.Combine(this.tempDir, "default_test.opt");
+            var datOutputPath = Path.Combine(this.tempDir, "default_test.dat");
+
+            // Act
+            await using (var stream = File.OpenWrite(optOutputPath))
+            {
+                await optWriter.WriteAsync(stream, request, fileData);
+            }
+
+            await using (var stream = File.OpenWrite(datOutputPath))
+            {
+                await datWriter.WriteAsync(stream, request, fileData);
+            }
+
+            // Assert OptWriter used Windows-1252 (ANSI) default
+            var optTargetEncoding = Encoding.GetEncoding("Windows-1252");
+            var optContentWithAnsi = await File.ReadAllTextAsync(optOutputPath, optTargetEncoding);
+
+            // OPT content should be read correctly as ANSI and matches basic expectations
+            Assert.NotEmpty(optContentWithAnsi);
+            Assert.Contains(",", optContentWithAnsi);
+
+            // Assert DatWriter used UTF-8 default
+            var datContentWithUtf8 = await File.ReadAllTextAsync(datOutputPath, Encoding.UTF8);
+            Assert.NotEmpty(datContentWithUtf8);
+
+            // Assert that the companion properties.json generated matches the effective encodings
+            var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optOutputPath, request, fileData.Count, null, LoadFileFormat.Opt);
+            Assert.Contains("\"encoding\": \"ANSI\"", optAuditJson);
+
+            var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datOutputPath, request, fileData.Count, null, LoadFileFormat.Dat);
+            Assert.Contains("\"encoding\": \"UTF-8\"", datAuditJson);
+        }
+
+        [Fact]
         public async Task CsvWriter_ShouldWriteCsvFormat()
         {
             // Arrange

@@ -8,6 +8,8 @@ public record LoadFileConfig
 
     public string Encoding { get; init; } = "UTF-8";
 
+    public bool IsEncodingExplicit { get; init; }
+
     public DistributionType Distribution { get; init; } = DistributionType.Proportional;
 
     public int AttachmentRate { get; init; }
