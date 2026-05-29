@@ -741,10 +741,10 @@ internal class DatWriter : LoadFileWriterBase
         var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
         var author = $"Author {random.Next(1, 100):D3}";
         var fileSize = random.Next(1024, 10485760).ToString();
-        var emailSubject = $"Email Subject {index}";
-        var emailFrom = $"sender{index}@example.com";
-        var emailTo = $"recipient{index}@example.com";
-        var emailSentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        var subjLine = $"Email Subject {index}";
+        var senderAddr = $"sender{index}@example.com";
+        var recipientAddr = $"recipient{index}@example.com";
+        var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
         var filePath = $"NATIVES\\{(index % 50) + 1:D3}\\{recordId}.pdf";
         var extractedText = $"Sample extracted text content for document {recordId}.";
 
@@ -760,13 +760,13 @@ internal class DatWriter : LoadFileWriterBase
         sb.Append(colDelim);
         AppendField(sb, fileSize, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailSubject, quote, hasQuote);
+        AppendField(sb, subjLine, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailFrom, quote, hasQuote);
+        AppendField(sb, senderAddr, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailTo, quote, hasQuote);
+        AppendField(sb, recipientAddr, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailSentDate, quote, hasQuote);
+        AppendField(sb, sentTime, quote, hasQuote);
         sb.Append(colDelim);
         AppendField(sb, extractedText, quote, hasQuote);
 

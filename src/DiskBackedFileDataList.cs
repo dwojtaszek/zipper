@@ -16,8 +16,8 @@ namespace Zipper
 
         public DiskBackedFileDataList()
         {
-            this.tempFilePath = Path.GetTempFileName();
-            this.fileStream = new FileStream(this.tempFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
+            this.tempFilePath = Path.Combine(Path.GetTempPath(), "zipper-" + Guid.NewGuid().ToString("N") + ".tmp");
+            this.fileStream = new FileStream(this.tempFilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
             this.writer = new BinaryWriter(this.fileStream, Encoding.UTF8, leaveOpen: true);
         }
 
