@@ -558,5 +558,30 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public void GenerateFileData_NonPlaceholderWithMaxPadding_TakesFallbackPath()
+        {
+            var generator = new ParallelFileGenerator();
+            var workItem = new FileWorkItem { Index = 1 };
+            var paddingPerFile = PerformanceConstants.MaxPaddingPerFile;
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = "dummy",
+                    FileType = "docx",
+                    FileCount = 1,
+                }
+            };
+            var fileGenerator = new OfficeFileGenerator("docx");
+
+            var fileData = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+            // Correct path selection means it should not use MemoryPool rent and therefore MemoryOwner should be null
+            Assert.Null(fileData.MemoryOwner);
+            Assert.False(fileData.Data.IsEmpty);
+            Assert.Equal(fileData.DataLength, fileData.Data.Length);
+        }
     }
 }

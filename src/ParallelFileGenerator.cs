@@ -196,7 +196,7 @@ namespace Zipper
             }
         }
 
-        private FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
+        internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
         {
             var generated = fileGenerator.Generate(workItem, request);
             var fileContent = generated.Content;
@@ -216,7 +216,7 @@ namespace Zipper
             var totalSize = fileContent.Length + effectivePadding;
 
             var rentSize = (int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize);
-            var memoryOwner = rentSize > 0 && rentSize <= PerformanceConstants.MaxPoolSize
+            var memoryOwner = totalSize > 0 && totalSize <= PerformanceConstants.MaxPoolSize
                 ? MemoryPool<byte>.Shared.Rent(rentSize)
                 : null;
 
@@ -252,24 +252,32 @@ namespace Zipper
                 };
             }
 
-            fileContent.CopyTo(memoryOwner.Memory.Span);
-
-            if (paddingPerFile > 0)
+            try
             {
-                var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)paddingPerFile);
-                RandomNumberGenerator.Fill(paddingSpan);
+                fileContent.CopyTo(memoryOwner.Memory.Span);
+
+                if (paddingPerFile > 0)
+                {
+                    var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)paddingPerFile);
+                    RandomNumberGenerator.Fill(paddingSpan);
+                }
+
+                return new FileData
+                {
+                    WorkItem = workItem,
+                    Data = memoryOwner.Memory[..(int)totalSize],
+                    DataLength = (int)totalSize,
+                    MemoryOwner = memoryOwner,
+                    Attachment = attachment,
+                    PageCount = pageCount,
+                    Email = email,
+                };
             }
-
-            return new FileData
+            catch
             {
-                WorkItem = workItem,
-                Data = memoryOwner.Memory[..(int)totalSize],
-                DataLength = (int)totalSize,
-                MemoryOwner = memoryOwner,
-                Attachment = attachment,
-                PageCount = pageCount,
-                Email = email,
-            };
+                memoryOwner.Dispose();
+                throw;
+            }
         }
 
         internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
