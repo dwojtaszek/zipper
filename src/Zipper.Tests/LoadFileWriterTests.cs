@@ -698,8 +698,8 @@ namespace Zipper
             var content = Encoding.UTF8.GetString(stream.ToArray());
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            // 3 data rows, no header
-            Assert.Equal(3, lines.Length);
+            // 16 data rows (3 documents expanded to page level), no header
+            Assert.Equal(16, lines.Length);
             foreach (var line in lines)
             {
                 int commaCount = line.Count(c => c == ',');

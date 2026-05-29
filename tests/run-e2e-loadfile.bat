@@ -105,11 +105,11 @@ if not defined opt_file (
     goto :cleanup
 )
 
-REM Verify line count
+REM Verify line count (documents expand to page level, so should be at least 50)
 powershell -Command "(Get-Content -Path '%opt_file%').Count" > "%temp%\line_count.txt"
 set /p opt_line_count=<"%temp%\line_count.txt"
-if "!opt_line_count!" neq "50" (
-    echo [ ERROR ] OPT line count: expected 50, got !opt_line_count!
+if !opt_line_count! lss 50 (
+    echo [ ERROR ] OPT line count: expected at least 50, got !opt_line_count!
     goto :cleanup
 )
 

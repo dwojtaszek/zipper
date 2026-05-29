@@ -49,7 +49,7 @@ internal class DatWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         switch (this.mode)
@@ -73,7 +73,7 @@ internal class DatWriter : LoadFileWriterBase
     internal static async Task WriteContentAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        List<FileData> processedFiles)
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles)
     {
         // Defensive guards to prevent IndexOutOfRangeException when delimiters are unset
         char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
@@ -121,7 +121,7 @@ internal class DatWriter : LoadFileWriterBase
     private static async Task WriteStandardAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
@@ -186,32 +186,43 @@ internal class DatWriter : LoadFileWriterBase
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
-        var rows = new List<(long LineNumber, string RecordId, string Line)>();
-        rows.Add((1, "HEADER", header));
+        await using var writer = CreateWriter(stream, request);
+
+        // Write header
+        string interceptedHeader = ApplyChaosInterception(chaosEngine, 1, header, "HEADER");
+        await writer.WriteAsync(interceptedHeader + eolString);
+
+        if (chaosEngine != null)
+        {
+            var anomaly = chaosEngine.GetEncodingAnomaly(1, 2, encoding);
+            if (anomaly != null)
+            {
+                await writer.FlushAsync();
+                await stream.WriteAsync(anomaly);
+            }
+        }
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             string recordId = $"DOC{i:D8}";
             var line = BuildLoadfileOnlyRow(i, recordId, colDelim, quote, hasQuote, now, random);
-            rows.Add((lineNumber, recordId, line));
-        }
 
-        if (chaosEngine == null)
-        {
-            // Simple path: write directly using StreamWriter
-            await using var writer = CreateWriter(stream, request);
-            foreach (var (_, _, line) in rows)
+            string interceptedLine = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
+            await writer.WriteAsync(interceptedLine + eolString);
+
+            if (chaosEngine != null && i < request.Output.FileCount)
             {
-                await writer.WriteAsync(line + eolString);
+                var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
+                if (anomaly != null)
+                {
+                    await writer.FlushAsync();
+                    await stream.WriteAsync(anomaly);
+                }
             }
+        }
 
-            await writer.FlushAsync();
-        }
-        else
-        {
-            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
-        }
+        await writer.FlushAsync();
     }
 
     /// <summary>
@@ -225,7 +236,7 @@ internal class DatWriter : LoadFileWriterBase
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         var col = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? "\u0014" : request.Delimiters.ColumnDelimiter;
@@ -730,10 +741,10 @@ internal class DatWriter : LoadFileWriterBase
         var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
         var author = $"Author {random.Next(1, 100):D3}";
         var fileSize = random.Next(1024, 10485760).ToString();
-        var emailSubject = $"Email Subject {index}";
-        var emailFrom = $"sender{index}@example.com";
-        var emailTo = $"recipient{index}@example.com";
-        var emailSentDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        var subjLine = $"Email Subject {index}";
+        var senderAddr = $"sender{index}@example.com";
+        var recipientAddr = $"recipient{index}@example.com";
+        var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
         var filePath = $"NATIVES\\{(index % 50) + 1:D3}\\{recordId}.pdf";
         var extractedText = $"Sample extracted text content for document {recordId}.";
 
@@ -749,13 +760,13 @@ internal class DatWriter : LoadFileWriterBase
         sb.Append(colDelim);
         AppendField(sb, fileSize, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailSubject, quote, hasQuote);
+        AppendField(sb, subjLine, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailFrom, quote, hasQuote);
+        AppendField(sb, senderAddr, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailTo, quote, hasQuote);
+        AppendField(sb, recipientAddr, quote, hasQuote);
         sb.Append(colDelim);
-        AppendField(sb, emailSentDate, quote, hasQuote);
+        AppendField(sb, sentTime, quote, hasQuote);
         sb.Append(colDelim);
         AppendField(sb, extractedText, quote, hasQuote);
 
