@@ -364,6 +364,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
 - **REQ-061**: When `--with-families` is specified, the Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENT_DOCID` columns.
 - **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
+- **REQ-122**: When `--with-families` is specified without `--type eml` or with `--attachment-rate 0`, a soft warning shall be emitted to stderr, but the execution shall not be rejected.
 
 #### FR-014: Column Profile System
 

@@ -87,7 +87,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns)
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise)
 
 **Loadfile-Only Options:**
 - `--loadfile-only`: Generate standalone Load Files directly to disk without creating Archives or Native Files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
@@ -231,6 +231,7 @@ Compatibility checklist:
 | `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
 | `--target-zip-size` | Requires `--count` to be specified |
 | `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) |
+| `--with-families` | Only meaningful when `--type eml` and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
 | `--tiff-pages` | Only meaningful when `--type tiff` |
 | `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
 | `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |

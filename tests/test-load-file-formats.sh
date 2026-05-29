@@ -150,16 +150,20 @@ if ! grep -q "<?xml" "$xml_file"; then
   print_error "Test 3: XML declaration not found"
 fi
 
-if ! grep -q "<documents>" "$xml_file"; then
-  print_error "Test 3: Root element <documents> not found"
+if ! grep -q "<Root DataInterchangeType=" "$xml_file"; then
+  print_error "Test 3: Root element <Root DataInterchangeType=...> not found"
 fi
 
-if ! grep -q "<document>" "$xml_file"; then
-  print_error "Test 3: <document> element not found"
+if ! grep -q "<Batch>" "$xml_file"; then
+  print_error "Test 3: <Batch> element not found"
 fi
 
-if ! grep -q "<controlNumber>" "$xml_file"; then
-  print_error "Test 3: <controlNumber> element not found"
+if ! grep -q "<Documents>" "$xml_file"; then
+  print_error "Test 3: Plural wrapper <Documents> element not found"
+fi
+
+if ! grep -q "<Document DocID=" "$xml_file"; then
+  print_error "Test 3: <Document DocID=...> element not found"
 fi
 
 print_success "Test Case 3: XML format passed"
