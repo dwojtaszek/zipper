@@ -18,7 +18,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         var profile = request.Metadata.ColumnProfile
@@ -102,18 +102,49 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
 
     private async Task WriteWithChaosAsync(ProfileWriterContext context, ChaosEngine chaosEngine)
     {
-        var rows = new List<(long LineNumber, string RecordId, string Line)>();
-        rows.Add((1, "HEADER", context.Header));
+        var preamble = context.Encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await context.Stream.WriteAsync(preamble, 0, preamble.Length);
+        }
+
+        await using var writer = CreateWriter(context.Stream, context.Request);
+
+        // Write header
+        string interceptedHeader = ApplyChaosInterception(chaosEngine, 1, context.Header, "HEADER");
+        await writer.WriteAsync(interceptedHeader + context.EolString);
+
+        if (chaosEngine != null)
+        {
+            var anomaly = chaosEngine.GetEncodingAnomaly(1, 2, context.Encoding);
+            if (anomaly != null)
+            {
+                await writer.FlushAsync();
+                await context.Stream.WriteAsync(anomaly);
+            }
+        }
 
         for (long i = 1; i <= context.Request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
             var recordId = $"DOC{i:D8}";
             var line = GenerateRowLine(context, i);
-            rows.Add((lineNumber, recordId, line));
+
+            string interceptedLine = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
+            await writer.WriteAsync(interceptedLine + context.EolString);
+
+            if (chaosEngine != null && i < context.Request.Output.FileCount)
+            {
+                var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, context.Encoding);
+                if (anomaly != null)
+                {
+                    await writer.FlushAsync();
+                    await context.Stream.WriteAsync(anomaly);
+                }
+            }
         }
 
-        await WriteRowsWithChaosAsync(context.Stream, context.Encoding, context.EolString, rows, chaosEngine);
+        await writer.FlushAsync();
     }
 
     private static string GenerateRowLine(ProfileWriterContext context, long i)
