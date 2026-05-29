@@ -5,17 +5,16 @@ using Zipper.Profiles.Generation;
 
 namespace Zipper.Tests.Profiles.Generation;
 
-public class DateGeneratorTests
+public class DateTimeColumnGeneratorTests
 {
     [Fact]
-    public void DateGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
+    public void DateTimeColumnGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
         var originalCulture = CultureInfo.CurrentCulture;
         var originalUiCulture = CultureInfo.CurrentUICulture;
 
         try
         {
-            // Create a custom culture using ar-SA but explicitly set to UmAlQuraCalendar
             var nonUsCulture = (CultureInfo)CultureInfo.GetCultureInfo("ar-SA").Clone();
             nonUsCulture.DateTimeFormat.Calendar = new UmAlQuraCalendar();
             CultureInfo.CurrentCulture = nonUsCulture;
@@ -23,15 +22,14 @@ public class DateGeneratorTests
 
             var col = new ColumnDefinition
             {
-                Name = "TestDate",
-                Type = "date",
+                Name = "TestDateTime",
+                Type = "datetime",
                 DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2020-01-10" }
             };
-            var settings = new ProfileSettings { DateFormat = "yyyy-MM-dd" };
+            var settings = new ProfileSettings { DateTimeFormat = "yyyy-MM-dd HH:mm" };
 
-            // Act & Assert
-            // This should parse the date correctly as Gregorian year 2020
-            var generator = new DateGenerator(col, settings);
+            // Act
+            var generator = new DateTimeColumnGenerator(col, settings);
             var context = new ColumnGenerationContext
             {
                 NativeFileIndex = 0,
@@ -43,10 +41,8 @@ public class DateGeneratorTests
 
             var value = generator.Generate(context);
             Assert.NotNull(value);
-
-            // Verify it generates a valid date within the range in invariant culture
-            var parsed = DateTime.ParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture);
-            Assert.InRange(parsed, new DateTime(2020, 1, 1), new DateTime(2020, 1, 10));
+            var parsed = DateTime.ParseExact(value, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            Assert.InRange(parsed, new DateTime(2020, 1, 1), new DateTime(2020, 1, 10, 23, 59, 59));
         }
         finally
         {
