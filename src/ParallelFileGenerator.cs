@@ -225,13 +225,13 @@ namespace Zipper
                 var data = new byte[(int)totalSize];
                 Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
 
-                if (paddingPerFile > 0)
+                if (effectivePadding > 0)
                 {
-                    var padding = new byte[Math.Min(paddingPerFile, 1024 * 1024)];
+                    var padding = new byte[Math.Min(effectivePadding, 1024 * 1024)];
                     RandomNumberGenerator.Fill(padding);
 
                     int offset = fileContent.Length;
-                    long remaining = paddingPerFile;
+                    long remaining = effectivePadding;
                     while (remaining > 0)
                     {
                         int toCopy = (int)Math.Min(remaining, padding.Length);
