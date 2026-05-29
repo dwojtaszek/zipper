@@ -196,7 +196,7 @@ namespace Zipper
             }
         }
 
-        private FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
+        internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
         {
             var generated = fileGenerator.Generate(workItem, request);
             var fileContent = generated.Content;
@@ -216,7 +216,7 @@ namespace Zipper
             var totalSize = fileContent.Length + effectivePadding;
 
             var rentSize = (int)Math.Min(totalSize, PerformanceConstants.MaxPoolSize);
-            var memoryOwner = rentSize > 0 && rentSize <= PerformanceConstants.MaxPoolSize
+            var memoryOwner = totalSize > 0 && totalSize <= PerformanceConstants.MaxPoolSize
                 ? MemoryPool<byte>.Shared.Rent(rentSize)
                 : null;
 
@@ -225,13 +225,13 @@ namespace Zipper
                 var data = new byte[(int)totalSize];
                 Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
 
-                if (paddingPerFile > 0)
+                if (effectivePadding > 0)
                 {
-                    var padding = new byte[Math.Min(paddingPerFile, 1024 * 1024)];
+                    var padding = new byte[Math.Min(effectivePadding, 1024 * 1024)];
                     RandomNumberGenerator.Fill(padding);
 
                     int offset = fileContent.Length;
-                    long remaining = paddingPerFile;
+                    long remaining = effectivePadding;
                     while (remaining > 0)
                     {
                         int toCopy = (int)Math.Min(remaining, padding.Length);
@@ -258,31 +258,39 @@ namespace Zipper
                 };
             }
 
-            fileContent.CopyTo(memoryOwner.Memory.Span);
-
-            if (paddingPerFile > 0)
+            try
             {
-                var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)paddingPerFile);
-                RandomNumberGenerator.Fill(paddingSpan);
-            }
+                fileContent.CopyTo(memoryOwner.Memory.Span);
 
-            var finalMemory = memoryOwner.Memory[..(int)totalSize];
+                if (effectivePadding > 0)
+                {
+                    var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)effectivePadding);
+                    RandomNumberGenerator.Fill(paddingSpan);
+                }
+
+                var finalMemory = memoryOwner.Memory[..(int)totalSize];
 #pragma warning disable S4790 // Cryptographic algorithms should be robust
-            var finalHashBytes = MD5.HashData(finalMemory.Span);
+                var finalHashBytes = MD5.HashData(finalMemory.Span);
 #pragma warning restore S4790
-            var finalHash = Convert.ToHexString(finalHashBytes).ToLowerInvariant();
+                var finalHash = Convert.ToHexString(finalHashBytes).ToLowerInvariant();
 
-            return new FileData
+                return new FileData
+                {
+                    WorkItem = workItem,
+                    Data = finalMemory,
+                    DataLength = (int)totalSize,
+                    MemoryOwner = memoryOwner,
+                    Attachment = attachment,
+                    PageCount = pageCount,
+                    Email = email,
+                    Hash = finalHash,
+                };
+            }
+            catch
             {
-                WorkItem = workItem,
-                Data = finalMemory,
-                DataLength = (int)totalSize,
-                MemoryOwner = memoryOwner,
-                Attachment = attachment,
-                PageCount = pageCount,
-                Email = email,
-                Hash = finalHash,
-            };
+                memoryOwner.Dispose();
+                throw;
+            }
         }
 
         internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
