@@ -319,21 +319,13 @@ internal class OptWriter : LoadFileWriterBase
     }
 
     /// <summary>
-    /// Gets the appropriate encoding for the OPT file, defaulting to ANSI if not explicitly set.
+    /// Gets the encoding for the OPT file, defaulting to Windows-1252 (ANSI) if not explicitly specified.
     /// </summary>
     private static Encoding GetOptEncoding(FileGenerationRequest request)
     {
-        if (request.LoadFile.IsEncodingExplicit)
-        {
-            return EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        }
-
-        // If the encoding is UTF-8 (the default when not specified), the OPT format defaults to ANSI
-        if (request.LoadFile.Encoding == "UTF-8")
-        {
-            return EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
-        }
-
-        return EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        return (request.LoadFile.IsEncodingExplicit || resolvedEncoding != Encoding.UTF8)
+            ? resolvedEncoding
+            : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
     }
 }
