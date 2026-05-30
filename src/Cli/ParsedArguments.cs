@@ -12,6 +12,8 @@ public class ParsedArguments
 
     public string? Encoding { get; set; } = "UTF-8";
 
+    public bool IsEncodingExplicit { get; set; }
+
     public string? Distribution { get; set; } = "proportional";
 
     public bool WithMetadata { get; set; }
@@ -29,8 +31,6 @@ public class ParsedArguments
     public string? LoadFileFormats { get; set; }
 
     public bool IsLoadFileFormatExplicit { get; set; }
-
-    public bool IsEncodingExplicit { get; set; }
 
     public string? DatDelimiters { get; set; }
 
