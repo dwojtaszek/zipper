@@ -211,7 +211,7 @@ internal class DatWriter : LoadFileWriterBase
             string interceptedLine = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
             await writer.WriteAsync(interceptedLine + eolString);
 
-            if (chaosEngine != null && i < request.Output.FileCount)
+            if (chaosEngine != null)
             {
                 var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
                 if (anomaly != null)

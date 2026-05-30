@@ -262,22 +262,9 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             buffer.Append(line);
             buffer.Append(eolString);
 
-            if (i < rows.Count - 1)
-            {
-                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
-                await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
-            }
-            else if (buffer.Length > 200_000)
-            {
-                await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
-            }
-        }
-
-        if (buffer.Length > 0)
-        {
             await memStream.WriteAsync(encoding.GetBytes(buffer.ToString()));
+            buffer.Clear();
+            await WriteEncodingAnomalyBytesAsync(memStream, chaosEngine, lineNumber, lineNumber + 1, encoding);
         }
 
         memStream.Position = 0;
