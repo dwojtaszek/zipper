@@ -353,5 +353,46 @@ namespace Zipper
             Assert.Contains("Control Number", content1);
             Assert.DoesNotContain("Control Number", content2);
         }
+
+        [Fact]
+        public async Task GenerateAsync_LoadfileOnly_Dat_EncodingChaos_HeaderAndLastLine_Injected()
+        {
+            var request = this.CreateRequest(format: LoadFileFormat.Dat, count: 5);
+            request.Chaos = request.Chaos with
+            {
+                ChaosMode = true,
+                ChaosAmount = "100%",
+                ChaosTypes = "encoding",
+            };
+            request.Metadata = request.Metadata with { Seed = 42 };
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            // Verify properties JSON audit has all expected anomalies
+            var json = await File.ReadAllTextAsync(result.PropertiesFilePath);
+            var doc = JsonDocument.Parse(json);
+            var totalAnomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("totalAnomalies").GetInt32();
+
+            // Total lines = 1 header + 5 data lines = 6 lines.
+            // Under 100% chaos, all 6 lines should have an anomaly.
+            Assert.Equal(6, totalAnomalies);
+
+            // Let's also read the load file bytes and verify the invalid bytes (0xFE, 0xFF for UTF-8) are present.
+            var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
+
+            // The encoding anomaly bytes for UTF-8 are 0xFE, 0xFF.
+            // Let's verify how many times they appear in the file.
+            int occurrences = 0;
+            for (int i = 0; i < bytes.Length - 1; i++)
+            {
+                if (bytes[i] == 0xFE && bytes[i + 1] == 0xFF)
+                {
+                    occurrences++;
+                }
+            }
+
+            // 6 lines targeted -> 6 boundaries where we expect the encoding anomalies
+            Assert.Equal(6, occurrences);
+        }
     }
 }
