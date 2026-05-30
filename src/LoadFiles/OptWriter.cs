@@ -323,8 +323,9 @@ internal class OptWriter : LoadFileWriterBase
     /// </summary>
     private static Encoding GetOptEncoding(FileGenerationRequest request)
     {
-        return (request.LoadFile.IsEncodingExplicit || request.LoadFile.Encoding != "UTF-8")
-            ? EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding)
+        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        return (request.LoadFile.IsEncodingExplicit || resolvedEncoding != Encoding.UTF8)
+            ? resolvedEncoding
             : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
     }
 }

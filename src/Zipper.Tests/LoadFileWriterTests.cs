@@ -1267,5 +1267,96 @@ namespace Zipper
             // It should be written in UTF-8
             Assert.Contains("TEST_ü", decodedWithUtf8);
         }
+
+        [Fact]
+        public async Task OptWriter_WithImplicitDefaultUtf8Alias_ShouldDefaultToWindows1252()
+        {
+            // Register code pages encoding provider for ANSI (Windows-1252) support on Linux
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+            // Arrange
+            var request = this.CreateTestRequest();
+            request.Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 };
+
+            // Keep the default "Unicode (UTF-8)" encoding but ensure IsEncodingExplicit is false
+            request.LoadFile = request.LoadFile with { IsEncodingExplicit = false };
+
+            // Create a file with a non-ASCII character in its path to detect encoding
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST_ü.tif",
+                        FilePathInZip = "NATIVES\\VOL001\\TEST_ü.tif"
+                    },
+                    PageCount = 1
+                }
+            };
+
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+
+            // Act
+            await writer.WriteAsync(stream, request, fileData);
+
+            // Assert
+            var bytes = stream.ToArray();
+
+            // Register provider and decode using Windows-1252
+            var decodedWithAnsi = Encoding.GetEncoding(1252).GetString(bytes);
+            var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
+
+            // Since it is implicit, it should default to Windows-1252
+            Assert.Contains("TEST_ü", decodedWithAnsi);
+
+            // When decoded with UTF-8, it should fail or contain replacement/wrong characters since it was written in 1252.
+            Assert.DoesNotContain("TEST_ü", decodedWithUtf8);
+        }
+
+        [Fact]
+        public async Task OptWriter_WithExplicitDefaultUtf8Alias_ShouldUseUtf8()
+        {
+            // Arrange
+            var request = this.CreateTestRequest();
+            request.Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 };
+
+            // Explicitly set IsEncodingExplicit to true for the default alias
+            request.LoadFile = request.LoadFile with { IsEncodingExplicit = true };
+
+            // Create a file with a non-ASCII character in its path to detect encoding
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST_ü.tif",
+                        FilePathInZip = "NATIVES\\VOL001\\TEST_ü.tif"
+                    },
+                    PageCount = 1
+                }
+            };
+
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+
+            // Act
+            await writer.WriteAsync(stream, request, fileData);
+
+            // Assert
+            var bytes = stream.ToArray();
+            var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
+
+            // Since it is explicit, it should use UTF-8
+            Assert.Contains("TEST_ü", decodedWithUtf8);
+        }
     }
 }
