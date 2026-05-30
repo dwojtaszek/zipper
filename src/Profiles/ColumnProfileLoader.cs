@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Zipper.Profiles;
@@ -145,12 +146,12 @@ public static class ColumnProfileLoader
         // Validate date ranges
         foreach (var column in profile.Columns.Where(c => c.DateRange != null))
         {
-            if (!DateTime.TryParse(column.DateRange!.Min, out var minDate))
+            if (!DateTime.TryParse(column.DateRange!.Min, CultureInfo.InvariantCulture, DateTimeStyles.None, out var minDate))
             {
                 throw new InvalidOperationException($"Column '{column.Name}' has invalid DateRange.Min '{column.DateRange.Min}'. Must be a valid date string.");
             }
 
-            if (!DateTime.TryParse(column.DateRange.Max, out var maxDate))
+            if (!DateTime.TryParse(column.DateRange.Max, CultureInfo.InvariantCulture, DateTimeStyles.None, out var maxDate))
             {
                 throw new InvalidOperationException($"Column '{column.Name}' has invalid DateRange.Max '{column.DateRange.Max}'. Must be a valid date string.");
             }

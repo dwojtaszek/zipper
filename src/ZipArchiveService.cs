@@ -29,7 +29,7 @@ namespace Zipper
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
-            var processedFiles = new List<FileData>();
+            using var processedFiles = new DiskBackedFileDataList();
             var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Pre-compute the extracted text content selection once, outside the loop

@@ -3,9 +3,13 @@ using System.Text.Json;
 using Xunit;
 
 using Zipper.Config;
+using Zipper.LoadFiles;
+
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Zipper
 {
+    [Collection("Sequential")]
     public class LoadfileOnlyGeneratorTests : IDisposable
     {
         private readonly string tempDir;
@@ -109,8 +113,8 @@ namespace Zipper
             Assert.True(File.Exists(result.LoadFilePath));
             var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
 
-            // OPT has no header, just data rows
-            Assert.Equal(20, lines.Length);
+            // OPT has no header, just data rows (20 documents expanded to page level)
+            Assert.Equal(109, lines.Length);
 
             // Each line should have 7 comma-separated fields (6 commas)
             foreach (var line in lines)
@@ -236,7 +240,7 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task GenerateAsync_Opt_FileCountOne_CreatesSingleLine()
+        public async Task GenerateAsync_Opt_FileCountOne_CreatesPageExpandedRows()
         {
             var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 1);
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
@@ -244,11 +248,19 @@ namespace Zipper
             Assert.True(File.Exists(result.LoadFilePath));
             var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
 
-            Assert.Single(lines);
-            var parts = lines[0].Split(',');
-            Assert.Equal(7, parts.Length);
-            Assert.StartsWith("IMG", parts[0]);
-            Assert.Equal("VOL001", parts[1]);
+            Assert.Equal(2, lines.Length);
+
+            var parts1 = lines[0].Split(',');
+            Assert.Equal(7, parts1.Length);
+            Assert.StartsWith("IMG", parts1[0]);
+            Assert.Equal("VOL001", parts1[1]);
+            Assert.Equal("Y", parts1[3]); // First page is doc break
+
+            var parts2 = lines[1].Split(',');
+            Assert.Equal(7, parts2.Length);
+            Assert.StartsWith("IMG", parts2[0]);
+            Assert.Equal("VOL001", parts2[1]);
+            Assert.Equal(string.Empty, parts2[3]); // Subsequent pages are not doc break
         }
 
         [Fact]
@@ -352,6 +364,142 @@ namespace Zipper
             // DAT should have header, OPT should not
             Assert.Contains("Control Number", content1);
             Assert.DoesNotContain("Control Number", content2);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Dat_LoadfileOnly_WritesInStreamingFashion()
+        {
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, WriterMode.LoadfileOnly);
+
+            // Warm up to force JIT compilation of all writer code
+            var warmupRequest = this.CreateRequest(format: LoadFileFormat.Dat, count: 5);
+            using var warmupMs = new MemoryStream();
+            await writer.WriteAsync(warmupMs, warmupRequest, new List<FileData>(), null);
+
+            var request = this.CreateRequest(format: LoadFileFormat.Dat, count: 50000);
+            using var ms = new MemoryStream();
+            using var assertionStream = new StreamingAssertionStream(ms, maxWriteSize: 16384);
+
+            await writer.WriteAsync(assertionStream, request, new List<FileData>(), null);
+            await assertionStream.FlushAsync();
+
+            Assert.True(assertionStream.WriteSizes.Count > 0, "No bytes were written to the stream.");
+            Assert.All(assertionStream.WriteSizes, size => Assert.True(size <= 16384, $"Write size {size} exceeds 16KB buffer limit."));
+            Assert.True(assertionStream.PeakMemoryUsage < 30 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 30MB streaming limit.");
+        }
+
+        [Fact]
+        public async Task GenerateAsync_Opt_LoadfileOnly_WritesInStreamingFashion()
+        {
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.LoadfileOnly);
+
+            // Warm up to force JIT compilation of all writer code
+            var warmupRequest = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
+            using var warmupMs = new MemoryStream();
+            await writer.WriteAsync(warmupMs, warmupRequest, new List<FileData>(), null);
+
+            var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 50000);
+            using var ms = new MemoryStream();
+            using var assertionStream = new StreamingAssertionStream(ms, maxWriteSize: 16384);
+
+            await writer.WriteAsync(assertionStream, request, new List<FileData>(), null);
+            await assertionStream.FlushAsync();
+
+            Assert.True(assertionStream.WriteSizes.Count > 0, "No bytes were written to the stream.");
+            Assert.All(assertionStream.WriteSizes, size => Assert.True(size <= 16384, $"Write size {size} exceeds 16KB buffer limit."));
+            Assert.True(assertionStream.PeakMemoryUsage < 30 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 30MB streaming limit.");
+        }
+
+        private class StreamingAssertionStream : Stream
+        {
+            private readonly Stream inner;
+            private readonly int maxWriteSize;
+            private readonly long startMemory;
+
+            public StreamingAssertionStream(Stream inner, int maxWriteSize)
+            {
+                this.inner = inner;
+                this.maxWriteSize = maxWriteSize;
+
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                this.startMemory = GC.GetTotalMemory(true);
+            }
+
+            public List<int> WriteSizes { get; } = new List<int>();
+
+            public long PeakMemoryUsage { get; private set; }
+
+            public override bool CanRead => this.inner.CanRead;
+
+            public override bool CanSeek => this.inner.CanSeek;
+
+            public override bool CanWrite => this.inner.CanWrite;
+
+            public override long Length => this.inner.Length;
+
+            public override long Position { get => this.inner.Position; set => this.inner.Position = value; }
+
+            public override void Flush() => this.inner.Flush();
+
+            public override int Read(byte[] buffer, int offset, int count) => this.inner.Read(buffer, offset, count);
+
+            public override long Seek(long offset, SeekOrigin origin) => this.inner.Seek(offset, origin);
+
+            public override void SetLength(long value) => this.inner.SetLength(value);
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                this.WriteSizes.Add(count);
+
+                if (count > this.maxWriteSize)
+                {
+                    throw new InvalidOperationException($"Write size of {count} bytes exceeds the maximum streaming write size of {this.maxWriteSize} bytes.");
+                }
+
+                this.TrackMemory();
+                this.inner.Write(buffer, offset, count);
+            }
+
+            public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                this.WriteSizes.Add(count);
+
+                if (count > this.maxWriteSize)
+                {
+                    throw new InvalidOperationException($"Write size of {count} bytes exceeds the maximum streaming write size of {this.maxWriteSize} bytes.");
+                }
+
+                this.TrackMemory();
+                await this.inner.WriteAsync(buffer, offset, count, cancellationToken);
+            }
+
+            public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            {
+                this.WriteSizes.Add(buffer.Length);
+
+                if (buffer.Length > this.maxWriteSize)
+                {
+                    throw new InvalidOperationException($"Write size of {buffer.Length} bytes exceeds the maximum streaming write size of {this.maxWriteSize} bytes.");
+                }
+
+                this.TrackMemory();
+                await this.inner.WriteAsync(buffer, cancellationToken);
+            }
+
+            private void TrackMemory()
+            {
+                if (this.WriteSizes.Count % 500 == 0)
+                {
+                    GC.Collect();
+                    long currentMemory = GC.GetTotalMemory(true) - this.startMemory;
+                    if (currentMemory > this.PeakMemoryUsage)
+                    {
+                        this.PeakMemoryUsage = currentMemory;
+                    }
+                }
+            }
         }
     }
 }
