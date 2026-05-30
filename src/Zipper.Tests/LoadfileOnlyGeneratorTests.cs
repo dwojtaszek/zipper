@@ -354,6 +354,11 @@ namespace Zipper
             Assert.DoesNotContain("Control Number", content2);
         }
 
+        /// <summary>
+        /// Verifies that when encoding chaos is enabled in DAT loadfile-only mode, the encoding anomaly
+        /// is successfully written after the header line and the last data line when targeted.
+        /// </summary>
+        /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
         [Fact]
         public async Task GenerateAsync_LoadfileOnly_Dat_EncodingChaos_HeaderAndLastLine_Injected()
         {
