@@ -30,6 +30,8 @@ public class ParsedArguments
 
     public bool IsLoadFileFormatExplicit { get; set; }
 
+    public bool IsEncodingExplicit { get; set; }
+
     public string? DatDelimiters { get; set; }
 
     public string? DelimiterColumn { get; set; }

@@ -141,6 +141,7 @@ public static class RequestBuilder
                 LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
                 LoadFileFormats = multiFormats,
                 Encoding = encodingName,
+                IsEncodingExplicit = parsed.IsEncodingExplicit,
                 Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
                 AttachmentRate = parsed.AttachmentRate,
             },

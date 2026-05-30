@@ -83,6 +83,7 @@ public static class CliParser
                     if (TryGetValue(args, i, out var encoding))
                     {
                         parsed.Encoding = encoding;
+                        parsed.IsEncodingExplicit = true;
                         i++;
                     }
 
