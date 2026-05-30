@@ -62,3 +62,9 @@ Thumbs.db
 *mixed*
 /..\\*
 **/..\\*
+
+# Local tool and auditing outputs
+.antigravitycli/
+graphify-out/
+graphify_audit/
+.worktrees/

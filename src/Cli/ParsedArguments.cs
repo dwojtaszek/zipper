@@ -12,6 +12,8 @@ public class ParsedArguments
 
     public string? Encoding { get; set; } = "UTF-8";
 
+    public bool IsEncodingExplicit { get; set; }
+
     public string? Distribution { get; set; } = "proportional";
 
     public bool WithMetadata { get; set; }

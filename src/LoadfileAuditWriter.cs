@@ -82,6 +82,15 @@ internal static class LoadfileAuditWriter
             };
         }
 
+        var encodingName = request.LoadFile.Encoding;
+        if (activeFormat == LoadFileFormat.Opt)
+        {
+            if (!request.LoadFile.IsEncodingExplicit && request.LoadFile.Encoding == "UTF-8")
+            {
+                encodingName = "ANSI";
+            }
+        }
+
         var audit = new AuditDocument
         {
             FileName = Path.GetFileName(outputPath),
@@ -89,7 +98,7 @@ internal static class LoadfileAuditWriter
             TotalRecords = totalRecords,
             Properties = new AuditProperties
             {
-                Encoding = request.LoadFile.Encoding,
+                Encoding = encodingName,
                 LineEnding = request.Delimiters.EndOfLine,
                 Delimiters = delimiters,
             },

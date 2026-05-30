@@ -3,7 +3,7 @@
   "format": "OPT (Image)",
   "totalRecords": 2000,
   "properties": {
-    "encoding": "UTF-8",
+    "encoding": "ANSI",
     "lineEnding": "CRLF",
     "delimiters": {
       "column": "char:,",
