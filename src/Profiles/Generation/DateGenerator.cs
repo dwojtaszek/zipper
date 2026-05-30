@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Zipper.Profiles.Generation;
 
 internal sealed class DateGenerator : IColumnValueGenerator
@@ -8,8 +10,8 @@ internal sealed class DateGenerator : IColumnValueGenerator
 
     public DateGenerator(ColumnDefinition col, ProfileSettings settings)
     {
-        this.minDate = DateTime.Parse(col.DateRange?.Min ?? "2020-01-01");
-        this.maxDate = DateTime.Parse(col.DateRange?.Max ?? "2024-12-31");
+        this.minDate = DateTime.Parse(col.DateRange?.Min ?? "2020-01-01", CultureInfo.InvariantCulture);
+        this.maxDate = DateTime.Parse(col.DateRange?.Max ?? "2024-12-31", CultureInfo.InvariantCulture);
         this.format = col.Format ?? settings.DateFormat;
     }
 
@@ -17,6 +19,6 @@ internal sealed class DateGenerator : IColumnValueGenerator
     {
         var range = (this.maxDate - this.minDate).Days;
         var date = range <= 0 ? this.minDate : this.minDate.AddDays(context.Seeded.Next(range + 1));
-        return date.ToString(this.format);
+        return date.ToString(this.format, CultureInfo.InvariantCulture);
     }
 }

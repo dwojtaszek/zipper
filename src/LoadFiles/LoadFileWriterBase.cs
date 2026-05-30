@@ -14,7 +14,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
     public abstract System.Threading.Tasks.Task WriteAsync(
         System.IO.Stream stream,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null);
 
     /// <summary>

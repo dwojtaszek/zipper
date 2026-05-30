@@ -320,6 +320,20 @@ public static class CliValidator
             }
         }
 
+        if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
+        {
+            var formats = parsed.LoadFileFormats.Split(',');
+            foreach (var fmt in formats)
+            {
+                var currentFormat = RequestBuilder.GetLoadFileFormat(fmt.Trim());
+                if (currentFormat.HasValue && currentFormat.Value != LoadFileFormat.Dat && currentFormat.Value != LoadFileFormat.Opt)
+                {
+                    Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 

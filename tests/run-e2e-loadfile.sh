@@ -106,9 +106,9 @@ run_test "OPT loadfile-only" \
 opt_file=$(find "$TEST_OUTPUT_DIR/opt_basic" -name "*.opt" -print -quit)
 [[ -z "$opt_file" ]] && print_error "No .opt file found"
 
-# Verify no header (OPT has no header row)
+# Verify no header (OPT has no header row, and documents expand to page level)
 opt_line_count=$(wc -l < "$opt_file" | tr -d ' ')
-[[ "$opt_line_count" -ne 50 ]] && print_error "OPT line count: expected 50, got $opt_line_count"
+[[ "$opt_line_count" -lt 50 ]] && print_error "OPT line count: expected at least 50, got $opt_line_count"
 
 # Verify 7-column comma-separated format (6 commas per line)
 bad_lines=0

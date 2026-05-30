@@ -509,4 +509,54 @@ public class ProductionSetTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task GenerateAsync_WithMultiPageTiff_ShouldWritePageLevelImageFilesToDisk()
+    {
+        // Arrange
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = "tiff",
+                },
+                Production = new ProductionConfig { ProductionSet = true },
+                Bates = new BatesNumberConfig { Prefix = "PLAN", Start = 1, Digits = 8 },
+                Tiff = new TiffConfig { PageRange = (3, 3) }, // Multi-page TIFF (3 pages)
+                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Opt } }
+            };
+
+            // Act
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+
+            // Assert
+            var productionDir = Directory.GetDirectories(outputPath, "PRODUCTION_*").FirstOrDefault();
+            Assert.NotNull(productionDir);
+
+            // Multi-page page-suffixed image files should exist
+            var image1 = Path.Combine(productionDir, "IMAGES", "VOL001", "PLAN00000001_001.tif");
+            var image2 = Path.Combine(productionDir, "IMAGES", "VOL001", "PLAN00000001_002.tif");
+            var image3 = Path.Combine(productionDir, "IMAGES", "VOL001", "PLAN00000001_003.tif");
+            var baseImage = Path.Combine(productionDir, "IMAGES", "VOL001", "PLAN00000001.tif");
+
+            Assert.True(File.Exists(image1));
+            Assert.True(File.Exists(image2));
+            Assert.True(File.Exists(image3));
+            Assert.False(File.Exists(baseImage)); // Base image file should not be written when pages > 1
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
 }

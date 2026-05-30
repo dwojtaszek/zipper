@@ -493,5 +493,75 @@ namespace Zipper.Tests
                 }
             }
         }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithCsvFormat_ReturnsFalse()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormat = "csv";
+            Assert.False(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithEdrmXmlFormat_ReturnsFalse()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormat = "edrm-xml";
+            Assert.False(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithCsvFormatsPlural_ReturnsFalse()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormats = "csv";
+            Assert.False(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithCsvAndXmlFormatsPlural_ReturnsFalse()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormats = "csv,xml";
+            Assert.False(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithDatFormatsPlural_ReturnsTrue()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormats = "dat,opt";
+            Assert.True(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithDatFormat_ReturnsTrue()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormat = "dat";
+            Assert.True(CliValidator.Validate(args));
+        }
+
+        [Fact]
+        public void Validate_LoadfileOnly_WithOptFormat_ReturnsTrue()
+        {
+            var args = CreateValidArgs();
+            args.FileType = null;
+            args.LoadfileOnly = true;
+            args.LoadFileFormat = "opt";
+            Assert.True(CliValidator.Validate(args));
+        }
     }
 }

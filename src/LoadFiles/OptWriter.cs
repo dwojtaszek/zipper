@@ -48,7 +48,7 @@ internal class OptWriter : LoadFileWriterBase
     public override async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         switch (this.mode)
@@ -62,7 +62,7 @@ internal class OptWriter : LoadFileWriterBase
             default:
                 {
                     // Use leaveOpen: true to avoid disposing the caller's stream
-                    await using var writer = new StreamWriter(stream, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), leaveOpen: true);
+                    await using var writer = new StreamWriter(stream, GetOptEncoding(request), leaveOpen: true);
                     await WriteStandardRowsAsync(writer, request, processedFiles);
 
                     // Flush to ensure data is written
@@ -82,7 +82,7 @@ internal class OptWriter : LoadFileWriterBase
     private static async Task WriteStandardRowsAsync(
         StreamWriter writer,
         FileGenerationRequest request,
-        System.Collections.Generic.List<FileData> processedFiles)
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles)
     {
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
@@ -141,44 +141,45 @@ internal class OptWriter : LoadFileWriterBase
         FileGenerationRequest request,
         ChaosEngine? chaosEngine)
     {
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var encoding = GetOptEncoding(request);
         var eolString = GetEolString(request.Delimiters.EndOfLine);
 
 #pragma warning disable S2245
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
-        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
+        long currentLineNumber = 1;
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
             string batesId = $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
-            string docBreak = "Y";
-            string folderBreak = string.Empty;
-            string boxBreak = string.Empty;
             int pageCount = random.Next(1, 11);
 
-            string line = $"{batesId},{volume},{imagePath},{docBreak},{folderBreak},{boxBreak},{pageCount}";
-            rows.Add((i, batesId, line));
-        }
-
-        if (chaosEngine == null)
-        {
-            // Simple path: write directly using StreamWriter
-            await using var writer = CreateWriter(stream, request);
-            foreach (var (_, _, line) in rows)
+            foreach (var entry in GeneratePageEntries(batesId, imagePath, pageCount))
             {
-                await writer.WriteAsync(line + eolString);
-            }
+                string line = $"{entry.Bates},{volume},{entry.ImagePath},{entry.DocBreak},,,{entry.PageCountStr}";
 
-            await writer.FlushAsync();
+                string interceptedLine = ApplyChaosInterception(chaosEngine, currentLineNumber, line, entry.Bates);
+                await writer.WriteAsync(interceptedLine + eolString);
+
+                if (chaosEngine != null)
+                {
+                    var anomaly = chaosEngine.GetEncodingAnomaly(currentLineNumber, currentLineNumber + 1, encoding);
+                    if (anomaly != null)
+                    {
+                        await writer.FlushAsync();
+                        await stream.WriteAsync(anomaly);
+                    }
+                }
+
+                currentLineNumber++;
+            }
         }
-        else
-        {
-            await WriteRowsWithChaosAsync(stream, encoding, eolString, rows, chaosEngine);
-        }
+
+        await writer.FlushAsync();
     }
 
     /// <summary>
@@ -192,11 +193,11 @@ internal class OptWriter : LoadFileWriterBase
     private static async Task WriteProductionSetAsync(
         Stream stream,
         FileGenerationRequest request,
-        List<FileData> processedFiles,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
         ChaosEngine? chaosEngine = null)
     {
         var eol = GetEolString(request.Delimiters.EndOfLine);
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var encoding = GetOptEncoding(request);
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
         int rowIdx = 0;
@@ -212,7 +213,7 @@ internal class OptWriter : LoadFileWriterBase
 
         if (chaosEngine == null)
         {
-            await using var writer = CreateWriter(stream, request);
+            await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
             foreach (var row in rows)
             {
                 await writer.WriteAsync(row.Line + eol);
@@ -315,5 +316,16 @@ internal class OptWriter : LoadFileWriterBase
         {
             yield return (baseBates, baseImagePath, "Y", "1");
         }
+    }
+
+    /// <summary>
+    /// Gets the encoding for the OPT file, defaulting to Windows-1252 (ANSI) if not explicitly specified.
+    /// </summary>
+    private static Encoding GetOptEncoding(FileGenerationRequest request)
+    {
+        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        return (request.LoadFile.IsEncodingExplicit || resolvedEncoding != Encoding.UTF8)
+            ? resolvedEncoding
+            : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
     }
 }
