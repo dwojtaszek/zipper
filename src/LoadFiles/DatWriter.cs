@@ -340,6 +340,7 @@ internal class DatWriter : LoadFileWriterBase
     /// <param name="request">The file generation request.</param>
     /// <param name="colDelim">The column delimiter character.</param>
     /// <param name="quote">The quote character.</param>
+    /// <param name="hasQuote">A value indicating whether quote characters should be written around each field.</param>
     /// <param name="profileValues">The custom metadata profile values.</param>
     /// <returns>A collection of generated load file rows containing record ID and row string.</returns>
     private static IEnumerable<(string RecordId, string Line)> BuildStandardRowsForFile(

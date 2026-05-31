@@ -365,6 +365,51 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithMetadata_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Metadata = request.Metadata with { WithMetadata = true };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Metadata columns (Custodian, Date Sent, Author, File Size) must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains("Custodian", output);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithText_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Output = request.Output with { WithText = true, FileType = "pdf" };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Extracted Text column must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains(".txt", output);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithBates_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 6, Increment = 1 };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Bates Number column must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains("TEST", output);
+        }
+
+        [Fact]
         public async Task WriteAsync_LeavesUnderlyingStreamOpen()
         {
             var request = DefaultRequest();
