@@ -68,3 +68,5 @@ Thumbs.db
 graphify-out/
 graphify_audit/
 .worktrees/
+.zipper-runner/
+
