@@ -76,9 +76,7 @@ internal class DatWriter : LoadFileWriterBase
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles)
     {
         // Defensive guards to prevent IndexOutOfRangeException when delimiters are unset
-        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
-        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        var (hasQuote, quote, colDelim) = ResolveStandardDelimiters(request.Delimiters);
 
         await writer.WriteLineAsync(BuildStandardHeader(request, colDelim, quote, hasQuote));
 
@@ -138,9 +136,7 @@ internal class DatWriter : LoadFileWriterBase
 
         // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
         var eolString = GetEolString(request.Delimiters.EndOfLine);
-        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
-        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        var (hasQuote, quote, colDelim) = ResolveStandardDelimiters(request.Delimiters);
 
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var generator = GetEffectiveProfileGenerator(request, now);
@@ -647,9 +643,7 @@ internal class DatWriter : LoadFileWriterBase
             return;
         }
 
-        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
-        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        var (hasQuote, quote, colDelim) = ResolveStandardDelimiters(request.Delimiters);
 
         var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
         var dateSent = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
@@ -681,9 +675,7 @@ internal class DatWriter : LoadFileWriterBase
             return;
         }
 
-        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
-        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        var (hasQuote, quote, colDelim) = ResolveStandardDelimiters(request.Delimiters);
 
         var workItem = fileData.WorkItem;
         var to = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
@@ -718,9 +710,7 @@ internal class DatWriter : LoadFileWriterBase
             return;
         }
 
-        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
-        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
-        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
+        var (hasQuote, quote, colDelim) = ResolveStandardDelimiters(request.Delimiters);
 
         var workItem = fileData.WorkItem;
         string textPath;
@@ -739,6 +729,20 @@ internal class DatWriter : LoadFileWriterBase
 
         sb.Append(colDelim);
         AppendField(sb, textPath, quote, hasQuote);
+    }
+
+    /// <summary>
+    /// Resolves the standard column delimiter, quote character, and hasQuote flag from the configured
+    /// delimiter settings, applying fallback sentinel values when a delimiter is unset.
+    /// </summary>
+    /// <param name="delimiters">The delimiter configuration.</param>
+    /// <returns>A tuple of (hasQuote, quoteChar, columnDelimChar).</returns>
+    private static (bool HasQuote, char Quote, char ColDelim) ResolveStandardDelimiters(Config.DelimiterConfig delimiters)
+    {
+        bool hasQuote = !string.IsNullOrEmpty(delimiters.QuoteDelimiter);
+        char quote = hasQuote ? delimiters.QuoteDelimiter[0] : '\u00fe';
+        char colDelim = !string.IsNullOrEmpty(delimiters.ColumnDelimiter) ? delimiters.ColumnDelimiter[0] : '\u0014';
+        return (hasQuote, quote, colDelim);
     }
 
     /// <summary>
