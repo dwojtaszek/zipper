@@ -76,10 +76,11 @@ internal class DatWriter : LoadFileWriterBase
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles)
     {
         // Defensive guards to prevent IndexOutOfRangeException when delimiters are unset
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
         char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
-        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
 
-        await writer.WriteLineAsync(BuildStandardHeader(request, colDelim, quote));
+        await writer.WriteLineAsync(BuildStandardHeader(request, colDelim, quote, hasQuote));
 
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var generator = GetEffectiveProfileGenerator(request, now);
@@ -90,7 +91,7 @@ internal class DatWriter : LoadFileWriterBase
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            foreach (var (_, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, profileValues))
+            foreach (var (_, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, hasQuote, profileValues))
             {
                 buffer.AppendLine(rowLine);
                 rowCount++;
@@ -137,20 +138,21 @@ internal class DatWriter : LoadFileWriterBase
 
         // Chaos path: build rows then delegate to shared WriteRowsWithChaosAsync
         var eolString = GetEolString(request.Delimiters.EndOfLine);
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
         char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
-        char quote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
 
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var generator = GetEffectiveProfileGenerator(request, now);
 
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
-        rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote)));
+        rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote, hasQuote)));
 
         long currentLineNumber = 2;
         foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            foreach (var (recordId, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, profileValues))
+            foreach (var (recordId, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, hasQuote, profileValues))
             {
                 rows.Add((currentLineNumber++, recordId, rowLine));
             }
@@ -345,12 +347,13 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
+        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues)
     {
         return BuildRowsForFile(
             fileData,
             request,
-            context => BuildStandardRow(fileData, request, colDelim, quote, profileValues, context),
+            context => BuildStandardRow(fileData, request, colDelim, quote, hasQuote, profileValues, context),
             context =>
             {
                 var attach = fileData.Attachment!.Value;
@@ -365,7 +368,7 @@ internal class DatWriter : LoadFileWriterBase
                     EndAttach = context.EndAttach,
                     ParentDocId = context.ParentDocId
                 };
-                return BuildStandardRow(fileData, request, colDelim, quote, profileValues, newContext);
+                return BuildStandardRow(fileData, request, colDelim, quote, hasQuote, profileValues, newContext);
             });
     }
 
@@ -500,41 +503,68 @@ internal class DatWriter : LoadFileWriterBase
     /// <param name="request">The file generation request.</param>
     /// <param name="colDelim">The column delimiter character.</param>
     /// <param name="quote">The quote character.</param>
+    /// <param name="hasQuote">A value indicating whether quote characters should be written around each field.</param>
     /// <returns>The formatted header string.</returns>
-    private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote)
+    private static string BuildStandardHeader(FileGenerationRequest request, char colDelim, char quote, bool hasQuote)
     {
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var sb = new StringBuilder();
-        sb.Append($"{quote}{NamingConventionHelper.ApplyConvention("Control Number", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("File Path", namingConvention)}{quote}");
+        AppendField(sb, NamingConventionHelper.ApplyConvention("Control Number", namingConvention), quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, NamingConventionHelper.ApplyConvention("File Path", namingConvention), quote, hasQuote);
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Custodian", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Date Sent", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Author", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("File Size", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Custodian", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Date Sent", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Author", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("File Size", namingConvention), quote, hasQuote);
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("To", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("From", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Subject", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Sent Date", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Attachment", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("To", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("From", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Subject", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Sent Date", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Attachment", namingConvention), quote, hasQuote);
         }
 
         if (request.Bates != null)
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Bates Number", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Bates Number", namingConvention), quote, hasQuote);
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Page Count", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Page Count", namingConvention), quote, hasQuote);
         }
 
         if (request.Output.WithText)
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("Extracted Text", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("Extracted Text", namingConvention), quote, hasQuote);
         }
 
         if (request.Metadata.WithFamilies)
         {
-            sb.Append($"{colDelim}{quote}{NamingConventionHelper.ApplyConvention("BEGATTACH", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("ENDATTACH", namingConvention)}{quote}{colDelim}{quote}{NamingConventionHelper.ApplyConvention("PARENTDOCID", namingConvention)}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("BEGATTACH", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("ENDATTACH", namingConvention), quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, NamingConventionHelper.ApplyConvention("PARENTDOCID", namingConvention), quote, hasQuote);
         }
 
         return sb.ToString();
@@ -547,6 +577,7 @@ internal class DatWriter : LoadFileWriterBase
     /// <param name="request">The file generation request.</param>
     /// <param name="colDelim">The column delimiter character.</param>
     /// <param name="quote">The quote character.</param>
+    /// <param name="hasQuote">A value indicating whether quote characters should be written around each field.</param>
     /// <param name="profileValues">The custom metadata profile values.</param>
     /// <param name="context">The row context containing optional overrides and family boundaries.</param>
     /// <returns>A formatted DAT row string.</returns>
@@ -555,6 +586,7 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
+        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
         RowBuildContext context)
     {
@@ -563,28 +595,37 @@ internal class DatWriter : LoadFileWriterBase
         var filePath = context.FilePathOverride ?? EscapeDatField(workItem.FilePathInZip, quote, request.Delimiters.NewlineDelimiter);
 
         var sb = new StringBuilder();
-        sb.Append($"{quote}{docId}{quote}{colDelim}{quote}{filePath}{quote}");
+        AppendField(sb, docId, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, filePath, quote, hasQuote);
 
-        AppendMetadataColumns(sb, fileData, request, colDelim, quote, profileValues, context);
-        AppendEmailColumns(sb, fileData, request, colDelim, quote, profileValues, context);
+        AppendMetadataColumns(sb, fileData, request, colDelim, quote, hasQuote, profileValues, context);
+        AppendEmailColumns(sb, fileData, request, colDelim, quote, hasQuote, profileValues, context);
 
         if (request.Bates != null)
         {
             var batesVal = context.IdOverride ?? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1);
-            sb.Append($"{colDelim}{quote}{batesVal}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, batesVal, quote, hasQuote);
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
             var pageCount = context.IsChild ? 1 : fileData.PageCount;
-            sb.Append($"{colDelim}{quote}{pageCount}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, pageCount.ToString(), quote, hasQuote);
         }
 
-        AppendTextColumn(sb, fileData, request, colDelim, quote, context);
+        AppendTextColumn(sb, fileData, request, colDelim, quote, hasQuote, context);
 
         if (request.Metadata.WithFamilies)
         {
-            sb.Append($"{colDelim}{quote}{context.BegAttach ?? string.Empty}{quote}{colDelim}{quote}{context.EndAttach ?? string.Empty}{quote}{colDelim}{quote}{context.ParentDocId ?? string.Empty}{quote}");
+            sb.Append(colDelim);
+            AppendField(sb, context.BegAttach ?? string.Empty, quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, context.EndAttach ?? string.Empty, quote, hasQuote);
+            sb.Append(colDelim);
+            AppendField(sb, context.ParentDocId ?? string.Empty, quote, hasQuote);
         }
 
         return sb.ToString();
@@ -599,6 +640,7 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
+        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
         RowBuildContext context)
     {
@@ -612,7 +654,14 @@ internal class DatWriter : LoadFileWriterBase
         var author = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
         var fileSize = context.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString());
 
-        sb.Append($"{colDelim}{quote}{custodian}{quote}{colDelim}{quote}{dateSent}{quote}{colDelim}{quote}{author}{quote}{colDelim}{quote}{fileSize}{quote}");
+        sb.Append(colDelim);
+        AppendField(sb, custodian, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, dateSent, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, author, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, fileSize, quote, hasQuote);
     }
 
     /// <summary>
@@ -624,6 +673,7 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
+        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
         RowBuildContext context)
     {
@@ -639,7 +689,16 @@ internal class DatWriter : LoadFileWriterBase
         var sentDate = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty);
         var attachment = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
 
-        sb.Append($"{colDelim}{quote}{to}{quote}{colDelim}{quote}{from}{quote}{colDelim}{quote}{subject}{quote}{colDelim}{quote}{sentDate}{quote}{colDelim}{quote}{attachment}{quote}");
+        sb.Append(colDelim);
+        AppendField(sb, to, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, from, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, subject, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, sentDate, quote, hasQuote);
+        sb.Append(colDelim);
+        AppendField(sb, attachment, quote, hasQuote);
     }
 
     /// <summary>
@@ -651,6 +710,7 @@ internal class DatWriter : LoadFileWriterBase
         FileGenerationRequest request,
         char colDelim,
         char quote,
+        bool hasQuote,
         RowBuildContext context)
     {
         if (!request.Output.WithText)
@@ -673,7 +733,8 @@ internal class DatWriter : LoadFileWriterBase
                 : workItem.FilePathInZip;
         }
 
-        sb.Append($"{colDelim}{quote}{textPath}{quote}");
+        sb.Append(colDelim);
+        AppendField(sb, textPath, quote, hasQuote);
     }
 
     /// <summary>
