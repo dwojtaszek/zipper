@@ -260,9 +260,10 @@ namespace Zipper
         [Fact]
         public async Task WriteAsync_DefaultDelimiters_UseNonPrintingChars()
         {
+            // DefaultRequest() already has QuoteDelimiter = "\u00fe" (the default).
+            // We force them to explicit non-printing chars to verify they appear wrapped.
             var request = DefaultRequest();
-            request.Delimiters = request.Delimiters with { ColumnDelimiter = null! };
-            request.Delimiters = request.Delimiters with { QuoteDelimiter = null! };
+            request.Delimiters = request.Delimiters with { ColumnDelimiter = "\u0014", QuoteDelimiter = "\u00fe" };
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
@@ -330,6 +331,82 @@ namespace Zipper
             Assert.IsAssignableFrom<LoadFileWriterBase>(writer);
             Assert.Equal("DAT", writer.FormatName);
             Assert.Equal(".dat", writer.FileExtension);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_OmitsQuoteCharactersInHeader()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var (_, lines) = await WriteAndCapture(request, files);
+            var header = lines[0];
+
+            // With no quote delimiter, fields must NOT be wrapped in any quote character
+            Assert.DoesNotContain("þ", header);
+            Assert.Contains("Control Number", header);
+            Assert.Contains("File Path", header);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_OmitsQuoteCharactersInDataRows()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var (_, lines) = await WriteAndCapture(request, files);
+            var dataRow = lines[1];
+
+            // DOC00000001 must appear unquoted — no þ wrapper
+            Assert.DoesNotContain("þ", dataRow);
+            Assert.Contains("DOC00000001", dataRow);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithMetadata_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Metadata = request.Metadata with { WithMetadata = true };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Metadata columns (Custodian, Date Sent, Author, File Size) must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains("Custodian", output);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithText_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Output = request.Output with { WithText = true, FileType = "pdf" };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Extracted Text column must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains(".txt", output);
+        }
+
+        [Fact]
+        public async Task WriteAsync_StandardMode_EmptyQuoteDelimiter_WithBates_OmitsQuotes()
+        {
+            var request = DefaultRequest();
+            request.Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty };
+            request.Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 6, Increment = 1 };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var output = await WriteAndCaptureOutput(request, files);
+
+            // Bates Number column must appear unquoted
+            Assert.DoesNotContain("þ", output);
+            Assert.Contains("TEST", output);
         }
 
         [Fact]
