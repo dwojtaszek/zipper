@@ -362,4 +362,59 @@ public class DataGeneratorTests
             Assert.InRange(observed, emptyPct - 5.0, emptyPct + 5.0);
         }
     }
+
+    /// <summary>
+    /// Test that when weight count exceeds values count, the precomputed indices do not silently bias to 0.
+    /// </summary>
+    [Fact]
+    public void PrecomputeIndices_WeightsCountExceedingValuesCount_DoesNotBiasToIndexZero()
+    {
+        // Arrange
+        var profile = new ColumnProfile
+        {
+            Name = "test-weighted-bias",
+            DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>
+            {
+                ["weightedDS"] = new DataSourceConfig
+                {
+                    Values = new List<string> { "A", "B" },
+                    Weights = new List<int> { 1, 1, 100 }, // 3 weights for 2 values
+                    Distribution = "weighted"
+                }
+            },
+            Columns = new System.Collections.Generic.List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "WEIGHTEDFIELD", Type = "text", Required = true, DataSource = "weightedDS" }
+            }
+        };
+
+        // Note: ColumnProfileLoader.Validate is bypassed by instantiating DataGenerator directly.
+        var generator = new DataGenerator(profile, seed: 12345);
+        int sampleSize = 1000;
+        int aCount = 0;
+        int bCount = 0;
+
+        for (int i = 1; i <= sampleSize; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            var value = row["WEIGHTEDFIELD"];
+            if (value == "A")
+            {
+                aCount++;
+            }
+            else if (value == "B")
+            {
+                bCount++;
+            }
+        }
+
+        // Without the fix, "A" is heavily biased (approx 99%) because all out-of-bounds fallbacks default to 0 ("A").
+        // With the fix, out-of-bounds fallbacks are mapped to count - 1 ("B"), so "B" should dominate (~99%).
+        Assert.True(bCount > aCount, $"Expected B count ({bCount}) to be greater than A count ({aCount}) due to fallback to index 1.");
+        Assert.True(bCount > sampleSize * 0.9, $"Expected B count ({bCount}) to be close to 99% of sample size ({sampleSize}).");
+    }
 }

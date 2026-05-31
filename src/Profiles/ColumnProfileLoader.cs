@@ -179,6 +179,21 @@ public static class ColumnProfileLoader
                 throw new InvalidOperationException($"Column '{column.Name}' has invalid truePercentage {column.TruePercentage}. Must be 0-100.");
             }
         }
+
+        // Validate data source weights
+        foreach (var (name, cfg) in profile.DataSources)
+        {
+            if (cfg.Weights != null && cfg.Weights.Count > 0)
+            {
+                var valCount = (cfg.Values != null && cfg.Values.Count > 0) ? cfg.Values.Count : cfg.Count;
+                if (cfg.Weights.Count > valCount)
+                {
+                    throw new InvalidOperationException(
+                        $"Data source '{name}' has an invalid configuration: it has more weights than values " +
+                        $"({cfg.Weights.Count} weights specified, but only {valCount} values exist).");
+                }
+            }
+        }
     }
 
     /// <summary>
