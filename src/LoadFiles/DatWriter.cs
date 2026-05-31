@@ -600,8 +600,8 @@ internal class DatWriter : LoadFileWriterBase
         sb.Append(colDelim);
         AppendField(sb, filePath, quote, hasQuote);
 
-        AppendMetadataColumns(sb, fileData, request, colDelim, quote, hasQuote, profileValues, context);
-        AppendEmailColumns(sb, fileData, request, colDelim, quote, hasQuote, profileValues, context);
+        AppendMetadataColumns(sb, fileData, request, profileValues, context);
+        AppendEmailColumns(sb, fileData, request, profileValues, context);
 
         if (request.Bates != null)
         {
@@ -617,7 +617,7 @@ internal class DatWriter : LoadFileWriterBase
             AppendField(sb, pageCount.ToString(), quote, hasQuote);
         }
 
-        AppendTextColumn(sb, fileData, request, colDelim, quote, hasQuote, context);
+        AppendTextColumn(sb, fileData, request, context);
 
         if (request.Metadata.WithFamilies)
         {
@@ -639,9 +639,6 @@ internal class DatWriter : LoadFileWriterBase
         StringBuilder sb,
         FileData fileData,
         FileGenerationRequest request,
-        char colDelim,
-        char quote,
-        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
         RowBuildContext context)
     {
@@ -649,6 +646,10 @@ internal class DatWriter : LoadFileWriterBase
         {
             return;
         }
+
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
+        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
 
         var custodian = EscapeDatField(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty, quote, request.Delimiters.NewlineDelimiter);
         var dateSent = context.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty);
@@ -672,9 +673,6 @@ internal class DatWriter : LoadFileWriterBase
         StringBuilder sb,
         FileData fileData,
         FileGenerationRequest request,
-        char colDelim,
-        char quote,
-        bool hasQuote,
         System.Collections.Generic.Dictionary<string, string>? profileValues,
         RowBuildContext context)
     {
@@ -682,6 +680,10 @@ internal class DatWriter : LoadFileWriterBase
         {
             return;
         }
+
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
+        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
 
         var workItem = fileData.WorkItem;
         var to = context.IsChild ? string.Empty : EscapeDatField(profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{workItem.Index}@example.com", quote, request.Delimiters.NewlineDelimiter);
@@ -709,15 +711,16 @@ internal class DatWriter : LoadFileWriterBase
         StringBuilder sb,
         FileData fileData,
         FileGenerationRequest request,
-        char colDelim,
-        char quote,
-        bool hasQuote,
         RowBuildContext context)
     {
         if (!request.Output.WithText)
         {
             return;
         }
+
+        bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
+        char quote = hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
+        char colDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? request.Delimiters.ColumnDelimiter[0] : '\u0014';
 
         var workItem = fileData.WorkItem;
         string textPath;
