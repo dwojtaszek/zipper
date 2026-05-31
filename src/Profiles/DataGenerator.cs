@@ -139,14 +139,21 @@ internal class DataGenerator
             {
                 var r = this.random.Next(total);
                 var cum = 0;
+                var assigned = false;
                 for (int j = 0; j < cfg.Weights.Count && j < count; j++)
                 {
                     cum += cfg.Weights[j];
                     if (r < cum)
                     {
                         indices[i] = j;
+                        assigned = true;
                         break;
                     }
+                }
+
+                if (!assigned && count > 0)
+                {
+                    indices[i] = count - 1;
                 }
             }
         }

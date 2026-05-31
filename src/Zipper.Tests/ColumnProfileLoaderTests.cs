@@ -531,6 +531,46 @@ namespace Zipper
             }
         }
 
+        [Fact]
+        public void Validate_WithWeightsCountExceedingValuesCount_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var profile = CreateMinimalProfile();
+            profile.DataSources["testDS"] = new DataSourceConfig
+            {
+                Values = new List<string> { "A", "B" },
+                Weights = new List<int> { 1, 1, 1 }, // 3 weights, but only 2 values
+                Distribution = "weighted"
+            };
+
+            // Act & Assert
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ColumnProfileLoader.Validate(profile));
+
+            Assert.Contains("testDS", exception.Message);
+            Assert.Contains("more weights than values", exception.Message);
+        }
+
+        [Fact]
+        public void Validate_WithWeightsCountExceedingCount_ThrowsInvalidOperationException()
+        {
+            // Arrange
+            var profile = CreateMinimalProfile();
+            profile.DataSources["testDS"] = new DataSourceConfig
+            {
+                Count = 2,
+                Weights = new List<int> { 1, 1, 1 }, // 3 weights, but Count = 2
+                Distribution = "weighted"
+            };
+
+            // Act & Assert
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                ColumnProfileLoader.Validate(profile));
+
+            Assert.Contains("testDS", exception.Message);
+            Assert.Contains("more weights than values", exception.Message);
+        }
+
         private static ColumnProfile CreateMinimalProfile()
         {
             return new ColumnProfile
