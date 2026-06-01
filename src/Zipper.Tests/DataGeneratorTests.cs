@@ -417,4 +417,169 @@ public class DataGeneratorTests
         Assert.True(bCount > aCount, $"Expected B count ({bCount}) to be greater than A count ({aCount}) due to fallback to index 1.");
         Assert.True(bCount > sampleSize * 0.9, $"Expected B count ({bCount}) to be close to 99% of sample size ({sampleSize}).");
     }
+
+    /// <summary>
+    /// Test that custodianCountOverride replaces the profile's custodians data source Count,
+    /// producing only values within the override range.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_LimitsDistinctCustodians()
+    {
+        // Standard profile has 25 custodians by default.
+        // We override to 3 — so every generated custodian value must be within Custodian_1..Custodian_3.
+        // Use 500 rows (seeded) to ensure all 3 values appear given pareto distribution.
+        var profile = BuiltInProfiles.Standard;
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 3);
+        var validValues = new HashSet<string> { "Custodian_1", "Custodian_2", "Custodian_3" };
+
+        var custodianValues = new HashSet<string>();
+
+        for (int i = 1; i <= 500; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            if (!string.IsNullOrEmpty(row["CUSTODIAN"]))
+            {
+                custodianValues.Add(row["CUSTODIAN"]);
+            }
+        }
+
+        // Upper bound: no value outside the 3 allowed
+        Assert.True(
+            custodianValues.Count <= 3,
+            $"Expected at most 3 distinct custodians but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
+        foreach (var v in custodianValues)
+        {
+            Assert.Contains(v, validValues);
+        }
+
+        // Lower bound: at least Custodian_1 must appear (it gets 80%+ under pareto)
+        Assert.Contains("Custodian_1", custodianValues);
+    }
+
+    /// <summary>
+    /// Test that custodianCountOverride is a no-op for profiles that have no "custodians" data source.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_NoCustodiansDataSource_NoOp()
+    {
+        // Minimal profile has a custodians source; build a custom profile that does NOT
+        var profile = new ColumnProfile
+        {
+            Name = "no-custodians",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(),
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+            },
+        };
+
+        // Should not throw; the override should be silently ignored
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 5);
+        var workItem = new FileWorkItem { Index = 1, FilePathInZip = "NATIVES/001/DOC00000001.pdf" };
+        var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+
+        var row = generator.GenerateRow(workItem, fileData);
+        Assert.Single(row); // Only DOCID
+    }
+
+    /// <summary>
+    /// Test that custodianCountOverride truncates a static Values-based custodians data source.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_ValuesBasedSource_TruncatesToOverrideCount()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "values-custodians",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>
+            {
+                ["custodians"] = new DataSourceConfig
+                {
+                    Values = new List<string> { "Alice", "Bob", "Carol", "Dave", "Eve" },
+                    Distribution = "uniform",
+                },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "CUSTODIAN", Type = "coded", DataSource = "custodians", EmptyPercentage = 0 },
+            },
+        };
+
+        // Override to 2: only "Alice" and "Bob" should ever appear
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 2);
+        var custodianValues = new HashSet<string>();
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+            custodianValues.Add(row["CUSTODIAN"]);
+        }
+
+        Assert.True(
+            custodianValues.Count <= 2,
+            $"Expected at most 2 custodians (Alice, Bob) but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
+        foreach (var v in custodianValues)
+        {
+            Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value: {v}");
+        }
+    }
+
+    /// <summary>
+    /// Regression test: when a Values-based custodian source also has Weights,
+    /// both must be truncated to effectiveCount so PrecomputeIndices works correctly.
+    /// Before the fix, the full Weights list was kept, causing index misalignment.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_WeightedValuesBasedSource_TruncatesBothValuesAndWeights()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "weighted-values-custodians",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>
+            {
+                ["custodians"] = new DataSourceConfig
+                {
+                    Values = new List<string> { "Alice", "Bob", "Carol", "Dave", "Eve" },
+                    Weights = new List<int> { 50, 30, 10, 5, 5 },
+                    Distribution = "weighted",
+                },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "CUSTODIAN", Type = "coded", DataSource = "custodians", EmptyPercentage = 0 },
+            },
+        };
+
+        // Override to 2: only "Alice" (weight 50) and "Bob" (weight 30) should appear.
+        // If Weights was NOT truncated, PrecomputeIndices would sum all 5 weights (100)
+        // but only 2 values exist, causing index-out-of-range fallback to the last value.
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 2);
+        var custodianValues = new HashSet<string>();
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+            custodianValues.Add(row["CUSTODIAN"]);
+        }
+
+        Assert.True(
+            custodianValues.Count <= 2,
+            $"Expected at most 2 custodians (Alice, Bob) but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
+        foreach (var v in custodianValues)
+        {
+            Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value after weight truncation: {v}");
+        }
+    }
 }

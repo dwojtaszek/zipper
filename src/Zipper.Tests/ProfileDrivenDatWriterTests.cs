@@ -22,12 +22,12 @@ namespace Zipper
             };
         }
 
-        private static FileGenerationRequest MakeRequest(ColumnProfile profile, int fileCount = 3)
+        private static FileGenerationRequest MakeRequest(ColumnProfile profile, int fileCount = 3, int? custodianCountOverride = null)
         {
             return new FileGenerationRequest
             {
                 Output = new OutputConfig { FileCount = fileCount, FileType = "pdf" },
-                Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+                Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42, CustodianCountOverride = custodianCountOverride },
                 LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
             };
@@ -94,6 +94,53 @@ namespace Zipper
 
             // \u00fe inside the field value must be doubled to \u00fe\u00fe per Concordance escaping
             Assert.Contains("val\u00fe\u00feSpecial", content);
+        }
+
+        /// <summary>
+        /// When CustodianCountOverride is set on the request, ProfileDrivenDatWriter
+        /// must pass it to DataGenerator so custodian values are bounded to that count.
+        /// </summary>
+        [Fact]
+        public async Task WriteAsync_WithCustodianCountOverride_LimitsCustodianValuesToOverrideCount()
+        {
+            // Standard profile has 25 custodians; we override to 2
+            var profile = BuiltInProfiles.Standard;
+            var request = MakeRequest(profile, fileCount: 200, custodianCountOverride: 2);
+            var content = await CaptureOutputAsync(request);
+
+            // Parse CUSTODIAN column values from all data rows
+            var lines = content.Split('\r', '\n', StringSplitOptions.RemoveEmptyEntries);
+            var headerLine = lines[0];
+            var colDelim = '\u0014';
+            var quote = '\u00fe';
+            var headers = headerLine.Split(colDelim)
+                .Select(h => h.Trim(quote))
+                .ToList();
+            var custodianIdx = headers.IndexOf("CUSTODIAN");
+            Assert.True(custodianIdx >= 0, "CUSTODIAN column not found in profile output");
+
+            var custodianValues = new HashSet<string>();
+            foreach (var line in lines.Skip(1))
+            {
+                var fields = line.Split(colDelim);
+                if (custodianIdx < fields.Length)
+                {
+                    var val = fields[custodianIdx].Trim(quote);
+                    if (!string.IsNullOrEmpty(val))
+                    {
+                        custodianValues.Add(val);
+                    }
+                }
+            }
+
+            // With override=2, must only see Custodian_1 and/or Custodian_2
+            Assert.True(
+                custodianValues.Count <= 2,
+                $"Expected at most 2 distinct custodians but found {custodianValues.Count}: {string.Join(", ", custodianValues)}");
+            foreach (var v in custodianValues)
+            {
+                Assert.Matches(@"^Custodian_[12]$", v);
+            }
         }
     }
 }
