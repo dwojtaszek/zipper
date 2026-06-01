@@ -192,5 +192,45 @@ namespace Zipper.Tests
             var result = CliParser.Parse(new[] { "--type", "--benchmark" });
             Assert.Null(result);
         }
+
+        /// <summary>
+        /// REQ-106: A relative path containing ".." that resolves outside CWD must be rejected by
+        /// the CLI layer. Before the fix, CliParser called ValidateAndCreateDirectory with no
+        /// baseDirectory, bypassing the traversal check entirely.
+        /// </summary>
+        [Fact]
+        public void Parse_OutputPathWithParentTraversal_RejectsPathOutsideCwd()
+        {
+            // "../escape" resolves to the parent of CWD — outside the allowed base directory.
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "../escape" });
+
+            // Parse must return null (error path) so the caller exits with a non-zero code.
+            Assert.Null(result);
+        }
+
+        /// <summary>
+        /// REQ-106: A path that stays inside CWD must still be accepted after the fix.
+        /// Regression guard: adding the base-directory check must not block safe relative paths.
+        /// </summary>
+        [Fact]
+        public void Parse_OutputPathWithinCwd_IsAccepted()
+        {
+            var uniqueDirName = "output_" + Guid.NewGuid().ToString("N");
+            try
+            {
+                // uniqueDirName is a safe relative subdirectory of CWD and must be accepted.
+                var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", uniqueDirName });
+
+                Assert.NotNull(result);
+                Assert.NotNull(result!.OutputDirectory);
+            }
+            finally
+            {
+                if (Directory.Exists(uniqueDirName))
+                {
+                    Directory.Delete(uniqueDirName, recursive: true);
+                }
+            }
+        }
     }
 }

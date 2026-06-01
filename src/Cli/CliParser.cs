@@ -52,7 +52,13 @@ public static class CliParser
                 case "--output-path":
                     if (TryGetValue(args, i, out var pathArg))
                     {
-                        parsed.OutputDirectory = PathValidator.ValidateAndCreateDirectory(pathArg);
+                        var dir = PathValidator.ValidateAndCreateDirectory(pathArg, Path.IsPathRooted(pathArg) ? null : Directory.GetCurrentDirectory());
+                        if (dir == null)
+                        {
+                            return null;
+                        }
+
+                        parsed.OutputDirectory = dir;
                         i++;
                     }
                     else
