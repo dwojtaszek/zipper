@@ -7,6 +7,8 @@ namespace Zipper.Profiles;
 /// </summary>
 internal class DataGenerator
 {
+    private const string CustodianDataSourceName = "custodians";
+
     private readonly ColumnProfile profile;
     private readonly Random random;
     private readonly Dictionary<string, string[]> dataSources;
@@ -15,9 +17,11 @@ internal class DataGenerator
     private readonly DateTime now;
     private int documentIndex;
 
-    public DataGenerator(ColumnProfile profile, int? seed = null, DateTime? now = null)
+    public DataGenerator(ColumnProfile profile, int? seed = null, DateTime? now = null, int? custodianCountOverride = null)
     {
-        this.profile = profile;
+        this.profile = custodianCountOverride.HasValue
+            ? ApplyCustodianCountOverride(profile, custodianCountOverride.Value)
+            : profile;
 #pragma warning disable S2245
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
 #pragma warning restore S2245
@@ -27,6 +31,58 @@ internal class DataGenerator
         this.now = now ?? DateTime.UtcNow;
         this.InitializeDataSources();
         this.InitializeColumnGenerators();
+    }
+
+    private static ColumnProfile ApplyCustodianCountOverride(ColumnProfile profile, int count)
+    {
+        if (!profile.DataSources.TryGetValue(CustodianDataSourceName, out var custodianSource))
+        {
+            return profile;
+        }
+
+        var effectiveCount = Math.Max(1, count);
+        DataSourceConfig overriddenSource;
+
+        if (custodianSource.Values?.Count > 0)
+        {
+            // Static value list: truncate to the requested count
+            overriddenSource = new DataSourceConfig
+            {
+                Count = effectiveCount,
+                Distribution = custodianSource.Distribution,
+                Prefix = custodianSource.Prefix,
+                Values = custodianSource.Values.Take(effectiveCount).ToList(),
+                Weights = custodianSource.Weights,
+            };
+        }
+        else
+        {
+            // Generated names (Count + Prefix): replace the count
+            overriddenSource = new DataSourceConfig
+            {
+                Count = effectiveCount,
+                Distribution = custodianSource.Distribution,
+                Prefix = custodianSource.Prefix,
+                Values = null,
+                Weights = custodianSource.Weights,
+            };
+        }
+
+        var newDataSources = new Dictionary<string, DataSourceConfig>(profile.DataSources)
+        {
+            [CustodianDataSourceName] = overriddenSource,
+        };
+
+        return new ColumnProfile
+        {
+            Name = profile.Name,
+            Description = profile.Description,
+            Version = profile.Version,
+            FieldNamingConvention = profile.FieldNamingConvention,
+            Settings = profile.Settings,
+            DataSources = newDataSources,
+            Columns = profile.Columns,
+        };
     }
 
     public Dictionary<string, string> GenerateRow(FileWorkItem workItem, FileData fileData)

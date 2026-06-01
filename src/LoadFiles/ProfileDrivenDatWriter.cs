@@ -32,7 +32,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             ? request.Delimiters.QuoteDelimiter[0] : '\u00fe';
         bool hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
 
-        var generator = new DataGenerator(profile, request.Metadata.Seed);
+        var generator = new DataGenerator(profile, request.Metadata.Seed, custodianCountOverride: request.Metadata.CustodianCountOverride);
         var columnNames = generator.GetColumnNames().ToList();
 
         // Write header row
