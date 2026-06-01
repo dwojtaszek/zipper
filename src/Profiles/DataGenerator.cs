@@ -33,6 +33,13 @@ internal class DataGenerator
         this.InitializeColumnGenerators();
     }
 
+    /// <summary>
+    /// Returns a copy of <paramref name="profile"/> whose <c>custodians</c> data source is
+    /// adjusted to produce at most <paramref name="count"/> distinct custodian values.
+    /// For generated (Count+Prefix) sources the count is replaced directly.
+    /// For static Values lists both the values and any associated weights are truncated.
+    /// If the profile has no <c>custodians</c> data source the original profile is returned unchanged.
+    /// </summary>
     private static ColumnProfile ApplyCustodianCountOverride(ColumnProfile profile, int count)
     {
         if (!profile.DataSources.TryGetValue(CustodianDataSourceName, out var custodianSource))
@@ -45,14 +52,14 @@ internal class DataGenerator
 
         if (custodianSource.Values?.Count > 0)
         {
-            // Static value list: truncate to the requested count
+            // Static value list: truncate values and corresponding weights to the requested count
             overriddenSource = new DataSourceConfig
             {
                 Count = effectiveCount,
                 Distribution = custodianSource.Distribution,
                 Prefix = custodianSource.Prefix,
                 Values = custodianSource.Values.Take(effectiveCount).ToList(),
-                Weights = custodianSource.Weights,
+                Weights = custodianSource.Weights?.Take(effectiveCount).ToList(),
             };
         }
         else

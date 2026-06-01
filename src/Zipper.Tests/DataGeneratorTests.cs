@@ -531,4 +531,55 @@ public class DataGeneratorTests
             Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value: {v}");
         }
     }
+
+    /// <summary>
+    /// Regression test: when a Values-based custodian source also has Weights,
+    /// both must be truncated to effectiveCount so PrecomputeIndices works correctly.
+    /// Before the fix, the full Weights list was kept, causing index misalignment.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_WeightedValuesBasedSource_TruncatesBothValuesAndWeights()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "weighted-values-custodians",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>
+            {
+                ["custodians"] = new DataSourceConfig
+                {
+                    Values = new List<string> { "Alice", "Bob", "Carol", "Dave", "Eve" },
+                    Weights = new List<int> { 50, 30, 10, 5, 5 },
+                    Distribution = "weighted",
+                },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "CUSTODIAN", Type = "coded", DataSource = "custodians", EmptyPercentage = 0 },
+            },
+        };
+
+        // Override to 2: only "Alice" (weight 50) and "Bob" (weight 30) should appear.
+        // If Weights was NOT truncated, PrecomputeIndices would sum all 5 weights (100)
+        // but only 2 values exist, causing index-out-of-range fallback to the last value.
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 2);
+        var custodianValues = new HashSet<string>();
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
+            var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+            custodianValues.Add(row["CUSTODIAN"]);
+        }
+
+        Assert.True(
+            custodianValues.Count <= 2,
+            $"Expected at most 2 custodians (Alice, Bob) but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
+        foreach (var v in custodianValues)
+        {
+            Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value after weight truncation: {v}");
+        }
+    }
 }
