@@ -64,14 +64,14 @@ internal class DataGenerator
         }
         else
         {
-            // Generated names (Count + Prefix): replace the count
+            // Generated names (Count + Prefix): replace the count and truncate weights to match
             overriddenSource = new DataSourceConfig
             {
                 Count = effectiveCount,
                 Distribution = custodianSource.Distribution,
                 Prefix = custodianSource.Prefix,
                 Values = null,
-                Weights = custodianSource.Weights,
+                Weights = custodianSource.Weights?.Take(effectiveCount).ToList(),
             };
         }
 
@@ -187,7 +187,7 @@ internal class DataGenerator
         var indices = new int[1000];
         if (cfg.Distribution == "weighted" && cfg.Weights?.Count > 0)
         {
-            var total = cfg.Weights.Sum();
+            var total = cfg.Weights.Take(count).Sum();
             if (total <= 0)
             {
                 for (int i = 0; i < 1000; i++)
@@ -214,6 +214,8 @@ internal class DataGenerator
                     }
                 }
 
+                // Defensive fallback: unreachable since the 'r' < 'total' check is guaranteed to be satisfied within the cumulative loop range,
+                // making 'assigned' always true when 'count' > 0. Intentionally retained as a safety net for 'indices' robustness.
                 if (!assigned && count > 0)
                 {
                     indices[i] = count - 1;
