@@ -64,14 +64,14 @@ internal class DataGenerator
         }
         else
         {
-            // Generated names (Count + Prefix): replace the count
+            // Generated names (Count + Prefix): replace the count and truncate weights to match
             overriddenSource = new DataSourceConfig
             {
                 Count = effectiveCount,
                 Distribution = custodianSource.Distribution,
                 Prefix = custodianSource.Prefix,
                 Values = null,
-                Weights = custodianSource.Weights,
+                Weights = custodianSource.Weights?.Take(effectiveCount).ToList(),
             };
         }
 
@@ -187,7 +187,7 @@ internal class DataGenerator
         var indices = new int[1000];
         if (cfg.Distribution == "weighted" && cfg.Weights?.Count > 0)
         {
-            var total = cfg.Weights.Sum();
+            var total = cfg.Weights.Take(count).Sum();
             if (total <= 0)
             {
                 for (int i = 0; i < 1000; i++)

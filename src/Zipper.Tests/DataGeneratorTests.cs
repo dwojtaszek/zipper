@@ -364,10 +364,10 @@ public class DataGeneratorTests
     }
 
     /// <summary>
-    /// Test that when weight count exceeds values count, the precomputed indices do not silently bias to 0.
+    /// Test that when weight count exceeds values count, the distribution is proportional to the values' weights.
     /// </summary>
     [Fact]
-    public void PrecomputeIndices_WeightsCountExceedingValuesCount_DoesNotBiasToIndexZero()
+    public void GenerateRow_WeightsCountExceedingValuesCount_ShouldDistributeProportionally()
     {
         // Arrange
         var profile = new ColumnProfile
@@ -412,10 +412,12 @@ public class DataGeneratorTests
             }
         }
 
-        // Without the fix, "A" is heavily biased (approx 99%) because all out-of-bounds fallbacks default to 0 ("A").
-        // With the fix, out-of-bounds fallbacks are mapped to count - 1 ("B"), so "B" should dominate (~99%).
-        Assert.True(bCount > aCount, $"Expected B count ({bCount}) to be greater than A count ({aCount}) due to fallback to index 1.");
-        Assert.True(bCount > sampleSize * 0.9, $"Expected B count ({bCount}) to be close to 99% of sample size ({sampleSize}).");
+        // With the fix, we ignore the extra weight (100) and only use the first two weights (1, 1).
+        // This should result in a 50/50 proportional distribution between A and B, within a standard tolerance.
+        double aPercent = (double)aCount / sampleSize * 100;
+        double bPercent = (double)bCount / sampleSize * 100;
+        Assert.InRange(aPercent, 45.0, 55.0);
+        Assert.InRange(bPercent, 45.0, 55.0);
     }
 
     /// <summary>
@@ -581,5 +583,65 @@ public class DataGeneratorTests
         {
             Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value after weight truncation: {v}");
         }
+    }
+
+    /// <summary>
+    /// Test that when custodianCountOverride is applied to a weighted, generated-names source,
+    /// the weights are correctly truncated and the output is distributed proportionally among remaining options.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WithCustodianCountOverride_WeightedGeneratedSource_ShouldDistributeProportionally()
+    {
+        // Arrange
+        var profile = new ColumnProfile
+        {
+            Name = "generated-weighted-custodians",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>
+            {
+                ["custodians"] = new DataSourceConfig
+                {
+                    Count = 5,
+                    Prefix = "Cust_",
+                    Weights = new List<int> { 1, 1, 100, 100, 100 }, // 5 weights
+                    Distribution = "weighted",
+                },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "CUSTODIAN", Type = "coded", DataSource = "custodians", EmptyPercentage = 0 },
+            },
+        };
+
+        // Override count to 2. This leaves us with Cust_1 (weight 1) and Cust_2 (weight 1).
+        // The remaining weights (100, 100, 100) must be ignored / truncated.
+        var generator = new DataGenerator(profile, seed: 12345, custodianCountOverride: 2);
+        int sampleSize = 1000;
+        int cust1Count = 0;
+        int cust2Count = 0;
+
+        for (int i = 1; i <= sampleSize; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            var value = row["CUSTODIAN"];
+            if (value == "Cust_1")
+            {
+                cust1Count++;
+            }
+            else if (value == "Cust_2")
+            {
+                cust2Count++;
+            }
+        }
+
+        // Output should be ~50% Cust_1 and ~50% Cust_2.
+        double cust1Percent = (double)cust1Count / sampleSize * 100;
+        double cust2Percent = (double)cust2Count / sampleSize * 100;
+        Assert.InRange(cust1Percent, 45.0, 55.0);
+        Assert.InRange(cust2Percent, 45.0, 55.0);
     }
 }
