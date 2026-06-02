@@ -253,5 +253,97 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public async Task Main_WithSeedAndTargetZipSize_ProducesIdenticalOutputAndHashes()
+        {
+            // Arrange
+            string tempPath1 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath2 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+
+            try
+            {
+                string[] args1 =
+                {
+                    "--output-path", tempPath1,
+                    "--count", "5",
+                    "--type", "pdf",
+                    "--seed", "123",
+                    "--target-zip-size", "1MB",
+                    "--with-metadata"
+                };
+
+                string[] args2 =
+                {
+                    "--output-path", tempPath2,
+                    "--count", "5",
+                    "--type", "pdf",
+                    "--seed", "123",
+                    "--target-zip-size", "1MB",
+                    "--with-metadata"
+                };
+
+                // Act
+                int exitCode1 = await RunWithRedirectedConsole(() => Program.Main(args1));
+                int exitCode2 = await RunWithRedirectedConsole(() => Program.Main(args2));
+
+                // Assert
+                Assert.Equal(0, exitCode1);
+                Assert.Equal(0, exitCode2);
+
+                // Find the load file in both outputs
+                var datFile1 = Directory.GetFiles(tempPath1, "*.dat").FirstOrDefault();
+                var datFile2 = Directory.GetFiles(tempPath2, "*.dat").FirstOrDefault();
+
+                Assert.NotNull(datFile1);
+                Assert.NotNull(datFile2);
+
+                var content1 = await File.ReadAllTextAsync(datFile1);
+                var content2 = await File.ReadAllTextAsync(datFile2);
+
+                // Entire load file contents must be identical, including columns
+                Assert.Equal(content1, content2);
+
+                var zipFile1 = Directory.GetFiles(tempPath1, "*.zip").FirstOrDefault();
+                var zipFile2 = Directory.GetFiles(tempPath2, "*.zip").FirstOrDefault();
+
+                Assert.NotNull(zipFile1);
+                Assert.NotNull(zipFile2);
+
+                using (var archive1 = System.IO.Compression.ZipFile.OpenRead(zipFile1))
+                using (var archive2 = System.IO.Compression.ZipFile.OpenRead(zipFile2))
+                {
+                    Assert.Equal(archive1.Entries.Count, archive2.Entries.Count);
+                    for (int i = 0; i < archive1.Entries.Count; i++)
+                    {
+                        var entry1 = archive1.Entries[i];
+                        var entry2 = archive2.Entries[i];
+
+                        Assert.Equal(entry1.FullName, entry2.FullName);
+                        Assert.Equal(entry1.Length, entry2.Length);
+
+                        using var stream1 = entry1.Open();
+                        using var stream2 = entry2.Open();
+
+                        var hash1 = System.Security.Cryptography.MD5.HashData(stream1);
+                        var hash2 = System.Security.Cryptography.MD5.HashData(stream2);
+
+                        Assert.Equal(hash1, hash2);
+                    }
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempPath1))
+                {
+                    Directory.Delete(tempPath1, true);
+                }
+
+                if (Directory.Exists(tempPath2))
+                {
+                    Directory.Delete(tempPath2, true);
+                }
+            }
+        }
     }
 }

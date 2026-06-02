@@ -227,17 +227,27 @@ namespace Zipper
 
                 if (effectivePadding > 0)
                 {
-                    var padding = new byte[Math.Min(effectivePadding, 1024 * 1024)];
-                    RandomNumberGenerator.Fill(padding);
-
-                    int offset = fileContent.Length;
-                    long remaining = effectivePadding;
-                    while (remaining > 0)
+                    if (request.Metadata.Seed.HasValue)
                     {
-                        int toCopy = (int)Math.Min(remaining, padding.Length);
-                        Buffer.BlockCopy(padding, 0, data, offset, toCopy);
-                        offset += toCopy;
-                        remaining -= toCopy;
+                        var fileSeed = unchecked((int)(request.Metadata.Seed.Value + workItem.Index));
+                        var rng = new DeterministicPaddingRng(fileSeed);
+                        var paddingSpan = data.AsSpan(fileContent.Length, (int)effectivePadding);
+                        rng.Fill(paddingSpan);
+                    }
+                    else
+                    {
+                        var padding = new byte[Math.Min(effectivePadding, 1024 * 1024)];
+                        RandomNumberGenerator.Fill(padding);
+
+                        int offset = fileContent.Length;
+                        long remaining = effectivePadding;
+                        while (remaining > 0)
+                        {
+                            int toCopy = (int)Math.Min(remaining, padding.Length);
+                            Buffer.BlockCopy(padding, 0, data, offset, toCopy);
+                            offset += toCopy;
+                            remaining -= toCopy;
+                        }
                     }
                 }
 
@@ -265,7 +275,16 @@ namespace Zipper
                 if (effectivePadding > 0)
                 {
                     var paddingSpan = memoryOwner.Memory.Span.Slice(fileContent.Length, (int)effectivePadding);
-                    RandomNumberGenerator.Fill(paddingSpan);
+                    if (request.Metadata.Seed.HasValue)
+                    {
+                        var fileSeed = unchecked((int)(request.Metadata.Seed.Value + workItem.Index));
+                        var rng = new DeterministicPaddingRng(fileSeed);
+                        rng.Fill(paddingSpan);
+                    }
+                    else
+                    {
+                        RandomNumberGenerator.Fill(paddingSpan);
+                    }
                 }
 
                 var finalMemory = memoryOwner.Memory[..(int)totalSize];
@@ -325,6 +344,32 @@ namespace Zipper
             if (ex is not null)
             {
                 ExceptionDispatchInfo.Capture(ex).Throw();
+            }
+        }
+
+        private struct DeterministicPaddingRng
+        {
+            private uint state;
+
+            public DeterministicPaddingRng(int seed)
+            {
+                // Use a mixer to avoid poor randomness if seed is small
+                uint s = (uint)seed;
+                s ^= s >> 16;
+                s *= 0x7feb352dU;
+                s ^= s >> 15;
+                s *= 0x846ca68bU;
+                s ^= s >> 16;
+                this.state = s == 0 ? 0x12345678U : s;
+            }
+
+            public void Fill(Span<byte> buffer)
+            {
+                for (int i = 0; i < buffer.Length; i++)
+                {
+                    this.state = unchecked((this.state * 1664525U) + 1013904223U);
+                    buffer[i] = (byte)(this.state >> 24);
+                }
             }
         }
     }
