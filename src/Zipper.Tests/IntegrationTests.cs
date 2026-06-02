@@ -22,6 +22,13 @@ namespace Zipper
 
                 using var archive = System.IO.Compression.ZipFile.OpenRead(zipFile!);
                 Assert.Equal(100, archive.Entries.Count);
+
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                Assert.Single(datFiles);
+                var datContent = await File.ReadAllTextAsync(datFiles[0]);
+                var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(101, datLines.Length); // 100 records + 1 header
+                Assert.Contains("DOC00000001", datContent);
             }
             finally
             {
@@ -50,6 +57,12 @@ namespace Zipper
 
                 using var archive = System.IO.Compression.ZipFile.OpenRead(zipFile!);
                 Assert.True(archive.Entries.Count >= 10);
+
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                Assert.Single(datFiles);
+                var datContent = await File.ReadAllTextAsync(datFiles[0]);
+                Assert.Contains("Attachment", datContent);
+                Assert.Contains("Subject", datContent);
             }
             finally
             {
@@ -78,6 +91,11 @@ namespace Zipper
 
                 using var archive = System.IO.Compression.ZipFile.OpenRead(zipFile!);
                 Assert.Equal(10, archive.Entries.Count);
+
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                Assert.Single(datFiles);
+                var datContent = await File.ReadAllTextAsync(datFiles[0]);
+                Assert.Contains("Page Count", datContent);
             }
             finally
             {
@@ -102,7 +120,18 @@ namespace Zipper
                 Assert.Equal(0, result);
 
                 Assert.Empty(Directory.GetFiles(tempDir, "*.zip"));
-                Assert.Single(Directory.GetFiles(tempDir, "*.dat"));
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                Assert.Single(datFiles);
+
+                var datContent = await File.ReadAllTextAsync(datFiles[0]);
+                var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                Assert.Equal(11, datLines.Length); // 10 records + 1 header
+                Assert.Contains("DOC00000001", datContent);
+
+                var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
+                Assert.Single(propFiles);
+                var propContent = await File.ReadAllTextAsync(propFiles[0]);
+                Assert.Contains("DAT (Metadata)", propContent);
             }
             finally
             {
@@ -125,7 +154,13 @@ namespace Zipper
                 var result = await Program.Main(args);
 
                 Assert.Equal(0, result);
-                Assert.Single(Directory.GetFiles(tempDir, "*.dat"));
+                var datFiles = Directory.GetFiles(tempDir, "*.dat");
+                Assert.Single(datFiles);
+
+                var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
+                Assert.Single(propFiles);
+                var propContent = await File.ReadAllTextAsync(propFiles[0]);
+                Assert.Contains("\"enabled\": true", propContent);
             }
             finally
             {
@@ -229,6 +264,10 @@ namespace Zipper
                 Assert.Single(datFiles);
                 Assert.Single(optFiles);
 
+                var optContent = await File.ReadAllTextAsync(optFiles[0]);
+                Assert.Contains("DOC00000001", optContent);
+                Assert.Contains("VOL001", optContent);
+
                 // Clean up files in tempDir
                 foreach (var file in Directory.GetFiles(tempDir))
                 {
@@ -245,6 +284,9 @@ namespace Zipper
 
                 Assert.Single(datFiles);
                 Assert.Single(optFiles);
+
+                var optContentJpg = await File.ReadAllTextAsync(optFiles[0]);
+                Assert.Contains("DOC00000001", optContentJpg);
             }
             finally
             {

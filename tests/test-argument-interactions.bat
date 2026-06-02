@@ -23,6 +23,14 @@ call :assert_rejected "--production-zip without --production-set" --type pdf --c
 call :assert_rejected "--volume-size without --production-set" --type pdf --count 5 --output-path "%TEMP%\zi_test" --volume-size 100
 call :assert_rejected "--target-zip-size without --count" --type pdf --output-path "%TEMP%\zi_test" --target-zip-size 10MB
 
+call :assert_accepted "valid standard --loadfile-only" --loadfile-only --count 5 --output-path "%TEMP%\zi_test"
+call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --col-delim "char:|"
+call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path "%TEMP%\zi_test"
+
+call :assert_rejected "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --load-file-format csv
+call :assert_rejected "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --load-file-format xml
+call :assert_rejected "--loadfile-only + --load-file-format concordance" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --load-file-format concordance
+
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
 if !FAILED! equ 0 (
@@ -43,6 +51,20 @@ if errorlevel 1 (
     set /a PASSED+=1
 ) else (
     echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
+    set /a FAILED+=1
+)
+goto :eof
+
+:assert_accepted
+set "DESC=%~1"
+set "ARGS=%*"
+set "ARGS=!ARGS:%~1 =!"
+%ZIPPER_CMD% !ARGS! >nul 2>&1
+if not errorlevel 1 (
+    echo [ INFO ] PASS: %DESC%
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: %DESC% ^(expected success^)
     set /a FAILED+=1
 )
 goto :eof

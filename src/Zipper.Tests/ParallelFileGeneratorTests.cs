@@ -500,15 +500,9 @@ namespace Zipper
             Assert.Equal(expectedPadding, result);
         }
 
-        [Fact(Timeout = 10000)]
+        [WindowsUnsupportedFact(Timeout = 10000)]
         public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
         {
-            // Windows ReadOnly attribute on directories doesn't prevent file creation
-            if (OperatingSystem.IsWindows())
-            {
-                return;
-            }
-
             var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(outputPath);
 
@@ -651,6 +645,53 @@ namespace Zipper
             {
                 fileData1.MemoryOwner?.Dispose();
                 fileData2.MemoryOwner?.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task GenerateFilesAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
+        {
+            var tempDir = Path.GetTempPath();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
+
+            try
+            {
+                var generator = new ParallelFileGenerator();
+                var request = new FileGenerationRequest
+                {
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputPath,
+                        FileCount = 1,
+                        FileType = "pdf",
+                    },
+                    Chaos = new ChaosConfig
+                    {
+                        ChaosMode = true,
+                    },
+                    LoadfileOnly = false,
+                };
+
+                await Assert.ThrowsAsync<InvalidOperationException>(() => generator.GenerateFilesAsync(request));
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
+        }
+    }
+
+    public sealed class WindowsUnsupportedFactAttribute : FactAttribute
+    {
+        public WindowsUnsupportedFactAttribute()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                this.Skip = "Windows doesn't support directory read-only attributes to block writing.";
             }
         }
     }

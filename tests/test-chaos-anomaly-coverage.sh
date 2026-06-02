@@ -147,8 +147,8 @@ while IFS= read -r TYPE; do
     cmp -s "$CHAOS_DAT" "$CHAOS_DAT2" \
         || print_error "Determinism failed (DAT differs) for type: $TYPE"
     # Compare _properties.json content excluding fileName (which contains a timestamp)
-    PROPS_CANONICAL=$(jq 'del(.fileName)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName)' "$PROPS2")
+    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
+    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for type: $TYPE"
 
@@ -218,8 +218,8 @@ while IFS= read -r TYPE; do
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_OPT" "$CHAOS_OPT2" \
         || print_error "Determinism failed (OPT differs) for type: $TYPE"
-    PROPS_CANONICAL=$(jq 'del(.fileName)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName)' "$PROPS2")
+    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
+    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for OPT type: $TYPE"
 
@@ -289,8 +289,8 @@ while IFS= read -r SCENARIO; do
     fi
     cmp -s "$FILE1" "$FILE2" \
         || print_error "Determinism failed (load file differs) for scenario: $SCENARIO"
-    PROPS_CANONICAL=$(jq 'del(.fileName)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName)' "$PROPS2")
+    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
+    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for scenario: $SCENARIO"
 

@@ -530,6 +530,8 @@ namespace Zipper
 
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("mixed-delimiters", a.ErrorType));
+            Assert.True(chaosOutput.Contains(",") || chaosOutput.Contains("\t") || chaosOutput.Contains("|"), "Should contain alternative delimiters");
         }
 
         [Fact]
@@ -559,6 +561,22 @@ namespace Zipper
 
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("columns", a.ErrorType));
+            var baseLines = baseOutput.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var chaosLines = chaosOutput.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            bool columnCountDiffers = false;
+            for (int i = 0; i < Math.Min(baseLines.Length, chaosLines.Length); i++)
+            {
+                var baseDelimCount = System.Linq.Enumerable.Count(baseLines[i], c => c == '\u0014');
+                var chaosDelimCount = System.Linq.Enumerable.Count(chaosLines[i], c => c == '\u0014');
+                if (baseDelimCount != chaosDelimCount)
+                {
+                    columnCountDiffers = true;
+                    break;
+                }
+            }
+
+            Assert.True(columnCountDiffers, "At least one line must have a different column count");
         }
 
         [Fact]
@@ -588,6 +606,10 @@ namespace Zipper
 
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("eol", a.ErrorType));
+            var baseLineCount = baseOutput.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Length;
+            var chaosLineCount = chaosOutput.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Length;
+            Assert.True(chaosLineCount > baseLineCount, "Injected EOL should increase line count");
         }
 
         [Fact]
@@ -617,6 +639,8 @@ namespace Zipper
 
             // Encoding anomaly injects extra bytes between lines — output must be longer
             Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
+            Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("encoding", a.ErrorType));
         }
 
         [Fact]
@@ -681,6 +705,7 @@ namespace Zipper
 
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
+            Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
         }
 
         [Fact]

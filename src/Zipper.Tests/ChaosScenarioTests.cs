@@ -86,6 +86,52 @@ public class ChaosScenarioTests
         Assert.Equal(LoadFileFormat.Opt, scenario.RequiredFormat);
     }
 
+    [Fact]
+    public void AllScenarios_MatchRequirementsExactly()
+    {
+        // 1. structured-import-failures
+        var structured = ChaosScenarios.GetByName("structured-import-failures");
+        Assert.NotNull(structured);
+        Assert.Equal("mixed-delimiters,quotes,columns", structured.ChaosTypes);
+        Assert.Equal("3%", structured.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, structured.RequiredFormat);
+
+        // 2. encoding-nightmare
+        var encoding = ChaosScenarios.GetByName("encoding-nightmare");
+        Assert.NotNull(encoding);
+        Assert.Equal("encoding,mixed-delimiters", encoding.ChaosTypes);
+        Assert.Equal("5%", encoding.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, encoding.RequiredFormat);
+
+        // 3. broken-boundaries
+        var broken = ChaosScenarios.GetByName("broken-boundaries");
+        Assert.NotNull(broken);
+        Assert.Equal("opt-boundary,opt-pagecount,opt-path", broken.ChaosTypes);
+        Assert.Equal("8%", broken.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Opt, broken.RequiredFormat);
+
+        // 4. field-overflow
+        var overflow = ChaosScenarios.GetByName("field-overflow");
+        Assert.NotNull(overflow);
+        Assert.Equal("eol,columns", overflow.ChaosTypes);
+        Assert.Equal("2%", overflow.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, overflow.RequiredFormat);
+
+        // 5. full-chaos
+        var full = ChaosScenarios.GetByName("full-chaos");
+        Assert.NotNull(full);
+        Assert.Equal(string.Empty, full.ChaosTypes);
+        Assert.Equal("10%", full.DefaultAmount);
+        Assert.Null(full.RequiredFormat);
+
+        // 6. transfer-encoding-failures
+        var transfer = ChaosScenarios.GetByName("transfer-encoding-failures");
+        Assert.NotNull(transfer);
+        Assert.Equal("mixed-delimiters,encoding,quotes", transfer.ChaosTypes);
+        Assert.Equal("4%", transfer.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, transfer.RequiredFormat);
+    }
+
     // --- CLI integration tests ---
     [Fact]
     public async Task ChaosList_PrintsScenariosAndExitsZero()

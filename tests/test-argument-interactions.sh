@@ -105,6 +105,28 @@ assert_rejected "--volume-size without --production-set" \
 assert_rejected "--target-zip-size without --count" \
     --type pdf --target-zip-size 10MB
 
+# --- Positive tests (assert_accepted) ---
+
+assert_accepted "valid standard --loadfile-only" \
+    --loadfile-only --count 5
+
+assert_accepted "valid standard --loadfile-only with --col-delim" \
+    --loadfile-only --count 5 --col-delim "char:|"
+
+assert_accepted "valid standard --production-set" \
+    --production-set --count 5 --bates-prefix TEST --type pdf
+
+# --- Negative E2E tests for --loadfile-only formats ---
+
+assert_rejected "--loadfile-only + --load-file-format csv" \
+    --loadfile-only --count 5 --load-file-format csv
+
+assert_rejected "--loadfile-only + --load-file-format xml" \
+    --loadfile-only --count 5 --load-file-format xml
+
+assert_rejected "--loadfile-only + --load-file-format concordance" \
+    --loadfile-only --count 5 --load-file-format concordance
+
 # --- Summary ---
 
 echo ""
