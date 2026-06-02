@@ -214,6 +214,8 @@ internal class DataGenerator
                     }
                 }
 
+                // Defensive fallback: unreachable since the 'r' < 'total' check is guaranteed to be satisfied within the cumulative loop range,
+                // making 'assigned' always true when 'count' > 0. Intentionally retained as a safety net for 'indices' robustness.
                 if (!assigned && count > 0)
                 {
                     indices[i] = count - 1;
