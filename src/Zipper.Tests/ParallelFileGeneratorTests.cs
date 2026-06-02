@@ -583,5 +583,75 @@ namespace Zipper
             Assert.False(fileData.Data.IsEmpty);
             Assert.Equal(fileData.DataLength, fileData.Data.Length);
         }
+
+        [Fact]
+        public void GenerateFileData_WithSeedAndTargetZipSize_PooledPath_ProducesDeterministicHash()
+        {
+            var generator = new ParallelFileGenerator();
+            var workItem = new FileWorkItem { Index = 1 };
+            var paddingPerFile = 1000; // Small padding -> pooled path
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = "dummy",
+                    FileType = "docx",
+                    FileCount = 1,
+                },
+                Metadata = new MetadataConfig
+                {
+                    Seed = 42
+                }
+            };
+            var fileGenerator = new OfficeFileGenerator("docx");
+
+            var fileData1 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+            var fileData2 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+            try
+            {
+                Assert.Equal(fileData1.Hash, fileData2.Hash);
+            }
+            finally
+            {
+                fileData1.MemoryOwner?.Dispose();
+                fileData2.MemoryOwner?.Dispose();
+            }
+        }
+
+        [Fact]
+        public void GenerateFileData_WithSeedAndTargetZipSize_NonPooledPath_ProducesDeterministicHash()
+        {
+            var generator = new ParallelFileGenerator();
+            var workItem = new FileWorkItem { Index = 1 };
+            var paddingPerFile = PerformanceConstants.MaxPaddingPerFile; // Max padding -> non-pooled path
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = "dummy",
+                    FileType = "docx",
+                    FileCount = 1,
+                },
+                Metadata = new MetadataConfig
+                {
+                    Seed = 42
+                }
+            };
+            var fileGenerator = new OfficeFileGenerator("docx");
+
+            var fileData1 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+            var fileData2 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+            try
+            {
+                Assert.Equal(fileData1.Hash, fileData2.Hash);
+            }
+            finally
+            {
+                fileData1.MemoryOwner?.Dispose();
+                fileData2.MemoryOwner?.Dispose();
+            }
+        }
     }
 }
