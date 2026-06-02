@@ -70,3 +70,7 @@ graphify_audit/
 .worktrees/
 .zipper-runner/
 
+# Local cache
+cache/
+
+

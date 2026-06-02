@@ -71,12 +71,13 @@ public class ChaosEngineBuilderTests
     public void Build_WithScenario_ResolvesTypesAndAmountFromScenario()
     {
         // Arrange
+        var scenarioName = "structured-import-failures";
         var request = new FileGenerationRequest();
         request.Chaos = request.Chaos with
         {
             ChaosMode = true,
-            ChaosScenario = "structured-import-failures",
-            ChaosAmount = null // Fall back to scenario default (3%)
+            ChaosScenario = scenarioName,
+            ChaosAmount = null // Fall back to scenario default
         };
 
         // Act
@@ -87,15 +88,21 @@ public class ChaosEngineBuilderTests
         var enabledTypes = GetPrivateField(engine, "enabledTypes") as HashSet<string>;
         var targetLines = GetPrivateField(engine, "targetLines") as HashSet<long>;
 
-        Assert.NotNull(enabledTypes);
-        Assert.Contains("mixed-delimiters", enabledTypes);
-        Assert.Contains("quotes", enabledTypes);
-        Assert.Contains("columns", enabledTypes);
-        Assert.Equal(3, enabledTypes.Count);
+        var scenario = ChaosScenarios.GetByName(scenarioName);
+        Assert.NotNull(scenario);
 
-        // 3% of 100 is 3 target lines
+        var expectedTypes = new HashSet<string>(
+            scenario.ChaosTypes.Split(',').Select(t => t.Trim().ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
+
+        Assert.NotNull(enabledTypes);
+        Assert.Equal(expectedTypes, enabledTypes);
+
+        var pct = double.Parse(scenario.DefaultAmount.TrimEnd('%'));
+        var expectedCount = Math.Max(1, (int)(100 * pct / 100.0));
+
         Assert.NotNull(targetLines);
-        Assert.Equal(3, targetLines.Count);
+        Assert.Equal(expectedCount, targetLines.Count);
     }
 
     [Fact]
@@ -177,7 +184,7 @@ public class ChaosEngineBuilderTests
     }
 
     [Fact]
-    public void Build_FormatDat_UsesRequestDelimiters()
+    public void Build_FormatDat_NullRequestDelimiters_FallbackToDefaultDelimiters()
     {
         // Arrange
         var request = new FileGenerationRequest();
