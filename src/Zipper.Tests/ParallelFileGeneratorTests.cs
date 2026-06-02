@@ -608,7 +608,15 @@ namespace Zipper
             var fileData1 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
             var fileData2 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
 
-            Assert.Equal(fileData1.Hash, fileData2.Hash);
+            try
+            {
+                Assert.Equal(fileData1.Hash, fileData2.Hash);
+            }
+            finally
+            {
+                fileData1.MemoryOwner?.Dispose();
+                fileData2.MemoryOwner?.Dispose();
+            }
         }
 
         [Fact]
@@ -635,7 +643,15 @@ namespace Zipper
             var fileData1 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
             var fileData2 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
 
-            Assert.Equal(fileData1.Hash, fileData2.Hash);
+            try
+            {
+                Assert.Equal(fileData1.Hash, fileData2.Hash);
+            }
+            finally
+            {
+                fileData1.MemoryOwner?.Dispose();
+                fileData2.MemoryOwner?.Dispose();
+            }
         }
     }
 }
