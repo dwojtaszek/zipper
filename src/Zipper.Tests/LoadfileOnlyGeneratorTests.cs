@@ -456,6 +456,123 @@ namespace Zipper
             Assert.True(assertionStream.PeakMemoryUsage < 30 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 30MB streaming limit.");
         }
 
+        [Fact]
+        public async Task GenerateAsync_TiffAndJpgWithoutExplicitFormat_CreatesBothDatAndOpt()
+        {
+            // TIFF
+            var tiffRequest = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = this.tempDir,
+                    FileCount = 5,
+                    FileType = "tiff",
+                },
+                LoadFile = new LoadFileConfig
+                {
+                    LoadFileFormat = LoadFileFormat.Dat,
+                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+                    Encoding = "UTF-8",
+                },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadfileOnly = true,
+            };
+
+            var tiffResult = await LoadfileOnlyGenerator.GenerateAsync(tiffRequest);
+
+            var datFiles = Directory.GetFiles(this.tempDir, "*.dat");
+            var optFiles = Directory.GetFiles(this.tempDir, "*.opt");
+
+            Assert.Single(datFiles);
+            Assert.Single(optFiles);
+
+            // Delete all files in tempDir
+            foreach (var f in Directory.GetFiles(this.tempDir))
+            {
+                File.Delete(f);
+            }
+
+            // JPG
+            var jpgRequest = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = this.tempDir,
+                    FileCount = 5,
+                    FileType = "jpg",
+                },
+                LoadFile = new LoadFileConfig
+                {
+                    LoadFileFormat = LoadFileFormat.Dat,
+                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+                    Encoding = "UTF-8",
+                },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Metadata = new MetadataConfig { Seed = 42 },
+                LoadfileOnly = true,
+            };
+
+            var jpgResult = await LoadfileOnlyGenerator.GenerateAsync(jpgRequest);
+
+            datFiles = Directory.GetFiles(this.tempDir, "*.dat");
+            optFiles = Directory.GetFiles(this.tempDir, "*.opt");
+
+            Assert.Single(datFiles);
+            Assert.Single(optFiles);
+        }
+
+        [Fact]
+        public async Task GenerateAsync_TiffWithBates_ProducesCorrectPageSuffixes()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = this.tempDir,
+                    FileCount = 2,
+                    FileType = "tiff",
+                },
+                LoadFile = new LoadFileConfig
+                {
+                    LoadFileFormat = LoadFileFormat.Opt,
+                    Encoding = "UTF-8",
+                },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Metadata = new MetadataConfig { Seed = 42 },
+                Bates = new BatesNumberConfig
+                {
+                    Prefix = "ABC001_",
+                    Start = 1,
+                    Digits = 5,
+                },
+                LoadfileOnly = true,
+            };
+
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+
+            Assert.True(File.Exists(result.LoadFilePath));
+            var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+
+            // Verify first page of first document
+            var parts1 = lines[0].Split(',');
+            Assert.StartsWith("ABC001_00001", parts1[0]);
+            if (parts1[0].Contains("_"))
+            {
+                Assert.Equal("ABC001_00001_001", parts1[0]);
+            }
+
+            Assert.Equal("Y", parts1[3]); // doc break
+
+            // If there's a second page for first document, verify no doc break
+            if (lines.Length > 1 && lines[1].StartsWith("ABC001_00001"))
+            {
+                var parts2 = lines[1].Split(',');
+                Assert.Equal("ABC001_00001_002", parts2[0]);
+                Assert.Equal(string.Empty, parts2[3]); // no doc break
+            }
+        }
+
         private class StreamingAssertionStream : Stream
         {
             private readonly Stream inner;

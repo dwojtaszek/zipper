@@ -203,7 +203,9 @@ internal class DatWriter : LoadFileWriterBase
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
             long lineNumber = i + 1;
-            string recordId = $"DOC{i:D8}";
+            string recordId = request.Bates != null
+                ? BatesNumberGenerator.Generate(request.Bates, i - 1)
+                : $"DOC{i:D8}";
             var line = BuildLoadfileOnlyRow(i, recordId, colDelim, quote, hasQuote, now, random);
 
             string interceptedLine = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
