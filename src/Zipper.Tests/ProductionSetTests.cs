@@ -475,7 +475,7 @@ public class ProductionSetTests : IDisposable
                 Output = new OutputConfig
                 {
                     OutputPath = outputPath,
-                    FileCount = 10,
+                    FileCount = 500,
                     FileType = "pdf",
                 },
                 Production = new ProductionConfig { ProductionSet = true, VolumeSize = 5000 },

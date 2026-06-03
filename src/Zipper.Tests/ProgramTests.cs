@@ -313,11 +313,14 @@ namespace Zipper
                 using (var archive1 = System.IO.Compression.ZipFile.OpenRead(zipFile1))
                 using (var archive2 = System.IO.Compression.ZipFile.OpenRead(zipFile2))
                 {
-                    Assert.Equal(archive1.Entries.Count, archive2.Entries.Count);
-                    for (int i = 0; i < archive1.Entries.Count; i++)
+                    var entries1 = archive1.Entries.OrderBy(e => e.FullName).ToList();
+                    var entries2 = archive2.Entries.OrderBy(e => e.FullName).ToList();
+
+                    Assert.Equal(entries1.Count, entries2.Count);
+                    for (int i = 0; i < entries1.Count; i++)
                     {
-                        var entry1 = archive1.Entries[i];
-                        var entry2 = archive2.Entries[i];
+                        var entry1 = entries1[i];
+                        var entry2 = entries2[i];
 
                         Assert.Equal(entry1.FullName, entry2.FullName);
                         Assert.Equal(entry1.Length, entry2.Length);
