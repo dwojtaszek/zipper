@@ -37,7 +37,8 @@ function validate_properties_json() {
 
 # Strip non-deterministic fields (timestamped fileName + generationTime) before comparison.
 function canonicalize_props() {
-    jq 'del(.fileName) | del(.generationTime)' "$1"
+    local prop_file="$1"
+    jq 'del(.fileName) | del(.generationTime)' "$prop_file"
 }
 
 # Lookup a field from the scenario-types TSV. Usage: tsv_lookup <scenario> <field_index>
