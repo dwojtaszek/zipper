@@ -31,9 +31,13 @@ function print_error()   {
     echo -e "\e[41m[ ERROR ]\e[0m $1" >&2
     exit 1
 }
-
 function validate_properties_json() {
     bash "$GOLDENS_LIB_DIR/validate-properties-json.sh" "$1"
+}
+
+# Strip non-deterministic fields (timestamped fileName + generationTime) before comparison.
+function canonicalize_props() {
+    jq 'del(.fileName) | del(.generationTime)' "$1"
 }
 
 # Lookup a field from the scenario-types TSV. Usage: tsv_lookup <scenario> <field_index>
@@ -146,9 +150,9 @@ while IFS= read -r TYPE; do
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_DAT" "$CHAOS_DAT2" \
         || print_error "Determinism failed (DAT differs) for type: $TYPE"
-    # Compare _properties.json content excluding fileName (which contains a timestamp)
-    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
+    # Compare _properties.json content excluding non-deterministic fields (timestamped fileName + generationTime)
+    PROPS_CANONICAL=$(canonicalize_props "$PROPS")
+    PROPS2_CANONICAL=$(canonicalize_props "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for type: $TYPE"
 
@@ -218,8 +222,8 @@ while IFS= read -r TYPE; do
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_OPT" "$CHAOS_OPT2" \
         || print_error "Determinism failed (OPT differs) for type: $TYPE"
-    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
+    PROPS_CANONICAL=$(canonicalize_props "$PROPS")
+    PROPS2_CANONICAL=$(canonicalize_props "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for OPT type: $TYPE"
 
@@ -289,8 +293,8 @@ while IFS= read -r SCENARIO; do
     fi
     cmp -s "$FILE1" "$FILE2" \
         || print_error "Determinism failed (load file differs) for scenario: $SCENARIO"
-    PROPS_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS")
-    PROPS2_CANONICAL=$(jq 'del(.fileName) | del(.generationTime)' "$PROPS2")
+    PROPS_CANONICAL=$(canonicalize_props "$PROPS")
+    PROPS2_CANONICAL=$(canonicalize_props "$PROPS2")
     [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
         && print_error "Determinism failed (_properties.json differs) for scenario: $SCENARIO"
 

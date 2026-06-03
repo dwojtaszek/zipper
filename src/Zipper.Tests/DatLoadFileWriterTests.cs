@@ -3,204 +3,204 @@ using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
 
-namespace Zipper.Tests
+namespace Zipper.Tests;
+
+public class DatLoadFileWriterTests : TempDirectoryTestBase
 {
-    public class DatLoadFileWriterTests : TempDirectoryTestBase
+    [Fact]
+    public async Task DatWriter_ShouldWriteValidDatFormat()
     {
-        [Fact]
-        public async Task DatWriter_ShouldWriteValidDatFormat()
+        var request = this.CreateTestRequest();
+        var fileData = this.CreateTestFileData();
+        var writer = new DatWriter();
+        var outputPath = Path.Combine(this.TempDir, "test.dat");
+
+        await using (var stream = File.OpenWrite(outputPath))
         {
-            var request = this.CreateTestRequest();
-            var fileData = this.CreateTestFileData();
-            var writer = new DatWriter();
-            var outputPath = Path.Combine(this.TempDir, "test.dat");
-
-            await using (var stream = File.OpenWrite(outputPath))
-            {
-                await writer.WriteAsync(stream, request, fileData);
-            }
-
-            var content = await File.ReadAllTextAsync(outputPath);
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            Assert.Equal(4, lines.Length);
-            Assert.Contains("Control Number", lines[0]);
-            Assert.Contains("DOC00000001", lines[1]);
-            Assert.Contains("DOC00000002", lines[2]);
-            Assert.Contains("DOC00000003", lines[3]);
+            await writer.WriteAsync(stream, request, fileData);
         }
 
-        [Theory]
-        [InlineData("UTF-16")]
-        [InlineData("ANSI")]
-        public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
+        var content = await File.ReadAllTextAsync(outputPath);
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(4, lines.Length);
+        Assert.Contains("Control Number", lines[0]);
+        Assert.Contains("DOC00000001", lines[1]);
+        Assert.Contains("DOC00000002", lines[2]);
+        Assert.Contains("DOC00000003", lines[3]);
+    }
+
+    [Theory]
+    [InlineData("UTF-16")]
+    [InlineData("ANSI")]
+    public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
+    {
+        ArgumentNullException.ThrowIfNull(encoding);
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+        var request = this.CreateTestRequest();
+        request.LoadFile = request.LoadFile with { Encoding = encoding };
+        var fileData = this.CreateTestFileData();
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
+        var outputPath = Path.Combine(this.TempDir, "test.dat");
+
+        await using (var stream = File.OpenWrite(outputPath))
         {
-            ArgumentNullException.ThrowIfNull(encoding);
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-
-            var request = this.CreateTestRequest();
-            request.LoadFile = request.LoadFile with { Encoding = encoding };
-            var fileData = this.CreateTestFileData();
-            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
-            var outputPath = Path.Combine(this.TempDir, "test.dat");
-
-            await using (var stream = File.OpenWrite(outputPath))
-            {
-                await writer.WriteAsync(stream, request, fileData);
-            }
-
-            var targetEncoding = encoding.ToUpperInvariant() switch
-            {
-                "UTF-16" => Encoding.Unicode,
-                "ANSI" => Encoding.GetEncoding("Windows-1252"),
-                _ => Encoding.UTF8,
-            };
-
-            var content = await File.ReadAllTextAsync(outputPath, targetEncoding);
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            Assert.True(lines.Length >= 2);
-            Assert.Contains("Control Number", lines[0]);
+            await writer.WriteAsync(stream, request, fileData);
         }
 
-        [Fact]
-        public async Task LoadfileOnlyDatWriter_ProducesCorrectFormat()
+        var targetEncoding = encoding.ToUpperInvariant() switch
         {
-            var request = new FileGenerationRequest
+            "UTF-16" => Encoding.Unicode,
+            "ANSI" => Encoding.GetEncoding("Windows-1252"),
+            _ => Encoding.UTF8,
+        };
+
+        var content = await File.ReadAllTextAsync(outputPath, targetEncoding);
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.True(lines.Length >= 2);
+        Assert.Contains("Control Number", lines[0]);
+    }
+
+    [Fact]
+    public async Task LoadfileOnlyDatWriter_ProducesCorrectFormat()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
             {
-                Output = new OutputConfig
+                FileCount = 5,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(6, lines.Length);
+        Assert.Contains("Control Number", lines[0]);
+        Assert.Contains("File Path", lines[0]);
+        Assert.Contains("EmailSubject", lines[0]);
+        Assert.Contains("ExtractedText", lines[0]);
+    }
+
+    [Fact]
+    public async Task LoadfileOnlyDatWriter_WithChaos_ProducesCorruptedLines()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 20,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+
+        var eol = "\r\n";
+        long totalLines = request.Output.FileCount + 1;
+        var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
+
+        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>(), chaos);
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.NotEmpty(content);
+        Assert.True(chaos.Anomalies.Count > 0);
+    }
+
+    [Fact]
+    public async Task ProductionSetDatWriter_ProducesCorrectFormat()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 5,
+                FileType = "pdf",
+                OutputPath = this.TempDir,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Production = new ProductionConfig { VolumeSize = 5000 },
+            Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+        };
+
+        var files = new List<FileData>();
+        for (int i = 0; i < 5; i++)
+        {
+            files.Add(new FileData
+            {
+                WorkItem = new FileWorkItem
                 {
-                    FileCount = 5,
-                    FileType = "pdf",
+                    Index = i + 1,
+                    FolderNumber = 1,
+                    FolderName = "VOL001",
+                    FileName = $"TEST{i + 1:D8}.pdf",
+                    FilePathInZip = $"NATIVES\\VOL001\\TEST{i + 1:D8}.pdf",
                 },
-                Metadata = new MetadataConfig { Seed = 42 },
-                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
-                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
-            };
-            var writer = new DatWriter(WriterMode.LoadfileOnly);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, new List<FileData>());
-
-            stream.Position = 0;
-            var content = Encoding.UTF8.GetString(stream.ToArray());
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            Assert.Equal(6, lines.Length);
-            Assert.Contains("Control Number", lines[0]);
-            Assert.Contains("File Path", lines[0]);
-            Assert.Contains("EmailSubject", lines[0]);
-            Assert.Contains("ExtractedText", lines[0]);
+                DataLength = 1024 * (i + 1),
+            });
         }
 
-        [Fact]
-        public async Task LoadfileOnlyDatWriter_WithChaos_ProducesCorruptedLines()
+        var writer = new DatWriter(WriterMode.ProductionSet);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(6, lines.Length);
+        Assert.Contains("DOCID", lines[0]);
+        Assert.Contains("BATES_NUMBER", lines[0]);
+        Assert.Contains("NATIVE_PATH", lines[0]);
+        Assert.Contains("IMAGE_PATH", lines[0]);
+        Assert.Contains("\r\n", content);
+    }
+
+    [Fact]
+    public async Task LoadfileOnlyDatWriter_WithNullEol_FallsBackToCrlf()
+    {
+        var request = new FileGenerationRequest
         {
-            var request = new FileGenerationRequest
+            Output = new OutputConfig
             {
-                Output = new OutputConfig
-                {
-                    FileCount = 20,
-                    FileType = "pdf",
-                },
-                Metadata = new MetadataConfig { Seed = 42 },
-                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
-                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
-            };
+                FileCount = 3,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = string.Empty },
+        };
+        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
 
-            var eol = "\r\n";
-            long totalLines = request.Output.FileCount + 1;
-            var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
 
-            var writer = new DatWriter(WriterMode.LoadfileOnly);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, new List<FileData>(), chaos);
+        Assert.Contains("\r\n", content);
+    }
 
-            stream.Position = 0;
-            var content = Encoding.UTF8.GetString(stream.ToArray());
-
-            Assert.NotEmpty(content);
-            Assert.True(chaos.Anomalies.Count > 0);
-        }
-
-        [Fact]
-        public async Task ProductionSetDatWriter_ProducesCorrectFormat()
-        {
-            var request = new FileGenerationRequest
-            {
-                Output = new OutputConfig
-                {
-                    FileCount = 5,
-                    FileType = "pdf",
-                    OutputPath = this.TempDir,
-                },
-                Metadata = new MetadataConfig { Seed = 42 },
-                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
-                Production = new ProductionConfig { VolumeSize = 5000 },
-                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
-            };
-
-            var files = new List<FileData>();
-            for (int i = 0; i < 5; i++)
-            {
-                files.Add(new FileData
-                {
-                    WorkItem = new FileWorkItem
-                    {
-                        Index = i + 1,
-                        FolderNumber = 1,
-                        FolderName = "VOL001",
-                        FileName = $"TEST{i + 1:D8}.pdf",
-                        FilePathInZip = $"NATIVES\\VOL001\\TEST{i + 1:D8}.pdf",
-                    },
-                    DataLength = 1024 * (i + 1),
-                });
-            }
-
-            var writer = new DatWriter(WriterMode.ProductionSet);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, files);
-
-            stream.Position = 0;
-            var content = Encoding.UTF8.GetString(stream.ToArray());
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            Assert.Equal(6, lines.Length);
-            Assert.Contains("DOCID", lines[0]);
-            Assert.Contains("BATES_NUMBER", lines[0]);
-            Assert.Contains("NATIVE_PATH", lines[0]);
-            Assert.Contains("IMAGE_PATH", lines[0]);
-            Assert.Contains("\r\n", content);
-        }
-
-        [Fact]
-        public async Task LoadfileOnlyDatWriter_WithNullEol_FallsBackToCrlf()
-        {
-            var request = new FileGenerationRequest
-            {
-                Output = new OutputConfig
-                {
-                    FileCount = 3,
-                    FileType = "pdf",
-                },
-                Metadata = new MetadataConfig { Seed = 42 },
-                LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
-                Delimiters = new DelimiterConfig { EndOfLine = string.Empty },
-            };
-            var writer = new DatWriter(WriterMode.LoadfileOnly);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, new List<FileData>());
-
-            stream.Position = 0;
-            var content = Encoding.UTF8.GetString(stream.ToArray());
-
-            Assert.Contains("\r\n", content);
-        }
-
-        [Fact]
-        public async Task DatWriter_StandardRow_FieldWithQuoteDelimiter_IsDoubled()
-        {
-            var request = this.CreateTestRequest();
-            var fileData = new List<FileData>
+    [Fact]
+    public async Task DatWriter_StandardRow_FieldWithQuoteDelimiter_IsDoubled()
+    {
+        var request = this.CreateTestRequest();
+        var fileData = new List<FileData>
             {
                 new FileData
                 {
@@ -213,37 +213,37 @@ namespace Zipper.Tests
                     Data = Array.Empty<byte>(),
                 },
             };
-            var writer = new DatWriter();
-            var outputPath = Path.Combine(this.TempDir, "test_escape.dat");
+        var writer = new DatWriter();
+        var outputPath = Path.Combine(this.TempDir, "test_escape.dat");
 
-            await using (var stream = File.OpenWrite(outputPath))
-            {
-                await writer.WriteAsync(stream, request, fileData);
-            }
-
-            var output = await File.ReadAllTextAsync(outputPath);
-
-            Assert.Contains("folderþþX/file.pdf", output);
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, fileData);
         }
 
-        [Fact]
-        public async Task DatWriter_ProductionSetRow_FieldWithQuoteDelimiter_IsDoubled()
-        {
-            var request = new FileGenerationRequest
-            {
-                Output = new OutputConfig
-                {
-                    FileCount = 1,
-                    FileType = "pdf",
-                    OutputPath = this.TempDir,
-                },
-                Metadata = new MetadataConfig { Seed = 42 },
-                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
-                Production = new ProductionConfig { VolumeSize = 5000 },
-                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
-            };
+        var output = await File.ReadAllTextAsync(outputPath);
 
-            var files = new List<FileData>
+        Assert.Contains("folderþþX/file.pdf", output);
+    }
+
+    [Fact]
+    public async Task DatWriter_ProductionSetRow_FieldWithQuoteDelimiter_IsDoubled()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 1,
+                FileType = "pdf",
+                OutputPath = this.TempDir,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Production = new ProductionConfig { VolumeSize = 5000 },
+            Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+        };
+
+        var files = new List<FileData>
             {
                 new FileData
                 {
@@ -259,23 +259,23 @@ namespace Zipper.Tests
                 },
             };
 
-            var writer = new DatWriter(WriterMode.ProductionSet);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, files);
+        var writer = new DatWriter(WriterMode.ProductionSet);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
 
-            stream.Position = 0;
-            var output = Encoding.UTF8.GetString(stream.ToArray());
+        stream.Position = 0;
+        var output = Encoding.UTF8.GetString(stream.ToArray());
 
-            Assert.Contains("fileþþX.pdf", output);
-        }
+        Assert.Contains("fileþþX.pdf", output);
+    }
 
-        [Fact]
-        public async Task DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows()
-        {
-            var request = this.CreateTestRequest("eml");
-            request.Metadata = request.Metadata with { WithFamilies = true };
+    [Fact]
+    public async Task DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows()
+    {
+        var request = this.CreateTestRequest("eml");
+        request.Metadata = request.Metadata with { WithFamilies = true };
 
-            var fileData = new List<FileData>
+        var fileData = new List<FileData>
             {
                 new FileData
                 {
@@ -290,50 +290,50 @@ namespace Zipper.Tests
                 }
             };
 
-            var writer = new DatWriter();
-            var outputPath = Path.Combine(this.TempDir, "test_families_standard.dat");
+        var writer = new DatWriter();
+        var outputPath = Path.Combine(this.TempDir, "test_families_standard.dat");
 
-            await using (var stream = File.OpenWrite(outputPath))
-            {
-                await writer.WriteAsync(stream, request, fileData);
-            }
-
-            var content = await File.ReadAllTextAsync(outputPath);
-            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-            Assert.Equal(3, lines.Length);
-            Assert.Contains("BEGATTACH", lines[0]);
-            Assert.Contains("ENDATTACH", lines[0]);
-            Assert.Contains("PARENTDOCID", lines[0]);
-
-            var parentLine = lines[1];
-            Assert.Contains("DOC00000001", parentLine);
-            Assert.Contains("DOC00000001_A001", parentLine);
-
-            var childLine = lines[2];
-            Assert.Contains("DOC00000001_A001", childLine);
-            Assert.Contains("DOC00000001", childLine);
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, fileData);
         }
 
-        [Fact]
-        public async Task DatWriter_WithFamilies_ProductionSetMode_IncludesFamilyColumnsAndRows()
-        {
-            var request = new FileGenerationRequest
-            {
-                Output = new OutputConfig
-                {
-                    FileCount = 1,
-                    FileType = "eml",
-                    OutputPath = this.TempDir,
-                },
-                Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
-                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
-                Production = new ProductionConfig { VolumeSize = 5000 },
-                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
-                LoadFile = new LoadFileConfig { Encoding = "UTF-8" }
-            };
+        var content = await File.ReadAllTextAsync(outputPath);
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-            var fileData = new List<FileData>
+        Assert.Equal(3, lines.Length);
+        Assert.Contains("BEGATTACH", lines[0]);
+        Assert.Contains("ENDATTACH", lines[0]);
+        Assert.Contains("PARENTDOCID", lines[0]);
+
+        var parentLine = lines[1];
+        Assert.Contains("DOC00000001", parentLine);
+        Assert.Contains("DOC00000001_A001", parentLine);
+
+        var childLine = lines[2];
+        Assert.Contains("DOC00000001_A001", childLine);
+        Assert.Contains("DOC00000001", childLine);
+    }
+
+    [Fact]
+    public async Task DatWriter_WithFamilies_ProductionSetMode_IncludesFamilyColumnsAndRows()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 1,
+                FileType = "eml",
+                OutputPath = this.TempDir,
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Production = new ProductionConfig { VolumeSize = 5000 },
+            Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" }
+        };
+
+        var fileData = new List<FileData>
             {
                 new FileData
                 {
@@ -350,24 +350,23 @@ namespace Zipper.Tests
                 }
             };
 
-            var writer = new DatWriter(WriterMode.ProductionSet);
-            using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, fileData);
+        var writer = new DatWriter(WriterMode.ProductionSet);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, fileData);
 
-            stream.Position = 0;
-            var content = Encoding.UTF8.GetString(stream.ToArray());
-            var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-            Assert.Equal(3, lines.Length);
-            Assert.Contains("BEGATTACH", lines[0]);
-            Assert.Contains("ENDATTACH", lines[0]);
-            Assert.Contains("PARENTDOCID", lines[0]);
+        Assert.Equal(3, lines.Length);
+        Assert.Contains("BEGATTACH", lines[0]);
+        Assert.Contains("ENDATTACH", lines[0]);
+        Assert.Contains("PARENTDOCID", lines[0]);
 
-            Assert.Contains("TEST00000001", lines[1]);
-            Assert.Contains("TEST00000001_A001", lines[1]);
+        Assert.Contains("TEST00000001", lines[1]);
+        Assert.Contains("TEST00000001_A001", lines[1]);
 
-            Assert.Contains("TEST00000001_A001", lines[2]);
-            Assert.Contains("TEST00000001", lines[2]);
-        }
+        Assert.Contains("TEST00000001_A001", lines[2]);
+        Assert.Contains("TEST00000001", lines[2]);
     }
 }

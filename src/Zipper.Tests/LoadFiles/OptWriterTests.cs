@@ -5,24 +5,8 @@ using Zipper.LoadFiles;
 
 namespace Zipper.Tests.LoadFiles;
 
-public class OptWriterTests : IDisposable
+public class OptWriterTests : TempDirectoryTestBase
 {
-    private readonly string tempDir;
-
-    public OptWriterTests()
-    {
-        this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            Directory.Delete(this.tempDir, true);
-        }
-    }
-
     [Fact]
     public void OptWriter_FormatName_ReturnsExpectedValuePerMode()
     {
@@ -41,7 +25,7 @@ public class OptWriterTests : IDisposable
     {
         var request = new FileGenerationRequest
         {
-            Output = new OutputConfig { OutputPath = this.tempDir, FileCount = 1, FileType = "tiff" },
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "tiff" },
             LoadFile = new LoadFileConfig { Encoding = "ANSI" },
             Metadata = new MetadataConfig { WithMetadata = false },
             Tiff = new TiffConfig { PageRange = (1, 10) }

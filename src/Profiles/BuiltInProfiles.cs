@@ -164,7 +164,7 @@ public static class BuiltInProfiles
     public static ColumnProfile? GetProfile(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        return name.ToLowerInvariant() switch
+        var profile = name.ToLowerInvariant() switch
         {
             "minimal" => Minimal,
             "standard" => Standard,
@@ -174,6 +174,7 @@ public static class BuiltInProfiles
             "legacyeml" => LegacyEml,
             _ => null,
         };
+        return profile?.Clone();
     }
 
     /// <summary>

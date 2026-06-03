@@ -48,6 +48,57 @@ public class ColumnProfile
     /// </summary>
     [JsonPropertyName("columns")]
     public List<ColumnDefinition> Columns { get; set; } = new();
+
+    /// <summary>
+    /// Creates a deep copy of this column profile.
+    /// </summary>
+    public ColumnProfile Clone()
+    {
+        var cloned = new ColumnProfile
+        {
+            Name = this.Name,
+            Description = this.Description,
+            Version = this.Version,
+            FieldNamingConvention = this.FieldNamingConvention,
+            Settings = new ProfileSettings
+            {
+                EmptyValuePercentage = this.Settings.EmptyValuePercentage,
+                MultiValueDelimiter = this.Settings.MultiValueDelimiter,
+                DateFormat = this.Settings.DateFormat,
+                DateTimeFormat = this.Settings.DateTimeFormat,
+            },
+            DataSources = this.DataSources.ToDictionary(
+                kv => kv.Key,
+                kv => new DataSourceConfig
+                {
+                    Count = kv.Value.Count,
+                    Distribution = kv.Value.Distribution,
+                    Prefix = kv.Value.Prefix,
+                    Values = kv.Value.Values != null ? new List<string>(kv.Value.Values) : null,
+                    Weights = kv.Value.Weights != null ? new List<int>(kv.Value.Weights) : null,
+                }),
+            Columns = this.Columns.Select(col => new ColumnDefinition
+            {
+                Name = col.Name,
+                DisplayName = col.DisplayName,
+                Type = col.Type,
+                Required = col.Required,
+                EmptyPercentage = col.EmptyPercentage,
+                MultiValue = col.MultiValue,
+                MultiValueCount = col.MultiValueCount != null ? new RangeConfig { Min = col.MultiValueCount.Min, Max = col.MultiValueCount.Max } : null,
+                DataSource = col.DataSource,
+                Range = col.Range != null ? new RangeConfig { Min = col.Range.Min, Max = col.Range.Max } : null,
+                DateRange = col.DateRange != null ? new DateRangeConfig { Min = col.DateRange.Min, Max = col.DateRange.Max } : null,
+                Distribution = col.Distribution,
+                Format = col.Format,
+                TruePercentage = col.TruePercentage,
+                Weights = col.Weights != null ? new List<int>(col.Weights) : null,
+                Generator = col.Generator,
+                GeneratorParams = col.GeneratorParams != null ? new Dictionary<string, object>(col.GeneratorParams) : null,
+            }).ToList(),
+        };
+        return cloned;
+    }
 }
 
 /// <summary>

@@ -91,7 +91,7 @@ public class AdditionalGeneratorTests
     }
 
     [Fact]
-    public void EmailAddressGenerator_GeneratesSingleAndMultiValueEmails()
+    public void Generate_EmailAddresses_SingleAndMultiValue()
     {
         var context = this.CreateContext();
         var settings = new ProfileSettings { MultiValueDelimiter = ";" };
@@ -117,7 +117,7 @@ public class AdditionalGeneratorTests
     }
 
     [Fact]
-    public void IdentifierGenerator_ProducesExpectedFormat()
+    public void Generate_Identifier_ProducesExpectedFormat()
     {
         var gen = new IdentifierGenerator();
         var context = this.CreateContext();
@@ -125,7 +125,7 @@ public class AdditionalGeneratorTests
     }
 
     [Fact]
-    public void LegacyMetadataGenerators_ProduceCorrectValues()
+    public void Generate_LegacyMetadata_ProducesCorrectValues()
     {
         var context = this.CreateContext();
 
@@ -155,7 +155,7 @@ public class AdditionalGeneratorTests
     }
 
     [Fact]
-    public void LongTextGenerator_GeneratesLoremIpsumAndReviewNotes()
+    public void Generate_LongText_ProducesLoremIpsumAndReviewNotes()
     {
         var context = this.CreateContext();
 
@@ -176,7 +176,7 @@ public class AdditionalGeneratorTests
     }
 
     [Fact]
-    public void TextGenerator_ResolvesSpecificColumnsAndDataSource()
+    public void Generate_Text_ResolvesSpecificColumnsAndDataSource()
     {
         var context = this.CreateContext();
 

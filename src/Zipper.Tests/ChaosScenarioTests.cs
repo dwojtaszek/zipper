@@ -87,7 +87,7 @@ public class ChaosScenarioTests
     }
 
     [Fact]
-    public void AllScenarios_MatchRequirementsExactly()
+    public void GetByName_AllScenarios_MatchesRequirements()
     {
         // 1. structured-import-failures
         var structured = ChaosScenarios.GetByName("structured-import-failures");

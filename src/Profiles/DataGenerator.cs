@@ -25,9 +25,10 @@ internal class DataGenerator
         string? dateFormatOverride = null,
         int? emptyPercentageOverride = null)
     {
+        var clonedProfile = profile.Clone();
         var tempProfile = custodianCountOverride.HasValue
-            ? ApplyCustodianCountOverride(profile, custodianCountOverride.Value)
-            : profile;
+            ? ApplyCustodianCountOverride(clonedProfile, custodianCountOverride.Value)
+            : clonedProfile;
 
         this.profile = tempProfile;
         if (!string.IsNullOrEmpty(dateFormatOverride))
@@ -108,9 +109,33 @@ internal class DataGenerator
             Description = profile.Description,
             Version = profile.Version,
             FieldNamingConvention = profile.FieldNamingConvention,
-            Settings = profile.Settings,
+            Settings = new ProfileSettings
+            {
+                EmptyValuePercentage = profile.Settings.EmptyValuePercentage,
+                MultiValueDelimiter = profile.Settings.MultiValueDelimiter,
+                DateFormat = profile.Settings.DateFormat,
+                DateTimeFormat = profile.Settings.DateTimeFormat,
+            },
             DataSources = newDataSources,
-            Columns = profile.Columns,
+            Columns = profile.Columns.Select(col => new ColumnDefinition
+            {
+                Name = col.Name,
+                DisplayName = col.DisplayName,
+                Type = col.Type,
+                Required = col.Required,
+                EmptyPercentage = col.EmptyPercentage,
+                MultiValue = col.MultiValue,
+                MultiValueCount = col.MultiValueCount != null ? new RangeConfig { Min = col.MultiValueCount.Min, Max = col.MultiValueCount.Max } : null,
+                DataSource = col.DataSource,
+                Range = col.Range != null ? new RangeConfig { Min = col.Range.Min, Max = col.Range.Max } : null,
+                DateRange = col.DateRange != null ? new DateRangeConfig { Min = col.DateRange.Min, Max = col.DateRange.Max } : null,
+                Distribution = col.Distribution,
+                Format = col.Format,
+                TruePercentage = col.TruePercentage,
+                Weights = col.Weights != null ? new List<int>(col.Weights) : null,
+                Generator = col.Generator,
+                GeneratorParams = col.GeneratorParams != null ? new Dictionary<string, object>(col.GeneratorParams) : null,
+            }).ToList(),
         };
     }
 

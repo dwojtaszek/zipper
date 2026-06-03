@@ -44,7 +44,7 @@ exit /b 0
 :assert_rejected
 set "DESC=%~1"
 set "ARGS=%*"
-set "ARGS=!ARGS:%~1 =!"
+set "ARGS=!ARGS:%1 =!"
 %ZIPPER_CMD% !ARGS! >nul 2>&1
 if errorlevel 1 (
     echo [ INFO ] PASS: %DESC%
@@ -58,7 +58,7 @@ goto :eof
 :assert_accepted
 set "DESC=%~1"
 set "ARGS=%*"
-set "ARGS=!ARGS:%~1 =!"
+set "ARGS=!ARGS:%1 =!"
 %ZIPPER_CMD% !ARGS! >nul 2>&1
 if not errorlevel 1 (
     echo [ INFO ] PASS: %DESC%
