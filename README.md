@@ -26,9 +26,6 @@ Zipper is a .NET command-line tool for generating large Archives containing Nati
 - The following NuGet packages are also required and are included in the project file:
   - `SixLabors.ImageSharp` - For TIFF image generation
   - `ClosedXML` - For XLSX spreadsheet generation
-  - `DocumentFormat.OpenXml` - For DOCX document generation
-  - `System.Drawing.Common` - For image processing
-  - `System.Text.Encoding.CodePages` - For ANSI encoding support
 
 ## Building
 
