@@ -11,7 +11,7 @@ REM --- Configuration ---
 
 set TEST_OUTPUT_DIR=.\results\e2e-loadfile
 set PROJECT=src\Zipper.csproj
-set BUILD_DIR=src\bin\Release\net8.0
+set BUILD_DIR=src\bin\Release\net10.0
 
 REM --- Build Once ---
 
