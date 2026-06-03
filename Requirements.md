@@ -95,7 +95,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ## 3. Technical Requirements
 
-- **Framework**: .NET 8.
+- **Framework**: .NET 10.
 - **Interface**: Command-line application.
 - **Dependencies**:
   - `System.Text.Encoding.CodePages` - For ANSI encoding support

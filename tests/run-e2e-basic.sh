@@ -15,7 +15,7 @@ PROJECT="src/Zipper.csproj"
 
 # Dynamically locate the built framework directory
 BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit)
-[[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net8.0" # Fallback
+[[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net10.0" # Fallback
 
 # --- Helper Functions ---
 

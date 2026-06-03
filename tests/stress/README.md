@@ -101,7 +101,7 @@ Stress tests complement the automated performance testing by:
     *   Multi-core CPU recommended
 
 2.  **Software Requirements:**
-    *   .NET 8.0 SDK
+    *   .NET 10.0 SDK
     *   Required utilities: `bc`, `df`, `stat`, `unzip`, `file`, `grep`, `wc`, `find`
         *   **Ubuntu/Debian:** `sudo apt-get install bc unzip`
         *   **macOS:** `brew install bc`

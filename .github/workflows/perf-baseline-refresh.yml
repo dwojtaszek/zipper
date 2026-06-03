@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          global-json-file: global.json
 
       - name: Publish Release binary
         run: dotnet publish src/Zipper.csproj -c Release -o publish-bin

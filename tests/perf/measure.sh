@@ -10,7 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-ZIPPER="${1:-$REPO_ROOT/src/bin/Release/net8.0/Zipper}"
+ZIPPER="${1:-$REPO_ROOT/src/bin/Release/net10.0/Zipper}"
 
 if [[ ! -x "$ZIPPER" ]]; then
     echo "Error: Zipper binary not found at $ZIPPER" >&2

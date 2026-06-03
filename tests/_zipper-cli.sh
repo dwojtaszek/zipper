@@ -28,7 +28,7 @@ _zipper_resolve_bin() {
     # helper-init and command invocation without breaking the binary path.
     local build_dir
     build_dir=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit 2>/dev/null)
-    [[ -z "$build_dir" ]] && build_dir="src/bin/Release/net8.0"
+    [[ -z "$build_dir" ]] && build_dir="src/bin/Release/net10.0"
     if [[ -d "$build_dir" ]]; then
         build_dir=$(cd "$build_dir" && pwd)
     fi

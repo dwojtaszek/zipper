@@ -25,7 +25,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set ZIPPER_DLL=src\bin\Release\net8.0\Zipper.dll
+set ZIPPER_DLL=src\bin\Release\net10.0\Zipper.dll
 if not exist "%ZIPPER_DLL%" (
     echo Could not find Zipper DLL at %ZIPPER_DLL%
     rmdir /s /q "%TEST_DIR%"
