@@ -216,7 +216,7 @@ See [docs/architecture.md](docs/architecture.md) for mode dispatch, pipeline des
 
 ## Code Style
 
-- C# 12 (net8.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
+- C# 14 (net10.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
 - **No copyright headers** — do not add `// <copyright ...>` to any files
 

@@ -22,7 +22,7 @@ Zipper is a .NET command-line tool for generating large Archives containing Nati
 
 ## Requirements
 
-- .NET 8.0 SDK (or newer)
+- .NET 10.0 SDK (or newer)
 - The following NuGet packages are also required and are included in the project file:
   - `SixLabors.ImageSharp` - For TIFF image generation
   - `ClosedXML` - For XLSX spreadsheet generation
@@ -38,7 +38,7 @@ To build a release version of the executable, run the following command from the
 dotnet publish -c Release
 ```
 
-This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `src/bin/Release/net8.0/<platform-specific-folder>/publish/` directory.
+This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `src/bin/Release/net10.0/<platform-specific-folder>/publish/` directory.
 
 ## Usage
 
