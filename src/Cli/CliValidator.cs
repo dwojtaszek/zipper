@@ -89,6 +89,7 @@ public static class CliValidator
                 !parsed.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase) ||
                 parsed.AttachmentRate <= 0)
             {
+                // REQ-122: Emit soft warning to stderr without rejecting execution
                 Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
             }
         }
