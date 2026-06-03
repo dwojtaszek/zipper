@@ -465,11 +465,6 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task ProductionSet_OnFailure_CleansUpPartialOutput()
     {
-        if (OperatingSystem.IsWindows())
-        {
-            return; // Directory permissions don't prevent file creation on Windows
-        }
-
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -487,15 +482,43 @@ public class ProductionSetTests : IDisposable
                 Bates = new BatesNumberConfig { Prefix = "FAIL", Start = 1, Digits = 8 },
             };
 
-            // Make the NATIVES dir read-only after structure creation to trigger failure mid-write
-            // We need to hook into the directory creation — use a path that will fail
-            // Simpler: use an invalid file type that will throw during generation
-            request.Output = request.Output with { FileType = "INVALID_TYPE_THAT_DOES_NOT_EXIST" };
+            // Start the generation task in the background
+            var generateTask = ProductionSetGenerator.GenerateAsync(request);
 
-            await Assert.ThrowsAnyAsync<Exception>(async () =>
+            // Poll until the production directory and the first native file are created
+            string? productionDir = null;
+            string? firstPdfFile = null;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 5000)
             {
-                await ProductionSetGenerator.GenerateAsync(request);
-            });
+                var dirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");
+                if (dirs.Length > 0)
+                {
+                    productionDir = dirs[0];
+                    var pdfPath = Path.Combine(productionDir, "NATIVES", "VOL001", "FAIL00000001.pdf");
+                    if (File.Exists(pdfPath))
+                    {
+                        firstPdfFile = pdfPath;
+                        break;
+                    }
+                }
+
+                await Task.Delay(1);
+            }
+
+            // We must have found the first PDF file
+            Assert.NotNull(productionDir);
+            Assert.NotNull(firstPdfFile);
+
+            // Cause a mid-generation I/O failure by deleting the NATIVES directory
+            var nativesDir = Path.Combine(productionDir, "NATIVES");
+            if (Directory.Exists(nativesDir))
+            {
+                Directory.Delete(nativesDir, true);
+            }
+
+            // The generation task should now fail mid-write
+            await Assert.ThrowsAnyAsync<Exception>(async () => await generateTask);
 
             // Verify: no PRODUCTION_* directory should remain
             var productionDirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");
@@ -550,6 +573,51 @@ public class ProductionSetTests : IDisposable
             Assert.True(File.Exists(image2));
             Assert.True(File.Exists(image3));
             Assert.False(File.Exists(baseImage)); // Base image file should not be written when pages > 1
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
+    {
+        var tempDir = Path.GetTempPath();
+        var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = "pdf",
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = true,
+                },
+                Production = new ProductionConfig
+                {
+                    ProductionSet = true,
+                },
+                Bates = new BatesNumberConfig
+                {
+                    Prefix = "PLAN",
+                    Start = 1,
+                    Digits = 8,
+                },
+                LoadfileOnly = false,
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => ProductionSetGenerator.GenerateAsync(request));
         }
         finally
         {

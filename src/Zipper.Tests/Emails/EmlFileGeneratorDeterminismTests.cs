@@ -28,6 +28,15 @@ public class EmlFileGeneratorDeterminismTests
         var result2 = generator.Generate(workItem, request);
 
         Assert.Equal(result1.Content, result2.Content);
+
+        // Correctness assertions (M3)
+        var emlText = System.Text.Encoding.UTF8.GetString(result1.Content);
+        Assert.Contains("To: recipient005@", emlText);
+        Assert.Contains("From: sender005@", emlText);
+        Assert.Contains("Subject: ", emlText);
+        Assert.Contains("MIME-Version: 1.0", emlText);
+        Assert.Contains("Date: ", emlText);
+        Assert.Contains("Content-Type: text/plain", emlText);
     }
 
     [Fact]
@@ -54,5 +63,16 @@ public class EmlFileGeneratorDeterminismTests
 
         Assert.Equal(result1.Content, result2.Content);
         Assert.Equal(result1.Attachment, result2.Attachment);
+
+        // Correctness assertions (M3)
+        var emlText = System.Text.Encoding.UTF8.GetString(result1.Content);
+        Assert.Contains("To: recipient003@", emlText);
+        Assert.Contains("From: sender003@", emlText);
+        Assert.Contains("Subject: ", emlText);
+        Assert.Contains("MIME-Version: 1.0", emlText);
+        Assert.Contains("Content-Type: multipart/mixed", emlText);
+        Assert.NotNull(result1.Attachment);
+        Assert.NotEmpty(result1.Attachment.Value.filename);
+        Assert.NotEmpty(result1.Attachment.Value.content);
     }
 }

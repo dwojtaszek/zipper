@@ -16,6 +16,13 @@ internal static class ProductionSetGenerator
     /// <returns>Result containing paths and performance metrics.</returns>
     public static async Task<ProductionSetResult> GenerateAsync(FileGenerationRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Chaos.ChaosMode && !request.LoadfileOnly)
+        {
+            throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
+        }
+
         var stopwatch = Stopwatch.StartNew();
 
         var productionName = $"PRODUCTION_{DateTime.Now:yyyyMMdd_HHmmss}";

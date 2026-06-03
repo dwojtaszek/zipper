@@ -17,11 +17,34 @@ internal class DataGenerator
     private readonly DateTime now;
     private int documentIndex;
 
-    public DataGenerator(ColumnProfile profile, int? seed = null, DateTime? now = null, int? custodianCountOverride = null)
+    public DataGenerator(
+        ColumnProfile profile,
+        int? seed = null,
+        DateTime? now = null,
+        int? custodianCountOverride = null,
+        string? dateFormatOverride = null,
+        int? emptyPercentageOverride = null)
     {
-        this.profile = custodianCountOverride.HasValue
-            ? ApplyCustodianCountOverride(profile, custodianCountOverride.Value)
-            : profile;
+        var clonedProfile = profile.Clone();
+        var tempProfile = custodianCountOverride.HasValue
+            ? ApplyCustodianCountOverride(clonedProfile, custodianCountOverride.Value)
+            : clonedProfile;
+
+        this.profile = tempProfile;
+        if (!string.IsNullOrEmpty(dateFormatOverride))
+        {
+            this.profile.Settings.DateFormat = dateFormatOverride;
+        }
+
+        if (emptyPercentageOverride.HasValue)
+        {
+            this.profile.Settings.EmptyValuePercentage = emptyPercentageOverride.Value;
+            foreach (var col in this.profile.Columns)
+            {
+                col.EmptyPercentage = emptyPercentageOverride.Value;
+            }
+        }
+
 #pragma warning disable S2245
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
 #pragma warning restore S2245
@@ -75,21 +98,9 @@ internal class DataGenerator
             };
         }
 
-        var newDataSources = new Dictionary<string, DataSourceConfig>(profile.DataSources)
-        {
-            [CustodianDataSourceName] = overriddenSource,
-        };
-
-        return new ColumnProfile
-        {
-            Name = profile.Name,
-            Description = profile.Description,
-            Version = profile.Version,
-            FieldNamingConvention = profile.FieldNamingConvention,
-            Settings = profile.Settings,
-            DataSources = newDataSources,
-            Columns = profile.Columns,
-        };
+        var cloned = profile.Clone();
+        cloned.DataSources[CustodianDataSourceName] = overriddenSource;
+        return cloned;
     }
 
     public Dictionary<string, string> GenerateRow(FileWorkItem workItem, FileData fileData)

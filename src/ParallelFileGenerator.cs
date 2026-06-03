@@ -25,6 +25,11 @@ namespace Zipper
             try
             {
                 // Validate inputs
+                if (request.Chaos.ChaosMode && !request.LoadfileOnly)
+                {
+                    throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
+                }
+
                 if (request.Output.FileCount <= 0)
                 {
                     throw new ArgumentException("File count must be positive", nameof(request.Output.FileCount));

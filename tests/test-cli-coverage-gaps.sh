@@ -119,10 +119,12 @@ if zipper --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/empty_pct" 
         fail "--empty-percentage 0: no .dat file produced"
     else
         non_empty_rows=$(tail -n +2 "$dat_file" | wc -l)
-        if [[ "$non_empty_rows" -eq 20 ]]; then
-            pass "--empty-percentage 0 produces 20 data rows"
+        empty_custodians=$(tail -n +2 "$dat_file" | cut -d$'\x14' -f15 | grep -c '^þþ$' || true)
+        empty_departments=$(tail -n +2 "$dat_file" | cut -d$'\x14' -f21 | grep -c '^þþ$' || true)
+        if [[ "$non_empty_rows" -eq 20 && "$empty_custodians" -eq 0 && "$empty_departments" -eq 0 ]]; then
+            pass "--empty-percentage 0: verified 20 rows produced and zero empty values for CUSTODIAN/DEPARTMENT"
         else
-            fail "--empty-percentage 0: expected 20 rows, got $non_empty_rows"
+            fail "--empty-percentage 0: failed validation. Rows: $non_empty_rows, Empty Custodians: $empty_custodians, Empty Departments: $empty_departments"
         fi
     fi
 else
@@ -146,9 +148,12 @@ print_info "Test: --date-format override"
 if zipper --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/date_fmt" \
     --column-profile standard --date-format "dd/MM/yyyy" --seed 42 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/date_fmt" -name "*.dat" -print -quit)
-    # The --date-format flag applies to column-profile settings; verify it's accepted without error
     if [[ -f "$dat_file" ]]; then
-        pass "--date-format accepted and produces output"
+        if grep -q -E '[0-9]{2}/[0-9]{2}/[0-9]{4}' "$dat_file"; then
+            pass "--date-format accepted and verified in output content"
+        else
+            fail "--date-format: output dates did not match dd/MM/yyyy"
+        fi
     else
         fail "--date-format: no output file"
     fi
