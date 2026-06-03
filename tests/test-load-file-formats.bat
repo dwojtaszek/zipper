@@ -312,6 +312,76 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 9: Delimiter override passed
 
+:: --- Test Case 10: Auto OPT generation for tiff/jpg types ---
+
+echo [ INFO ] Test Case 10: Auto OPT generation for tiff and jpg
+
+:: Run for tiff in loadfile-only mode
+%ZIPPER_CMD% ^
+  --type tiff ^
+  --count 3 ^
+  --output-path "%TEST_OUTPUT_DIR%\test10_tiff" ^
+  --loadfile-only ^
+  --bates-prefix "TIFF" ^
+  --bates-start 1 ^
+  --bates-digits 5
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 10 failed during execution for tiff
+  exit /b 1
+)
+
+dir /b /s "%TEST_OUTPUT_DIR%\test10_tiff\*.dat" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: No .dat file found for tiff
+  exit /b 1
+)
+
+dir /b /s "%TEST_OUTPUT_DIR%\test10_tiff\*.opt" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: No .opt file found for tiff
+  exit /b 1
+)
+
+:: Verify Bates prefix in OPT
+for %%f in ("%TEST_OUTPUT_DIR%\test10_tiff\*.opt") do set OPT_FILE=%%f
+findstr /C:"TIFF00001" "!OPT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: Base Bates number 'TIFF00001' not found in tiff OPT file
+  exit /b 1
+)
+
+:: Run for jpg in standard mode
+%ZIPPER_CMD% ^
+  --type jpg ^
+  --count 3 ^
+  --output-path "%TEST_OUTPUT_DIR%\test10_jpg"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 10 failed during execution for jpg
+  exit /b 1
+)
+
+dir /b /s "%TEST_OUTPUT_DIR%\test10_jpg\*.zip" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: No .zip file found for jpg
+  exit /b 1
+)
+
+dir /b /s "%TEST_OUTPUT_DIR%\test10_jpg\*.dat" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: No .dat file found for jpg
+  exit /b 1
+)
+
+dir /b /s "%TEST_OUTPUT_DIR%\test10_jpg\*.opt" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 10: No .opt file found for jpg
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 10: Auto OPT generation passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Load File Formats E2E tests passed!

@@ -371,6 +371,57 @@ fi
 
 print_success "Test Case 9: Delimiter override passed"
 
+# --- Test Case 10: Auto OPT generation for tiff/jpg types ---
+
+print_info "Test Case 10: Auto OPT generation for tiff and jpg"
+
+# Run for tiff in loadfile-only mode
+zipper \
+  --type tiff \
+  --count 3 \
+  --output-path "$TEST_OUTPUT_DIR/test10_tiff" \
+  --loadfile-only \
+  --bates-prefix "TIFF" \
+  --bates-start 1 \
+  --bates-digits 5
+
+dat_file=$(find "$TEST_OUTPUT_DIR/test10_tiff" -name "*.dat" -print -quit)
+opt_file=$(find "$TEST_OUTPUT_DIR/test10_tiff" -name "*.opt" -print -quit)
+
+if [[ -z "$dat_file" ]]; then
+  print_error "Test 10: No .dat file found for tiff"
+fi
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 10: No .opt file found for tiff"
+fi
+
+# Verify Bates prefix and suffixes in OPT
+if ! grep -q "TIFF00001" "$opt_file"; then
+  print_error "Test 10: Base Bates number 'TIFF00001' not found in tiff OPT file"
+fi
+
+# Run for jpg in standard mode
+zipper \
+  --type jpg \
+  --count 3 \
+  --output-path "$TEST_OUTPUT_DIR/test10_jpg"
+
+zip_file=$(find "$TEST_OUTPUT_DIR/test10_jpg" -name "*.zip" -print -quit)
+dat_file=$(find "$TEST_OUTPUT_DIR/test10_jpg" -name "*.dat" -print -quit)
+opt_file=$(find "$TEST_OUTPUT_DIR/test10_jpg" -name "*.opt" -print -quit)
+
+if [[ -z "$zip_file" ]]; then
+  print_error "Test 10: No .zip file found for jpg"
+fi
+if [[ -z "$dat_file" ]]; then
+  print_error "Test 10: No .dat file found for jpg"
+fi
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 10: No .opt file found for jpg"
+fi
+
+print_success "Test Case 10: Auto OPT generation passed"
+
 # --- All Tests Passed ---
 
 print_success "All Load File Formats E2E tests passed!"

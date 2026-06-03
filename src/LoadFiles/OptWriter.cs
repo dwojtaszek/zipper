@@ -153,7 +153,9 @@ internal class OptWriter : LoadFileWriterBase
 
         for (long i = 1; i <= request.Output.FileCount; i++)
         {
-            string batesId = $"IMG{i:D8}";
+            string batesId = request.Bates != null
+                ? BatesNumberGenerator.Generate(request.Bates, i - 1)
+                : $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
             int pageCount = random.Next(1, 11);
