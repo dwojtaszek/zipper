@@ -79,17 +79,18 @@ public static class CliValidator
     /// <returns>True since it emits a soft warning but does not reject execution.</returns>
     private static bool ValidateFamilies(ParsedArguments parsed)
     {
+        // REQ-122: Emits a soft warning if --with-families is specified without --type eml or with --attachment-rate 0
         if (parsed.WithFamilies)
         {
             if (parsed.LoadfileOnly)
             {
                 Console.Error.WriteLine("Warning: --with-families has no effect in --loadfile-only mode.");
             }
-            else if (string.IsNullOrEmpty(parsed.FileType) ||
-                !parsed.FileType.Equals("eml", StringComparison.OrdinalIgnoreCase) ||
-                parsed.AttachmentRate <= 0)
+            else if (!string.Equals(parsed.FileType, "eml", StringComparison.OrdinalIgnoreCase) ||
+                     parsed.AttachmentRate <= 0)
             {
-                // REQ-122: Emit soft warning to stderr without rejecting execution
+                // REQ-122: Emit soft warning to stderr without rejecting execution when --with-families
+                // is used without --type eml or with --attachment-rate 0.
                 Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
             }
         }

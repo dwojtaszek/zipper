@@ -394,6 +394,7 @@ namespace Zipper.Tests
         [Fact]
         public void Validate_WithFamiliesWithoutEml_EmitsWarning()
         {
+            // REQ-122: Warn when --with-families is specified without --type eml
             var args = CreateValidArgs();
             args.FileType = "pdf";
             args.WithFamilies = true;
@@ -420,6 +421,7 @@ namespace Zipper.Tests
         [Fact]
         public void Validate_WithFamiliesWithEmlAndAttachmentRateZero_EmitsWarning()
         {
+            // REQ-122: Warn when --with-families is specified with --attachment-rate 0
             var args = CreateValidArgs();
             args.FileType = "eml";
             args.WithFamilies = true;
@@ -446,6 +448,7 @@ namespace Zipper.Tests
         [Fact]
         public void Validate_WithFamiliesWithEmlAndAttachmentRatePositive_DoesNotEmitWarning()
         {
+            // REQ-122: Do not warn when --with-families is used correctly with --type eml and positive attachment rate
             var args = CreateValidArgs();
             args.FileType = "eml";
             args.WithFamilies = true;
@@ -472,6 +475,7 @@ namespace Zipper.Tests
         [Fact]
         public void Validate_WithFamiliesAndLoadfileOnly_EmitsWarning()
         {
+            // REQ-122: Warn when --with-families is specified with --loadfile-only mode
             var args = CreateValidArgs();
             args.WithFamilies = true;
             args.LoadfileOnly = true;
