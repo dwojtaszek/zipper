@@ -1,0 +1,30 @@
+---
+description: Agent skill definitions for code review, debugging, and architecture
+globs:
+alwaysApply: true
+---
+
+# Skills
+
+Skills are reusable instruction sets for AI agents. They live in `.agents/skills/` and are symlinked to `.claude/skills/` for Claude Code compatibility.
+
+## Available Skills
+
+### autoreview
+
+Structured code review with multi-angle analysis, specialist dispatch, and adversarial review.
+
+**When to use:** Before commit/ship, after non-trivial code edits, reviewing PR branches, when stuck on a problem.
+
+**How to invoke:** Read `.agents/skills/autoreview/SKILL.md` and follow its instructions. The helper script is at `.agents/skills/autoreview/scripts/autoreview`.
+
+**Key capabilities:**
+- 11 review angles (A-K): line-by-line, removed-behavior, cross-file, reuse, altitude, code-judo, anti-spaghetti, abstraction, file-size, glossary, scenario
+- Specialist dispatch: testing, maintainability, security, performance, data-migration, API-contract, design
+- Adversarial review: attack the happy path, find silent failures, exploit trust assumptions
+- Confidence calibration: 1-10 scale with verification gate
+- Auto-logging to OPERATIONS.md for self-improvement
+
+### Other skills
+
+See `.claude/skills/` for additional skills: caveman, diagnose, grill-me, grill-with-docs, tdd, triage, zoom-out, etc.

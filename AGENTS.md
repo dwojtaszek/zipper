@@ -119,7 +119,7 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 4. Read the issue body; refresh labels, comments, and linked blockers before coding
 5. Write a failing test first (TDD), then implement the fix
 6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
-7. Run adversarial review before marking work complete (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
+7. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
 8. Commit and create PR
 9. Monitor CI until all checks pass; fix failures before requesting review. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
 10. Check SonarCloud issues on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge
@@ -134,7 +134,13 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 
 ## Adversarial Review
 
-Always use a subagent to perform adversarial review before marking work complete. Treat findings as bugs, not suggestions.
+Run the autoreview skill before creating a PR. This is mandatory for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.
+
+The skill runs entirely inside the current coding agent (Claude Code or Cursor): it produces the diff with git, then dispatches parallel review subagents via the `Agent` tool. No external reviewer CLI. Default target is local/uncommitted work; point it at a branch or commit diff for pushed/PR work.
+
+See `.agents/skills/autoreview/SKILL.md` for full methodology (target selection, two-pass review, specialist dispatch, confidence calibration, adversarial patterns).
+
+For lightweight subagent review without the full skill:
 
 **Dispatch format:**
 
