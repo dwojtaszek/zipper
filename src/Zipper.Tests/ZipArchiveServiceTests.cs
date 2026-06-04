@@ -26,7 +26,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 5; i++)
+            for (int i = 1; i <= 5; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }
@@ -67,7 +67,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 3; i++)
+            for (int i = 1; i <= 3; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }
@@ -111,7 +111,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 3; i++)
+            for (int i = 1; i <= 3; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }
@@ -156,7 +156,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 2; i++)
+            for (int i = 1; i <= 2; i++)
             {
                 testFiles.Add(this.CreateTestEmlFileData(i));
             }
@@ -204,7 +204,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 2; i++)
+            for (int i = 1; i <= 2; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }
@@ -290,7 +290,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 2; i++)
+            for (int i = 1; i <= 2; i++)
             {
                 testFiles.Add(this.CreateTestEmlFileData(i));
             }
@@ -344,7 +344,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < 3; i++)
+            for (int i = 1; i <= 3; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }
@@ -409,7 +409,7 @@ namespace Zipper.Tests
             };
 
             var testFiles = new List<FileData>();
-            for (int i = 0; i < fileCount; i++)
+            for (int i = 1; i <= fileCount; i++)
             {
                 testFiles.Add(this.CreateTestFileData(i));
             }

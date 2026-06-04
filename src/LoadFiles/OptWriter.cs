@@ -107,7 +107,7 @@ internal class OptWriter : LoadFileWriterBase
         var buffer = new StringBuilder();
         int rowCount = 0;
 
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             foreach (var (_, line) in BuildOptRowsForFile(fileData, request, isProductionSet: false))
             {
@@ -203,7 +203,7 @@ internal class OptWriter : LoadFileWriterBase
         var rows = new List<(long LineNumber, string RecordId, string Line)>();
 
         int rowIdx = 0;
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             foreach (var (recordId, line) in BuildOptRowsForFile(fileData, request, isProductionSet: true))
             {

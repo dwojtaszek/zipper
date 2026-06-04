@@ -90,17 +90,6 @@ namespace Zipper
         }
 
         [Fact]
-        public async Task WriteAsync_WritesInOrderOfFileIndex()
-        {
-            var request = DefaultRequest();
-            var files = new List<FileData> { MakeFileData(3), MakeFileData(1), MakeFileData(2) };
-            var (_, lines) = await WriteAndCapture(request, files);
-            Assert.Contains("DOC00000001", lines[1]);
-            Assert.Contains("DOC00000002", lines[2]);
-            Assert.Contains("DOC00000003", lines[3]);
-        }
-
-        [Fact]
         public async Task WriteAsync_WithMetadata_WritesMetadataValues()
         {
             var request = DefaultRequest();

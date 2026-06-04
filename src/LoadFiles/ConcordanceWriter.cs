@@ -94,7 +94,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
         var buffer = new StringBuilder();
         int rowCount = 0;
 
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             var workItem = fileData.WorkItem;
             var line = new StringBuilder();
