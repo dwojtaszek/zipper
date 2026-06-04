@@ -498,6 +498,10 @@ namespace Zipper.Tests
             }
         }
 
+        /// <summary>
+        /// Validates that using a CSV format with the --loadfile-only flag returns false,
+        /// satisfying the requirement to reject non-DAT/OPT formats (Covers issue #343).
+        /// </summary>
         [Fact]
         public void Validate_LoadfileOnly_WithCsvFormat_ReturnsFalse()
         {
