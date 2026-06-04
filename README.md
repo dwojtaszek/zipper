@@ -71,7 +71,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
   - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types unless explicitly requested otherwise)
   - `csv`: Comma-separated values format with RFC 4180 escaping
   - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
-  - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
+  - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
 - `--load-file-formats <format1,format2,...>`: Generate multiple Load File formats simultaneously (e.g., `dat,opt,csv`)
 - `--dat-delimiters <standard|csv>`: DAT delimiter style. `standard` uses ASCII 20/254/174, `csv` uses comma/quote. Defaults to `standard`
 - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
