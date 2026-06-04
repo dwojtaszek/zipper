@@ -12,8 +12,15 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>$(NoWarn);SA0001;EnableGenerateDocumentationFile</NoWarn>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <!-- Test isolation: parallelize across test classes by default -->
-    <ParallelizeTestCollections>true</ParallelizeTestCollections>
+    <!--
+      Tests must run serially: ProgramTests.RunWithRedirectedConsole performs a
+      process-global Console.SetOut/SetError, which races if collections run in
+      parallel (rare, load-dependent flake in Main_WithSeedAndTargetZipSize...,
+      issue #433). The assembly attribute [CollectionBehavior(DisableTest-
+      Parallelization = true)] in LoadfileOnlyGeneratorTests.cs enforces this;
+      do NOT re-add <ParallelizeTestCollections> here — under the MTP runner it
+      can override that attribute and re-enable the race.
+    -->
     <!-- Test performance: emit detailed timing via JUnit logger -->
     <VSTestResultsDirectory>$(MSBuildProjectDirectory)/TestResults</VSTestResultsDirectory>
   </PropertyGroup>
