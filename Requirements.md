@@ -28,7 +28,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ_E-016**: The application must generate a single `.dat` Load File corresponding to the Archive.
 - **REQ_E-017**: The Load File must use ASCII character 20 as the column delimiter.
 - **REQ_E-018**: The Load File must use ASCII character 254 as the quote/text qualifier.
-- **REQ_E-019**: The Load File must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`.
+- **REQ_E-019**: The Load File must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`. Note: `UTF-8` output includes a byte-order mark (BOM); some e-discovery loaders expect UTF-8 without a BOM (see Section 8.2) and may require the BOM to be stripped on import.
 - **REQ_E-020**: The Load File must contain a unique `Control Number` column for each Native File.
 - **REQ_E-021**: The Load File must contain a `File Path` column pointing to the Native File's relative location within the Archive.
 
@@ -181,7 +181,7 @@ This section documents industry-standard Load File formats used by major e-disco
 The Concordance DAT format is the most widely used Load File format in e-discovery. It is a delimited text file containing metadata and document information.
 
 #### Structure
-- **Encoding**: UTF-8 (preferred), UTF-8 without BOM, ASCII (Windows-1252), or UTF-16
+- **Encoding**: UTF-8 (preferred), UTF-8 without BOM, ASCII (Windows-1252), or UTF-16. Note: Zipper's `UTF-8` output emits a BOM; loaders requiring "UTF-8 without BOM" must strip it on import (see REQ_E-019).
 - **Header Row**: First line contains field names (strongly recommended)
 - **Records**: Each subsequent line represents a single document
 - **Text Qualifier**: Used to enclose field values containing delimiters
