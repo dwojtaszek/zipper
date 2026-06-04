@@ -130,7 +130,7 @@ public class DataGeneratorTests
         if (!string.IsNullOrEmpty(dateValue))
         {
             Assert.True(
-                DateTime.TryParse(dateValue, out _),
+                DateTime.TryParse(dateValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
                 $"Expected valid date but got {dateValue}");
         }
     }
@@ -274,7 +274,7 @@ public class DataGeneratorTests
             if (!string.IsNullOrEmpty(row["DATEFIELD"]))
             {
                 Assert.True(
-                    DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out _),
+                    DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
                     $"DATEFIELD '{row["DATEFIELD"]}' is not yyyy-MM-dd");
             }
 
