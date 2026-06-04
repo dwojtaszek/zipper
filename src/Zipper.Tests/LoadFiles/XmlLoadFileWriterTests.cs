@@ -44,7 +44,7 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
         Assert.Equal("Root", root.Name.LocalName);
         Assert.Equal("Export", root.Attribute("DataInterchangeType")?.Value);
 
-        var document = root.Element("Batch")?.Element("Documents")?.Element("Document");
+        var document = root.Element("Batch")?.Element("Document");
         Assert.NotNull(document);
         Assert.Equal("DOC00000001", document.Attribute("DocID")?.Value);
 
@@ -75,7 +75,8 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
         Assert.Contains("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>", content.ToLowerInvariant());
         Assert.Contains("<Root DataInterchangeType=\"Export\" MajorVersion=\"1\" MinorVersion=\"2\">", content);
         Assert.Contains("<Batch>", content);
-        Assert.Contains("<Documents>", content);
+        Assert.DoesNotContain("<Documents>", content);
+        Assert.DoesNotContain("</Documents>", content);
         Assert.Contains("<Document DocID=\"DOC00000001\">", content);
         Assert.Contains("<Files>", content);
         Assert.Contains("<File FileType=\"Native\">", content);
@@ -85,7 +86,6 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
         Assert.Contains("<Fields>", content);
         Assert.Contains("<Field Name=\"Custodian\">Custodian 1</Field>", content);
         Assert.Contains("</Document>", content);
-        Assert.Contains("</Documents>", content);
         Assert.Contains("</Batch>", content);
         Assert.Contains("</Root>", content);
     }

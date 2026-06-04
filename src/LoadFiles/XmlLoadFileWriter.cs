@@ -44,7 +44,6 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
             await writer.WriteAttributeStringAsync(null, "MinorVersion", null, "2");
 
             await writer.WriteStartElementAsync(null, "Batch", null);
-            await writer.WriteStartElementAsync(null, "Documents", null);
 
 #pragma warning disable S2245
             var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
@@ -57,7 +56,6 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
                 await element.WriteToAsync(writer, CancellationToken.None);
             }
 
-            await writer.WriteEndElementAsync(); // </Documents>
             await writer.WriteEndElementAsync(); // </Batch>
             await writer.WriteEndElementAsync(); // </Root>
             await writer.WriteEndDocumentAsync();

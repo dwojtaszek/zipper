@@ -111,8 +111,8 @@ if errorlevel 1 (
 )
 
 findstr /C:"<Documents>" "!XML_FILE!" >nul
-if errorlevel 1 (
-  echo [ ERROR ] Test 3: Plural wrapper ^<Documents^> not found
+if not errorlevel 1 (
+  echo [ ERROR ] Test 3: Plural wrapper ^<Documents^> element should not be present
   exit /b 1
 )
 
