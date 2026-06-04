@@ -36,8 +36,8 @@ internal class CsvWriter : LoadFileWriterBase
 
     private static Task WriteHeaderAsync(StreamWriter writer, FileGenerationRequest request)
     {
-        // CSV headers default to UPPERCASE for e-discovery platform compatibility (Section 8.2);
-        // an explicit profile fieldNamingConvention still overrides this default.
+        // CSV headers default to upper case for e-discovery platform compatibility (Section 8.2).
+        // When a column profile specifies a naming convention, that convention wins instead.
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention ?? "UPPERCASE";
         var headers = new System.Collections.Generic.List<string>
         {

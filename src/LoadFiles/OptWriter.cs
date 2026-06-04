@@ -159,44 +159,59 @@ internal class OptWriter : LoadFileWriterBase
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
 
-            // Honor an explicit --tiff-pages range when provided; otherwise keep the
-            // synthetic multi-page default (random 1-10) for loadfile-only OPT generation,
-            // where no real Native Files exist to derive a page count from.
-            int pageCount;
-            if (request.Tiff.PageRange.HasValue)
-            {
-                var (min, max) = request.Tiff.PageRange.Value;
-                // Guard against overflow when Max is int.MaxValue (Max + 1 would wrap to int.MinValue).
-                int upperExclusive = max == int.MaxValue ? max : max + 1;
-                pageCount = random.Next(min, upperExclusive);
-            }
-            else
-            {
-                pageCount = random.Next(1, 11);
-            }
+            // Honor an explicit --tiff-pages range when provided, reusing the shared
+            // TiffMultiPageGenerator helper (clamps Min/Max, overflow-safe, deterministic)
+            // so this path cannot drift from the real TIFF page-count logic. Without a
+            // range, keep the synthetic multi-page default (random 1-10) for loadfile-only
+            // OPT generation, where no real Native Files exist to derive a page count from.
+            int pageCount = request.Tiff.PageRange.HasValue
+                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, i)
+                : random.Next(1, 11);
 
-            foreach (var entry in GeneratePageEntries(batesId, imagePath, pageCount))
-            {
-                string line = $"{entry.Bates},{volume},{entry.ImagePath},{entry.DocBreak},,,{entry.PageCountStr}";
-
-                string interceptedLine = ApplyChaosInterception(chaosEngine, currentLineNumber, line, entry.Bates);
-                await writer.WriteAsync(interceptedLine + eolString);
-
-                if (chaosEngine != null)
-                {
-                    var anomaly = chaosEngine.GetEncodingAnomaly(currentLineNumber, currentLineNumber + 1, encoding);
-                    if (anomaly != null)
-                    {
-                        await writer.FlushAsync();
-                        await stream.WriteAsync(anomaly);
-                    }
-                }
-
-                currentLineNumber++;
-            }
+            currentLineNumber = await WriteLoadfileOnlyPagesAsync(
+                writer, stream, encoding, eolString, chaosEngine, batesId, volume, imagePath, pageCount, currentLineNumber);
         }
 
         await writer.FlushAsync();
+    }
+
+    /// <summary>
+    /// Writes the per-page OPT rows for a single document in loadfile-only mode,
+    /// applying chaos interception when enabled. Returns the advanced line number.
+    /// </summary>
+    private static async Task<long> WriteLoadfileOnlyPagesAsync(
+        StreamWriter writer,
+        Stream stream,
+        Encoding encoding,
+        string eolString,
+        ChaosEngine? chaosEngine,
+        string batesId,
+        string volume,
+        string imagePath,
+        int pageCount,
+        long currentLineNumber)
+    {
+        foreach (var entry in GeneratePageEntries(batesId, imagePath, pageCount))
+        {
+            string line = $"{entry.Bates},{volume},{entry.ImagePath},{entry.DocBreak},,,{entry.PageCountStr}";
+
+            string interceptedLine = ApplyChaosInterception(chaosEngine, currentLineNumber, line, entry.Bates);
+            await writer.WriteAsync(interceptedLine + eolString);
+
+            if (chaosEngine != null)
+            {
+                var anomaly = chaosEngine.GetEncodingAnomaly(currentLineNumber, currentLineNumber + 1, encoding);
+                if (anomaly != null)
+                {
+                    await writer.FlushAsync();
+                    await stream.WriteAsync(anomaly);
+                }
+            }
+
+            currentLineNumber++;
+        }
+
+        return currentLineNumber;
     }
 
     /// <summary>

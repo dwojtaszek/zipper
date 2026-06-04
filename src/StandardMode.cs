@@ -54,13 +54,13 @@ namespace Zipper
                 double deviation = target > 0 ? Math.Abs(actual - target) / (double)target : 0;
                 if (deviation > 0.10)
                 {
-                    Console.Error.WriteLine(string.Format(
+                    await Console.Error.WriteLineAsync(string.Format(
                         "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
                         actual, target, deviation));
                 }
                 else
                 {
-                    Console.WriteLine(string.Format(
+                    await Console.Out.WriteLineAsync(string.Format(
                         "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
                         actual, target, deviation));
                 }
