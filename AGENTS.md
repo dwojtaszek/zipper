@@ -123,7 +123,12 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 8. Commit and create PR
 9. Monitor CI until all checks pass; fix failures before requesting review. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
 10. Check SonarCloud issues on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge
-11. Address CodeRabbit review comments (blocking issues required, nitpicks optional)
+11. Address review comments from **all** bots/reviewers (CodeRabbit, Gemini Code Assist, Codex, SonarCloud, human). Blocking/major issues required, nitpicks optional. Bots post to three *separate* endpoints — you must query all three to discover every comment (the PR web view and `gh pr view` alone miss inline threads):
+    - **Inline review comments** (code-anchored): `gh api repos/<owner>/<repo>/pulls/<N>/comments --paginate`
+    - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
+    - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
+
+    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it.
 12. Merge after all checks pass and reviews are addressed
 
 **Test location:** `src/Zipper.Tests/`.

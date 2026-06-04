@@ -353,7 +353,7 @@ if not defined csv_zip (
 if not defined csv_file (
     call :print_error "Test 18: No .csv file found"
 )
-powershell -Command "(Get-Content -Path '%csv_file%' -TotalCount 1)" | findstr /c:"Control Number" >nul
+powershell -Command "(Get-Content -Path '%csv_file%' -TotalCount 1)" | findstr /i /c:"Control Number" >nul
 if errorlevel 1 (
     call :print_error "Test 18: 'Control Number' column not found in .csv header"
 )

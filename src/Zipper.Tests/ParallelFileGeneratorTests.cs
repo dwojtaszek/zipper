@@ -72,13 +72,14 @@ namespace Zipper
                 Assert.Equal(10, result.FilesGenerated);
                 Assert.True(File.Exists(result.ZipFilePath));
 
-                // Verify the ZIP file is approximately the target size (within 20% tolerance)
-                // Due to compression variance, exact size isn't possible but files should be padded
+                // REQ-025: the final archive must fall within +/-10% of the target.
+                // Padding is random/incompressible, so the compressed result tracks
+                // the target closely; assert both-sided tolerance, not just a floor.
                 var actualSize = new FileInfo(result.ZipFilePath).Length;
-                var minimumExpected = targetSize * 0.5; // At least 50% of target
+                var deviation = Math.Abs(actualSize - targetSize) / (double)targetSize;
                 Assert.True(
-                    actualSize >= minimumExpected,
-                    $"ZIP size {actualSize} bytes is below minimum expected {minimumExpected} bytes for target {targetSize} bytes");
+                    deviation <= 0.10,
+                    $"ZIP size {actualSize} bytes deviates {deviation:P1} from target {targetSize} bytes (REQ-025 allows +/-10%)");
 
                 // Verify files were created (padding increases file sizes)
                 using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);

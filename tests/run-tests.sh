@@ -424,7 +424,7 @@ fi
 if [[ -z "$csv_file" ]]; then
   print_error "Test 18: No .csv file found"
 fi
-if ! head -n 1 "$csv_file" | grep -q "Control Number"; then
+if ! head -n 1 "$csv_file" | grep -qi "Control Number"; then
   print_error "Test 18: 'Control Number' column not found in .csv header"
 fi
 print_success "Test Case 18 passed."

@@ -43,7 +43,7 @@ internal class ConcordanceWriter : LoadFileWriterBase
 
         // Concordance format headers are wrapped in quote delimiter, comma-delimited
         header.Append($"{quoteDelim}BEGATTY{quoteDelim}{fieldDelim}");
-        header.Append($"{quoteDelim}ENDDATTY{quoteDelim}{fieldDelim}");
+        header.Append($"{quoteDelim}ENDATTY{quoteDelim}{fieldDelim}");
         header.Append($"{quoteDelim}CONTROLNUMBER{quoteDelim}{fieldDelim}");
         header.Append($"{quoteDelim}PATH{quoteDelim}{fieldDelim}");
 
@@ -99,11 +99,11 @@ internal class ConcordanceWriter : LoadFileWriterBase
             var workItem = fileData.WorkItem;
             var line = new StringBuilder();
 
-            // Note: BEGATTY and ENDDATTY (beginning/ending attachment Bates numbers)
+            // Note: BEGATTY and ENDATTY (beginning/ending attachment Bates numbers)
             // are intentionally left empty. The format requires these fields,
             // but this generator does not track attachment parent/child ranges.
             line.Append($"{quoteDelim}{quoteDelim}{fieldDelim}");  // BEGATTY field (empty)
-            line.Append($"{quoteDelim}{quoteDelim}{fieldDelim}");  // ENDDATTY field (empty)
+            line.Append($"{quoteDelim}{quoteDelim}{fieldDelim}");  // ENDATTY field (empty)
             line.Append($"{quoteDelim}{EscapeDatField(GenerateDocumentId(workItem), quoteDelim)}{quoteDelim}{fieldDelim}");
             line.Append($"{quoteDelim}{EscapeDatField(workItem.FilePathInZip, quoteDelim)}{quoteDelim}{fieldDelim}");
 
