@@ -51,7 +51,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
 - **REQ-009**: When `--type eml` is specified, the tool will generate Email Native Files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
 - **REQ-010**: The associated `.dat` Load File will contain columns corresponding to the email headers, populated with auto-generated data. For Emails, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to Emails.
-- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have one of the Native Files included as a random Attachment. Defaults to 0.
+- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have a placeholder Native File (one of `jpg`, `tiff`, or `pdf` drawn from the internal attachment pool) included as a random Attachment. The Attachment uses internal placeholder content (consistent with REQ-012) rather than a reference to one of the `--count` generated Native Files, to preserve the streaming, no-intermediate-storage generation design. Defaults to 0.
 
 ### FR_E-005: File Distribution Patterns
 - **REQ_E-022**: A new optional command-line argument `--distribution` shall be introduced.
@@ -362,7 +362,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 - **REQ-057**: When `--type tiff` or `--type jpg` is used **and no Load File format is explicitly selected** (neither `--load-file-format` nor `--load-file-formats` is passed), the tool shall automatically generate both a DAT and an OPT file. If an explicit format is selected, only that format is produced and auto-OPT generation is suppressed (e.g. `--type tiff --load-file-format edrm-xml` yields EDRM-XML only). Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
 - **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`). Note: in `--loadfile-only` OPT mode there are no real Native Files, so page counts are synthetic — when `--tiff-pages` is supplied the page count is drawn from that range, otherwise it defaults to a synthetic multi-page distribution (random 1–10 pages per document), independent of the REQ-047 `1-1` Native-File default.
-- **REQ-059**: OPT files shall use ANSI encoding for maximum platform compatibility.
+- **REQ-059**: OPT files shall default to ANSI (Windows-1252) encoding for maximum platform compatibility. An explicit `--encoding` argument overrides this default (e.g. to UTF-8 or UTF-16), consistent with REQ-051's "by default" wording; note that UTF-8/UTF-16 OPT has limited platform support (Section 8.5).
 
 #### FR-013: Family Relationship Support
 
