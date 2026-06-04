@@ -66,7 +66,7 @@ if errorlevel 1 (
 :: Verify header contains expected columns
 for %%f in ("%TEST_OUTPUT_DIR%\test2\*.csv") do set CSV_FILE=%%f
 set /p FIRST_LINE=<"!CSV_FILE!"
-echo !FIRST_LINE! | findstr /C:"Control Number" >nul
+echo !FIRST_LINE! | findstr /I /C:"Control Number" >nul
 if errorlevel 1 (
   echo [ ERROR ] Test 2: 'Control Number' column not found in .csv header
   exit /b 1

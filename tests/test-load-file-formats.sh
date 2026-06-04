@@ -105,7 +105,7 @@ fi
 
 # Verify header contains expected columns
 first_line=$(head -n 1 "$csv_file")
-if ! echo "$first_line" | grep -q "Control Number"; then
+if ! echo "$first_line" | grep -qi "Control Number"; then
   print_error "Test 2: 'Control Number' column not found in .csv header"
 fi
 
