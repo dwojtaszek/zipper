@@ -86,7 +86,7 @@ internal class DatWriter : LoadFileWriterBase
         var buffer = new StringBuilder();
         int rowCount = 0;
 
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
             foreach (var (_, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, hasQuote, profileValues))
@@ -145,7 +145,7 @@ internal class DatWriter : LoadFileWriterBase
         rows.Add((1, "HEADER", BuildStandardHeader(request, colDelim, quote, hasQuote)));
 
         long currentLineNumber = 2;
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
             foreach (var (recordId, rowLine) in BuildStandardRowsForFile(fileData, request, colDelim, quote, hasQuote, profileValues))
@@ -259,7 +259,7 @@ internal class DatWriter : LoadFileWriterBase
             await using var writer = CreateWriter(stream, request);
             await writer.WriteAsync(headerLine + eol);
 
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            foreach (var fileData in processedFiles)
             {
                 foreach (var (_, rowLine) in BuildProductionSetRowsForFile(fileData, request, col, quote))
                 {
@@ -276,7 +276,7 @@ internal class DatWriter : LoadFileWriterBase
         rows.Add((1, "HEADER", headerLine));
 
         long currentLineNumber = 2;
-        foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+        foreach (var fileData in processedFiles)
         {
             foreach (var (recordId, rowLine) in BuildProductionSetRowsForFile(fileData, request, col, quote))
             {

@@ -7,46 +7,27 @@ namespace Zipper
     internal sealed class DiskBackedFileDataList : IReadOnlyList<FileData>, IDisposable
     {
         private readonly string tempFilePath;
-        private readonly FileStream fileStream;
-        private readonly BinaryWriter writer;
-        private readonly List<long> offsets = new List<long>();
-        private readonly object syncRoot = new object();
-        private BinaryReader? reader;
+        private FileStream? writeStream;
+        private BinaryWriter? writer;
         private int count;
+        private readonly object syncRoot = new object();
 
         public DiskBackedFileDataList()
         {
             this.tempFilePath = Path.Combine(Path.GetTempPath(), "zipper-" + Guid.NewGuid().ToString("N") + ".tmp");
-            this.fileStream = new FileStream(this.tempFilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose);
-            this.writer = new BinaryWriter(this.fileStream, Encoding.UTF8, leaveOpen: true);
+            this.writeStream = new FileStream(this.tempFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.Read | FileShare.Delete, 4096, FileOptions.DeleteOnClose);
+            this.writer = new BinaryWriter(this.writeStream, Encoding.UTF8, leaveOpen: true);
         }
 
         public int Count => this.count;
 
-        public FileData this[int index]
-        {
-            get
-            {
-                if (index < 0 || index >= this.count)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(index));
-                }
-
-                lock (this.syncRoot)
-                {
-                    this.writer.Flush();
-                    this.reader ??= new BinaryReader(this.fileStream, Encoding.UTF8, leaveOpen: true);
-                    this.fileStream.Position = this.offsets[index];
-                    return FileDataSerializer.Deserialize(this.reader);
-                }
-            }
-        }
+        public FileData this[int index] => throw new NotSupportedException("DiskBackedFileDataList only supports sequential enumeration.");
 
         public void Add(FileData data)
         {
             lock (this.syncRoot)
             {
-                this.offsets.Add(this.fileStream.Position);
+                if (this.writer == null) throw new ObjectDisposedException(nameof(DiskBackedFileDataList));
                 FileDataSerializer.Serialize(this.writer, data);
                 this.count++;
             }
@@ -54,9 +35,18 @@ namespace Zipper
 
         public IEnumerator<FileData> GetEnumerator()
         {
+            lock (this.syncRoot)
+            {
+                this.writer?.Flush();
+                this.writeStream?.Flush(true);
+            }
+
+            using var readStream = new FileStream(this.tempFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096);
+            using var reader = new BinaryReader(readStream, Encoding.UTF8);
+
             for (int i = 0; i < this.count; i++)
             {
-                yield return this[i];
+                yield return FileDataSerializer.Deserialize(reader);
             }
         }
 
@@ -66,9 +56,10 @@ namespace Zipper
         {
             lock (this.syncRoot)
             {
-                this.writer.Dispose();
-                this.reader?.Dispose();
-                this.fileStream.Dispose();
+                this.writer?.Dispose();
+                this.writeStream?.Dispose();
+                this.writer = null;
+                this.writeStream = null;
 
                 try
                 {

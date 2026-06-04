@@ -50,7 +50,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 #pragma warning restore S2245
             var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
-            foreach (var fileData in processedFiles.OrderBy(f => f.WorkItem.Index))
+            foreach (var fileData in processedFiles)
             {
                 var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
                 await element.WriteToAsync(writer, CancellationToken.None);

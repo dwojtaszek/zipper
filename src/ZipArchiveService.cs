@@ -40,37 +40,26 @@ namespace Zipper
                 : null;
 
             // Process generated files and write to archive
-            await foreach (var fileData in fileDataReader.ReadAllAsync())
+            long nextExpectedIndex = 1;
+            var outOfOrderBuffer = new Dictionary<long, FileData>();
+
+            await foreach (var incomingFileData in fileDataReader.ReadAllAsync())
             {
-                processedFiles.Add(fileData);
-
-                // Sequentially create ZIP entries to avoid conflicts.
-                // The order is:
-                // 1. Main file (e.g., .eml)
-                // 2. Main file's extracted text (if requested)
-                // 3. Attachment (if it exists)
-                // 4. Attachment's extracted text (if it exists and text is requested)
-                WriteFileToArchive(archive, fileData, usedEntryPaths);
-
-                if (request.Output.WithText)
+                if (incomingFileData.WorkItem.Index == nextExpectedIndex)
                 {
-                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
-                }
+                    ProcessFileData(archive, incomingFileData, request, extractedTextContent, usedEntryPaths, processedFiles);
+                    nextExpectedIndex++;
 
-                if (fileData.Attachment.HasValue)
+                    while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
+                    {
+                        ProcessFileData(archive, buffered, request, extractedTextContent, usedEntryPaths, processedFiles);
+                        nextExpectedIndex++;
+                    }
+                }
+                else
                 {
-                    WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
+                    outOfOrderBuffer[incomingFileData.WorkItem.Index] = incomingFileData;
                 }
-
-                if (fileData.Attachment.HasValue && request.Output.WithText)
-                {
-                    WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
-                }
-
-                // Dispose memory owner immediately after writing to archive to bound memory usage.
-                // The FileData record remains in processedFiles for load file generation,
-                // but the large byte arrays are released since they've been written to the ZIP.
-                fileData.MemoryOwner?.Dispose();
             }
 
             var formatsToGenerate = request.LoadFile.LoadFileFormats?.Any() == true
@@ -137,6 +126,30 @@ namespace Zipper
         /// <summary>
         /// Writes a single file to the ZIP archive. Skips if the entry path already exists.
         /// </summary>
+        private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? extractedTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)
+        {
+            processedFiles.Add(fileData);
+
+            WriteFileToArchive(archive, fileData, usedEntryPaths);
+
+            if (request.Output.WithText)
+            {
+                WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
+            }
+
+            if (fileData.Attachment.HasValue)
+            {
+                WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
+            }
+
+            if (fileData.Attachment.HasValue && request.Output.WithText)
+            {
+                WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
+            }
+
+            fileData.MemoryOwner?.Dispose();
+        }
+
         private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
         {
             var entryPath = fileData.WorkItem.FilePathInZip;
