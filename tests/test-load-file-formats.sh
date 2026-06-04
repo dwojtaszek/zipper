@@ -158,8 +158,8 @@ if ! grep -q "<Batch>" "$xml_file"; then
   print_error "Test 3: <Batch> element not found"
 fi
 
-if ! grep -q "<Documents>" "$xml_file"; then
-  print_error "Test 3: Plural wrapper <Documents> element not found"
+if grep -q "<Documents>" "$xml_file"; then
+  print_error "Test 3: Plural wrapper <Documents> element should not be present"
 fi
 
 if ! grep -q "<Document DocID=" "$xml_file"; then
