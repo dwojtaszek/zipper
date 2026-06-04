@@ -64,7 +64,7 @@ namespace Zipper
         {
             var gen = new LegacyDateSentGenerator();
             var result = gen.Generate(MakeContext(seed: 42));
-            Assert.True(DateTime.TryParseExact(result, "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out _));
+            Assert.True(DateTime.TryParseExact(result, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _));
         }
 
         [Fact]

@@ -528,7 +528,19 @@ public class ProductionSetTests : IDisposable
         {
             if (Directory.Exists(outputPath))
             {
-                Directory.Delete(outputPath, true);
+                for (int i = 0; i < 3; i++)
+                {
+                    try
+                    {
+                        Directory.Delete(outputPath, true);
+                        break;
+                    }
+                    catch (System.IO.IOException)
+                    {
+                        if (i == 2) throw;
+                        await Task.Delay(100);
+                    }
+                }
             }
         }
     }
