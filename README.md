@@ -63,7 +63,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
   - `exponential`: Exponential decay with most files in first folders
 - `--with-metadata`: Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`
 - `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the Load File. Supported for all file types including `eml`
-- `--attachment-rate <number>`: When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0
+- `--attachment-rate <number>`: When type is `eml`, specifies the percentage of Emails (0-100) that will receive a placeholder Native File (jpg/tiff/pdf from the internal pool) as a random Attachment. Defaults to 0
 - `--target-zip-size <size>`: Specifies a target size for the final Archive (e.g., 500MB, 10GB). This feature works by padding each of the `--count` Native Files with uncompressible data to meet the target size. This significantly reduces the overall Compression Ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
 - `--include-load-file`: Includes the generated Load File in the root of the output Archive instead of as a separate file
 - `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`). Note: `concordance` is a **distinct** format, NOT an alias of `dat`. Available formats:
