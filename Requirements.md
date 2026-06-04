@@ -35,7 +35,10 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ### FR-000: Automatic Metadata Generation
 - **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
 - **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For the Email File Type, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to Emails.
-- **REQ-002**: The `Custodian` field shall be linked to the Folder structure. The tool will generate a unique custodian name for each Folder (e.g., "Custodian 1"). All Native Files within a given Folder will be assigned that Folder's custodian. If no Folders are specified, a single default custodian name will be assigned to all Native Files.
+- **REQ-002**: In the default (standard Archive) generation mode, the `Custodian` field shall be linked to the Folder structure. The tool will generate a unique custodian name for each Folder (e.g., "Custodian 1"). All Native Files within a given Folder will be assigned that Folder's custodian. If no Folders are specified, a single default custodian name will be assigned to all Native Files. This applies to both non-Email and Email standard output (via the built-in `LegacyWithMetadata`/`LegacyEml` profiles). The following modes use a **different** custodian model and are NOT folder-linked:
+  - `--production-set`: custodians are drawn randomly from a pool of size `--custodian-count` (default 10, max 1000), independent of Folders.
+  - `--loadfile-only` (DAT): custodians use an index-based assignment (`Custodian {(index % 10) + 1}`).
+  - An explicit `--column-profile`: custodians come from the profile's `custodians` data source and its distribution (see REQ-076; the profile takes precedence over `--with-metadata`).
 - **REQ-003**: The `Author`, `Date Sent`, and `File Size` fields will be auto-generated with plausible random data without requiring user input.
 
 ### FR-001: Integrated Extracted Text
