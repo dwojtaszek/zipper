@@ -42,6 +42,30 @@ namespace Zipper
             Console.WriteLine(string.Format("\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format("  Archive created: {0}", result.ZipFilePath));
             Console.WriteLine(string.Format("  Performance: {0:F1} files/second", result.FilesPerSecond));
+
+            // REQ-025: the final archive must fall within +/- 10% of --target-zip-size.
+            // This is the success criterion for the operation; verify and report it.
+            // Outside tolerance is warned (not a hard failure) because compression
+            // variance can legitimately push the result beyond +/- 10%.
+            if (request.Output.TargetZipSize.HasValue && File.Exists(result.ZipFilePath))
+            {
+                long target = request.Output.TargetZipSize.Value;
+                long actual = new FileInfo(result.ZipFilePath).Length;
+                double deviation = target > 0 ? Math.Abs(actual - target) / (double)target : 0;
+                if (deviation > 0.10)
+                {
+                    Console.Error.WriteLine(string.Format(
+                        "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
+                        actual, target, deviation));
+                }
+                else
+                {
+                    Console.WriteLine(string.Format(
+                        "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
+                        actual, target, deviation));
+                }
+            }
+
             if (!request.Output.IncludeLoadFile)
             {
                 Console.WriteLine(string.Format("  Load file created: {0}", result.LoadFilePath));

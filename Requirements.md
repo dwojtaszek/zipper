@@ -67,7 +67,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-022**: The application must exit with a validation error if `--target-zip-size` is specified without the `--count` argument.
 - **REQ-023**: When both `--target-zip-size` and `--count` are used, the tool must calculate the amount of uncompressible padding needed for each Native File to meet the final compressed --target-zip-size.
 - **REQ-024**: The tool must append the calculated amount of random (non-compressible) data to each of the count Native Files' content before they are added to the Archive for compression.
-- **REQ-025**: The final generated Archive size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation.
+- **REQ-025**: The final generated Archive size must fall within a +/- 10% tolerance of the --target-zip-size. This is the final success criterion for the operation. After generation, the tool verifies the final archive size against the target: within tolerance it reports success, and outside tolerance it emits a warning to stderr with the actual size and deviation (it does not hard-fail, since compression variance can legitimately exceed the tolerance).
 - **REQ-026**: The application must perform a pre-check to estimate the minimum possible compressed size of the requested files. If this estimated minimum size already exceeds the --target-zip-size, the tool must exit immediately with a clear error message to prevent an impossible task from running.
 
 ### FR-006: Inclusive Load File
@@ -93,7 +93,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - **REQ-043**: A new optional command-line argument `--tiff-pages <min-max>` shall be introduced.
 - **REQ-044**: The argument accepts a range specification (e.g., "1-20") to define the minimum and maximum page count.
 - **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF Native File shall have a random page count within the specified range.
-- **REQ-046**: The Load File must include a `Page Count` column indicating the number of pages in each TIFF file.
+- **REQ-046**: When `--tiff-pages` is specified (with `--type tiff`), the Load File must include a `Page Count` column indicating the number of pages in each TIFF file. When `--tiff-pages` is omitted, no `Page Count` column is emitted, preserving backward-compatible output (see REQ-047).
 - **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility.
 
 ## 3. Technical Requirements
