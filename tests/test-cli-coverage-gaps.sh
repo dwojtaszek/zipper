@@ -205,7 +205,7 @@ print_info "Test: --with-families warning emitted without --type eml"
 err_file=$(mktemp)
 if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/families-warn1" \
     --with-families 2> "$err_file"; then
-    if grep -qi "warning: --with-families" "$err_file"; then
+    if grep -q "Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "$err_file"; then
         pass "--with-families warning emitted for non-eml type"
     else
         fail "--with-families warning NOT emitted for non-eml type"
@@ -219,7 +219,7 @@ print_info "Test: --with-families warning emitted with --attachment-rate 0"
 err_file=$(mktemp)
 if zipper --type eml --count 5 --output-path "$TEST_OUTPUT_DIR/families-warn2" \
     --with-families --attachment-rate 0 2> "$err_file"; then
-    if grep -qi "warning: --with-families" "$err_file"; then
+    if grep -q "Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "$err_file"; then
         pass "--with-families warning emitted for attachment-rate 0"
     else
         fail "--with-families warning NOT emitted for attachment-rate 0"

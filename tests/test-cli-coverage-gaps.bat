@@ -96,7 +96,7 @@ echo [ INFO ] Test: --with-families warning emitted without --type eml
 %ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn1" --with-families 2> "%TEMP%\warn1.txt" >nul
 set ZIPPER_EXIT=!ERRORLEVEL!
 if !ZIPPER_EXIT! equ 0 (
-    findstr /i /c:"warning: --with-families" "%TEMP%\warn1.txt" >nul 2>&1
+    findstr /i /c:"Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "%TEMP%\warn1.txt" >nul 2>&1
     if not errorlevel 1 (
         echo [ INFO ] PASS: --with-families warning emitted for non-eml type
         set /a PASSED+=1
@@ -114,7 +114,7 @@ echo [ INFO ] Test: --with-families warning emitted with --attachment-rate 0
 %ZIPPER_CMD% --type eml --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn2" --with-families --attachment-rate 0 2> "%TEMP%\warn2.txt" >nul
 set ZIPPER_EXIT=!ERRORLEVEL!
 if !ZIPPER_EXIT! equ 0 (
-    findstr /i /c:"warning: --with-families" "%TEMP%\warn2.txt" >nul 2>&1
+    findstr /i /c:"Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified." "%TEMP%\warn2.txt" >nul 2>&1
     if not errorlevel 1 (
         echo [ INFO ] PASS: --with-families warning emitted for attachment-rate 0
         set /a PASSED+=1
@@ -132,7 +132,7 @@ echo [ INFO ] Test: --with-families warning emitted with --loadfile-only
 %ZIPPER_CMD% --type eml --count 5 --output-path "%TEST_OUTPUT_DIR%\families-warn3" --with-families --attachment-rate 50 --loadfile-only 2> "%TEMP%\warn3.txt" >nul
 set ZIPPER_EXIT=!ERRORLEVEL!
 if !ZIPPER_EXIT! equ 0 (
-    findstr /i /c:"warning: --with-families" "%TEMP%\warn3.txt" >nul 2>&1
+    findstr /i /c:"Warning: --with-families has no effect in --loadfile-only mode." "%TEMP%\warn3.txt" >nul 2>&1
     if not errorlevel 1 (
         echo [ INFO ] PASS: --with-families warning emitted for loadfile-only mode
         set /a PASSED+=1
