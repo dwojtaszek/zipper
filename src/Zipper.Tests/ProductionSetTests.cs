@@ -510,11 +510,23 @@ public class ProductionSetTests : IDisposable
             Assert.NotNull(productionDir);
             Assert.NotNull(firstPdfFile);
 
-            // Cause a mid-generation I/O failure by deleting the NATIVES directory
+            // Cause a mid-generation I/O failure by deleting the NATIVES directory.
+            // The generator is still writing into NATIVES/VOL001 concurrently, so on
+            // Linux/macOS a recursive delete can throw "Directory not empty" when a new
+            // file appears between enumeration and removal. Retry until the delete sticks
+            // (the generator stops writing once it hits the induced failure).
             var nativesDir = Path.Combine(productionDir, "NATIVES");
-            if (Directory.Exists(nativesDir))
+            var deleteSw = System.Diagnostics.Stopwatch.StartNew();
+            while (Directory.Exists(nativesDir))
             {
-                Directory.Delete(nativesDir, true);
+                try
+                {
+                    Directory.Delete(nativesDir, true);
+                }
+                catch (IOException) when (deleteSw.ElapsedMilliseconds < 5000)
+                {
+                    // Concurrent writer recreated a file mid-delete; retry.
+                }
             }
 
             // The generation task should now fail mid-write
