@@ -160,7 +160,7 @@ public static class CliValidator
         {
             if (RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) == null)
             {
-                Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, xml, concordance.");
+                Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.");
                 return false;
             }
         }
@@ -191,7 +191,7 @@ public static class CliValidator
             {
                 if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) == null)
                 {
-                    Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml.");
+                    Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml, xml, concordance.");
                     return false;
                 }
             }

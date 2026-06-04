@@ -26,7 +26,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --include-load-file      Include load file in ZIP archive");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Load File Options:");
-        Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, edrm-xml (default: dat)");
+        Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, edrm-xml, xml, concordance (default: dat)");
         Console.Error.WriteLine("  --load-file-formats <f>  Multiple formats comma-separated (e.g., dat,opt,csv)");
         Console.Error.WriteLine("  --dat-delimiters <type>  DAT delimiter style: standard, csv (default: standard)");
         Console.Error.WriteLine("  --delimiter-column <c>   Custom column delimiter (char or ASCII code)");

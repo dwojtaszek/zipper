@@ -158,7 +158,13 @@ internal class OptWriter : LoadFileWriterBase
                 : $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
-            int pageCount = random.Next(1, 11);
+
+            // Honor an explicit --tiff-pages range when provided; otherwise keep the
+            // synthetic multi-page default (random 1-10) for loadfile-only OPT generation,
+            // where no real Native Files exist to derive a page count from.
+            int pageCount = request.Tiff.PageRange.HasValue
+                ? random.Next(request.Tiff.PageRange.Value.Min, request.Tiff.PageRange.Value.Max + 1)
+                : random.Next(1, 11);
 
             foreach (var entry in GeneratePageEntries(batesId, imagePath, pageCount))
             {

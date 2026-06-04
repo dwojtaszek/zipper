@@ -32,7 +32,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(4, lines.Length);
-        Assert.Contains("Control Number", lines[0]);
+        Assert.Contains("CONTROL NUMBER", lines[0]);
         Assert.Contains("DOC00000001", lines[1]);
     }
 
@@ -94,16 +94,16 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         request.Metadata = request.Metadata with { WithMetadata = true };
         var files = this.CreateTestFileData(1);
         var contentWith = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("Custodian", contentWith);
+        Assert.Contains("CUSTODIAN", contentWith);
 
         request.Metadata = request.Metadata with { WithMetadata = false };
         var contentWithout = await this.CaptureCsvOutput(request, files);
-        Assert.DoesNotContain("Custodian", contentWithout);
+        Assert.DoesNotContain("CUSTODIAN", contentWithout);
 
         var emlRequest = this.CreateTestRequest("eml");
         emlRequest.Metadata = emlRequest.Metadata with { WithMetadata = false };
         var emlContent = await this.CaptureCsvOutput(emlRequest, files);
-        Assert.Contains("Custodian", emlContent);
+        Assert.Contains("CUSTODIAN", emlContent);
     }
 
     [Fact]
@@ -112,12 +112,17 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         var emlRequest = this.CreateTestRequest("eml");
         var emlContent = await this.CaptureCsvOutput(emlRequest, files);
-        Assert.Contains("To", emlContent);
-        Assert.Contains("From", emlContent);
+
+        // Assert against exact header tokens, not substrings: "TO" is a substring
+        // of "CUSTODIAN", so a substring check would give a false positive/negative.
+        var emlHeader = emlContent.Split('\n')[0].Trim('\r', '\n', ' ').Split(',');
+        Assert.Contains("TO", emlHeader);
+        Assert.Contains("FROM", emlHeader);
 
         var pdfRequest = this.CreateTestRequest("pdf");
         var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
-        Assert.DoesNotContain("To", pdfContent);
+        var pdfHeader = pdfContent.Split('\n')[0].Trim('\r', '\n', ' ').Split(',');
+        Assert.DoesNotContain("TO", pdfHeader);
     }
 
     [Fact]
@@ -128,16 +133,16 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         files[0] = files[0] with { PageCount = 5 };
         var contentWith = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("Page Count", contentWith);
+        Assert.Contains("PAGE COUNT", contentWith);
 
         request.Tiff = request.Tiff with { PageRange = null };
         var contentWithout = await this.CaptureCsvOutput(request, files);
-        Assert.DoesNotContain("Page Count", contentWithout);
+        Assert.DoesNotContain("PAGE COUNT", contentWithout);
 
         var pdfRequest = this.CreateTestRequest("pdf");
         pdfRequest.Tiff = pdfRequest.Tiff with { PageRange = (1, 10) };
         var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
-        Assert.DoesNotContain("Page Count", pdfContent);
+        Assert.DoesNotContain("PAGE COUNT", pdfContent);
     }
 
     [Fact]
@@ -191,7 +196,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         Assert.Equal(0xFE, bytes[1]);
 
         var content = await File.ReadAllTextAsync(outputPath, System.Text.Encoding.Unicode);
-        Assert.Contains("Control Number", content);
+        Assert.Contains("CONTROL NUMBER", content);
     }
 
     [Fact]
@@ -215,6 +220,6 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
 
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         var content = System.Text.Encoding.GetEncoding(1252).GetString(bytes);
-        Assert.Contains("Control Number", content);
+        Assert.Contains("CONTROL NUMBER", content);
     }
 }

@@ -66,11 +66,12 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--attachment-rate <number>`: When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0
 - `--target-zip-size <size>`: Specifies a target size for the final Archive (e.g., 500MB, 10GB). This feature works by padding each of the `--count` Native Files with uncompressible data to meet the target size. This significantly reduces the overall Compression Ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
 - `--include-load-file`: Includes the generated Load File in the root of the output Archive instead of as a separate file
-- `--load-file-format <dat|opt|csv|edrm-xml>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`) and `concordance` (alias for `dat`). Available formats:
+- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`). Note: `concordance` is a **distinct** format, NOT an alias of `dat`. Available formats:
   - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
   - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types unless explicitly requested otherwise)
   - `csv`: Comma-separated values format with RFC 4180 escaping
   - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
+  - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
 - `--load-file-formats <format1,format2,...>`: Generate multiple Load File formats simultaneously (e.g., `dat,opt,csv`)
 - `--dat-delimiters <standard|csv>`: DAT delimiter style. `standard` uses ASCII 20/254/174, `csv` uses comma/quote. Defaults to `standard`
 - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
@@ -84,7 +85,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise)
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns; `dat` format only). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise)
 
 **Loadfile-Only Options:**
 - `--loadfile-only`: Generate standalone Load Files directly to disk without creating Archives or Native Files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
@@ -235,6 +236,7 @@ Compatibility checklist:
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
 | `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |

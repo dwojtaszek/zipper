@@ -74,7 +74,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 
 ### FR-007: Multiple Load File Formats
 - **REQ-036**: A new optional command-line argument `--load-file-format <format>` shall be introduced.
-- **REQ-037**: The tool shall support multiple Load File formats as specified in Section 8: `dat` (default), `opt`, `csv`, and `edrm-xml`.
+- **REQ-037**: The tool shall support multiple Load File formats as specified in Section 8: `dat` (default), `opt`, `csv`, `edrm-xml`, and `concordance`. Note: `concordance` is a **distinct** format (every field quote-wrapped, ASCII 20-delimited database-import variant with BEGATTY/ENDATTY/CONTROLNUMBER/PATH columns), NOT an alias of `dat`. See Section 8.7.
 - **REQ-038**: Each format shall conform to industry-standard specifications defined in Section 8 (Load File Format Standards).
 
 ### FR-008: Bates Numbering System
@@ -170,6 +170,8 @@ This section documents industry-standard Load File formats used by major e-disco
 | Concordance DAT | `.dat` | Metadata and document data |
 | Opticon | `.opt` | Image cross-references (page-level) |
 | EDRM XML | `.xml` | Vendor-neutral data interchange |
+| Concordance (DB import) | `.dat` | Fully quote-wrapped database-import variant (`--load-file-format concordance`), distinct from `dat`. See Section 8.7. |
+| CSV | `.csv` | RFC 4180 comma-separated values (`--load-file-format csv`). See Section 8.8. |
 
 ### 8.2 Concordance DAT Format Specification
 
@@ -346,7 +348,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
-- **REQ-101**: `edrm-xml`, `xml`, and `concordance` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`, and `concordance` maps to the same output as `dat`.
+- **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`. `concordance` is NOT an alias of `dat`; it is a distinct format with its own writer producing fully quote-wrapped, ASCII 20-delimited database-import output with a different column set (see Section 8.7).
 
 #### FR-011: Multi-Format Output
 
@@ -355,14 +357,14 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 #### FR-012: OPT File Generation
 
-- **REQ-057**: When `--type tiff` or `--type jpg` is used, an OPT file shall be generated automatically alongside the DAT file. Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
-- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`).
+- **REQ-057**: When `--type tiff` or `--type jpg` is used **and no Load File format is explicitly selected** (neither `--load-file-format` nor `--load-file-formats` is passed), the tool shall automatically generate both a DAT and an OPT file. If an explicit format is selected, only that format is produced and auto-OPT generation is suppressed (e.g. `--type tiff --load-file-format edrm-xml` yields EDRM-XML only). Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
+- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`). Note: in `--loadfile-only` OPT mode there are no real Native Files, so page counts are synthetic — when `--tiff-pages` is supplied the page count is drawn from that range, otherwise it defaults to a synthetic multi-page distribution (random 1–10 pages per document), independent of the REQ-047 `1-1` Native-File default.
 - **REQ-059**: OPT files shall use ANSI encoding for maximum platform compatibility.
 
 #### FR-013: Family Relationship Support
 
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
-- **REQ-061**: When `--with-families` is specified, the Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENT_DOCID` columns.
+- **REQ-061**: When `--with-families` is specified, the **DAT** Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns. Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns are currently supported only for the `dat` format (and OPT document-break semantics); the `csv`, `concordance`, and `edrm-xml` writers do not emit family columns.
 - **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
 - **REQ-122**: When `--with-families` is specified without `--type eml` or with `--attachment-rate 0`, a soft warning shall be emitted to stderr, but the execution shall not be rejected.
 
@@ -468,6 +470,68 @@ Based on the above research, the following requirements apply to the Zipper Load
   - Quote delimiter: ASCII 254 (Concordance standard)
   - Newline delimiter: ASCII 174 (Concordance standard)
 - **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption.
+
+### 8.7 Concordance (Database Import) Format Specification
+
+The `concordance` format (`--load-file-format concordance`) is a **distinct** database-import variant, NOT an alias of `dat` (see REQ-101). It targets legacy Concordance database loaders that expect every field quote-wrapped and a fixed leading attachment-range column pair.
+
+#### Structure
+- **Extension**: `.dat`
+- **Encoding**: Same as `--encoding` (UTF-8 default)
+- **Field Delimiter**: Configured column delimiter, default ASCII 20 (DC4)
+- **Quote/Text Qualifier**: ASCII 254 (þ), applied to **every** field (unlike `dat`, which qualifies selectively)
+- **Header Row**: Present; field names UPPERCASE, no spaces, each quote-wrapped
+- **In-field quote escaping**: Embedded quote characters are doubled (DAT-style escaping)
+
+#### Column Order
+Leading columns (always present):
+
+| Column | Notes |
+|--------|-------|
+| `BEGATTY` | Beginning attachment Bates. Emitted empty (generator does not track attachment ranges). |
+| `ENDATTY` | Ending attachment Bates. Emitted empty. |
+| `CONTROLNUMBER` | Unique document identifier. |
+| `PATH` | Relative Native File path within the Archive. |
+
+Conditional columns append in this order when their feature is active: metadata (`CUSTODIAN`, `DATESENT`, `AUTHOR`, `FILESIZE`), email (`TO`, `FROM`, `SUBJECT`, `SENTDATE`, `ATTACHMENT`), `BATES`, `PAGECOUNT`, `TEXT_PATH`.
+
+> [!NOTE]
+> `BEGATTY`/`ENDATTY` are structurally required by the format but are intentionally emitted empty because the generator does not compute attachment parent/child Bates ranges. This is a known limitation, not corruption.
+
+### 8.8 CSV Format Specification
+
+The `csv` format (`--load-file-format csv`) produces a standard RFC 4180 comma-separated values file with a `.csv` extension. It is intended for spreadsheet tools and generic importers, NOT for Concordance-style e-discovery loaders (use `dat` or `concordance` for those).
+
+#### Structure
+- **Extension**: `.csv`
+- **Encoding**: Same as `--encoding` (UTF-8 default)
+- **Field Delimiter**: Comma (`,`)
+- **Text Qualifier**: Double quote (`"`)
+- **Header Row**: Present, comma-joined. Headers default to **UPPERCASE** (e.g. `CONTROL NUMBER`, `FILE PATH`) for e-discovery platform compatibility (Section 8.2). A `--column-profile` with an explicit `fieldNamingConvention` overrides this default.
+- **Line Terminator**: Platform newline
+
+#### RFC 4180 Escaping
+- A field is quoted **only** if it contains a comma, a double quote, CR, or LF.
+- Embedded double quotes are escaped by doubling (`"` → `""`).
+- Empty values are emitted as an empty field (no quotes).
+
+#### Columns
+Same conditional column set and order as the DAT writer: base (`Control Number`, `File Path`), then metadata (`Custodian`, `Date Sent`, `Author`, `File Size`), email (`To`, `From`, `Subject`, `Sent Date`, `Attachment`), `Bates Number`, `Page Count`, `Extracted Text` — each gated by the corresponding feature flag.
+
+#### `--load-file-format csv` vs `--dat-delimiters csv`
+
+These are **distinct** and must not be confused (REQ-050 / REQ-037):
+
+| | `--load-file-format csv` | `--dat-delimiters csv` |
+|---|---|---|
+| Writer | `CsvWriter` (RFC 4180) | DAT writer with CSV-style delimiters |
+| Extension | `.csv` | `.dat` |
+| Column delimiter | `,` | `,` |
+| Quote | `"` (selective, RFC 4180) | `"` |
+| In-field newline | preserved inside quotes | replaced with space |
+| Header names | UPPERCASE by default | DAT header convention |
+
+In short: `--load-file-format csv` selects a true CSV file; `--dat-delimiters csv` only swaps the delimiter preset of a `.dat` file and has no effect unless `--load-file-format dat` (REQ-083).
 
 ---
 
