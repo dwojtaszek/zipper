@@ -23,7 +23,7 @@ jobs:
     outputs:
       only_docs: ${{ steps.check.outputs.only_docs }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
       - id: check
@@ -58,38 +58,19 @@ jobs:
             echo "only_docs=false" >> "$GITHUB_OUTPUT"
           fi
 
-  validate-agents-md:
-    needs: docs-only
-    if: needs.docs-only.outputs.only_docs != 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
-        with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
-      - name: Verify AGENTS.md commands work
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Validating commands documented in AGENTS.md..."
-          dotnet restore zipper.sln --locked-mode
-          dotnet build zipper.sln -c Release --no-restore
-          dotnet format --verify-no-changes --no-restore src/
-          dotnet test src/Zipper.Tests/Zipper.Tests.csproj -c Release --no-build --list-tests > /dev/null
-          echo "All AGENTS.md commands validated successfully."
-
+  # Note: the previously-separate `validate-agents-md` job was folded in (#397).
+  # Its checks (restore, build, format, test) are fully covered by `lint`
+  # (restore + format) and `build-and-test` (restore + build + test), so a
+  # dedicated job was redundant CI minutes.
   lint:
     needs: docs-only
     if: needs.docs-only.outputs.only_docs != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-      - uses: eifinger/actionlint-action@v1.10.2
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -112,7 +93,7 @@ jobs:
           echo "No oversized files detected (limit: ${MAX_BYTES} bytes)."
 
   build-and-test:
-    needs: [docs-only, lint, validate-agents-md]
+    needs: [docs-only, lint]
     if: needs.docs-only.outputs.only_docs != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
@@ -131,9 +112,9 @@ jobs:
             coverage: false
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -156,9 +137,28 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults
 
-      - name: Check for unused NuGet packages (Linux)
+      - name: Check for deprecated/vulnerable NuGet packages (Linux)
         if: matrix.coverage == true
-        run: dotnet list package --unused --include-transitive || true
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `--unused` is not a valid `dotnet list package` option (it was a
+          # silent no-op masked by `|| true`). Use the real checks instead.
+          #
+          # Deprecated: informational only — xunit v2 is flagged "Legacy" by
+          # design, which would otherwise break every build.
+          echo "::group::Deprecated packages (informational)"
+          dotnet list package --deprecated --include-transitive
+          echo "::endgroup::"
+          # Vulnerable: hard gate. The tool prints finding rows prefixed with
+          # `>`; a clean project prints "has no vulnerable packages".
+          vuln=$(dotnet list package --vulnerable --include-transitive)
+          echo "$vuln"
+          if echo "$vuln" | grep -qE '^[[:space:]]*>'; then
+            echo "ERROR: vulnerable packages detected." >&2
+            exit 1
+          fi
+          echo "No vulnerable packages detected."
 
       - name: Test timing report (Linux)
         if: matrix.coverage == true
@@ -177,32 +177,9 @@ jobs:
             '''))"
           fi
 
-      - name: Cache reportgenerator tool (Linux)
-        if: matrix.coverage == true
-        uses: actions/cache@v5.0.5
-        with:
-          # dotnet tool restore installs into the per-repo tool home.
-          path: .dotnet-tools
-          key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
-          restore-keys: ${{ runner.os }}-reportgen-
-
       - name: Coverage report + 80% gate (Linux)
         if: matrix.coverage == true
-        env:
-          DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
-        run: |
-          dotnet tool restore
-          dotnet reportgenerator \
-            -reports:TestResults/*/coverage.cobertura.xml \
-            -targetdir:TestResults/coverage-report \
-            -reporttypes:"Html;TextSummary"
-          cat TestResults/coverage-report/Summary.txt
-          COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
-          echo "Coverage: ${COVERAGE}%"
-          awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
-            echo "ERROR: coverage ${COVERAGE}% < 80%"
-            exit 1
-          }
+        uses: ./.github/actions/coverage-gate
 
       - name: Unit tests (non-Linux)
         if: matrix.coverage != true
@@ -217,28 +194,41 @@ jobs:
             bash ./tests/run-tests.sh
           fi
 
+      # Publish the CLI once on Linux and hand it to the `goldens` job as an
+      # artifact, so goldens does not re-restore + re-publish (#397).
+      - name: Publish CLI for goldens (Linux)
+        if: matrix.coverage == true
+        run: dotnet publish src/Zipper.csproj -c Release -o ./publish-bin --no-restore
+
+      - name: Upload CLI artifact for goldens (Linux)
+        if: matrix.coverage == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: zipper-cli-linux
+          path: publish-bin/
+          retention-days: 1
+
   goldens:
     needs: [docs-only, build-and-test]
     if: needs.docs-only.outputs.only_docs != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: actions/setup-dotnet@v5
+      # Runtime only — the binary is framework-dependent; no restore/build here.
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
 
-      - name: Restore (locked)
-        run: dotnet restore zipper.sln --locked-mode
-
-      - name: Publish CLI (Release)
-        run: dotnet publish src/Zipper.csproj -c Release -o ./publish-bin
+      - name: Download CLI artifact (built by the Linux build-and-test leg)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: zipper-cli-linux
+          path: publish-bin
 
       - name: Run golden scenarios
         run: |
-          chmod +x ./tests/goldens/run-goldens.sh
+          chmod +x ./publish-bin/Zipper ./tests/goldens/run-goldens.sh
           ZIPPER_CLI="$(pwd)/publish-bin/Zipper" bash ./tests/goldens/run-goldens.sh
 

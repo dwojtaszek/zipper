@@ -20,7 +20,7 @@ REM Check build-and-test.yml for artifact patterns
 echo 1. Analyzing %WORKFLOW_FILE% artifact patterns...
 
 REM Check for artifact upload steps
-findstr /C:"actions/upload-artifact@v" "%WORKFLOW_FILE%" >nul
+findstr /C:"actions/upload-artifact@" "%WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses actions/upload-artifact
 ) else (
@@ -80,7 +80,7 @@ if !errorlevel! equ 0 (
 
 echo 3. Analyzing caching strategy...
 
-findstr /C:"actions/cache@v" "%WORKFLOW_FILE%" >nul
+findstr /S /C:"actions/cache@" ".github\*.yml" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses actions/cache
 ) else (
@@ -108,7 +108,7 @@ if !errorlevel! equ 0 (
 
 echo 5. Checking release job artifact handling...
 
-findstr /C:"actions/download-artifact@v" "%WORKFLOW_FILE%" >nul
+findstr /C:"actions/download-artifact@" "%WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses actions/download-artifact
 ) else (

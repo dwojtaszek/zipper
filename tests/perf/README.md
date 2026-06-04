@@ -6,7 +6,8 @@ Automated performance regression detection for Zipper.
 
 1. `measure.sh` runs three scenarios and emits wall time + peak RSS as JSON.
 2. `perf-guard.yml` runs on PRs that touch `src/**`, takes the median of 5 runs, and compares against `baselines.json`.
-3. If wall time exceeds 1.25× baseline or RSS exceeds 1.20× baseline, the check fails.
+3. **RSS is the hard gate:** if peak RSS exceeds 1.20× baseline, the check fails.
+4. **Wall time is informational only.** Shared GitHub runners vary 15–40% run-to-run with no code change, and baselines are captured on a different runner than each PR is measured on, so the wall ratio mixes hardware delta with code delta. It is reported (1.25× reference line) but never fails the job.
 
 ## Scenarios
 
@@ -43,8 +44,9 @@ The perf-guard workflow posts a markdown table on the PR:
 | pdf_50k | wall_s | 1.86 | 2.10 | 1.13× | ✅ |
 | pdf_50k | rss_kb | 110116 | 115000 | 1.04× | ✅ |
 
-- **✅** = within threshold
-- **❌** = exceeds threshold (wall > 1.25× or RSS > 1.20×)
+- **✅** = RSS within threshold (≤ 1.20×) — gating
+- **❌** = RSS exceeds 1.20× — fails the job
+- **ℹ️ / ⚠️** = wall_s reference marker (≤ / > 1.25×) — informational only, never fails
 
 ## When to Re-capture
 

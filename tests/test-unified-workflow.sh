@@ -93,14 +93,14 @@ done
 
 # Check for artifact handling
 echo "8. Checking artifact handling..."
-if grep -q "actions/upload-artifact@v" .github/workflows/build-and-test.yml; then
+if grep -q "actions/upload-artifact@" .github/workflows/build-and-test.yml; then
     echo "✓ Uses upload-artifact"
 else
     echo "✗ Missing upload-artifact"
     exit 1
 fi
 
-if grep -q "actions/download-artifact@v" .github/workflows/build-and-test.yml; then
+if grep -q "actions/download-artifact@" .github/workflows/build-and-test.yml; then
     echo "✓ Uses download-artifact"
 else
     echo "✗ Missing download-artifact"
@@ -157,9 +157,11 @@ else
     exit 1
 fi
 
-# Check for caching
+# Check for caching. The reportgenerator cache moved into the shared composite
+# action (.github/actions/coverage-gate); match a tag or SHA-pinned
+# `actions/cache@` ref anywhere under .github/.
 echo "13. Checking caching configuration..."
-if grep -q "actions/cache@v" .github/workflows/build-and-test.yml; then
+if grep -rq "actions/cache@" .github/; then
     echo "✓ Uses caching"
 else
     echo "✗ Missing caching"

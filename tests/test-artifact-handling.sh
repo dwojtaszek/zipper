@@ -21,7 +21,7 @@ fi
 echo "1. Analyzing $WORKFLOW_FILE artifact patterns..."
 
 # Check for artifact upload steps
-if grep -q "actions/upload-artifact@v" "$WORKFLOW_FILE"; then
+if grep -q "actions/upload-artifact@" "$WORKFLOW_FILE"; then
     echo "✓ Uses actions/upload-artifact"
 else
     echo "✗ Missing actions/upload-artifact"
@@ -60,18 +60,24 @@ for artifact in "${EXPECTED_ARTIFACTS[@]}"; do
     fi
 done
 
-# Check for caching strategy
+# Check for caching strategy. The reportgenerator cache lives in the shared
+# composite action (.github/actions/coverage-gate); setup-dotnet caching lives
+# in the workflow itself. Match a tag or SHA-pinned `actions/cache@` ref
+# anywhere under .github/.
 echo "3. Analyzing caching strategy..."
-if grep -q "actions/cache@v" "$WORKFLOW_FILE"; then
+if grep -rq "actions/cache@" .github/; then
     echo "✓ Uses actions/cache"
 else
     echo "✗ Missing actions/cache"
     exit 1
 fi
 
-# Check cache keys (setup-dotnet cache: true counts as implicit cache key)
-IMPLICIT_KEYS=$(grep -c "cache: true" "$WORKFLOW_FILE" || echo 0)
-EXPLICIT_KEYS=$(grep -c "key:" "$WORKFLOW_FILE" || echo 0)
+# Check cache keys (setup-dotnet `cache: true` is an implicit key in the
+# workflows; the explicit reportgenerator `key:` lives in the composite action).
+# Count across .github/ and use `wc -l` so a zero count is a clean 0 (avoids the
+# `grep -c ... || echo 0` multiline pitfall when there are no matches).
+IMPLICIT_KEYS=$(grep -rh "cache: true" .github/ | wc -l)
+EXPLICIT_KEYS=$(grep -rh "key:" .github/ | wc -l)
 CACHE_KEYS=$((IMPLICIT_KEYS + EXPLICIT_KEYS))
 if [ "$CACHE_KEYS" -ge 2 ]; then
     echo "✓ Found sufficient cache keys ($CACHE_KEYS total)"
@@ -101,7 +107,7 @@ fi
 
 # Check for artifact download in release job
 echo "5. Checking release job artifact handling..."
-if grep -q "actions/download-artifact@v" "$WORKFLOW_FILE"; then
+if grep -q "actions/download-artifact@" "$WORKFLOW_FILE"; then
     echo "✓ Uses actions/download-artifact"
 else
     echo "✗ Missing actions/download-artifact"

@@ -11,9 +11,9 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
 
@@ -53,8 +53,14 @@ jobs:
               rsss = [r[sc]["rss_kb"] for r in runs]
               results[sc] = {"wall_s": median(walls), "rss_kb": median(rsss)}
 
-          # Compare
-          wall_threshold = 1.25
+          # Compare.
+          # NOTE: wall_s on shared GitHub runners swings 15-40% run-to-run with
+          # no code change (rotating host CPUs, noisy neighbours), and baselines
+          # are captured on a *different* runner than each PR is measured on — so
+          # the wall ratio mixes hardware delta with code delta. It is reported
+          # for visibility but does NOT gate. rss_kb is stable across runners and
+          # remains the hard gate. (#397)
+          wall_threshold = 1.25  # informational only — does not fail the job
           rss_threshold = 1.20
           failed = False
           rows = []
@@ -66,9 +72,9 @@ jobs:
               mr = results[sc]["rss_kb"]
               rw = mw / bw if bw > 0 else 0
               rr = mr / br if br > 0 else 0
-              sw = "✅" if rw <= wall_threshold else "❌"
+              sw = "ℹ️" if rw <= wall_threshold else "⚠️"  # informational, never fails
               sr = "✅" if rr <= rss_threshold else "❌"
-              if rw > wall_threshold or rr > rss_threshold:
+              if rr > rss_threshold:
                   failed = True
               rows.append(f"| {sc} | wall_s | {bw:.2f} | {mw:.2f} | {rw:.2f}× | {sw} |")
               rows.append(f"| {sc} | rss_kb | {br} | {mr:.0f} | {rr:.2f}× | {sr} |")
@@ -95,14 +101,14 @@ jobs:
 
       - name: Upload measurement artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: perf-measurements
           path: results/
 
       - name: Post PR comment
         if: always()
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const table = `${{ steps.compare.outputs.table }}`;
@@ -111,7 +117,8 @@ jobs:
               ? '## ❌ Performance Regression Detected'
               : '## ✅ Performance Guard Passed';
             const body = `${header}\n\n${table}\n\n` +
-              `_Thresholds: wall ≤ 1.25×, RSS ≤ 1.20× baseline. Median of 5 runs._`;
+              `_Gate: RSS ≤ 1.20× baseline (median of 5 runs). ` +
+              `wall_s is informational only — shared-runner timing is noise-dominated and not comparable across runners._`;
             const marker = '<!-- perf-guard-comment -->';
             const fullBody = `${marker}\n${body}`;
 

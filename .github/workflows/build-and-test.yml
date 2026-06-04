@@ -24,7 +24,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
       - name: Set Version
@@ -52,8 +52,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -79,9 +79,9 @@ jobs:
             platform: osx-arm64
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
         with:
           global-json-file: global.json
           cache: true
@@ -103,32 +103,9 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults
 
-      - name: Cache reportgenerator tool (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/cache@v5.0.5
-        with:
-          # dotnet tool restore installs into the per-repo tool home.
-          path: .dotnet-tools
-          key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
-          restore-keys: ${{ runner.os }}-reportgen-
-
       - name: Coverage report + 80% gate (Linux)
         if: runner.os == 'Linux'
-        env:
-          DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
-        run: |
-          dotnet tool restore
-          dotnet reportgenerator \
-            -reports:TestResults/*/coverage.cobertura.xml \
-            -targetdir:TestResults/coverage-report \
-            -reporttypes:"Html;TextSummary"
-          cat TestResults/coverage-report/Summary.txt
-          COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
-          echo "Coverage: ${COVERAGE}%"
-          awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
-            echo "ERROR: coverage ${COVERAGE}% < 80%"
-            exit 1
-          }
+        uses: ./.github/actions/coverage-gate
 
       - name: Unit tests (non-Linux)
         if: runner.os != 'Linux'
@@ -159,7 +136,7 @@ jobs:
             bash ./tests/run-tests.sh
           fi
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: zipper-${{ matrix.platform }}
           path: publish/${{ matrix.platform }}
@@ -173,11 +150,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
 

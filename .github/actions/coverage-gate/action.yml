@@ -1,0 +1,35 @@
+name: Coverage gate
+description: >
+  Restore reportgenerator (cached), build the coverage report from the
+  cobertura output under TestResults/, and enforce the 80% line-coverage gate.
+  Shared by pr.yml and build-and-test.yml (#397). Assumes a prior step already
+  produced TestResults/*/coverage.cobertura.xml.
+
+runs:
+  using: composite
+  steps:
+    - name: Cache reportgenerator tool
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        # dotnet tool restore installs into the per-repo tool home.
+        path: .dotnet-tools
+        key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
+        restore-keys: ${{ runner.os }}-reportgen-
+
+    - name: Coverage report + 80% gate
+      shell: bash
+      env:
+        DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
+      run: |
+        dotnet tool restore
+        dotnet reportgenerator \
+          -reports:TestResults/*/coverage.cobertura.xml \
+          -targetdir:TestResults/coverage-report \
+          -reporttypes:"Html;TextSummary"
+        cat TestResults/coverage-report/Summary.txt
+        COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+        echo "Coverage: ${COVERAGE}%"
+        awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
+          echo "ERROR: coverage ${COVERAGE}% < 80%"
+          exit 1
+        }

@@ -105,7 +105,7 @@ for %%P in (%PLATFORMS%) do (
 REM Check for artifact handling
 echo.
 echo 8. Checking artifact handling...
-findstr /C:"actions/upload-artifact@v" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"actions/upload-artifact@" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing upload-artifact
     exit /b 1
@@ -113,7 +113,7 @@ if errorlevel 1 (
     echo [OK] Uses upload-artifact
 )
 
-findstr /C:"actions/download-artifact@v" ".github\workflows\build-and-test.yml" > nul
+findstr /C:"actions/download-artifact@" ".github\workflows\build-and-test.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing download-artifact
     exit /b 1
@@ -184,7 +184,7 @@ if errorlevel 1 (
 REM Check for caching
 echo.
 echo 13. Checking caching configuration...
-findstr /C:"actions/cache@v" ".github\workflows\build-and-test.yml" > nul
+findstr /S /C:"actions/cache@" ".github\*.yml" > nul
 if errorlevel 1 (
     echo [FAIL] Missing caching
     exit /b 1
