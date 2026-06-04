@@ -83,8 +83,8 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 ### FR-008: Bates Numbering System
 - **REQ-039**: New optional command-line arguments for Bates numbering shall be introduced:
   - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
-  - `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
-  - `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
+  - `--bates-start <number>`: Starting number for Bates numbering. Must be non-negative (>= 0). Defaults to 1
+  - `--bates-digits <number>`: Number of digits for Bates numbering. Must be between 1 and 20. Defaults to 8
 - **REQ-040**: When Bates numbering is enabled, the Load File must include a `Bates Number` column.
 - **REQ-041**: Bates numbers shall be formatted as `{PREFIX}{PADDED_NUMBER}` where the number is zero-padded to the specified digit count.
 - **REQ-042**: Bates numbers must increment sequentially for each Native File generated.
