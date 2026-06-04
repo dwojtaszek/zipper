@@ -188,7 +188,7 @@ if zipper --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/families" \
     --with-families --attachment-rate 50 2> "$err_file"; then
     dat_file=$(find "$TEST_OUTPUT_DIR/families" -name "*.dat" -print -quit)
     if [[ -n "$dat_file" && -s "$dat_file" ]]; then
-        if ! grep -q "Warning: --with-families is only meaningful" "$err_file"; then
+        if ! grep -qi "warning: --with-families" "$err_file"; then
             pass "--with-families accepted and does not emit warning"
         else
             fail "--with-families incorrectly emitted warning for valid config"

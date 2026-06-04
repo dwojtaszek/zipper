@@ -303,7 +303,7 @@ call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control N
 call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
-call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50
+call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50 --seed 42
 call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
 call :print_success "Test Case 10 passed."
 
@@ -333,7 +333,7 @@ call :verify_load_file_included "%TEST_OUTPUT_DIR%\pdf_include_load" 10 "Control
 call :print_success "Test Case 15 passed."
 
 REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
-call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text
+call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
 call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
 call :print_success "Test Case 16 passed."
 

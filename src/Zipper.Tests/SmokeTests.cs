@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Zipper;
 
-public class IntegrationTests
+public class SmokeTests
 {
     [Fact]
     public async Task Main_WithParallelGeneration_ShouldCreateValidArchive()
