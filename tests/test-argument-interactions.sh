@@ -23,14 +23,19 @@ assert_rejected() {
     local desc="$1"
     shift
     local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
-    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
+    local err_file="$TEMP_DIR/err_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>"$err_file"; then
         print_error "FAIL: $desc (expected rejection, got success)"
+        FAILED=$((FAILED + 1))
+    elif grep -qE "Unhandled exception|NullReferenceException|Exception:" "$err_file"; then
+        print_error "FAIL: $desc (expected validation error, got crash)"
+        cat "$err_file"
         FAILED=$((FAILED + 1))
     else
         print_info "PASS: $desc"
         PASSED=$((PASSED + 1))
     fi
-    rm -rf "$out_path" 2>/dev/null || true
+    rm -rf "$out_path" "$err_file" 2>/dev/null || true
 }
 
 # Assert command exits zero (accepted)
@@ -115,6 +120,15 @@ assert_accepted "valid standard --loadfile-only with --col-delim" \
 
 assert_accepted "valid standard --production-set" \
     --production-set --count 5 --bates-prefix TEST --type pdf
+
+assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" \
+    --loadfile-only --count 5 --chaos-mode --chaos-amount "5%"
+
+assert_accepted "--production-set + --bates-prefix + --volume-size" \
+    --production-set --count 5 --bates-prefix TEST --volume-size 100
+
+assert_accepted "--loadfile-only + --col-delim + --quote-delim" \
+    --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\""
 
 # --- Negative E2E tests for --loadfile-only formats ---
 

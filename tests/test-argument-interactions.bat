@@ -26,6 +26,9 @@ call :assert_rejected "--target-zip-size without --count" --type pdf --output-pa
 call :assert_accepted "valid standard --loadfile-only" --loadfile-only --count 5 --output-path "%TEMP%\zi_test"
 call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --col-delim "char:|"
 call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path "%TEMP%\zi_test"
+call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfile-only --count 5 --chaos-mode --chaos-amount "5%%" --output-path "%TEMP%\zi_test"
+call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path "%TEMP%\zi_test"
+call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\"" --output-path "%TEMP%\zi_test"
 
 call :assert_rejected "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --load-file-format csv
 call :assert_rejected "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path "%TEMP%\zi_test" --load-file-format xml
@@ -45,14 +48,23 @@ exit /b 0
 set "DESC=%~1"
 set "ARGS=%*"
 set "ARGS=!ARGS:%1 =!"
-%ZIPPER_CMD% !ARGS! >nul 2>&1
+set "STDERR_FILE=%TEMP%\stderr_!PASSED!_!FAILED!.txt"
+%ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if errorlevel 1 (
-    echo [ INFO ] PASS: %DESC%
-    set /a PASSED+=1
+    findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
+    if not errorlevel 1 (
+        echo [ ERROR ] FAIL: %DESC% ^(expected validation error, got crash^)
+        type "!STDERR_FILE!"
+        set /a FAILED+=1
+    ) else (
+        echo [ INFO ] PASS: %DESC%
+        set /a PASSED+=1
+    )
 ) else (
     echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
     set /a FAILED+=1
 )
+del /f /q "!STDERR_FILE!" 2>nul
 goto :eof
 
 :assert_accepted
