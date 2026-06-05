@@ -713,5 +713,46 @@ namespace Zipper
 
             Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
         }
+
+        /// <summary>
+        /// Tests that a chaos encoding anomaly successfully injects invalid bytes on both the header boundary
+        /// and the final data record boundary in loadfile-only mode.
+        /// </summary>
+        [Fact]
+        public async Task WriteAsync_LoadfileOnlyMode_WithChaosEncoding_TargetsHeaderAndLastLine_InjectsInvalidBytesAndCreatesAudit()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { Seed = 42 };
+            request.Output = request.Output with { FileCount = 3 }; // 1 header + 3 data lines = 4 lines
+
+            // Generate baseline
+            using var baseStream = new MemoryStream();
+            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
+            var baseBytes = baseStream.ToArray();
+
+            // Total lines = FileCount + 1 (header + 3 data = 4 lines)
+            var chaosEngine = new ChaosEngine(
+                totalLines: 4,
+                chaosAmount: "100%", // target all lines, so header (line 1) and last line (line 4) are targeted
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
+            var chaosBytes = chaosStream.ToArray();
+
+            // The output should have anomalies injected for line 1 and line 4 (among others).
+            // This means there should be anomalies in the Audit log specifically for Boundary 1-2 and Boundary 4-5.
+            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 1-2");
+            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 4-5");
+
+            Assert.NotNull(headerAnomaly);
+            Assert.NotNull(lastLineAnomaly);
+            Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
+        }
     }
 }

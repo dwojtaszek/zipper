@@ -138,7 +138,7 @@ internal sealed class ProfileDrivenDatWriter : LoadFileWriterBase
             string interceptedLine = ApplyChaosInterception(chaosEngine, lineNumber, line, recordId);
             await writer.WriteAsync(interceptedLine + context.EolString);
 
-            if (chaosEngine != null && i < context.Request.Output.FileCount)
+            if (chaosEngine != null)
             {
                 var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, context.Encoding);
                 if (anomaly != null)
