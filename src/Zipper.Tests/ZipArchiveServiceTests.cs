@@ -472,7 +472,8 @@ namespace Zipper.Tests
         private class MockMemoryOwner : System.Buffers.IMemoryOwner<byte>
         {
             public bool IsDisposed { get; private set; }
-            public Memory<byte> Memory => new byte[10];
+            private readonly byte[] _buffer = new byte[10];
+            public Memory<byte> Memory => _buffer;
             public void Dispose() { IsDisposed = true; }
         }
     }
