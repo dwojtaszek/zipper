@@ -142,5 +142,38 @@ namespace Zipper
                 Assert.Matches(@"^Custodian_[12]$", v);
             }
         }
+
+        [Fact]
+        public async Task WriteAsync_WithChaosEncoding_TargetsHeaderAndLastLine_InjectsInvalidBytesAndCreatesAudit()
+        {
+            var profile = MakeMinimalProfile();
+            var request = MakeRequest(profile);
+            request.Output = request.Output with { FileCount = 3 };
+
+            using var baseStream = new MemoryStream();
+            await new ProfileDrivenDatWriter().WriteAsync(baseStream, request, []);
+            var baseBytes = baseStream.ToArray();
+
+            var chaosEngine = new ChaosEngine(
+                totalLines: 4,
+                chaosAmount: "100%",
+                chaosTypes: "encoding",
+                format: LoadFileFormat.Dat,
+                columnDelimiter: "\u0014",
+                quoteDelimiter: "\u00fe",
+                eol: "\r\n",
+                seed: 42);
+
+            using var chaosStream = new MemoryStream();
+            await new ProfileDrivenDatWriter().WriteAsync(chaosStream, request, [], chaosEngine);
+            var chaosBytes = chaosStream.ToArray();
+
+            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 1-2");
+            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 4-5");
+
+            Assert.NotNull(headerAnomaly);
+            Assert.NotNull(lastLineAnomaly);
+            Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
+        }
     }
 }
