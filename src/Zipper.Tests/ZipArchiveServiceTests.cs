@@ -435,5 +435,45 @@ namespace Zipper.Tests
             // Cleanup
             Directory.Delete(tempDir, true);
         }
+
+        [Fact]
+        public async Task CreateArchiveAsync_WhenProcessFileDataThrows_DisposesAllMemoryOwners()
+        {
+            var zipPath = Path.GetTempFileName();
+            var loadPath = Path.GetTempFileName();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "pdf", FileCount = 3, Concurrency = 1 }
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+
+            var owner2 = new MockMemoryOwner();
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 2, FilePathInZip = "test2.pdf" }, MemoryOwner = owner2, Data = new byte[1] });
+
+            var owner1 = new MockMemoryOwner();
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 1, FilePathInZip = null! }, MemoryOwner = owner1, Data = new byte[1] });
+
+            var owner3 = new MockMemoryOwner();
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 3, FilePathInZip = "test3.pdf" }, MemoryOwner = owner3, Data = new byte[1] });
+
+            channel.Writer.Complete();
+
+            await Assert.ThrowsAnyAsync<Exception>(() => ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+
+            Assert.True(owner1.IsDisposed, "Current item memory owner should be disposed");
+            Assert.True(owner2.IsDisposed, "Buffered item memory owner should be disposed");
+            Assert.True(owner3.IsDisposed, "Unread item memory owner should be disposed");
+
+            File.Delete(zipPath);
+            File.Delete(loadPath);
+        }
+
+        private class MockMemoryOwner : System.Buffers.IMemoryOwner<byte>
+        {
+            public bool IsDisposed { get; private set; }
+            public Memory<byte> Memory => new byte[10];
+            public void Dispose() { IsDisposed = true; }
+        }
     }
 }

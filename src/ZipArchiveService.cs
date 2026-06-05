@@ -43,22 +43,38 @@ namespace Zipper
             long nextExpectedIndex = 1;
             var outOfOrderBuffer = new Dictionary<long, FileData>();
 
-            await foreach (var incomingFileData in fileDataReader.ReadAllAsync())
+            try
             {
-                if (incomingFileData.WorkItem.Index == nextExpectedIndex)
+                await foreach (var incomingFileData in fileDataReader.ReadAllAsync())
                 {
-                    ProcessFileData(archive, incomingFileData, request, extractedTextContent, usedEntryPaths, processedFiles);
-                    nextExpectedIndex++;
-
-                    while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
+                    if (incomingFileData.WorkItem.Index == nextExpectedIndex)
                     {
-                        ProcessFileData(archive, buffered, request, extractedTextContent, usedEntryPaths, processedFiles);
+                        ProcessFileData(archive, incomingFileData, request, extractedTextContent, usedEntryPaths, processedFiles);
                         nextExpectedIndex++;
+
+                        while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
+                        {
+                            ProcessFileData(archive, buffered, request, extractedTextContent, usedEntryPaths, processedFiles);
+                            nextExpectedIndex++;
+                        }
+                    }
+                    else
+                    {
+                        outOfOrderBuffer[incomingFileData.WorkItem.Index] = incomingFileData;
                     }
                 }
-                else
+            }
+            finally
+            {
+                foreach (var buffered in outOfOrderBuffer.Values)
                 {
-                    outOfOrderBuffer[incomingFileData.WorkItem.Index] = incomingFileData;
+                    buffered.MemoryOwner?.Dispose();
+                }
+                outOfOrderBuffer.Clear();
+
+                while (fileDataReader.TryRead(out var leftover))
+                {
+                    leftover.MemoryOwner?.Dispose();
                 }
             }
 
@@ -128,26 +144,31 @@ namespace Zipper
         /// </summary>
         private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? extractedTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)
         {
-            processedFiles.Add(fileData);
-
-            WriteFileToArchive(archive, fileData, usedEntryPaths);
-
-            if (request.Output.WithText)
+            try
             {
-                WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
-            }
+                processedFiles.Add(fileData);
 
-            if (fileData.Attachment.HasValue)
+                WriteFileToArchive(archive, fileData, usedEntryPaths);
+
+                if (request.Output.WithText)
+                {
+                    WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
+                }
+
+                if (fileData.Attachment.HasValue)
+                {
+                    WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
+                }
+
+                if (fileData.Attachment.HasValue && request.Output.WithText)
+                {
+                    WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
+                }
+            }
+            finally
             {
-                WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
+                fileData.MemoryOwner?.Dispose();
             }
-
-            if (fileData.Attachment.HasValue && request.Output.WithText)
-            {
-                WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
-            }
-
-            fileData.MemoryOwner?.Dispose();
         }
 
         private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)

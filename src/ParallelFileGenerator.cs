@@ -184,7 +184,15 @@ namespace Zipper
             await foreach (var workItem in reader.ReadAllAsync())
             {
                 var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
-                await writer.WriteAsync(fileData);
+                try
+                {
+                    await writer.WriteAsync(fileData);
+                }
+                catch
+                {
+                    fileData.MemoryOwner?.Dispose();
+                    throw;
+                }
 
                 filesProcessed++;
                 if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
