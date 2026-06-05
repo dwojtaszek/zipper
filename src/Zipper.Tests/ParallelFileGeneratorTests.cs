@@ -684,6 +684,33 @@ namespace Zipper
                 }
             }
         }
+
+        [Fact]
+        public void GenerateFileData_TotalSizeEqualsMaxPoolSize_UsesMemoryOwner()
+        {
+            var generator = new ParallelFileGenerator();
+            var workItem = new FileWorkItem { Index = 1 };
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = "dummy",
+                    FileType = "docx",
+                    FileCount = 1,
+                }
+            };
+            var fileGenerator = new OfficeFileGenerator("docx");
+            var content = fileGenerator.Generate(workItem, request).Content;
+
+            var paddingPerFile = PerformanceConstants.MaxPoolSize - content.Length;
+
+            var fileData = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+            Assert.NotNull(fileData.MemoryOwner);
+            Assert.Equal(PerformanceConstants.MaxPoolSize, fileData.DataLength);
+
+            fileData.MemoryOwner?.Dispose();
+        }
     }
 
     public sealed class WindowsUnsupportedFactAttribute : FactAttribute
