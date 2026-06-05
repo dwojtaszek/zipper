@@ -53,21 +53,28 @@ namespace Zipper
         public void ValidateAndCreateDirectory_RelativePathWithTraversal_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
-
-            string[] relativePaths =
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
             {
-                "../../../etc",
-                "test/../../../etc/passwd",
-                "folder/subfolder/../../../sensitive",
-            };
+                Directory.CreateDirectory(baseDir);
 
-            // Act & Assert
-            foreach (string path in relativePaths)
+                string[] relativePaths =
+                {
+                    "../../../etc",
+                    "test/../../../etc/passwd",
+                    "folder/subfolder/../../../sensitive",
+                };
+
+                // Act & Assert
+                foreach (string path in relativePaths)
+                {
+                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    Assert.Null(result);
+                }
+            }
+            finally
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
-                Assert.Null(result);
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
             }
         }
 
@@ -75,21 +82,28 @@ namespace Zipper
         public void ValidateAndCreateDirectory_MixedSlashesWithTraversal_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
-
-            string[] mixedPaths =
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
             {
-                $"folder{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}etc",
-                $"folder/../..{Path.DirectorySeparatorChar}etc",
-                $"folder{Path.DirectorySeparatorChar}../etc/passwd",
-            };
+                Directory.CreateDirectory(baseDir);
 
-            // Act & Assert
-            foreach (string path in mixedPaths)
+                string[] mixedPaths =
+                {
+                    $"folder{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}etc",
+                    $"folder/../..{Path.DirectorySeparatorChar}etc",
+                    $"folder{Path.DirectorySeparatorChar}../etc/passwd",
+                };
+
+                // Act & Assert
+                foreach (string path in mixedPaths)
+                {
+                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    Assert.Null(result);
+                }
+            }
+            finally
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
-                Assert.Null(result);
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
             }
         }
 
@@ -243,17 +257,24 @@ namespace Zipper
         public void ValidateAndCreateDirectory_CanonicalTraversalAttempt_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
+            {
+                Directory.CreateDirectory(baseDir);
 
-            // A path that technically starts with the base dir name but canonically resolves outside it
-            string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
+                // A path that technically starts with the base dir name but canonically resolves outside it
+                string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
 
-            // Act
-            var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+                // Act
+                var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
 
-            // Assert
-            Assert.Null(result); // Canonical path escapes baseDir, should be rejected
+                // Assert
+                Assert.Null(result); // Canonical path escapes baseDir, should be rejected
+            }
+            finally
+            {
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+            }
         }
 
         [Fact]
@@ -327,9 +348,21 @@ namespace Zipper
                 {
                     Directory.CreateSymbolicLink(linkPath, targetDir);
                 }
-                catch (Exception)
+                catch (UnauthorizedAccessException)
                 {
                     // Ignore if symlink creation is not permitted (e.g. Windows non-admin)
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                {
                     return;
                 }
 

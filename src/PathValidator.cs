@@ -114,6 +114,19 @@ namespace Zipper
         private static string GetRealPath(string path)
         {
             string fullPath = Path.GetFullPath(path);
+            var linkResult = ResolveLinkTargetWithSuffix(fullPath);
+
+            if (linkResult.HasValue)
+            {
+                string rebuilt = RebuildPathFromParts(linkResult.Value.resolvedRootPath, linkResult.Value.suffixParts);
+                return GetRealPath(rebuilt);
+            }
+
+            return fullPath;
+        }
+
+        private static (string resolvedRootPath, System.Collections.Generic.IEnumerable<string> suffixParts)? ResolveLinkTargetWithSuffix(string fullPath)
+        {
             DirectoryInfo? current = new DirectoryInfo(fullPath);
             var parts = new System.Collections.Generic.List<string>();
 
@@ -124,23 +137,28 @@ namespace Zipper
                     var resolved = current.ResolveLinkTarget(true);
                     if (resolved != null)
                     {
-                        string resolvedPath = resolved.FullName;
                         parts.Reverse();
-                        foreach (var p in parts)
-                        {
-                            if (!string.IsNullOrEmpty(p))
-                            {
-                                resolvedPath = Path.Combine(resolvedPath, p);
-                            }
-                        }
-                        return GetRealPath(resolvedPath);
+                        return (resolved.FullName, parts);
                     }
                 }
                 parts.Add(current.Name);
                 current = current.Parent;
             }
 
-            return fullPath;
+            return null;
+        }
+
+        private static string RebuildPathFromParts(string basePath, System.Collections.Generic.IEnumerable<string> suffixParts)
+        {
+            string resolvedPath = basePath;
+            foreach (var p in suffixParts)
+            {
+                if (!string.IsNullOrEmpty(p))
+                {
+                    resolvedPath = Path.Combine(resolvedPath, p);
+                }
+            }
+            return resolvedPath;
         }
     }
 }
