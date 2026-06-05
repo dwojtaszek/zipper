@@ -26,7 +26,7 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
         return new MetadataColumns
         {
             Custodian = $"Custodian {workItem.FolderNumber}",
-            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd"),
+            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             Author = $"Author {random.Next(1, 100):D3}",
             FileSize = fileData.DataLength,
         };
@@ -43,8 +43,8 @@ internal abstract class LoadFileWriterBase : ILoadFileWriter
             To = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com",
             From = fileData.Email?.From ?? $"sender{workItem.Index}@example.com",
             Subject = fileData.Email?.Subject ?? $"Email Subject {workItem.Index}",
-            SentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss")
-                ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss"),
+            SentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+                ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
             Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
         };
     }

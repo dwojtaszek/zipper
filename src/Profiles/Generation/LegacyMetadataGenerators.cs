@@ -16,14 +16,14 @@ internal sealed class LegacyIndexCustodianGenerator : IColumnValueGenerator
 internal sealed class LegacyDateSentGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>
-        context.Now.AddDays(-context.Seeded.Next(1, 365)).ToString("yyyy-MM-dd");
+        context.Now.AddDays(-context.Seeded.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>Legacy DateCreated: random date within 730 days before Now.</summary>
 internal sealed class LegacyDateCreatedGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>
-        context.Now.AddDays(-context.Seeded.Next(1, 730)).ToString("yyyy-MM-dd");
+        context.Now.AddDays(-context.Seeded.Next(1, 730)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>Legacy Author: "Author NNN" from random 1-99.</summary>
@@ -69,8 +69,8 @@ internal sealed class LegacyEmailSubjectGenerator : IColumnValueGenerator
 internal sealed class LegacyEmailSentDateGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>
-        context.FileData?.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss")
-            ?? context.Now.AddDays(-context.Seeded.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        context.FileData?.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+            ?? context.Now.AddDays(-context.Seeded.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>EmailAttachment column: reads fileData.Attachment filename.</summary>
@@ -102,5 +102,5 @@ internal sealed class LegacySyntheticEmailSubjectGenerator : IColumnValueGenerat
 internal sealed class LegacySyntheticEmailSentDateGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>
-        context.Now.AddDays(-context.Seeded.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        context.Now.AddDays(-context.Seeded.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 }

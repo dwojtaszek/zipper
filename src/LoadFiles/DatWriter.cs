@@ -445,7 +445,7 @@ internal class DatWriter : LoadFileWriterBase
         var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
         var maxCustodians = Math.Max(2, request.Metadata.CustodianCountOverride ?? 10);
         var custodianProd = $"Custodian {random.Next(1, maxCustodians + 1)}";
-        var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd");
+        var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
         var fileSize = context.FileSizeOverride ?? fileData.DataLength.ToString();
         var fileType = context.IsChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : request.Output.FileType.ToUpperInvariant();
@@ -809,13 +809,13 @@ internal class DatWriter : LoadFileWriterBase
     {
         var sb = new StringBuilder();
         var custodian = $"Custodian {(index % 10) + 1}";
-        var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd");
+        var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var author = $"Author {random.Next(1, 100):D3}";
         var fileSize = random.Next(1024, 10485760).ToString();
         var subjLine = $"Email Subject {index}";
         var senderAddr = $"sender{index}@example.com";
         var recipientAddr = $"recipient{index}@example.com";
-        var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss");
+        var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
         var filePath = $"NATIVES\\{(index % 50) + 1:D3}\\{recordId}.pdf";
         var extractedText = $"Sample extracted text content for document {recordId}.";
 

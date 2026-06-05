@@ -30,7 +30,7 @@ internal static class ProductionManifestWriter
 
         var manifest = new ProductionManifest
         {
-            ProductionDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            ProductionDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
             BatesRange = new BatesRange
             {
                 Start = batesStart,
