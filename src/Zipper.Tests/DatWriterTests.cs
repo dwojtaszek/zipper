@@ -714,6 +714,10 @@ namespace Zipper
             Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
         }
 
+        /// <summary>
+        /// Tests that a chaos encoding anomaly successfully injects invalid bytes on both the header boundary
+        /// and the final data record boundary in loadfile-only mode.
+        /// </summary>
         [Fact]
         public async Task WriteAsync_LoadfileOnlyMode_WithChaosEncoding_TargetsHeaderAndLastLine_InjectsInvalidBytesAndCreatesAudit()
         {

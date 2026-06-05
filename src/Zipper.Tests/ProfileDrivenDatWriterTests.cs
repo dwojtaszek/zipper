@@ -143,6 +143,10 @@ namespace Zipper
             }
         }
 
+        /// <summary>
+        /// Tests that a chaos encoding anomaly successfully injects invalid bytes on both the header boundary
+        /// and the final data record boundary.
+        /// </summary>
         [Fact]
         public async Task WriteAsync_WithChaosEncoding_TargetsHeaderAndLastLine_InjectsInvalidBytesAndCreatesAudit()
         {
