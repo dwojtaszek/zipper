@@ -12,7 +12,7 @@ namespace Zipper.Tests
             {
                 FileType = "pdf",
                 Count = 100,
-                OutputDirectory = new DirectoryInfo(Path.GetTempPath()),
+                OutputDirectory = new DirectoryInfo(Directory.GetCurrentDirectory()),
             };
         }
 
@@ -23,7 +23,7 @@ namespace Zipper.Tests
             var result = RequestBuilder.Build(parsed);
 
             Assert.NotNull(result);
-            Assert.Equal(Path.GetTempPath(), result.Output.OutputPath);
+            Assert.Equal(Directory.GetCurrentDirectory(), result.Output.OutputPath);
             Assert.Equal(100, result.Output.FileCount);
             Assert.Equal("pdf", result.Output.FileType);
             Assert.Equal(1, result.Output.Folders);

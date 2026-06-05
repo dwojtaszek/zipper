@@ -12,7 +12,7 @@ public class ProductionSetTests : IDisposable
 
     public ProductionSetTests()
     {
-        this.testOutputPath = Path.Combine(Path.GetTempPath(), $"zipper_prod_test_{Guid.NewGuid():N}");
+        this.testOutputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.testOutputPath);
     }
 
@@ -465,7 +465,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task ProductionSet_OnFailure_CleansUpPartialOutput()
     {
-        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
         try
@@ -561,7 +561,7 @@ public class ProductionSetTests : IDisposable
     public async Task GenerateAsync_WithMultiPageTiff_ShouldWritePageLevelImageFilesToDisk()
     {
         // Arrange
-        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
         try
@@ -610,7 +610,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task GenerateAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
     {
-        var tempDir = Path.GetTempPath();
+        var tempDir = Directory.GetCurrentDirectory();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 

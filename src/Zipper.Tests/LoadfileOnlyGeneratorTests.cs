@@ -16,7 +16,7 @@ namespace Zipper
 
         public LoadfileOnlyGeneratorTests()
         {
-            this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(this.tempDir);
         }
 
@@ -196,7 +196,7 @@ namespace Zipper
             var content1 = await File.ReadAllTextAsync(result1.LoadFilePath);
 
             // Reset temp dir
-            var tempDir2 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            var tempDir2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDir2);
             try
             {

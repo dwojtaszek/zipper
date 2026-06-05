@@ -391,7 +391,7 @@ namespace Zipper.Tests
         public async Task CreateArchiveAsync_AuditFile_TotalRecordsEqualsFileCount()
         {
             // Arrange
-            var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempDir);
             var zipPath = Path.Combine(tempDir, "test.zip");
             var loadPath = Path.Combine(tempDir, "load.dat");

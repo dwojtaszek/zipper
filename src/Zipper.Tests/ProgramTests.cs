@@ -67,7 +67,7 @@ namespace Zipper
         public async Task Main_WithInvalidFileType_ReturnsErrorCode()
         {
             // Arrange
-            string tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             string[] args =
             {
                 "--output", tempPath,
@@ -92,7 +92,7 @@ namespace Zipper
         public async Task Main_WithInvalidCount_ReturnsErrorCode()
         {
             // Arrange
-            string tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             string[] args =
             {
                 "--output", tempPath,
@@ -117,7 +117,7 @@ namespace Zipper
         public async Task Main_WithInvalidNumericArgument_ReturnsErrorCode()
         {
             // Arrange
-            string tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             string[] args =
             {
                 "--output", tempPath,
@@ -159,8 +159,8 @@ namespace Zipper
         public async Task Main_WithSameSeed_ProducesIdenticalOutputSizes()
         {
             // Arrange
-            string tempPath1 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            string tempPath2 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath1 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+            string tempPath2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
 
             try
             {
@@ -258,8 +258,8 @@ namespace Zipper
         public async Task Main_WithSeedAndTargetZipSize_ProducesIdenticalOutputAndHashes()
         {
             // Arrange
-            string tempPath1 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-            string tempPath2 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+            string tempPath1 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+            string tempPath2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
 
             try
             {

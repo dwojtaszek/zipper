@@ -9,7 +9,7 @@ public abstract class TempDirectoryTestBase : IDisposable
 
     protected TempDirectoryTestBase()
     {
-        this.TempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        this.TempDir = Path.Combine(Directory.GetCurrentDirectory(), "TestOutput_" + Guid.NewGuid().ToString());
         Directory.CreateDirectory(this.TempDir);
     }
 

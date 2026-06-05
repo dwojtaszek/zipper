@@ -7,7 +7,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithParallelGeneration_ShouldCreateValidArchive()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -42,7 +42,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithEmlAndAttachments_ShouldCreateArchive()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -76,7 +76,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithTiffPageRange_ShouldCreateArchive()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -109,7 +109,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithLoadfileOnly_ShouldCreateLoadFileOnly()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -145,7 +145,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithChaosMode_ShouldCreateLoadFile()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -174,7 +174,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithTargetZipSize_ShouldCreateArchiveNearTarget()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -202,8 +202,8 @@ public class SmokeTests
     [Fact]
     public async Task Main_ConcurrentGeneration_ShouldHandleParallelRuns()
     {
-        var tempDir1 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        var tempDir2 = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir1 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir1);
         Directory.CreateDirectory(tempDir2);
 
@@ -247,7 +247,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithAutoOptGeneration_ForTiffAndJpg_CreatesBothDatAndOpt()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -300,7 +300,7 @@ public class SmokeTests
     [Fact]
     public async Task Main_WithEmlFamiliesAndAttachments_ShouldCreateFamilyColumnsAndRows()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try

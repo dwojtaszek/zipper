@@ -10,7 +10,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_GeneratesManifestWithExpectedStructure()
     {
         // Arrange
-        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -115,7 +115,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_WithEmptyDelimiters_FormatsCorrectly()
     {
         // Arrange
-        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -158,7 +158,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_WithNonPrintableDelimiters_FormatsCorrectly()
     {
         // Arrange
-        var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
