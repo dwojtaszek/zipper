@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Xunit;
 
 namespace Zipper
@@ -8,7 +9,7 @@ namespace Zipper
         public void ValidateAndCreateDirectory_ValidPath_ReturnsDirectoryInfo()
         {
             // Arrange
-            string validPath = Path.GetTempPath();
+            string validPath = Directory.GetCurrentDirectory();
 
             // Act
             var result = PathValidator.ValidateAndCreateDirectory(validPath);
@@ -31,13 +32,13 @@ namespace Zipper
         public void ValidateAndCreateDirectory_PathWithTraversal_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.GetTempPath();
+            string baseDir = Directory.GetCurrentDirectory();
             string[] traversalPaths =
             {
                 "../",
                 "folder/../../folder",
-                "..\\",
-                "folder\\..\\..\\folder",
+                "..".PadRight(3, Path.DirectorySeparatorChar),
+                $"folder{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}folder",
             };
 
             // Act & Assert
@@ -52,21 +53,28 @@ namespace Zipper
         public void ValidateAndCreateDirectory_RelativePathWithTraversal_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
-
-            string[] relativePaths =
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
             {
-                "../../../etc",
-                "test/../../../etc/passwd",
-                "folder/subfolder/../../../sensitive",
-            };
+                Directory.CreateDirectory(baseDir);
 
-            // Act & Assert
-            foreach (string path in relativePaths)
+                string[] relativePaths =
+                {
+                    "../../../etc",
+                    "test/../../../etc/passwd",
+                    "folder/subfolder/../../../sensitive",
+                };
+
+                // Act & Assert
+                foreach (string path in relativePaths)
+                {
+                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    Assert.Null(result);
+                }
+            }
+            finally
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
-                Assert.Null(result);
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
             }
         }
 
@@ -74,21 +82,28 @@ namespace Zipper
         public void ValidateAndCreateDirectory_MixedSlashesWithTraversal_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
-
-            string[] mixedPaths =
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
             {
-                "folder\\..\\..\\etc",
-                "folder/../..\\etc",
-                "folder\\../etc/passwd",
-            };
+                Directory.CreateDirectory(baseDir);
 
-            // Act & Assert
-            foreach (string path in mixedPaths)
+                string[] mixedPaths =
+                {
+                    $"folder{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}etc",
+                    $"folder/../..{Path.DirectorySeparatorChar}etc",
+                    $"folder{Path.DirectorySeparatorChar}../etc/passwd",
+                };
+
+                // Act & Assert
+                foreach (string path in mixedPaths)
+                {
+                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    Assert.Null(result);
+                }
+            }
+            finally
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
-                Assert.Null(result);
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
             }
         }
 
@@ -121,7 +136,7 @@ namespace Zipper
         public void IsPathSafe_InvalidPaths_ReturnsFalse(string path)
         {
             // Arrange
-            string baseDir = Path.GetTempPath();
+            string baseDir = Directory.GetCurrentDirectory();
 
             // Act
             bool result = PathValidator.IsPathSafe(path, baseDir);
@@ -170,7 +185,7 @@ namespace Zipper
         public void ValidateAndCreateDirectory_WithPathTooLong_DoesNotThrow()
         {
             // Arrange - Create a path longer than max path length
-            string longPath = Path.Combine(Path.GetTempPath(), new string('a', 300));
+            string longPath = Path.Combine(Directory.GetCurrentDirectory(), new string('a', 300));
 
             // Act
             var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(longPath));
@@ -183,14 +198,14 @@ namespace Zipper
         public void ValidateAndCreateDirectory_WithComplexTraversalAttempts_ReturnsNull()
         {
             // Arrange - Complex traversal attack patterns
-            string baseDir = Path.GetTempPath();
+            string baseDir = Directory.GetCurrentDirectory();
             string[] complexTraversals =
             {
                 "../../../../../../../etc/passwd",
-                "..\\..\\..\\..\\..\\..\\..\\windows\\system32",
+                $"..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}windows{Path.DirectorySeparatorChar}system32",
                 "test/../../sensitive/../../../data",
                 "/folder/../../etc/shadow",
-                "C:\\folder\\..\\..\\sensitive",
+                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "C:\\folder\\..\\..\\sensitive" : "/folder/../../sensitive",
             };
 
             // Act & Assert
@@ -242,23 +257,30 @@ namespace Zipper
         public void ValidateAndCreateDirectory_CanonicalTraversalAttempt_ReturnsNull()
         {
             // Arrange
-            string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase");
-            Directory.CreateDirectory(baseDir);
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+            try
+            {
+                Directory.CreateDirectory(baseDir);
 
-            // A path that technically starts with the base dir name but canonically resolves outside it
-            string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
+                // A path that technically starts with the base dir name but canonically resolves outside it
+                string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
 
-            // Act
-            var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+                // Act
+                var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
 
-            // Assert
-            Assert.Null(result); // Canonical path escapes baseDir, should be rejected
+                // Assert
+                Assert.Null(result); // Canonical path escapes baseDir, should be rejected
+            }
+            finally
+            {
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+            }
         }
 
         [Fact]
         public void ValidateAndCreateDirectory_WithUncPath_DoesNotThrow()
         {
-            var baseDir = Path.GetTempPath();
+            var baseDir = Directory.GetCurrentDirectory();
             var uncPath = @"\\server\share\folder";
             var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(uncPath, baseDir));
             Assert.Null(exception);
@@ -267,7 +289,7 @@ namespace Zipper
         [Fact]
         public void ValidateAndCreateDirectory_WithUnicodeCharacters_ReturnsDirectoryInfo()
         {
-            var tempPath = Path.GetTempPath();
+            var tempPath = Directory.GetCurrentDirectory();
             var unicodePath = Path.Combine(tempPath, "über-cool_文件_パス");
             var result = PathValidator.ValidateAndCreateDirectory(unicodePath);
             Assert.NotNull(result);
@@ -276,7 +298,7 @@ namespace Zipper
         [Fact]
         public void ValidateAndCreateDirectory_WithTrailingSeparator_NormalizesPath()
         {
-            var tempPath = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar);
+            var tempPath = Directory.GetCurrentDirectory().TrimEnd(Path.DirectorySeparatorChar);
             var pathWithTrailing = tempPath + Path.DirectorySeparatorChar;
             var result = PathValidator.ValidateAndCreateDirectory(pathWithTrailing);
             Assert.NotNull(result);
@@ -287,7 +309,7 @@ namespace Zipper
         public void IsPathSafe_UncPath_DoesNotThrow()
         {
             var uncPath = @"\\server\share\folder";
-            var baseDir = Path.GetTempPath();
+            var baseDir = Directory.GetCurrentDirectory();
             var exception = Record.Exception(() => PathValidator.IsPathSafe(uncPath, baseDir));
             Assert.Null(exception);
         }
@@ -308,6 +330,50 @@ namespace Zipper
             var safePath = Path.Combine(Environment.CurrentDirectory, "folder") + Path.DirectorySeparatorChar;
             var result = PathValidator.IsPathSafe(safePath);
             Assert.True(result);
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_SymlinkEscapingBase_ReturnsNull()
+        {
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSymlinkTest_" + Guid.NewGuid().ToString());
+            string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSymlinkTest_" + Guid.NewGuid().ToString());
+
+            try
+            {
+                Directory.CreateDirectory(baseDir);
+                Directory.CreateDirectory(targetDir);
+
+                string linkPath = Path.Combine(baseDir, "symlink");
+                try
+                {
+                    Directory.CreateSymbolicLink(linkPath, targetDir);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignore if symlink creation is not permitted (e.g. Windows non-admin)
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                {
+                    return;
+                }
+
+                var result = PathValidator.ValidateAndCreateDirectory(linkPath, baseDir);
+                Assert.Null(result);
+            }
+            finally
+            {
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+                if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true);
+            }
         }
     }
 }

@@ -9,7 +9,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_RequiredArgs_ParsesCorrectly()
         {
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", "/tmp/test" };
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), "test") };
             var result = CliParser.Parse(args);
             Assert.NotNull(result);
             Assert.Equal("pdf", result!.FileType);
@@ -26,14 +26,14 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_UnknownFlag_OutputsWarningButContinues()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--unknown-flag" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--unknown-flag" });
             Assert.NotNull(result);
         }
 
         [Fact]
         public void Parse_AllBooleanFlags_SetCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "5", "--output-path", "/tmp", "--with-metadata", "--with-text", "--include-load-file", "--with-families", "--loadfile-only", "--chaos-mode", "--production-set", "--production-zip" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--with-metadata", "--with-text", "--include-load-file", "--with-families", "--loadfile-only", "--chaos-mode", "--production-set", "--production-zip" });
             Assert.NotNull(result);
             Assert.True(result!.WithMetadata);
             Assert.True(result.WithText);
@@ -48,7 +48,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_LoadfileOnlyArgs_ParsesCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--loadfile-only", "--count", "10", "--output-path", "/tmp", "--eol", "LF", "--col-delim", "ascii:20", "--quote-delim", "none", "--multi-delim", "char:;", "--nested-delim", "char:\\", "--loadfile-format", "opt" });
+            var result = CliParser.Parse(new[] { "--loadfile-only", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--eol", "LF", "--col-delim", "ascii:20", "--quote-delim", "none", "--multi-delim", "char:;", "--nested-delim", "char:\\", "--loadfile-format", "opt" });
             Assert.NotNull(result);
             Assert.True(result!.LoadfileOnly);
             Assert.Equal("LF", result.Eol);
@@ -62,7 +62,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_ChaosArgs_ParsesCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--loadfile-only", "--count", "50", "--output-path", "/tmp", "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns", "--chaos-scenario", "test" });
+            var result = CliParser.Parse(new[] { "--loadfile-only", "--count", "50", "--output-path", Directory.GetCurrentDirectory(), "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns", "--chaos-scenario", "test" });
             Assert.NotNull(result);
             Assert.True(result!.ChaosMode);
             Assert.Equal("5%", result.ChaosAmount);
@@ -73,7 +73,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_ProductionSetArgs_ParsesCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6", "--volume-size", "1000", "--count", "20", "--output-path", "/tmp" });
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6", "--volume-size", "1000", "--count", "20", "--output-path", Directory.GetCurrentDirectory() });
             Assert.NotNull(result);
             Assert.True(result!.ProductionSet);
             Assert.Equal("CL001", result.BatesPrefix);
@@ -85,7 +85,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_DelimiterArgs_ParsesCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--dat-delimiters", "csv", "--delimiter-column", "|", "--delimiter-quote", "~", "--delimiter-newline", " " });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--dat-delimiters", "csv", "--delimiter-column", "|", "--delimiter-quote", "~", "--delimiter-newline", " " });
             Assert.NotNull(result);
             Assert.Equal("csv", result!.DatDelimiters);
             Assert.Equal("|", result.DelimiterColumn);
@@ -96,7 +96,7 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_ColumnProfileArgs_ParsesCorrectly()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" });
             Assert.NotNull(result);
             Assert.Equal("standard", result!.ColumnProfile);
             Assert.Equal(42, result.Seed);
@@ -114,63 +114,63 @@ namespace Zipper.Tests
         [Fact]
         public void Parse_InvalidCount_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "not-a-number", "--output-path", "/tmp" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "not-a-number", "--output-path", Directory.GetCurrentDirectory() });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidFolders_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--folders", "notanumber" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--folders", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidAttachmentRate_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--attachment-rate", "notanumber" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--attachment-rate", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidBatesStart_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--bates-start", "notanumber" });
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--bates-start", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidBatesDigits_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--bates-digits", "notanumber" });
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--bates-digits", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidSeed_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--seed", "notanumber" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--seed", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidEmptyPercentage_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--empty-percentage", "notanumber" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--empty-percentage", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidCustodianCount_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "/tmp", "--custodian-count", "notanumber" });
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--custodian-count", "notanumber" });
             Assert.Null(result);
         }
 
         [Fact]
         public void Parse_InvalidVolumeSize_ReturnsNull()
         {
-            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", "/tmp", "--volume-size", "notanumber" });
+            var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--volume-size", "notanumber" });
             Assert.Null(result);
         }
 

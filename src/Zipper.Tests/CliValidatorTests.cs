@@ -12,7 +12,7 @@ namespace Zipper.Tests
             {
                 FileType = "pdf",
                 Count = 10,
-                OutputDirectory = new DirectoryInfo(Path.GetTempPath()),
+                OutputDirectory = new DirectoryInfo(Directory.GetCurrentDirectory()),
             };
         }
 

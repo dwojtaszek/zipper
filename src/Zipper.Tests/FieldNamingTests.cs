@@ -14,7 +14,7 @@ public class FieldNamingTests : IDisposable
 
     public FieldNamingTests()
     {
-        this.tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(this.tempDir);
     }
 

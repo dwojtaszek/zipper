@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Zipper
 {
     /// <summary>
@@ -22,19 +24,23 @@ namespace Zipper
             try
             {
                 // Let the OS resolve the full canonical path, resolving any ".." or "." components
-                string fullPath = Path.GetFullPath(path);
+                string fullPath = GetRealPath(path);
 
                 if (baseDirectory != null)
                 {
                     // Determine the base directory to restrict access to
-                    string restrictToBase = Path.GetFullPath(baseDirectory);
+                    string restrictToBase = GetRealPath(baseDirectory);
 
                     // Ensure the resolved canonical path starts with the allowed base directory
                     // We add a trailing separator to ensure /var/www doesn't allow /var/www-backup
                     string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                    if (!fullPathWithTrailing.StartsWith(baseDirWithTrailing, StringComparison.OrdinalIgnoreCase))
+                    StringComparison comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+
+                    if (!fullPathWithTrailing.StartsWith(baseDirWithTrailing, comparison))
                     {
                         Console.Error.WriteLine($"Error: Path traversal detected. Destination '{fullPath}' is outside the allowed base directory.");
                         return null;
@@ -82,15 +88,19 @@ namespace Zipper
 
             try
             {
-                string fullPath = Path.GetFullPath(path);
+                string fullPath = GetRealPath(path);
 
                 if (baseDirectory != null)
                 {
-                    string restrictToBase = Path.GetFullPath(baseDirectory);
+                    string restrictToBase = GetRealPath(baseDirectory);
                     string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                    return fullPathWithTrailing.StartsWith(baseDirWithTrailing, StringComparison.OrdinalIgnoreCase);
+                    StringComparison comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? StringComparison.OrdinalIgnoreCase
+                        : StringComparison.Ordinal;
+
+                    return fullPathWithTrailing.StartsWith(baseDirWithTrailing, comparison);
                 }
 
                 return true;
@@ -99,6 +109,56 @@ namespace Zipper
             {
                 return false;
             }
+        }
+
+        private static string GetRealPath(string path)
+        {
+            string fullPath = Path.GetFullPath(path);
+            var linkResult = ResolveLinkTargetWithSuffix(fullPath);
+
+            if (linkResult.HasValue)
+            {
+                string rebuilt = RebuildPathFromParts(linkResult.Value.resolvedRootPath, linkResult.Value.suffixParts);
+                return GetRealPath(rebuilt);
+            }
+
+            return fullPath;
+        }
+
+        private static (string resolvedRootPath, System.Collections.Generic.IEnumerable<string> suffixParts)? ResolveLinkTargetWithSuffix(string fullPath)
+        {
+            DirectoryInfo? current = new DirectoryInfo(fullPath);
+            var parts = new System.Collections.Generic.List<string>();
+
+            while (current != null)
+            {
+                if (current.Exists && current.LinkTarget != null)
+                {
+                    var resolved = current.ResolveLinkTarget(true);
+                    if (resolved != null)
+                    {
+                        parts.Reverse();
+                        return (resolved.FullName, parts);
+                    }
+                }
+                parts.Add(current.Name);
+                current = current.Parent;
+            }
+
+            return null;
+        }
+
+        private static string RebuildPathFromParts(string basePath, System.Collections.Generic.IEnumerable<string> suffixParts)
+        {
+            string resolvedPath = basePath;
+            foreach (var p in suffixParts)
+            {
+                if (!string.IsNullOrEmpty(p))
+                {
+                    resolvedPath = Path.Combine(resolvedPath, p);
+                }
+            }
+            return resolvedPath;
         }
     }
 }
