@@ -134,7 +134,7 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
     - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
     - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
 
-    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rule 5) before pushing the fix.**
+    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
 12. Merge after all checks pass and reviews are addressed
 
 **Test location:** `src/Zipper.Tests/`.
