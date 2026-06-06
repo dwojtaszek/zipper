@@ -136,7 +136,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
+            var metadata = GenerateMetadataValues(workItem, fileData, random, now);
 
             AddTag(tagsElement, "Custodian", metadata.Custodian, namingConvention);
             AddTag(tagsElement, "DateSent", metadata.DateSent, namingConvention);
@@ -146,7 +146,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var eml = GenerateEmlValues(workItem, fileData, random, now, request);
+            var eml = GenerateEmlValues(workItem, fileData, random, now);
 
             AddTag(tagsElement, "To", eml.To, namingConvention);
             AddTag(tagsElement, "From", eml.From, namingConvention);
@@ -188,7 +188,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
             : string.Empty;
 
-    private static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
+    private static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
         => new()
         {
             Custodian = $"Custodian {workItem.FolderNumber}",
@@ -197,7 +197,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             FileSize = fileData.DataLength,
         };
 
-    private static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
+    private static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
         => new()
         {
             To = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com",
