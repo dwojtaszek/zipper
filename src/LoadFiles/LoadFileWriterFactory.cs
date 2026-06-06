@@ -15,12 +15,12 @@ internal static class LoadFileWriterFactory
     {
         return format switch
         {
-            LoadFileFormat.Dat => new DatWriter(mode),
+            LoadFileFormat.Dat => new DatComposingWriter(mode),
             LoadFileFormat.Opt => new OptWriter(mode),
             LoadFileFormat.Csv => new CsvWriter(),
             LoadFileFormat.EdrmXml => new XmlLoadFileWriter(), // EDRM XML uses same writer
             LoadFileFormat.Concordance => new ConcordanceWriter(),
-            _ => new DatWriter(mode),
+            _ => new DatComposingWriter(mode),
         };
     }
 }

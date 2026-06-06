@@ -33,7 +33,7 @@ public class CultureTests
             };
 
             using var stream = new MemoryStream();
-            var writer = new DatWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
+            var writer = new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
             await writer.WriteAsync(stream, request, Array.Empty<Zipper.FileData>());
 
             var result = System.Text.Encoding.UTF8.GetString(stream.ToArray());

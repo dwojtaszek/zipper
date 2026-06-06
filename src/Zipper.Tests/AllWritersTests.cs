@@ -9,7 +9,7 @@ public class AllWritersTests : TempDirectoryTestBase
     public void WriterFactory_WithAllFormats_ShouldReturnCorrectWriters()
     {
         var datWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
-        Assert.IsType<DatWriter>(datWriter);
+        Assert.IsType<DatComposingWriter>(datWriter);
         Assert.Equal("DAT", datWriter.FormatName);
         Assert.Equal(".dat", datWriter.FileExtension);
 

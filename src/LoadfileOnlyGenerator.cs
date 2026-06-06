@@ -79,11 +79,11 @@ internal static class LoadfileOnlyGenerator
                     request.Metadata.Seed);
             }
 
-            ILoadFileWriter writer = format == LoadFileFormat.Opt
-                ? LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.LoadfileOnly)
-                : request.Metadata.ColumnProfile != null
-                    ? new ProfileDrivenDatWriter()
-                    : LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, WriterMode.LoadfileOnly);
+            // DatComposingWriter handles the column-profile path internally, so loadfile-only
+            // DAT generation no longer needs a separate profile writer branch here.
+            ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
+                format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
+                WriterMode.LoadfileOnly);
 
             await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
             {

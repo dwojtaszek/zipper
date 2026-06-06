@@ -52,35 +52,24 @@ internal static class LoadFileEmitter
         Encoding encoding,
         string eol)
     {
-        var preamble = encoding.GetPreamble();
-        if (preamble.Length > 0)
-        {
-            await stream.WriteAsync(preamble);
-        }
+        // A StreamWriter owns the encoding preamble (written once) and chunks output to the
+        // underlying stream by its internal buffer, so records stream out without the whole
+        // file ever being materialized in memory.
+        await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
 
-        var buffer = new StringBuilder();
         if (hasHeader)
         {
-            buffer.Append(serializer.RenderHeader(headerColumns));
-            buffer.Append(eol);
+            await writer.WriteAsync(serializer.RenderHeader(headerColumns));
+            await writer.WriteAsync(eol);
         }
 
         foreach (var record in records)
         {
-            buffer.Append(serializer.RenderRecord(record));
-            buffer.Append(eol);
-
-            if (buffer.Length >= 200_000)
-            {
-                await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-                buffer.Clear();
-            }
+            await writer.WriteAsync(serializer.RenderRecord(record));
+            await writer.WriteAsync(eol);
         }
 
-        if (buffer.Length > 0)
-        {
-            await stream.WriteAsync(encoding.GetBytes(buffer.ToString()));
-        }
+        await writer.FlushAsync();
     }
 
     private static async Task EmitWithChaosAsync(

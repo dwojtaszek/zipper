@@ -35,7 +35,7 @@ namespace Zipper
 
         private static async Task<string> CaptureOutputAsync(FileGenerationRequest request)
         {
-            var writer = new ProfileDrivenDatWriter();
+            var writer = new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
             await writer.WriteAsync(stream, request, new List<FileData>());
             stream.Position = 0;
@@ -155,7 +155,7 @@ namespace Zipper
             request.Output = request.Output with { FileCount = 3 };
 
             using var baseStream = new MemoryStream();
-            await new ProfileDrivenDatWriter().WriteAsync(baseStream, request, []);
+            await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
             var baseBytes = baseStream.ToArray();
 
             var chaosEngine = new ChaosEngine(
@@ -169,7 +169,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new ProfileDrivenDatWriter().WriteAsync(chaosStream, request, [], chaosEngine);
+            await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
             var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 1-2");

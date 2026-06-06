@@ -12,7 +12,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
     {
         var request = this.CreateTestRequest();
         var fileData = this.CreateTestFileData();
-        var writer = new DatWriter();
+        var writer = new DatComposingWriter();
         var outputPath = Path.Combine(this.TempDir, "test.dat");
 
         await using (var stream = File.OpenWrite(outputPath))
@@ -77,7 +77,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
             LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
             Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
         };
-        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, new List<FileData>());
 
@@ -111,7 +111,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
         long totalLines = request.Output.FileCount + 1;
         var chaos = new ChaosEngine(totalLines, "5", null, LoadFileFormat.Dat, "\u0014", "\u00fe", eol, 42);
 
-        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, new List<FileData>(), chaos);
 
@@ -156,7 +156,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
             });
         }
 
-        var writer = new DatWriter(WriterMode.ProductionSet);
+        var writer = new DatComposingWriter(WriterMode.ProductionSet);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
 
@@ -186,7 +186,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
             LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
             Delimiters = new DelimiterConfig { EndOfLine = string.Empty },
         };
-        var writer = new DatWriter(WriterMode.LoadfileOnly);
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, new List<FileData>());
 
@@ -213,7 +213,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
                     Data = Array.Empty<byte>(),
                 },
             };
-        var writer = new DatWriter();
+        var writer = new DatComposingWriter();
         var outputPath = Path.Combine(this.TempDir, "test_escape.dat");
 
         await using (var stream = File.OpenWrite(outputPath))
@@ -259,7 +259,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
                 },
             };
 
-        var writer = new DatWriter(WriterMode.ProductionSet);
+        var writer = new DatComposingWriter(WriterMode.ProductionSet);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
 
@@ -290,7 +290,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
                 }
             };
 
-        var writer = new DatWriter();
+        var writer = new DatComposingWriter();
         var outputPath = Path.Combine(this.TempDir, "test_families_standard.dat");
 
         await using (var stream = File.OpenWrite(outputPath))
@@ -350,7 +350,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
                 }
             };
 
-        var writer = new DatWriter(WriterMode.ProductionSet);
+        var writer = new DatComposingWriter(WriterMode.ProductionSet);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, fileData);
 
