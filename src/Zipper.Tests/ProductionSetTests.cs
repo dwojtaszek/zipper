@@ -478,16 +478,15 @@ public class ProductionSetTests : IDisposable
                     FileCount = 500,
                     FileType = "pdf",
                 },
-                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 5000 },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100 },
                 Bates = new BatesNumberConfig { Prefix = "FAIL", Start = 1, Digits = 8 },
             };
 
             // Start the generation task in the background
             var generateTask = ProductionSetGenerator.GenerateAsync(request);
 
-            // Poll until the production directory and the first native file are created
+            // Poll until the production directory and VOL002 are created
             string? productionDir = null;
-            string? firstPdfFile = null;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             while (sw.ElapsedMilliseconds < 5000)
             {
@@ -495,10 +494,14 @@ public class ProductionSetTests : IDisposable
                 if (dirs.Length > 0)
                 {
                     productionDir = dirs[0];
-                    var pdfPath = Path.Combine(productionDir, "NATIVES", "VOL001", "FAIL00000001.pdf");
-                    if (File.Exists(pdfPath))
+                    var vol2TextPath = Path.Combine(productionDir, "TEXT", "VOL002");
+                    if (Directory.Exists(vol2TextPath))
                     {
-                        firstPdfFile = pdfPath;
+                        // Delete a future volume directory before the generator reaches it.
+                        // Since the generator processes VOL001 first, VOL002 is currently empty
+                        // and can be deleted safely without race conditions.
+                        // When the generator reaches VOL002, it will throw DirectoryNotFoundException.
+                        Directory.Delete(vol2TextPath, true);
                         break;
                     }
                 }
@@ -506,30 +509,10 @@ public class ProductionSetTests : IDisposable
                 await Task.Delay(1);
             }
 
-            // We must have found the first PDF file
+            // We must have found the production directory
             Assert.NotNull(productionDir);
-            Assert.NotNull(firstPdfFile);
 
-            // Cause a mid-generation I/O failure by deleting the NATIVES directory.
-            // The generator is still writing into NATIVES/VOL001 concurrently, so on
-            // Linux/macOS a recursive delete can throw "Directory not empty" when a new
-            // file appears between enumeration and removal. Retry until the delete sticks
-            // (the generator stops writing once it hits the induced failure).
-            var nativesDir = Path.Combine(productionDir, "NATIVES");
-            var deleteSw = System.Diagnostics.Stopwatch.StartNew();
-            while (Directory.Exists(nativesDir))
-            {
-                try
-                {
-                    Directory.Delete(nativesDir, true);
-                }
-                catch (IOException) when (deleteSw.ElapsedMilliseconds < 5000)
-                {
-                    // Concurrent writer recreated a file mid-delete; retry.
-                }
-            }
-
-            // The generation task should now fail mid-write
+            // The generation task should now fail mid-write (when it tries to write to VOL002)
             await Assert.ThrowsAnyAsync<Exception>(async () => await generateTask);
 
             // Verify: no PRODUCTION_* directory should remain

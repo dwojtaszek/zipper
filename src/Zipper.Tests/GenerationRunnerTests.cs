@@ -84,6 +84,18 @@ namespace Zipper
             Assert.IsType<LoadfileOnlyMode>(Program.SelectMode(request));
         }
 
+        [Fact]
+        public async Task RunAsync_StandardMode_WithChaosConfig_ThrowsException()
+        {
+            var request = DefaultRequest();
+            request.Chaos = request.Chaos with { ChaosMode = true };
+            request.LoadfileOnly = false; // ensure we're targeting standard/generation mode
+
+            var mode = new StandardMode();
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+        }
+
         private static async Task<(int exitCode, string stdout, string stderr)> RunWithCapture(IGenerationMode mode, FileGenerationRequest request)
         {
             var originalOut = Console.Out;
