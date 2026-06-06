@@ -3,125 +3,41 @@ using Zipper.Utils;
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Column authority for the CSV format (standard generation only). Columns default to
-/// UPPERCASE naming for e-discovery platform compatibility unless a column profile overrides
-/// the convention. One record per file; values are raw and the serializer applies RFC 4180
-/// escaping.
+/// Column authority for the CSV format (standard generation only). Columns default to UPPERCASE
+/// naming for e-discovery platform compatibility unless a column profile overrides the
+/// convention. Shares the single-record-per-file pipeline in <see cref="StandardRowComposer"/>.
 /// </summary>
-internal sealed class CsvComposer : ILoadFileComposer
+internal sealed class CsvComposer : StandardRowComposer
 {
-    private readonly FileGenerationRequest request;
-    private readonly string namingConvention;
-    private readonly List<string> headerColumns;
-
     public CsvComposer(FileGenerationRequest request)
+        : base(request)
     {
-        this.request = request;
-        this.namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention ?? "UPPERCASE";
-        this.headerColumns = this.BuildHeaderColumns();
     }
 
-    public IReadOnlyList<string> HeaderColumns => this.headerColumns;
+    protected override bool IncludeAttachmentBoundaryColumns => false;
 
-    public IEnumerable<LoadFileRecord> Compose(IReadOnlyList<FileData> processedFiles)
+    protected override string HeaderName(string columnKey)
     {
-#pragma warning disable S2245
-        var random = this.request.Metadata.Seed.HasValue ? new Random(this.request.Metadata.Seed.Value) : Random.Shared;
-#pragma warning restore S2245
-        var now = this.request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
-
-        foreach (var fileData in processedFiles)
-        {
-            var wi = fileData.WorkItem;
-            var v = new List<string>(this.headerColumns.Count)
-            {
-                $"DOC{wi.Index:D8}",
-                wi.FilePathInZip,
-            };
-
-            if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
-            {
-                var (custodian, dateSent, author, fileSize) = SyntheticRowValues.Metadata(wi, fileData, random, now);
-                v.Add(custodian);
-                v.Add(dateSent);
-                v.Add(author);
-                v.Add(fileSize);
-            }
-
-            if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
-            {
-                var (to, from, subject, sentDate, attachment) = SyntheticRowValues.Eml(wi, fileData, random, now);
-                v.Add(to);
-                v.Add(from);
-                v.Add(subject);
-                v.Add(sentDate);
-                v.Add(attachment);
-            }
-
-            if (this.request.Bates != null)
-            {
-                v.Add(BatesNumberGenerator.Generate(this.request.Bates, wi.Index - 1));
-            }
-
-            if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
-            {
-                v.Add(fileData.PageCount.ToString());
-            }
-
-            if (this.request.Output.WithText)
-            {
-                v.Add(wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt"));
-            }
-
-            yield return this.MakeRecord($"DOC{wi.Index:D8}", v);
-        }
+        var convention = this.request.Metadata.ColumnProfile?.FieldNamingConvention ?? "UPPERCASE";
+        return NamingConventionHelper.ApplyConvention(Friendly(columnKey), convention);
     }
 
-    private List<string> BuildHeaderColumns()
+    private static string Friendly(string columnKey) => columnKey switch
     {
-        var cols = new List<string> { "Control Number", "File Path" };
-        if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
-        {
-            cols.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
-        }
-
-        if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
-        {
-            cols.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
-        }
-
-        if (this.request.Bates != null)
-        {
-            cols.Add("Bates Number");
-        }
-
-        if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
-        {
-            cols.Add("Page Count");
-        }
-
-        if (this.request.Output.WithText)
-        {
-            cols.Add("Extracted Text");
-        }
-
-        return cols.Select(c => NamingConventionHelper.ApplyConvention(c, this.namingConvention)).ToList();
-    }
-
-    private LoadFileRecord MakeRecord(string recordId, List<string> orderedValues)
-    {
-        if (orderedValues.Count != this.headerColumns.Count)
-        {
-            throw new InvalidOperationException(
-                $"CsvComposer value count {orderedValues.Count} does not match header column count {this.headerColumns.Count}.");
-        }
-
-        var values = new Dictionary<string, string>(this.headerColumns.Count);
-        for (int i = 0; i < this.headerColumns.Count; i++)
-        {
-            values[this.headerColumns[i]] = orderedValues[i];
-        }
-
-        return new LoadFileRecord { Columns = this.headerColumns, Values = values, RecordId = recordId };
-    }
+        "CONTROL" => "Control Number",
+        "PATH" => "File Path",
+        "CUSTODIAN" => "Custodian",
+        "DATESENT" => "Date Sent",
+        "AUTHOR" => "Author",
+        "FILESIZE" => "File Size",
+        "TO" => "To",
+        "FROM" => "From",
+        "SUBJECT" => "Subject",
+        "SENTDATE" => "Sent Date",
+        "ATTACHMENT" => "Attachment",
+        "BATES" => "Bates Number",
+        "PAGECOUNT" => "Page Count",
+        "TEXT" => "Extracted Text",
+        _ => columnKey,
+    };
 }

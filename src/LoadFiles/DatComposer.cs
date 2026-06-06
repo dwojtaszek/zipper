@@ -69,26 +69,7 @@ internal sealed class DatComposer : ILoadFileComposer
         : DateTime.UtcNow;
 
     private LoadFileRecord MakeRecord(string recordId, List<string> orderedValues)
-    {
-        if (orderedValues.Count != this.headerColumns.Count)
-        {
-            throw new InvalidOperationException(
-                $"DatComposer value count {orderedValues.Count} does not match header column count {this.headerColumns.Count}.");
-        }
-
-        var values = new Dictionary<string, string>(this.headerColumns.Count);
-        for (int i = 0; i < this.headerColumns.Count; i++)
-        {
-            values[this.headerColumns[i]] = orderedValues[i];
-        }
-
-        return new LoadFileRecord
-        {
-            Columns = this.headerColumns,
-            Values = values,
-            RecordId = recordId,
-        };
-    }
+        => LoadFileRecordBuilder.Build(this.headerColumns, orderedValues, recordId);
 
     private List<string> BuildHeaderColumns()
     {
