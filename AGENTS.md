@@ -196,12 +196,13 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
 | `src/ChaosAnomalyTypes.cs` | Canonical anomaly type catalog |
 | `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning |
-| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model |
-| `src/LoadFiles/ILoadFileSerializer.cs` | Format-specific record serialization interface |
-| `src/LoadFiles/DatSerializer.cs` | DAT format serializer |
+| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model (raw values) |
+| `src/LoadFiles/ILoadFileComposer.cs` | Column authority: header columns + lazy records (`Dat`/`Opt`/`Csv`/`Concordance` composers) |
+| `src/LoadFiles/ILoadFileSerializer.cs` | Render authority: record/header → one escaped line (`Dat`/`Opt`/`Csv`/`Concordance` serializers) |
+| `src/LoadFiles/LoadFileEmitter.cs` | I/O + chaos authority: preamble, EOL, batching, chaos pipeline |
 | `src/Profiles/Generation/` | Column value generators |
 | `src/Emails/` | Email domain model |
-| `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
+| `src/LoadFiles/` | Load File seam: composers, serializers, emitter, thin composing writers + `XmlLoadFileWriter` carve-out |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/LoadfileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
 | `src/Zipper.Tests/` | Unit tests |
