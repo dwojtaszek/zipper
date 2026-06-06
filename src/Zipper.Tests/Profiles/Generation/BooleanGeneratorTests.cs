@@ -4,8 +4,14 @@ using Zipper.Profiles.Generation;
 
 namespace Zipper.Tests.Profiles.Generation;
 
+/// <summary>
+/// Test class for public class BooleanGeneratorTests
+/// </summary>
 public class BooleanGeneratorTests
 {
+    /// <summary>
+    /// Creates context.
+    /// </summary>
     private static ColumnGenerationContext MakeContext(int seed = 42) => new()
     {
         NativeFileIndex = seed,
@@ -15,6 +21,9 @@ public class BooleanGeneratorTests
         Seeded = new Random(seed)
     };
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_YnFormat_ReturnsYOrN()
     {
@@ -32,6 +41,9 @@ public class BooleanGeneratorTests
         Assert.Subset(new HashSet<string> { "Y", "N" }, results);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_TrueFalseFormat_ReturnsTrueOrFalse()
     {
@@ -49,6 +61,9 @@ public class BooleanGeneratorTests
         Assert.Subset(new HashSet<string> { "True", "False" }, results);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_10Format_Returns1Or0()
     {
@@ -66,6 +81,9 @@ public class BooleanGeneratorTests
         Assert.Subset(new HashSet<string> { "1", "0" }, results);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_NullFormat_ReturnsYOrN()
     {
@@ -83,6 +101,9 @@ public class BooleanGeneratorTests
         Assert.Subset(new HashSet<string> { "Y", "N" }, results);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_UnrecognizedFormat_ReturnsYOrN()
     {
@@ -100,6 +121,9 @@ public class BooleanGeneratorTests
         Assert.Subset(new HashSet<string> { "Y", "N" }, results);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_TruePercentage100_AlwaysReturnsY()
     {
@@ -112,6 +136,9 @@ public class BooleanGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_TruePercentage0_AlwaysReturnsN()
     {

@@ -4,8 +4,14 @@ using Zipper.Profiles.Generation;
 
 namespace Zipper.Tests.Profiles.Generation;
 
+/// <summary>
+/// Test class for public class NumberGeneratorTests
+/// </summary>
 public class NumberGeneratorTests
 {
+    /// <summary>
+    /// Creates context.
+    /// </summary>
     private static ColumnGenerationContext MakeContext(int seed = 42) => new()
     {
         NativeFileIndex = seed,
@@ -15,6 +21,9 @@ public class NumberGeneratorTests
         Seeded = new Random(seed)
     };
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_WithinRange_ReturnsValuesInBounds()
     {
@@ -32,6 +41,9 @@ public class NumberGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_UniformDistribution_IncludesMinAndMax()
     {
@@ -50,6 +62,9 @@ public class NumberGeneratorTests
         Assert.All(results, x => Assert.InRange(x, 1, 10));
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_GaussianDistribution_CenteredAverage()
     {
@@ -69,6 +84,9 @@ public class NumberGeneratorTests
         Assert.InRange(average, 40, 60); // Should be centered around 50
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_MinEqualsMax_ReturnsExactValue()
     {

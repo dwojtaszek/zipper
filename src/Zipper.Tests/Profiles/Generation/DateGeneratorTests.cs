@@ -5,8 +5,14 @@ using Zipper.Profiles.Generation;
 
 namespace Zipper.Tests.Profiles.Generation;
 
+/// <summary>
+/// Test class for public class DateGeneratorTests
+/// </summary>
 public class DateGeneratorTests
 {
+    /// <summary>
+    /// Creates context.
+    /// </summary>
     private static ColumnGenerationContext MakeContext(int seed = 42) => new()
     {
         NativeFileIndex = seed,
@@ -16,6 +22,9 @@ public class DateGeneratorTests
         Seeded = new Random(seed)
     };
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void DateGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
@@ -64,6 +73,9 @@ public class DateGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_RangeSpecified_ReturnsDatesWithinRange()
     {
@@ -83,6 +95,9 @@ public class DateGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_GivenCustomDateFormat_ReturnsFormattedDate()
     {
@@ -99,6 +114,9 @@ public class DateGeneratorTests
         Assert.Equal("01/15/2023", result);
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_MinEqualsMaxDate_ShouldReturnExactDate()
     {

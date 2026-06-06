@@ -5,8 +5,14 @@ using Zipper.Profiles.Generation;
 
 namespace Zipper.Tests.Profiles.Generation;
 
+/// <summary>
+/// Test class for public class DateTimeColumnGeneratorTests
+/// </summary>
 public class DateTimeColumnGeneratorTests
 {
+    /// <summary>
+    /// Creates context.
+    /// </summary>
     private static ColumnGenerationContext MakeContext(int seed = 42) => new()
     {
         NativeFileIndex = seed,
@@ -16,6 +22,9 @@ public class DateTimeColumnGeneratorTests
         Seeded = new Random(seed)
     };
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void DateTimeColumnGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
@@ -60,6 +69,9 @@ public class DateTimeColumnGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_WithConfiguredRange_ReturnsValuesWithinBounds()
     {
@@ -79,6 +91,9 @@ public class DateTimeColumnGeneratorTests
         }
     }
 
+    /// <summary>
+    /// Test method.
+    /// </summary>
     [Fact]
     public void Generate_WithSingleDayRange_ProducesVariedTimeComponents()
     {
@@ -98,6 +113,6 @@ public class DateTimeColumnGeneratorTests
         }
 
         // With 50 generations, we expect multiple unique time values, proving randomization within the day.
-        Assert.True(generatedTimes.Count > 1);
+        Assert.True(generatedTimes.Count > 10, $"Expected > 10 unique times, got {generatedTimes.Count}");
     }
 }
