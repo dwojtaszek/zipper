@@ -10,7 +10,7 @@ echo ========================================
 echo.
 
 REM Set test environment
-set "TEST_DIR=%TEMP%\zipper-eml-test-%RANDOM%"
+set "TEST_DIR=.\results\zipper-eml-test-%RANDOM%"
 set "REPO_ROOT=%~dp0.."
 set "FILE_COUNT=20"
 

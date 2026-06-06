@@ -85,6 +85,8 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
         Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.txt\" FileName=\"file_00000001.txt\" FileSize=\"41\" Hash=\"", content);
         Assert.Contains("<Tags>", content);
         Assert.Contains("<Tag TagName=\"Custodian\" TagValue=\"Custodian 1\" />", content);
+        Assert.DoesNotContain("<Fields>", content);
+        Assert.DoesNotContain("<Field ", content);
         Assert.Contains("</Document>", content);
         Assert.Contains("</Batch>", content);
         Assert.Contains("</Root>", content);
