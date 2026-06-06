@@ -298,7 +298,7 @@ The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral s
 | `File` | File reference with type (Native, Image, Text, Redacted) |
 | `ExternalFile` | Reference to external file with path, size, hash |
 | `InlineContent` | Embedded content within XML |
-| `Fields` | Metadata fields container |
+| `Tags` | Metadata tags container |
 | `Tag` | Tagging/coding information |
 
 #### Example EDRM XML
@@ -315,11 +315,11 @@ The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral s
           <ExternalFile FilePath="TEXT\DOC001.txt"/>
         </File>
       </Files>
-      <Fields>
-        <Field Name="Custodian">John Smith</Field>
-        <Field Name="Author">Jane Doe</Field>
-        <Field Name="DateCreated">2024-01-15T10:30:00Z</Field>
-      </Fields>
+      <Tags>
+        <Tag TagName="Custodian" TagValue="John Smith"/>
+        <Tag TagName="Author" TagValue="Jane Doe"/>
+        <Tag TagName="DateSent" TagValue="2024-01-15T10:30:00Z"/>
+      </Tags>
     </Document>
   </Batch>
 </Root>

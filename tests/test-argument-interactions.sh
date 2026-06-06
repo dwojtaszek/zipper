@@ -9,7 +9,8 @@ source "$(dirname "$0")/_zipper-cli.sh"
 
 PASSED=0
 FAILED=0
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR="./results/test-interactions-$$"
+mkdir -p "$TEMP_DIR"
 
 function print_info() { local msg="$1"; echo -e "\033[44m[ INFO ]\033[0m $msg"; }
 function print_success() { local msg="$1"; echo -e "\033[42m[ SUCCESS ]\033[0m $msg"; }

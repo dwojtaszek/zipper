@@ -11,7 +11,7 @@ echo "========================================"
 echo
 
 # Set test environment
-TEST_DIR="/tmp/zipper-eml-test-$$"
+TEST_DIR="./results/zipper-eml-test-$$"
 REPO_ROOT="$(pwd)"
 FILE_COUNT=20 # Use a consistent number of files for most tests
 

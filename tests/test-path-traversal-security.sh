@@ -11,7 +11,8 @@ echo "🔒 Path Traversal Security Test"
 echo "================================="
 
 # Create test directory
-TEST_DIR="$(mktemp -d)"
+TEST_DIR="./results/security_test"
+mkdir -p "$TEST_DIR"
 echo "Created test directory: $TEST_DIR"
 
 # Test 1: Normal path should work
