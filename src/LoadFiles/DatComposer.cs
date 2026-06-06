@@ -270,9 +270,11 @@ internal sealed class DatComposer : ILoadFileComposer
         var batesNumber = ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1);
         var imagePath = ctx.ImagePathOverride ?? wi.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
             .Replace(Path.GetExtension(wi.FilePathInZip), ".tif");
-        var nativePath = ctx.NativePathOverride ?? wi.FilePathInZip.Replace(Path.DirectorySeparatorChar, '\\');
+        // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
+        // backslash normalization also works on Windows (where DirectorySeparatorChar is '\').
+        var nativePath = ctx.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
         var textPath = ctx.TextPathOverride ?? nativePath.Replace($".{this.request.Output.FileType}", ".txt");
-        var imagesPath = imagePath.Replace(Path.DirectorySeparatorChar, '\\');
+        var imagesPath = imagePath.Replace('/', '\\');
 
 #pragma warning disable S2245
         var random = this.request.Metadata.Seed.HasValue ? new Random(unchecked((int)(this.request.Metadata.Seed.Value + wi.Index))) : Random.Shared;

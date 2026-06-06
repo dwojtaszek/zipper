@@ -95,7 +95,7 @@ internal sealed class OptComposer : ILoadFileComposer
             string baseImagePath = isProductionSet
                 ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
                     .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif")
-                    .Replace(Path.DirectorySeparatorChar, '\\')
+                    .Replace('/', '\\') // FilePathInZip uses '/' (ZIP spec); normalize on all platforms incl. Windows
                 : $"IMAGES\\{baseBatesNumber}.tif";
 
             int actualPages = this.request.Tiff.ShouldIncludePageCount(this.request.Output) ? Math.Max(1, fileData.PageCount) : 1;

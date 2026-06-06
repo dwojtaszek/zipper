@@ -92,47 +92,48 @@ internal static class LoadFileEmitter
         string eol,
         ChaosEngine chaosEngine)
     {
-        var rows = new List<(long LineNumber, string RecordId, string Line)>();
+        // Records stream lazily: raw encoding-anomaly bytes are written straight to the stream
+        // after each line's encoded text, so byte ordering is correct without materializing the
+        // rows or buffering the whole file (keeps chaos emit at O(1) auxiliary memory).
+        var preamble = encoding.GetPreamble();
+        if (preamble.Length > 0)
+        {
+            await stream.WriteAsync(preamble);
+        }
+
         long lineNumber = 1;
         if (hasHeader)
         {
-            rows.Add((lineNumber++, "HEADER", serializer.RenderHeader(headerColumns)));
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderHeader(headerColumns), "HEADER", encoding, eol);
+            lineNumber++;
         }
 
         foreach (var record in records)
         {
-            rows.Add((lineNumber++, record.RecordId, serializer.RenderRecord(record)));
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol);
+            lineNumber++;
         }
+    }
 
-        // A MemoryStream guarantees correct byte ordering when raw encoding-anomaly bytes
-        // must be inserted between text lines.
-        using var memStream = new MemoryStream();
-        var preamble = encoding.GetPreamble();
-        if (preamble.Length > 0)
+    private static async Task EmitChaosLineAsync(
+        Stream stream,
+        ChaosEngine chaosEngine,
+        long lineNumber,
+        string originalLine,
+        string recordId,
+        Encoding encoding,
+        string eol)
+    {
+        var text = chaosEngine.ShouldIntercept(lineNumber)
+            ? chaosEngine.Intercept(lineNumber, originalLine, recordId)
+            : originalLine;
+
+        await stream.WriteAsync(encoding.GetBytes(text + eol));
+
+        var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
+        if (anomaly != null)
         {
-            await memStream.WriteAsync(preamble);
+            await stream.WriteAsync(anomaly);
         }
-
-        var sb = new StringBuilder();
-        foreach (var (line, recordId, originalLine) in rows)
-        {
-            var text = chaosEngine.ShouldIntercept(line)
-                ? chaosEngine.Intercept(line, originalLine, recordId)
-                : originalLine;
-
-            sb.Append(text);
-            sb.Append(eol);
-            await memStream.WriteAsync(encoding.GetBytes(sb.ToString()));
-            sb.Clear();
-
-            var anomaly = chaosEngine.GetEncodingAnomaly(line, line + 1, encoding);
-            if (anomaly != null)
-            {
-                await memStream.WriteAsync(anomaly);
-            }
-        }
-
-        memStream.Position = 0;
-        await memStream.CopyToAsync(stream);
     }
 }
