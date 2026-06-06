@@ -7,6 +7,15 @@ namespace Zipper.Tests.Profiles.Generation;
 
 public class DateGeneratorTests
 {
+    private static ColumnGenerationContext MakeContext(int seed = 42) => new()
+    {
+        NativeFileIndex = seed,
+        FolderNumber = 1,
+        DocumentIndex = seed,
+        Now = DateTime.UtcNow,
+        Seeded = new Random(seed)
+    };
+
     [Fact]
     public void DateGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
@@ -53,5 +62,55 @@ public class DateGeneratorTests
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
+    }
+
+    [Fact]
+    public void Generate_WithinSpecifiedRange()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestDate",
+            DateRange = new DateRangeConfig { Min = "2023-01-01", Max = "2023-01-10" }
+        };
+        var settings = new ProfileSettings { DateFormat = "yyyy-MM-dd" };
+        var generator = new DateGenerator(col, settings);
+
+        for (int i = 0; i < 50; i++)
+        {
+            var result = generator.Generate(MakeContext(i));
+            var date = DateTime.ParseExact(result, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            Assert.InRange(date, new DateTime(2023, 1, 1), new DateTime(2023, 1, 10));
+        }
+    }
+
+    [Fact]
+    public void Generate_CustomDateFormats()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestDate",
+            Format = "MM/dd/yyyy",
+            DateRange = new DateRangeConfig { Min = "2023-01-15", Max = "2023-01-15" }
+        };
+        var settings = new ProfileSettings { DateFormat = "yyyy-MM-dd" };
+        var generator = new DateGenerator(col, settings);
+
+        var result = generator.Generate(MakeContext());
+        Assert.Equal("01/15/2023", result);
+    }
+
+    [Fact]
+    public void Generate_MinEqualsMaxDate()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestDate",
+            DateRange = new DateRangeConfig { Min = "2023-01-01", Max = "2023-01-01" }
+        };
+        var settings = new ProfileSettings { DateFormat = "yyyy-MM-dd" };
+        var generator = new DateGenerator(col, settings);
+
+        var result = generator.Generate(MakeContext(42));
+        Assert.Equal("2023-01-01", result);
     }
 }

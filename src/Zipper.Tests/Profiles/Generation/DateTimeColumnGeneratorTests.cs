@@ -7,6 +7,15 @@ namespace Zipper.Tests.Profiles.Generation;
 
 public class DateTimeColumnGeneratorTests
 {
+    private static ColumnGenerationContext MakeContext(int seed = 42) => new()
+    {
+        NativeFileIndex = seed,
+        FolderNumber = 1,
+        DocumentIndex = seed,
+        Now = DateTime.UtcNow,
+        Seeded = new Random(seed)
+    };
+
     [Fact]
     public void DateTimeColumnGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
@@ -49,5 +58,46 @@ public class DateTimeColumnGeneratorTests
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
+    }
+
+    [Fact]
+    public void Generate_WithinSpecifiedRange()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestDateTime",
+            DateRange = new DateRangeConfig { Min = "2023-01-01", Max = "2023-01-10" }
+        };
+        var settings = new ProfileSettings { DateTimeFormat = "yyyy-MM-dd HH:mm" };
+        var generator = new DateTimeColumnGenerator(col, settings);
+
+        for (int i = 0; i < 50; i++)
+        {
+            var result = generator.Generate(MakeContext(i));
+            var date = DateTime.ParseExact(result, "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+            Assert.InRange(date, new DateTime(2023, 1, 1), new DateTime(2023, 1, 10, 23, 59, 59));
+        }
+    }
+
+    [Fact]
+    public void Generate_TimeComponentIsRandomisedWithinDay()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestDateTime",
+            DateRange = new DateRangeConfig { Min = "2023-01-01", Max = "2023-01-01" } // One specific day
+        };
+        var settings = new ProfileSettings { DateTimeFormat = "yyyy-MM-dd HH:mm" };
+        var generator = new DateTimeColumnGenerator(col, settings);
+
+        var generatedTimes = new HashSet<string>();
+        var context = MakeContext();
+        for (int i = 0; i < 50; i++)
+        {
+            generatedTimes.Add(generator.Generate(context));
+        }
+
+        // With 50 generations, we expect multiple unique time values, proving randomization within the day.
+        Assert.True(generatedTimes.Count > 1);
     }
 }

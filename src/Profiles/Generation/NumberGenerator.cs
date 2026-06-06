@@ -44,6 +44,20 @@ internal sealed class NumberGenerator : IColumnValueGenerator
             return Math.Min(value, this.max).ToString();
         }
 
+        if (this.distribution == "gaussian" || this.distribution == "normal")
+        {
+            double u1 = 1.0 - context.Seeded.NextDouble();
+            double u2 = 1.0 - context.Seeded.NextDouble();
+            double z0 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+            double mean = this.min + (this.max - this.min) / 2.0;
+            double stdDev = (this.max - this.min) / 6.0; // 99.7% of values within [min, max]
+
+            int value = (int)Math.Round(mean + z0 * stdDev);
+            value = Math.Max(this.min, Math.Min(this.max, value));
+            return value.ToString();
+        }
+
         if (this.max == int.MaxValue)
         {
             return (this.min + (long)(context.Seeded.NextDouble() * ((long)this.max - this.min + 1))).ToString();
