@@ -97,14 +97,14 @@ public class AllWritersTests : TempDirectoryTestBase
                 var doc2Content = content.Substring(doc2Index, doc3Index - doc2Index);
                 var doc3Content = content.Substring(doc3Index);
 
-                Assert.Contains("Name=\"PageCount\"", doc1Content);
-                Assert.Contains(">5<", doc1Content);
+                Assert.Contains("TagName=\"PageCount\"", doc1Content);
+                Assert.Contains("TagValue=\"5\"", doc1Content);
 
-                Assert.Contains("Name=\"PageCount\"", doc2Content);
-                Assert.Contains(">7<", doc2Content);
+                Assert.Contains("TagName=\"PageCount\"", doc2Content);
+                Assert.Contains("TagValue=\"7\"", doc2Content);
 
-                Assert.Contains("Name=\"PageCount\"", doc3Content);
-                Assert.Contains(">3<", doc3Content);
+                Assert.Contains("TagName=\"PageCount\"", doc3Content);
+                Assert.Contains("TagValue=\"3\"", doc3Content);
             }
             else if (format == LoadFileFormat.Opt)
             {

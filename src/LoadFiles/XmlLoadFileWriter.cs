@@ -10,7 +10,7 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal class XmlLoadFileWriter : LoadFileWriterBase
 {
-    private const string FieldElement = "Field";
+    private const string TagElement = "Tag";
 
     public override string FormatName => "XML";
 
@@ -74,6 +74,13 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         }
     }
 
+    private static void AddTag(XElement parent, string name, object? value, string? namingConvention)
+    {
+        parent.Add(new XElement(TagElement,
+            new XAttribute("TagName", NamingConventionHelper.ApplyConvention(name, namingConvention)),
+            new XAttribute("TagValue", value ?? string.Empty)));
+    }
+
     private static XElement CreateDocumentElement(
         FileWorkItem workItem,
         FileData fileData,
@@ -125,47 +132,47 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         docElement.Add(filesElement);
 
-        var fieldsElement = new XElement("Fields");
+        var tagsElement = new XElement("Tags");
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
 
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Custodian", namingConvention)), metadata.Custodian));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("DateSent", namingConvention)), metadata.DateSent));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Author", namingConvention)), metadata.Author));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("FileSize", namingConvention)), metadata.FileSize));
+            AddTag(tagsElement, "Custodian", metadata.Custodian, namingConvention);
+            AddTag(tagsElement, "DateSent", metadata.DateSent, namingConvention);
+            AddTag(tagsElement, "Author", metadata.Author, namingConvention);
+            AddTag(tagsElement, "FileSize", metadata.FileSize, namingConvention);
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             var eml = GenerateEmlValues(workItem, fileData, random, now, request);
 
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("To", namingConvention)), eml.To));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("From", namingConvention)), eml.From));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Subject", namingConvention)), eml.Subject));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("SentDate", namingConvention)), eml.SentDate));
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("Attachment", namingConvention)), eml.Attachment));
+            AddTag(tagsElement, "To", eml.To, namingConvention);
+            AddTag(tagsElement, "From", eml.From, namingConvention);
+            AddTag(tagsElement, "Subject", eml.Subject, namingConvention);
+            AddTag(tagsElement, "SentDate", eml.SentDate, namingConvention);
+            AddTag(tagsElement, "Attachment", eml.Attachment, namingConvention);
         }
 
         if (request.Bates != null)
         {
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("BatesNumber", namingConvention)), GenerateBatesNumber(request, workItem)));
+            AddTag(tagsElement, "BatesNumber", GenerateBatesNumber(request, workItem), namingConvention);
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("PageCount", namingConvention)), fileData.PageCount));
+            AddTag(tagsElement, "PageCount", fileData.PageCount, namingConvention);
         }
 
         if (request.Output.WithText)
         {
-            fieldsElement.Add(new XElement(FieldElement, new XAttribute("Name", NamingConventionHelper.ApplyConvention("ExtractedTextPath", namingConvention)), GenerateTextPath(request, workItem)));
+            AddTag(tagsElement, "ExtractedTextPath", GenerateTextPath(request, workItem), namingConvention);
         }
 
-        if (fieldsElement.HasElements)
+        if (tagsElement.HasElements)
         {
-            docElement.Add(fieldsElement);
+            docElement.Add(tagsElement);
         }
 
         return docElement;

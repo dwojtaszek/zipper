@@ -315,11 +315,11 @@ The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral s
           <ExternalFile FilePath="TEXT\DOC001.txt"/>
         </File>
       </Files>
-      <Fields>
-        <Field Name="Custodian">John Smith</Field>
-        <Field Name="Author">Jane Doe</Field>
-        <Field Name="DateCreated">2024-01-15T10:30:00Z</Field>
-      </Fields>
+      <Tags>
+        <Tag TagName="Custodian" TagValue="John Smith"/>
+        <Tag TagName="Author" TagValue="Jane Doe"/>
+        <Tag TagName="DateCreated" TagValue="2024-01-15T10:30:00Z"/>
+      </Tags>
     </Document>
   </Batch>
 </Root>
