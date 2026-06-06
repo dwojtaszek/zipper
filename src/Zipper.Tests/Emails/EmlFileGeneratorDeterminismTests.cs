@@ -76,7 +76,7 @@ public class EmlFileGeneratorDeterminismTests
         Assert.NotEmpty(result1.Attachment.Value.content);
     }
     [Fact]
-    public void Generate_ProducesValidRfc2822Headers()
+    public void Generate_WithSeed_ProducesValidRfc2822Headers()
     {
         var generator = new EmlFileGenerator();
         var request = new FileGenerationRequest
@@ -94,6 +94,6 @@ public class EmlFileGeneratorDeterminismTests
         Assert.Contains("Subject: ", emlText);
 
         // Date should be RFC 2822 formatted with InvariantCulture
-        Assert.Matches(@"Date: (Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} [+-]\d{2}:?\d{2}", emlText);
+        Assert.Matches(@"Date: (Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}", emlText);
     }
 }

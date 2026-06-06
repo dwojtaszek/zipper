@@ -487,8 +487,9 @@ public class ProductionSetTests : IDisposable
 
             // Poll until the production directory and VOL002 are created
             string? productionDir = null;
+            var vol2Deleted = false;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            while (sw.ElapsedMilliseconds < 5000)
+            while (sw.ElapsedMilliseconds < 10000)
             {
                 var dirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");
                 if (dirs.Length > 0)
@@ -502,6 +503,7 @@ public class ProductionSetTests : IDisposable
                         // and can be deleted safely without race conditions.
                         // When the generator reaches VOL002, it will throw DirectoryNotFoundException.
                         Directory.Delete(vol2TextPath, true);
+                        vol2Deleted = true;
                         break;
                     }
                 }
@@ -511,9 +513,10 @@ public class ProductionSetTests : IDisposable
 
             // We must have found the production directory
             Assert.NotNull(productionDir);
+            Assert.True(vol2Deleted, "Test did not induce the intended VOL002 deletion failure.");
 
             // The generation task should now fail mid-write (when it tries to write to VOL002)
-            await Assert.ThrowsAnyAsync<Exception>(async () => await generateTask);
+            await Assert.ThrowsAnyAsync<System.IO.DirectoryNotFoundException>(async () => await generateTask);
 
             // Verify: no PRODUCTION_* directory should remain
             var productionDirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");
