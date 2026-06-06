@@ -119,7 +119,7 @@ The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three de
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
-- **Emitter** (`LoadFileEmitter`) — I/O + chaos authority: encoding preamble (BOM), end-of-line, batching, and the single Chaos Engine pipeline. Streams non-chaos output; materializes only for chaos.
+- **Emitter** (`LoadFileEmitter`) — I/O + chaos authority: encoding preamble (BOM), end-of-line, batching, and the single Chaos Engine pipeline. Both paths stream lazily (O(1) auxiliary memory); the chaos path additionally intercepts each line and writes inter-line encoding-anomaly bytes straight after it.
 
 ```mermaid
 graph TD
@@ -133,8 +133,8 @@ graph TD
     Rec --> Ser["Serializer — render authority<br/>record/header → one escaped line (pure)"]
     Ser --> Emit["LoadFileEmitter — I/O + chaos authority<br/>preamble (BOM), EOL, batching"]
 
-    Emit -->|"no chaos"| Stream["stream lines<br/>(bounded memory)"]
-    Emit -->|"chaos (Loadfile-Only)"| ChaosP["materialize rows → ChaosEngine → bytes"]
+    Emit -->|"no chaos"| Stream["stream lines<br/>(buffered StreamWriter)"]
+    Emit -->|"chaos (Loadfile-Only)"| ChaosP["stream line → intercept<br/>+ inter-line anomaly bytes"]
 
     Stream --> Out["Load File (on disk / in ZIP)"]
     ChaosP --> Out

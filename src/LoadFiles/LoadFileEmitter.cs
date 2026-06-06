@@ -27,10 +27,11 @@ internal static class LoadFileEmitter
     };
 
     /// <summary>
-    /// Emits an optional header followed by the records. Without a chaos engine the records
-    /// are streamed lazily with a bounded buffer (no full materialization). With a chaos
-    /// engine the rendered lines are materialized so line-targeted interception and
-    /// cross-line encoding-anomaly bytes can be injected deterministically.
+    /// Emits an optional header followed by the records. Both paths stream lazily with no full
+    /// materialization. Without a chaos engine, lines are written through a buffered
+    /// <see cref="StreamWriter"/>. With a chaos engine, each line is line-targeted for
+    /// interception and cross-line encoding-anomaly bytes are written straight to the stream
+    /// after it, preserving byte order at O(1) auxiliary memory.
     /// </summary>
     public static async Task EmitAsync(
         Stream stream,

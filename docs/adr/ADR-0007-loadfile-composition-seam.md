@@ -19,7 +19,7 @@ Split delimited load file generation into three deep modules with a single, real
 
 - **Composer** decides *what columns, in what order, with what raw values*. `DatComposer` absorbs all three writer modes plus the column-profile path (retiring `ProfileDrivenDatWriter`). Values are emitted **raw**; the serializer escapes once.
 - **Serializer** is **pure**: record/header → line. No stream, no EOL, no chaos.
-- **Emitter** is the single I/O and chaos authority. Non-chaos output streams through a `StreamWriter` (bounded memory, BOM once); the chaos path materializes `(line, recordId, line)` rows so line-targeted interception and cross-line encoding-anomaly bytes inject deterministically. Chaos now runs in exactly one place.
+- **Emitter** is the single I/O and chaos authority. Both paths stream lazily (O(1) auxiliary memory, no row materialization): non-chaos output goes through a buffered `StreamWriter` (BOM once); the chaos path renders each line, applies line-targeted interception, and writes cross-line encoding-anomaly bytes straight to the stream after it, preserving byte order. Chaos now runs in exactly one place.
 
 `ILoadFileWriter` is **retained** as the format-selection seam the factory returns. It now has five real adapters (four thin composing writers + the XML carve-out), so it earns its keep rather than being a pass-through.
 
