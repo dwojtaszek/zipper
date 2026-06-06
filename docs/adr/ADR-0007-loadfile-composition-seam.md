@@ -10,7 +10,7 @@ The delimited load file formats (DAT, OPT, CSV, Concordance) were each produced 
 
 Split delimited load file generation into three deep modules with a single, realised seam:
 
-```
+```text
 (request, processedFiles)
   → ILoadFileComposer   // column authority: header columns + lazy raw records
   → ILoadFileSerializer // render authority: record/header → one escaped line (pure)
@@ -36,4 +36,4 @@ Split delimited load file generation into three deep modules with a single, real
 
 ## Closes
 
-#446, #447, #448, #450. Drops #435 (tested class removed). Implements #351 (Concordance), #350/#356 (header naming, OPT page rows) through the composers.
+Closes #446, #447, #448, #450. Drops #435 (tested class removed). Implements #351 (Concordance), #350/#356 (header naming, OPT page rows) through the composers.

@@ -57,6 +57,10 @@ internal static class LoadfileOnlyGenerator
 
                     Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
+                else
+                {
+                    Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
+                }
             }
 
             ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);

@@ -313,7 +313,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void Factory_ReturnsDatWriter_AsLoadFileWriterBase()
+        public void CreateWriter_DatFormat_ReturnsDatComposingWriter()
         {
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
             Assert.IsType<DatComposingWriter>(writer);

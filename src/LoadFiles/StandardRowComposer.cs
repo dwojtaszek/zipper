@@ -113,6 +113,8 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "ATTACHMENT" => eml.Attachment,
             "BATES" => BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1),
             "PAGECOUNT" => fileData.PageCount.ToString(),
+            // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
+            // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.
             "TEXT" => wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt"),
             _ => string.Empty,
         };
