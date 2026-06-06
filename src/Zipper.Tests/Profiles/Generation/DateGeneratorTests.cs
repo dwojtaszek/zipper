@@ -12,7 +12,7 @@ public class DateGeneratorTests
         NativeFileIndex = seed,
         FolderNumber = 1,
         DocumentIndex = seed,
-        Now = DateTime.UtcNow,
+        Now = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc),
         Seeded = new Random(seed)
     };
 
@@ -65,7 +65,7 @@ public class DateGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithinSpecifiedRange()
+    public void Generate_RangeSpecified_ReturnsDatesWithinRange()
     {
         var col = new ColumnDefinition
         {
@@ -84,7 +84,7 @@ public class DateGeneratorTests
     }
 
     [Fact]
-    public void Generate_CustomDateFormats()
+    public void Generate_GivenCustomDateFormat_ReturnsFormattedDate()
     {
         var col = new ColumnDefinition
         {
@@ -100,7 +100,7 @@ public class DateGeneratorTests
     }
 
     [Fact]
-    public void Generate_MinEqualsMaxDate()
+    public void Generate_MinEqualsMaxDate_ShouldReturnExactDate()
     {
         var col = new ColumnDefinition
         {

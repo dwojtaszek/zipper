@@ -12,7 +12,7 @@ public class DateTimeColumnGeneratorTests
         NativeFileIndex = seed,
         FolderNumber = 1,
         DocumentIndex = seed,
-        Now = DateTime.UtcNow,
+        Now = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc),
         Seeded = new Random(seed)
     };
 
@@ -61,7 +61,7 @@ public class DateTimeColumnGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithinSpecifiedRange()
+    public void Generate_WithConfiguredRange_ReturnsValuesWithinBounds()
     {
         var col = new ColumnDefinition
         {
@@ -80,7 +80,7 @@ public class DateTimeColumnGeneratorTests
     }
 
     [Fact]
-    public void Generate_TimeComponentIsRandomisedWithinDay()
+    public void Generate_WithSingleDayRange_ProducesVariedTimeComponents()
     {
         var col = new ColumnDefinition
         {

@@ -11,12 +11,12 @@ public class NumberGeneratorTests
         NativeFileIndex = seed,
         FolderNumber = 1,
         DocumentIndex = seed,
-        Now = DateTime.UtcNow,
+        Now = new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Utc),
         Seeded = new Random(seed)
     };
 
     [Fact]
-    public void Generate_WithinRange()
+    public void Generate_WithinRange_ReturnsValuesInBounds()
     {
         var col = new ColumnDefinition
         {
@@ -33,7 +33,7 @@ public class NumberGeneratorTests
     }
 
     [Fact]
-    public void Generate_UniformDistribution()
+    public void Generate_UniformDistribution_IncludesMinAndMax()
     {
         var col = new ColumnDefinition
         {
@@ -51,7 +51,7 @@ public class NumberGeneratorTests
     }
 
     [Fact]
-    public void Generate_GaussianDistribution()
+    public void Generate_GaussianDistribution_CenteredAverage()
     {
         var col = new ColumnDefinition
         {
@@ -70,7 +70,7 @@ public class NumberGeneratorTests
     }
 
     [Fact]
-    public void Generate_MinEqualsMax()
+    public void Generate_MinEqualsMax_ReturnsExactValue()
     {
         var col = new ColumnDefinition
         {

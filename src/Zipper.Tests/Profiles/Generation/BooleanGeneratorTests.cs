@@ -16,34 +16,92 @@ public class BooleanGeneratorTests
     };
 
     [Fact]
-    public void Generate_YnFormat()
+    public void Generate_YnFormat_ReturnsYOrN()
     {
         var col = new ColumnDefinition { Name = "Test", Format = "yn", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
-        var result = generator.Generate(MakeContext());
-        Assert.Contains(result, new[] { "Y", "N" });
+
+        var results = new HashSet<string>();
+        for (int i = 0; i < 50; i++)
+        {
+            results.Add(generator.Generate(MakeContext(i)));
+        }
+
+        Assert.Contains("Y", results);
+        Assert.Contains("N", results);
+        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
     }
 
     [Fact]
-    public void Generate_TrueFalseFormat()
+    public void Generate_TrueFalseFormat_ReturnsTrueOrFalse()
     {
         var col = new ColumnDefinition { Name = "Test", Format = "truefalse", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
-        var result = generator.Generate(MakeContext());
-        Assert.Contains(result, new[] { "True", "False" });
+
+        var results = new HashSet<string>();
+        for (int i = 0; i < 50; i++)
+        {
+            results.Add(generator.Generate(MakeContext(i)));
+        }
+
+        Assert.Contains("True", results);
+        Assert.Contains("False", results);
+        Assert.Subset(new HashSet<string> { "True", "False" }, results);
     }
 
     [Fact]
-    public void Generate_10Format()
+    public void Generate_10Format_Returns1Or0()
     {
         var col = new ColumnDefinition { Name = "Test", Format = "10", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
-        var result = generator.Generate(MakeContext());
-        Assert.Contains(result, new[] { "1", "0" });
+
+        var results = new HashSet<string>();
+        for (int i = 0; i < 50; i++)
+        {
+            results.Add(generator.Generate(MakeContext(i)));
+        }
+
+        Assert.Contains("1", results);
+        Assert.Contains("0", results);
+        Assert.Subset(new HashSet<string> { "1", "0" }, results);
     }
 
     [Fact]
-    public void Generate_TruePercentage_100()
+    public void Generate_NullFormat_ReturnsYOrN()
+    {
+        var col = new ColumnDefinition { Name = "Test", Format = null, TruePercentage = 50 };
+        var generator = new BooleanGenerator(col);
+
+        var results = new HashSet<string>();
+        for (int i = 0; i < 50; i++)
+        {
+            results.Add(generator.Generate(MakeContext(i)));
+        }
+
+        Assert.Contains("Y", results);
+        Assert.Contains("N", results);
+        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
+    }
+
+    [Fact]
+    public void Generate_UnrecognizedFormat_ReturnsYOrN()
+    {
+        var col = new ColumnDefinition { Name = "Test", Format = "unknown", TruePercentage = 50 };
+        var generator = new BooleanGenerator(col);
+
+        var results = new HashSet<string>();
+        for (int i = 0; i < 50; i++)
+        {
+            results.Add(generator.Generate(MakeContext(i)));
+        }
+
+        Assert.Contains("Y", results);
+        Assert.Contains("N", results);
+        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
+    }
+
+    [Fact]
+    public void Generate_TruePercentage100_AlwaysReturnsY()
     {
         var col = new ColumnDefinition { Name = "Test", Format = "yn", TruePercentage = 100 };
         var generator = new BooleanGenerator(col);
@@ -55,7 +113,7 @@ public class BooleanGeneratorTests
     }
 
     [Fact]
-    public void Generate_TruePercentage_0()
+    public void Generate_TruePercentage0_AlwaysReturnsN()
     {
         var col = new ColumnDefinition { Name = "Test", Format = "yn", TruePercentage = 0 };
         var generator = new BooleanGenerator(col);
