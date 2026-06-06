@@ -7,6 +7,11 @@ namespace Zipper
     {
         public async Task RunAsync(FileGenerationRequest request)
         {
+            if (request.Chaos.ChaosMode)
+            {
+                throw new InvalidOperationException("Chaos mode is not supported in standard generation mode. Use --loadfile-only.");
+            }
+
             Console.WriteLine("Starting parallel file generation...");
             Console.WriteLine(string.Format("  File Type: {0}", request.Output.FileType));
             Console.WriteLine(string.Format("  Count: {0:N0}", request.Output.FileCount));
