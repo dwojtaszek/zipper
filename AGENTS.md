@@ -82,6 +82,8 @@ dotnet format --verify-no-changes src/   # Format check (run after every code ch
 dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj
 
 # E2E (must pass before push)
+# The pre-push hook runs the basic E2E smoke against src/bin/Release — build Release first.
+dotnet build -c Release
 ./tests/run-tests.sh   # Linux/macOS
 tests/run-tests.bat    # Windows
 ```
@@ -96,7 +98,7 @@ tests/run-tests.bat    # Windows
 
 2. **Requirement IDs are IMMUTABLE.** REQ-XXX and FR-XXX numbers must NEVER be changed or renumbered.
 
-3. **Test coverage must not decrease in substance.** Every removed or modified test must be replaced with a test that covers the same or a stricter behavioral contract. If no behavioral contract was being tested (e.g., a test that only asserted line execution), a behavior-coverage replacement is required. Never remove test files to make a test run green. *When this conflicts with Surgical Changes (e.g., fixing a pre-existing failing test requires touching adjacent code), Surgical Changes wins — but flag the conflict.*
+3. **Test coverage must not decrease in substance.** Every removed or modified test must be replaced with a test that covers the same or a stricter behavioral contract. If no behavioral contract was being tested (e.g., a test that only asserted line execution), a behavior-coverage replacement is required. Never remove test files to make a test run green. When replacing an implementation behind a stable interface, **retarget** the existing output-asserting tests onto the replacement (swap the construction, e.g. `new OldWriter()` → `new NewWriter()`) so they keep guarding the same contract instead of being deleted. *When this conflicts with Surgical Changes (e.g., fixing a pre-existing failing test requires touching adjacent code), Surgical Changes wins — but flag the conflict.*
 
 4. **Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
 1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
@@ -107,6 +109,8 @@ tests/run-tests.bat    # Windows
 Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement. *When this conflicts with Simplicity First (e.g., a trivial code change triggers a 4-doc update cascade), Simplicity First wins — but flag the conflict and note which docs are out of sync.*
 
 5. **Architecture invariants:** [docs/architecture.md](docs/architecture.md) diagrams are the source of truth for system structure — notably the load-file `composer → serializer → emitter` seam and the EDRM-XML carve-out. Any change that deviates from them, or makes a diagram inaccurate, requires **explicit human approval** and a same-PR diagram update. AI agents must stop and ask the maintainer (e.g. via AskUserQuestion) before merging such a change. Rationale: ADR-0006, ADR-0007.
+
+6. **Output parity for refactors:** Before refactoring code that produces Load File / Audit File / Production Set output, capture a **seeded golden baseline** of representative scenarios as a content-hash manifest (timestamp/filename-independent), then diff it after **every** step. Byte-for-byte parity is what makes it safe to delete or restructure writers. Keep the harness local and gitignored. *Preserve historical output quirks (EOL, encoding, path separators) exactly — file a follow-up issue rather than "fixing" them inline, since that changes bytes and breaks parity.*
 
 ---
 
@@ -124,13 +128,13 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 7. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
 8. Commit and create PR
 9. Monitor CI until all checks pass; fix failures before requesting review. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
-10. Check SonarCloud issues on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge
+10. Check SonarCloud on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) with **zero** BLOCKER/MAJOR issues — query the gate conditions, not just the issue list. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
 11. Address review comments from **all** bots/reviewers (CodeRabbit, Gemini Code Assist, Codex, SonarCloud, human). Blocking/major issues required, nitpicks optional. Bots post to three *separate* endpoints — you must query all three to discover every comment (the PR web view and `gh pr view` alone miss inline threads):
     - **Inline review comments** (code-anchored): `gh api repos/<owner>/<repo>/pulls/<N>/comments --paginate`
     - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
     - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
 
-    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it.
+    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
 12. Merge after all checks pass and reviews are addressed
 
 **Test location:** `src/Zipper.Tests/`.
@@ -228,6 +232,7 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 
 - C# 14 (net10.0), file-scoped namespaces, nullable reference types, switch expressions, pattern matching
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
+- ZIP entry paths always use `/`; normalize to backslashes with `.Replace('/', '\\')`, never `Replace(Path.DirectorySeparatorChar, '\\')` (a no-op on Windows, where the separator is already `\`)
 - **No copyright headers** — do not add `// <copyright ...>` to any files
 
 ### Test Naming Convention
