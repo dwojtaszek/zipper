@@ -1,5 +1,9 @@
 namespace Zipper.Profiles.Generation;
 
+/// <summary>
+/// Generates numeric string values based on the column definition.
+/// Supports ranges and distributions (uniform, exponential, gaussian).
+/// </summary>
 internal sealed class NumberGenerator : IColumnValueGenerator
 {
     private readonly string colName;
@@ -7,6 +11,10 @@ internal sealed class NumberGenerator : IColumnValueGenerator
     private readonly int max;
     private readonly string? distribution;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NumberGenerator"/> class.
+    /// </summary>
+    /// <param name="col">The column definition containing the range and distribution settings.</param>
     public NumberGenerator(ColumnDefinition col)
     {
         this.colName = col.Name;
@@ -15,6 +23,11 @@ internal sealed class NumberGenerator : IColumnValueGenerator
         this.distribution = col.Distribution;
     }
 
+    /// <summary>
+    /// Generates a numeric value according to the configured range and distribution.
+    /// </summary>
+    /// <param name="context">The generation context containing random seeds and row state.</param>
+    /// <returns>A string representation of the generated number.</returns>
     public string Generate(ColumnGenerationContext context)
     {
         if (this.colName.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase))
