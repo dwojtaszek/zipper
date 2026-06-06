@@ -19,6 +19,10 @@ What does this PR change and why?
 - [ ] E2E tests pass (`bash tests/run-tests.sh`)
 - [ ] Lint clean (`dotnet format --verify-no-changes src/`)
 
+## Architecture
+
+- [ ] No deviation from the [architecture diagrams](../docs/architecture.md#architecture-invariants-human-approval-required), **OR** the deviation is human-approved and `docs/architecture.md` is updated in this PR.
+
 ## Affected Requirements
 
 List any REQ-XXX or FR-XXX identifiers impacted by this change.

@@ -106,6 +106,8 @@ tests/run-tests.bat    # Windows
 
 Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement. *When this conflicts with Simplicity First (e.g., a trivial code change triggers a 4-doc update cascade), Simplicity First wins — but flag the conflict and note which docs are out of sync.*
 
+5. **Architecture invariants:** [docs/architecture.md](docs/architecture.md) diagrams are the source of truth for system structure — notably the load-file `composer → serializer → emitter` seam and the EDRM-XML carve-out. Any change that deviates from them, or makes a diagram inaccurate, requires **explicit human approval** and a same-PR diagram update. AI agents must stop and ask the maintainer (e.g. via AskUserQuestion) before merging such a change. Rationale: ADR-0006, ADR-0007.
+
 ---
 
 ## Workflow for github issues
@@ -215,7 +217,9 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for mode dispatch, pipeline design, and component diagrams.
+[docs/architecture.md](docs/architecture.md) is the **source-of-truth** architecture reference (mode dispatch, pipeline design, component + load-file-seam diagrams). Read it before any structural change.
+
+**Invariant:** the diagrams there are a contract — notably the load-file `composer → serializer → emitter` seam and the EDRM-XML carve-out. Any deviation, or any change that makes a diagram stale, requires **explicit human approval** plus a same-PR diagram update (see Critical Rule 5 and the PR template's **Architecture** checklist). AI agents must stop and ask the maintainer before merging such a change.
 
 ---
 
