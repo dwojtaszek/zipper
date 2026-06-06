@@ -78,5 +78,6 @@ cache/
 # parity harness (local, do not commit)
 _golden-main/
 _check/
+_chk/
 _gen.sh
 _parity.sh
