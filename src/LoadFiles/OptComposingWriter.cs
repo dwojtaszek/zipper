@@ -46,7 +46,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         var effectiveChaos = this.mode == WriterMode.Standard ? null : chaosEngine;
         var eol = this.mode == WriterMode.Standard
             ? Environment.NewLine
-            : LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+            : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
         await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos);

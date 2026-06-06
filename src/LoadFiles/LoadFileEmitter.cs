@@ -17,6 +17,16 @@ namespace Zipper.LoadFiles;
 internal static class LoadFileEmitter
 {
     /// <summary>
+    /// Resolves the end-of-line sequence from the configured EOL specifier (defaulting to CRLF).
+    /// </summary>
+    public static string GetEolString(string eol) => eol?.ToUpperInvariant() switch
+    {
+        "LF" => "\n",
+        "CR" => "\r",
+        _ => "\r\n",
+    };
+
+    /// <summary>
     /// Emits an optional header followed by the records. Without a chaos engine the records
     /// are streamed lazily with a bounded buffer (no full materialization). With a chaos
     /// engine the rendered lines are materialized so line-targeted interception and

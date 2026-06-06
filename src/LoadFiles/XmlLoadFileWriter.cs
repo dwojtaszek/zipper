@@ -8,15 +8,15 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes XML format load files - structured markup format.
 /// </summary>
-internal class XmlLoadFileWriter : LoadFileWriterBase
+internal sealed class XmlLoadFileWriter : ILoadFileWriter
 {
     private const string TagElement = "Tag";
 
-    public override string FormatName => "XML";
+    public string FormatName => "XML";
 
-    public override string FileExtension => ".xml";
+    public string FileExtension => ".xml";
 
-    public override async Task WriteAsync(
+    public async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
@@ -176,5 +176,59 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
         }
 
         return docElement;
+    }
+
+    private static string GenerateDocumentId(FileWorkItem workItem) => $"DOC{workItem.Index:D8}";
+
+    private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
+        => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt");
+
+    private static string GenerateBatesNumber(FileGenerationRequest request, FileWorkItem workItem)
+        => request.Bates != null
+            ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
+            : string.Empty;
+
+    private static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
+        => new()
+        {
+            Custodian = $"Custodian {workItem.FolderNumber}",
+            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            Author = $"Author {random.Next(1, 100):D3}",
+            FileSize = fileData.DataLength,
+        };
+
+    private static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now, FileGenerationRequest request)
+        => new()
+        {
+            To = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com",
+            From = fileData.Email?.From ?? $"sender{workItem.Index}@example.com",
+            Subject = fileData.Email?.Subject ?? $"Email Subject {workItem.Index}",
+            SentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
+                ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+            Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
+        };
+
+    private sealed record MetadataColumns
+    {
+        public string Custodian { get; init; } = string.Empty;
+
+        public string DateSent { get; init; } = string.Empty;
+
+        public string Author { get; init; } = string.Empty;
+
+        public long FileSize { get; init; }
+    }
+
+    private sealed record EmlColumns
+    {
+        public string To { get; init; } = string.Empty;
+
+        public string From { get; init; } = string.Empty;
+
+        public string Subject { get; init; } = string.Empty;
+
+        public string SentDate { get; init; } = string.Empty;
+
+        public string Attachment { get; init; } = string.Empty;
     }
 }

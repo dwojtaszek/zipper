@@ -38,7 +38,7 @@ internal sealed class DatComposingWriter : ILoadFileWriter
         // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
         var eol = this.mode == WriterMode.Standard && chaosEngine == null
             ? Environment.NewLine
-            : LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+            : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
         await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine);
