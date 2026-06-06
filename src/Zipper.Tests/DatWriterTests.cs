@@ -313,11 +313,11 @@ namespace Zipper
         }
 
         [Fact]
-        public void Factory_ReturnsDatWriter_AsLoadFileWriterBase()
+        public void CreateWriter_DatFormat_ReturnsDatComposingWriter()
         {
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
-            Assert.IsType<DatWriter>(writer);
-            Assert.IsAssignableFrom<LoadFileWriterBase>(writer);
+            Assert.IsType<DatComposingWriter>(writer);
+            Assert.IsAssignableFrom<ILoadFileWriter>(writer);
             Assert.Equal("DAT", writer.FormatName);
             Assert.Equal(".dat", writer.FileExtension);
         }
@@ -403,7 +403,7 @@ namespace Zipper
         {
             var request = DefaultRequest();
             using var stream = new MemoryStream();
-            var writer = new DatWriter();
+            var writer = new DatComposingWriter();
             await writer.WriteAsync(stream, request, []);
             Assert.True(stream.CanWrite);
             stream.WriteByte(0x00); // would throw if disposed
@@ -412,7 +412,7 @@ namespace Zipper
         private static async Task<(string output, string[] lines)> WriteAndCapture(FileGenerationRequest request, List<FileData> files)
         {
             using var stream = new MemoryStream();
-            var writer = new DatWriter();
+            var writer = new DatComposingWriter();
             await writer.WriteAsync(stream, request, files);
 
             var output = Encoding.UTF8.GetString(stream.ToArray());
@@ -467,7 +467,7 @@ namespace Zipper
 
             // Baseline (no chaos)
             using var baseStream = new MemoryStream();
-            var baseWriter = new DatWriter();
+            var baseWriter = new DatComposingWriter();
             await baseWriter.WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
@@ -483,7 +483,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            var chaosWriter = new DatWriter();
+            var chaosWriter = new DatComposingWriter();
             await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
@@ -508,7 +508,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -522,7 +522,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -547,7 +547,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -561,7 +561,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -592,7 +592,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -606,7 +606,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -625,7 +625,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseBytes = baseStream.ToArray();
 
             var chaosEngine = new ChaosEngine(
@@ -639,7 +639,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
             // Encoding anomaly injects extra bytes between lines — output must be longer
@@ -666,10 +666,10 @@ namespace Zipper
                 seed: 42);
 
             using var stream1 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream1, request, files, MakeEngine(files.Count));
+            await new DatComposingWriter().WriteAsync(stream1, request, files, MakeEngine(files.Count));
 
             using var stream2 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream2, request, files, MakeEngine(files.Count));
+            await new DatComposingWriter().WriteAsync(stream2, request, files, MakeEngine(files.Count));
 
             Assert.Equal(stream1.ToArray(), stream2.ToArray());
         }
@@ -689,7 +689,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            var baseWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            var baseWriter = new DatComposingWriter(LoadFiles.WriterMode.ProductionSet);
             await baseWriter.WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
@@ -704,7 +704,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            var chaosWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            var chaosWriter = new DatComposingWriter(LoadFiles.WriterMode.ProductionSet);
             await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
@@ -730,10 +730,10 @@ namespace Zipper
 
             // Passing null explicitly should produce identical output to no-arg call
             using var stream1 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream1, request, files, null);
+            await new DatComposingWriter().WriteAsync(stream1, request, files, null);
 
             using var stream2 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream2, request, files);
+            await new DatComposingWriter().WriteAsync(stream2, request, files);
 
             Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
         }
@@ -751,7 +751,7 @@ namespace Zipper
 
             // Generate baseline
             using var baseStream = new MemoryStream();
-            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
+            await new DatComposingWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
             var baseBytes = baseStream.ToArray();
 
             // Total lines = FileCount + 1 (header + 3 data = 4 lines)
@@ -766,7 +766,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
+            await new DatComposingWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
             // The output should have anomalies injected for line 1 and line 4 (among others).

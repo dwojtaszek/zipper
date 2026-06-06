@@ -1,8 +1,11 @@
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Serializes <see cref="LoadFileRecord"/> instances to a specific load file format.
-/// Separates "what data goes in a row" from "how that row is written."
+/// Renders <see cref="LoadFileRecord"/> instances to a specific load file format.
+/// Pure rendering only: a serializer turns columns/values into an escaped, delimited
+/// line. It owns no stream, no end-of-line, no encoding, and no chaos — those belong
+/// to <see cref="LoadFileEmitter"/>. This separates "what data goes in a row" (composer)
+/// from "how that row renders" (serializer) from "how it reaches the stream" (emitter).
 /// </summary>
 internal interface ILoadFileSerializer
 {
@@ -17,17 +20,13 @@ internal interface ILoadFileSerializer
     string FileExtension { get; }
 
     /// <summary>
-    /// Writes a header row to the stream.
+    /// Renders a header line from the ordered column names.
+    /// Returns an empty string for formats that have no header row (e.g. OPT).
     /// </summary>
-    Task WriteHeaderAsync(Stream stream, IReadOnlyList<string> columns);
+    string RenderHeader(IReadOnlyList<string> columns);
 
     /// <summary>
-    /// Writes a single data record to the stream.
+    /// Renders a single data record to a delimited line, applying format-specific escaping.
     /// </summary>
-    Task WriteRecordAsync(Stream stream, LoadFileRecord record);
-
-    /// <summary>
-    /// Flushes any buffered output.
-    /// </summary>
-    Task FlushAsync(Stream stream);
+    string RenderRecord(LoadFileRecord record);
 }

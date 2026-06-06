@@ -3,8 +3,10 @@ using System.Text;
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Serializes <see cref="LoadFileRecord"/> instances to standard DAT format
-/// (ASCII 20 column delimiter, ASCII 254 quote delimiter).
+/// Renders <see cref="LoadFileRecord"/> instances to standard DAT (Concordance) format
+/// (ASCII 20 column delimiter, ASCII 254 quote delimiter by default).
+/// Field values are quote-wrapped, the quote character is doubled when it appears in a
+/// value, and embedded newlines are replaced with the configured newline delimiter.
 /// </summary>
 internal sealed class DatSerializer : ILoadFileSerializer
 {
@@ -12,9 +14,6 @@ internal sealed class DatSerializer : ILoadFileSerializer
     private readonly char quoteDelimiter;
     private readonly bool hasQuote;
     private readonly string newlineDelimiter;
-    private readonly Encoding encoding;
-    private StreamWriter? writer;
-    private Stream? boundStream;
 
     public DatSerializer(char columnDelimiter = '\x14', char quoteDelimiter = '\xfe', string newlineDelimiter = "\xae")
     {
@@ -22,25 +21,26 @@ internal sealed class DatSerializer : ILoadFileSerializer
         this.quoteDelimiter = quoteDelimiter;
         this.hasQuote = quoteDelimiter != '\0';
         this.newlineDelimiter = newlineDelimiter;
-        this.encoding = Encoding.UTF8;
     }
 
     public DatSerializer(FileGenerationRequest request)
     {
-        this.columnDelimiter = request.Delimiters.GetColumnChar();
-        this.quoteDelimiter = request.Delimiters.GetQuoteChar();
-        this.hasQuote = this.quoteDelimiter != '\0';
+        // Mirror the defensive fallbacks the legacy writer used so unset delimiters
+        // cannot throw or drift from historical output.
+        this.columnDelimiter = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter)
+            ? request.Delimiters.ColumnDelimiter[0]
+            : '\x14';
+        this.hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
+        this.quoteDelimiter = this.hasQuote ? request.Delimiters.QuoteDelimiter[0] : '\xfe';
         this.newlineDelimiter = request.Delimiters.NewlineDelimiter;
-        this.encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
     }
 
     public string FormatName => "DAT";
 
     public string FileExtension => ".dat";
 
-    public async Task WriteHeaderAsync(Stream stream, IReadOnlyList<string> columns)
+    public string RenderHeader(IReadOnlyList<string> columns)
     {
-        this.EnsureWriter(stream);
         var sb = new StringBuilder();
         for (int i = 0; i < columns.Count; i++)
         {
@@ -52,12 +52,11 @@ internal sealed class DatSerializer : ILoadFileSerializer
             this.AppendField(sb, columns[i]);
         }
 
-        await this.writer!.WriteLineAsync(sb.ToString());
+        return sb.ToString();
     }
 
-    public async Task WriteRecordAsync(Stream stream, LoadFileRecord record)
+    public string RenderRecord(LoadFileRecord record)
     {
-        this.EnsureWriter(stream);
         var sb = new StringBuilder();
         for (int i = 0; i < record.Columns.Count; i++)
         {
@@ -67,28 +66,10 @@ internal sealed class DatSerializer : ILoadFileSerializer
             }
 
             var value = record.Values.TryGetValue(record.Columns[i], out var v) ? v : string.Empty;
-            var escaped = this.EscapeField(value);
-            this.AppendField(sb, escaped);
+            this.AppendField(sb, this.EscapeField(value));
         }
 
-        await this.writer!.WriteLineAsync(sb.ToString());
-    }
-
-    public async Task FlushAsync(Stream stream)
-    {
-        if (this.writer != null)
-        {
-            await this.writer!.FlushAsync();
-        }
-    }
-
-    private void EnsureWriter(Stream stream)
-    {
-        if (this.writer == null || this.boundStream != stream)
-        {
-            this.writer = new StreamWriter(stream, this.encoding, leaveOpen: true);
-            this.boundStream = stream;
-        }
+        return sb.ToString();
     }
 
     private void AppendField(StringBuilder sb, string value)

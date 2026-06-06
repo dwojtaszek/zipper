@@ -191,7 +191,7 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
             LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
             Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
         };
-        var writer = new OptWriter(WriterMode.LoadfileOnly);
+        var writer = new OptComposingWriter(WriterMode.LoadfileOnly);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, new List<FileData>());
 
@@ -243,7 +243,7 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
             });
         }
 
-        var writer = new OptWriter(WriterMode.ProductionSet);
+        var writer = new OptComposingWriter(WriterMode.ProductionSet);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
 

@@ -31,7 +31,7 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
                 }
             };
 
-        var writer = new ConcordanceWriter();
+        var writer = new ConcordanceComposingWriter();
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
 

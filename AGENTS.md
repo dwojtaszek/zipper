@@ -106,6 +106,8 @@ tests/run-tests.bat    # Windows
 
 Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement. *When this conflicts with Simplicity First (e.g., a trivial code change triggers a 4-doc update cascade), Simplicity First wins — but flag the conflict and note which docs are out of sync.*
 
+5. **Architecture invariants:** [docs/architecture.md](docs/architecture.md) diagrams are the source of truth for system structure — notably the load-file `composer → serializer → emitter` seam and the EDRM-XML carve-out. Any change that deviates from them, or makes a diagram inaccurate, requires **explicit human approval** and a same-PR diagram update. AI agents must stop and ask the maintainer (e.g. via AskUserQuestion) before merging such a change. Rationale: ADR-0006, ADR-0007.
+
 ---
 
 ## Workflow for github issues
@@ -196,12 +198,13 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
 | `src/ChaosAnomalyTypes.cs` | Canonical anomaly type catalog |
 | `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning |
-| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model |
-| `src/LoadFiles/ILoadFileSerializer.cs` | Format-specific record serialization interface |
-| `src/LoadFiles/DatSerializer.cs` | DAT format serializer |
+| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model (raw values) |
+| `src/LoadFiles/ILoadFileComposer.cs` | Column authority: header columns + lazy records (`Dat`/`Opt`/`Csv`/`Concordance` composers) |
+| `src/LoadFiles/ILoadFileSerializer.cs` | Render authority: record/header → one escaped line (`Dat`/`Opt`/`Csv`/`Concordance` serializers) |
+| `src/LoadFiles/LoadFileEmitter.cs` | I/O + chaos authority: preamble, EOL, batching, chaos pipeline |
 | `src/Profiles/Generation/` | Column value generators |
 | `src/Emails/` | Email domain model |
-| `src/LoadFiles/` | Load File writers (DAT, OPT, CSV, XML, Concordance) |
+| `src/LoadFiles/` | Load File seam: composers, serializers, emitter, thin composing writers + `XmlLoadFileWriter` carve-out |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/LoadfileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
 | `src/Zipper.Tests/` | Unit tests |
@@ -214,7 +217,9 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for mode dispatch, pipeline design, and component diagrams.
+[docs/architecture.md](docs/architecture.md) is the **source-of-truth** architecture reference (mode dispatch, pipeline design, component + load-file-seam diagrams). Read it before any structural change.
+
+**Invariant:** the diagrams there are a contract — notably the load-file `composer → serializer → emitter` seam and the EDRM-XML carve-out. Any deviation, or any change that makes a diagram stale, requires **explicit human approval** plus a same-PR diagram update (see Critical Rule 5 and the PR template's **Architecture** checklist). AI agents must stop and ask the maintainer before merging such a change.
 
 ---
 

@@ -27,6 +27,17 @@
 
 ---
 
+## Load File Composition Concepts
+
+The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by three deep modules in sequence. EDRM-XML is the **carve-out**: its hierarchical document tree does not fit a flat record, so it keeps its own dedicated writer (see ADR-0007).
+
+| Term | Definition | Aliases to avoid |
+|------|-----------|-----------------|
+| **Load File Record** | A format-independent row: ordered **Columns** plus raw (unescaped) values, keyed by column name, with a **Record Id** for chaos auditing. `LoadFileRecord`. | Row object, line model |
+| **Composer** | The **column authority** for a format: decides the header **Columns** and yields **Load File Records** with raw values (handling modes and **Column Profiles** internally). `ILoadFileComposer`, `DatComposer`, `OptComposer`, `CsvComposer`, `ConcordanceComposer`. | Builder, row generator |
+| **Serializer** | The **render authority**: turns one **Load File Record** (or header) into a single escaped text line. Pure — no stream, no EOL, no chaos. `ILoadFileSerializer`, `DatSerializer`, `OptSerializer`, `CsvSerializer`, `ConcordanceSerializer`. | Formatter, writer |
+| **Emitter** | The **I/O and chaos authority**: writes rendered lines to the stream, owning the encoding preamble (BOM), end-of-line sequence, output batching, and the single **Chaos Engine** pipeline. Streams both paths lazily (O(1) auxiliary memory) — the chaos path additionally intercepts each line and injects inter-line encoding-anomaly bytes. `LoadFileEmitter`. | Stream writer, output writer |
+
 ## Load File Format Concepts
 
 | Term | Definition | Aliases to avoid |
