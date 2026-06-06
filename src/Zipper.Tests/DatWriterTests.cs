@@ -490,6 +490,14 @@ namespace Zipper
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
+
+            var anomaly = chaosEngine.Anomalies.First();
+            Assert.Contains("Omitted the closing", anomaly.Description);
+            Assert.NotEqual("N/A", anomaly.Column);
+
+            var baseQuoteCount = baseOutput.Count(c => c == '\u00fe');
+            var chaosQuoteCount = chaosOutput.Count(c => c == '\u00fe');
+            Assert.True(chaosQuoteCount < baseQuoteCount, "Chaos output should have fewer quote characters");
         }
 
         [Fact]
@@ -521,6 +529,14 @@ namespace Zipper
             Assert.True(chaosEngine.Anomalies.Count > 0);
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("mixed-delimiters", a.ErrorType));
             Assert.True(chaosOutput.Contains(",") || chaosOutput.Contains("\t") || chaosOutput.Contains("|"), "Should contain alternative delimiters");
+
+            var anomaly = chaosEngine.Anomalies.First();
+            Assert.Contains("Replaced delimiter", anomaly.Description);
+            Assert.NotEqual("N/A", anomaly.Column);
+
+            var baseDelimCount = baseOutput.Count(c => c == '\u0014');
+            var chaosDelimCount = chaosOutput.Count(c => c == '\u0014');
+            Assert.True(chaosDelimCount < baseDelimCount, "Chaos output should have fewer standard delimiters");
         }
 
         [Fact]
@@ -695,6 +711,14 @@ namespace Zipper
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
+
+            var anomaly = chaosEngine.Anomalies.First();
+            Assert.Contains("Omitted the closing", anomaly.Description);
+            Assert.NotEqual("N/A", anomaly.Column);
+
+            var baseQuoteCount = baseOutput.Count(c => c == '\u00fe');
+            var chaosQuoteCount = chaosOutput.Count(c => c == '\u00fe');
+            Assert.True(chaosQuoteCount < baseQuoteCount, "Chaos output should have fewer quote characters");
         }
 
         [Fact]
