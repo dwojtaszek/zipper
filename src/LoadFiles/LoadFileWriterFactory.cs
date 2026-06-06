@@ -16,7 +16,7 @@ internal static class LoadFileWriterFactory
         return format switch
         {
             LoadFileFormat.Dat => new DatComposingWriter(mode),
-            LoadFileFormat.Opt => new OptWriter(mode),
+            LoadFileFormat.Opt => new OptComposingWriter(mode),
             LoadFileFormat.Csv => new CsvWriter(),
             LoadFileFormat.EdrmXml => new XmlLoadFileWriter(), // EDRM XML uses same writer
             LoadFileFormat.Concordance => new ConcordanceWriter(),
