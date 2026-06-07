@@ -81,3 +81,6 @@ _check/
 _chk/
 _gen.sh
 _parity.sh
+
+# Serena MCP
+.serena/
