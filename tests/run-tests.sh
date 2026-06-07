@@ -4,6 +4,7 @@
 set -euo pipefail
 
 TOTAL_FAILURES=0
+AGGREGATE_FAILURE=0
 
 # --- Test Configuration ---
 
@@ -25,7 +26,7 @@ function print_info() {
   echo -e "\e[44m[ INFO ]\e[0m $1"
 }
 
-# Prints a message with a red background and exits.
+# Prints a message with a red background and records/flags a failure (does not exit).
 function print_error() {
   echo -e "\e[41m[ ERROR ]\e[0m $1"
   ((TOTAL_FAILURES+=1)) || true
@@ -65,11 +66,11 @@ function verify_output() {
 
   if [[ -z "$zip_file" ]]; then
     print_error "No .zip file found in $test_dir"
-    return 1
+    AGGREGATE_FAILURE=1; return 0
   fi
   if [[ -z "$dat_file" ]]; then
     print_error "No .dat file found in $test_dir"
-    return 1
+    AGGREGATE_FAILURE=1; return 0
   fi
 
   # Get zip listing once and reuse it (major performance optimization)
@@ -101,7 +102,7 @@ function verify_output() {
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
       print_error "Header validation failed. Expected to find '$col' in '$header'."
-      return 1
+      AGGREGATE_FAILURE=1; return 0
     fi
   done
   print_info ".dat file header is correct."
@@ -110,7 +111,7 @@ function verify_output() {
   local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
   if [[ "$zip_file_count" -ne "$expected_count" ]]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
-    return 1
+    AGGREGATE_FAILURE=1; return 0
   fi
   print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 
@@ -208,7 +209,7 @@ function verify_zip_size() {
     local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
-    return 1
+    AGGREGATE_FAILURE=1; return 0
     fi
 
     local actual_size_bytes
@@ -222,7 +223,7 @@ function verify_zip_size() {
 
     if [[ "$actual_size_bytes" -lt "$min_size" ]] || [[ "$actual_size_bytes" -gt "$max_size" ]]; then
         print_error "Zip file size is out of tolerance. Expected around ${target_size_mb}MB, found $(($actual_size_bytes / 1024 / 1024))MB."
-    return 1
+    AGGREGATE_FAILURE=1; return 0
     fi
 
     print_info "Zip file size is within the expected range."
@@ -247,7 +248,7 @@ function verify_load_file_included() {
     local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
-    return 1
+    AGGREGATE_FAILURE=1; return 0
     fi
 
     # Verify no separate .dat file in output directory
@@ -299,7 +300,7 @@ function verify_load_file_included() {
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
             print_error "Header validation failed. Expected to find '$col' in '$header'."
-      return 1
+      AGGREGATE_FAILURE=1; return 0
         fi
     done
     print_info ".dat file header is correct."
@@ -308,7 +309,7 @@ function verify_load_file_included() {
     local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
     if [[ "$zip_file_count" -ne "$expected_count" ]]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
-    return 1
+    AGGREGATE_FAILURE=1; return 0
     fi
     print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 }
@@ -329,10 +330,10 @@ source "$(dirname "$0")/_zipper-cli.sh"
 # Function to run a single test case with logging
 function run_test_case() {
     local test_name="$1"
+    local exit_code=0
     shift
     print_info "START: $test_name at $(date)"
     zipper "$@" || exit_code=$?
-    exit_code=${exit_code:-0}
     if [[ $exit_code -ne 0 ]]; then
         print_error "$test_name failed with exit code $exit_code"
     fi
@@ -530,7 +531,6 @@ print_success "Unified workflow tests passed."
 print_info "Running loadfile-only and Chaos Engine tests..."
 if ! bash ./tests/run-e2e-loadfile.sh; then
   print_error "Loadfile-only tests failed."
-  exit 1
 fi
 print_success "Loadfile-only tests passed."
 
@@ -571,13 +571,13 @@ print_success "CLI coverage gap tests passed."
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then
   print_error "FileGenerationRequest must not have flat pass-through properties (see issue #213)."
-  exit 1
 fi
 print_success "FGR flat-property guard passed."
 
-if [[ $TOTAL_FAILURES -gt 0 ]]; then
-  echo -e "\n\e[41m[ FAILED ]\e[0m $TOTAL_FAILURES test(s) failed."
+if [[ "$TOTAL_FAILURES" -ne 0 ]] || [[ "$AGGREGATE_FAILURE" -ne 0 ]]; then
+  print_error "Test suite failed with $TOTAL_FAILURES errors."
   exit 1
-else
-  print_success "All tests passed successfully!"
 fi
+
+print_success "All tests passed successfully!"
+exit 0

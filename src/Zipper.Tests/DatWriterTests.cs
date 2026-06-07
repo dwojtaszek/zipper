@@ -780,7 +780,7 @@ namespace Zipper
             Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
         }
         [Fact]
-        public async Task DatWriter_ShouldWriteValidDatFormat()
+        public async Task WriteAsync_BasicScenario_WritesValidDatFormat()
         {
             var request = this.CreateTestRequest();
             var fileData = this.CreateTestFileData();
@@ -805,7 +805,7 @@ namespace Zipper
         [Theory]
         [InlineData("UTF-16")]
         [InlineData("ANSI")]
-        public async Task DatWriter_WithDifferentEncodings_ShouldWriteCorrectly(string encoding)
+        public async Task WriteAsync_WithDifferentEncodings_WritesCorrectly(string encoding)
         {
             ArgumentNullException.ThrowIfNull(encoding);
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
