@@ -116,7 +116,7 @@ public static class RequestBuilder
             {
                 OutputPath = parsed.OutputDirectory!.FullName,
                 FileCount = parsed.Count!.Value,
-                FileType = (parsed.FileType ?? "pdf").ToLower(System.Globalization.CultureInfo.CurrentCulture),
+                FileType = (parsed.FileType ?? "pdf").ToLowerInvariant(),
                 Folders = parsed.Folders,
                 Concurrency = PerformanceConstants.DefaultConcurrency,
                 WithText = parsed.WithText,
