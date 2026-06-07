@@ -136,7 +136,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData, random, now);
+            var metadata = SyntheticRowValues.Metadata(workItem, fileData, random, now);
 
             AddTag(tagsElement, "Custodian", metadata.Custodian, namingConvention);
             AddTag(tagsElement, "DateSent", metadata.DateSent, namingConvention);
@@ -146,7 +146,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var eml = GenerateEmlValues(workItem, fileData, random, now);
+            var eml = SyntheticRowValues.Eml(workItem, fileData, random, now);
 
             AddTag(tagsElement, "To", eml.To, namingConvention);
             AddTag(tagsElement, "From", eml.From, namingConvention);
@@ -188,47 +188,4 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
             : string.Empty;
 
-    private static MetadataColumns GenerateMetadataValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
-        => new()
-        {
-            Custodian = $"Custodian {workItem.FolderNumber}",
-            DateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-            Author = $"Author {random.Next(1, 100):D3}",
-            FileSize = fileData.DataLength,
-        };
-
-    private static EmlColumns GenerateEmlValues(FileWorkItem workItem, FileData fileData, Random random, DateTime now)
-        => new()
-        {
-            To = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com",
-            From = fileData.Email?.From ?? $"sender{workItem.Index}@example.com",
-            Subject = fileData.Email?.Subject ?? $"Email Subject {workItem.Index}",
-            SentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
-                ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
-            Attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty,
-        };
-
-    private sealed record MetadataColumns
-    {
-        public string Custodian { get; init; } = string.Empty;
-
-        public string DateSent { get; init; } = string.Empty;
-
-        public string Author { get; init; } = string.Empty;
-
-        public long FileSize { get; init; }
-    }
-
-    private sealed record EmlColumns
-    {
-        public string To { get; init; } = string.Empty;
-
-        public string From { get; init; } = string.Empty;
-
-        public string Subject { get; init; } = string.Empty;
-
-        public string SentDate { get; init; } = string.Empty;
-
-        public string Attachment { get; init; } = string.Empty;
-    }
 }
