@@ -503,4 +503,22 @@ if errorlevel 1 (
 )
 call :print_success "Column profile matrix tests passed."
 
+REM Test 18: Column-profile custom every-kind profile
+call :print_info "Running column-profile custom-kinds test..."
+call .\tests\test-column-profile-custom-kinds.bat
+if errorlevel 1 (
+    echo [ ERROR ] Column-profile custom-kinds test failed.
+    exit /b 1
+)
+call :print_success "Column-profile custom-kinds test passed."
+
+REM Test 19: Column-profile EmptyPercentage chi-square
+call :print_info "Running column-profile empty-percentage tests..."
+call .\tests\test-column-profile-empty-pct.bat
+if errorlevel 1 (
+    echo [ ERROR ] Column-profile empty-percentage tests failed.
+    exit /b 1
+)
+call :print_success "Column-profile empty-percentage tests passed."
+
 call :print_success "All tests passed successfully!"

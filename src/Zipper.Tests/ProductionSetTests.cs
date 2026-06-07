@@ -462,9 +462,11 @@ public class ProductionSetTests : IDisposable
         Assert.Equal(fileCount, doc.RootElement.GetProperty("totalRecords").GetInt64());
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task ProductionSet_OnFailure_CleansUpPartialOutput()
     {
+        Skip.If(OperatingSystem.IsWindows(), "Directory permissions don't prevent file creation on Windows");
+
         var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 

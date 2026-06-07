@@ -501,9 +501,11 @@ namespace Zipper
             Assert.Equal(expectedPadding, result);
         }
 
-        [WindowsUnsupportedFact(Timeout = 10000)]
+        [SkippableFact(Timeout = 10000)]
         public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
         {
+            Skip.If(OperatingSystem.IsWindows(), "Directory permissions don't prevent file creation on Windows");
+
             var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
             Directory.CreateDirectory(outputPath);
 
@@ -511,11 +513,8 @@ namespace Zipper
             {
                 // Make directory read-only so zip file creation fails inside the consumer
                 File.SetAttributes(outputPath, FileAttributes.ReadOnly);
-                if (!OperatingSystem.IsWindows())
-                {
-                    // On Linux, directory write permission controls file creation
-                    System.Diagnostics.Process.Start("chmod", $"555 {outputPath}")?.WaitForExit();
-                }
+                // On Linux, directory write permission controls file creation
+                System.Diagnostics.Process.Start("chmod", $"555 {outputPath}")?.WaitForExit();
 
                 var generator = new ParallelFileGenerator();
 
@@ -538,14 +537,7 @@ namespace Zipper
             finally
             {
                 // Restore permissions before cleanup
-                if (!OperatingSystem.IsWindows())
-                {
-                    System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
-                }
-                else
-                {
-                    File.SetAttributes(outputPath, FileAttributes.Normal);
-                }
+                System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
 
                 if (Directory.Exists(outputPath))
                 {
@@ -713,14 +705,4 @@ namespace Zipper
         }
     }
 
-    public sealed class WindowsUnsupportedFactAttribute : FactAttribute
-    {
-        public WindowsUnsupportedFactAttribute()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                this.Skip = "Windows doesn't support directory read-only attributes to block writing.";
-            }
-        }
-    }
 }
