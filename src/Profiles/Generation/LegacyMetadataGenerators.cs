@@ -35,13 +35,13 @@ internal sealed class LegacyAuthorGenerator : IColumnValueGenerator
 /// <summary>FileSize from actual FileData.DataLength.</summary>
 internal sealed class LegacyFileSizeFromDataGenerator : IColumnValueGenerator
 {
-    public string Generate(ColumnGenerationContext context) => (context.FileData?.DataLength ?? 0).ToString();
+    public string Generate(ColumnGenerationContext context) => (context.FileData?.DataLength ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>Random FileSize in [1024, 10485760] (loadfile-only mode).</summary>
 internal sealed class LegacyRandomFileSizeGenerator : IColumnValueGenerator
 {
-    public string Generate(ColumnGenerationContext context) => context.Seeded.Next(1024, 10485760).ToString();
+    public string Generate(ColumnGenerationContext context) => context.Seeded.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
 /// <summary>EmailTo column: reads fileData.Email.To; falls back to synthetic.</summary>

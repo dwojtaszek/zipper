@@ -181,7 +181,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
     private static string GenerateDocumentId(FileWorkItem workItem) => $"DOC{workItem.Index:D8}";
 
     private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
-        => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt");
+        => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
 
     private static string GenerateBatesNumber(FileGenerationRequest request, FileWorkItem workItem)
         => request.Bates != null

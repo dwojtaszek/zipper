@@ -55,7 +55,7 @@ public static class BatesNumberGenerator
     {
         ArgumentNullException.ThrowIfNull(config);
         var number = CalculateValue(config, currentIndex);
-        var formattedNumber = number.ToString($"D{config.Digits}");
+        var formattedNumber = number.ToString($"D{config.Digits}", System.Globalization.CultureInfo.InvariantCulture);
         var safePrefix = Path.GetFileName(config.Prefix);
         return $"{safePrefix}{formattedNumber}";
     }
@@ -69,6 +69,6 @@ public static class BatesNumberGenerator
     public static string GenerateWithoutPrefix(BatesNumberConfig config, long currentIndex)
     {
         ArgumentNullException.ThrowIfNull(config);
-        return CalculateValue(config, currentIndex).ToString($"D{config.Digits}");
+        return CalculateValue(config, currentIndex).ToString($"D{config.Digits}", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

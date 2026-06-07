@@ -151,7 +151,7 @@ internal sealed class DatComposer : ILoadFileComposer
                     {
                         IdOverride = childId,
                         FilePathOverride = attachmentPath,
-                        FileSizeOverride = attach.content.Length.ToString(),
+                        FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
                         BegAttach = parentId,
                         EndAttach = childId,
@@ -175,7 +175,7 @@ internal sealed class DatComposer : ILoadFileComposer
             v.Add(profileValues?.GetValueOrDefault("CUSTODIAN") ?? string.Empty);
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty));
-            v.Add(ctx.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString()));
+            v.Add(ctx.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
@@ -194,7 +194,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
         {
-            v.Add((ctx.IsChild ? 1 : fileData.PageCount).ToString());
+            v.Add((ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         if (this.request.Output.WithText)
@@ -254,7 +254,7 @@ internal sealed class DatComposer : ILoadFileComposer
                         NativePathOverride = childNativePath,
                         TextPathOverride = childTextPath,
                         ImagePathOverride = childImagePath,
-                        FileSizeOverride = attach.content.Length.ToString(),
+                        FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
                         BegAttach = parentId,
                         EndAttach = childId,
@@ -269,11 +269,11 @@ internal sealed class DatComposer : ILoadFileComposer
         var wi = fileData.WorkItem;
         var batesNumber = ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1);
         var imagePath = ctx.ImagePathOverride ?? wi.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-            .Replace(Path.GetExtension(wi.FilePathInZip), ".tif");
+            .Replace(Path.GetExtension(wi.FilePathInZip), ".tif", StringComparison.Ordinal);
         // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
         // backslash normalization also works on Windows (where DirectorySeparatorChar is '\').
         var nativePath = ctx.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
-        var textPath = ctx.TextPathOverride ?? nativePath.Replace($".{this.request.Output.FileType}", ".txt");
+        var textPath = ctx.TextPathOverride ?? nativePath.Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
         var imagesPath = imagePath.Replace('/', '\\');
 
 #pragma warning disable S2245
@@ -284,7 +284,7 @@ internal sealed class DatComposer : ILoadFileComposer
         var custodianProd = $"Custodian {random.Next(1, maxCustodians + 1)}";
         var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
-        var fileSize = ctx.FileSizeOverride ?? fileData.DataLength.ToString();
+        var fileSize = ctx.FileSizeOverride ?? fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var fileType = ctx.IsChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : this.request.Output.FileType.ToUpperInvariant();
 
         var v = new List<string>(this.headerColumns.Count)
@@ -328,7 +328,7 @@ internal sealed class DatComposer : ILoadFileComposer
             var custodian = $"Custodian {(i % 10) + 1}";
             var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             var author = $"Author {random.Next(1, 100):D3}";
-            var fileSize = random.Next(1024, 10485760).ToString();
+            var fileSize = random.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var subjLine = $"Email Subject {i}";
             var senderAddr = $"sender{i}@example.com";
             var recipientAddr = $"recipient{i}@example.com";

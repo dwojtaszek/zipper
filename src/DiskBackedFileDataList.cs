@@ -27,7 +27,7 @@ namespace Zipper
         {
             lock (this.syncRoot)
             {
-                if (this.writer == null) throw new ObjectDisposedException(nameof(DiskBackedFileDataList));
+                ObjectDisposedException.ThrowIf(this.writer is null, this);
                 FileDataSerializer.Serialize(this.writer, data);
                 this.count++;
             }
