@@ -128,6 +128,11 @@ public class SmokeTests
             Assert.Equal(11, datLines.Length); // 10 records + 1 header
             Assert.Contains("DOC00000001", datContent);
 
+            // Verify load file column structure
+            var header = datLines[0];
+            Assert.Contains("\x14", header);
+            Assert.Contains("\xFE", header);
+
             var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
             Assert.Single(propFiles);
             var propContent = await File.ReadAllTextAsync(propFiles[0]);
@@ -156,6 +161,11 @@ public class SmokeTests
             Assert.Equal(0, result);
             var datFiles = Directory.GetFiles(tempDir, "*.dat");
             Assert.Single(datFiles);
+
+            var datContent = await File.ReadAllTextAsync(datFiles[0]);
+            Assert.NotEmpty(datContent);
+            var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.True(datLines.Length > 0);
 
             var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
             Assert.Single(propFiles);
