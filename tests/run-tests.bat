@@ -382,6 +382,11 @@ if not errorlevel 1 (
 )
 call :print_success "Test Case 19 passed."
 
+REM Test Case 20: High-volume smoke test
+call :run_test_case "Test Case 20: High-volume smoke test" --type pdf --count 5000 --output-path "%TEST_OUTPUT_DIR%\pdf_high_volume"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_high_volume" 5000 "Control Number,File Path" "pdf" "false" "UTF-8"
+call :print_success "Test Case 20 passed."
+
 REM --- Cleanup ---
 
 call :print_info "Cleaning up test output..."
