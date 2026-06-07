@@ -164,7 +164,7 @@ REM ================================================================
 REM Test 4: Chaos mode generates anomalies
 REM ================================================================
 echo [ INFO ] START: Chaos mode
-%BINARY% --loadfile-only --count 200 --output-path "%TEST_OUTPUT_DIR%\dat_chaos" --chaos-mode --chaos-amount "5%%" --seed 42
+%BINARY% --loadfile-only --count 200 --output-path "%TEST_OUTPUT_DIR%\dat_chaos" --chaos-mode --chaos-amount "5%%" --seed 12345
 if errorlevel 1 (
     echo [ ERROR ] Test 4 failed: Chaos mode execution
     goto :cleanup
@@ -193,7 +193,7 @@ REM ================================================================
 REM Test 5: Chaos with specific types filter
 REM ================================================================
 echo [ INFO ] START: Chaos with type filter
-%BINARY% --loadfile-only --count 100 --output-path "%TEST_OUTPUT_DIR%\dat_chaos_typed" --chaos-mode --chaos-amount "10" --chaos-types "quotes,columns" --seed 42
+%BINARY% --loadfile-only --count 100 --output-path "%TEST_OUTPUT_DIR%\dat_chaos_typed" --chaos-mode --chaos-amount "10" --chaos-types "quotes,columns" --seed 12345
 if errorlevel 1 (
     echo [ ERROR ] Test 5 failed: Chaos typed execution
     goto :cleanup

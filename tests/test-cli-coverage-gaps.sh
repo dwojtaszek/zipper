@@ -113,7 +113,7 @@ fi
 
 print_info "Test: --empty-percentage 0 produces no empty fields"
 if zipper --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/empty_pct" \
-    --column-profile standard --empty-percentage 0 --seed 42 > /dev/null 2>&1; then
+    --column-profile standard --empty-percentage 0 --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/empty_pct" -name "*.dat" -print -quit)
     if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
         fail "--empty-percentage 0: no .dat file produced"
@@ -145,7 +145,7 @@ fi
 
 print_info "Test: --date-format override"
 if zipper --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/date_fmt" \
-    --column-profile standard --date-format "dd/MM/yyyy" --seed 42 > /dev/null 2>&1; then
+    --column-profile standard --date-format "dd/MM/yyyy" --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/date_fmt" -name "*.dat" -print -quit)
     if [[ -f "$dat_file" ]]; then
         if grep -q -E '[0-9]{2}/[0-9]{2}/[0-9]{4}' "$dat_file"; then
@@ -162,7 +162,7 @@ fi
 
 print_info "Test: --custodian-count limits pool"
 if zipper --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/cust_count" \
-    --with-metadata --custodian-count 2 --seed 42 > /dev/null 2>&1; then
+    --with-metadata --custodian-count 2 --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/cust_count" -name "*.dat" -print -quit)
     if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
         fail "--custodian-count: no .dat file produced"
