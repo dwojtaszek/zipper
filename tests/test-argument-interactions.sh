@@ -139,6 +139,9 @@ assert_rejected "--loadfile-only + --load-file-format csv" \
 assert_rejected "--loadfile-only + --load-file-format xml" \
     --loadfile-only --count 5 --load-file-format xml
 
+assert_rejected "--loadfile-only + --load-file-format edrm-xml" \
+    --loadfile-only --count 5 --load-file-format edrm-xml
+
 assert_rejected "--loadfile-only + --load-file-format concordance" \
     --loadfile-only --count 5 --load-file-format concordance
 
