@@ -93,7 +93,8 @@ function verify_output() {
   print_info ".dat file line count is correct ($line_count)."
 
   # Verify header (using cached content)
-  local header=$(echo "$dat_content" | head -n 1)
+  local header
+  IFS= read -r header <<< "$dat_content"
   IFS=',' read -ra cols <<< "$expected_header"
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
@@ -281,7 +282,8 @@ function verify_load_file_included() {
     print_info ".dat file line count is correct ($line_count)."
 
     # Verify header (using cached content)
-    local header=$(echo "$dat_content" | head -n 1)
+    local header
+    IFS= read -r header <<< "$dat_content"
     IFS=',' read -ra cols <<< "$expected_header"
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
