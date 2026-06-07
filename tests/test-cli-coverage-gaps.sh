@@ -119,11 +119,13 @@ if zipper --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/empty_pct" 
         fail "--empty-percentage 0: no .dat file produced"
     else
         non_empty_rows=$(tail -n +2 "$dat_file" | wc -l)
-        empty_fields=$(grep -c -E $'\x14\x14|\x14þþ\x14|^\x14|^þþ\x14|\x14$|\x14þþ$' "$dat_file" || true)
-        if [[ "$non_empty_rows" -eq 20 && "$empty_fields" -eq 0 ]]; then
-            pass "--empty-percentage 0: verified 20 rows produced and zero empty fields across all columns"
+        # DAT format uses \x14 (field separator) and þ (\xFE quote delimiter)
+        # Pattern matches: consecutive separators, empty quoted fields, empty first/last fields
+        lines_with_empty_fields=$(grep -c -E $'\x14\x14|\x14þþ\x14|^\x14|^þþ\x14|\x14$|\x14þþ$' "$dat_file" || true)
+        if [[ "$non_empty_rows" -eq 20 && "$lines_with_empty_fields" -eq 0 ]]; then
+            pass "--empty-percentage 0: verified 20 rows produced and zero lines with empty fields"
         else
-            fail "--empty-percentage 0: failed validation. Rows: $non_empty_rows, Empty Fields: $empty_fields"
+            fail "--empty-percentage 0: failed validation. Rows: $non_empty_rows, Lines with empty fields: $lines_with_empty_fields"
         fi
     fi
 else

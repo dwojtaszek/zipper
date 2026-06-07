@@ -97,7 +97,8 @@ function verify_output() {
   print_info ".dat file line count is correct ($line_count)."
 
   # Verify header (using cached content)
-  local header=$(echo "$dat_content" | head -n 1)
+  local header
+  IFS= read -r header <<< "$dat_content"
   IFS=',' read -ra cols <<< "$expected_header"
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
@@ -295,7 +296,8 @@ function verify_load_file_included() {
     print_info ".dat file line count is correct ($line_count)."
 
     # Verify header (using cached content)
-    local header=$(echo "$dat_content" | head -n 1)
+    local header
+    IFS= read -r header <<< "$dat_content"
     IFS=',' read -ra cols <<< "$expected_header"
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
@@ -461,6 +463,11 @@ if head -n 1 "$opt_file" | grep -q "Control Number"; then
   print_error "Test 19: OPT should not contain header row, found 'Control Number'"
 fi
 print_success "Test Case 19 passed."
+
+# Test Case 20: High-volume smoke test
+run_test_case "Test Case 20: High-volume smoke test" --type pdf --count 5000 --output-path "$TEST_OUTPUT_DIR/pdf_high_volume"
+verify_output "$TEST_OUTPUT_DIR/pdf_high_volume" 5000 "Control Number,File Path" "pdf" "false" "UTF-8"
+print_success "Test Case 20 passed."
 
 # --- Cleanup ---
 

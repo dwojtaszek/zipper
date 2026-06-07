@@ -165,7 +165,6 @@ public class SmokeTests
             var datContent = await File.ReadAllTextAsync(datFiles[0]);
             Assert.NotEmpty(datContent);
             var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-            Assert.True(datLines.Length > 0);
 
             var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
             Assert.Single(propFiles);
