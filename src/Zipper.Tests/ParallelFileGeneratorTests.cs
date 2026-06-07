@@ -536,8 +536,17 @@ namespace Zipper
             }
             finally
             {
-                // Restore permissions before cleanup
-                System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
+                if (!OperatingSystem.IsWindows())
+                {
+                    System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
+                }
+                else
+                {
+                    if (Directory.Exists(outputPath))
+                    {
+                        File.SetAttributes(outputPath, FileAttributes.Normal);
+                    }
+                }
 
                 if (Directory.Exists(outputPath))
                 {
