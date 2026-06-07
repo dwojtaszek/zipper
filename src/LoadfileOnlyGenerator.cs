@@ -24,7 +24,7 @@ internal static class LoadfileOnlyGenerator
 
         var baseFileName = $"loadfile_{DateTime.Now:yyyyMMdd_HHmmss}";
 
-        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Any() == true
+        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
             ? request.LoadFile.LoadFileFormats
             : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
 
@@ -55,7 +55,7 @@ internal static class LoadfileOnlyGenerator
 
                     request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
 
-                    Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
                 else
                 {

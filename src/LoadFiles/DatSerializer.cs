@@ -94,18 +94,19 @@ internal sealed class DatSerializer : ILoadFileSerializer
         }
 
         var result = field;
-        if (this.hasQuote && result.Contains(this.quoteDelimiter))
+        if (this.hasQuote && result.Contains(this.quoteDelimiter, StringComparison.Ordinal))
         {
             result = result.Replace(
                 this.quoteDelimiter.ToString(),
-                new string(this.quoteDelimiter, 2));
+                new string(this.quoteDelimiter, 2),
+                StringComparison.Ordinal);
         }
 
         if (!string.IsNullOrEmpty(this.newlineDelimiter))
         {
-            result = result.Replace("\r\n", this.newlineDelimiter)
-                           .Replace("\n", this.newlineDelimiter)
-                           .Replace("\r", this.newlineDelimiter);
+            result = result.Replace("\r\n", this.newlineDelimiter, StringComparison.Ordinal)
+                           .Replace("\n", this.newlineDelimiter, StringComparison.Ordinal)
+                           .Replace("\r", this.newlineDelimiter, StringComparison.Ordinal);
         }
 
         return result;

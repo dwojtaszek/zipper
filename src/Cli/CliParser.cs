@@ -4,10 +4,7 @@ public static class CliParser
 {
     public static ParsedArguments? Parse(string[] args)
     {
-        if (args == null)
-        {
-            throw new ArgumentNullException(nameof(args));
-        }
+        ArgumentNullException.ThrowIfNull(args);
 
         var parsed = new ParsedArguments();
 
@@ -457,7 +454,7 @@ public static class CliParser
 
     private static bool IsParameterlessFlag(string arg)
     {
-        if (!arg.StartsWith("--"))
+        if (!arg.StartsWith("--", StringComparison.Ordinal))
         {
             return false;
         }

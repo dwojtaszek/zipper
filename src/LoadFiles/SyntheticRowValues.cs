@@ -16,7 +16,7 @@ internal static class SyntheticRowValues
         var custodian = $"Custodian {workItem.FolderNumber}";
         var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var author = $"Author {random.Next(1, 100):D3}";
-        var fileSize = fileData.DataLength.ToString();
+        var fileSize = fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return (custodian, dateSent, author, fileSize);
     }
 

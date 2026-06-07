@@ -145,12 +145,12 @@ internal class ChaosEngine
         byte[] invalidBytes;
         string encodingName = encoding.WebName.ToUpperInvariant();
 
-        if (encodingName.Contains("UTF-16"))
+        if (encodingName.Contains("UTF-16", StringComparison.Ordinal))
         {
             // Unpaired high surrogate in little-endian: 0x00D8 as LE bytes
             invalidBytes = new byte[] { 0x00, 0xD8 };
         }
-        else if (encodingName.Contains("UTF-8") || encodingName == "UTF-8")
+        else if (encodingName.Contains("UTF-8", StringComparison.Ordinal) || encodingName == "UTF-8")
         {
             // Invalid UTF-8 continuation byte without start byte
             invalidBytes = new byte[] { 0xFE, 0xFF };
@@ -257,7 +257,7 @@ internal class ChaosEngine
 
         this.anomalies.Add(new ChaosAnomaly
         {
-            LineNumber = lineNumber.ToString(),
+            LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
             RecordID = recordId,
             Column = column,
             ErrorType = chaosType,
@@ -304,7 +304,7 @@ internal class ChaosEngine
 
         this.anomalies.Add(new ChaosAnomaly
         {
-            LineNumber = lineNumber.ToString(),
+            LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
             RecordID = recordId,
             Column = "N/A",
             ErrorType = chaosType,
@@ -453,7 +453,7 @@ internal class ChaosEngine
 
     private string RemoveOneComma(string line)
     {
-        int commaPos = line.IndexOf(',');
+        int commaPos = line.IndexOf(',', StringComparison.Ordinal);
         if (commaPos < 0)
         {
             return line;
@@ -490,7 +490,7 @@ internal class ChaosEngine
 
     private static string ApplyOptBatesNumberCorruption(string line)
     {
-        int firstComma = line.IndexOf(',');
+        int firstComma = line.IndexOf(',', StringComparison.Ordinal);
         if (firstComma >= 0)
         {
             return line.Substring(firstComma); // Leaves empty Bates Number

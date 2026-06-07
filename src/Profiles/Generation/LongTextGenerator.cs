@@ -15,12 +15,12 @@ internal sealed class LongTextGenerator : IColumnValueGenerator
         {
             if (col.GeneratorParams.TryGetValue("min", out var minObj))
             {
-                this.minParagraphs = Convert.ToInt32(minObj);
+                this.minParagraphs = Convert.ToInt32(minObj, System.Globalization.CultureInfo.InvariantCulture);
             }
 
             if (col.GeneratorParams.TryGetValue("max", out var maxObj))
             {
-                this.maxParagraphs = Convert.ToInt32(maxObj);
+                this.maxParagraphs = Convert.ToInt32(maxObj, System.Globalization.CultureInfo.InvariantCulture);
             }
         }
     }

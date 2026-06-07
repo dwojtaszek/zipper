@@ -22,9 +22,9 @@ internal sealed class CsvSerializer : ILoadFileSerializer
             return string.Empty;
         }
 
-        if (field.Contains(',') || field.Contains('"') || field.Contains('\n') || field.Contains('\r'))
+        if (field.Contains(',', StringComparison.Ordinal) || field.Contains('"', StringComparison.Ordinal) || field.Contains('\n', StringComparison.Ordinal) || field.Contains('\r', StringComparison.Ordinal))
         {
-            return $"\"{field.Replace("\"", "\"\"")}\"";
+            return $"\"{field.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
         }
 
         return field;

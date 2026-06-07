@@ -115,11 +115,34 @@ dotnet_naming_style.pascal_case.capitalization = pascal_case
 dotnet_naming_style.begins_with_i.required_prefix = I
 dotnet_naming_style.begins_with_i.capitalization = pascal_case
 
-# Specify all diagnostics severity of the analyzer
-dotnet_diagnostic.category_design.severity = warning
-dotnet_diagnostic.category_documentation.severity = warning
-dotnet_diagnostic.category_naming.severity = warning
-dotnet_diagnostic.category_performance.severity = warning
+# NOTE: the previous `dotnet_diagnostic.category_design.severity` style keys were
+# silent no-ops — there is no rule named "category_design". The correct Roslyn
+# syntax for category-wide config is `dotnet_analyzer_diagnostic.category-<Name>.severity`.
+# Rather than blanket-enabling whole categories (which surfaces large, unscoped churn
+# such as CA1707 across the xUnit test suite), high-value rules are enabled explicitly below.
+
+# --- Determinism / globalization (tool guarantees byte-identical output) ---
+# Culture-sensitive string and format operations are a latent determinism-bug class.
+dotnet_diagnostic.CA1304.severity = warning   # specify CultureInfo
+dotnet_diagnostic.CA1305.severity = warning   # specify IFormatProvider
+dotnet_diagnostic.CA1307.severity = warning   # specify StringComparison for clarity
+dotnet_diagnostic.CA1310.severity = warning   # specify StringComparison for correctness
+dotnet_diagnostic.CA1311.severity = warning   # specify culture / use invariant ToUpper
+# CA1308 intentionally NOT enabled: hash hex is emitted lowercase (ToLowerInvariant) per
+# EDRM document-hash convention; forcing ToUpperInvariant would break byte-identity/goldens.
+
+# --- Performance quick wins ---
+dotnet_diagnostic.CA1510.severity = warning   # use ArgumentNullException.ThrowIfNull
+dotnet_diagnostic.CA1513.severity = warning   # use ObjectDisposedException.ThrowIf
+dotnet_diagnostic.CA1805.severity = warning   # do not explicitly init to default
+dotnet_diagnostic.CA1860.severity = warning   # prefer Count/Length over Any()
+dotnet_diagnostic.CA1869.severity = warning   # cache and reuse JsonSerializerOptions
+
+# --- Intentional domain choices: disabled with justification ---
+dotnet_diagnostic.CA5394.severity = none   # System.Random drives synthetic test data, not security
+dotnet_diagnostic.CA2007.severity = none   # CLI application, not a library; ConfigureAwait adds no value
+dotnet_diagnostic.CA1303.severity = none   # CLI output is not localized
+dotnet_diagnostic.CA5351.severity = none   # MD5 produces the EDRM document-hash column, not a security primitive
 
 # IDE0005: Remove unnecessary usings
 dotnet_diagnostic.IDE0005.severity = warning
@@ -147,3 +170,17 @@ dotnet_diagnostic.CA1861.severity = suggestion
 
 # RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
 dotnet_diagnostic.RCS1139.severity = none
+
+# Test projects: determinism/perf analyzer rules add churn without value in test
+# assertions and fixtures. Scope the rules enabled above to production code only.
+[**/{Zipper.Tests,Zipper.Analyzers.Tests}/**.cs]
+dotnet_diagnostic.CA1304.severity = none
+dotnet_diagnostic.CA1305.severity = none
+dotnet_diagnostic.CA1307.severity = none
+dotnet_diagnostic.CA1310.severity = none
+dotnet_diagnostic.CA1311.severity = none
+dotnet_diagnostic.CA1510.severity = none
+dotnet_diagnostic.CA1513.severity = none
+dotnet_diagnostic.CA1805.severity = none
+dotnet_diagnostic.CA1860.severity = none
+dotnet_diagnostic.CA1869.severity = none

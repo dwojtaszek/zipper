@@ -38,8 +38,8 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
             return string.Empty;
         }
 
-        return field.Contains(QuoteDelim)
-            ? field.Replace(QuoteDelim.ToString(), new string(QuoteDelim, 2))
+        return field.Contains(QuoteDelim, StringComparison.Ordinal)
+            ? field.Replace(QuoteDelim.ToString(), new string(QuoteDelim, 2), StringComparison.Ordinal)
             : field;
     }
 }
