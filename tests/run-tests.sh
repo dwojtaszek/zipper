@@ -3,6 +3,8 @@
 # Exit immediately if a command exits with a non-zero status, use unset variable as error, and fail on pipe failures.
 set -euo pipefail
 
+TOTAL_FAILURES=0
+
 # --- Test Configuration ---
 
 # The directory where test output will be generated.
@@ -26,7 +28,7 @@ function print_info() {
 # Prints a message with a red background and exits.
 function print_error() {
   echo -e "\e[41m[ ERROR ]\e[0m $1"
-  exit 1
+  ((TOTAL_FAILURES+=1)) || true
 }
 
 # Optimized function to get unzip listing once and cache it
@@ -63,9 +65,11 @@ function verify_output() {
 
   if [[ -z "$zip_file" ]]; then
     print_error "No .zip file found in $test_dir"
+    return 1
   fi
   if [[ -z "$dat_file" ]]; then
     print_error "No .dat file found in $test_dir"
+    return 1
   fi
 
   # Get zip listing once and reuse it (major performance optimization)
@@ -97,6 +101,7 @@ function verify_output() {
   for col in "${cols[@]}"; do
     if ! echo "$header" | grep -q "$col"; then
       print_error "Header validation failed. Expected to find '$col' in '$header'."
+      return 1
     fi
   done
   print_info ".dat file header is correct."
@@ -105,6 +110,7 @@ function verify_output() {
   local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
   if [[ "$zip_file_count" -ne "$expected_count" ]]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
+    return 1
   fi
   print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 
@@ -202,6 +208,7 @@ function verify_zip_size() {
     local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
+    return 1
     fi
 
     local actual_size_bytes
@@ -215,6 +222,7 @@ function verify_zip_size() {
 
     if [[ "$actual_size_bytes" -lt "$min_size" ]] || [[ "$actual_size_bytes" -gt "$max_size" ]]; then
         print_error "Zip file size is out of tolerance. Expected around ${target_size_mb}MB, found $(($actual_size_bytes / 1024 / 1024))MB."
+    return 1
     fi
 
     print_info "Zip file size is within the expected range."
@@ -239,6 +247,7 @@ function verify_load_file_included() {
     local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
     if [[ -z "$zip_file" ]]; then
         print_error "No .zip file found in $test_dir"
+    return 1
     fi
 
     # Verify no separate .dat file in output directory
@@ -290,6 +299,7 @@ function verify_load_file_included() {
     for col in "${cols[@]}"; do
         if ! echo "$header" | grep -q "$col"; then
             print_error "Header validation failed. Expected to find '$col' in '$header'."
+      return 1
         fi
     done
     print_info ".dat file header is correct."
@@ -298,6 +308,7 @@ function verify_load_file_included() {
     local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
     if [[ "$zip_file_count" -ne "$expected_count" ]]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
+    return 1
     fi
     print_info ".zip file count for .$file_type is correct ($zip_file_count)."
 }
@@ -320,8 +331,8 @@ function run_test_case() {
     local test_name="$1"
     shift
     print_info "START: $test_name at $(date)"
-    zipper "$@"
-    local exit_code=$?
+    zipper "$@" || exit_code=$?
+    exit_code=${exit_code:-0}
     if [[ $exit_code -ne 0 ]]; then
         print_error "$test_name failed with exit code $exit_code"
     fi
@@ -462,19 +473,19 @@ print_info "Running standalone feature test suites..."
 
 # Test 1: EML comprehensive tests
 print_info "Running EML comprehensive tests..."
-bash ./tests/test-eml-comprehensive.sh
+bash ./tests/test-eml-comprehensive.sh || print_error "test-eml-comprehensive.sh failed."
 print_success "EML comprehensive tests passed."
 
 # Test 2: Bates numbering tests
 echo "[ INFO ] Running Bates Numbering Tests..."
-bash ./tests/test-bates-numbering.sh
+bash ./tests/test-bates-numbering.sh || print_error "test-bates-numbering.sh failed."
 
 if [[ $? -ne 0 ]]; then
   print_error "Bates Numbering Tests failed."
 fi
 
 echo "[ INFO ] Running Production Sets Tests..."
-bash ./tests/test-production-sets.sh
+bash ./tests/test-production-sets.sh || print_error "test-production-sets.sh failed."
 
 if [[ $? -ne 0 ]]; then
   print_error "Production Sets Tests failed."
@@ -482,37 +493,37 @@ fi
 
 # Test 3: Multipage TIFF tests
 print_info "Running multipage TIFF tests..."
-bash ./tests/test-multipage-tiff.sh
+bash ./tests/test-multipage-tiff.sh || print_error "test-multipage-tiff.sh failed."
 print_success "Multipage TIFF tests passed."
 
 # Test 4: Office formats tests
 print_info "Running office formats tests..."
-bash ./tests/test-office-formats.sh
+bash ./tests/test-office-formats.sh || print_error "test-office-formats.sh failed."
 print_success "Office formats tests passed."
 
 # Test 5: Load file formats tests
 print_info "Running load file formats tests..."
-bash ./tests/test-load-file-formats.sh
+bash ./tests/test-load-file-formats.sh || print_error "test-load-file-formats.sh failed."
 print_success "Load file formats tests passed."
 
 # Test 6: Artifact handling tests
 print_info "Running artifact handling tests..."
-bash ./tests/test-artifact-handling.sh
+bash ./tests/test-artifact-handling.sh || print_error "test-artifact-handling.sh failed."
 print_success "Artifact handling tests passed."
 
 # Test 7: Cross-platform tests
 print_info "Running cross-platform tests..."
-bash ./tests/test-cross-platform.sh
+bash ./tests/test-cross-platform.sh || print_error "test-cross-platform.sh failed."
 print_success "Cross-platform tests passed."
 
 # Test 10: Path traversal security tests
 print_info "Running path traversal security tests..."
-bash ./tests/test-path-traversal-security.sh
+bash ./tests/test-path-traversal-security.sh || print_error "test-path-traversal-security.sh failed."
 print_success "Path traversal security tests passed."
 
 # Test 11: Unified workflow tests
 print_info "Running unified workflow tests..."
-bash ./tests/test-unified-workflow.sh
+bash ./tests/test-unified-workflow.sh || print_error "test-unified-workflow.sh failed."
 print_success "Unified workflow tests passed."
 
 # Test 12: Loadfile-only and Chaos Engine tests
@@ -525,35 +536,35 @@ print_success "Loadfile-only tests passed."
 
 # Test 13: Chaos anomaly-type and scenario coverage
 print_info "Running chaos anomaly coverage tests..."
-bash ./tests/test-chaos-anomaly-coverage.sh
+bash ./tests/test-chaos-anomaly-coverage.sh || print_error "test-chaos-anomaly-coverage.sh failed."
 print_success "Chaos anomaly coverage tests passed."
 
 
 # Test 14: Column-profile built-in matrix (40 combos: 4 profiles × 5 file types × 2 seeds)
 print_info "Running column-profile built-in matrix tests..."
-bash ./tests/test-column-profile-builtin-matrix.sh
+bash ./tests/test-column-profile-builtin-matrix.sh || print_error "test-column-profile-builtin-matrix.sh failed."
 print_success "Column-profile built-in matrix tests passed."
 
 # Test 15: Column-profile custom every-kind profile
 print_info "Running column-profile custom-kinds test..."
-bash ./tests/test-column-profile-custom-kinds.sh
+bash ./tests/test-column-profile-custom-kinds.sh || print_error "test-column-profile-custom-kinds.sh failed."
 print_success "Column-profile custom-kinds test passed."
 
 # Test 16: Column-profile EmptyPercentage chi-square
 print_info "Running column-profile empty-percentage tests..."
-bash ./tests/test-column-profile-empty-pct.sh
+bash ./tests/test-column-profile-empty-pct.sh || print_error "test-column-profile-empty-pct.sh failed."
 print_success "Column-profile empty-percentage tests passed."
 
 print_info "Running target-zip-size accuracy tests..."
-bash ./tests/test-target-zip-size.sh
+bash ./tests/test-target-zip-size.sh || print_error "test-target-zip-size.sh failed."
 print_success "Target-zip-size accuracy tests passed."
 
 print_info "Running argument-interaction conflict tests..."
-bash ./tests/test-argument-interactions.sh
+bash ./tests/test-argument-interactions.sh || print_error "test-argument-interactions.sh failed."
 print_success "Argument-interaction conflict tests passed."
 
 print_info "Running CLI coverage gap tests..."
-bash ./tests/test-cli-coverage-gaps.sh
+bash ./tests/test-cli-coverage-gaps.sh || print_error "test-cli-coverage-gaps.sh failed."
 print_success "CLI coverage gap tests passed."
 
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
@@ -564,4 +575,9 @@ if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then
 fi
 print_success "FGR flat-property guard passed."
 
-print_success "All tests passed successfully!"
+if [[ $TOTAL_FAILURES -gt 0 ]]; then
+  echo -e "\n\e[41m[ FAILED ]\e[0m $TOTAL_FAILURES test(s) failed."
+  exit 1
+else
+  print_success "All tests passed successfully!"
+fi

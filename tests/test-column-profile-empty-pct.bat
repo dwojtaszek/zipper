@@ -121,7 +121,7 @@ echo   ]
 echo }
 ) > "%TMP_PROFILE_0%"
 
-%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_0%" --seed 42 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct0"
+%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_0%" --seed 9999 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct0"
 if errorlevel 1 (
     echo [ ERROR ] Zipper pct0 run failed
     del "%PY_HELPER%"
@@ -155,7 +155,7 @@ echo   ]
 echo }
 ) > "%TMP_PROFILE_100%"
 
-%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_100%" --seed 42 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct100"
+%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_100%" --seed 9999 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct100"
 if errorlevel 1 (
     echo [ ERROR ] Zipper pct100 run failed
     del "%PY_HELPER%"
@@ -189,7 +189,7 @@ echo   ]
 echo }
 ) > "%TMP_PROFILE_10%"
 
-%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_10%" --seed 42 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct10"
+%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_10%" --seed 9999 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct10"
 if errorlevel 1 (
     echo [ ERROR ] Zipper pct10 run failed
     del "%PY_HELPER%"
@@ -225,7 +225,7 @@ echo   ]
 echo }
 ) > "%TMP_PROFILE_50%"
 
-%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_50%" --seed 42 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct50"
+%ZIPPER_CMD% --count %COUNT% --type pdf --column-profile "%TMP_PROFILE_50%" --seed 9999 --loadfile-only --output-path "%TEST_OUTPUT_DIR%\pct50"
 if errorlevel 1 (
     echo [ ERROR ] Zipper pct50 run failed
     del "%PY_HELPER%"
