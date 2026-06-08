@@ -64,7 +64,7 @@ Version-controlled in [`.github/hooks/`](../.github/hooks/), installed with `./s
 
 | Hook | Trigger | Does |
 |------|---------|------|
-| `pre-commit` | `git commit` | Short-circuits if every staged file is docs (`*.md`, `*.txt`, `docs/`, `CHANGELOG.md`). Else stashes unstaged changes, runs `dotnet format` on staged `*.cs`, runs all unit tests. |
+| `pre-commit` | `git commit` | Short-circuits if every staged file is docs (`*.md`, `*.txt`, `docs/`). Else stashes unstaged changes, runs `dotnet format` on staged `*.cs`, runs all unit tests. |
 | `post-commit` | after commit object exists | Writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
 | `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`). |
 
@@ -91,7 +91,7 @@ Trigger: `push` → `main`, and tags `v*`.
 1. **prepare** — computes version. Tag push → exact `vX.Y.Z`; main push → next patch with `-dev` suffix.
 2. **lint** — restore (locked) + format check.
 3. **build-and-test** — same matrix as PR, plus a **self-contained per-platform publish** (`linux-x64`, `win-x64`, `osx-arm64`) uploaded as artifacts (7-day retention).
-4. **tag-and-release** — main only, skipped on `[skip ci]`. Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with auto-generated notes and the three platform binaries. Idempotent: skips if the tag already exists.
+4. **tag-and-release** — main only, skipped on `[skip ci]`. Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with auto-generated notes and the three platform binaries. Idempotent: skips if the tag already exists. Release history is in `git log` (Conventional Commits) and the GitHub Releases page; there is no `CHANGELOG.md`.
 
 ### 5. Scheduled / bot
 
