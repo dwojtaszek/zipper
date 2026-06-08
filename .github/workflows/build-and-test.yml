@@ -155,6 +155,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+      models: read
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -250,11 +251,11 @@ import json, urllib.request, os, sys
 cl = os.environ.get("COMMIT_LOG", "")
 p = ("Summarize these git commits as 1-3 plain prose sentences for a developer "
      "changelog. Key facts only. No fluff. No marketing language.\n\nCommits:\n") + cl
-d = json.dumps({"model": "gpt-4o-mini",
+d = json.dumps({"model": "openai/gpt-4o-mini",
                 "messages": [{"role": "user", "content": p}],
                 "max_tokens": 200}).encode()
 req = urllib.request.Request(
-    "https://models.inference.ai.azure.com/chat/completions", data=d,
+    "https://models.github.ai/inference/chat/completions", data=d,
     headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"],
              "Content-Type": "application/json"})
 try:
