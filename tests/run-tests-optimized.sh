@@ -16,17 +16,20 @@ PROJECT="src/Zipper.csproj"
 
 # Prints a message with a green background.
 function print_success() {
-  echo -e "\e[42m[ SUCCESS ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[42m[ SUCCESS ]\e[0m $msg"
 }
 
 # Prints a message with a blue background.
 function print_info() {
-  echo -e "\e[44m[ INFO ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[44m[ INFO ]\e[0m $msg"
 }
 
 # Prints a message with a red background and exits.
 function print_error() {
-  echo -e "\e[41m[ ERROR ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[41m[ ERROR ]\e[0m $msg" >&2
   exit 1
 }
 
@@ -293,7 +296,8 @@ function verify_load_file_included() {
     print_info ".dat file header is correct."
 
     # Verify file count in zip (excluding the .dat file, using cached listing)
-    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)    if [[ "$zip_file_count" -ne "$expected_count" ]]; then
+    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
+    if [[ "$zip_file_count" -ne "$expected_count" ]]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     fi
     print_info ".zip file count for .$file_type is correct ($zip_file_count)."
