@@ -78,7 +78,7 @@ namespace Zipper
                 }
             }
 
-            var formatsToGenerate = request.LoadFile.LoadFileFormats?.Any() == true
+            var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
                 ? request.LoadFile.LoadFileFormats
                 : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
 
@@ -234,7 +234,7 @@ namespace Zipper
         {
             System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
-            var textFileName = fileData.WorkItem.FileName.Replace($".{request.Output.FileType}", ".txt");
+            var textFileName = fileData.WorkItem.FileName.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
             var entryPath = $"{fileData.WorkItem.FolderName}/{textFileName}";
 
             if (!usedEntryPaths.Add(entryPath))

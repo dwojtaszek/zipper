@@ -10,6 +10,11 @@ public static class ColumnProfileLoader
 {
     private const int MaxColumns = 200;
 
+    private static readonly JsonSerializerOptions ProfileSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     /// <summary>
     /// Loads a column profile by name or file path.
     /// </summary>
@@ -44,10 +49,7 @@ public static class ColumnProfileLoader
         try
         {
             var json = File.ReadAllText(filePath);
-            var profile = JsonSerializer.Deserialize<ColumnProfile>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            });
+            var profile = JsonSerializer.Deserialize<ColumnProfile>(json, ProfileSerializerOptions);
 
             if (profile == null)
             {

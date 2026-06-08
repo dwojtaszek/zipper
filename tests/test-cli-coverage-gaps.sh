@@ -113,17 +113,19 @@ fi
 
 print_info "Test: --empty-percentage 0 produces no empty fields"
 if zipper --loadfile-only --count 20 --output-path "$TEST_OUTPUT_DIR/empty_pct" \
-    --column-profile standard --empty-percentage 0 --seed 42 > /dev/null 2>&1; then
+    --column-profile standard --empty-percentage 0 --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/empty_pct" -name "*.dat" -print -quit)
     if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
         fail "--empty-percentage 0: no .dat file produced"
     else
         non_empty_rows=$(tail -n +2 "$dat_file" | wc -l)
-        empty_fields=$(tail -n +2 "$dat_file" | grep -c -E $'\x14\x14|\x14þþ\x14|^\x14|^þþ\x14|\x14$|\x14þþ$' || true)
-        if [[ "$non_empty_rows" -eq 20 && "$empty_fields" -eq 0 ]]; then
-            pass "--empty-percentage 0: verified 20 rows produced and zero empty fields across all columns"
+        # DAT format uses \x14 (field separator) and þ (\xFE quote delimiter)
+        # Pattern matches: consecutive separators, empty quoted fields, empty first/last fields
+        lines_with_empty_fields=$(tail -n +2 "$dat_file" | grep -c -E $'\x14\x14|\x14þþ\x14|^\x14|^þþ\x14|\x14$|\x14þþ$' || true)
+        if [[ "$non_empty_rows" -eq 20 && "$lines_with_empty_fields" -eq 0 ]]; then
+            pass "--empty-percentage 0: verified 20 rows produced and zero lines with empty fields"
         else
-            fail "--empty-percentage 0: failed validation. Rows: $non_empty_rows, Empty Fields: $empty_fields"
+            fail "--empty-percentage 0: failed validation. Rows: $non_empty_rows, Lines with empty fields: $lines_with_empty_fields"
         fi
     fi
 else
@@ -145,7 +147,7 @@ fi
 
 print_info "Test: --date-format override"
 if zipper --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/date_fmt" \
-    --column-profile standard --date-format "dd/MM/yyyy" --seed 42 > /dev/null 2>&1; then
+    --column-profile standard --date-format "dd/MM/yyyy" --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/date_fmt" -name "*.dat" -print -quit)
     if [[ -f "$dat_file" ]]; then
         if grep -q -E '[0-9]{2}/[0-9]{2}/[0-9]{4}' "$dat_file"; then
@@ -162,7 +164,7 @@ fi
 
 print_info "Test: --custodian-count limits pool"
 if zipper --type pdf --count 20 --output-path "$TEST_OUTPUT_DIR/cust_count" \
-    --with-metadata --custodian-count 2 --seed 42 > /dev/null 2>&1; then
+    --with-metadata --custodian-count 2 --seed 1337 > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/cust_count" -name "*.dat" -print -quit)
     if [[ -z "$dat_file" || ! -s "$dat_file" ]]; then
         fail "--custodian-count: no .dat file produced"

@@ -13,5 +13,5 @@ public record EmailAttachment
 
     public string? ContentId { get; init; }
 
-    public bool IsInline { get; init; } = false;
+    public bool IsInline { get; init; }
 }

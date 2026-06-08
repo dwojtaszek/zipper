@@ -3,10 +3,11 @@ using Xunit;
 using Zipper.Config;
 using Zipper.Emails;
 using Zipper.LoadFiles;
+using Zipper.Tests;
 
 namespace Zipper
 {
-    public class DatWriterTests
+    public class DatWriterTests : TempDirectoryTestBase
     {
         [Fact]
         public async Task WriteAsync_BasicHeader_WritesCorrectColumns()
@@ -313,11 +314,11 @@ namespace Zipper
         }
 
         [Fact]
-        public void Factory_ReturnsDatWriter_AsLoadFileWriterBase()
+        public void CreateWriter_DatFormat_ReturnsDatComposingWriter()
         {
             var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
-            Assert.IsType<DatWriter>(writer);
-            Assert.IsAssignableFrom<LoadFileWriterBase>(writer);
+            Assert.IsType<DatComposingWriter>(writer);
+            Assert.IsAssignableFrom<ILoadFileWriter>(writer);
             Assert.Equal("DAT", writer.FormatName);
             Assert.Equal(".dat", writer.FileExtension);
         }
@@ -403,7 +404,7 @@ namespace Zipper
         {
             var request = DefaultRequest();
             using var stream = new MemoryStream();
-            var writer = new DatWriter();
+            var writer = new DatComposingWriter();
             await writer.WriteAsync(stream, request, []);
             Assert.True(stream.CanWrite);
             stream.WriteByte(0x00); // would throw if disposed
@@ -412,7 +413,7 @@ namespace Zipper
         private static async Task<(string output, string[] lines)> WriteAndCapture(FileGenerationRequest request, List<FileData> files)
         {
             using var stream = new MemoryStream();
-            var writer = new DatWriter();
+            var writer = new DatComposingWriter();
             await writer.WriteAsync(stream, request, files);
 
             var output = Encoding.UTF8.GetString(stream.ToArray());
@@ -467,7 +468,7 @@ namespace Zipper
 
             // Baseline (no chaos)
             using var baseStream = new MemoryStream();
-            var baseWriter = new DatWriter();
+            var baseWriter = new DatComposingWriter();
             await baseWriter.WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
@@ -483,7 +484,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            var chaosWriter = new DatWriter();
+            var chaosWriter = new DatComposingWriter();
             await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
@@ -508,7 +509,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -522,7 +523,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -547,7 +548,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -561,7 +562,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -592,7 +593,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
             var chaosEngine = new ChaosEngine(
@@ -606,7 +607,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
             Assert.NotEqual(baseOutput, chaosOutput);
@@ -625,7 +626,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            await new DatWriter().WriteAsync(baseStream, request, files);
+            await new DatComposingWriter().WriteAsync(baseStream, request, files);
             var baseBytes = baseStream.ToArray();
 
             var chaosEngine = new ChaosEngine(
@@ -639,7 +640,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter().WriteAsync(chaosStream, request, files, chaosEngine);
+            await new DatComposingWriter().WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
             // Encoding anomaly injects extra bytes between lines — output must be longer
@@ -666,10 +667,10 @@ namespace Zipper
                 seed: 42);
 
             using var stream1 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream1, request, files, MakeEngine(files.Count));
+            await new DatComposingWriter().WriteAsync(stream1, request, files, MakeEngine(files.Count));
 
             using var stream2 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream2, request, files, MakeEngine(files.Count));
+            await new DatComposingWriter().WriteAsync(stream2, request, files, MakeEngine(files.Count));
 
             Assert.Equal(stream1.ToArray(), stream2.ToArray());
         }
@@ -689,7 +690,7 @@ namespace Zipper
             var files = Enumerable.Range(1, 10).Select(i => MakeFileData(i)).ToList();
 
             using var baseStream = new MemoryStream();
-            var baseWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            var baseWriter = new DatComposingWriter(LoadFiles.WriterMode.ProductionSet);
             await baseWriter.WriteAsync(baseStream, request, files);
             var baseOutput = Encoding.UTF8.GetString(baseStream.ToArray());
 
@@ -704,7 +705,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            var chaosWriter = new DatWriter(LoadFiles.WriterMode.ProductionSet);
+            var chaosWriter = new DatComposingWriter(LoadFiles.WriterMode.ProductionSet);
             await chaosWriter.WriteAsync(chaosStream, request, files, chaosEngine);
             var chaosOutput = Encoding.UTF8.GetString(chaosStream.ToArray());
 
@@ -730,10 +731,10 @@ namespace Zipper
 
             // Passing null explicitly should produce identical output to no-arg call
             using var stream1 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream1, request, files, null);
+            await new DatComposingWriter().WriteAsync(stream1, request, files, null);
 
             using var stream2 = new MemoryStream();
-            await new DatWriter().WriteAsync(stream2, request, files);
+            await new DatComposingWriter().WriteAsync(stream2, request, files);
 
             Assert.Equal(Encoding.UTF8.GetString(stream1.ToArray()), Encoding.UTF8.GetString(stream2.ToArray()));
         }
@@ -751,7 +752,7 @@ namespace Zipper
 
             // Generate baseline
             using var baseStream = new MemoryStream();
-            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
+            await new DatComposingWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
             var baseBytes = baseStream.ToArray();
 
             // Total lines = FileCount + 1 (header + 3 data = 4 lines)
@@ -766,7 +767,7 @@ namespace Zipper
                 seed: 42);
 
             using var chaosStream = new MemoryStream();
-            await new DatWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
+            await new DatComposingWriter(LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
             // The output should have anomalies injected for line 1 and line 4 (among others).
@@ -777,6 +778,235 @@ namespace Zipper
             Assert.NotNull(headerAnomaly);
             Assert.NotNull(lastLineAnomaly);
             Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
+        }
+        [Fact]
+        public async Task WriteAsync_BasicScenario_WritesValidDatFormat()
+        {
+            var request = this.CreateTestRequest();
+            var fileData = this.CreateTestFileData();
+            var writer = new DatComposingWriter();
+            var outputPath = Path.Combine(this.TempDir, "test.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(4, lines.Length);
+            Assert.Contains("Control Number", lines[0]);
+            Assert.Contains("DOC00000001", lines[1]);
+            Assert.Contains("DOC00000002", lines[2]);
+            Assert.Contains("DOC00000003", lines[3]);
+        }
+
+        [Theory]
+        [InlineData("UTF-16")]
+        [InlineData("ANSI")]
+        public async Task WriteAsync_WithDifferentEncodings_WritesCorrectly(string encoding)
+        {
+            ArgumentNullException.ThrowIfNull(encoding);
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+
+            var request = this.CreateTestRequest();
+            request.LoadFile = request.LoadFile with { Encoding = encoding };
+            var fileData = this.CreateTestFileData();
+            var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);
+            var outputPath = Path.Combine(this.TempDir, "test.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var targetEncoding = encoding.ToUpperInvariant() switch
+            {
+                "UTF-16" => Encoding.Unicode,
+                "ANSI" => Encoding.GetEncoding("Windows-1252"),
+                _ => Encoding.UTF8,
+            };
+
+            var content = await File.ReadAllTextAsync(outputPath, targetEncoding);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.True(lines.Length >= 2);
+            Assert.Contains("Control Number", lines[0]);
+        }
+
+        [Fact]
+        public async Task DatWriter_StandardRow_FieldWithQuoteDelimiter_IsDoubled()
+        {
+            var request = this.CreateTestRequest();
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folderþX/file.pdf",
+                    },
+                    Data = Array.Empty<byte>(),
+                },
+            };
+            var writer = new DatComposingWriter();
+            var outputPath = Path.Combine(this.TempDir, "test_escape.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var output = await File.ReadAllTextAsync(outputPath);
+
+            Assert.Contains("folderþþX/file.pdf", output);
+        }
+
+        [Fact]
+        public async Task DatWriter_ProductionSetRow_FieldWithQuoteDelimiter_IsDoubled()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileCount = 1,
+                    FileType = "pdf",
+                    OutputPath = this.TempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42 },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+            };
+
+            var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST00000001.pdf",
+                        FilePathInZip = "NATIVES/VOL001/fileþX.pdf",
+                    },
+                    DataLength = 1024,
+                },
+            };
+
+            var writer = new DatComposingWriter(WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, files);
+
+            stream.Position = 0;
+            var output = Encoding.UTF8.GetString(stream.ToArray());
+
+            Assert.Contains("fileþþX.pdf", output);
+        }
+
+        [Fact]
+        public async Task DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows()
+        {
+            var request = this.CreateTestRequest("eml");
+            request.Metadata = request.Metadata with { WithFamilies = true };
+
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/00000001.eml"
+                    },
+                    Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                    DataLength = 100
+                }
+            };
+
+            var writer = new DatComposingWriter();
+            var outputPath = Path.Combine(this.TempDir, "test_families_standard.dat");
+
+            await using (var stream = File.OpenWrite(outputPath))
+            {
+                await writer.WriteAsync(stream, request, fileData);
+            }
+
+            var content = await File.ReadAllTextAsync(outputPath);
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(3, lines.Length);
+            Assert.Contains("BEGATTACH", lines[0]);
+            Assert.Contains("ENDATTACH", lines[0]);
+            Assert.Contains("PARENTDOCID", lines[0]);
+
+            var parentLine = lines[1];
+            Assert.Contains("DOC00000001", parentLine);
+            Assert.Contains("DOC00000001_A001", parentLine);
+
+            var childLine = lines[2];
+            Assert.Contains("DOC00000001_A001", childLine);
+            Assert.Contains("DOC00000001", childLine);
+        }
+
+        [Fact]
+        public async Task DatWriter_WithFamilies_ProductionSetMode_IncludesFamilyColumnsAndRows()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileCount = 1,
+                    FileType = "eml",
+                    OutputPath = this.TempDir,
+                },
+                Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+                Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+                Production = new ProductionConfig { VolumeSize = 5000 },
+                Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+                LoadFile = new LoadFileConfig { Encoding = "UTF-8" }
+            };
+
+            var fileData = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FolderName = "VOL001",
+                        FileName = "TEST00000001.eml",
+                        FilePathInZip = "NATIVES\\VOL001\\TEST00000001.eml"
+                    },
+                    Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                    DataLength = 100
+                }
+            };
+
+            var writer = new DatComposingWriter(WriterMode.ProductionSet);
+            using var stream = new MemoryStream();
+            await writer.WriteAsync(stream, request, fileData);
+
+            stream.Position = 0;
+            var content = Encoding.UTF8.GetString(stream.ToArray());
+            var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.Equal(3, lines.Length);
+            Assert.Contains("BEGATTACH", lines[0]);
+            Assert.Contains("ENDATTACH", lines[0]);
+            Assert.Contains("PARENTDOCID", lines[0]);
+
+            Assert.Contains("TEST00000001", lines[1]);
+            Assert.Contains("TEST00000001_A001", lines[1]);
+
+            Assert.Contains("TEST00000001_A001", lines[2]);
+            Assert.Contains("TEST00000001", lines[2]);
         }
     }
 }

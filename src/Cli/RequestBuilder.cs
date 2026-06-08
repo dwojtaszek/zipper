@@ -15,10 +15,7 @@ public static class RequestBuilder
 
     public static FileGenerationRequest Build(ParsedArguments parsed)
     {
-        if (parsed == null)
-        {
-            throw new ArgumentNullException(nameof(parsed));
-        }
+        ArgumentNullException.ThrowIfNull(parsed);
 
         var encoding = GetEncodingFromName(parsed.Encoding ?? "UTF-8");
 
@@ -119,7 +116,7 @@ public static class RequestBuilder
             {
                 OutputPath = parsed.OutputDirectory!.FullName,
                 FileCount = parsed.Count!.Value,
-                FileType = (parsed.FileType ?? "pdf").ToLower(),
+                FileType = (parsed.FileType ?? "pdf").ToLowerInvariant(),
                 Folders = parsed.Folders,
                 Concurrency = PerformanceConstants.DefaultConcurrency,
                 WithText = parsed.WithText,
@@ -213,7 +210,7 @@ public static class RequestBuilder
 
     internal static LoadFileFormat? GetLoadFileFormat(string name)
     {
-        return name.ToUpperInvariant().Replace("-", string.Empty) switch
+        return name.ToUpperInvariant().Replace("-", string.Empty, StringComparison.Ordinal) switch
         {
             "DAT" => LoadFileFormat.Dat,
             "OPT" => LoadFileFormat.Opt,

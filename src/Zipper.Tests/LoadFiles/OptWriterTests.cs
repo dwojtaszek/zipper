@@ -10,13 +10,13 @@ public class OptWriterTests : TempDirectoryTestBase
     [Fact]
     public void OptWriter_FormatName_ReturnsExpectedValuePerMode()
     {
-        var standard = new OptWriter(WriterMode.Standard);
+        var standard = new OptComposingWriter(WriterMode.Standard);
         Assert.Equal("OPT", standard.FormatName);
 
-        var loadfileOnly = new OptWriter(WriterMode.LoadfileOnly);
+        var loadfileOnly = new OptComposingWriter(WriterMode.LoadfileOnly);
         Assert.Equal("OPT (Image)", loadfileOnly.FormatName);
 
-        var productionSet = new OptWriter(WriterMode.ProductionSet);
+        var productionSet = new OptComposingWriter(WriterMode.ProductionSet);
         Assert.Equal("Production Set OPT", productionSet.FormatName);
     }
 
@@ -46,7 +46,7 @@ public class OptWriterTests : TempDirectoryTestBase
             }
         };
 
-        var writer = new OptWriter(WriterMode.Standard);
+        var writer = new OptComposingWriter(WriterMode.Standard);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
 
@@ -69,7 +69,7 @@ public class OptWriterTests : TempDirectoryTestBase
             Tiff = new TiffConfig { PageRange = (1, 10) }
         };
 
-        var writer = new OptWriter(WriterMode.LoadfileOnly);
+        var writer = new OptComposingWriter(WriterMode.LoadfileOnly);
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, new List<FileData>());
 

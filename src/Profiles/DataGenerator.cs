@@ -17,6 +17,9 @@ internal class DataGenerator
     private readonly DateTime now;
     private int documentIndex;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataGenerator"/> class using the specified profile and overrides.
+    /// </summary>
     public DataGenerator(
         ColumnProfile profile,
         int? seed = null,

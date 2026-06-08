@@ -8,15 +8,15 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Writes XML format load files - structured markup format.
 /// </summary>
-internal class XmlLoadFileWriter : LoadFileWriterBase
+internal sealed class XmlLoadFileWriter : ILoadFileWriter
 {
     private const string TagElement = "Tag";
 
-    public override string FormatName => "XML";
+    public string FormatName => "XML";
 
-    public override string FileExtension => ".xml";
+    public string FileExtension => ".xml";
 
-    public override async Task WriteAsync(
+    public async Task WriteAsync(
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
@@ -136,7 +136,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            var metadata = GenerateMetadataValues(workItem, fileData, random, now, request);
+            var metadata = SyntheticRowValues.Metadata(workItem, fileData, random, now);
 
             AddTag(tagsElement, "Custodian", metadata.Custodian, namingConvention);
             AddTag(tagsElement, "DateSent", metadata.DateSent, namingConvention);
@@ -146,7 +146,7 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            var eml = GenerateEmlValues(workItem, fileData, random, now, request);
+            var eml = SyntheticRowValues.Eml(workItem, fileData, random, now);
 
             AddTag(tagsElement, "To", eml.To, namingConvention);
             AddTag(tagsElement, "From", eml.From, namingConvention);
@@ -177,4 +177,15 @@ internal class XmlLoadFileWriter : LoadFileWriterBase
 
         return docElement;
     }
+
+    private static string GenerateDocumentId(FileWorkItem workItem) => $"DOC{workItem.Index:D8}";
+
+    private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
+        => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
+
+    private static string GenerateBatesNumber(FileGenerationRequest request, FileWorkItem workItem)
+        => request.Bates != null
+            ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
+            : string.Empty;
+
 }

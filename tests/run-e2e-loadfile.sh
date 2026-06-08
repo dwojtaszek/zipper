@@ -157,7 +157,7 @@ print_success "Test 3: Custom delimiters — PASSED"
 TOTAL=$((TOTAL + 1))
 run_test "Chaos mode" \
     --loadfile-only --count 200 --output-path "$TEST_OUTPUT_DIR/dat_chaos" \
-    --chaos-mode --chaos-amount "5%" --seed 42
+    --chaos-mode --chaos-amount "5%" --seed 12345
 
 props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found for chaos test"
@@ -183,7 +183,7 @@ print_success "Test 4: Chaos mode — PASSED"
 TOTAL=$((TOTAL + 1))
 run_test "Chaos with type filter" \
     --loadfile-only --count 100 --output-path "$TEST_OUTPUT_DIR/dat_chaos_typed" \
-    --chaos-mode --chaos-amount "10" --chaos-types "quotes,columns" --seed 42
+    --chaos-mode --chaos-amount "10" --chaos-types "quotes,columns" --seed 12345
 
 props_file=$(find "$TEST_OUTPUT_DIR/dat_chaos_typed" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found"

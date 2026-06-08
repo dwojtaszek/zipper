@@ -12,6 +12,7 @@ set -euo pipefail
 
 TEST_OUTPUT_DIR="./results/e2e-basic"
 PROJECT="src/Zipper.csproj"
+readonly EXPECTED_HEADER="Control Number,File Path"
 
 # Dynamically locate the built framework directory
 BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit)
@@ -175,7 +176,7 @@ function run_test() {
 
 # 1. Basic PDF generation (core happy path)
 run_test "Basic PDF generation" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_basic"
-verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "Control Number,File Path" "pdf" "false"
+verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "$EXPECTED_HEADER" "pdf" "false"
 print_success "Test 1: Basic PDF — PASSED"
 
 # 2. EML with attachments (complex format + attachment handling)
@@ -193,12 +194,12 @@ print_success "Test 2: EML with attachments — PASSED"
 
 # 3. TIFF with folders (folder distribution + image gen)
 run_test "TIFF with folders" --type tiff --count 10 --output-path "$TEST_OUTPUT_DIR/tiff_folders" --folders 3
-verify_output "$TEST_OUTPUT_DIR/tiff_folders" 10 "Control Number,File Path" "tiff" "false"
+verify_output "$TEST_OUTPUT_DIR/tiff_folders" 10 "$EXPECTED_HEADER" "tiff" "false"
 print_success "Test 3: TIFF with folders — PASSED"
 
 # 4. Load file included in zip (edge case)
 run_test "Include load file in zip" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_include_load" --include-load-file
-verify_load_file_included "$TEST_OUTPUT_DIR/pdf_include_load" 10 "Control Number,File Path" "pdf"
+verify_load_file_included "$TEST_OUTPUT_DIR/pdf_include_load" 10 "$EXPECTED_HEADER" "pdf"
 print_success "Test 4: Load file in zip — PASSED"
 
 # 5. Bates numbering (feature-specific)
@@ -210,9 +211,10 @@ grep -q "SMOKE00000010" "$dat_file" || print_error "Bates number SMOKE00000010 n
 print_success "Test 5: Bates numbering — PASSED"
 
 
+
 # --- Cleanup ---
 
 print_info "Cleaning up..."
 rm -rf "$TEST_OUTPUT_DIR"
 
-print_success "All basic E2E smoke tests passed! (5/5)"
+print_success "All basic E2E smoke tests passed! (6/6)"

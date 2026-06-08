@@ -8,6 +8,12 @@ namespace Zipper;
 /// </summary>
 internal static class ProductionManifestWriter
 {
+    private static readonly JsonSerializerOptions ManifestSerializerOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
     /// <summary>
     /// Writes the production manifest to the specified directory.
     /// </summary>
@@ -65,13 +71,7 @@ internal static class ProductionManifestWriter
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
         };
 
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        };
-
-        var json = JsonSerializer.Serialize(manifest, options);
+        var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
         await File.WriteAllTextAsync(manifestPath, json);
 
         return manifestPath;

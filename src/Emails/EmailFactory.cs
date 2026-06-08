@@ -281,7 +281,7 @@ internal static class EmailFactory
         var result = template;
         foreach (var replacement in replacements)
         {
-            result = result.Replace(replacement.Key, replacement.Value);
+            result = result.Replace(replacement.Key, replacement.Value, StringComparison.Ordinal);
         }
 
         return result;
