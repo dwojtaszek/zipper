@@ -28,6 +28,7 @@ namespace Zipper.Tests
         {
             var flags = new[]
             {
+                "--type", "--count", "--output-path", "--delimiter-column", "--delimiter-quote", "--delimiter-newline",
                 "--folders", "--encoding", "--distribution", "--attachment-rate", "--target-zip-size",
                 "--load-file-format", "--bates-prefix", "--bates-start", "--bates-digits", "--tiff-pages",
                 "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
