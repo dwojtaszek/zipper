@@ -272,7 +272,6 @@ When adding new stress tests:
 
 - [Main Test Suite](../README.md)
 - [Regular E2E Tests](../run-tests.sh)
-- [Optimized Pre-commit Tests](../run-tests-optimized.sh)
 - [Application README](../../README.md)
 - [Requirements](../../Requirements.md)
 
