@@ -127,7 +127,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).
 - `--include-load-file`: (Optional) Includes the generated Load File in the root of the output Archive.
-- `--load-file-format <dat|opt|csv|edrm-xml>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications.
+- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see Section 8.7).
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
@@ -157,7 +157,7 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 - **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically increments the patch version.
 - **REQ-032**: Manual version control is supported by pushing specific tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`).
 - **REQ-033**: On every push to the `main` branch, the CI/CD pipeline will build the application, embedding the version from the tag into the assembly as the `InformationalVersion`.
-- **REQ-034**: The application must display its full version number on startup.
+- **REQ-034**: The application must display its full version string when invoked with `--version` (or equivalent version flag), and must embed it as the assembly `InformationalVersion` so it appears in diagnostic output. It need not print a startup banner on normal invocations.
 - **REQ-035**: The CI/CD pipeline will automatically create a new GitHub Release for each successful `main` branch build. The release tag and title will be named according to the version (e.g., `v1.2.3`).
 
 ---
@@ -190,7 +190,7 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 
 | Purpose | ASCII Code (Decimal) | Character | Symbol |
 |---------|---------------------|-----------|--------|
-| Field Separator | 20 | DC4 | ¶ |
+| Field Separator | 20 | DC4 | (non-printable; shown as ¶ in many e-discovery tools) |
 | Quote/Text Qualifier | 254 | Latin Small Letter Thorn | þ |
 | Newline within field | 174 | Registered Trademark | ® |
 | Multi-Value Separator | 59 | Semicolon | ; |

@@ -101,10 +101,10 @@ tests/run-tests.bat    # Windows
 3. **Test coverage must not decrease in substance.** Every removed or modified test must be replaced with a test that covers the same or a stricter behavioral contract. If no behavioral contract was being tested (e.g., a test that only asserted line execution), a behavior-coverage replacement is required. Never remove test files to make a test run green. When replacing an implementation behind a stable interface, **retarget** the existing output-asserting tests onto the replacement (swap the construction, e.g. `new OldWriter()` → `new NewWriter()`) so they keep guarding the same contract instead of being deleted. *When this conflicts with Surgical Changes (e.g., fixing a pre-existing failing test requires touching adjacent code), Surgical Changes wins — but flag the conflict.*
 
 4. **Documentation Sync:** Any change to CLI behavior, Load File/Audit File/Production Set formats, or Email domain names must update **all** of:
-1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
-2. `Requirements.md` — add or revise requirements (never renumber)
-3. `UBIQUITOUS_LANGUAGE.md` — if domain terms change
-4. E2E scripts — both `.sh` and `.bat` for new coverage
+   1. `README.md` — Arguments Quick Reference, Argument Interactions, examples
+   2. `Requirements.md` — add or revise requirements (never renumber)
+   3. `UBIQUITOUS_LANGUAGE.md` — if domain terms change
+   4. E2E scripts — both `.sh` and `.bat` for new coverage
 
 Verify behavior changes against Requirements.md before committing. Run `grep -n "REQ-XXX" Requirements.md` for each affected requirement. *When this conflicts with Simplicity First (e.g., a trivial code change triggers a 4-doc update cascade), Simplicity First wins — but flag the conflict and note which docs are out of sync.*
 

@@ -49,10 +49,10 @@ graph TD
     PFG -->|"Work Channel"| Producers["N Concurrent Producers"]
     Producers -->|"Result Channel"| ZAS["ZipArchiveService (Consumer)"]
     ZAS --> ZIP["ZIP Archive"]
-    ZAS --> LF1["Load Files (DAT/OPT)"]
+    ZAS --> LF1["Load Files (all formats)"]
 
     LoadfileOnlyMode --> LOG["LoadfileOnlyGenerator"]
-    LOG --> LF2["Load Files (DAT/OPT/CSV/XML/Concordance)"]
+    LOG --> LF2["Load Files (DAT/OPT)"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
     Chaos --> Audit["_properties.json Audit"]
 
