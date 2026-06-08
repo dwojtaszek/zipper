@@ -5,9 +5,16 @@ Automated performance regression detection for Zipper.
 ## How It Works
 
 1. `measure.sh` runs three scenarios and emits wall time + peak RSS as JSON.
-2. `perf-guard.yml` runs on PRs that touch `src/**`, takes the median of 5 runs, and compares against `baselines.json`.
+2. `perf-guard.yml` runs on PRs that touch `src/**`, takes the **median** of 5 runs, and compares against `baselines.json`.
 3. **RSS is the hard gate:** if peak RSS exceeds 1.20× baseline, the check fails.
 4. **Wall time is informational only.** Shared GitHub runners vary 15–40% run-to-run with no code change, and baselines are captured on a different runner than each PR is measured on, so the wall ratio mixes hardware delta with code delta. It is reported (1.25× reference line) but never fails the job.
+
+> **Why median for guard, max for baselines?** Baselines are captured using the
+> maximum of 5 runs (see Capturing New Baselines below), which sets a conservative
+> ceiling. The PR guard then checks the median of 5 runs against that ceiling,
+> giving real regressions time to surface while absorbing single-run noise.
+> This asymmetry is intentional: a genuine leak shows up in the median; a
+> one-off spike does not.
 
 ## Scenarios
 

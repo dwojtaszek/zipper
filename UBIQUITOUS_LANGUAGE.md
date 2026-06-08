@@ -42,7 +42,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Load File Format** | The structured output format of the **Load File**. Supported formats: DAT (Concordance), OPT (Opticon), CSV, EDRM-XML. | File format, output format |
+| **Load File Format** | The structured output format of the **Load File**. Supported formats: DAT, OPT (Opticon), CSV, EDRM-XML, and Concordance (database-import). The `concordance` CLI value is a **distinct** format — not an alias of `dat`. | File format, output format |
 | **Concordance DAT** | Industry-standard **Load File Format** using ASCII delimiters (DC4 for columns, Thorn for quotes, ®  for newlines). Default format. | DAT format, concordance format |
 | **Delimiter** | A special character marking boundaries in a **Concordance DAT** format. Types: **Column Delimiter**, **Quote Delimiter**, **Newline Delimiter**, **Multi-Value Delimiter**, **Nested Delimiter**. | Separator, boundary marker |
 | **Column Delimiter** | The character separating fields in a **Concordance DAT**. Default: ASCII 20 (DC4). | Field separator |
@@ -144,7 +144,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
 | **Encoding** | The character encoding for the **Load File** output. Supported: UTF-8 (default), UTF-16, ANSI (Windows-1252). | Character set, code page |
-| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only Mode**. Options: CRLF, LF, CR. | EOL, newline format, line separator |
+| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only Mode**. Options: CRLF, LF, CR. Note: in **Standard** (archive) mode, line endings follow the platform default rather than `--eol`, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
 | **Placeholder Content** | The minimal valid content generated for each **Native File** to ensure maximum compression. Identical across all files of the same **File Type**. | Template content, default content |
 | **Placeholder Text** | The fixed block of text used in **Extracted Text** files to ensure compressibility. | Template text, default text |
 
