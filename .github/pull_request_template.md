@@ -1,3 +1,7 @@
+## Release Notes
+<!-- 1-2 sentences for small changes, 3-5 for larger ones. Plain prose. Key facts only.
+     Leave this block as-is (comment only) to have CI auto-generate from commit history. -->
+
 ## Description
 
 What does this PR change and why?
