@@ -44,7 +44,7 @@ internal class DataGenerator
                 col.EmptyPercentage = emptyPercentageOverride.Value;
                 if (emptyPercentageOverride.Value == 0 && col.MultiValueCount != null && col.MultiValueCount.Min == 0)
                 {
-                    col.MultiValueCount = new RangeConfig { Min = 1, Max = col.MultiValueCount.Max };
+                    col.MultiValueCount = new RangeConfig { Min = 1, Max = Math.Max(1, col.MultiValueCount.Max) };
                 }
             }
         }

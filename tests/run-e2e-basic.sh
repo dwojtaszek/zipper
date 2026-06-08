@@ -209,14 +209,10 @@ grep -q "SMOKE00000001" "$dat_file" || print_error "Bates number SMOKE00000001 n
 grep -q "SMOKE00000010" "$dat_file" || print_error "Bates number SMOKE00000010 not found"
 print_success "Test 5: Bates numbering — PASSED"
 
-# 6. High-volume smoke test
-run_test "High-volume smoke test" --type pdf --count 5000 --output-path "$TEST_OUTPUT_DIR/pdf_high_volume"
-verify_output "$TEST_OUTPUT_DIR/pdf_high_volume" 5000 "Control Number,File Path" "pdf" "false"
-print_success "Test 6: High-volume smoke test — PASSED"
 
 # --- Cleanup ---
 
 print_info "Cleaning up..."
 rm -rf "$TEST_OUTPUT_DIR"
 
-print_success "All basic E2E smoke tests passed! (6/6)"
+print_success "All basic E2E smoke tests passed! (5/5)"

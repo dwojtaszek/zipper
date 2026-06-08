@@ -16,17 +16,20 @@ PROJECT="src/Zipper.csproj"
 
 # Prints a message with a green background.
 function print_success() {
-  echo -e "\e[42m[ SUCCESS ]\e[0m $1"
+  local message="$1"
+  echo -e "\e[42m[ SUCCESS ]\e[0m $message"
 }
 
 # Prints a message with a blue background.
 function print_info() {
-  echo -e "\e[44m[ INFO ]\e[0m $1"
+  local message="$1"
+  echo -e "\e[44m[ INFO ]\e[0m $message"
 }
 
 # Prints a message with a red background and exits.
 function print_error() {
-  echo -e "\e[41m[ ERROR ]\e[0m $1"
+  local message="$1"
+  echo -e "\e[41m[ ERROR ]\e[0m $message" >&2
   exit 1
 }
 
