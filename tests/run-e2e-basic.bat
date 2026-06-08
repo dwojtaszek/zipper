@@ -258,6 +258,7 @@ if errorlevel 1 (
 echo [ SUCCESS ] Test 5: Bates numbering — PASSED
 set /a TESTS_PASSED+=1
 
+
 REM ─────────────────────────────────────────────
 REM Test 6: High-volume smoke test
 REM ─────────────────────────────────────────────

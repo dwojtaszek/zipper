@@ -210,10 +210,7 @@ grep -q "SMOKE00000001" "$dat_file" || print_error "Bates number SMOKE00000001 n
 grep -q "SMOKE00000010" "$dat_file" || print_error "Bates number SMOKE00000010 not found"
 print_success "Test 5: Bates numbering — PASSED"
 
-# 6. High-volume smoke test
-run_test "High-volume smoke test" --type pdf --count 5000 --output-path "$TEST_OUTPUT_DIR/pdf_high_volume"
-verify_output "$TEST_OUTPUT_DIR/pdf_high_volume" 5000 "$EXPECTED_HEADER" "pdf" "false"
-print_success "Test 6: High-volume smoke test — PASSED"
+
 
 # --- Cleanup ---
 

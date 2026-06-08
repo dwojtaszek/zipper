@@ -40,7 +40,7 @@ namespace Zipper.Tests
             foreach (var flag in flags)
             {
                 var result = CliParser.Parse(new[] { flag });
-                Assert.Null(result);
+                Assert.True(result == null, $"Expected null when {flag} is missing a value");
             }
         }
 

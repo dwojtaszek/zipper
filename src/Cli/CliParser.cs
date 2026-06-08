@@ -540,9 +540,6 @@ public static class CliParser
                     }
 
                     break;
-                case "--chaos-list":
-                    parsed.ChaosList = true;
-                    break;
                 case "--production-set":
                     parsed.ProductionSet = true;
                     break;
