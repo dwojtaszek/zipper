@@ -80,7 +80,6 @@ public class ColumnProfile
             Columns = this.Columns.Select(col => new ColumnDefinition
             {
                 Name = col.Name,
-                DisplayName = col.DisplayName,
                 Type = col.Type,
                 Required = col.Required,
                 EmptyPercentage = col.EmptyPercentage,
@@ -177,12 +176,6 @@ public class ColumnDefinition
     /// </summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets the display name (optional).
-    /// </summary>
-    [JsonPropertyName("displayName")]
-    public string? DisplayName { get; set; }
 
     /// <summary>
     /// Gets or sets the column type.

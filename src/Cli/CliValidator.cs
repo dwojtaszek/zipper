@@ -275,7 +275,7 @@ public static class CliValidator
                 return false;
             }
 
-            if (!ValidateLoadFileOnlyFormatAndEncoding(parsed))
+            if (!ValidateLoadFileOnlyFormat(parsed))
             {
                 return false;
             }
@@ -300,18 +300,8 @@ public static class CliValidator
         return true;
     }
 
-    private static bool ValidateLoadFileOnlyFormatAndEncoding(ParsedArguments parsed)
+    private static bool ValidateLoadFileOnlyFormat(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.Encoding))
-        {
-            var enc = EncodingHelper.GetEncoding(parsed.Encoding);
-            if (enc == null)
-            {
-                Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
-                return false;
-            }
-        }
-
         if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
         {
             var currentFormat = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) ?? LoadFileFormat.Dat;

@@ -83,6 +83,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --folders requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--encoding":
@@ -92,6 +97,11 @@ public static class CliParser
                         parsed.IsEncodingExplicit = true;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --encoding requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--distribution":
@@ -99,6 +109,11 @@ public static class CliParser
                     {
                         parsed.Distribution = dist;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --distribution requires a value.");
+                        return null;
                     }
 
                     break;
@@ -123,6 +138,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --attachment-rate requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--target-zip-size":
@@ -130,6 +150,11 @@ public static class CliParser
                     {
                         parsed.TargetZipSize = zipSize;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --target-zip-size requires a value.");
+                        return null;
                     }
 
                     break;
@@ -143,6 +168,11 @@ public static class CliParser
                         parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --load-file-format requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--bates-prefix":
@@ -150,6 +180,11 @@ public static class CliParser
                     {
                         parsed.BatesPrefix = batesPfx;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --bates-prefix requires a value.");
+                        return null;
                     }
 
                     break;
@@ -168,6 +203,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --bates-start requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--bates-digits":
@@ -185,6 +225,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --bates-digits requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--tiff-pages":
@@ -193,6 +238,11 @@ public static class CliParser
                         parsed.TiffPagesRange = tiffPages;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --tiff-pages requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--column-profile":
@@ -200,6 +250,11 @@ public static class CliParser
                     {
                         parsed.ColumnProfile = colProf;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --column-profile requires a value.");
+                        return null;
                     }
 
                     break;
@@ -218,6 +273,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --seed requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--date-format":
@@ -225,6 +285,11 @@ public static class CliParser
                     {
                         parsed.DateFormat = dateFmt;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --date-format requires a value.");
+                        return null;
                     }
 
                     break;
@@ -243,6 +308,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --empty-percentage requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--custodian-count":
@@ -260,6 +330,11 @@ public static class CliParser
 
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --custodian-count requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--with-families":
@@ -272,6 +347,11 @@ public static class CliParser
                         parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --load-file-formats requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--dat-delimiters":
@@ -279,6 +359,11 @@ public static class CliParser
                     {
                         parsed.DatDelimiters = datDelims;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --dat-delimiters requires a value.");
+                        return null;
                     }
 
                     break;
@@ -331,6 +416,11 @@ public static class CliParser
                         parsed.IsLoadFileFormatExplicit = true;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --loadfile-format requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--eol":
@@ -338,6 +428,11 @@ public static class CliParser
                     {
                         parsed.Eol = eolVal;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --eol requires a value.");
+                        return null;
                     }
 
                     break;
@@ -347,6 +442,11 @@ public static class CliParser
                         parsed.ColDelim = colDelimVal;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --col-delim requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--quote-delim":
@@ -354,6 +454,11 @@ public static class CliParser
                     {
                         parsed.QuoteDelim = quoteDelimVal;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --quote-delim requires a value.");
+                        return null;
                     }
 
                     break;
@@ -363,6 +468,11 @@ public static class CliParser
                         parsed.NewlineDelim = newlineDelimVal;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --newline-delim requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--multi-delim":
@@ -371,6 +481,11 @@ public static class CliParser
                         parsed.MultiDelim = multiDelimVal;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --multi-delim requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--nested-delim":
@@ -378,6 +493,11 @@ public static class CliParser
                     {
                         parsed.NestedDelim = nestedDelimVal;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --nested-delim requires a value.");
+                        return null;
                     }
 
                     break;
@@ -390,6 +510,11 @@ public static class CliParser
                         parsed.ChaosAmount = chaosAmtVal;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --chaos-amount requires a value.");
+                        return null;
+                    }
 
                     break;
                 case "--chaos-types":
@@ -397,6 +522,11 @@ public static class CliParser
                     {
                         parsed.ChaosTypes = chaosTypesVal;
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --chaos-types requires a value.");
+                        return null;
                     }
 
                     break;
@@ -406,10 +536,12 @@ public static class CliParser
                         parsed.ChaosScenario = chaosScenarioVal;
                         i++;
                     }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --chaos-scenario requires a value.");
+                        return null;
+                    }
 
-                    break;
-                case "--chaos-list":
-                    parsed.ChaosList = true;
                     break;
                 case "--production-set":
                     parsed.ProductionSet = true;
@@ -431,6 +563,11 @@ public static class CliParser
                         }
 
                         i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --volume-size requires a value.");
+                        return null;
                     }
 
                     break;
