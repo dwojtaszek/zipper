@@ -36,7 +36,7 @@ curl -s "https://sonarcloud.io/api/qualitygates/project_status?projectKey=dwojta
 ### Fix cycle
 
 1. Fix locally
-2. Amend commit and force push: `git commit --amend --no-edit && git push --force-with-lease`
+2. Amend the last commit and force-push **your PR branch** (not `main`): `git commit --amend --no-edit && git push --force-with-lease`
 3. Re-check after CI re-runs
 
 ## CodeRabbit
@@ -58,6 +58,8 @@ Bot infra errors — retry, don't block merge.
 Regenerate with:
 
 ```bash
+# publish-bin/ is created by the publish step below; it is gitignored
+dotnet publish src/Zipper.csproj -c Release -o ./publish-bin
 ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture
 ```
 

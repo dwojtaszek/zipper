@@ -27,11 +27,22 @@
 
 ---
 
+## Load File Composition Concepts
+
+The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by three deep modules in sequence. EDRM-XML is the **carve-out**: its hierarchical document tree does not fit a flat record, so it keeps its own dedicated writer (see ADR-0007).
+
+| Term | Definition | Aliases to avoid |
+|------|-----------|-----------------|
+| **Load File Record** | A format-independent row: ordered **Columns** plus raw (unescaped) values, keyed by column name, with a **Record Id** for chaos auditing. `LoadFileRecord`. | Row object, line model |
+| **Composer** | The **column authority** for a format: decides the header **Columns** and yields **Load File Records** with raw values (handling modes and **Column Profiles** internally). `ILoadFileComposer`, `DatComposer`, `OptComposer`, `CsvComposer`, `ConcordanceComposer`. | Builder, row generator |
+| **Serializer** | The **render authority**: turns one **Load File Record** (or header) into a single escaped text line. Pure — no stream, no EOL, no chaos. `ILoadFileSerializer`, `DatSerializer`, `OptSerializer`, `CsvSerializer`, `ConcordanceSerializer`. | Formatter, writer |
+| **Emitter** | The **I/O and chaos authority**: writes rendered lines to the stream, owning the encoding preamble (BOM), end-of-line sequence, output batching, and the single **Chaos Engine** pipeline. Streams both paths lazily (O(1) auxiliary memory) — the chaos path additionally intercepts each line and injects inter-line encoding-anomaly bytes. `LoadFileEmitter`. | Stream writer, output writer |
+
 ## Load File Format Concepts
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Load File Format** | The structured output format of the **Load File**. Supported formats: DAT (Concordance), OPT (Opticon), CSV, EDRM-XML. | File format, output format |
+| **Load File Format** | The structured output format of the **Load File**. Supported formats: DAT, OPT (Opticon), CSV, EDRM-XML, and Concordance (database-import). The `concordance` CLI value is a **distinct** format — not an alias of `dat`. | File format, output format |
 | **Concordance DAT** | Industry-standard **Load File Format** using ASCII delimiters (DC4 for columns, Thorn for quotes, ®  for newlines). Default format. | DAT format, concordance format |
 | **Delimiter** | A special character marking boundaries in a **Concordance DAT** format. Types: **Column Delimiter**, **Quote Delimiter**, **Newline Delimiter**, **Multi-Value Delimiter**, **Nested Delimiter**. | Separator, boundary marker |
 | **Column Delimiter** | The character separating fields in a **Concordance DAT**. Default: ASCII 20 (DC4). | Field separator |
@@ -133,7 +144,7 @@
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
 | **Encoding** | The character encoding for the **Load File** output. Supported: UTF-8 (default), UTF-16, ANSI (Windows-1252). | Character set, code page |
-| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only Mode**. Options: CRLF, LF, CR. | EOL, newline format, line separator |
+| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only Mode**. Options: CRLF, LF, CR. Note: in **Standard** (archive) mode, line endings follow the platform default rather than `--eol`, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
 | **Placeholder Content** | The minimal valid content generated for each **Native File** to ensure maximum compression. Identical across all files of the same **File Type**. | Template content, default content |
 | **Placeholder Text** | The fixed block of text used in **Extracted Text** files to ensure compressibility. | Template text, default text |
 

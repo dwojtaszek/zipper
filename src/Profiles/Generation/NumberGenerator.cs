@@ -32,29 +32,29 @@ internal sealed class NumberGenerator : IColumnValueGenerator
     {
         if (this.colName.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase))
         {
-            return (context.FileData?.DataLength ?? 0).ToString();
+            return (context.FileData?.DataLength ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.colName.Equals("PAGECOUNT", StringComparison.OrdinalIgnoreCase))
         {
-            return (context.FileData?.PageCount ?? 1).ToString();
+            return (context.FileData?.PageCount ?? 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.max < this.min)
         {
-            return this.min.ToString();
+            return this.min.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.max == this.min)
         {
-            return this.min.ToString();
+            return this.min.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.distribution == "exponential")
         {
             var lambda = 3.0 / (this.max - this.min);
             var value = this.min + (int)(-Math.Log(1 - context.Seeded.NextDouble()) / lambda);
-            return Math.Min(value, this.max).ToString();
+            return Math.Min(value, this.max).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.distribution == "gaussian" || this.distribution == "normal")
@@ -68,14 +68,14 @@ internal sealed class NumberGenerator : IColumnValueGenerator
 
             int value = (int)Math.Round(mean + z0 * stdDev);
             value = Math.Max(this.min, Math.Min(this.max, value));
-            return value.ToString();
+            return value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
         if (this.max == int.MaxValue)
         {
-            return (this.min + (long)(context.Seeded.NextDouble() * ((long)this.max - this.min + 1))).ToString();
+            return (this.min + (long)(context.Seeded.NextDouble() * ((long)this.max - this.min + 1))).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        return context.Seeded.Next(this.min, this.max + 1).ToString();
+        return context.Seeded.Next(this.min, this.max + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 }

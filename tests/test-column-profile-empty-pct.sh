@@ -96,7 +96,7 @@ JSONEOF
 zipper \
     --count "$COUNT" --type pdf \
     --column-profile "$tmp_profile_0" \
-    --seed 42 --loadfile-only \
+    --seed 9999 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct0"
 
 dat_0=$(find "$TEST_OUTPUT_DIR/pct0" -name "*.dat" -print -quit)
@@ -125,7 +125,7 @@ JSONEOF
 zipper \
     --count "$COUNT" --type pdf \
     --column-profile "$tmp_profile_100" \
-    --seed 42 --loadfile-only \
+    --seed 9999 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct100"
 
 dat_100=$(find "$TEST_OUTPUT_DIR/pct100" -name "*.dat" -print -quit)
@@ -154,7 +154,7 @@ JSONEOF
 zipper \
     --count "$COUNT" --type pdf \
     --column-profile "$tmp_profile_10" \
-    --seed 42 --loadfile-only \
+    --seed 9999 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct10"
 
 dat_10=$(find "$TEST_OUTPUT_DIR/pct10" -name "*.dat" -print -quit)
@@ -186,7 +186,7 @@ JSONEOF
 zipper \
     --count "$COUNT" --type pdf \
     --column-profile "$tmp_profile_50" \
-    --seed 42 --loadfile-only \
+    --seed 9999 --loadfile-only \
     --output-path "$TEST_OUTPUT_DIR/pct50"
 
 dat_50=$(find "$TEST_OUTPUT_DIR/pct50" -name "*.dat" -print -quit)

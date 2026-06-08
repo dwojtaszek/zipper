@@ -77,7 +77,7 @@ public class FieldNamingTests : IDisposable
 
         // Arrange
         var request = this.CreateRequest(convention);
-        var writer = new ProfileDrivenDatWriter();
+        var writer = new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
         var stream = new MemoryStream();
 
         // Act
@@ -105,7 +105,7 @@ public class FieldNamingTests : IDisposable
 
         // Arrange
         var request = this.CreateRequest(convention);
-        var writer = new DatWriter();
+        var writer = new DatComposingWriter();
         var fileData = new List<FileData>
         {
             new FileData

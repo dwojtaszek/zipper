@@ -68,9 +68,10 @@ Lines starting with `#` and blank lines are ignored.
 | 13 | production-set | Production Set |
 
 > **EML scenarios** use structural comparison (tree listing + DAT row count
-> and header), not byte-exact diffing.  This is because `EmailTemplateSystem`
-> uses `DateTime.Now` and `Random.Shared` internally, making email content
-> non-deterministic even with `--seed`.
+> and header), not byte-exact diffing.  This is because the `.eml` file
+> content includes timestamps generated relative to `DateTime.Now` in code
+> paths that run outside the seeded `Random` passed to `EmailFactory`, making
+> the raw bytes differ across runs even when `--seed` is supplied.
 
 ## Running scenarios
 

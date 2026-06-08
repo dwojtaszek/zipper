@@ -51,7 +51,7 @@ Stress tests complement the automated performance testing by:
 - Memory: Up to 2GB
 - CPU: High usage
 
-### 3. 30GB Attachment-Heavy EML Focus
+### 2. 30GB Attachment-Heavy EML Focus
 **Script:** `stress-30gb-attachments.sh`
 
 **Focus:** Tests attachment handling, nested file processing, and archive size limits
@@ -59,7 +59,7 @@ Stress tests complement the automated performance testing by:
 **Configuration:**
 - Target Size: ~30GB compressed archive
 - Primary: 1 million EML files with 80% attachment rate
-- Attachments: Varied PDF/JPG/TIFF files (2-5MB each)
+- Attachments: Internal placeholder PDF/JPG/TIFF content padded via `--target-zip-size` to reach the target archive size
 - Distribution: Proportional across 100 folders
 - Features: Metadata + Text extraction for all files and attachments
 
@@ -71,7 +71,7 @@ Stress tests complement the automated performance testing by:
 - Memory: Up to 6GB+
 - CPU: Extremely high usage
 
-### 4. Large Load File Performance
+### 3. Large Load File Performance
 **Script:** `stress-large-loadfile.sh`
 
 **Focus:** Tests large data handling scenarios focused on load file performance
@@ -137,7 +137,7 @@ All stress tests include comprehensive pre-run validations:
 
     # Run a specific test by name (substring match)
     ./run-stress-tests.sh 10gb
-    ./run-stress-tests.sh multi-format
+    ./run-stress-tests.sh attachments
     ```
 
 3.  **Alternatively, run an individual test script:**
@@ -272,7 +272,6 @@ When adding new stress tests:
 
 - [Main Test Suite](../README.md)
 - [Regular E2E Tests](../run-tests.sh)
-- [Optimized Pre-commit Tests](../run-tests-optimized.sh)
 - [Application README](../../README.md)
 - [Requirements](../../Requirements.md)
 

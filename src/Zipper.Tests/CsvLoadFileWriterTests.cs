@@ -7,7 +7,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
 {
     private async Task<string> CaptureCsvOutput(FileGenerationRequest request, List<FileData> files)
     {
-        var writer = new CsvWriter();
+        var writer = new CsvComposingWriter();
         using var stream = new MemoryStream();
         await writer.WriteAsync(stream, request, files);
         stream.Position = 0;

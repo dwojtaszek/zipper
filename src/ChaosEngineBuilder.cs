@@ -37,7 +37,7 @@ internal static class ChaosEngineBuilder
             }
         }
 
-        var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
+        var eolString = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
         string chaosColDelim = format == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter ?? "\u0014";
         string chaosQuoteDelim = format == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter ?? "\u00fe";
 

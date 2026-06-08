@@ -21,7 +21,7 @@ public record Email
 
     public string? ReplyTo { get; init; }
 
-    public bool IsHighPriority { get; init; } = false;
+    public bool IsHighPriority { get; init; }
 
-    public bool RequestReadReceipt { get; init; } = false;
+    public bool RequestReadReceipt { get; init; }
 }

@@ -24,6 +24,27 @@ namespace Zipper.Tests
         }
 
         [Fact]
+        public void Parse_MissingValueForValueTakingFlags_ReturnsNull()
+        {
+            var flags = new[]
+            {
+                "--type", "--count", "--output-path", "--delimiter-column", "--delimiter-quote", "--delimiter-newline",
+                "--folders", "--encoding", "--distribution", "--attachment-rate", "--target-zip-size",
+                "--load-file-format", "--bates-prefix", "--bates-start", "--bates-digits", "--tiff-pages",
+                "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
+                "--load-file-formats", "--dat-delimiters", "--loadfile-format", "--eol", "--col-delim",
+                "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim", "--chaos-amount",
+                "--chaos-types", "--chaos-scenario", "--volume-size"
+            };
+
+            foreach (var flag in flags)
+            {
+                var result = CliParser.Parse(new[] { flag });
+                Assert.True(result == null, $"Expected null when {flag} is missing a value");
+            }
+        }
+
+        [Fact]
         public void Parse_UnknownFlag_OutputsWarningButContinues()
         {
             var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--unknown-flag" });

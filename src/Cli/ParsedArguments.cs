@@ -82,8 +82,6 @@ public class ParsedArguments
 
     public string? ChaosScenario { get; set; }
 
-    public bool ChaosList { get; set; }
-
     public bool ProductionSet { get; set; }
 
     public bool ProductionZip { get; set; }

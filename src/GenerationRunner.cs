@@ -20,7 +20,7 @@ namespace Zipper
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(string.Format("\nAn error occurred: {0}", ex.Message));
+                Console.Error.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\nAn error occurred: {0}", ex.Message));
                 return 1;
             }
         }

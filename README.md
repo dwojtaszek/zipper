@@ -68,7 +68,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--include-load-file`: Includes the generated Load File in the root of the output Archive instead of as a separate file
 - `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`). Note: `concordance` is a **distinct** format, NOT an alias of `dat`. Available formats:
   - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
-  - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types unless explicitly requested otherwise)
+  - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types when **no** `--load-file-format` or `--load-file-formats` is specified; any explicit format selection suppresses auto-OPT generation)
   - `csv`: Comma-separated values format with RFC 4180 escaping
   - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
   - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
@@ -117,7 +117,7 @@ Loadfile-Only Mode writes a companion `_properties.json` audit file next to the 
 - Chaos Engine output (`chaosMode.enabled`, `targetAmount`, `totalAnomalies`, `injectedAnomalies`)
 
 > [!IMPORTANT]
-> The audit file now uses `camelCase` JSON property names. This is a breaking schema change for external tooling that previously consumed PascalCase names such as `FileName`, `TotalRecords`, `ChaosMode.Enabled`, or `InjectedAnomalies[*].RecordID`.
+> The audit file uses `camelCase` JSON property names. External tooling that previously consumed PascalCase names such as `FileName`, `TotalRecords`, `ChaosMode.Enabled`, or `InjectedAnomalies[*].RecordID` must use the new names below.
 
 Common schema changes:
 
@@ -167,8 +167,8 @@ Example:
 
 Compatibility checklist:
 
-- Repository unit tests and Loadfile-Only Mode E2E tests are aligned with the camelCase audit schema.
-- Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` must be updated before consuming this branch.
+- Repository unit tests and Loadfile-Only Mode E2E tests use the camelCase audit schema.
+- Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` and were written against PascalCase field names must be updated.
 
 ### Arguments Quick Reference
 
@@ -194,7 +194,7 @@ Compatibility checklist:
 | `--bates-prefix` | none | string | Bates prefix |
 | `--bates-start` | 1 | ≥0 | Bates start number |
 | `--bates-digits` | 8 | 1-20 | Bates digit count |
-| `--tiff-pages` | 1-1 | min-max | TIFF page range |
+| `--tiff-pages` | 1-1 (standard mode); random 1–10 per doc in loadfile-only OPT mode | min-max | TIFF page range |
 | `--column-profile` | none | minimal, standard, litigation, full, or path | Column profile |
 | `--seed` | none | integer | Random seed |
 | `--date-format` | yyyy-MM-dd | format string | Date format override |
@@ -448,13 +448,13 @@ Zipper is optimized for high-performance file generation with advanced parallel 
 
 Typical performance on modern hardware with parallel processing enabled:
 
-| File Count | Estimated Time | Files/Second | Memory Usage | Improvement |
-|------------|---------------|--------------|--------------|-------------|
-| 1,000      | 1-2 seconds   | 500-1,500    | Low          | ~2x faster  |
-| 10,000     | 5-10 seconds  | 1,000-3,000  | Moderate     | ~2x faster  |
-| 100,000    | 30-60 seconds | 1,500-4,000  | Optimized    | ~2x faster  |
+| File Count | Estimated Time | Files/Second | Memory Usage |
+|------------|---------------|--------------|--------------|
+| 1,000      | 1-2 seconds   | 500-1,500    | Low          |
+| 10,000     | 5-10 seconds  | 1,000-3,000  | Moderate     |
+| 100,000    | 30-60 seconds | 1,500-4,000  | Optimized    |
 
-*Performance varies based on hardware, file type, and options selected. Parallel processing provides up to 3x improvement over single-threaded generation.*
+*Performance varies based on hardware, file type, and options selected. Parallel processing typically provides 2–3× improvement over single-threaded generation.*
 
 ### Real-time Performance Monitoring
 

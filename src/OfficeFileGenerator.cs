@@ -75,10 +75,11 @@ internal sealed class OfficeFileGenerator : IFileGenerator
     }
 
     /// <summary>
-    /// Determines if the specified file type is an Office format.
+    /// For test use only. Determines if the specified file type is an Office format.
     /// </summary>
     /// <param name="fileType">The file type to check.</param>
     /// <returns>True if the file type is an Office format.</returns>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static bool IsOfficeFormat(string fileType)
     {
         return fileType.Equals("docx", System.StringComparison.OrdinalIgnoreCase) ||

@@ -24,7 +24,7 @@ internal static class LoadfileOnlyGenerator
 
         var baseFileName = $"loadfile_{DateTime.Now:yyyyMMdd_HHmmss}";
 
-        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Any() == true
+        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
             ? request.LoadFile.LoadFileFormats
             : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
 
@@ -36,54 +36,40 @@ internal static class LoadfileOnlyGenerator
             var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
             var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
 
-            var eolString = LoadFiles.LoadFileWriterBase.GetEolString(request.Delimiters.EndOfLine);
             long totalLines = format == LoadFileFormat.Opt
                 ? request.Output.FileCount
                 : request.Output.FileCount + 1;
 
-            ChaosEngine? chaosEngine = null;
-            if (request.Chaos.ChaosMode)
+            // Resolve a named chaos scenario for display and audit, then let ChaosEngineBuilder
+            // own engine construction (including the format-keyed delimiter defaults). This
+            // removes the previous per-caller delimiter leak.
+            if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
             {
-                string? resolvedTypes = request.Chaos.ChaosTypes;
-                string? resolvedAmount = request.Chaos.ChaosAmount;
-
-                if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
+                var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
+                if (scenario != null)
                 {
-                    var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
-                    if (scenario != null)
+                    if (string.IsNullOrEmpty(request.Chaos.ChaosAmount))
                     {
-                        resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
-                        if (string.IsNullOrEmpty(resolvedAmount))
-                        {
-                            resolvedAmount = scenario.DefaultAmount;
-                        }
-
-                        request.Chaos = request.Chaos with { ChaosAmount = resolvedAmount };
-                        request.Chaos = request.Chaos with { ChaosTypes = resolvedTypes };
-
-                        Console.WriteLine(string.Format("  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                        request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
                     }
+
+                    request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
+
+                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
-
-                string chaosColDelim = format == LoadFileFormat.Opt ? "," : request.Delimiters.ColumnDelimiter;
-                string chaosQuoteDelim = format == LoadFileFormat.Opt ? string.Empty : request.Delimiters.QuoteDelimiter;
-
-                chaosEngine = new ChaosEngine(
-                    totalLines,
-                    resolvedAmount,
-                    resolvedTypes,
-                    format,
-                    chaosColDelim,
-                    chaosQuoteDelim,
-                    eolString,
-                    request.Metadata.Seed);
+                else
+                {
+                    Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
+                }
             }
 
-            ILoadFileWriter writer = format == LoadFileFormat.Opt
-                ? LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, WriterMode.LoadfileOnly)
-                : request.Metadata.ColumnProfile != null
-                    ? new ProfileDrivenDatWriter()
-                    : LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, WriterMode.LoadfileOnly);
+            ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
+
+            // DatComposingWriter handles the column-profile path internally, so loadfile-only
+            // DAT generation no longer needs a separate profile writer branch here.
+            ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
+                format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
+                WriterMode.LoadfileOnly);
 
             await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
             {

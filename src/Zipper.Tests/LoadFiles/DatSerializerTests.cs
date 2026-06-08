@@ -1,5 +1,3 @@
-using System.Text;
-
 using Xunit;
 
 using Zipper.LoadFiles;
@@ -9,17 +7,13 @@ namespace Zipper.Tests.LoadFiles;
 public class DatSerializerTests
 {
     [Fact]
-    public async Task WriteHeaderAsync_ProducesDelimitedHeader()
+    public void RenderHeader_ProducesDelimitedHeader()
     {
         var serializer = new DatSerializer();
-        using var stream = new MemoryStream();
         var columns = new List<string> { "DOCID", "FILEPATH", "CUSTODIAN" };
 
-        await serializer.WriteHeaderAsync(stream, columns);
-        await serializer.FlushAsync(stream);
+        var content = serializer.RenderHeader(columns);
 
-        stream.Position = 0;
-        var content = Encoding.UTF8.GetString(stream.ToArray());
         Assert.Contains("DOCID", content);
         Assert.Contains("FILEPATH", content);
         Assert.Contains("CUSTODIAN", content);
@@ -27,10 +21,9 @@ public class DatSerializerTests
     }
 
     [Fact]
-    public async Task WriteRecordAsync_ProducesDelimitedRow()
+    public void RenderRecord_ProducesDelimitedRow()
     {
         var serializer = new DatSerializer();
-        using var stream = new MemoryStream();
         var columns = new List<string> { "DOCID", "FILEPATH" };
         var record = new LoadFileRecord
         {
@@ -42,82 +35,78 @@ public class DatSerializerTests
             },
         };
 
-        await serializer.WriteRecordAsync(stream, record);
-        await serializer.FlushAsync(stream);
+        var content = serializer.RenderRecord(record);
 
-        stream.Position = 0;
-        var content = Encoding.UTF8.GetString(stream.ToArray());
         Assert.Contains("DOC001", content);
         Assert.Contains("folder/file.pdf", content);
         Assert.Contains("\x14", content); // column delimiter
     }
 
     [Fact]
-    public async Task WriteRecordAsync_EscapesQuoteDelimiter()
+    public void RenderRecord_EscapesQuoteDelimiter()
     {
         var serializer = new DatSerializer();
-        using var stream = new MemoryStream();
-        var columns = new List<string> { "VALUE" };
         var record = new LoadFileRecord
         {
-            Columns = columns,
+            Columns = new List<string> { "VALUE" },
             Values = new Dictionary<string, string>
             {
                 ["VALUE"] = "has\xfequote",
             },
         };
 
-        await serializer.WriteRecordAsync(stream, record);
-        await serializer.FlushAsync(stream);
-
-        stream.Position = 0;
-        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var content = serializer.RenderRecord(record);
 
         // Quote delimiter should be doubled
         Assert.Contains("\xfe\xfe", content);
     }
 
     [Fact]
-    public async Task WriteRecordAsync_ReplacesNewlines()
+    public void RenderRecord_ReplacesNewlines()
     {
         var serializer = new DatSerializer();
-        using var stream = new MemoryStream();
-        var columns = new List<string> { "TEXT" };
         var record = new LoadFileRecord
         {
-            Columns = columns,
+            Columns = new List<string> { "TEXT" },
             Values = new Dictionary<string, string>
             {
                 ["TEXT"] = "line1\nline2",
             },
         };
 
-        await serializer.WriteRecordAsync(stream, record);
-        await serializer.FlushAsync(stream);
+        var content = serializer.RenderRecord(record);
 
-        stream.Position = 0;
-        var content = Encoding.UTF8.GetString(stream.ToArray());
-        Assert.DoesNotContain("\n", content.TrimEnd('\r', '\n'));
+        Assert.DoesNotContain("\n", content);
         Assert.Contains("\xae", content);
     }
 
     [Fact]
-    public async Task NoQuoteMode_OmitsQuoteDelimiters()
+    public void NoQuoteMode_OmitsQuoteDelimiters()
     {
         var serializer = new DatSerializer(columnDelimiter: '|', quoteDelimiter: '\0');
-        using var stream = new MemoryStream();
-        var columns = new List<string> { "A", "B" };
         var record = new LoadFileRecord
         {
-            Columns = columns,
+            Columns = new List<string> { "A", "B" },
             Values = new Dictionary<string, string> { ["A"] = "x", ["B"] = "y" },
         };
 
-        await serializer.WriteRecordAsync(stream, record);
-        await serializer.FlushAsync(stream);
+        var content = serializer.RenderRecord(record);
 
-        stream.Position = 0;
-        var content = Encoding.UTF8.GetString(stream.ToArray());
-        Assert.StartsWith("x|y", content);
+        Assert.Equal("x|y", content);
+    }
+
+    [Fact]
+    public void RenderRecord_MissingValue_RendersEmptyField()
+    {
+        var serializer = new DatSerializer(columnDelimiter: '|', quoteDelimiter: '\0');
+        var record = new LoadFileRecord
+        {
+            Columns = new List<string> { "A", "MISSING", "B" },
+            Values = new Dictionary<string, string> { ["A"] = "x", ["B"] = "y" },
+        };
+
+        var content = serializer.RenderRecord(record);
+
+        Assert.Equal("x||y", content);
     }
 }

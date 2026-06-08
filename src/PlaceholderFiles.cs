@@ -66,6 +66,10 @@ public static class PlaceholderFiles
         return FileContentMap.TryGetValue(fileType, out var content) ? content : Array.Empty<byte>();
     }
 
+    /// <summary>
+    /// For test use only. Gets a random attachment.
+    /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
     public static (string filename, byte[] content)? GetRandomAttachment()
     {
         var fileTypes = new List<string>(FileContentMap.Keys);

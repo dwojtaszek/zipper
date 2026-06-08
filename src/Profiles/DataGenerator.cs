@@ -17,6 +17,9 @@ internal class DataGenerator
     private readonly DateTime now;
     private int documentIndex;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataGenerator"/> class using the specified profile and overrides.
+    /// </summary>
     public DataGenerator(
         ColumnProfile profile,
         int? seed = null,
@@ -44,11 +47,7 @@ internal class DataGenerator
                 col.EmptyPercentage = emptyPercentageOverride.Value;
                 if (emptyPercentageOverride.Value == 0 && col.MultiValueCount != null && col.MultiValueCount.Min == 0)
                 {
-                    col.MultiValueCount = new RangeConfig
-                    {
-                        Min = 1,
-                        Max = Math.Max(1, col.MultiValueCount.Max)
-                    };
+                    col.MultiValueCount = new RangeConfig { Min = 1, Max = Math.Max(1, col.MultiValueCount.Max) };
                 }
             }
         }

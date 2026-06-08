@@ -7,13 +7,18 @@ namespace Zipper
     {
         public async Task RunAsync(FileGenerationRequest request)
         {
+            if (request.Chaos.ChaosMode)
+            {
+                throw new InvalidOperationException("Chaos mode is not supported in standard generation mode. Use --loadfile-only.");
+            }
+
             Console.WriteLine("Starting parallel file generation...");
-            Console.WriteLine(string.Format("  File Type: {0}", request.Output.FileType));
-            Console.WriteLine(string.Format("  Count: {0:N0}", request.Output.FileCount));
-            Console.WriteLine(string.Format("  Output Path: {0}", request.Output.OutputPath));
-            Console.WriteLine(string.Format("  Folders: {0}", request.Output.Folders));
-            Console.WriteLine(string.Format("  Encoding: {0}", request.LoadFile.Encoding));
-            Console.WriteLine(string.Format("  Distribution: {0}", request.LoadFile.Distribution));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  File Type: {0}", request.Output.FileType));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Count: {0:N0}", request.Output.FileCount));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Output Path: {0}", request.Output.OutputPath));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Folders: {0}", request.Output.Folders));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Encoding: {0}", request.LoadFile.Encoding));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Distribution: {0}", request.LoadFile.Distribution));
             if (request.Metadata.WithMetadata)
             {
                 Console.WriteLine("  Metadata: Enabled");
@@ -26,7 +31,7 @@ namespace Zipper
 
             if (request.Output.TargetZipSize.HasValue)
             {
-                Console.WriteLine(string.Format("  Target ZIP Size: {0} MB", request.Output.TargetZipSize.Value / (1024 * 1024)));
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Target ZIP Size: {0} MB", request.Output.TargetZipSize.Value / (1024 * 1024)));
             }
 
             if (request.Output.IncludeLoadFile)
@@ -39,9 +44,9 @@ namespace Zipper
 
             var result = await generator.GenerateFilesAsync(request);
 
-            Console.WriteLine(string.Format("\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
-            Console.WriteLine(string.Format("  Archive created: {0}", result.ZipFilePath));
-            Console.WriteLine(string.Format("  Performance: {0:F1} files/second", result.FilesPerSecond));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Archive created: {0}", result.ZipFilePath));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Performance: {0:F1} files/second", result.FilesPerSecond));
 
             // REQ-025: the final archive must fall within +/- 10% of --target-zip-size.
             // This is the success criterion for the operation; verify and report it.
@@ -54,13 +59,13 @@ namespace Zipper
                 double deviation = target > 0 ? Math.Abs(actual - target) / (double)target : 0;
                 if (deviation > 0.10)
                 {
-                    await Console.Error.WriteLineAsync(string.Format(
+                    await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
                         actual, target, deviation));
                 }
                 else
                 {
-                    await Console.Out.WriteLineAsync(string.Format(
+                    await Console.Out.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
                         actual, target, deviation));
                 }
@@ -68,7 +73,7 @@ namespace Zipper
 
             if (!request.Output.IncludeLoadFile)
             {
-                Console.WriteLine(string.Format("  Load file created: {0}", result.LoadFilePath));
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file created: {0}", result.LoadFilePath));
             }
         }
     }

@@ -6,10 +6,7 @@ public static class CliValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        if (parsed == null)
-        {
-            throw new ArgumentNullException(nameof(parsed));
-        }
+        ArgumentNullException.ThrowIfNull(parsed);
 
         if (!ValidateRequired(parsed))
         {
@@ -232,13 +229,13 @@ public static class CliValidator
 
         if (!string.IsNullOrEmpty(parsed.BatesPrefix))
         {
-            if (parsed.BatesPrefix.Contains('/') || parsed.BatesPrefix.Contains('\\'))
+            if (parsed.BatesPrefix.Contains('/', StringComparison.Ordinal) || parsed.BatesPrefix.Contains('\\', StringComparison.Ordinal))
             {
                 Console.Error.WriteLine("Error: --bates-prefix must not contain path separators.");
                 return false;
             }
 
-            if (parsed.BatesPrefix == ".." || parsed.BatesPrefix.Contains("../") || parsed.BatesPrefix.Contains("..\\"))
+            if (parsed.BatesPrefix == ".." || parsed.BatesPrefix.Contains("../", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("..\\", StringComparison.Ordinal))
             {
                 Console.Error.WriteLine("Error: --bates-prefix must not contain directory traversal sequences.");
                 return false;
@@ -275,7 +272,7 @@ public static class CliValidator
                 return false;
             }
 
-            if (!ValidateLoadFileOnlyFormatAndEncoding(parsed))
+            if (!ValidateLoadFileOnlyFormat(parsed))
             {
                 return false;
             }
@@ -300,18 +297,8 @@ public static class CliValidator
         return true;
     }
 
-    private static bool ValidateLoadFileOnlyFormatAndEncoding(ParsedArguments parsed)
+    private static bool ValidateLoadFileOnlyFormat(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.Encoding))
-        {
-            var enc = EncodingHelper.GetEncoding(parsed.Encoding);
-            if (enc == null)
-            {
-                Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported: UTF-8, UTF-16LE, Windows-1252, ASCII.");
-                return false;
-            }
-        }
-
         if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
         {
             var currentFormat = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) ?? LoadFileFormat.Dat;
