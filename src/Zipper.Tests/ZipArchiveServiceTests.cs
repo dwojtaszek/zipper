@@ -179,7 +179,7 @@ namespace Zipper.Tests
 
             // Should have 2 EML files and 2 attachments
             var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
-            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment")).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
 
             Assert.Equal(2, emlEntries.Count);
             Assert.Equal(2, attachmentEntries.Count);
@@ -315,9 +315,9 @@ namespace Zipper.Tests
             Assert.Equal(8, archive.Entries.Count);
 
             var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
-            var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal) && !e.FullName.Contains("attachment")).ToList();
-            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment") && !e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
-            var attachmentTextEntries = archive.Entries.Where(e => e.FullName.Contains("attachment") && e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal) && !e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && !e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            var attachmentTextEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
 
             Assert.Equal(2, emlEntries.Count);
             Assert.Equal(2, emlTextEntries.Count);

@@ -141,7 +141,10 @@ namespace Zipper
                     if (zipFilePath != null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
                     if (loadFilePath != null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
                 }
-                catch { }
+                catch
+                {
+                    // Suppressed: cleanup failures shouldn't mask the original exception
+                }
                 throw;
             }
         }

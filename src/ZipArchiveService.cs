@@ -127,12 +127,12 @@ namespace Zipper
                     var fileStream = new FileStream(currentFilePath, FileMode.Create);
                     await using (fileStream.ConfigureAwait(false))
                     {
-                        await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine);
-                        await fileStream.FlushAsync();
+                        await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine).ConfigureAwait(false);
+                        await fileStream.FlushAsync().ConfigureAwait(false);
 
                         // Write audit file to disk
                         var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies, format);
-                        await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson);
+                        await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson).ConfigureAwait(false);
 
                         actualLoadFilePath = currentFilePath;
                     }
