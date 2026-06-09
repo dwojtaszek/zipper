@@ -209,6 +209,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           COMMIT_SHA: ${{ github.sha }}
+          # Passed via env to avoid template injection in bash (step output could contain $() etc.)
+          PREV_TAG_FROM_STEP: ${{ steps.tag_step.outputs.prev_tag }}
         shell: bash
         run: |
           set -eo pipefail
@@ -219,9 +221,17 @@ jobs:
             --jq '(.[0] // {}) | .body // ""' > /tmp/pr_body.txt 2>/dev/null || true
 
           # Rebase-merge fallback: rebased commits have new SHAs not tracked by the
-          # commits API. Extract PR number from the commit message instead.
+          # commits API. Extract PR number from PR-specific patterns only — avoiding
+          # issue references like "Fixes #123" which use the same #N syntax.
           if [[ ! -s /tmp/pr_body.txt ]]; then
-            PR_NUM=$(git log -1 --format="%s %b" | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
+            SUBJECT=$(git log -1 --format="%s")
+            BODY=$(git log -1 --format="%b")
+            # Squash pattern: "My PR title (#42)" — number in trailing parens
+            PR_NUM=$(printf '%s\n' "$SUBJECT" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p' | head -1 || true)
+            if [[ -z "$PR_NUM" ]]; then
+              # Merge pattern: "Merge pull request #42 from ..."
+              PR_NUM=$(printf '%s\n%s\n' "$SUBJECT" "$BODY" | sed -nE 's/^Merge pull request #([0-9]+).*/\1/p' | head -1 || true)
+            fi
             if [[ -n "$PR_NUM" ]]; then
               gh api "repos/${REPO}/pulls/${PR_NUM}" \
                 --jq '.body // ""' > /tmp/pr_body.txt 2>/dev/null || true
@@ -249,9 +259,9 @@ jobs:
             echo "use_ai=false" >> "$GITHUB_OUTPUT"
           else
             echo "use_ai=true" >> "$GITHUB_OUTPUT"
-            # Use prev_tag output from tag_step (avoids re-sorting all tags).
+            # Use prev_tag passed via env (avoids re-sorting all tags).
             # v0.0.0 is synthetic (no real prior tag) — fall back to initial commit.
-            PREV_TAG="${{ steps.tag_step.outputs.prev_tag }}"
+            PREV_TAG="${PREV_TAG_FROM_STEP:-}"
             [[ -z "$PREV_TAG" || "$PREV_TAG" == "v0.0.0" ]] && \
               PREV_TAG=$(git rev-list --max-parents=0 HEAD)
             COMMIT_LOG=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" | head -50 || true)
@@ -262,6 +272,7 @@ jobs:
       - name: Generate Release Notes via AI
         id: ai_notes
         if: steps.tag_step.outputs.tag != '' && steps.pr_notes.outputs.use_ai == 'true'
+        continue-on-error: true
         uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
         with:
           model: openai/gpt-4o-mini
@@ -279,7 +290,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag_step.outputs.tag }}
           name: Release ${{ steps.tag_step.outputs.tag }}
-          body: ${{ steps.pr_notes.outputs.body || steps.ai_notes.outputs.response || 'See commit history for changes in this release.' }}
+          body: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
           draft: false
           prerelease: false
           files: |
