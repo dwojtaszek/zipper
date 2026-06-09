@@ -75,7 +75,7 @@ public class AdditionalGeneratorTests
             Range = new RangeConfig { Min = 100, Max = 200 }
         };
         var genRange = new NumberGenerator(colRange);
-        var val = int.Parse(genRange.Generate(context));
+        var val = int.Parse(genRange.Generate(context), System.Globalization.CultureInfo.InvariantCulture);
         Assert.InRange(val, 100, 200);
 
         // Exponential distribution
@@ -86,7 +86,7 @@ public class AdditionalGeneratorTests
             Range = new RangeConfig { Min = 50, Max = 150 }
         };
         var genExp = new NumberGenerator(colExp);
-        var expVal = int.Parse(genExp.Generate(context));
+        var expVal = int.Parse(genExp.Generate(context), System.Globalization.CultureInfo.InvariantCulture);
         Assert.InRange(expVal, 50, 150);
     }
 
@@ -100,7 +100,7 @@ public class AdditionalGeneratorTests
         var colSingle = new ColumnDefinition { MultiValue = false };
         var genSingle = new EmailAddressGenerator(colSingle, settings);
         var email = genSingle.Generate(context);
-        Assert.Contains("@", email);
+        Assert.Contains("@", email, StringComparison.Ordinal);
 
         // Multi value
         var colMulti = new ColumnDefinition
@@ -112,8 +112,8 @@ public class AdditionalGeneratorTests
         var emails = genMulti.Generate(context);
         var parts = emails.Split(';');
         Assert.Equal(2, parts.Length);
-        Assert.Contains("@", parts[0]);
-        Assert.Contains("@", parts[1]);
+        Assert.Contains("@", parts[0], StringComparison.Ordinal);
+        Assert.Contains("@", parts[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class AdditionalGeneratorTests
         var dateCreated = new LegacyDateCreatedGenerator().Generate(context);
         Assert.NotNull(dateCreated);
 
-        Assert.StartsWith("Author ", new LegacyAuthorGenerator().Generate(context));
+        Assert.StartsWith("Author ", new LegacyAuthorGenerator().Generate(context), StringComparison.Ordinal);
         Assert.Equal("2048", new LegacyFileSizeFromDataGenerator().Generate(context));
         Assert.NotEmpty(new LegacyRandomFileSizeGenerator().Generate(context));
 
@@ -168,7 +168,7 @@ public class AdditionalGeneratorTests
         // Paragraphs generator
         var colPara = new ColumnDefinition
         {
-            GeneratorParams = new Dictionary<string, object> { { "min", 2 }, { "max", 2 } }
+            GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "min", 2 }, { "max", 2 } }
         };
         var genPara = new LongTextGenerator(colPara);
         var text = genPara.Generate(context);

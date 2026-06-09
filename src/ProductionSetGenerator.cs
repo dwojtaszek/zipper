@@ -25,12 +25,12 @@ internal static class ProductionSetGenerator
 
         var stopwatch = Stopwatch.StartNew();
 
-        var productionName = $"PRODUCTION_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var productionName = $"PRODUCTION_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
         var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
         try
         {
-            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch);
+            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch).ConfigureAwait(false);
         }
         catch
         {
@@ -103,11 +103,11 @@ internal static class ProductionSetGenerator
             var generated = fileGenerator.Generate(workItem, request);
             var nativeContent = generated.Content;
 
-            await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent);
+            await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent).ConfigureAwait(false);
 
             var textContent = $"Extracted text for document {plan.BatesNumber}. " +
                               Profiles.LoremIpsum.GetParagraph(random);
-            await File.WriteAllTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding);
+            await File.WriteAllTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding).ConfigureAwait(false);
 
             // Write placeholder TIFF image (single-pixel stub)
             if (generated.PageCount > 1)
@@ -120,12 +120,12 @@ internal static class ProductionSetGenerator
                 for (int pageIdx = 1; pageIdx <= generated.PageCount; pageIdx++)
                 {
                     var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
-                    await File.WriteAllBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff"));
+                    await File.WriteAllBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
                 }
             }
             else
             {
-                await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff"));
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
             }
 
             fileDataList.Add(new FileData
@@ -147,12 +147,12 @@ internal static class ProductionSetGenerator
                 var childTextRelPath = Path.Combine("TEXT", plan.VolumeName, $"{childBates}.txt");
                 var childImageRelPath = Path.Combine("IMAGES", plan.VolumeName, $"{childBates}.tif");
 
-                await File.WriteAllBytesAsync(Path.Combine(productionPath, childNativeRelPath), attach.content);
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, childNativeRelPath), attach.content).ConfigureAwait(false);
 
                 var childTextContent = $"Extracted text for attachment {childBates}.";
-                await File.WriteAllTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding);
+                await File.WriteAllTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding).ConfigureAwait(false);
 
-                await File.WriteAllBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff"));
+                await File.WriteAllBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
             }
 
             // Progress reporting
@@ -175,13 +175,14 @@ internal static class ProductionSetGenerator
         var datWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, LoadFiles.WriterMode.ProductionSet);
         long datTotalLines = totalRecords + 1; // header + data rows
         var datChaosEngine = ChaosEngineBuilder.Build(request, datTotalLines, LoadFileFormat.Dat);
-        await using (var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
+        var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+        await using (datStream.ConfigureAwait(false))
         {
-            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine);
+            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine).ConfigureAwait(false);
         }
 
         var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, totalRecords, datChaosEngine?.Anomalies, LoadFileFormat.Dat);
-        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson);
+        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson).ConfigureAwait(false);
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
@@ -190,21 +191,22 @@ internal static class ProductionSetGenerator
             (request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
             + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0));
         var optChaosEngine = ChaosEngineBuilder.Build(request, optTotalLines, LoadFileFormat.Opt);
-        await using (var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
+        var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+        await using (optStream.ConfigureAwait(false))
         {
-            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine);
+            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine).ConfigureAwait(false);
         }
 
         var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, optTotalLines, optChaosEngine?.Anomalies, LoadFileFormat.Opt);
 
         // Save OPT properties with a slightly different name to avoid overwriting DAT properties
-        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson);
+        await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson).ConfigureAwait(false);
 
         // Write manifest
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
         var manifestPath = await ProductionManifestWriter.WriteAsync(
-            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed);
+            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed).ConfigureAwait(false);
 
         // Optionally wrap in ZIP
         string? zipPath = null;

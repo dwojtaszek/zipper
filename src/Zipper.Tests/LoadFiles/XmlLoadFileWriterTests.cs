@@ -72,24 +72,24 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
 
         var content = await File.ReadAllTextAsync(outputPath);
 
-        Assert.Contains("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>", content.ToLowerInvariant());
-        Assert.Contains("<Root DataInterchangeType=\"Export\" MajorVersion=\"1\" MinorVersion=\"2\">", content);
-        Assert.Contains("<Batch>", content);
-        Assert.DoesNotContain("<Documents>", content);
-        Assert.DoesNotContain("</Documents>", content);
-        Assert.Contains("<Document DocID=\"DOC00000001\">", content);
-        Assert.Contains("<Files>", content);
-        Assert.Contains("<File FileType=\"Native\">", content);
-        Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.pdf\" FileName=\"file_00000001.pdf\" FileSize=\"14\" Hash=\"", content);
-        Assert.Contains("<File FileType=\"Text\">", content);
-        Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.txt\" FileName=\"file_00000001.txt\" FileSize=\"41\" Hash=\"", content);
-        Assert.Contains("<Tags>", content);
-        Assert.Contains("<Tag TagName=\"Custodian\" TagValue=\"Custodian 1\" />", content);
-        Assert.DoesNotContain("<Fields>", content);
-        Assert.DoesNotContain("<Field ", content);
-        Assert.Contains("</Document>", content);
-        Assert.Contains("</Batch>", content);
-        Assert.Contains("</Root>", content);
+        Assert.Contains("<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>", content.ToLowerInvariant(), StringComparison.Ordinal);
+        Assert.Contains("<Root DataInterchangeType=\"Export\" MajorVersion=\"1\" MinorVersion=\"2\">", content, StringComparison.Ordinal);
+        Assert.Contains("<Batch>", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Documents>", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("</Documents>", content, StringComparison.Ordinal);
+        Assert.Contains("<Document DocID=\"DOC00000001\">", content, StringComparison.Ordinal);
+        Assert.Contains("<Files>", content, StringComparison.Ordinal);
+        Assert.Contains("<File FileType=\"Native\">", content, StringComparison.Ordinal);
+        Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.pdf\" FileName=\"file_00000001.pdf\" FileSize=\"14\" Hash=\"", content, StringComparison.Ordinal);
+        Assert.Contains("<File FileType=\"Text\">", content, StringComparison.Ordinal);
+        Assert.Contains("<ExternalFile FilePath=\"folder_001/file_00000001.txt\" FileName=\"file_00000001.txt\" FileSize=\"41\" Hash=\"", content, StringComparison.Ordinal);
+        Assert.Contains("<Tags>", content, StringComparison.Ordinal);
+        Assert.Contains("<Tag TagName=\"Custodian\" TagValue=\"Custodian 1\" />", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Fields>", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("<Field ", content, StringComparison.Ordinal);
+        Assert.Contains("</Document>", content, StringComparison.Ordinal);
+        Assert.Contains("</Batch>", content, StringComparison.Ordinal);
+        Assert.Contains("</Root>", content, StringComparison.Ordinal);
     }
 
     [Fact]

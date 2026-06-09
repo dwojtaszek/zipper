@@ -37,7 +37,7 @@ namespace Zipper
         {
             var writer = new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
             using var stream = new MemoryStream();
-            await writer.WriteAsync(stream, request, new List<FileData>());
+            await writer.WriteAsync(stream, request, new List<FileData>()).ConfigureAwait(false);
             stream.Position = 0;
             return Encoding.UTF8.GetString(stream.ToArray());
         }
@@ -52,8 +52,8 @@ namespace Zipper
 
             // Header + 3 data rows
             Assert.Equal(4, lines.Length);
-            Assert.Contains("DOCID", lines[0]);
-            Assert.Contains("FILEPATH", lines[0]);
+            Assert.Contains("DOCID", lines[0], StringComparison.Ordinal);
+            Assert.Contains("FILEPATH", lines[0], StringComparison.Ordinal);
         }
 
         [Fact]
@@ -65,7 +65,7 @@ namespace Zipper
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             // Each data field should be wrapped in the quote delimiter (\u00fe)
-            Assert.Contains("\u00fe", lines[1]);
+            Assert.Contains("\u00fe", lines[1], StringComparison.Ordinal);
         }
 
         [Fact]
@@ -76,6 +76,7 @@ namespace Zipper
                 Name = "escape-test",
                 Settings = new ProfileSettings { EmptyValuePercentage = 0 },
                 DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
                 {
                     ["quoteValues"] = new DataSourceConfig
                     {
@@ -93,7 +94,7 @@ namespace Zipper
             var content = await CaptureOutputAsync(request);
 
             // \u00fe inside the field value must be doubled to \u00fe\u00fe per Concordance escaping
-            Assert.Contains("val\u00fe\u00feSpecial", content);
+            Assert.Contains("val\u00fe\u00feSpecial", content, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -119,7 +120,7 @@ namespace Zipper
             var custodianIdx = headers.IndexOf("CUSTODIAN");
             Assert.True(custodianIdx >= 0, "CUSTODIAN column not found in profile output");
 
-            var custodianValues = new HashSet<string>();
+            var custodianValues = new HashSet<string>(StringComparer.Ordinal);
             foreach (var line in lines.Skip(1))
             {
                 var fields = line.Split(colDelim);
@@ -172,8 +173,8 @@ namespace Zipper
             await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
             var chaosBytes = chaosStream.ToArray();
 
-            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 1-2");
-            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 4-5");
+            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => string.Equals(a.LineNumber, "Boundary 1-2", StringComparison.Ordinal));
+            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => string.Equals(a.LineNumber, "Boundary 4-5", StringComparison.Ordinal));
 
             Assert.NotNull(headerAnomaly);
             Assert.NotNull(lastLineAnomaly);

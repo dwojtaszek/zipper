@@ -28,7 +28,7 @@ public static class CliParser
                 case "--count":
                     if (TryGetValue(args, i, out var countStr))
                     {
-                        if (long.TryParse(countStr, out var count))
+                        if (long.TryParse(countStr, System.Globalization.CultureInfo.InvariantCulture, out var count))
                         {
                             parsed.Count = count;
                             i++;
@@ -68,7 +68,7 @@ public static class CliParser
                 case "--folders":
                     if (TryGetValue(args, i, out var foldersStr))
                     {
-                        if (int.TryParse(foldersStr, out var folders))
+                        if (int.TryParse(foldersStr, System.Globalization.CultureInfo.InvariantCulture, out var folders))
                         {
                             parsed.Folders = folders;
                         }
@@ -123,7 +123,7 @@ public static class CliParser
                 case "--attachment-rate":
                     if (TryGetValue(args, i, out var attRateStr))
                     {
-                        if (int.TryParse(attRateStr, out var attachmentRate))
+                        if (int.TryParse(attRateStr, System.Globalization.CultureInfo.InvariantCulture, out var attachmentRate))
                         {
                             parsed.AttachmentRate = attachmentRate;
                         }
@@ -188,7 +188,7 @@ public static class CliParser
                 case "--bates-start":
                     if (TryGetValue(args, i, out var batesStartStr))
                     {
-                        if (long.TryParse(batesStartStr, out var batesStart))
+                        if (long.TryParse(batesStartStr, System.Globalization.CultureInfo.InvariantCulture, out var batesStart))
                         {
                             parsed.BatesStart = batesStart;
                         }
@@ -210,7 +210,7 @@ public static class CliParser
                 case "--bates-digits":
                     if (TryGetValue(args, i, out var batesDigitsStr))
                     {
-                        if (int.TryParse(batesDigitsStr, out var batesDigits))
+                        if (int.TryParse(batesDigitsStr, System.Globalization.CultureInfo.InvariantCulture, out var batesDigits))
                         {
                             parsed.BatesDigits = batesDigits;
                         }
@@ -258,7 +258,7 @@ public static class CliParser
                 case "--seed":
                     if (TryGetValue(args, i, out var seedStr))
                     {
-                        if (int.TryParse(seedStr, out var seed))
+                        if (int.TryParse(seedStr, System.Globalization.CultureInfo.InvariantCulture, out var seed))
                         {
                             parsed.Seed = seed;
                         }
@@ -293,7 +293,7 @@ public static class CliParser
                 case "--empty-percentage":
                     if (TryGetValue(args, i, out var emptyPctStr))
                     {
-                        if (int.TryParse(emptyPctStr, out var emptyPct))
+                        if (int.TryParse(emptyPctStr, System.Globalization.CultureInfo.InvariantCulture, out var emptyPct))
                         {
                             parsed.EmptyPercentage = emptyPct;
                         }
@@ -315,7 +315,7 @@ public static class CliParser
                 case "--custodian-count":
                     if (TryGetValue(args, i, out var custCountStr))
                     {
-                        if (int.TryParse(custCountStr, out var custCount))
+                        if (int.TryParse(custCountStr, System.Globalization.CultureInfo.InvariantCulture, out var custCount))
                         {
                             parsed.CustodianCount = custCount;
                         }
@@ -549,7 +549,7 @@ public static class CliParser
                 case "--volume-size":
                     if (TryGetValue(args, i, out var volumeSizeVal))
                     {
-                        if (int.TryParse(volumeSizeVal, out var volumeSize))
+                        if (int.TryParse(volumeSizeVal, System.Globalization.CultureInfo.InvariantCulture, out var volumeSize))
                         {
                             parsed.VolumeSize = volumeSize;
                         }

@@ -69,11 +69,11 @@ namespace Zipper
             var result = await LoadfileOnlyGenerator.GenerateAsync(request);
 
             var firstLine = (await File.ReadAllLinesAsync(result.LoadFilePath))[0];
-            Assert.Contains("Control Number", firstLine);
-            Assert.Contains("File Path", firstLine);
-            Assert.Contains("Custodian", firstLine);
-            Assert.Contains("EmailSubject", firstLine);
-            Assert.Contains("ExtractedText", firstLine);
+            Assert.Contains("Control Number", firstLine, StringComparison.Ordinal);
+            Assert.Contains("File Path", firstLine, StringComparison.Ordinal);
+            Assert.Contains("Custodian", firstLine, StringComparison.Ordinal);
+            Assert.Contains("EmailSubject", firstLine, StringComparison.Ordinal);
+            Assert.Contains("ExtractedText", firstLine, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -134,9 +134,9 @@ namespace Zipper
             var parts = firstLine.Split(',');
 
             Assert.Equal(7, parts.Length);
-            Assert.StartsWith("IMG", parts[0]); // Bates Number
+            Assert.StartsWith("IMG", parts[0], StringComparison.Ordinal); // Bates Number
             Assert.Equal("VOL001", parts[1]); // Volume
-            Assert.Contains("IMAGES", parts[2]); // ImagePath
+            Assert.Contains("IMAGES", parts[2], StringComparison.Ordinal); // ImagePath
             Assert.Equal("Y", parts[3]); // DocBreak
         }
 
@@ -183,8 +183,8 @@ namespace Zipper
             var content = Encoding.UTF8.GetString(bytes);
 
             // Should contain LF but not CRLF
-            Assert.Contains("\n", content);
-            Assert.DoesNotContain("\r\n", content);
+            Assert.Contains("\n", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\r\n", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -236,7 +236,7 @@ namespace Zipper
             var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
 
             Assert.Equal(2, lines.Length);
-            Assert.Contains("Control Number", lines[0]);
+            Assert.Contains("Control Number", lines[0], StringComparison.Ordinal);
         }
 
         [Fact]
@@ -252,13 +252,13 @@ namespace Zipper
 
             var parts1 = lines[0].Split(',');
             Assert.Equal(7, parts1.Length);
-            Assert.StartsWith("IMG", parts1[0]);
+            Assert.StartsWith("IMG", parts1[0], StringComparison.Ordinal);
             Assert.Equal("VOL001", parts1[1]);
             Assert.Equal("Y", parts1[3]); // First page is doc break
 
             var parts2 = lines[1].Split(',');
             Assert.Equal(7, parts2.Length);
-            Assert.StartsWith("IMG", parts2[0]);
+            Assert.StartsWith("IMG", parts2[0], StringComparison.Ordinal);
             Assert.Equal("VOL001", parts2[1]);
             Assert.Equal(string.Empty, parts2[3]); // Subsequent pages are not doc break
         }
@@ -273,8 +273,8 @@ namespace Zipper
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
             var content = System.Text.Encoding.UTF8.GetString(bytes);
 
-            Assert.Contains("\r", content);
-            Assert.DoesNotContain("\n", content);
+            Assert.Contains("\r", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -287,7 +287,7 @@ namespace Zipper
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
             var content = System.Text.Encoding.UTF8.GetString(bytes);
 
-            Assert.Contains("\r\n", content);
+            Assert.Contains("\r\n", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -300,8 +300,8 @@ namespace Zipper
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
             var content = System.Text.Encoding.UTF8.GetString(bytes);
 
-            Assert.Contains("\n", content);
-            Assert.DoesNotContain("\r\n", content);
+            Assert.Contains("\n", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("\r\n", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -332,7 +332,7 @@ namespace Zipper
             var bytes = await File.ReadAllBytesAsync(result.LoadFilePath);
             var content = System.Text.Encoding.UTF8.GetString(bytes);
 
-            Assert.Contains("\r\n", content);
+            Assert.Contains("\r\n", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -362,8 +362,8 @@ namespace Zipper
             var content2 = await File.ReadAllTextAsync(result2.LoadFilePath);
 
             // DAT should have header, OPT should not
-            Assert.Contains("Control Number", content1);
-            Assert.DoesNotContain("Control Number", content2);
+            Assert.Contains("Control Number", content1, StringComparison.Ordinal);
+            Assert.DoesNotContain("Control Number", content2, StringComparison.Ordinal);
         }
 
         /// <summary>
@@ -556,7 +556,7 @@ namespace Zipper
 
             // Verify first page of first document
             var parts1 = lines[0].Split(',');
-            Assert.StartsWith("ABC001_00001", parts1[0]);
+            Assert.StartsWith("ABC001_00001", parts1[0], StringComparison.Ordinal);
             if (parts1[0].Contains("_"))
             {
                 Assert.Equal("ABC001_00001_001", parts1[0]);
@@ -565,7 +565,7 @@ namespace Zipper
             Assert.Equal("Y", parts1[3]); // doc break
 
             // If there's a second page for first document, verify no doc break
-            if (lines.Length > 1 && lines[1].StartsWith("ABC001_00001"))
+            if (lines.Length > 1 && lines[1].StartsWith("ABC001_00001", StringComparison.Ordinal))
             {
                 var parts2 = lines[1].Split(',');
                 Assert.Equal("ABC001_00001_002", parts2[0]);
@@ -635,7 +635,7 @@ namespace Zipper
                 }
 
                 this.TrackMemory();
-                await this.inner.WriteAsync(buffer, offset, count, cancellationToken);
+                await inner.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
             }
 
             public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
@@ -648,7 +648,7 @@ namespace Zipper
                 }
 
                 this.TrackMemory();
-                await this.inner.WriteAsync(buffer, cancellationToken);
+                await inner.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
             }
 
             private void TrackMemory()

@@ -21,7 +21,7 @@ namespace Zipper
                 Console.WriteLine("  ZIP Output: Enabled");
             }
 
-            var result = await ProductionSetGenerator.GenerateAsync(request);
+            var result = await ProductionSetGenerator.GenerateAsync(request).ConfigureAwait(false);
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nProduction set complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Production: {0}", result.ProductionPath));

@@ -126,7 +126,7 @@ namespace Zipper
             var content = reader.ReadToEnd();
 
             // O(1): pre-computed content is identical for all files
-            Assert.Contains("eDiscovery testing", content);
+            Assert.Contains("eDiscovery testing", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -174,7 +174,7 @@ namespace Zipper
             Assert.NotNull(archive);
 
             // XLSX files should contain workbook entries
-            var xlEntry = archive.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/"));
+            var xlEntry = archive.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/", StringComparison.Ordinal));
             Assert.NotNull(xlEntry);
         }
 

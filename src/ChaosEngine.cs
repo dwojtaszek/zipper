@@ -150,7 +150,7 @@ internal class ChaosEngine
             // Unpaired high surrogate in little-endian: 0x00D8 as LE bytes
             invalidBytes = new byte[] { 0x00, 0xD8 };
         }
-        else if (encodingName.Contains("UTF-8", StringComparison.Ordinal) || encodingName == "UTF-8")
+        else if (encodingName.Contains("UTF-8", StringComparison.Ordinal))
         {
             // Invalid UTF-8 continuation byte without start byte
             invalidBytes = new byte[] { 0xFE, 0xFF };
@@ -183,13 +183,13 @@ internal class ChaosEngine
 
         if (chaosAmount.EndsWith('%'))
         {
-            if (double.TryParse(chaosAmount.TrimEnd('%'), out var pct))
+            if (double.TryParse(chaosAmount.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture, out var pct))
             {
                 return Math.Max(1, (int)(totalLines * pct / 100.0));
             }
         }
 
-        if (int.TryParse(chaosAmount, out var exact))
+        if (int.TryParse(chaosAmount, System.Globalization.CultureInfo.InvariantCulture, out var exact))
         {
             return Math.Min(exact, totalLines);
         }
@@ -347,7 +347,7 @@ internal class ChaosEngine
         delimiterIndex = this.random.Next(positions.Count) + 1;
         int targetPos = positions[delimiterIndex - 1];
 
-        var alternatives = AlternativeDelimiters.Where(c => c.ToString() != this.columnDelimiter).ToArray();
+        var alternatives = AlternativeDelimiters.Where(c => !string.Equals(c.ToString(), this.columnDelimiter, StringComparison.Ordinal)).ToArray();
         if (alternatives.Length == 0)
         {
             return line;
@@ -444,7 +444,7 @@ internal class ChaosEngine
         var parts = line.Split(',');
         if (parts.Length >= 4)
         {
-            parts[3] = parts[3].Trim() == "Y" ? string.Empty : "Y";
+            parts[3] = string.Equals(parts[3].Trim(), "Y", StringComparison.Ordinal) ? string.Empty : "Y";
             return string.Join(",", parts);
         }
 

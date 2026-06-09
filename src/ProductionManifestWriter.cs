@@ -72,7 +72,7 @@ internal static class ProductionManifestWriter
         };
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
-        await File.WriteAllTextAsync(manifestPath, json);
+        await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
 
         return manifestPath;
     }

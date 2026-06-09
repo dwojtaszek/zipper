@@ -41,7 +41,7 @@ public class ColumnProfile
     /// Gets or sets the data sources for value generation.
     /// </summary>
     [JsonPropertyName("dataSources")]
-    public Dictionary<string, DataSourceConfig> DataSources { get; set; } = new();
+    public Dictionary<string, DataSourceConfig> DataSources { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Gets or sets the column definitions.
@@ -76,7 +76,7 @@ public class ColumnProfile
                     Prefix = kv.Value.Prefix,
                     Values = kv.Value.Values != null ? new List<string>(kv.Value.Values) : null,
                     Weights = kv.Value.Weights != null ? new List<int>(kv.Value.Weights) : null,
-                }),
+                }, StringComparer.Ordinal),
             Columns = this.Columns.Select(col => new ColumnDefinition
             {
                 Name = col.Name,
@@ -93,7 +93,7 @@ public class ColumnProfile
                 TruePercentage = col.TruePercentage,
                 Weights = col.Weights != null ? new List<int>(col.Weights) : null,
                 Generator = col.Generator,
-                GeneratorParams = col.GeneratorParams != null ? new Dictionary<string, object>(col.GeneratorParams) : null,
+                GeneratorParams = col.GeneratorParams != null ? new Dictionary<string, object>(col.GeneratorParams, StringComparer.Ordinal) : null,
             }).ToList(),
         };
         return cloned;

@@ -104,7 +104,7 @@ namespace Zipper
         {
             var gen = new LegacyRandomFileSizeGenerator();
             var result = gen.Generate(MakeContext(seed: 42));
-            var parsed = int.Parse(result);
+            var parsed = int.Parse(result, System.Globalization.CultureInfo.InvariantCulture);
             Assert.InRange(parsed, 1024, 10485760);
         }
 

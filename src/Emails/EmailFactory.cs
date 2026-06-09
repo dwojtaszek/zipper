@@ -145,14 +145,14 @@ internal static class EmailFactory
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(seeded);
         var referenceDate = request.Metadata.Seed.HasValue
-            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Local)
-            : DateTime.Now;
+            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
+            : DateTime.UtcNow;
         return Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
     }
 
     internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)
     {
-        return Create(recipientIndex, senderIndex, category, random, DateTime.Now);
+        return Create(recipientIndex, senderIndex, category, random, DateTime.UtcNow);
     }
 
     internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random, DateTime referenceDate)
@@ -179,7 +179,7 @@ internal static class EmailFactory
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(random);
-        var referenceDate = DateTime.Now;
+        var referenceDate = DateTime.UtcNow;
         var baseTemplate = GetContextualBaseTemplate(context);
         return new Email
         {
@@ -237,6 +237,7 @@ internal static class EmailFactory
     private static Dictionary<string, string> BuildReplacements(int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
         return new Dictionary<string, string>
+(StringComparer.Ordinal)
         {
             ["{recipient}"] = $"Recipient {recipientIndex:D3}",
             ["{sender}"] = $"Sender {senderIndex:D3}",

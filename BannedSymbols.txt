@@ -1,0 +1,6 @@
+P:System.DateTime.Now;Use DateTime.UtcNow instead
+P:System.Globalization.CultureInfo.CurrentCulture;Use CultureInfo.InvariantCulture instead
+M:System.String.Format(System.String,System.Object);Use an overload that takes an IFormatProvider instead
+M:System.String.Format(System.String,System.Object[]);Use an overload that takes an IFormatProvider instead
+M:System.String.Format(System.String,System.Object,System.Object);Use an overload that takes an IFormatProvider instead
+M:System.String.Format(System.String,System.Object,System.Object,System.Object);Use an overload that takes an IFormatProvider instead

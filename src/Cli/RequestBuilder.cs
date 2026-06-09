@@ -42,7 +42,7 @@ public static class RequestBuilder
         else if (!parsed.IsLoadFileFormatExplicit)
         {
             var fileType = (parsed.FileType ?? "pdf").ToLowerInvariant();
-            if (fileType == "tiff" || fileType == "jpg")
+            if (string.Equals(fileType, "tiff", StringComparison.Ordinal) || string.Equals(fileType, "jpg", StringComparison.Ordinal))
             {
                 multiFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
             }
@@ -188,7 +188,7 @@ public static class RequestBuilder
             if (size.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {
                 var numberPart = size.Substring(0, size.Length - suffix.Length);
-                return long.TryParse(numberPart, out var value) ? value * multiplier : null;
+                return long.TryParse(numberPart, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value * multiplier : null;
             }
         }
 
@@ -229,27 +229,27 @@ public static class RequestBuilder
             throw new ArgumentException("Delimiter argument cannot be empty.");
         }
 
-        if (arg == "\\t")
+        if (string.Equals(arg, "\\t", StringComparison.Ordinal))
         {
             return "\t";
         }
 
-        if (arg == "\\n")
+        if (string.Equals(arg, "\\n", StringComparison.Ordinal))
         {
             return "\n";
         }
 
-        if (arg == "\\r")
+        if (string.Equals(arg, "\\r", StringComparison.Ordinal))
         {
             return "\r";
         }
 
-        if (arg == "\\r\\n")
+        if (string.Equals(arg, "\\r\\n", StringComparison.Ordinal))
         {
             return "\r\n";
         }
 
-        if (int.TryParse(arg, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
+        if (int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
         {
             return ((char)asciiCode).ToString();
         }
@@ -267,7 +267,7 @@ public static class RequestBuilder
         if (arg.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
         {
             var numPart = arg.Substring(6);
-            if (int.TryParse(numPart, out var code) && code >= 0 && code <= 255)
+            if (int.TryParse(numPart, System.Globalization.CultureInfo.InvariantCulture, out var code) && code >= 0 && code <= 255)
             {
                 return ((char)code).ToString();
             }

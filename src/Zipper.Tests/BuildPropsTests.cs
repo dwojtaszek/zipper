@@ -53,8 +53,11 @@ public class BuildPropsTests
     /// <param name="doc">The XML document to search.</param>
     /// <param name="propertyName">The local name of the property element to find.</param>
     /// <returns>The <see cref="XElement"/> if found; otherwise, <c>null</c>.</returns>
+    private static IEnumerable<XElement> GetPropertyElements(XDocument doc, string propertyName)
+        => doc.Descendants().Where(e => string.Equals(e.Name.LocalName, propertyName, StringComparison.Ordinal));
+
     private static XElement? GetPropertyElement(XDocument doc, string propertyName)
-        => doc.Descendants().FirstOrDefault(e => e.Name.LocalName == propertyName);
+        => GetPropertyElements(doc, propertyName).FirstOrDefault();
 
     /// <summary>
     /// Gets the string value of the specified property element.
@@ -87,9 +90,7 @@ public class BuildPropsTests
         var doc = LoadBuildProps();
 
         // Exactly one element: no accidental unconditional duplicate that would cause NETSDK1211
-        var elements = doc.Descendants()
-            .Where(e => e.Name.LocalName == "EnableSingleFileAnalyzer")
-            .ToList();
+        var elements = GetPropertyElements(doc, "EnableSingleFileAnalyzer").ToList();
         var element = Assert.Single(elements);
         Assert.Equal("true", element.Value.Trim(), ignoreCase: true);
 

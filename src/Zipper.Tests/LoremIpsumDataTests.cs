@@ -23,7 +23,7 @@ public class LoremIpsumDataTests
     public void GetSentence_EndsWithPeriod()
     {
         var result = LoremIpsum.GetSentence(new Random(42));
-        Assert.EndsWith(".", result);
+        Assert.EndsWith(".", result, StringComparison.Ordinal);
     }
 
     [Fact]

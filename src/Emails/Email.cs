@@ -11,7 +11,7 @@ public record Email
 
     public string Subject { get; init; } = string.Empty;
 
-    public DateTime SentDate { get; init; } = DateTime.Now;
+    public DateTime SentDate { get; init; } = DateTime.UtcNow;
 
     public string Body { get; init; } = string.Empty;
 

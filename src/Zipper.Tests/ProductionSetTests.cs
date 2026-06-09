@@ -141,7 +141,7 @@ public class ProductionSetTests : IDisposable
 
         var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.*", SearchOption.AllDirectories)
             .Select(Path.GetFileNameWithoutExtension)
-            .OrderBy(f => f)
+            .OrderBy(f => f, StringComparer.Ordinal)
             .ToArray();
 
         Assert.Equal("DOC000001", nativeFiles[0]);
@@ -160,7 +160,7 @@ public class ProductionSetTests : IDisposable
 
         var volDirs = Directory.GetDirectories(Path.Combine(result.ProductionPath, "NATIVES"));
         Assert.Equal(4, volDirs.Length);
-        Assert.Contains(volDirs, d => Path.GetFileName(d) == "VOL001");
+        Assert.Contains(volDirs, d => string.Equals(Path.GetFileName(d), "VOL001", StringComparison.Ordinal));
         Assert.Contains(volDirs, d => Path.GetFileName(d) == "VOL004");
     }
 
@@ -177,10 +177,10 @@ public class ProductionSetTests : IDisposable
 
         // Header should contain expected columns
         var header = datContent[0];
-        Assert.Contains("DOCID", header);
-        Assert.Contains("BATES_NUMBER", header);
-        Assert.Contains("NATIVE_PATH", header);
-        Assert.Contains("IMAGE_PATH", header);
+        Assert.Contains("DOCID", header, StringComparison.Ordinal);
+        Assert.Contains("BATES_NUMBER", header, StringComparison.Ordinal);
+        Assert.Contains("NATIVE_PATH", header, StringComparison.Ordinal);
+        Assert.Contains("IMAGE_PATH", header, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -195,8 +195,8 @@ public class ProductionSetTests : IDisposable
         Assert.Equal(5, optContent.Length);
 
         // Each line should contain the Bates number
-        Assert.StartsWith("TEST", optContent[0]);
-        Assert.Contains(".tif", optContent[0]);
+        Assert.StartsWith("TEST", optContent[0], StringComparison.Ordinal);
+        Assert.Contains(".tif", optContent[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -325,10 +325,10 @@ public class ProductionSetTests : IDisposable
         foreach (var file in nativeFiles)
         {
             var content = await File.ReadAllTextAsync(file);
-            Assert.Contains("From:", content);
-            Assert.Contains("To:", content);
-            Assert.Contains("Subject:", content);
-            Assert.Contains("Date:", content);
+            Assert.Contains("From:", content, StringComparison.Ordinal);
+            Assert.Contains("To:", content, StringComparison.Ordinal);
+            Assert.Contains("Subject:", content, StringComparison.Ordinal);
+            Assert.Contains("Date:", content, StringComparison.Ordinal);
         }
     }
 
@@ -444,7 +444,7 @@ public class ProductionSetTests : IDisposable
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         var datContent = await File.ReadAllTextAsync(result.DatFilePath, System.Text.Encoding.Unicode);
-        Assert.Contains("DOCID", datContent);
+        Assert.Contains("DOCID", datContent, StringComparison.Ordinal);
         Assert.Equal(4, datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
     }
 
@@ -518,7 +518,7 @@ public class ProductionSetTests : IDisposable
             Assert.True(vol2Deleted, "Test did not induce the intended VOL002 deletion failure.");
 
             // The generation task should now fail mid-write (when it tries to write to VOL002)
-            await Assert.ThrowsAnyAsync<System.IO.DirectoryNotFoundException>(async () => await generateTask);
+            await Assert.ThrowsAnyAsync<System.IO.DirectoryNotFoundException>(() => generateTask);
 
             // Verify: no PRODUCTION_* directory should remain
             var productionDirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");

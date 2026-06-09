@@ -18,21 +18,21 @@ namespace Zipper.Tests
                 HelpTextGenerator.Show();
 
                 var output = errorOutput.ToString();
-                Assert.Contains("Error: Missing required arguments.", output);
-                Assert.Contains("Usage:", output);
-                Assert.Contains("--type <pdf|jpg|tiff|eml|docx|xlsx>", output);
-                Assert.Contains("--count <number>", output);
-                Assert.Contains("--output-path <path>", output);
-                Assert.Contains("Optional Arguments:", output);
-                Assert.Contains("Required Arguments:", output);
-                Assert.Contains("Load File Options:", output);
-                Assert.Contains("Loadfile-Only Options:", output);
-                Assert.Contains("Chaos Engine Options:", output);
-                Assert.Contains("Production Set Options:", output);
-                Assert.Contains("Bates Numbering:", output);
-                Assert.Contains("TIFF Options:", output);
-                Assert.Contains("Column Profile Options:", output);
-                Assert.Contains("Utility Options:", output);
+                Assert.Contains("Error: Missing required arguments.", output, StringComparison.Ordinal);
+                Assert.Contains("Usage:", output, StringComparison.Ordinal);
+                Assert.Contains("--type <pdf|jpg|tiff|eml|docx|xlsx>", output, StringComparison.Ordinal);
+                Assert.Contains("--count <number>", output, StringComparison.Ordinal);
+                Assert.Contains("--output-path <path>", output, StringComparison.Ordinal);
+                Assert.Contains("Optional Arguments:", output, StringComparison.Ordinal);
+                Assert.Contains("Required Arguments:", output, StringComparison.Ordinal);
+                Assert.Contains("Load File Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Loadfile-Only Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Chaos Engine Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Production Set Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Bates Numbering:", output, StringComparison.Ordinal);
+                Assert.Contains("TIFF Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Column Profile Options:", output, StringComparison.Ordinal);
+                Assert.Contains("Utility Options:", output, StringComparison.Ordinal);
             }
             finally
             {

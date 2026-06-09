@@ -19,9 +19,9 @@ public class ColumnProfileTests
 
         Assert.Equal("minimal", profile.Name);
         Assert.Equal(5, profile.Columns.Count);
-        Assert.Contains(profile.Columns, c => c.Name == "DOCID");
-        Assert.Contains(profile.Columns, c => c.Name == "FILEPATH");
-        Assert.Contains(profile.Columns, c => c.Name == "CUSTODIAN");
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "DOCID", StringComparison.Ordinal));
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "FILEPATH", StringComparison.Ordinal));
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "CUSTODIAN", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -34,9 +34,9 @@ public class ColumnProfileTests
 
         Assert.Equal("standard", profile.Name);
         Assert.Equal(24, profile.Columns.Count);
-        Assert.Contains(profile.Columns, c => c.Name == "BEGBATES");
-        Assert.Contains(profile.Columns, c => c.Name == "EMAILFROM");
-        Assert.Contains(profile.Columns, c => c.Name == "RESPONSIVE");
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "BEGBATES", StringComparison.Ordinal));
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "EMAILFROM", StringComparison.Ordinal));
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "RESPONSIVE", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -49,8 +49,8 @@ public class ColumnProfileTests
 
         Assert.Equal("litigation", profile.Name);
         Assert.Equal(48, profile.Columns.Count);
-        Assert.Contains(profile.Columns, c => c.Name == "MD5HASH");
-        Assert.Contains(profile.Columns, c => c.Name == "PRIVILEGE");
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "MD5HASH", StringComparison.Ordinal));
+        Assert.Contains(profile.Columns, c => string.Equals(c.Name, "PRIVILEGE", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public class ColumnProfileTests
         var profile = BuiltInProfiles.GetProfile(profileName);
 
         Assert.NotNull(profile);
-        Assert.Contains(profile.Columns, c => c.Type == "identifier");
+        Assert.Contains(profile.Columns, c => string.Equals(c.Type, "identifier", StringComparison.Ordinal));
     }
 
     /// <summary>

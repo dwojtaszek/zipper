@@ -36,7 +36,7 @@ public class NumberGeneratorTests
 
         for (int i = 0; i < 50; i++)
         {
-            var result = int.Parse(generator.Generate(MakeContext(i)));
+            var result = int.Parse(generator.Generate(MakeContext(i)), System.Globalization.CultureInfo.InvariantCulture);
             Assert.InRange(result, 10, 20);
         }
     }
@@ -55,7 +55,7 @@ public class NumberGeneratorTests
         var generator = new NumberGenerator(col);
 
         var context = MakeContext();
-        var results = Enumerable.Range(0, 1000).Select(_ => int.Parse(generator.Generate(context))).ToList();
+        var results = Enumerable.Range(0, 1000).Select(_ => int.Parse(generator.Generate(context), System.Globalization.CultureInfo.InvariantCulture)).ToList();
 
         Assert.Contains(results, x => x == 1);
         Assert.Contains(results, x => x == 10);
@@ -77,7 +77,7 @@ public class NumberGeneratorTests
         var generator = new NumberGenerator(col);
 
         var context = MakeContext();
-        var results = Enumerable.Range(0, 1000).Select(_ => int.Parse(generator.Generate(context))).ToList();
+        var results = Enumerable.Range(0, 1000).Select(_ => int.Parse(generator.Generate(context), System.Globalization.CultureInfo.InvariantCulture)).ToList();
 
         Assert.All(results, x => Assert.InRange(x, 0, 100));
         var average = results.Average();

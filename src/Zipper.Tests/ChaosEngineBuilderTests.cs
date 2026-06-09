@@ -98,7 +98,7 @@ public class ChaosEngineBuilderTests
         Assert.NotNull(enabledTypes);
         Assert.Equal(expectedTypes, enabledTypes);
 
-        var pct = double.Parse(scenario.DefaultAmount.TrimEnd('%'));
+        var pct = double.Parse(scenario.DefaultAmount.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture);
         var expectedCount = Math.Max(1, (int)(100 * pct / 100.0));
 
         Assert.NotNull(targetLines);

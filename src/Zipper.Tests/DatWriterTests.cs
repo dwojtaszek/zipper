@@ -15,9 +15,9 @@ namespace Zipper
             var (_, lines) = await WriteAndCapture(DefaultRequest(), []);
             var header = lines[0];
 
-            Assert.Contains("Control Number", header);
-            Assert.Contains("File Path", header);
-            Assert.DoesNotContain("Custodian", header);
+            Assert.Contains("Control Number", header, StringComparison.Ordinal);
+            Assert.Contains("File Path", header, StringComparison.Ordinal);
+            Assert.DoesNotContain("Custodian", header, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -26,10 +26,10 @@ namespace Zipper
             var request = DefaultRequest();
             request.Metadata = request.Metadata with { WithMetadata = true };
             var output = await WriteAndCaptureOutput(request, []);
-            Assert.Contains("Custodian", output);
-            Assert.Contains("Date Sent", output);
-            Assert.Contains("Author", output);
-            Assert.Contains("File Size", output);
+            Assert.Contains("Custodian", output, StringComparison.Ordinal);
+            Assert.Contains("Date Sent", output, StringComparison.Ordinal);
+            Assert.Contains("Author", output, StringComparison.Ordinal);
+            Assert.Contains("File Size", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -38,11 +38,11 @@ namespace Zipper
             var request = DefaultRequest();
             request.Output = request.Output with { FileType = "eml" };
             var output = await WriteAndCaptureOutput(request, []);
-            Assert.Contains("To", output);
-            Assert.Contains("From", output);
-            Assert.Contains("Subject", output);
-            Assert.Contains("Sent Date", output);
-            Assert.Contains("Attachment", output);
+            Assert.Contains("To", output, StringComparison.Ordinal);
+            Assert.Contains("From", output, StringComparison.Ordinal);
+            Assert.Contains("Subject", output, StringComparison.Ordinal);
+            Assert.Contains("Sent Date", output, StringComparison.Ordinal);
+            Assert.Contains("Attachment", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -57,7 +57,7 @@ namespace Zipper
                 Increment = 1,
             };
             var output = await WriteAndCaptureOutput(request, []);
-            Assert.Contains("Bates Number", output);
+            Assert.Contains("Bates Number", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -67,7 +67,7 @@ namespace Zipper
             request.Output = request.Output with { FileType = "tiff" };
             request.Tiff = request.Tiff with { PageRange = (1, 10) };
             var output = await WriteAndCaptureOutput(request, []);
-            Assert.Contains("Page Count", output);
+            Assert.Contains("Page Count", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -76,7 +76,7 @@ namespace Zipper
             var request = DefaultRequest();
             request.Output = request.Output with { WithText = true };
             var output = await WriteAndCaptureOutput(request, []);
-            Assert.Contains("Extracted Text", output);
+            Assert.Contains("Extracted Text", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -86,8 +86,8 @@ namespace Zipper
             var files = new List<FileData> { MakeFileData(1), MakeFileData(2) };
             var (_, lines) = await WriteAndCapture(request, files);
             Assert.Equal(3, lines.Length);
-            Assert.Contains("DOC00000001", lines[1]);
-            Assert.Contains("DOC00000002", lines[2]);
+            Assert.Contains("DOC00000001", lines[1], StringComparison.Ordinal);
+            Assert.Contains("DOC00000002", lines[2], StringComparison.Ordinal);
         }
 
         [Fact]
@@ -98,8 +98,8 @@ namespace Zipper
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains("Custodian 1", output);
-            Assert.Contains("File Size", output);
+            Assert.Contains("Custodian 1", output, StringComparison.Ordinal);
+            Assert.Contains("File Size", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -133,10 +133,10 @@ namespace Zipper
             };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains("test@example.com", output);
-            Assert.Contains("sender@example.com", output);
-            Assert.Contains("Test Subject", output);
-            Assert.Contains("2026-01-15", output);
+            Assert.Contains("test@example.com", output, StringComparison.Ordinal);
+            Assert.Contains("sender@example.com", output, StringComparison.Ordinal);
+            Assert.Contains("Test Subject", output, StringComparison.Ordinal);
+            Assert.Contains("2026-01-15", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -153,7 +153,7 @@ namespace Zipper
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains("DOC000100", output);
+            Assert.Contains("DOC000100", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -182,7 +182,7 @@ namespace Zipper
 
             var output = await WriteAndCaptureOutput(request, files);
             var dataLine = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Last();
-            Assert.EndsWith("þ3þ", dataLine);
+            Assert.EndsWith("þ3þ", dataLine, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -194,7 +194,7 @@ namespace Zipper
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains(".txt", output);
+            Assert.Contains(".txt", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -243,8 +243,8 @@ namespace Zipper
             };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains("recipient1@example.com", output);
-            Assert.Contains("sender1@example.com", output);
+            Assert.Contains("recipient1@example.com", output, StringComparison.Ordinal);
+            Assert.Contains("sender1@example.com", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -257,7 +257,7 @@ namespace Zipper
             var files = new List<FileData> { MakeFileData(1) };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.Contains("þ", output);
+            Assert.Contains("þ", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -283,8 +283,8 @@ namespace Zipper
             };
 
             var output = await WriteAndCaptureOutput(request, files);
-            Assert.DoesNotContain("line1\r\nline2", output);
-            Assert.Contains("line1®line2", output);
+            Assert.DoesNotContain("line1\r\nline2", output, StringComparison.Ordinal);
+            Assert.Contains("line1®line2", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -310,7 +310,7 @@ namespace Zipper
 
             var output = await WriteAndCaptureOutput(request, files);
             var dataLine = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Last();
-            Assert.Contains("line1®line2", dataLine);
+            Assert.Contains("line1®line2", dataLine, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -334,9 +334,9 @@ namespace Zipper
             var header = lines[0];
 
             // With no quote delimiter, fields must NOT be wrapped in any quote character
-            Assert.DoesNotContain("þ", header);
-            Assert.Contains("Control Number", header);
-            Assert.Contains("File Path", header);
+            Assert.DoesNotContain("þ", header, StringComparison.Ordinal);
+            Assert.Contains("Control Number", header, StringComparison.Ordinal);
+            Assert.Contains("File Path", header, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -350,8 +350,8 @@ namespace Zipper
             var dataRow = lines[1];
 
             // DOC00000001 must appear unquoted — no þ wrapper
-            Assert.DoesNotContain("þ", dataRow);
-            Assert.Contains("DOC00000001", dataRow);
+            Assert.DoesNotContain("þ", dataRow, StringComparison.Ordinal);
+            Assert.Contains("DOC00000001", dataRow, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -365,8 +365,8 @@ namespace Zipper
             var output = await WriteAndCaptureOutput(request, files);
 
             // Metadata columns (Custodian, Date Sent, Author, File Size) must appear unquoted
-            Assert.DoesNotContain("þ", output);
-            Assert.Contains("Custodian", output);
+            Assert.DoesNotContain("þ", output, StringComparison.Ordinal);
+            Assert.Contains("Custodian", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -380,8 +380,8 @@ namespace Zipper
             var output = await WriteAndCaptureOutput(request, files);
 
             // Extracted Text column must appear unquoted
-            Assert.DoesNotContain("þ", output);
-            Assert.Contains(".txt", output);
+            Assert.DoesNotContain("þ", output, StringComparison.Ordinal);
+            Assert.Contains(".txt", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -395,8 +395,8 @@ namespace Zipper
             var output = await WriteAndCaptureOutput(request, files);
 
             // Bates Number column must appear unquoted
-            Assert.DoesNotContain("þ", output);
-            Assert.Contains("TEST", output);
+            Assert.DoesNotContain("þ", output, StringComparison.Ordinal);
+            Assert.Contains("TEST", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -414,7 +414,7 @@ namespace Zipper
         {
             using var stream = new MemoryStream();
             var writer = new DatComposingWriter();
-            await writer.WriteAsync(stream, request, files);
+            await writer.WriteAsync(stream, request, files).ConfigureAwait(false);
 
             var output = Encoding.UTF8.GetString(stream.ToArray());
             var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
@@ -423,7 +423,7 @@ namespace Zipper
 
         private static async Task<string> WriteAndCaptureOutput(FileGenerationRequest request, List<FileData> files)
         {
-            var (output, _) = await WriteAndCapture(request, files);
+            var (output, _) = await WriteAndCapture(request, files).ConfigureAwait(false);
             return output;
         }
 
@@ -493,7 +493,7 @@ namespace Zipper
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
 
             var anomaly = chaosEngine.Anomalies.First();
-            Assert.Contains("Omitted the closing", anomaly.Description);
+            Assert.Contains("Omitted the closing", anomaly.Description, StringComparison.Ordinal);
             Assert.NotEqual("N/A", anomaly.Column);
 
             var baseQuoteCount = baseOutput.Count(c => c == '\u00fe');
@@ -532,7 +532,7 @@ namespace Zipper
             Assert.True(chaosOutput.Contains(",") || chaosOutput.Contains("\t") || chaosOutput.Contains("|"), "Should contain alternative delimiters");
 
             var anomaly = chaosEngine.Anomalies.First();
-            Assert.Contains("Replaced delimiter", anomaly.Description);
+            Assert.Contains("Replaced delimiter", anomaly.Description, StringComparison.Ordinal);
             Assert.NotEqual("N/A", anomaly.Column);
 
             var baseDelimCount = baseOutput.Count(c => c == '\u0014');
@@ -714,7 +714,7 @@ namespace Zipper
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("quotes", a.ErrorType));
 
             var anomaly = chaosEngine.Anomalies.First();
-            Assert.Contains("Omitted the closing", anomaly.Description);
+            Assert.Contains("Omitted the closing", anomaly.Description, StringComparison.Ordinal);
             Assert.NotEqual("N/A", anomaly.Column);
 
             var baseQuoteCount = baseOutput.Count(c => c == '\u00fe');
@@ -772,8 +772,8 @@ namespace Zipper
 
             // The output should have anomalies injected for line 1 and line 4 (among others).
             // This means there should be anomalies in the Audit log specifically for Boundary 1-2 and Boundary 4-5.
-            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 1-2");
-            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => a.LineNumber == "Boundary 4-5");
+            var headerAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => string.Equals(a.LineNumber, "Boundary 1-2", StringComparison.Ordinal));
+            var lastLineAnomaly = chaosEngine.Anomalies.FirstOrDefault(a => string.Equals(a.LineNumber, "Boundary 4-5", StringComparison.Ordinal));
 
             Assert.NotNull(headerAnomaly);
             Assert.NotNull(lastLineAnomaly);
@@ -796,10 +796,10 @@ namespace Zipper
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             Assert.Equal(4, lines.Length);
-            Assert.Contains("Control Number", lines[0]);
-            Assert.Contains("DOC00000001", lines[1]);
-            Assert.Contains("DOC00000002", lines[2]);
-            Assert.Contains("DOC00000003", lines[3]);
+            Assert.Contains("Control Number", lines[0], StringComparison.Ordinal);
+            Assert.Contains("DOC00000001", lines[1], StringComparison.Ordinal);
+            Assert.Contains("DOC00000002", lines[2], StringComparison.Ordinal);
+            Assert.Contains("DOC00000003", lines[3], StringComparison.Ordinal);
         }
 
         [Theory]
@@ -832,7 +832,7 @@ namespace Zipper
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             Assert.True(lines.Length >= 2);
-            Assert.Contains("Control Number", lines[0]);
+            Assert.Contains("Control Number", lines[0], StringComparison.Ordinal);
         }
 
         [Fact]
@@ -862,7 +862,7 @@ namespace Zipper
 
             var output = await File.ReadAllTextAsync(outputPath);
 
-            Assert.Contains("folderþþX/file.pdf", output);
+            Assert.Contains("folderþþX/file.pdf", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -905,7 +905,7 @@ namespace Zipper
             stream.Position = 0;
             var output = Encoding.UTF8.GetString(stream.ToArray());
 
-            Assert.Contains("fileþþX.pdf", output);
+            Assert.Contains("fileþþX.pdf", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -941,17 +941,17 @@ namespace Zipper
             var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
             Assert.Equal(3, lines.Length);
-            Assert.Contains("BEGATTACH", lines[0]);
-            Assert.Contains("ENDATTACH", lines[0]);
-            Assert.Contains("PARENTDOCID", lines[0]);
+            Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
+            Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
+            Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
 
             var parentLine = lines[1];
-            Assert.Contains("DOC00000001", parentLine);
-            Assert.Contains("DOC00000001_A001", parentLine);
+            Assert.Contains("DOC00000001", parentLine, StringComparison.Ordinal);
+            Assert.Contains("DOC00000001_A001", parentLine, StringComparison.Ordinal);
 
             var childLine = lines[2];
-            Assert.Contains("DOC00000001_A001", childLine);
-            Assert.Contains("DOC00000001", childLine);
+            Assert.Contains("DOC00000001_A001", childLine, StringComparison.Ordinal);
+            Assert.Contains("DOC00000001", childLine, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -998,15 +998,15 @@ namespace Zipper
             var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
             Assert.Equal(3, lines.Length);
-            Assert.Contains("BEGATTACH", lines[0]);
-            Assert.Contains("ENDATTACH", lines[0]);
-            Assert.Contains("PARENTDOCID", lines[0]);
+            Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
+            Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
+            Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
 
-            Assert.Contains("TEST00000001", lines[1]);
-            Assert.Contains("TEST00000001_A001", lines[1]);
+            Assert.Contains("TEST00000001", lines[1], StringComparison.Ordinal);
+            Assert.Contains("TEST00000001_A001", lines[1], StringComparison.Ordinal);
 
-            Assert.Contains("TEST00000001_A001", lines[2]);
-            Assert.Contains("TEST00000001", lines[2]);
+            Assert.Contains("TEST00000001_A001", lines[2], StringComparison.Ordinal);
+            Assert.Contains("TEST00000001", lines[2], StringComparison.Ordinal);
         }
     }
 }

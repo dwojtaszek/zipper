@@ -95,7 +95,7 @@ namespace Zipper
         public void ValidateAndParseArguments_WithEmptyArgs_ShouldReturnNull()
         {
             // Arrange
-            var args = new string[0];
+            var args = Array.Empty<string>();
 
             // Act
             var result = Cli.Pipeline.Build(args);
@@ -379,7 +379,7 @@ namespace Zipper
                 // Assert
                 Assert.Null(result);
                 var output = errorOutput.ToString();
-                Assert.Contains("Error: Invalid TIFF pages range", output);
+                Assert.Contains("Error: Invalid TIFF pages range", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -425,7 +425,7 @@ namespace Zipper
                 // Assert
                 Assert.Null(result);
                 var output = errorOutput.ToString();
-                Assert.Contains("Error: Invalid load file format", output);
+                Assert.Contains("Error: Invalid load file format", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -493,7 +493,7 @@ namespace Zipper
                 // Assert
                 Assert.NotNull(result); // The valid args should still parse into a valid request
                 var output = errorOutput.ToString();
-                Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output);
+                Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -685,7 +685,7 @@ namespace Zipper
                 // Assert
                 Assert.Null(result);
                 var output = errorOutput.ToString();
-                Assert.Contains("--count must be a positive number", output);
+                Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -712,7 +712,7 @@ namespace Zipper
                 // Assert
                 Assert.Null(result);
                 var output = errorOutput.ToString();
-                Assert.Contains("--count must be a positive number", output);
+                Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -739,7 +739,7 @@ namespace Zipper
                 // Assert
                 Assert.Null(result);
                 var output = errorOutput.ToString();
-                Assert.Contains("--count must not exceed", output);
+                Assert.Contains("--count must not exceed", output, StringComparison.Ordinal);
             }
             finally
             {

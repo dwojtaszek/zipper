@@ -197,7 +197,7 @@ public static class CliValidator
         if (!string.IsNullOrEmpty(parsed.DatDelimiters))
         {
             var delim = parsed.DatDelimiters.ToLowerInvariant();
-            if (delim != "standard" && delim != "csv")
+            if (!string.Equals(delim, "standard", StringComparison.Ordinal) && !string.Equals(delim, "csv", StringComparison.Ordinal))
             {
                 Console.Error.WriteLine("Error: DAT delimiters must be 'standard' or 'csv'.");
                 return false;
@@ -235,7 +235,7 @@ public static class CliValidator
                 return false;
             }
 
-            if (parsed.BatesPrefix == ".." || parsed.BatesPrefix.Contains("../", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("..\\", StringComparison.Ordinal))
+            if (string.Equals(parsed.BatesPrefix, "..", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("../", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("..\\", StringComparison.Ordinal))
             {
                 Console.Error.WriteLine("Error: --bates-prefix must not contain directory traversal sequences.");
                 return false;
@@ -456,7 +456,7 @@ public static class CliValidator
         if (!string.IsNullOrEmpty(parsed.Eol))
         {
             var eolUpper = parsed.Eol.ToUpperInvariant();
-            if (eolUpper != "CRLF" && eolUpper != "LF" && eolUpper != "CR")
+            if (!string.Equals(eolUpper, "CRLF", StringComparison.Ordinal) && !string.Equals(eolUpper, "LF", StringComparison.Ordinal) && !string.Equals(eolUpper, "CR", StringComparison.Ordinal))
             {
                 Console.Error.WriteLine("Error: --eol must be CRLF, LF, or CR.");
                 return false;
@@ -490,7 +490,7 @@ public static class CliValidator
         if (value.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
         {
             var numPart = value.Substring(6);
-            return int.TryParse(numPart, out var code) && code >= 0 && code <= 255;
+            return int.TryParse(numPart, System.Globalization.CultureInfo.InvariantCulture, out var code) && code >= 0 && code <= 255;
         }
 
         if (value.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
@@ -505,9 +505,9 @@ public static class CliValidator
     {
         if (value.EndsWith('%'))
         {
-            return double.TryParse(value.TrimEnd('%'), out var pct) && pct > 0;
+            return double.TryParse(value.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture, out var pct) && pct > 0;
         }
 
-        return int.TryParse(value, out var count) && count > 0;
+        return int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var count) && count > 0;
     }
 }

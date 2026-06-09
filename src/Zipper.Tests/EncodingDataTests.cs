@@ -6,7 +6,7 @@ namespace Zipper.Tests;
 public class EncodingDataTests
 {
     private static readonly System.Collections.Generic.HashSet<string> ValidEncodings =
-        new() { "UTF-8", "ASCII", "UTF-16", "ISO-8859-1", "Windows-1252" };
+        new(StringComparer.Ordinal) { "UTF-8", "ASCII", "UTF-16", "ISO-8859-1", "Windows-1252" };
 
     [Fact]
     public void GetRandom_ReturnsNonEmptyString()

@@ -45,7 +45,7 @@ public class CodedGeneratorTests
 
         var parts = result.Split(';');
         Assert.InRange(parts.Length, 2, 3);
-        Assert.Equal(parts.Length, parts.Distinct().Count());
+        Assert.Equal(parts.Length, parts.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact(Timeout = 2000)]
@@ -62,7 +62,7 @@ public class CodedGeneratorTests
 
         var parts = result.Split(';');
         Assert.InRange(parts.Length, 2, 3);
-        Assert.Equal(parts.Length, parts.Distinct().Count());
+        Assert.Equal(parts.Length, parts.Distinct(StringComparer.Ordinal).Count());
     }
 
     [Fact]

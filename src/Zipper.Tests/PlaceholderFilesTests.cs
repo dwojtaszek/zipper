@@ -104,8 +104,8 @@ public class PlaceholderFilesTests
         var nullableAttachment = PlaceholderFiles.GetRandomAttachment();
         Assert.NotNull(nullableAttachment);
         var attachment = nullableAttachment.Value;
-        Assert.StartsWith("attachment.", attachment.filename);
-        Assert.True(attachment.filename.EndsWith(".jpg") || attachment.filename.EndsWith(".pdf") || attachment.filename.EndsWith(".tiff"));
+        Assert.StartsWith("attachment.", attachment.filename, StringComparison.Ordinal);
+        Assert.True(attachment.filename.EndsWith(".jpg", StringComparison.Ordinal) || attachment.filename.EndsWith(".pdf", StringComparison.Ordinal) || attachment.filename.EndsWith(".tiff", StringComparison.Ordinal));
     }
 
     [Fact]

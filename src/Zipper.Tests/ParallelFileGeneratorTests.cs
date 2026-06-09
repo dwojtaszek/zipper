@@ -128,7 +128,7 @@ namespace Zipper
                         },
                     }));
 
-                Assert.Contains("target ZIP size", ex.Message);
+                Assert.Contains("target ZIP size", ex.Message, StringComparison.Ordinal);
             }
             finally
             {
@@ -324,7 +324,7 @@ namespace Zipper
                         },
                     }));
 
-                Assert.Contains("File count must be positive", ex.Message);
+                Assert.Contains("File count must be positive", ex.Message, StringComparison.Ordinal);
             }
             finally
             {
@@ -392,7 +392,7 @@ namespace Zipper
                         },
                     }));
 
-                Assert.Contains("Unknown file type", ex.Message);
+                Assert.Contains("Unknown file type", ex.Message, StringComparison.Ordinal);
             }
             finally
             {
@@ -531,7 +531,7 @@ namespace Zipper
                             Folders = 2,
                             Concurrency = 4,
                         },
-                    });
+                    }).ConfigureAwait(false);
                 });
             }
             finally

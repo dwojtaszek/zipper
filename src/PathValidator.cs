@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 
 namespace Zipper
 {
@@ -36,7 +35,7 @@ namespace Zipper
                     string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                    StringComparison comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    StringComparison comparison = OperatingSystem.IsWindows()
                         ? StringComparison.OrdinalIgnoreCase
                         : StringComparison.Ordinal;
 
@@ -96,7 +95,7 @@ namespace Zipper
                     string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
                     string baseDirWithTrailing = restrictToBase.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                    StringComparison comparison = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    StringComparison comparison = OperatingSystem.IsWindows()
                         ? StringComparison.OrdinalIgnoreCase
                         : StringComparison.Ordinal;
 

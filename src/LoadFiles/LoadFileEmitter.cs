@@ -46,11 +46,11 @@ internal static class LoadFileEmitter
 
         if (chaosEngine == null)
         {
-            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol);
+            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol).ConfigureAwait(false);
         }
         else
         {
-            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine);
+            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine).ConfigureAwait(false);
         }
     }
 
@@ -66,21 +66,23 @@ internal static class LoadFileEmitter
         // A StreamWriter owns the encoding preamble (written once) and chunks output to the
         // underlying stream by its internal buffer, so records stream out without the whole
         // file ever being materialized in memory.
-        await using var writer = new StreamWriter(stream, encoding, leaveOpen: true);
-
-        if (hasHeader)
+        var writer = new StreamWriter(stream, encoding, leaveOpen: true);
+        await using (writer.ConfigureAwait(false))
         {
-            await writer.WriteAsync(serializer.RenderHeader(headerColumns));
-            await writer.WriteAsync(eol);
-        }
+            if (hasHeader)
+            {
+                await writer.WriteAsync(serializer.RenderHeader(headerColumns)).ConfigureAwait(false);
+                await writer.WriteAsync(eol).ConfigureAwait(false);
+            }
 
-        foreach (var record in records)
-        {
-            await writer.WriteAsync(serializer.RenderRecord(record));
-            await writer.WriteAsync(eol);
-        }
+            foreach (var record in records)
+            {
+                await writer.WriteAsync(serializer.RenderRecord(record)).ConfigureAwait(false);
+                await writer.WriteAsync(eol).ConfigureAwait(false);
+            }
 
-        await writer.FlushAsync();
+            await writer.FlushAsync().ConfigureAwait(false);
+        }
     }
 
     private static async Task EmitWithChaosAsync(
@@ -99,19 +101,19 @@ internal static class LoadFileEmitter
         var preamble = encoding.GetPreamble();
         if (preamble.Length > 0)
         {
-            await stream.WriteAsync(preamble);
+            await stream.WriteAsync(preamble).ConfigureAwait(false);
         }
 
         long lineNumber = 1;
         if (hasHeader)
         {
-            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderHeader(headerColumns), "HEADER", encoding, eol);
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderHeader(headerColumns), "HEADER", encoding, eol).ConfigureAwait(false);
             lineNumber++;
         }
 
         foreach (var record in records)
         {
-            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol);
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol).ConfigureAwait(false);
             lineNumber++;
         }
     }
@@ -129,12 +131,12 @@ internal static class LoadFileEmitter
             ? chaosEngine.Intercept(lineNumber, originalLine, recordId)
             : originalLine;
 
-        await stream.WriteAsync(encoding.GetBytes(text + eol));
+        await stream.WriteAsync(encoding.GetBytes(text + eol)).ConfigureAwait(false);
 
         var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
         if (anomaly != null)
         {
-            await stream.WriteAsync(anomaly);
+            await stream.WriteAsync(anomaly).ConfigureAwait(false);
         }
     }
 }

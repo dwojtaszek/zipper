@@ -49,7 +49,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
             : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos);
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
     private static Encoding GetOptEncoding(FileGenerationRequest request)
     {
         var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        return request.LoadFile.IsEncodingExplicit || resolvedEncoding != Encoding.UTF8
+        return request.LoadFile.IsEncodingExplicit || !object.Equals(resolvedEncoding, Encoding.UTF8)
             ? resolvedEncoding
             : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
     }

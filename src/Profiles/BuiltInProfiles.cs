@@ -25,6 +25,7 @@ public static class BuiltInProfiles
             DateFormat = "yyyy-MM-dd",
         },
         DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
         {
             ["custodians"] = new DataSourceConfig { Count = 10, Distribution = "pareto", Prefix = "Custodian_" },
         },
@@ -54,6 +55,7 @@ public static class BuiltInProfiles
             DateFormat = "yyyy-MM-dd",
         },
         DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
         {
             ["custodians"] = new DataSourceConfig { Count = 25, Distribution = "pareto", Prefix = "Custodian_" },
             ["authors"] = new DataSourceConfig { Count = 50, Distribution = "pareto", Prefix = "Author_" },
@@ -114,6 +116,7 @@ public static class BuiltInProfiles
             DateFormat = "yyyy-MM-dd",
         },
         DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
         {
             ["custodians"] = new DataSourceConfig { Count = 50, Distribution = "pareto", Prefix = "Custodian_" },
             ["authors"] = new DataSourceConfig { Count = 100, Distribution = "pareto", Prefix = "Author_" },
@@ -143,6 +146,7 @@ public static class BuiltInProfiles
             DateFormat = "yyyy-MM-dd",
         },
         DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
         {
             ["custodians"] = new DataSourceConfig { Count = 100, Distribution = "pareto", Prefix = "Custodian_" },
             ["authors"] = new DataSourceConfig { Count = 200, Distribution = "pareto", Prefix = "Author_" },
@@ -188,7 +192,7 @@ public static class BuiltInProfiles
         Version = "1.0",
         FieldNamingConvention = null,
         Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-        DataSources = new Dictionary<string, DataSourceConfig>(),
+        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
         Columns = new List<ColumnDefinition>
         {
             new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
@@ -209,7 +213,7 @@ public static class BuiltInProfiles
         Version = "1.0",
         FieldNamingConvention = null,
         Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-        DataSources = new Dictionary<string, DataSourceConfig>(),
+        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
         Columns = new List<ColumnDefinition>
         {
             new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
@@ -370,7 +374,7 @@ public static class BuiltInProfiles
                 Name = $"NOTES{i:D2}",
                 Type = "longtext",
                 Generator = "loremParagraphs",
-                GeneratorParams = new Dictionary<string, object> { ["min"] = 1, ["max"] = 3 },
+                GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { ["min"] = 1, ["max"] = 3 },
                 EmptyPercentage = 70 + (i * 2),
             });
         }

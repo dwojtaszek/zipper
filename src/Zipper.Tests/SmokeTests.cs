@@ -28,7 +28,7 @@ public class SmokeTests
             var datContent = await File.ReadAllTextAsync(datFiles[0]);
             var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(101, datLines.Length); // 100 records + 1 header
-            Assert.Contains("DOC00000001", datContent);
+            Assert.Contains("DOC00000001", datContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -61,8 +61,8 @@ public class SmokeTests
             var datFiles = Directory.GetFiles(tempDir, "*.dat");
             Assert.Single(datFiles);
             var datContent = await File.ReadAllTextAsync(datFiles[0]);
-            Assert.Contains("Attachment", datContent);
-            Assert.Contains("Subject", datContent);
+            Assert.Contains("Attachment", datContent, StringComparison.Ordinal);
+            Assert.Contains("Subject", datContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -95,7 +95,7 @@ public class SmokeTests
             var datFiles = Directory.GetFiles(tempDir, "*.dat");
             Assert.Single(datFiles);
             var datContent = await File.ReadAllTextAsync(datFiles[0]);
-            Assert.Contains("Page Count", datContent);
+            Assert.Contains("Page Count", datContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -126,17 +126,17 @@ public class SmokeTests
             var datContent = await File.ReadAllTextAsync(datFiles[0]);
             var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(11, datLines.Length); // 10 records + 1 header
-            Assert.Contains("DOC00000001", datContent);
+            Assert.Contains("DOC00000001", datContent, StringComparison.Ordinal);
 
             // Verify load file column structure
             var header = datLines[0];
-            Assert.Contains("\x14", header);
-            Assert.Contains("\xFE", header);
+            Assert.Contains("\x14", header, StringComparison.Ordinal);
+            Assert.Contains("\xFE", header, StringComparison.Ordinal);
 
             var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
             Assert.Single(propFiles);
             var propContent = await File.ReadAllTextAsync(propFiles[0]);
-            Assert.Contains("DAT (Metadata)", propContent);
+            Assert.Contains("DAT (Metadata)", propContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -170,7 +170,7 @@ public class SmokeTests
             var propFiles = Directory.GetFiles(tempDir, "*_properties.json");
             Assert.Single(propFiles);
             var propContent = await File.ReadAllTextAsync(propFiles[0]);
-            Assert.Contains("\"enabled\": true", propContent);
+            Assert.Contains("\"enabled\": true", propContent, StringComparison.Ordinal);
         }
         finally
         {
@@ -275,8 +275,8 @@ public class SmokeTests
             Assert.Single(optFiles);
 
             var optContent = await File.ReadAllTextAsync(optFiles[0]);
-            Assert.Contains("DOC00000001", optContent);
-            Assert.Contains("VOL001", optContent);
+            Assert.Contains("DOC00000001", optContent, StringComparison.Ordinal);
+            Assert.Contains("VOL001", optContent, StringComparison.Ordinal);
 
             // Clean up files in tempDir
             foreach (var file in Directory.GetFiles(tempDir))
@@ -296,7 +296,7 @@ public class SmokeTests
             Assert.Single(optFiles);
 
             var optContentJpg = await File.ReadAllTextAsync(optFiles[0]);
-            Assert.Contains("DOC00000001", optContentJpg);
+            Assert.Contains("DOC00000001", optContentJpg, StringComparison.Ordinal);
         }
         finally
         {
@@ -329,9 +329,9 @@ public class SmokeTests
             var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.True(lines.Length > 0);
             var header = lines[0];
-            Assert.Contains("BEGATTACH", header);
-            Assert.Contains("ENDATTACH", header);
-            Assert.Contains("PARENTDOCID", header);
+            Assert.Contains("BEGATTACH", header, StringComparison.Ordinal);
+            Assert.Contains("ENDATTACH", header, StringComparison.Ordinal);
+            Assert.Contains("PARENTDOCID", header, StringComparison.Ordinal);
 
             // Assert there are more rows than emails since there are child attachment rows
             Assert.True(lines.Length > 6);

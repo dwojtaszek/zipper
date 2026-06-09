@@ -23,6 +23,6 @@ internal sealed class ConcordanceComposingWriter : ILoadFileWriter
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null).ConfigureAwait(false);
     }
 }

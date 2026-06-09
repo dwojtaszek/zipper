@@ -33,7 +33,7 @@ internal static class LoadfileAuditWriter
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
         var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies, format);
-        await File.WriteAllTextAsync(propertiesPath, json);
+        await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
         return propertiesPath;
     }
 
@@ -85,7 +85,7 @@ internal static class LoadfileAuditWriter
         var encodingName = request.LoadFile.Encoding;
         if (activeFormat == LoadFileFormat.Opt)
         {
-            if (!request.LoadFile.IsEncodingExplicit && request.LoadFile.Encoding == "UTF-8")
+            if (!request.LoadFile.IsEncodingExplicit && string.Equals(request.LoadFile.Encoding, "UTF-8", StringComparison.Ordinal))
             {
                 encodingName = "ANSI";
             }

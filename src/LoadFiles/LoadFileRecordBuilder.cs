@@ -14,7 +14,7 @@ internal static class LoadFileRecordBuilder
                 $"Load file value count {orderedValues.Count} does not match header column count {headerColumns.Count}.");
         }
 
-        var values = new Dictionary<string, string>(headerColumns.Count);
+        var values = new Dictionary<string, string>(headerColumns.Count, StringComparer.Ordinal);
         for (int i = 0; i < headerColumns.Count; i++)
         {
             values[headerColumns[i]] = orderedValues[i];
