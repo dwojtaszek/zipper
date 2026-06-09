@@ -55,9 +55,9 @@ internal class DataGenerator
 #pragma warning disable S2245
         this.random = seed.HasValue ? new Random(seed.Value) : Random.Shared;
 #pragma warning restore S2245
-        this.dataSources = new Dictionary<string, string[]>();
-        this.distributionIndices = new Dictionary<string, int[]>();
-        this.columnGenerators = new Dictionary<string, IColumnValueGenerator>();
+        this.dataSources = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        this.distributionIndices = new Dictionary<string, int[]>(StringComparer.Ordinal);
+        this.columnGenerators = new Dictionary<string, IColumnValueGenerator>(StringComparer.Ordinal);
         this.now = now ?? DateTime.UtcNow;
         this.InitializeDataSources();
         this.InitializeColumnGenerators();
@@ -122,7 +122,7 @@ internal class DataGenerator
             Now = this.now,
             FileData = fileData,
         };
-        var row = new Dictionary<string, string>(this.profile.Columns.Count);
+        var row = new Dictionary<string, string>(this.profile.Columns.Count, StringComparer.Ordinal);
         foreach (var col in this.profile.Columns)
         {
             var emptyPct = col.EmptyPercentage ?? this.profile.Settings.EmptyValuePercentage;
@@ -150,7 +150,7 @@ internal class DataGenerator
                 ? cfg.Values
                 : Enumerable.Range(1, cfg.Count).Select(i => $"{cfg.Prefix}{i}")).ToArray();
             this.dataSources[name] = vals;
-            if (cfg.Distribution == "pareto" || cfg.Distribution == "weighted")
+            if (string.Equals(cfg.Distribution, "pareto", StringComparison.Ordinal) || string.Equals(cfg.Distribution, "weighted", StringComparison.Ordinal))
             {
                 this.distributionIndices[name] = this.PrecomputeIndices(vals.Length, cfg);
             }
@@ -203,7 +203,7 @@ internal class DataGenerator
     private int[] PrecomputeIndices(int count, DataSourceConfig cfg)
     {
         var indices = new int[1000];
-        if (cfg.Distribution == "weighted" && cfg.Weights?.Count > 0)
+        if (string.Equals(cfg.Distribution, "weighted", StringComparison.Ordinal) && cfg.Weights?.Count > 0)
         {
             var total = cfg.Weights.Take(count).Sum();
             if (total <= 0)

@@ -15,7 +15,7 @@ namespace Zipper
                 using var errWriter = new StringWriter();
                 Console.SetOut(outWriter);
                 Console.SetError(errWriter);
-                return await action();
+                return await action().ConfigureAwait(false);
             }
             finally
             {
@@ -41,7 +41,7 @@ namespace Zipper
         public async Task Main_WithInvalidArguments_ReturnsErrorCode()
         {
             // Arrange - Missing required arguments
-            string[] args = { };
+            string[] args = Array.Empty<string>();
 
             // Act
             int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
@@ -197,13 +197,13 @@ namespace Zipper
                                       .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
                                                   !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
                                                   !f.Contains("_properties.json", StringComparison.OrdinalIgnoreCase))
-                                      .OrderBy(n => n).ToList();
+                                      .OrderBy(n => n, StringComparer.Ordinal).ToList();
                 var files2 = Directory.GetFiles(tempPath2, "*.*", SearchOption.AllDirectories)
                                       .Select(f => Path.GetRelativePath(tempPath2, f))
                                       .Where(f => !f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
                                                   !f.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
                                                   !f.Contains("_properties.json", StringComparison.OrdinalIgnoreCase))
-                                      .OrderBy(n => n).ToList();
+                                      .OrderBy(n => n, StringComparer.Ordinal).ToList();
 
                 Assert.Equal(files1, files2);
 
@@ -313,8 +313,8 @@ namespace Zipper
                 using (var archive1 = System.IO.Compression.ZipFile.OpenRead(zipFile1))
                 using (var archive2 = System.IO.Compression.ZipFile.OpenRead(zipFile2))
                 {
-                    var entries1 = archive1.Entries.OrderBy(e => e.FullName).ToList();
-                    var entries2 = archive2.Entries.OrderBy(e => e.FullName).ToList();
+                    var entries1 = archive1.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal).ToList();
+                    var entries2 = archive2.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal).ToList();
 
                     Assert.Equal(entries1.Count, entries2.Count);
                     for (int i = 0; i < entries1.Count; i++)

@@ -31,12 +31,12 @@ public class EmlFileGeneratorDeterminismTests
 
         // Correctness assertions (M3)
         var emlText = System.Text.Encoding.UTF8.GetString(result1.Content);
-        Assert.Contains("To: recipient005@", emlText);
-        Assert.Contains("From: sender005@", emlText);
-        Assert.Contains("Subject: ", emlText);
-        Assert.Contains("MIME-Version: 1.0", emlText);
-        Assert.Contains("Date: ", emlText);
-        Assert.Contains("Content-Type: text/plain", emlText);
+        Assert.Contains("To: recipient005@", emlText, StringComparison.Ordinal);
+        Assert.Contains("From: sender005@", emlText, StringComparison.Ordinal);
+        Assert.Contains("Subject: ", emlText, StringComparison.Ordinal);
+        Assert.Contains("MIME-Version: 1.0", emlText, StringComparison.Ordinal);
+        Assert.Contains("Date: ", emlText, StringComparison.Ordinal);
+        Assert.Contains("Content-Type: text/plain", emlText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,11 +66,11 @@ public class EmlFileGeneratorDeterminismTests
 
         // Correctness assertions (M3)
         var emlText = System.Text.Encoding.UTF8.GetString(result1.Content);
-        Assert.Contains("To: recipient003@", emlText);
-        Assert.Contains("From: sender003@", emlText);
-        Assert.Contains("Subject: ", emlText);
-        Assert.Contains("MIME-Version: 1.0", emlText);
-        Assert.Contains("Content-Type: multipart/mixed", emlText);
+        Assert.Contains("To: recipient003@", emlText, StringComparison.Ordinal);
+        Assert.Contains("From: sender003@", emlText, StringComparison.Ordinal);
+        Assert.Contains("Subject: ", emlText, StringComparison.Ordinal);
+        Assert.Contains("MIME-Version: 1.0", emlText, StringComparison.Ordinal);
+        Assert.Contains("Content-Type: multipart/mixed", emlText, StringComparison.Ordinal);
         Assert.NotNull(result1.Attachment);
         Assert.NotEmpty(result1.Attachment.Value.filename);
         Assert.NotEmpty(result1.Attachment.Value.content);
@@ -89,9 +89,9 @@ public class EmlFileGeneratorDeterminismTests
         var emlText = System.Text.Encoding.UTF8.GetString(result.Content);
 
         // Headers presence check
-        Assert.Contains("From: ", emlText);
-        Assert.Contains("To: ", emlText);
-        Assert.Contains("Subject: ", emlText);
+        Assert.Contains("From: ", emlText, StringComparison.Ordinal);
+        Assert.Contains("To: ", emlText, StringComparison.Ordinal);
+        Assert.Contains("Subject: ", emlText, StringComparison.Ordinal);
 
         // Date should be RFC 2822 formatted with InvariantCulture
         Assert.Matches(@"Date: (Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}", emlText);

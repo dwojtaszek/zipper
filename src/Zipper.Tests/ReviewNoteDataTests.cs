@@ -24,6 +24,6 @@ public class ReviewNoteDataTests
     public void GetRandomNote_EndsWithPeriod()
     {
         var result = ReviewNotes.GetRandomNote(new Random(42));
-        Assert.EndsWith(".", result);
+        Assert.EndsWith(".", result, StringComparison.Ordinal);
     }
 }

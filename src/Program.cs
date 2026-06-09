@@ -16,7 +16,7 @@ namespace Zipper
             {
                 try
                 {
-                    await PerformanceBenchmarkRunner.RunBenchmarks();
+                    await PerformanceBenchmarkRunner.RunBenchmarks().ConfigureAwait(false);
                     return 0;
                 }
                 catch (Exception ex)
@@ -39,7 +39,7 @@ namespace Zipper
             }
 
             IGenerationMode mode = SelectMode(request);
-            return await GenerationRunner.RunAsync(mode, request);
+            return await GenerationRunner.RunAsync(mode, request).ConfigureAwait(false);
         }
 
         /// <summary>

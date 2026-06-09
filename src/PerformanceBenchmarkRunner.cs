@@ -15,10 +15,10 @@ namespace Zipper
             Console.WriteLine("=== Performance Benchmark Suite ===");
             Console.WriteLine();
 
-            await BenchmarkParallelVsSequential();
-            await BenchmarkMemoryPooling();
-            await BenchmarkScalability();
-            await BenchmarkAllocation();
+            await BenchmarkParallelVsSequential().ConfigureAwait(false);
+            await BenchmarkMemoryPooling().ConfigureAwait(false);
+            await BenchmarkScalability().ConfigureAwait(false);
+            await BenchmarkAllocation().ConfigureAwait(false);
 
             Console.WriteLine("=== Benchmark Suite Complete ===");
         }
@@ -58,7 +58,7 @@ namespace Zipper
                     LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                 };
 
-                await generator.GenerateFilesAsync(request);
+                await generator.GenerateFilesAsync(request).ConfigureAwait(false);
 
                 var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
                 var totalAllocated = allocatedAfter - allocatedBefore;
@@ -94,7 +94,7 @@ namespace Zipper
             {
                 // Sequential baseline
                 var sw = Stopwatch.StartNew();
-                await GenerateSequentialFiles(fileCount, outputPath1);
+                await GenerateSequentialFiles(fileCount, outputPath1).ConfigureAwait(false);
                 sw.Stop();
                 var sequentialTime = sw.ElapsedMilliseconds;
 
@@ -113,7 +113,7 @@ namespace Zipper
                     },
                     LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                 };
-                await generator.GenerateFilesAsync(request);
+                await generator.GenerateFilesAsync(request).ConfigureAwait(false);
                 sw.Stop();
                 var parallelTime = sw.ElapsedMilliseconds;
 
@@ -224,7 +224,7 @@ namespace Zipper
                         LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                     };
 
-                    var result = await generator.GenerateFilesAsync(request);
+                    var result = await generator.GenerateFilesAsync(request).ConfigureAwait(false);
                     sw.Stop();
 
                     var throughput = result.FilesPerSecond;
@@ -246,7 +246,7 @@ namespace Zipper
         {
             return Task.Run(async () =>
             {
-                var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
+                var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
                 var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
 
                 using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
@@ -259,7 +259,7 @@ namespace Zipper
                     var fileName = $"{i:D8}.pdf";
                     var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
                     using var entryStream = entry.Open();
-                    await entryStream.WriteAsync(placeholderContent);
+                    await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
                 }
             });
         }

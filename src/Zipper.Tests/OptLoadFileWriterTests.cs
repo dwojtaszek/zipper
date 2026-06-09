@@ -98,7 +98,7 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         Assert.Equal(3, lines.Length);
         Assert.Contains(',', lines[0]);
         Assert.DoesNotContain('\t', lines[0]);
-        Assert.DoesNotContain("Control Number", lines[0]);
+        Assert.DoesNotContain("Control Number", lines[0], StringComparison.Ordinal);
         Assert.Equal(6, lines[0].Count(c => c == ','));
     }
 
@@ -165,16 +165,16 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var optContentWithAnsi = await File.ReadAllTextAsync(optOutputPath, optTargetEncoding);
 
         Assert.NotEmpty(optContentWithAnsi);
-        Assert.Contains(",", optContentWithAnsi);
+        Assert.Contains(",", optContentWithAnsi, StringComparison.Ordinal);
 
         var datContentWithUtf8 = await File.ReadAllTextAsync(datOutputPath, Encoding.UTF8);
         Assert.NotEmpty(datContentWithUtf8);
 
         var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optOutputPath, request, fileData.Count, null, LoadFileFormat.Opt);
-        Assert.Contains("\"encoding\": \"ANSI\"", optAuditJson);
+        Assert.Contains("\"encoding\": \"ANSI\"", optAuditJson, StringComparison.Ordinal);
 
         var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datOutputPath, request, fileData.Count, null, LoadFileFormat.Dat);
-        Assert.Contains("\"encoding\": \"UTF-8\"", datAuditJson);
+        Assert.Contains("\"encoding\": \"UTF-8\"", datAuditJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -204,8 +204,8 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         {
             int commaCount = line.Count(c => c == ',');
             Assert.Equal(6, commaCount);
-            Assert.StartsWith("IMG", line);
-            Assert.Contains("VOL001", line);
+            Assert.StartsWith("IMG", line, StringComparison.Ordinal);
+            Assert.Contains("VOL001", line, StringComparison.Ordinal);
         }
     }
 
@@ -254,12 +254,12 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         Assert.Equal(3, lines.Length);
         foreach (var line in lines)
         {
-            Assert.StartsWith("PROD", line);
-            Assert.Contains(".tif", line);
-            Assert.Contains("VOL001", line);
+            Assert.StartsWith("PROD", line, StringComparison.Ordinal);
+            Assert.Contains(".tif", line, StringComparison.Ordinal);
+            Assert.Contains("VOL001", line, StringComparison.Ordinal);
         }
 
-        Assert.Contains("\r\n", content);
+        Assert.Contains("\r\n", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -296,8 +296,8 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var decodedWithAnsi = Encoding.GetEncoding(1252).GetString(bytes);
         var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
 
-        Assert.Contains("TEST_ü", decodedWithAnsi);
-        Assert.DoesNotContain("TEST_ü", decodedWithUtf8);
+        Assert.Contains("TEST_ü", decodedWithAnsi, StringComparison.Ordinal);
+        Assert.DoesNotContain("TEST_ü", decodedWithUtf8, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var bytes = stream.ToArray();
         var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
 
-        Assert.Contains("TEST_ü", decodedWithUtf8);
+        Assert.Contains("TEST_ü", decodedWithUtf8, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -368,8 +368,8 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var decodedWithAnsi = Encoding.GetEncoding(1252).GetString(bytes);
         var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
 
-        Assert.Contains("TEST_ü", decodedWithAnsi);
-        Assert.DoesNotContain("TEST_ü", decodedWithUtf8);
+        Assert.Contains("TEST_ü", decodedWithAnsi, StringComparison.Ordinal);
+        Assert.DoesNotContain("TEST_ü", decodedWithUtf8, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -403,6 +403,6 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var bytes = stream.ToArray();
         var decodedWithUtf8 = Encoding.UTF8.GetString(bytes);
 
-        Assert.Contains("TEST_ü", decodedWithUtf8);
+        Assert.Contains("TEST_ü", decodedWithUtf8, StringComparison.Ordinal);
     }
 }

@@ -15,7 +15,7 @@ namespace Zipper
         {
             try
             {
-                await mode.RunAsync(request);
+                await mode.RunAsync(request).ConfigureAwait(false);
                 return 0;
             }
             catch (Exception ex)

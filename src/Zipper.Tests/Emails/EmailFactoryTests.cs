@@ -51,8 +51,8 @@ namespace Zipper
             // Assert — basic RFC-5321 shape: local@domain
             Assert.Matches(@"^[^@]+@[^@]+\.[^@]+$", template.To);
             Assert.Matches(@"^[^@]+@[^@]+\.[^@]+$", template.From);
-            Assert.Contains($"recipient{recipientIndex:D3}@", template.To);
-            Assert.Contains($"sender{senderIndex:D3}@", template.From);
+            Assert.Contains($"recipient{recipientIndex:D3}@", template.To, StringComparison.Ordinal);
+            Assert.Contains($"sender{senderIndex:D3}@", template.From, StringComparison.Ordinal);
         }
 
         [Theory]
@@ -71,13 +71,13 @@ namespace Zipper
         public void Create_SentDate_WithinCategoryRange(EmailCategory category, int maxDaysAgo)
         {
             // Arrange
-            var now = DateTime.Now;
+            var now = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
             const int iterations = 50;
 
             for (int i = 0; i < iterations; i++)
             {
                 // Act
-                var template = EmailFactory.Create(i, i, category, new Random(i));
+                var template = EmailFactory.Create(i, i, category, new Random(i), now);
 
                 // Assert — date is not absurdly far in the past or future
                 // Allow 2-day buffer for the ±23 hour and ±59 min adjustments
@@ -276,8 +276,8 @@ namespace Zipper
         [Fact]
         public void GenerateEmailAddress_ProducesExpectedFormat()
         {
-            Assert.Contains("recipient042@", EmailFactory.GenerateEmailAddress(42, "recipient"));
-            Assert.Contains("sender001@", EmailFactory.GenerateEmailAddress(1, "sender"));
+            Assert.Contains("recipient042@", EmailFactory.GenerateEmailAddress(42, "recipient"), StringComparison.Ordinal);
+            Assert.Contains("sender001@", EmailFactory.GenerateEmailAddress(1, "sender"), StringComparison.Ordinal);
         }
 
         // Tests redistributed from EmailTemplateSystemTests
@@ -287,14 +287,15 @@ namespace Zipper
             const int recipientIndex = 1;
             const int senderIndex = 2;
 
-            var email = EmailFactory.Create(recipientIndex, senderIndex, null, new Random(42));
+            var now = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+            var email = EmailFactory.Create(recipientIndex, senderIndex, null, new Random(42), now);
 
             Assert.NotNull(email);
             Assert.False(string.IsNullOrEmpty(email.To));
             Assert.False(string.IsNullOrEmpty(email.From));
             Assert.False(string.IsNullOrEmpty(email.Subject));
             Assert.False(string.IsNullOrEmpty(email.Body));
-            Assert.True(email.SentDate <= DateTime.Now);
+            Assert.True(email.SentDate <= now);
         }
 
         [Theory]
@@ -318,8 +319,8 @@ namespace Zipper
             var email = EmailFactory.Create(recipientIndex, senderIndex, category, new Random(99));
 
             Assert.NotNull(email);
-            Assert.Contains($"recipient{recipientIndex:D3}@", email.To);
-            Assert.Contains($"sender{senderIndex:D3}@", email.From);
+            Assert.Contains($"recipient{recipientIndex:D3}@", email.To, StringComparison.Ordinal);
+            Assert.Contains($"sender{senderIndex:D3}@", email.From, StringComparison.Ordinal);
             this.output.WriteLine($"Category: {category}, Subject: {email.Subject}");
         }
 
@@ -335,7 +336,7 @@ namespace Zipper
                 subjects[i] = email.Subject;
             }
 
-            var uniqueSubjects = subjects.Distinct().Count();
+            var uniqueSubjects = subjects.Distinct(StringComparer.Ordinal).Count();
             Assert.True(uniqueSubjects > 1, "Expected multiple different subjects");
             Assert.True(uniqueSubjects >= iterations * 0.3, $"Expected at least 30% variety, got {uniqueSubjects}/{iterations}");
         }
@@ -352,8 +353,8 @@ namespace Zipper
                 emailAddresses[i] = (email.To, email.From);
             }
 
-            var uniqueToAddresses = emailAddresses.Select(e => e.to).Distinct().Count();
-            var uniqueFromAddresses = emailAddresses.Select(e => e.from).Distinct().Count();
+            var uniqueToAddresses = emailAddresses.Select(e => e.to).Distinct(StringComparer.Ordinal).Count();
+            var uniqueFromAddresses = emailAddresses.Select(e => e.from).Distinct(StringComparer.Ordinal).Count();
 
             Assert.Equal(iterations, uniqueToAddresses);
             Assert.Equal(iterations, uniqueFromAddresses);
@@ -376,8 +377,8 @@ namespace Zipper
             var email = EmailFactory.CreateContextual(context, new Random(42));
 
             Assert.NotNull(email);
-            Assert.Contains("recipient005@", email.To);
-            Assert.Contains("sender010@", email.From);
+            Assert.Contains("recipient005@", email.To, StringComparison.Ordinal);
+            Assert.Contains("sender010@", email.From, StringComparison.Ordinal);
             Assert.Equal(new DateTime(2023, 6, 15), email.SentDate);
             Assert.True(email.IsHighPriority);
             Assert.True(email.RequestReadReceipt);
@@ -438,7 +439,7 @@ namespace Zipper
                 var email = EmailFactory.Create(i + 1, i + 2, category, new Random(i));
                 foreach (var placeholder in bodyPlaceholders)
                 {
-                    Assert.DoesNotContain(placeholder, email.Body);
+                    Assert.DoesNotContain(placeholder, email.Body, StringComparison.Ordinal);
                 }
             }
         }
@@ -452,8 +453,8 @@ namespace Zipper
             var email = EmailFactory.Create(largeRecipientIndex, largeSenderIndex, null, new Random(1));
 
             Assert.NotNull(email);
-            Assert.Contains($"recipient{largeRecipientIndex:D6}@", email.To);
-            Assert.Contains($"sender{largeSenderIndex:D6}@", email.From);
+            Assert.Contains($"recipient{largeRecipientIndex:D6}@", email.To, StringComparison.Ordinal);
+            Assert.Contains($"sender{largeSenderIndex:D6}@", email.From, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -467,13 +468,13 @@ namespace Zipper
                 var email = EmailFactory.Create(i + 1, i + 2, null, new Random(i));
                 foreach (var placeholder in commonPlaceholders)
                 {
-                    Assert.DoesNotContain(placeholder, email.Subject);
-                    Assert.DoesNotContain(placeholder, email.Body);
+                    Assert.DoesNotContain(placeholder, email.Subject, StringComparison.Ordinal);
+                    Assert.DoesNotContain(placeholder, email.Body, StringComparison.Ordinal);
                 }
 
                 foreach (var placeholder in bodyOnlyPlaceholders)
                 {
-                    Assert.DoesNotContain(placeholder, email.Body);
+                    Assert.DoesNotContain(placeholder, email.Body, StringComparison.Ordinal);
                 }
             }
         }

@@ -75,7 +75,7 @@ internal static class TiffMultiPageGenerator
             return null;
         }
 
-        if (!int.TryParse(parts[0], out var min) || !int.TryParse(parts[1], out var max))
+        if (!int.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out var min) || !int.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out var max))
         {
             return null;
         }

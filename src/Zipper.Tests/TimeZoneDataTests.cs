@@ -6,7 +6,7 @@ namespace Zipper.Tests;
 public class TimeZoneDataTests
 {
     private static readonly System.Collections.Generic.HashSet<string> ValidTimeZones =
-        new() { "UTC", "America/New_York", "America/Los_Angeles", "America/Chicago", "Europe/London", "Europe/Paris", "Asia/Tokyo", "Asia/Shanghai" };
+        new(StringComparer.Ordinal) { "UTC", "America/New_York", "America/Los_Angeles", "America/Chicago", "Europe/London", "Europe/Paris", "Asia/Tokyo", "Asia/Shanghai" };
 
     [Fact]
     public void GetRandom_ReturnsNonEmptyString()

@@ -1,3 +1,4 @@
+#pragma warning disable RS0030 // Do not use banned APIs
 using System.Globalization;
 using Xunit;
 using Zipper.Profiles;

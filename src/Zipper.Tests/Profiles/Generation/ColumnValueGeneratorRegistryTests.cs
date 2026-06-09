@@ -59,6 +59,6 @@ public class ColumnValueGeneratorRegistryTests
     public void KnownTypes_HasNoUnknownDuplicates()
     {
         // Each entry should be distinct (HashSet enforces uniqueness)
-        Assert.Equal(ColumnValueGeneratorRegistry.KnownTypes.Count, ColumnValueGeneratorRegistry.KnownTypes.ToHashSet().Count);
+        Assert.Equal(ColumnValueGeneratorRegistry.KnownTypes.Count, ColumnValueGeneratorRegistry.KnownTypes.ToHashSet(StringComparer.Ordinal).Count);
     }
 }

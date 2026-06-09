@@ -28,7 +28,7 @@ public class LoadFileEmitterTests
     private static LoadFileRecord Rec(string id, params (string Col, string Val)[] cells) => new()
     {
         Columns = cells.Select(c => c.Col).ToList(),
-        Values = cells.ToDictionary(c => c.Col, c => c.Val),
+        Values = cells.ToDictionary(c => c.Col, c => c.Val, StringComparer.Ordinal),
         RecordId = id,
     };
 
@@ -75,7 +75,7 @@ public class LoadFileEmitterTests
     public async Task NoChaos_StreamsLargeInputWithoutLoss()
     {
         using var ms = new MemoryStream();
-        var records = Enumerable.Range(0, 5000).Select(i => Rec(i.ToString(), ("A", $"v{i}")));
+        var records = Enumerable.Range(0, 5000).Select(i => Rec(i.ToString(System.Globalization.CultureInfo.InvariantCulture), ("A", $"v{i}")));
 
         await LoadFileEmitter.EmitAsync(ms, new FakeSerializer(), Array.Empty<string>(), records, NoBom, "\n", chaosEngine: null);
 

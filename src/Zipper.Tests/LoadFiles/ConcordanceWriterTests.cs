@@ -41,10 +41,10 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
 
         Assert.Equal(2, lines.Length);
 
-        Assert.Contains("\u00feCONTROLNUMBER\u00fe", lines[0]);
-        Assert.Contains("\u00fePATH\u00fe", lines[0]);
-        Assert.Contains("\u00feDOC00000001\u00fe", lines[1]);
-        Assert.Contains("\u00fefolder/doc1.pdf\u00fe", lines[1]);
+        Assert.Contains("\u00feCONTROLNUMBER\u00fe", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\u00fePATH\u00fe", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\u00feDOC00000001\u00fe", lines[1], StringComparison.Ordinal);
+        Assert.Contains("\u00fefolder/doc1.pdf\u00fe", lines[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
         var dataLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1];
         var fields = dataLine.Split('\u0014');
 
-        Assert.Contains("\u00fe\u00fe", fields[3]);
+        Assert.Contains("\u00fe\u00fe", fields[3], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -95,11 +95,11 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
         var content = await File.ReadAllTextAsync(outputPath);
         var colDelim = '\u0014';
         Assert.Contains(colDelim, content);
-        Assert.Contains("CONTROLNUMBER", content);
+        Assert.Contains("CONTROLNUMBER", content, StringComparison.Ordinal);
 
         var lines_split = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        Assert.Contains("BEGATTY", lines_split[0]);
-        Assert.Contains("CONTROLNUMBER", lines_split[0]);
-        Assert.Contains("PATH", lines_split[0]);
+        Assert.Contains("BEGATTY", lines_split[0], StringComparison.Ordinal);
+        Assert.Contains("CONTROLNUMBER", lines_split[0], StringComparison.Ordinal);
+        Assert.Contains("PATH", lines_split[0], StringComparison.Ordinal);
     }
 }

@@ -1,3 +1,4 @@
+#pragma warning disable RS0030 // Do not use banned APIs
 using System.Text.Json;
 using Xunit;
 using Zipper.Profiles;
@@ -48,7 +49,7 @@ namespace Zipper
                     new ColumnDefinition { Name = "DocID", Type = "identifier" },
                     new ColumnDefinition { Name = "Title", Type = "text" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             var filePath = Path.Combine(this.tempDir, "test-profile.json");
@@ -114,7 +115,7 @@ namespace Zipper
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.LoadFromFile(filePath));
 
-            Assert.Contains("Invalid JSON", exception.Message);
+            Assert.Contains("Invalid JSON", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -129,7 +130,7 @@ namespace Zipper
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.LoadFromFile(filePath));
 
-            Assert.Contains("Failed to parse", exception.Message);
+            Assert.Contains("Failed to parse", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -144,7 +145,7 @@ namespace Zipper
                     new ColumnDefinition { Name = "DocID", Type = "identifier" },
                     new ColumnDefinition { Name = "Text", Type = "text" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert - Should not throw
@@ -162,14 +163,14 @@ namespace Zipper
                 {
                     new ColumnDefinition { Name = "ID", Type = "identifier" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("must have a name", exception.Message);
+            Assert.Contains("must have a name", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -180,14 +181,14 @@ namespace Zipper
             {
                 Name = "NoColumnsProfile",
                 Columns = new List<ColumnDefinition>(),
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("at least one column", exception.Message);
+            Assert.Contains("at least one column", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -198,14 +199,14 @@ namespace Zipper
             {
                 Name = "NullColumnsProfile",
                 Columns = null!,
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("at least one column", exception.Message);
+            Assert.Contains("at least one column", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -226,7 +227,7 @@ namespace Zipper
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("DataSources dictionary", exception.Message);
+            Assert.Contains("DataSources dictionary", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -247,14 +248,14 @@ namespace Zipper
             {
                 Name = "TooManyColumnsProfile",
                 Columns = columns,
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("exceeds maximum of 200", exception.Message);
+            Assert.Contains("exceeds maximum of 200", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -269,14 +270,14 @@ namespace Zipper
                     new ColumnDefinition { Name = "ID", Type = "identifier" },
                     new ColumnDefinition { Name = "ID", Type = "text" }, // Duplicate!
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("Duplicate column name", exception.Message);
+            Assert.Contains("Duplicate column name", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -291,14 +292,14 @@ namespace Zipper
                     new ColumnDefinition { Name = "ID", Type = "identifier" },
                     new ColumnDefinition { Name = string.Empty, Type = "text" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("null or empty name", exception.Message);
+            Assert.Contains("null or empty name", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -313,14 +314,14 @@ namespace Zipper
                     new ColumnDefinition { Name = "Text1", Type = "text" },
                     new ColumnDefinition { Name = "Text2", Type = "text" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("'identifier' type column", exception.Message);
+            Assert.Contains("'identifier' type column", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -340,14 +341,14 @@ namespace Zipper
                         DataSource = "categories", // References undefined data source
                     },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(), // Empty!
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal), // Empty!
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("undefined data source", exception.Message);
+            Assert.Contains("undefined data source", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -362,14 +363,14 @@ namespace Zipper
                     new ColumnDefinition { Name = "ID", Type = "identifier" },
                     new ColumnDefinition { Name = "Invalid", Type = "invalid_type" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("invalid type", exception.Message);
+            Assert.Contains("invalid type", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -389,14 +390,14 @@ namespace Zipper
                         EmptyPercentage = 150, // Invalid: > 100
                     },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("invalid emptyPercentage", exception.Message);
+            Assert.Contains("invalid emptyPercentage", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -416,14 +417,14 @@ namespace Zipper
                         TruePercentage = -10, // Invalid: < 0
                     },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
 
             // Act & Assert
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("invalid truePercentage", exception.Message);
+            Assert.Contains("invalid truePercentage", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -454,8 +455,8 @@ namespace Zipper
             });
 
             var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
-            Assert.Contains("BadDate", ex.Message);
-            Assert.Contains("DateRange.Min", ex.Message);
+            Assert.Contains("BadDate", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("DateRange.Min", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -470,8 +471,8 @@ namespace Zipper
             });
 
             var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
-            Assert.Contains("BadMax", ex.Message);
-            Assert.Contains("DateRange.Max", ex.Message);
+            Assert.Contains("BadMax", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("DateRange.Max", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -486,8 +487,8 @@ namespace Zipper
             });
 
             var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
-            Assert.Contains("Inverted", ex.Message);
-            Assert.Contains("greater than", ex.Message);
+            Assert.Contains("Inverted", ex.Message, StringComparison.Ordinal);
+            Assert.Contains("greater than", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -547,8 +548,8 @@ namespace Zipper
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("testDS", exception.Message);
-            Assert.Contains("more weights than values", exception.Message);
+            Assert.Contains("testDS", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("more weights than values", exception.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -567,8 +568,8 @@ namespace Zipper
             var exception = Assert.Throws<InvalidOperationException>(() =>
                 ColumnProfileLoader.Validate(profile));
 
-            Assert.Contains("testDS", exception.Message);
-            Assert.Contains("more weights than values", exception.Message);
+            Assert.Contains("testDS", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("more weights than values", exception.Message, StringComparison.Ordinal);
         }
 
         private static ColumnProfile CreateMinimalProfile()
@@ -580,7 +581,7 @@ namespace Zipper
                 {
                     new() { Name = "DOCID", Type = "identifier" },
                 },
-                DataSources = new Dictionary<string, DataSourceConfig>(),
+                DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             };
         }
     }

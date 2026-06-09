@@ -20,7 +20,7 @@ public record OutputConfig
 
     public string FileTypeLower => this.FileType.ToLowerInvariant();
 
-    public bool IsEml => this.FileTypeLower == "eml";
+    public bool IsEml => string.Equals(this.FileTypeLower, "eml", StringComparison.Ordinal);
 
-    public bool IsTiff => this.FileTypeLower == "tiff";
+    public bool IsTiff => string.Equals(this.FileTypeLower, "tiff", StringComparison.Ordinal);
 }

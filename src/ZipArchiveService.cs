@@ -45,7 +45,7 @@ namespace Zipper
 
             try
             {
-                await foreach (var incomingFileData in fileDataReader.ReadAllAsync())
+                await foreach (var incomingFileData in fileDataReader.ReadAllAsync().ConfigureAwait(false))
                 {
                     if (incomingFileData.WorkItem.Index == nextExpectedIndex)
                     {
@@ -106,7 +106,7 @@ namespace Zipper
                     var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
                     using (var loadFileStream = loadFileEntry.Open())
                     {
-                        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, chaosEngine);
+                        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, chaosEngine).ConfigureAwait(false);
                     }
 
                     // Write audit file to ZIP
@@ -115,7 +115,7 @@ namespace Zipper
                     using (var propertiesStream = propertiesEntry.Open())
                     using (var propertiesWriter = new StreamWriter(propertiesStream))
                     {
-                        await propertiesWriter.WriteAsync(auditJson);
+                        await propertiesWriter.WriteAsync(auditJson).ConfigureAwait(false);
                     }
 
                     // Return path within the ZIP archive when load file is included
@@ -124,15 +124,18 @@ namespace Zipper
                 else
                 {
                     var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
-                    await using var fileStream = new FileStream(currentFilePath, FileMode.Create);
-                    await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine);
-                    await fileStream.FlushAsync();
+                    var fileStream = new FileStream(currentFilePath, FileMode.Create);
+                    await using (fileStream.ConfigureAwait(false))
+                    {
+                        await loadFileWriter.WriteAsync(fileStream, request, processedFiles, chaosEngine);
+                        await fileStream.FlushAsync();
 
-                    // Write audit file to disk
-                    var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies, format);
-                    await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson);
+                        // Write audit file to disk
+                        var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies, format);
+                        await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson);
 
-                    actualLoadFilePath = currentFilePath;
+                        actualLoadFilePath = currentFilePath;
+                    }
                 }
             }
 

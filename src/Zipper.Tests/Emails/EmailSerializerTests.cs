@@ -21,13 +21,13 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("From: sender@example.com", content);
-            Assert.Contains("To: recipient@example.com", content);
-            Assert.Contains("Subject: RFC 2822 Test", content);
-            Assert.Contains("Date: Fri, 15 Mar 2024 10:30:00", content);
-            Assert.Contains("MIME-Version: 1.0", content);
-            Assert.Contains("Content-Type: text/plain; charset=utf-8", content);
-            Assert.Contains("Content-Transfer-Encoding: 8bit", content);
+            Assert.Contains("From: sender@example.com", content, StringComparison.Ordinal);
+            Assert.Contains("To: recipient@example.com", content, StringComparison.Ordinal);
+            Assert.Contains("Subject: RFC 2822 Test", content, StringComparison.Ordinal);
+            Assert.Contains("Date: Fri, 15 Mar 2024 10:30:00", content, StringComparison.Ordinal);
+            Assert.Contains("MIME-Version: 1.0", content, StringComparison.Ordinal);
+            Assert.Contains("Content-Type: text/plain; charset=utf-8", content, StringComparison.Ordinal);
+            Assert.Contains("Content-Transfer-Encoding: 8bit", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -51,7 +51,7 @@ namespace Zipper
                 var content = Encoding.UTF8.GetString(result);
 
                 // Must use English abbreviations per RFC 2822
-                Assert.Contains("Date: Mon, 15 Jan 2024 14:00:00", content);
+                Assert.Contains("Date: Mon, 15 Jan 2024 14:00:00", content, StringComparison.Ordinal);
             }
             finally
             {
@@ -75,8 +75,8 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains(unicodeBody, content);
-            Assert.Contains("Unicode Subject: ñoño", content);
+            Assert.Contains(unicodeBody, content, StringComparison.Ordinal);
+            Assert.Contains("Unicode Subject: ñoño", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -99,10 +99,10 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, attachment);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("multipart/mixed", content);
-            Assert.Contains("Content-Transfer-Encoding: base64", content);
-            Assert.Contains("Content-Disposition: attachment; filename=\"data.pdf\"", content);
-            Assert.Contains("application/pdf", content);
+            Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
+            Assert.Contains("Content-Transfer-Encoding: base64", content, StringComparison.Ordinal);
+            Assert.Contains("Content-Disposition: attachment; filename=\"data.pdf\"", content, StringComparison.Ordinal);
+            Assert.Contains("application/pdf", content, StringComparison.Ordinal);
             Assert.True(result.Length > 0);
         }
 
@@ -122,8 +122,8 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("X-Priority: 1", content);
-            Assert.Contains("Priority: Urgent", content);
+            Assert.Contains("X-Priority: 1", content, StringComparison.Ordinal);
+            Assert.Contains("Priority: Urgent", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -142,7 +142,7 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Disposition-Notification-To: sender@example.com", content);
+            Assert.Contains("Disposition-Notification-To: sender@example.com", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -161,7 +161,7 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Cc: cc@example.com", content);
+            Assert.Contains("Cc: cc@example.com", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -180,7 +180,7 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Reply-To: reply@example.com", content);
+            Assert.Contains("Reply-To: reply@example.com", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -205,8 +205,8 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.DoesNotContain("X-Priority:", content);
-            Assert.DoesNotContain("Priority: Urgent", content);
+            Assert.DoesNotContain("X-Priority:", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Priority: Urgent", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -231,8 +231,8 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, attachment);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Content-ID: <img-001>", content);
-            Assert.Contains("Content-Disposition: inline; filename=\"image.png\"", content);
+            Assert.Contains("Content-ID: <img-001>", content, StringComparison.Ordinal);
+            Assert.Contains("Content-Disposition: inline; filename=\"image.png\"", content, StringComparison.Ordinal);
         }
 
         // Tests redistributed from EmailBuilderTests
@@ -253,8 +253,8 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, null);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Cc: cc@example.com", content);
-            Assert.Contains("Bcc: bcc@example.com", content);
+            Assert.Contains("Cc: cc@example.com", content, StringComparison.Ordinal);
+            Assert.Contains("Bcc: bcc@example.com", content, StringComparison.Ordinal);
         }
 
         [Theory]
@@ -284,7 +284,7 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, attachment);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains(expectedContentType, content);
+            Assert.Contains(expectedContentType, content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -308,7 +308,7 @@ namespace Zipper
             var result = EmailSerializer.ToEml(email, attachment);
 
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("application/custom-type", content);
+            Assert.Contains("application/custom-type", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -334,7 +334,7 @@ namespace Zipper
 
             Assert.True(result.Length > largeContent.Length);
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("base64", content.ToLowerInvariant());
+            Assert.Contains("base64", content.ToLowerInvariant(), StringComparison.Ordinal);
         }
 
         [Fact]
@@ -354,7 +354,7 @@ namespace Zipper
             Assert.NotNull(result);
             Assert.True(result.Length > 0);
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Subject:", content);
+            Assert.Contains("Subject:", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -373,7 +373,7 @@ namespace Zipper
 
             Assert.NotNull(result);
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("Date:", content);
+            Assert.Contains("Date:", content, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -397,7 +397,7 @@ namespace Zipper
 
             Assert.NotNull(result);
             var content = Encoding.UTF8.GetString(result);
-            Assert.Contains("multipart/mixed", content);
+            Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
         }
 
         [Fact]

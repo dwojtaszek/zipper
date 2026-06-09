@@ -33,14 +33,14 @@ namespace Zipper
         public async Task RunAsync_ThrowingMode_PrintsLegacyErrorFormatToStderr()
         {
             var (_, _, err) = await RunWithCapture(new ThrowingMode("disk full"), DefaultRequest());
-            Assert.Contains("\nAn error occurred: disk full", err);
+            Assert.Contains("\nAn error occurred: disk full", err, StringComparison.Ordinal);
         }
 
         [Fact]
         public async Task RunAsync_ThrowingMode_DoesNotWriteErrorToStdout()
         {
             var (_, output, _) = await RunWithCapture(new ThrowingMode("boom"), DefaultRequest());
-            Assert.DoesNotContain("An error occurred", output);
+            Assert.DoesNotContain("An error occurred", output, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -106,7 +106,7 @@ namespace Zipper
                 using var errWriter = new StringWriter();
                 Console.SetOut(outWriter);
                 Console.SetError(errWriter);
-                int exit = await GenerationRunner.RunAsync(mode, request);
+                int exit = await GenerationRunner.RunAsync(mode, request).ConfigureAwait(false);
                 return (exit, outWriter.ToString(), errWriter.ToString());
             }
             finally

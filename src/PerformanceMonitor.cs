@@ -13,7 +13,7 @@ namespace Zipper
         private long totalFiles;
         private DateTime lastProgressUpdate = DateTime.UtcNow;
         private double lastDisplayedPercentage;
-        private readonly object syncRoot = new object();
+        private readonly Lock syncRoot = new();
 
         /// <summary>
         /// Starts performance monitoring for a new operation.
@@ -64,7 +64,7 @@ namespace Zipper
         public void ReportProgress(long completed, long total)
         {
             // Disable progress bar in CI environments to prevent hangs
-            if (Environment.GetEnvironmentVariable("CI") == "true")
+            if (string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.Ordinal))
             {
                 return;
             }
@@ -91,7 +91,7 @@ namespace Zipper
         public void FinalizeProgress()
         {
             // Disable in CI environments
-            if (Environment.GetEnvironmentVariable("CI") == "true")
+            if (string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.Ordinal))
             {
                 return;
             }

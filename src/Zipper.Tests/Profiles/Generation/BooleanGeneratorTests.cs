@@ -30,7 +30,7 @@ public class BooleanGeneratorTests
         var col = new ColumnDefinition { Name = "Test", Format = "yn", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
 
-        var results = new HashSet<string>();
+        var results = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 50; i++)
         {
             results.Add(generator.Generate(MakeContext(i)));
@@ -38,7 +38,7 @@ public class BooleanGeneratorTests
 
         Assert.Contains("Y", results);
         Assert.Contains("N", results);
-        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
+        Assert.Subset(new HashSet<string>(StringComparer.Ordinal) { "Y", "N" }, results);
     }
 
     /// <summary>
@@ -50,7 +50,7 @@ public class BooleanGeneratorTests
         var col = new ColumnDefinition { Name = "Test", Format = "truefalse", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
 
-        var results = new HashSet<string>();
+        var results = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 50; i++)
         {
             results.Add(generator.Generate(MakeContext(i)));
@@ -58,7 +58,7 @@ public class BooleanGeneratorTests
 
         Assert.Contains("True", results);
         Assert.Contains("False", results);
-        Assert.Subset(new HashSet<string> { "True", "False" }, results);
+        Assert.Subset(new HashSet<string>(StringComparer.Ordinal) { "True", "False" }, results);
     }
 
     /// <summary>
@@ -70,7 +70,7 @@ public class BooleanGeneratorTests
         var col = new ColumnDefinition { Name = "Test", Format = "10", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
 
-        var results = new HashSet<string>();
+        var results = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 50; i++)
         {
             results.Add(generator.Generate(MakeContext(i)));
@@ -78,7 +78,7 @@ public class BooleanGeneratorTests
 
         Assert.Contains("1", results);
         Assert.Contains("0", results);
-        Assert.Subset(new HashSet<string> { "1", "0" }, results);
+        Assert.Subset(new HashSet<string>(StringComparer.Ordinal) { "1", "0" }, results);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public class BooleanGeneratorTests
         var col = new ColumnDefinition { Name = "Test", Format = null, TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
 
-        var results = new HashSet<string>();
+        var results = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 50; i++)
         {
             results.Add(generator.Generate(MakeContext(i)));
@@ -98,7 +98,7 @@ public class BooleanGeneratorTests
 
         Assert.Contains("Y", results);
         Assert.Contains("N", results);
-        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
+        Assert.Subset(new HashSet<string>(StringComparer.Ordinal) { "Y", "N" }, results);
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class BooleanGeneratorTests
         var col = new ColumnDefinition { Name = "Test", Format = "unknown", TruePercentage = 50 };
         var generator = new BooleanGenerator(col);
 
-        var results = new HashSet<string>();
+        var results = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < 50; i++)
         {
             results.Add(generator.Generate(MakeContext(i)));
@@ -118,7 +118,7 @@ public class BooleanGeneratorTests
 
         Assert.Contains("Y", results);
         Assert.Contains("N", results);
-        Assert.Subset(new HashSet<string> { "Y", "N" }, results);
+        Assert.Subset(new HashSet<string>(StringComparer.Ordinal) { "Y", "N" }, results);
     }
 
     /// <summary>

@@ -32,45 +32,47 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             CloseOutput = false,
         };
 
-        await using var writer = System.Xml.XmlWriter.Create(stream, settings);
-
-        try
+        var writer = System.Xml.XmlWriter.Create(stream, settings);
+        await using (writer.ConfigureAwait(false))
         {
-            // Match the original XDeclaration("1.0", "UTF-8", "yes")
-            await writer.WriteStartDocumentAsync(standalone: true);
-            await writer.WriteStartElementAsync(null, "Root", null);
-            await writer.WriteAttributeStringAsync(null, "DataInterchangeType", null, "Export");
-            await writer.WriteAttributeStringAsync(null, "MajorVersion", null, "1");
-            await writer.WriteAttributeStringAsync(null, "MinorVersion", null, "2");
+            try
+            {
+                // Match the original XDeclaration("1.0", "UTF-8", "yes")
+                await writer.WriteStartDocumentAsync(standalone: true);
+                await writer.WriteStartElementAsync(null, "Root", null);
+                await writer.WriteAttributeStringAsync(null, "DataInterchangeType", null, "Export");
+                await writer.WriteAttributeStringAsync(null, "MajorVersion", null, "1");
+                await writer.WriteAttributeStringAsync(null, "MinorVersion", null, "2");
 
-            await writer.WriteStartElementAsync(null, "Batch", null);
+                await writer.WriteStartElementAsync(null, "Batch", null);
 
 #pragma warning disable S2245
-            var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
+                var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
 #pragma warning restore S2245
-            var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
+                var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
-            foreach (var fileData in processedFiles)
-            {
-                var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
-                await element.WriteToAsync(writer, CancellationToken.None);
+                foreach (var fileData in processedFiles)
+                {
+                    var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
+                    await element.WriteToAsync(writer, CancellationToken.None);
+                }
+
+                await writer.WriteEndElementAsync(); // </Batch>
+                await writer.WriteEndElementAsync(); // </Root>
+                await writer.WriteEndDocumentAsync();
+
+                await writer.FlushAsync();
             }
-
-            await writer.WriteEndElementAsync(); // </Batch>
-            await writer.WriteEndElementAsync(); // </Root>
-            await writer.WriteEndDocumentAsync();
-
-            await writer.FlushAsync();
-        }
-        catch (Exception ex)
-        {
-            if (ex is OperationCanceledException)
+            catch (Exception ex)
             {
-                throw;
-            }
+                if (ex is OperationCanceledException)
+                {
+                    throw;
+                }
 
-            throw new InvalidOperationException(
-                $"Failed to write XML load file: {ex.Message}", ex);
+                throw new InvalidOperationException(
+                    $"Failed to write XML load file: {ex.Message}", ex);
+            }
         }
     }
 

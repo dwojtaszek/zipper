@@ -23,7 +23,7 @@ namespace Zipper
                 }
             }
 
-            var result = await LoadfileOnlyGenerator.GenerateAsync(request);
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request).ConfigureAwait(false);
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file: {0}", result.LoadFilePath));

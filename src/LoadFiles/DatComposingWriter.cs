@@ -41,6 +41,6 @@ internal sealed class DatComposingWriter : ILoadFileWriter
             : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine);
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine).ConfigureAwait(false);
     }
 }

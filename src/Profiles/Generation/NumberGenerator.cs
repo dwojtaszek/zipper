@@ -50,14 +50,14 @@ internal sealed class NumberGenerator : IColumnValueGenerator
             return this.min.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        if (this.distribution == "exponential")
+        if (string.Equals(this.distribution, "exponential", StringComparison.Ordinal))
         {
             var lambda = 3.0 / (this.max - this.min);
             var value = this.min + (int)(-Math.Log(1 - context.Seeded.NextDouble()) / lambda);
             return Math.Min(value, this.max).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        if (this.distribution == "gaussian" || this.distribution == "normal")
+        if (string.Equals(this.distribution, "gaussian", StringComparison.Ordinal) || string.Equals(this.distribution, "normal", StringComparison.Ordinal))
         {
             double u1 = 1.0 - context.Seeded.NextDouble();
             double u2 = 1.0 - context.Seeded.NextDouble();

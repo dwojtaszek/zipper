@@ -54,8 +54,8 @@ public class OptWriterTests : TempDirectoryTestBase
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(2, lines.Length);
-        Assert.StartsWith("DOC00000001_001,VOL001,IMAGES\\DOC00000001_001.tif,Y", lines[0]);
-        Assert.StartsWith("DOC00000001_002,VOL001,IMAGES\\DOC00000001_002.tif,", lines[1]);
+        Assert.StartsWith("DOC00000001_001,VOL001,IMAGES\\DOC00000001_001.tif,Y", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("DOC00000001_002,VOL001,IMAGES\\DOC00000001_002.tif,", lines[1], StringComparison.Ordinal);
     }
 
     [Fact]

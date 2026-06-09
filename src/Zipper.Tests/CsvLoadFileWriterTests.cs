@@ -9,10 +9,10 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
     {
         var writer = new CsvComposingWriter();
         using var stream = new MemoryStream();
-        await writer.WriteAsync(stream, request, files);
+        await writer.WriteAsync(stream, request, files).ConfigureAwait(false);
         stream.Position = 0;
         using var reader = new StreamReader(stream);
-        return await reader.ReadToEndAsync();
+        return await reader.ReadToEndAsync().ConfigureAwait(false);
     }
 
     [Fact]
@@ -32,8 +32,8 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(4, lines.Length);
-        Assert.Contains("CONTROL NUMBER", lines[0]);
-        Assert.Contains("DOC00000001", lines[1]);
+        Assert.Contains("CONTROL NUMBER", lines[0], StringComparison.Ordinal);
+        Assert.Contains("DOC00000001", lines[1], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
 
         var content = await File.ReadAllTextAsync(outputPath);
 
-        Assert.Contains("\"\"", content);
+        Assert.Contains("\"\"", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -72,8 +72,8 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var request = this.CreateTestRequest();
         var files = this.CreateTestFileData(2);
         var content = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("DOC00000001", content);
-        Assert.Contains("DOC00000002", content);
+        Assert.Contains("DOC00000001", content, StringComparison.Ordinal);
+        Assert.Contains("DOC00000002", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         files[0] = files[0] with { WorkItem = files[0].WorkItem with { FilePathInZip = "folder_001/file_00000001.pdf" } };
         var content = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("folder_001/file_00000001.txt", content);
+        Assert.Contains("folder_001/file_00000001.txt", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,16 +94,16 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         request.Metadata = request.Metadata with { WithMetadata = true };
         var files = this.CreateTestFileData(1);
         var contentWith = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("CUSTODIAN", contentWith);
+        Assert.Contains("CUSTODIAN", contentWith, StringComparison.Ordinal);
 
         request.Metadata = request.Metadata with { WithMetadata = false };
         var contentWithout = await this.CaptureCsvOutput(request, files);
-        Assert.DoesNotContain("CUSTODIAN", contentWithout);
+        Assert.DoesNotContain("CUSTODIAN", contentWithout, StringComparison.Ordinal);
 
         var emlRequest = this.CreateTestRequest("eml");
         emlRequest.Metadata = emlRequest.Metadata with { WithMetadata = false };
         var emlContent = await this.CaptureCsvOutput(emlRequest, files);
-        Assert.Contains("CUSTODIAN", emlContent);
+        Assert.Contains("CUSTODIAN", emlContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,16 +133,16 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         files[0] = files[0] with { PageCount = 5 };
         var contentWith = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("PAGE COUNT", contentWith);
+        Assert.Contains("PAGE COUNT", contentWith, StringComparison.Ordinal);
 
         request.Tiff = request.Tiff with { PageRange = null };
         var contentWithout = await this.CaptureCsvOutput(request, files);
-        Assert.DoesNotContain("PAGE COUNT", contentWithout);
+        Assert.DoesNotContain("PAGE COUNT", contentWithout, StringComparison.Ordinal);
 
         var pdfRequest = this.CreateTestRequest("pdf");
         pdfRequest.Tiff = pdfRequest.Tiff with { PageRange = (1, 10) };
         var pdfContent = await this.CaptureCsvOutput(pdfRequest, files);
-        Assert.DoesNotContain("PAGE COUNT", pdfContent);
+        Assert.DoesNotContain("PAGE COUNT", pdfContent, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         files[0] = files[0] with { WorkItem = files[0].WorkItem with { Index = 10 } };
         var content = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("TEST001009", content);
+        Assert.Contains("TEST001009", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -171,8 +171,8 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         files[0] = files[0] with { DataLength = 1024, WorkItem = files[0].WorkItem with { FolderNumber = 5 } };
         var content = await this.CaptureCsvOutput(request, files);
         var dataLine = content.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1];
-        Assert.Contains("Custodian 5", dataLine);
-        Assert.Contains("1024", dataLine);
+        Assert.Contains("Custodian 5", dataLine, StringComparison.Ordinal);
+        Assert.Contains("1024", dataLine, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -196,7 +196,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         Assert.Equal(0xFE, bytes[1]);
 
         var content = await File.ReadAllTextAsync(outputPath, System.Text.Encoding.Unicode);
-        Assert.Contains("CONTROL NUMBER", content);
+        Assert.Contains("CONTROL NUMBER", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -232,6 +232,6 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var content = encoding.GetString(bytes);
         var roundTripBytes = encoding.GetBytes(content);
         Assert.Equal(bytes, roundTripBytes);
-        Assert.Contains("CONTROL NUMBER", content);
+        Assert.Contains("CONTROL NUMBER", content, StringComparison.Ordinal);
     }
 }

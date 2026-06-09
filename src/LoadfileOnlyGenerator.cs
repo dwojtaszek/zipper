@@ -22,7 +22,7 @@ internal static class LoadfileOnlyGenerator
 
         Directory.CreateDirectory(request.Output.OutputPath);
 
-        var baseFileName = $"loadfile_{DateTime.Now:yyyyMMdd_HHmmss}";
+        var baseFileName = $"loadfile_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
 
         var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
             ? request.LoadFile.LoadFileFormats
@@ -71,9 +71,10 @@ internal static class LoadfileOnlyGenerator
                 format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
                 WriterMode.LoadfileOnly);
 
-            await using (var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
+            var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+            await using (fileStream.ConfigureAwait(false))
             {
-                await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine);
+                await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine).ConfigureAwait(false);
             }
 
             string propertiesPath;
@@ -84,7 +85,7 @@ internal static class LoadfileOnlyGenerator
                     request,
                     request.Output.FileCount,
                     chaosEngine?.Anomalies,
-                    format);
+                    format).ConfigureAwait(false);
             }
             catch
             {

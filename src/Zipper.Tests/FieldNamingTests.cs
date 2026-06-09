@@ -151,7 +151,7 @@ public class FieldNamingTests : IDisposable
         };
 
         var ex = Assert.Throws<InvalidOperationException>(() => ColumnProfileLoader.Validate(profile));
-        Assert.Contains("has an invalid fieldNamingConvention", ex.Message);
+        Assert.Contains("has an invalid fieldNamingConvention", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

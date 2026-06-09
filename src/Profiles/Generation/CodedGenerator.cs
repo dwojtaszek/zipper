@@ -34,7 +34,7 @@ internal sealed class CodedGenerator : IColumnValueGenerator
                 return string.Empty;
             }
 
-            var selected = new HashSet<string>();
+            var selected = new HashSet<string>(StringComparer.Ordinal);
             selected.Add(this.PickValue(context));
             while (selected.Count < count && selected.Count < this.values.Length)
             {

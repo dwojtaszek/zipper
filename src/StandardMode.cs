@@ -42,7 +42,7 @@ namespace Zipper
             // Use parallel file generator for improved performance
             var generator = new ParallelFileGenerator();
 
-            var result = await generator.GenerateFilesAsync(request);
+            var result = await generator.GenerateFilesAsync(request).ConfigureAwait(false);
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Archive created: {0}", result.ZipFilePath));
@@ -61,13 +61,13 @@ namespace Zipper
                 {
                     await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
-                        actual, target, deviation));
+                        actual, target, deviation)).ConfigureAwait(false);
                 }
                 else
                 {
                     await Console.Out.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
-                        actual, target, deviation));
+                        actual, target, deviation)).ConfigureAwait(false);
                 }
             }
 

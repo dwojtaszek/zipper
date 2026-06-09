@@ -15,6 +15,9 @@ namespace Zipper
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
         {
+            string? zipFilePath = null;
+            string? loadFilePath = null;
+
             ArgumentNullException.ThrowIfNull(request);
 
             // Clone to avoid mutating the caller's request object
@@ -45,10 +48,10 @@ namespace Zipper
 
                 Directory.CreateDirectory(request.Output.OutputPath);
 
-                var baseFileName = $"archive_{DateTime.Now:yyyyMMdd_HHmmss}";
-                var zipFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.zip");
+                var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+                zipFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.zip");
                 var loadFileName = $"{baseFileName}.dat";
-                var loadFilePath = Path.Combine(request.Output.OutputPath, loadFileName);
+                loadFilePath = Path.Combine(request.Output.OutputPath, loadFileName);
 
                 var placeholderContent = fileGenerator.IsPlaceholderBased
                     ? PlaceholderFiles.GetContent(request.Output.FileTypeLower)
@@ -83,14 +86,14 @@ namespace Zipper
                 Exception? producerException = null;
                 try
                 {
-                    var completed = await Task.WhenAny(allProducersTask, consumerTask);
+                    var completed = await Task.WhenAny(allProducersTask, consumerTask).ConfigureAwait(false);
                     if (completed == consumerTask && consumerTask.IsFaulted)
                     {
                         // Consumer died — complete channel with its exception to unblock producers
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
                         try
                         {
-                            await allProducersTask;
+                            await allProducersTask.ConfigureAwait(false);
                         }
                         catch
                         {
@@ -100,7 +103,7 @@ namespace Zipper
                     else
                     {
                         // Producers finished first (normal path)
-                        await allProducersTask;
+                        await allProducersTask.ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -114,7 +117,7 @@ namespace Zipper
                 }
 
                 // Always wait for consumer (releases zip file handles)
-                var actualLoadFilePath = await consumerTask;
+                var actualLoadFilePath = await consumerTask.ConfigureAwait(false);
 
                 RethrowIfNotNull(producerException);
 
@@ -133,6 +136,12 @@ namespace Zipper
             catch
             {
                 this.performanceMonitor.Stop();
+                try
+                {
+                    if (zipFilePath != null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
+                    if (loadFilePath != null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
+                }
+                catch { }
                 throw;
             }
         }
@@ -163,7 +172,7 @@ namespace Zipper
                             FolderName = folderName,
                             FileName = fileName,
                             FilePathInZip = filePathInZip,
-                        });
+                        }).ConfigureAwait(false);
                     }
 
                     writer.Complete();
@@ -181,12 +190,12 @@ namespace Zipper
         {
             long filesProcessed = 0;
 
-            await foreach (var workItem in reader.ReadAllAsync())
+            await foreach (var workItem in reader.ReadAllAsync().ConfigureAwait(false))
             {
                 var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
                 try
                 {
-                    await writer.WriteAsync(fileData);
+                    await writer.WriteAsync(fileData).ConfigureAwait(false);
                 }
                 catch
                 {

@@ -16,7 +16,7 @@ public class ChaosScenarioTests
             using var errWriter = new StringWriter();
             Console.SetOut(outWriter);
             Console.SetError(errWriter);
-            int exitCode = await Program.Main(args);
+            int exitCode = await Program.Main(args).ConfigureAwait(false);
             return (exitCode, outWriter.ToString(), errWriter.ToString());
         }
         finally
@@ -33,7 +33,7 @@ public class ChaosScenarioTests
         var scenario = ChaosScenarios.GetByName("structured-import-failures");
         Assert.NotNull(scenario);
         Assert.Equal("structured-import-failures", scenario.Name);
-        Assert.Contains("mixed-delimiters", scenario.ChaosTypes);
+        Assert.Contains("mixed-delimiters", scenario.ChaosTypes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -138,9 +138,9 @@ public class ChaosScenarioTests
     {
         var (exitCode, stdout, _) = await RunWithCapture(new[] { "--chaos-list" });
         Assert.Equal(0, exitCode);
-        Assert.Contains("Available Chaos Scenarios", stdout);
-        Assert.Contains("structured-import-failures", stdout);
-        Assert.Contains("full-chaos", stdout);
+        Assert.Contains("Available Chaos Scenarios", stdout, StringComparison.Ordinal);
+        Assert.Contains("structured-import-failures", stdout, StringComparison.Ordinal);
+        Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class ChaosScenarioTests
                 "--chaos-scenario", "structured-import-failures",
             });
             Assert.Equal(1, exitCode);
-            Assert.Contains("--chaos-scenario requires --chaos-mode", stderr);
+            Assert.Contains("--chaos-scenario requires --chaos-mode", stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -179,7 +179,7 @@ public class ChaosScenarioTests
                 "--chaos-types", "quotes",
             });
             Assert.Equal(1, exitCode);
-            Assert.Contains("conflicts with --chaos-types", stderr);
+            Assert.Contains("conflicts with --chaos-types", stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -202,7 +202,7 @@ public class ChaosScenarioTests
                 "--chaos-mode", "--chaos-scenario", "fake-scenario",
             });
             Assert.Equal(1, exitCode);
-            Assert.Contains("Unknown chaos scenario 'fake-scenario'", stderr);
+            Assert.Contains("Unknown chaos scenario 'fake-scenario'", stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -226,7 +226,7 @@ public class ChaosScenarioTests
                 "--loadfile-format", "dat",
             });
             Assert.Equal(1, exitCode);
-            Assert.Contains("requires --loadfile-format opt", stderr);
+            Assert.Contains("requires --loadfile-format opt", stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -249,7 +249,7 @@ public class ChaosScenarioTests
                 "--chaos-mode", "--chaos-scenario", "structured-import-failures", "--seed", "42",
             });
             Assert.Equal(0, exitCode);
-            Assert.Contains("Chaos Scenario: structured-import-failures", stdout);
+            Assert.Contains("Chaos Scenario: structured-import-failures", stdout, StringComparison.Ordinal);
 
             // Verify load file was created
             var datFiles = Directory.GetFiles(tempPath, "*.dat");
@@ -267,7 +267,7 @@ public class ChaosScenarioTests
 
             // Verify anomaly types match scenario (mixed-delimiters, quotes, columns)
             var anomalies = chaosMode.GetProperty("injectedAnomalies");
-            var errorTypes = new HashSet<string>();
+            var errorTypes = new HashSet<string>(StringComparer.Ordinal);
             foreach (var anomaly in anomalies.EnumerateArray())
             {
                 errorTypes.Add(anomaly.GetProperty("errorType").GetString()!);
@@ -276,7 +276,7 @@ public class ChaosScenarioTests
             // Should only contain types from the structured-import-failures scenario
             Assert.Subset(
                 errorTypes,
-                new HashSet<string> { "mixed-delimiters", "quotes", "columns" });
+                new HashSet<string>(StringComparer.Ordinal) { "mixed-delimiters", "quotes", "columns" });
         }
         finally
         {
@@ -366,7 +366,7 @@ public class ChaosScenarioTests
                 "--chaos-mode", "--chaos-scenario", "broken-boundaries", "--seed", "42",
             });
             Assert.Equal(0, exitCode);
-            Assert.Contains("Chaos Scenario: broken-boundaries", stdout);
+            Assert.Contains("Chaos Scenario: broken-boundaries", stdout, StringComparison.Ordinal);
 
             var optFiles = Directory.GetFiles(tempPath, "*.opt");
             Assert.Single(optFiles);

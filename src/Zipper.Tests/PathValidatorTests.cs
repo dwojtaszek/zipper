@@ -205,7 +205,7 @@ namespace Zipper
                 $"..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}..{Path.DirectorySeparatorChar}windows{Path.DirectorySeparatorChar}system32",
                 "test/../../sensitive/../../../data",
                 "/folder/../../etc/shadow",
-                RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "C:\\folder\\..\\..\\sensitive" : "/folder/../../sensitive",
+                OperatingSystem.IsWindows() ? "C:\\folder\\..\\..\\sensitive" : "/folder/../../sensitive",
             };
 
             // Act & Assert

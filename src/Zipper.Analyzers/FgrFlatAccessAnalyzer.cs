@@ -147,7 +147,7 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        if (symbol.ContainingType?.Name != "FileGenerationRequest")
+        if (!string.Equals(symbol.ContainingType?.Name, "FileGenerationRequest", StringComparison.Ordinal))
         {
             return;
         }

@@ -18,7 +18,7 @@ namespace Zipper
                 eol: "\r\n",
                 seed: 42));
 
-            Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message);
+            Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -138,8 +138,8 @@ namespace Zipper
                 if (engine.ShouldIntercept(i))
                 {
                     string modified = engine.Intercept(i, line, $"DOC{i:D8}");
-                    Assert.Contains("\n", modified);
-                    Assert.DoesNotContain("\r\n", modified);
+                    Assert.Contains("\n", modified, StringComparison.Ordinal);
+                    Assert.DoesNotContain("\r\n", modified, StringComparison.Ordinal);
                     break;
                 }
             }
@@ -284,7 +284,7 @@ namespace Zipper
                     string lastField = modified.Split(',').Last();
 
                     // Should be either "ABC" or "-1"
-                    Assert.True(lastField == "ABC" || lastField == "-1", $"Last field was '{lastField}'");
+                    Assert.True(string.Equals(lastField, "ABC", StringComparison.Ordinal) || string.Equals(lastField, "-1", StringComparison.Ordinal), $"Last field was '{lastField}'");
                     break;
                 }
             }
@@ -418,7 +418,7 @@ namespace Zipper
                 {
                     string modified = engine.Intercept(i, line, "IMG001");
                     var parts = modified.Split(',');
-                    Assert.Contains("invalid", parts[2]);
+                    Assert.Contains("invalid", parts[2], StringComparison.Ordinal);
                     break;
                 }
             }
@@ -444,7 +444,7 @@ namespace Zipper
                 if (engine.ShouldIntercept(i))
                 {
                     string modified = engine.Intercept(i, line, "IMG001");
-                    Assert.StartsWith(",VOL001", modified);
+                    Assert.StartsWith(",VOL001", modified, StringComparison.Ordinal);
                     break;
                 }
             }
@@ -516,7 +516,7 @@ namespace Zipper
                 eol: "\r\n",
                 seed: 42));
 
-            Assert.Contains("Chaos Engine requires a positive totalLines count", ex.Message);
+            Assert.Contains("Chaos Engine requires a positive totalLines count", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -663,7 +663,7 @@ namespace Zipper
             Assert.Equal(10, interceptedCount);
             Assert.True(engine.Anomalies.Count > 0);
 
-            var types = engine.Anomalies.Select(a => a.ErrorType).Distinct().ToList();
+            var types = engine.Anomalies.Select(a => a.ErrorType).Distinct(StringComparer.Ordinal).ToList();
             Assert.True(
                 types.Count >= 2,
                 $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
@@ -700,7 +700,7 @@ namespace Zipper
             // Every numeric line number in Anomalies must be an intercepted line
             foreach (var anomaly in engine.Anomalies)
             {
-                if (long.TryParse(anomaly.LineNumber, out var lineNum))
+                if (long.TryParse(anomaly.LineNumber, System.Globalization.CultureInfo.InvariantCulture, out var lineNum))
                 {
                     Assert.Contains(lineNum, interceptedLines);
                 }
@@ -736,7 +736,7 @@ namespace Zipper
             }
 
             var anomalyLines = engine.Anomalies
-                .Select(a => long.TryParse(a.LineNumber, out var n) ? (long?)n : null)
+                .Select(a => long.TryParse(a.LineNumber, System.Globalization.CultureInfo.InvariantCulture, out var n) ? (long?)n : null)
                 .Where(n => n.HasValue)
                 .Select(n => n!.Value)
                 .ToHashSet();

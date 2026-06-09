@@ -10,7 +10,7 @@ namespace Zipper
         private FileStream? writeStream;
         private BinaryWriter? writer;
         private int count;
-        private readonly object syncRoot = new object();
+        private readonly Lock syncRoot = new();
 
         public DiskBackedFileDataList()
         {

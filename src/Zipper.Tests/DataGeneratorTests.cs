@@ -109,7 +109,7 @@ public class DataGeneratorTests
         // ISRESPONSIVE is a boolean column with Format = "YN"
         var responsiveValue = row["ISRESPONSIVE"];
         Assert.True(
-            responsiveValue == "Y" || responsiveValue == "N" || string.IsNullOrEmpty(responsiveValue),
+string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(responsiveValue, "N", StringComparison.Ordinal) || string.IsNullOrEmpty(responsiveValue),
             $"Expected Y, N, or empty but got {responsiveValue}");
     }
 
@@ -151,8 +151,8 @@ public class DataGeneratorTests
         var emailValue = row["EMAILFROM"];
         if (!string.IsNullOrEmpty(emailValue))
         {
-            Assert.Contains("@", emailValue);
-            Assert.Contains(".", emailValue);
+            Assert.Contains("@", emailValue, StringComparison.Ordinal);
+            Assert.Contains(".", emailValue, StringComparison.Ordinal);
         }
     }
 
@@ -199,7 +199,7 @@ public class DataGeneratorTests
             var emailToValue = row["EMAILTO"];
             if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(delimiter))
             {
-                Assert.Contains(delimiter, emailToValue);
+                Assert.Contains(delimiter, emailToValue, StringComparison.Ordinal);
                 var parts = emailToValue.Split(delimiter);
                 Assert.True(parts.Length >= 2);
                 return;
@@ -224,7 +224,7 @@ public class DataGeneratorTests
 
         var fileSizeValue = row["FILESIZE"];
         Assert.True(
-            long.TryParse(fileSizeValue, out var size),
+            long.TryParse(fileSizeValue, System.Globalization.CultureInfo.InvariantCulture, out var size),
             $"Expected valid number but got {fileSizeValue}");
         Assert.True(size >= 0, "File size should be non-negative");
     }
@@ -239,6 +239,7 @@ public class DataGeneratorTests
         {
             Name = "test-every-kind",
             DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
             {
                 ["statusValues"] = new DataSourceConfig { Values = ["Active", "Inactive", "Pending", "Closed", "Archived"] },
                 ["categoryValues"] = new DataSourceConfig { Values = ["CategoryA", "CategoryB", "CategoryC", "CategoryD"], Weights = [40, 30, 20, 10] },
@@ -258,8 +259,8 @@ public class DataGeneratorTests
             },
         };
         var generator = new DataGenerator(profile, seed: 42);
-        var validCoded = new HashSet<string> { "Active", "Inactive", "Pending", "Closed", "Archived" };
-        var validBool = new HashSet<string> { "Y", "N" };
+        var validCoded = new HashSet<string>(StringComparer.Ordinal) { "Active", "Inactive", "Pending", "Closed", "Archived" };
+        var validBool = new HashSet<string>(StringComparer.Ordinal) { "Y", "N" };
 
         for (int i = 1; i <= 200; i++)
         {
@@ -281,13 +282,13 @@ public class DataGeneratorTests
             // datetime: ISO 8601 with time component
             if (!string.IsNullOrEmpty(row["DATETIMEFIELD"]))
             {
-                Assert.Contains("T", row["DATETIMEFIELD"]);
+                Assert.Contains("T", row["DATETIMEFIELD"], StringComparison.Ordinal);
             }
 
             // number: integer in valid range
             if (!string.IsNullOrEmpty(row["NUMBERFIELD"]))
             {
-                Assert.True(int.TryParse(row["NUMBERFIELD"], out var numVal), $"NUMBERFIELD is not an integer: {row["NUMBERFIELD"]}");
+                Assert.True(int.TryParse(row["NUMBERFIELD"], System.Globalization.CultureInfo.InvariantCulture, out var numVal), $"NUMBERFIELD is not an integer: {row["NUMBERFIELD"]}");
                 Assert.InRange(numVal, 0, 10000);
             }
 
@@ -324,7 +325,7 @@ public class DataGeneratorTests
         var profile = new ColumnProfile
         {
             Name = $"test-empty-{emptyPct}",
-            DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>(),
+            DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             Columns = new System.Collections.Generic.List<ColumnDefinition>
             {
                 new() { Name = "DOCID", Type = "identifier", Required = true },
@@ -374,6 +375,7 @@ public class DataGeneratorTests
         {
             Name = "test-weighted-bias",
             DataSources = new System.Collections.Generic.Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
             {
                 ["weightedDS"] = new DataSourceConfig
                 {
@@ -402,11 +404,11 @@ public class DataGeneratorTests
             var row = generator.GenerateRow(workItem, fileData);
 
             var value = row["WEIGHTEDFIELD"];
-            if (value == "A")
+            if (string.Equals(value, "A", StringComparison.Ordinal))
             {
                 aCount++;
             }
-            else if (value == "B")
+            else if (string.Equals(value, "B", StringComparison.Ordinal))
             {
                 bCount++;
             }
@@ -432,9 +434,9 @@ public class DataGeneratorTests
         // Use 500 rows (seeded) to ensure all 3 values appear given pareto distribution.
         var profile = BuiltInProfiles.Standard;
         var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 3);
-        var validValues = new HashSet<string> { "Custodian_1", "Custodian_2", "Custodian_3" };
+        var validValues = new HashSet<string>(StringComparer.Ordinal) { "Custodian_1", "Custodian_2", "Custodian_3" };
 
-        var custodianValues = new HashSet<string>();
+        var custodianValues = new HashSet<string>(StringComparer.Ordinal);
 
         for (int i = 1; i <= 500; i++)
         {
@@ -472,7 +474,7 @@ public class DataGeneratorTests
         {
             Name = "no-custodians",
             Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-            DataSources = new Dictionary<string, DataSourceConfig>(),
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
             Columns = new List<ColumnDefinition>
             {
                 new() { Name = "DOCID", Type = "identifier", Required = true },
@@ -499,6 +501,7 @@ public class DataGeneratorTests
             Name = "values-custodians",
             Settings = new ProfileSettings { EmptyValuePercentage = 0 },
             DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
             {
                 ["custodians"] = new DataSourceConfig
                 {
@@ -515,7 +518,7 @@ public class DataGeneratorTests
 
         // Override to 2: only "Alice" and "Bob" should ever appear
         var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 2);
-        var custodianValues = new HashSet<string>();
+        var custodianValues = new HashSet<string>(StringComparer.Ordinal);
 
         for (int i = 1; i <= 200; i++)
         {
@@ -530,7 +533,7 @@ public class DataGeneratorTests
             $"Expected at most 2 custodians (Alice, Bob) but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
         foreach (var v in custodianValues)
         {
-            Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value: {v}");
+            Assert.True(string.Equals(v, "Alice", StringComparison.Ordinal) || string.Equals(v, "Bob", StringComparison.Ordinal), $"Unexpected custodian value: {v}");
         }
     }
 
@@ -547,6 +550,7 @@ public class DataGeneratorTests
             Name = "weighted-values-custodians",
             Settings = new ProfileSettings { EmptyValuePercentage = 0 },
             DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
             {
                 ["custodians"] = new DataSourceConfig
                 {
@@ -566,7 +570,7 @@ public class DataGeneratorTests
         // If Weights was NOT truncated, PrecomputeIndices would sum all 5 weights (100)
         // but only 2 values exist, causing index-out-of-range fallback to the last value.
         var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 2);
-        var custodianValues = new HashSet<string>();
+        var custodianValues = new HashSet<string>(StringComparer.Ordinal);
 
         for (int i = 1; i <= 200; i++)
         {
@@ -581,7 +585,7 @@ public class DataGeneratorTests
             $"Expected at most 2 custodians (Alice, Bob) but got {custodianValues.Count}: {string.Join(", ", custodianValues)}");
         foreach (var v in custodianValues)
         {
-            Assert.True(v == "Alice" || v == "Bob", $"Unexpected custodian value after weight truncation: {v}");
+            Assert.True(string.Equals(v, "Alice", StringComparison.Ordinal) || string.Equals(v, "Bob", StringComparison.Ordinal), $"Unexpected custodian value after weight truncation: {v}");
         }
     }
 
@@ -598,6 +602,7 @@ public class DataGeneratorTests
             Name = "generated-weighted-custodians",
             Settings = new ProfileSettings { EmptyValuePercentage = 0 },
             DataSources = new Dictionary<string, DataSourceConfig>
+(StringComparer.Ordinal)
             {
                 ["custodians"] = new DataSourceConfig
                 {
@@ -628,11 +633,11 @@ public class DataGeneratorTests
             var row = generator.GenerateRow(workItem, fileData);
 
             var value = row["CUSTODIAN"];
-            if (value == "Cust_1")
+            if (string.Equals(value, "Cust_1", StringComparison.Ordinal))
             {
                 cust1Count++;
             }
-            else if (value == "Cust_2")
+            else if (string.Equals(value, "Cust_2", StringComparison.Ordinal))
             {
                 cust2Count++;
             }

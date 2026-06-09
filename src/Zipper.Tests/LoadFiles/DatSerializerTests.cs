@@ -14,10 +14,10 @@ public class DatSerializerTests
 
         var content = serializer.RenderHeader(columns);
 
-        Assert.Contains("DOCID", content);
-        Assert.Contains("FILEPATH", content);
-        Assert.Contains("CUSTODIAN", content);
-        Assert.Contains("\x14", content); // column delimiter
+        Assert.Contains("DOCID", content, StringComparison.Ordinal);
+        Assert.Contains("FILEPATH", content, StringComparison.Ordinal);
+        Assert.Contains("CUSTODIAN", content, StringComparison.Ordinal);
+        Assert.Contains("\x14", content, StringComparison.Ordinal); // column delimiter
     }
 
     [Fact]
@@ -29,6 +29,7 @@ public class DatSerializerTests
         {
             Columns = columns,
             Values = new Dictionary<string, string>
+(StringComparer.Ordinal)
             {
                 ["DOCID"] = "DOC001",
                 ["FILEPATH"] = "folder/file.pdf",
@@ -37,9 +38,9 @@ public class DatSerializerTests
 
         var content = serializer.RenderRecord(record);
 
-        Assert.Contains("DOC001", content);
-        Assert.Contains("folder/file.pdf", content);
-        Assert.Contains("\x14", content); // column delimiter
+        Assert.Contains("DOC001", content, StringComparison.Ordinal);
+        Assert.Contains("folder/file.pdf", content, StringComparison.Ordinal);
+        Assert.Contains("\x14", content, StringComparison.Ordinal); // column delimiter
     }
 
     [Fact]
@@ -50,6 +51,7 @@ public class DatSerializerTests
         {
             Columns = new List<string> { "VALUE" },
             Values = new Dictionary<string, string>
+(StringComparer.Ordinal)
             {
                 ["VALUE"] = "has\xfequote",
             },
@@ -58,7 +60,7 @@ public class DatSerializerTests
         var content = serializer.RenderRecord(record);
 
         // Quote delimiter should be doubled
-        Assert.Contains("\xfe\xfe", content);
+        Assert.Contains("\xfe\xfe", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -69,6 +71,7 @@ public class DatSerializerTests
         {
             Columns = new List<string> { "TEXT" },
             Values = new Dictionary<string, string>
+(StringComparer.Ordinal)
             {
                 ["TEXT"] = "line1\nline2",
             },
@@ -76,8 +79,8 @@ public class DatSerializerTests
 
         var content = serializer.RenderRecord(record);
 
-        Assert.DoesNotContain("\n", content);
-        Assert.Contains("\xae", content);
+        Assert.DoesNotContain("\n", content, StringComparison.Ordinal);
+        Assert.Contains("\xae", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,7 +90,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "A", "B" },
-            Values = new Dictionary<string, string> { ["A"] = "x", ["B"] = "y" },
+            Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["A"] = "x", ["B"] = "y" },
         };
 
         var content = serializer.RenderRecord(record);
@@ -102,7 +105,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "A", "MISSING", "B" },
-            Values = new Dictionary<string, string> { ["A"] = "x", ["B"] = "y" },
+            Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["A"] = "x", ["B"] = "y" },
         };
 
         var content = serializer.RenderRecord(record);

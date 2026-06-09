@@ -55,8 +55,8 @@ public class AllWritersTests : TempDirectoryTestBase
 
             var content = await File.ReadAllTextAsync(outputPath);
 
-            Assert.Contains("TEST", content);
-            Assert.Contains("000001", content);
+            Assert.Contains("TEST", content, StringComparison.Ordinal);
+            Assert.Contains("000001", content, StringComparison.Ordinal);
         }
     }
 
@@ -85,9 +85,9 @@ public class AllWritersTests : TempDirectoryTestBase
 
             if (format == LoadFileFormat.EdrmXml)
             {
-                var doc1Index = content.IndexOf("DocID=\"DOC00000001\"");
-                var doc2Index = content.IndexOf("DocID=\"DOC00000002\"");
-                var doc3Index = content.IndexOf("DocID=\"DOC00000003\"");
+                var doc1Index = content.IndexOf("DocID=\"DOC00000001\"", StringComparison.Ordinal);
+                var doc2Index = content.IndexOf("DocID=\"DOC00000002\"", StringComparison.Ordinal);
+                var doc3Index = content.IndexOf("DocID=\"DOC00000003\"", StringComparison.Ordinal);
 
                 Assert.True(doc1Index != -1);
                 Assert.True(doc2Index != -1);
@@ -97,28 +97,28 @@ public class AllWritersTests : TempDirectoryTestBase
                 var doc2Content = content.Substring(doc2Index, doc3Index - doc2Index);
                 var doc3Content = content.Substring(doc3Index);
 
-                Assert.Contains("TagName=\"PageCount\"", doc1Content);
-                Assert.Contains("TagValue=\"5\"", doc1Content);
+                Assert.Contains("TagName=\"PageCount\"", doc1Content, StringComparison.Ordinal);
+                Assert.Contains("TagValue=\"5\"", doc1Content, StringComparison.Ordinal);
 
-                Assert.Contains("TagName=\"PageCount\"", doc2Content);
-                Assert.Contains("TagValue=\"7\"", doc2Content);
+                Assert.Contains("TagName=\"PageCount\"", doc2Content, StringComparison.Ordinal);
+                Assert.Contains("TagValue=\"7\"", doc2Content, StringComparison.Ordinal);
 
-                Assert.Contains("TagName=\"PageCount\"", doc3Content);
-                Assert.Contains("TagValue=\"3\"", doc3Content);
+                Assert.Contains("TagName=\"PageCount\"", doc3Content, StringComparison.Ordinal);
+                Assert.Contains("TagValue=\"3\"", doc3Content, StringComparison.Ordinal);
             }
             else if (format == LoadFileFormat.Opt)
             {
-                var line1 = lines.FirstOrDefault(l => l.StartsWith("DOC00000001_001"));
-                var line2 = lines.FirstOrDefault(l => l.StartsWith("DOC00000002_001"));
-                var line3 = lines.FirstOrDefault(l => l.StartsWith("DOC00000003_001"));
+                var line1 = lines.FirstOrDefault(l => l.StartsWith("DOC00000001_001", StringComparison.Ordinal));
+                var line2 = lines.FirstOrDefault(l => l.StartsWith("DOC00000002_001", StringComparison.Ordinal));
+                var line3 = lines.FirstOrDefault(l => l.StartsWith("DOC00000003_001", StringComparison.Ordinal));
 
                 Assert.NotNull(line1);
                 Assert.NotNull(line2);
                 Assert.NotNull(line3);
 
-                Assert.EndsWith(",5", line1);
-                Assert.EndsWith(",7", line2);
-                Assert.EndsWith(",3", line3);
+                Assert.EndsWith(",5", line1, StringComparison.Ordinal);
+                Assert.EndsWith(",7", line2, StringComparison.Ordinal);
+                Assert.EndsWith(",3", line3, StringComparison.Ordinal);
             }
             else
             {

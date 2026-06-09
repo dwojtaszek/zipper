@@ -34,10 +34,10 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(6, lines.Length);
-        Assert.Contains("Control Number", lines[0]);
-        Assert.Contains("File Path", lines[0]);
-        Assert.Contains("EmailSubject", lines[0]);
-        Assert.Contains("ExtractedText", lines[0]);
+        Assert.Contains("Control Number", lines[0], StringComparison.Ordinal);
+        Assert.Contains("File Path", lines[0], StringComparison.Ordinal);
+        Assert.Contains("EmailSubject", lines[0], StringComparison.Ordinal);
+        Assert.Contains("ExtractedText", lines[0], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -113,11 +113,11 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(6, lines.Length);
-        Assert.Contains("DOCID", lines[0]);
-        Assert.Contains("BATES_NUMBER", lines[0]);
-        Assert.Contains("NATIVE_PATH", lines[0]);
-        Assert.Contains("IMAGE_PATH", lines[0]);
-        Assert.Contains("\r\n", content);
+        Assert.Contains("DOCID", lines[0], StringComparison.Ordinal);
+        Assert.Contains("BATES_NUMBER", lines[0], StringComparison.Ordinal);
+        Assert.Contains("NATIVE_PATH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("IMAGE_PATH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\r\n", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class DatLoadFileWriterTests : TempDirectoryTestBase
         stream.Position = 0;
         var content = Encoding.UTF8.GetString(stream.ToArray());
 
-        Assert.Contains("\r\n", content);
+        Assert.Contains("\r\n", content, StringComparison.Ordinal);
     }
 
 

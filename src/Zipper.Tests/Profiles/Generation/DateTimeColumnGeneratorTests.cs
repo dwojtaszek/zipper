@@ -1,3 +1,4 @@
+#pragma warning disable RS0030 // Do not use banned APIs
 using System.Globalization;
 using Xunit;
 using Zipper.Profiles;
@@ -105,7 +106,7 @@ public class DateTimeColumnGeneratorTests
         var settings = new ProfileSettings { DateTimeFormat = "yyyy-MM-dd HH:mm" };
         var generator = new DateTimeColumnGenerator(col, settings);
 
-        var generatedTimes = new HashSet<string>();
+        var generatedTimes = new HashSet<string>(StringComparer.Ordinal);
         var context = MakeContext();
         for (int i = 0; i < 50; i++)
         {
