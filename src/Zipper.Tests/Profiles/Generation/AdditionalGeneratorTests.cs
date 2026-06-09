@@ -206,4 +206,107 @@ public class AdditionalGeneratorTests
         var genNamed = new TextGenerator(colGen, null, null);
         Assert.NotEmpty(genNamed.Generate(context));
     }
+
+    [Theory]
+    [InlineData("sha1hash", 40)]
+    [InlineData("md5hash", 32)]
+    [InlineData("sha256hash", 64)]
+    public void Generate_Text_HashGenerators_ProduceLowercaseHexOfExpectedLength(string generatorName, int expectedLength)
+    {
+        var col = new ColumnDefinition { Name = "HASH", Generator = generatorName };
+        var gen = new TextGenerator(col, null, null);
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.Equal(expectedLength, value.Length);
+        Assert.Matches("^[0-9a-f]+$", value);
+    }
+
+    [Fact]
+    public void Generate_Text_ReviewNoteGenerator_ProducesNonEmptyNote()
+    {
+        var col = new ColumnDefinition { Name = "NOTE", Generator = "reviewnote" };
+        var gen = new TextGenerator(col, null, null);
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.NotEmpty(value);
+    }
+
+    [Fact]
+    public void Generate_Text_TimezoneGenerator_ProducesNonEmptyTimezone()
+    {
+        var col = new ColumnDefinition { Name = "TZ", Generator = "timezone" };
+        var gen = new TextGenerator(col, null, null);
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.NotEmpty(value);
+    }
+
+    [Fact]
+    public void Generate_Text_UnknownNamedGenerator_FallsBackToGeneratedValue()
+    {
+        var col = new ColumnDefinition { Name = "CUSTOM", Generator = "doesnotexist" };
+        var gen = new TextGenerator(col, null, null);
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.Equal("Generated_doesnotexist_12", value);
+    }
+
+    [Theory]
+    [InlineData("FILEPATH")]
+    [InlineData("FILENAME")]
+    [InlineData("FILEEXT")]
+    public void Generate_Text_FileColumnsWithoutFileData_ReturnEmpty(string columnName)
+    {
+        var col = new ColumnDefinition { Name = columnName };
+        var gen = new TextGenerator(col, null, null);
+        var context = new ColumnGenerationContext
+        {
+            NativeFileIndex = 1,
+            FolderNumber = 1,
+            DocumentIndex = 1,
+            Seeded = new Random(7),
+            Now = new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc),
+            FileData = null,
+        };
+
+        var value = gen.Generate(context);
+
+        Assert.Equal(string.Empty, value);
+    }
+
+    [Fact]
+    public void Generate_Date_ExplicitDateRangeWithEqualBounds_ReturnsThatDate()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "DATESENT",
+            Format = "yyyy-MM-dd",
+            DateRange = new DateRangeConfig { Min = "2023-05-17", Max = "2023-05-17" },
+        };
+        var gen = new DateGenerator(col, new ProfileSettings());
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.Equal("2023-05-17", value);
+    }
+
+    [Fact]
+    public void Generate_DateTime_ExplicitDateRangeWithEqualBounds_StaysOnThatDay()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "SENTSTAMP",
+            Format = "yyyy-MM-dd HH:mm",
+            DateRange = new DateRangeConfig { Min = "2023-05-17", Max = "2023-05-17" },
+        };
+        var gen = new DateTimeColumnGenerator(col, new ProfileSettings());
+
+        var value = gen.Generate(this.CreateContext());
+
+        Assert.StartsWith("2023-05-17 ", value, StringComparison.Ordinal);
+    }
 }
