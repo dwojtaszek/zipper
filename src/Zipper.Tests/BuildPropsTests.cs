@@ -14,6 +14,11 @@ public class BuildPropsTests
 
     private static readonly string RepoRoot = FindRepoRoot(AppContext.BaseDirectory);
 
+    /// <summary>
+    /// Walks up the directory tree to locate the root directory containing the build properties file.
+    /// </summary>
+    /// <param name="startDir">The directory to start the search from.</param>
+    /// <returns>The path to the repository root directory.</returns>
     private static string FindRepoRoot(string startDir)
     {
         var dir = new DirectoryInfo(startDir);
@@ -31,6 +36,10 @@ public class BuildPropsTests
             $"Could not find repo root ({BuildPropsFileName}) walking up from: {startDir}");
     }
 
+    /// <summary>
+    /// Loads the root <c>Directory.Build.props</c> file as an XML document.
+    /// </summary>
+    /// <returns>An <see cref="XDocument"/> representing the build properties file.</returns>
     private XDocument LoadBuildProps()
     {
         var path = Path.Combine(RepoRoot, BuildPropsFileName);
@@ -38,12 +47,27 @@ public class BuildPropsTests
         return XDocument.Load(path);
     }
 
+    /// <summary>
+    /// Gets the first XML element with the specified local name.
+    /// </summary>
+    /// <param name="doc">The XML document to search.</param>
+    /// <param name="propertyName">The local name of the property element to find.</param>
+    /// <returns>The <see cref="XElement"/> if found; otherwise, <c>null</c>.</returns>
     private static XElement? GetPropertyElement(XDocument doc, string propertyName)
         => doc.Descendants().FirstOrDefault(e => e.Name.LocalName == propertyName);
 
+    /// <summary>
+    /// Gets the string value of the specified property element.
+    /// </summary>
+    /// <param name="doc">The XML document to search.</param>
+    /// <param name="propertyName">The local name of the property element to find.</param>
+    /// <returns>The trimmed value of the property if found; otherwise, <c>null</c>.</returns>
     private static string? GetPropertyValue(XDocument doc, string propertyName)
         => GetPropertyElement(doc, propertyName)?.Value.Trim();
 
+    /// <summary>
+    /// Verifies that the <c>AnalysisMode</c> property is set to <c>latest-Recommended</c>.
+    /// </summary>
     [Fact]
     public void DirectoryBuildProps_ShouldHave_AnalysisMode_Set()
     {
@@ -54,6 +78,9 @@ public class BuildPropsTests
         Assert.Equal("latest-Recommended", value);
     }
 
+    /// <summary>
+    /// Verifies that the <c>EnableSingleFileAnalyzer</c> property is enabled with the correct TargetFramework condition.
+    /// </summary>
     [Fact]
     public void DirectoryBuildProps_ShouldHave_EnableSingleFileAnalyzer_True()
     {
