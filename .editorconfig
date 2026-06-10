@@ -156,6 +156,9 @@ dotnet_diagnostic.CA1805.severity = warning   # do not explicitly init to defaul
 dotnet_diagnostic.CA1860.severity = warning   # prefer Count/Length over Any()
 dotnet_diagnostic.CA1869.severity = warning   # cache and reuse JsonSerializerOptions
 
+# --- Security ---
+dotnet_analyzer_diagnostic.category-Security.severity = error
+
 # --- Intentional domain choices: disabled with justification ---
 dotnet_diagnostic.CA5394.severity = none   # System.Random drives synthetic test data, not security
 dotnet_diagnostic.CA2007.severity = none   # CLI application, not a library; ConfigureAwait adds no value
