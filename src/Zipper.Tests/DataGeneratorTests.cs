@@ -649,4 +649,178 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
         Assert.InRange(cust1Percent, 45.0, 55.0);
         Assert.InRange(cust2Percent, 45.0, 55.0);
     }
+
+    /// <summary>
+    /// Test that the date format override is applied to date columns without an explicit format.
+    /// </summary>
+    [Fact]
+    public void Constructor_DateFormatOverride_AppliesToDateColumns()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "date-format-override",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DATECREATED", Type = "date", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42, dateFormatOverride: "dd/MM/yyyy");
+        var workItem = new FileWorkItem { Index = 1, FilePathInZip = "Folder001/file001.pdf" };
+        var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+
+        var row = generator.GenerateRow(workItem, fileData);
+
+        Assert.Matches(@"^\d{2}/\d{2}/\d{4}$", row["DATECREATED"]);
+    }
+
+    /// <summary>
+    /// Test that an empty percentage override of zero suppresses empty values and bumps
+    /// zero-minimum multi-value counts so every value is populated.
+    /// </summary>
+    [Fact]
+    public void Constructor_EmptyPercentageOverrideZero_ProducesNoEmptyValues()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "empty-override-zero",
+            Settings = new ProfileSettings { EmptyValuePercentage = 90 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["tags"] = new DataSourceConfig { Count = 3, Prefix = "Tag_" },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "NOTE", Type = "text", EmptyPercentage = 90 },
+                new()
+                {
+                    Name = "TAGS",
+                    Type = "coded",
+                    DataSource = "tags",
+                    MultiValue = true,
+                    MultiValueCount = new RangeConfig { Min = 0, Max = 2 },
+                },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42, emptyPercentageOverride: 0);
+
+        for (int i = 1; i <= 50; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.NotEqual(string.Empty, row["NOTE"]);
+            Assert.NotEqual(string.Empty, row["TAGS"]);
+        }
+    }
+
+    /// <summary>
+    /// Test that an empty percentage override of 100 forces all non-required columns empty
+    /// while required columns keep their values.
+    /// </summary>
+    [Fact]
+    public void Constructor_EmptyPercentageOverrideFull_EmptiesNonRequiredColumnsOnly()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "empty-override-full",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "NOTE", Type = "text", EmptyPercentage = 0 },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42, emptyPercentageOverride: 100);
+
+        for (int i = 1; i <= 20; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.NotEqual(string.Empty, row["DOCID"]);
+            Assert.Equal(string.Empty, row["NOTE"]);
+        }
+    }
+
+    /// <summary>
+    /// Test that legacy and synthetic-email column types resolve to their dedicated generators.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_LegacyAndSyntheticEmailColumnTypes_ProduceExpectedShapes()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "legacy-types",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "CUSTODIAN", Type = "indexcustodian", Required = true },
+                new() { Name = "DATECREATED", Type = "legacydatecreated", Required = true },
+                new() { Name = "FILESIZE", Type = "randomfilesize", Required = true },
+                new() { Name = "TO", Type = "syntheticemailto", Required = true },
+                new() { Name = "FROM", Type = "syntheticemailfrom", Required = true },
+                new() { Name = "SUBJECT", Type = "syntheticemailsubject", Required = true },
+                new() { Name = "SENTDATE", Type = "syntheticemailsentdate", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        var workItem = new FileWorkItem { Index = 7, FolderNumber = 3, FilePathInZip = "Folder003/doc7.pdf" };
+        var fileData = new FileData { Data = new byte[256], WorkItem = workItem };
+
+        var row = generator.GenerateRow(workItem, fileData);
+
+        Assert.Equal("Custodian 8", row["CUSTODIAN"]); // (7 % 10) + 1
+        Assert.NotEmpty(row["DATECREATED"]);
+        Assert.True(long.Parse(row["FILESIZE"], System.Globalization.CultureInfo.InvariantCulture) > 0);
+        Assert.Contains("@", row["TO"], StringComparison.Ordinal);
+        Assert.Contains("@", row["FROM"], StringComparison.Ordinal);
+        Assert.NotEmpty(row["SUBJECT"]);
+        Assert.NotEmpty(row["SENTDATE"]);
+    }
+
+    /// <summary>
+    /// Test that a weighted data source whose weights sum to zero falls back to a uniform draw
+    /// instead of failing.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_WeightedSourceWithZeroTotalWeight_FallsBackToUniformDraw()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "zero-weights",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["tags"] = new DataSourceConfig
+                {
+                    Values = new List<string> { "alpha", "beta", "gamma" },
+                    Weights = new List<int> { 0, 0, 0 },
+                    Distribution = "weighted",
+                },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "TAG", Type = "coded", DataSource = "tags", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        var validValues = new HashSet<string>(StringComparer.Ordinal) { "alpha", "beta", "gamma" };
+
+        for (int i = 1; i <= 20; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.Contains(row["TAG"], validValues);
+        }
+    }
 }

@@ -375,5 +375,105 @@ namespace Zipper
                 if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true);
             }
         }
+
+        [Fact]
+        public void IsPathSafe_PathWithEmbeddedNull_ReturnsFalse()
+        {
+            var result = PathValidator.IsPathSafe("folder\0name", Directory.GetCurrentDirectory());
+
+            Assert.False(result);
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_SymlinkWithChildSuffix_EscapingBase_ReturnsNull()
+        {
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSuffixTest_" + Guid.NewGuid().ToString());
+            string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSuffixTest_" + Guid.NewGuid().ToString());
+
+            Directory.CreateDirectory(baseDir);
+            Directory.CreateDirectory(targetDir);
+
+            string linkPath = Path.Combine(baseDir, "symlink");
+            try
+            {
+                try
+                {
+                    Directory.CreateSymbolicLink(linkPath, targetDir);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Symlink creation is not permitted (e.g. Windows non-admin); skip.
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                {
+                    return;
+                }
+
+                // The child segment does not exist on disk, so resolution must walk up to the
+                // symlink and rebuild the path from the resolved target plus the child suffix.
+                var escapePath = Path.Combine(linkPath, "child");
+                var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+                Assert.Null(result);
+            }
+            finally
+            {
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+                if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true);
+            }
+        }
+
+        [Fact]
+        public void ValidateAndCreateDirectory_SymlinkWithChildSuffix_InsideBase_ReturnsDirectoryInfo()
+        {
+            string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString());
+            string targetDir = Path.Combine(baseDir, "real");
+
+            Directory.CreateDirectory(baseDir);
+            Directory.CreateDirectory(targetDir);
+
+            string linkPath = Path.Combine(baseDir, "symlink");
+            try
+            {
+                try
+                {
+                    Directory.CreateSymbolicLink(linkPath, targetDir);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                {
+                    return;
+                }
+
+                var insidePath = Path.Combine(linkPath, "child");
+                var result = PathValidator.ValidateAndCreateDirectory(insidePath, baseDir);
+
+                Assert.NotNull(result);
+                Assert.StartsWith(baseDir, result.FullName, StringComparison.Ordinal);
+            }
+            finally
+            {
+                if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
+            }
+        }
     }
 }

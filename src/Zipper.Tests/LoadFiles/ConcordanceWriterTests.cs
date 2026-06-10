@@ -102,4 +102,83 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
         Assert.Contains("CONTROLNUMBER", lines_split[0], StringComparison.Ordinal);
         Assert.Contains("PATH", lines_split[0], StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task WriteAsync_EmlWithTextAndBates_EmitsEmailTextPathAndBatesColumns()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 2, FileType = "eml", WithText = true },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Metadata = new MetadataConfig { WithMetadata = true, Seed = 42 },
+            Bates = new BatesNumberConfig { Prefix = "TST", Start = 1, Digits = 6 },
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.eml",
+                    FilePathInZip = "folder/doc1.eml",
+                },
+                DataLength = 100,
+                Email = new Zipper.Emails.Email
+                {
+                    To = "alice@example.com",
+                    From = "bob@example.com",
+                    Subject = "Quarterly Report",
+                    SentDate = new DateTime(2024, 1, 15, 10, 30, 0, DateTimeKind.Utc),
+                },
+                Attachment = ("invoice.pdf", new byte[] { 1, 2, 3 }),
+            },
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 2,
+                    FolderNumber = 1,
+                    FileName = "doc2.eml",
+                    FilePathInZip = "folder/doc2.eml",
+                },
+                DataLength = 50,
+            },
+        };
+
+        var writer = new ConcordanceComposingWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(3, lines.Length);
+
+        // Header must use Concordance names for the email, text, and Bates columns.
+        Assert.Contains("þTOþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þFROMþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þSUBJECTþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þSENTDATEþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þATTACHMENTþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þTEXT_PATHþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þBATESþ", lines[0], StringComparison.Ordinal);
+
+        // First record carries the explicit email template and attachment values.
+        Assert.Contains("þalice@example.comþ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þbob@example.comþ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þQuarterly Reportþ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þ2024-01-15 10:30:00þ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þinvoice.pdfþ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þfolder/doc1.txtþ", lines[1], StringComparison.Ordinal);
+        Assert.Contains("þTST000001þ", lines[1], StringComparison.Ordinal);
+
+        // Second record has no email template, so synthetic fallbacks are used.
+        Assert.Contains("þrecipient2@example.comþ", lines[2], StringComparison.Ordinal);
+        Assert.Contains("þsender2@example.comþ", lines[2], StringComparison.Ordinal);
+        Assert.Contains("þEmail Subject 2þ", lines[2], StringComparison.Ordinal);
+        Assert.Contains("þfolder/doc2.txtþ", lines[2], StringComparison.Ordinal);
+    }
 }
