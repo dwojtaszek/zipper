@@ -10,6 +10,7 @@ public class EditorConfigTests
 {
     private const string SolutionFileName = "zipper.sln";
     private const string EditorConfigFileName = ".editorconfig";
+    private const int RegexTimeoutSeconds = 1;
 
     private static readonly string RepoRoot = FindRepoRoot(System.AppContext.BaseDirectory);
 
@@ -38,13 +39,11 @@ public class EditorConfigTests
 
         // Regex ensures we match the setting at the start of a line (or preceded by spaces, but not #)
         // and allows flexible whitespace around the equals sign.
-        var timeout = System.TimeSpan.FromSeconds(1);
-        var hasSecurityCategory = Regex.IsMatch(content, @"^(?!\s*#)\s*dotnet_analyzer_diagnostic\.category-Security\.severity\s*=\s*error", RegexOptions.Multiline, timeout) ||
-                                  Regex.IsMatch(content, @"^(?!\s*#)\s*dotnet_diagnostic\.category_security\.severity\s*=\s*error", RegexOptions.Multiline, timeout);
+        var hasSecurityCategory = Regex.IsMatch(content, @"^(?!\s*#)\s*dotnet_analyzer_diagnostic\.category-Security\.severity\s*=\s*error", RegexOptions.Multiline, System.TimeSpan.FromSeconds(RegexTimeoutSeconds));
 
         Assert.True(
             hasSecurityCategory,
-            "Expected .editorconfig to elevate security analyzer rules (category_security) to error severity."
+            "Expected .editorconfig to elevate security analyzer rules (category-Security) to error severity."
         );
     }
 }
