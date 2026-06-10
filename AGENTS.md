@@ -129,13 +129,15 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 8. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below
 9. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
 10. Check SonarCloud on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) with **zero** BLOCKER/MAJOR issues — query the gate conditions, not just the issue list. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
-11. Address review comments from **all** bots/reviewers (CodeRabbit, Gemini Code Assist, Codex, SonarCloud, human). Blocking/major issues required, nitpicks optional. Bots post to three *separate* endpoints — you must query all three to discover every comment (the PR web view and `gh pr view` alone miss inline threads):
+11. **Run `bash tests/wait-for-reviews.sh <PR-number>` after creating the PR and again after every push.** The script blocks until every robot reviewer (Gemini Code Assist, CodeRabbit, Codex) has reviewed or declared a rate-limit skip, then exits non-zero while any review thread is unresolved. A "pass" or "skipped" check status from a review bot is **not** an approval — only the script's exit 0 is.
+
+    For each finding it reports: verify it against current code, fix if still valid, or reply on the thread with a brief skip reason (e.g. conflicts with an explicit design decision), then resolve the thread and re-run the script. Blocking/major issues must be fixed; nitpicks may be skipped-with-reason but never silently ignored. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
+
+    Fallback if the script is unavailable — bots post to three *separate* endpoints; query all three (the PR web view and `gh pr view` alone miss inline threads):
     - **Inline review comments** (code-anchored): `gh api repos/<owner>/<repo>/pulls/<N>/comments --paginate`
     - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
     - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
-
-    For each finding: verify it against current code, fix if still valid, or skip with a brief reason (e.g. conflicts with an explicit design decision). If a suggestion contradicts a deliberate choice, reply on the thread explaining why rather than silently ignoring it. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
-12. Merge after all checks pass and reviews are addressed
+12. Merge after all checks pass, `tests/wait-for-reviews.sh` exits 0, and reviews are addressed. Branch protection on `main` enforces this server-side: GitHub refuses the merge while any review thread is unresolved (see [CI.md](CI.md#robot-reviews)).
 
 **Test location:** `src/Zipper.Tests/`.
 
