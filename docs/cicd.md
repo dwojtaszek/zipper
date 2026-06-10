@@ -91,7 +91,7 @@ Trigger: `push` → `main`, and tags `v*`.
 1. **prepare** — computes version. Tag push → exact `vX.Y.Z`; main push → next patch with `-dev` suffix.
 2. **lint** — restore (locked) + format check.
 3. **build-and-test** — same matrix as PR, plus a **self-contained per-platform publish** (`linux-x64`, `win-x64`, `osx-arm64`) uploaded as artifacts (7-day retention).
-4. **tag-and-release** — main only, skipped on `[skip ci]`. Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with auto-generated notes and the three platform binaries. Idempotent: skips if the tag already exists. Release history is in `git log` (Conventional Commits) and the GitHub Releases page; there is no `CHANGELOG.md`.
+4. **tag-and-release** — main only, skipped on `[skip ci]`. Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with the three platform binaries. The release body is sourced in priority order: (1) the merged PR's `## Release Notes` section, (2) GitHub Models AI summary of commits since the previous tag (model: `gpt-4o-mini`), (3) static fallback `"See commit history for changes in this release."` Agents and humans must include a `## Release Notes` section in every PR body — see [Release Notes Mandate](../AGENTS.md#release-notes-mandate). Idempotent: skips if the tag already exists. Release history is on the GitHub Releases page; there is no `CHANGELOG.md`.
 
 ### 5. Scheduled / bot
 

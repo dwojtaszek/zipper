@@ -518,7 +518,7 @@ public class ProductionSetTests : IDisposable
             Assert.True(vol2Deleted, "Test did not induce the intended VOL002 deletion failure.");
 
             // The generation task should now fail mid-write (when it tries to write to VOL002)
-            await Assert.ThrowsAnyAsync<System.IO.DirectoryNotFoundException>(async () => await generateTask.ConfigureAwait(false));
+            await Assert.ThrowsAnyAsync<System.IO.DirectoryNotFoundException>(() => generateTask);
 
             // Verify: no PRODUCTION_* directory should remain
             var productionDirs = Directory.GetDirectories(outputPath, "PRODUCTION_*");

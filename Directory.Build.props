@@ -6,6 +6,7 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>latest-Recommended</AnalysisMode>
+    <AnalysisModeSecurity>All</AnalysisModeSecurity>
     <!-- Single-file analysis only supported for net8.0+; netstandard2.0 (Zipper.Analyzers) is excluded by this condition -->
     <EnableSingleFileAnalyzer Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</EnableSingleFileAnalyzer>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
