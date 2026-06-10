@@ -712,8 +712,8 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
             var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
             var row = generator.GenerateRow(workItem, fileData);
 
-            Assert.NotEqual(string.Empty, row["NOTE"]);
-            Assert.NotEqual(string.Empty, row["TAGS"]);
+            Assert.NotEmpty(row["NOTE"]);
+            Assert.NotEmpty(row["TAGS"]);
         }
     }
 
@@ -743,7 +743,7 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
             var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
             var row = generator.GenerateRow(workItem, fileData);
 
-            Assert.NotEqual(string.Empty, row["DOCID"]);
+            Assert.NotEmpty(row["DOCID"]);
             Assert.Equal(string.Empty, row["NOTE"]);
         }
     }

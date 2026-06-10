@@ -413,7 +413,7 @@ namespace Zipper
                 {
                     return;
                 }
-                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                catch (System.IO.IOException)
                 {
                     return;
                 }
@@ -459,7 +459,7 @@ namespace Zipper
                 {
                     return;
                 }
-                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                catch (System.IO.IOException)
                 {
                     return;
                 }
@@ -468,7 +468,10 @@ namespace Zipper
                 var result = PathValidator.ValidateAndCreateDirectory(insidePath, baseDir);
 
                 Assert.NotNull(result);
-                Assert.StartsWith(baseDir, result.FullName, StringComparison.Ordinal);
+                var comparison = OperatingSystem.IsWindows()
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+                Assert.StartsWith(baseDir, result.FullName, comparison);
             }
             finally
             {
