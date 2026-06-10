@@ -141,7 +141,14 @@ namespace Zipper
                     if (zipFilePath != null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
                     if (loadFilePath != null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
                 }
-                catch { }
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+                catch (Exception)
+                {
+                    // Best-effort cleanup; do not mask the original generation exception.
+                }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
                 throw;
             }
         }
