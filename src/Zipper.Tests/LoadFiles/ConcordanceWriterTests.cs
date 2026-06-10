@@ -153,7 +153,7 @@ public class ConcordanceWriterTests : TempDirectoryTestBase
         await writer.WriteAsync(stream, request, files);
 
         var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
-        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal(3, lines.Length);
 
