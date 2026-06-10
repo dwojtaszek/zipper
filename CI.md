@@ -39,6 +39,35 @@ curl -s "https://sonarcloud.io/api/qualitygates/project_status?projectKey=dwojta
 2. Amend the last commit and force-push **your PR branch** (not `main`): `git commit --amend --no-edit && git push --force-with-lease`
 3. Re-check after CI re-runs
 
+## Robot Reviews
+
+After creating a PR — and after every subsequent push — run the review-wait gate:
+
+```bash
+bash tests/wait-for-reviews.sh <PR-number> [timeout-minutes]   # default timeout: 20
+```
+
+The script blocks until each expected bot (Gemini Code Assist, CodeRabbit, Codex) has posted a review or declared a rate-limit skip, then lists every unresolved review thread and exits non-zero while any remain. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A bot that stays silent past the timeout produces a warning, not a failure.
+
+Caveats:
+- A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
+- Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
+
+Server-side enforcement: `main` has branch protection with **required conversation resolution** — GitHub refuses the merge while any review thread is unresolved. One-time setup (admin):
+
+```bash
+gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
+  --input - <<'JSON'
+{
+  "required_status_checks": null,
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null,
+  "required_conversation_resolution": true
+}
+JSON
+```
+
 ## CodeRabbit
 
 Address blocking issues (required). Nitpicks are optional.
