@@ -504,6 +504,7 @@ namespace Zipper
         [Fact]
         public void Validate_WithNonUsCulture_ParsesIsoDateRangesCorrectly()
         {
+#pragma warning disable RS0030 // Do not use banned APIs
             var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
             var originalUiCulture = System.Globalization.CultureInfo.CurrentUICulture;
 
@@ -530,6 +531,7 @@ namespace Zipper
                 System.Globalization.CultureInfo.CurrentCulture = originalCulture;
                 System.Globalization.CultureInfo.CurrentUICulture = originalUiCulture;
             }
+#pragma warning restore RS0030 // Do not use banned APIs
         }
 
         [Fact]
