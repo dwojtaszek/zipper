@@ -102,4 +102,13 @@ public class BuildPropsTests
         Assert.Contains("IsTargetFrameworkCompatible", condition, StringComparison.Ordinal);
         Assert.Contains("net8.0", condition, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void DirectoryBuildProps_ShouldHave_InvariantGlobalization_True()
+    {
+        var doc = LoadBuildProps();
+        var elements = GetPropertyElements(doc, "InvariantGlobalization").ToList();
+        var element = Assert.Single(elements);
+        Assert.Equal("true", element.Value.Trim(), ignoreCase: true);
+    }
 }

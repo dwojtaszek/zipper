@@ -6,3 +6,11 @@
 - **telemetry**: host=claude-code mode=branch specialists=4 bundle=~2500c
 - **lessons**: For build-config-only diffs, all specialists return INFO at most. The Condition-assertion-too-loose finding was the only multi-source finding and most valuable — caught by testing (conf 8), adversarial (conf 8), and correctness (conf 8).
 - **suppressions**: none
+### 2026-06-11 claude-code:branch:feat/ISSUE-427-spike-evaluate-invariantglobalization-fo
+
+- **findings**: 2 INFO
+- **outcome**: accepted (0 action needed, coverage confirmed elsewhere)
+- **telemetry**: host=claude-code mode=branch specialists=1 bundle=294c
+- **lessons**: none
+- **suppressions**: none
+

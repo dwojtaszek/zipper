@@ -502,39 +502,6 @@ namespace Zipper
         }
 
         [Fact]
-        public void Validate_WithNonUsCulture_ParsesIsoDateRangesCorrectly()
-        {
-#pragma warning disable RS0030 // Do not use banned APIs
-            var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
-            var originalUiCulture = System.Globalization.CultureInfo.CurrentUICulture;
-
-            try
-            {
-                var nonUsCulture = (System.Globalization.CultureInfo)System.Globalization.CultureInfo.GetCultureInfo("ar-SA").Clone();
-                nonUsCulture.DateTimeFormat.Calendar = new System.Globalization.UmAlQuraCalendar();
-                System.Globalization.CultureInfo.CurrentCulture = nonUsCulture;
-                System.Globalization.CultureInfo.CurrentUICulture = nonUsCulture;
-
-                var profile = CreateMinimalProfile();
-                profile.Columns.Add(new ColumnDefinition
-                {
-                    Name = "ValidDateRange",
-                    Type = "date",
-                    DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" }
-                });
-
-                // Act & Assert - Should not throw FormatException or InvalidOperationException
-                ColumnProfileLoader.Validate(profile);
-            }
-            finally
-            {
-                System.Globalization.CultureInfo.CurrentCulture = originalCulture;
-                System.Globalization.CultureInfo.CurrentUICulture = originalUiCulture;
-            }
-#pragma warning restore RS0030 // Do not use banned APIs
-        }
-
-        [Fact]
         public void Validate_WithWeightsCountExceedingValuesCount_ThrowsInvalidOperationException()
         {
             // Arrange
