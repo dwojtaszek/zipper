@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+cd "$(dirname "$0")"
+
 echo "Testing Deterministic property..."
 DETERMINISTIC=$(dotnet msbuild ../src/Zipper.csproj -getProperty:Deterministic)
 if [[ "$DETERMINISTIC" != "true" ]]; then

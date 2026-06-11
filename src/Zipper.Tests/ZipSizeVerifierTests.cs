@@ -14,7 +14,7 @@ namespace Zipper.Tests
         [InlineData(1000, 1101, false, 0.101)]
         [InlineData(1000, 899, false, 0.101)]
         // Zero target
-        [InlineData(0, 1000, true, 0.0)]
+        [InlineData(0, 1000, false, double.PositiveInfinity)]
         [InlineData(0, 0, true, 0.0)]
         // Target smaller than fixed overhead
         [InlineData(10, 1000, false, 99.0)]

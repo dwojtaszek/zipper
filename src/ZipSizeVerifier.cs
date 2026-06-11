@@ -4,7 +4,12 @@ namespace Zipper
     {
         public static (bool IsWithinTolerance, double Deviation) Verify(long targetSize, long actualSize)
         {
-            double deviation = targetSize > 0 ? Math.Abs(actualSize - targetSize) / (double)targetSize : 0;
+            if (targetSize <= 0)
+            {
+                bool isZeroMatch = targetSize == 0 && actualSize == 0;
+                return (isZeroMatch, isZeroMatch ? 0.0 : double.PositiveInfinity);
+            }
+            double deviation = Math.Abs(actualSize - targetSize) / (double)targetSize;
             bool isWithinTolerance = deviation <= 0.10;
             return (isWithinTolerance, deviation);
         }
