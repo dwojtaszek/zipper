@@ -107,8 +107,8 @@ public class BuildPropsTests
     public void DirectoryBuildProps_ShouldHave_InvariantGlobalization_True()
     {
         var doc = LoadBuildProps();
-        var value = GetPropertyValue(doc, "InvariantGlobalization");
-        Assert.NotNull(value);
-        Assert.Equal("true", value, ignoreCase: true);
+        var elements = GetPropertyElements(doc, "InvariantGlobalization").ToList();
+        var element = Assert.Single(elements);
+        Assert.Equal("true", element.Value.Trim(), ignoreCase: true);
     }
 }
