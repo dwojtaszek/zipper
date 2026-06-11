@@ -124,13 +124,28 @@ namespace Zipper
                 this.performanceMonitor.FinalizeProgress();
                 var performanceMetrics = this.performanceMonitor.Stop();
 
+                long actualZipSize = 0;
+                ZipSizeVerificationResult? zipSizeVerification = null;
+
+                if (zipFilePath != null && File.Exists(zipFilePath))
+                {
+                    actualZipSize = new FileInfo(zipFilePath).Length;
+                    if (request.Output.TargetZipSize.HasValue)
+                    {
+                        var (isWithinTolerance, deviation) = ZipSizeVerifier.Verify(request.Output.TargetZipSize.Value, actualZipSize);
+                        zipSizeVerification = new ZipSizeVerificationResult(isWithinTolerance, deviation);
+                    }
+                }
+
                 return new FileGenerationResult
                 {
-                    ZipFilePath = zipFilePath,
-                    LoadFilePath = actualLoadFilePath,
+                    ZipFilePath = zipFilePath ?? string.Empty,
+                    LoadFilePath = actualLoadFilePath ?? string.Empty,
                     FilesGenerated = request.Output.FileCount,
                     GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
                     FilesPerSecond = performanceMetrics.FilesPerSecond,
+                    ActualZipSize = actualZipSize,
+                    ZipSizeVerification = zipSizeVerification,
                 };
             }
             catch

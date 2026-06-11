@@ -52,12 +52,13 @@ namespace Zipper
             // This is the success criterion for the operation; verify and report it.
             // Outside tolerance is warned (not a hard failure) because compression
             // variance can legitimately push the result beyond +/- 10%.
-            if (request.Output.TargetZipSize.HasValue && File.Exists(result.ZipFilePath))
+            if (request.Output.TargetZipSize.HasValue && result.ZipSizeVerification != null)
             {
                 long target = request.Output.TargetZipSize.Value;
-                long actual = new FileInfo(result.ZipFilePath).Length;
-                double deviation = target > 0 ? Math.Abs(actual - target) / (double)target : 0;
-                if (deviation > 0.10)
+                long actual = result.ActualZipSize;
+                double deviation = result.ZipSizeVerification.Deviation;
+
+                if (!result.ZipSizeVerification.IsWithinTolerance)
                 {
                     await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                         "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
