@@ -31,35 +31,6 @@ namespace Zipper
         }
 
         [Fact]
-        public void ToEml_DateHeader_UsesEnglishAbbreviationsRegardlessOfLocale()
-        {
-            var originalCulture = Thread.CurrentThread.CurrentCulture;
-            try
-            {
-                Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("pl-PL");
-
-                var email = new Email
-                {
-                    To = "test@example.com",
-                    From = "sender@example.com",
-                    Subject = "Locale test",
-                    SentDate = new DateTime(2024, 1, 15, 14, 0, 0), // Monday, January
-                    Body = "Body.",
-                };
-
-                var result = EmailSerializer.ToEml(email, null);
-                var content = Encoding.UTF8.GetString(result);
-
-                // Must use English abbreviations per RFC 2822
-                Assert.Contains("Date: Mon, 15 Jan 2024 14:00:00", content, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Thread.CurrentThread.CurrentCulture = originalCulture;
-            }
-        }
-
-        [Fact]
         public void ToEml_PreservesUnicodeBody()
         {
             var unicodeBody = "Unicode: café, naïve, 你好, Привет";
