@@ -18,14 +18,14 @@ namespace Zipper
                 await mode.RunAsync(request, cancellationToken).ConfigureAwait(false);
                 return 0;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested || ex.CancellationToken == cancellationToken)
             {
-                Console.Error.WriteLine("\nOperation cancelled.");
+                await Console.Error.WriteLineAsync("\nOperation cancelled.").ConfigureAwait(false);
                 return 130;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\nAn error occurred: {0}", ex.Message));
+                await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\nAn error occurred: {0}", ex.Message)).ConfigureAwait(false);
                 return 1;
             }
         }

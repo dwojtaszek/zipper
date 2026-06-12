@@ -169,14 +169,18 @@ namespace Zipper
         {
             public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
             {
-                throw new OperationCanceledException("Cancelled by test");
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.CompletedTask;
             }
         }
 
         [Fact]
         public async Task RunAsync_OperationCanceledException_Returns130AndPrintsMessage()
         {
-            var (exit, _, err) = await RunWithCapture(new CancellingMode(), DefaultRequest());
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var (exit, _, err) = await RunWithCapture(new CancellingMode(), DefaultRequest(), cts.Token);
             Assert.Equal(130, exit);
             Assert.Contains("\nOperation cancelled.", err, StringComparison.Ordinal);
         }

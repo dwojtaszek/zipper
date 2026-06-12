@@ -77,26 +77,13 @@ internal static class LoadfileOnlyGenerator
                     await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
-                string propertiesPath;
-                try
-                {
-                    propertiesPath = await LoadfileAuditWriter.WriteAsync(
-                        loadFilePath,
-                        request,
-                        request.Output.FileCount,
-                        chaosEngine?.Anomalies,
-                        format).ConfigureAwait(false);
-                    generatedFiles.Add(propertiesPath);
-                }
-                catch
-                {
-                    if (File.Exists(loadFilePath))
-                    {
-                        File.Delete(loadFilePath);
-                    }
-
-                    throw;
-                }
+                string propertiesPath = await LoadfileAuditWriter.WriteAsync(
+                    loadFilePath,
+                    request,
+                    request.Output.FileCount,
+                    chaosEngine?.Anomalies,
+                    format).ConfigureAwait(false);
+                generatedFiles.Add(propertiesPath);
 
                 if (format == request.LoadFile.LoadFileFormat || string.IsNullOrEmpty(primaryLoadFilePath))
                 {

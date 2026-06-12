@@ -52,13 +52,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 #pragma warning restore S2245
                 var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
-                long lineCount = 0;
                 foreach (var fileData in processedFiles)
                 {
-                    if (++lineCount % 1000 == 0)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                    }
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
                     await element.WriteToAsync(writer, cancellationToken);

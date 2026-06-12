@@ -77,13 +77,9 @@ internal static class LoadFileEmitter
                 await writer.WriteAsync(eol).ConfigureAwait(false);
             }
 
-            long lineCount = 0;
             foreach (var record in records)
             {
-                if (++lineCount % 1000 == 0)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
+                cancellationToken.ThrowIfCancellationRequested();
 
                 await writer.WriteAsync(serializer.RenderRecord(record)).ConfigureAwait(false);
                 await writer.WriteAsync(eol).ConfigureAwait(false);
@@ -122,10 +118,7 @@ internal static class LoadFileEmitter
 
         foreach (var record in records)
         {
-            if (lineNumber % 1000 == 0)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-            }
+            cancellationToken.ThrowIfCancellationRequested();
 
             await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol, cancellationToken).ConfigureAwait(false);
             lineNumber++;
