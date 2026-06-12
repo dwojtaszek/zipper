@@ -1,6 +1,4 @@
-using System;
 using Xunit;
-using Zipper;
 
 namespace Zipper.Tests
 {
