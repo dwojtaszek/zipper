@@ -22,6 +22,7 @@ internal interface ILoadFileWriter
     /// <param name="request">File generation request parameters.</param>
     /// <param name="processedFiles">List of processed file data.</param>
     /// <param name="chaosEngine">Optional chaos engine for anomaly injection.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Task representing the write operation.</returns>
-    Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.IReadOnlyList<FileData> processedFiles, ChaosEngine? chaosEngine = null);
+    Task WriteAsync(Stream stream, FileGenerationRequest request, System.Collections.Generic.IReadOnlyList<FileData> processedFiles, ChaosEngine? chaosEngine = null, CancellationToken cancellationToken = default);
 }

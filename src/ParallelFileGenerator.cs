@@ -13,7 +13,7 @@ namespace Zipper
     {
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
 
-        public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request)
+        public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             string? zipFilePath = null;
             string? loadFilePath = null;
@@ -65,18 +65,18 @@ namespace Zipper
                 }
 
                 // Create channels for work distribution
-                var workChannelReader = CreateWorkChannel(request.Output.FileCount, request.Output.Folders, request.LoadFile.Distribution, request.Output.FileType, request.Output.Concurrency);
+                var workChannelReader = CreateWorkChannel(request.Output.FileCount, request.Output.Folders, request.LoadFile.Distribution, request.Output.FileType, request.Output.Concurrency, cancellationToken);
                 var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
                 {
                     FullMode = BoundedChannelFullMode.Wait,
                 });
 
                 // Start the consumer task to write the archive concurrently
-                var consumerTask = ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader);
+                var consumerTask = ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
 
                 // Generate files in parallel (producers)
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator))
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator, cancellationToken))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -168,7 +168,7 @@ namespace Zipper
             }
         }
 
-        private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType, int concurrency)
+        private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType, int concurrency, CancellationToken cancellationToken)
         {
             var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(concurrency * 2)
             {
@@ -194,7 +194,7 @@ namespace Zipper
                             FolderName = folderName,
                             FileName = fileName,
                             FilePathInZip = filePathInZip,
-                        }).ConfigureAwait(false);
+                        }, cancellationToken).ConfigureAwait(false);
                     }
 
                     writer.Complete();
@@ -203,21 +203,21 @@ namespace Zipper
                 {
                     writer.Complete(ex);
                 }
-            });
+            }, cancellationToken);
 
             return channel.Reader;
         }
 
-        private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator)
+        private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator, CancellationToken cancellationToken)
         {
             long filesProcessed = 0;
 
-            await foreach (var workItem in reader.ReadAllAsync().ConfigureAwait(false))
+            await foreach (var workItem in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
                 try
                 {
-                    await writer.WriteAsync(fileData).ConfigureAwait(false);
+                    await writer.WriteAsync(fileData, cancellationToken).ConfigureAwait(false);
                 }
                 catch
                 {

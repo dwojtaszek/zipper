@@ -38,8 +38,24 @@ namespace Zipper
                 return 1;
             }
 
+            using var cts = new CancellationTokenSource();
+            using var sigInt = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+                System.Runtime.InteropServices.PosixSignal.SIGINT,
+                context =>
+                {
+                    context.Cancel = true;
+                    cts.Cancel();
+                });
+            using var sigTerm = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+                System.Runtime.InteropServices.PosixSignal.SIGTERM,
+                context =>
+                {
+                    context.Cancel = true;
+                    cts.Cancel();
+                });
+
             IGenerationMode mode = SelectMode(request);
-            return await GenerationRunner.RunAsync(mode, request).ConfigureAwait(false);
+            return await GenerationRunner.RunAsync(mode, request, cts.Token).ConfigureAwait(false);
         }
 
         /// <summary>

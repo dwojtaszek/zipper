@@ -16,13 +16,14 @@ internal sealed class ConcordanceComposingWriter : ILoadFileWriter
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
+        ChaosEngine? chaosEngine = null,
+        CancellationToken cancellationToken = default)
     {
         var composer = new ConcordanceComposer(request);
         var serializer = new ConcordanceSerializer(request);
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null).ConfigureAwait(false);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null, cancellationToken).ConfigureAwait(false);
     }
 }

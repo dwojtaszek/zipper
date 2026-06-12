@@ -11,12 +11,17 @@ namespace Zipper
         /// Exception messages are written to standard error in the legacy format
         /// (<c>"\nAn error occurred: {message}"</c>).
         /// </summary>
-        public static async Task<int> RunAsync(IGenerationMode mode, FileGenerationRequest request)
+        public static async Task<int> RunAsync(IGenerationMode mode, FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             try
             {
-                await mode.RunAsync(request).ConfigureAwait(false);
+                await mode.RunAsync(request, cancellationToken).ConfigureAwait(false);
                 return 0;
+            }
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine("\nOperation cancelled.");
+                return 130;
             }
             catch (Exception ex)
             {

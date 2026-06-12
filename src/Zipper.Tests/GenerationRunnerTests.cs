@@ -96,7 +96,7 @@ namespace Zipper
             await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
         }
 
-        private static async Task<(int exitCode, string stdout, string stderr)> RunWithCapture(IGenerationMode mode, FileGenerationRequest request)
+        private static async Task<(int exitCode, string stdout, string stderr)> RunWithCapture(IGenerationMode mode, FileGenerationRequest request, CancellationToken token = default)
         {
             var originalOut = Console.Out;
             var originalError = Console.Error;
@@ -106,7 +106,7 @@ namespace Zipper
                 using var errWriter = new StringWriter();
                 Console.SetOut(outWriter);
                 Console.SetError(errWriter);
-                int exit = await GenerationRunner.RunAsync(mode, request).ConfigureAwait(false);
+                int exit = await GenerationRunner.RunAsync(mode, request, token).ConfigureAwait(false);
                 return (exit, outWriter.ToString(), errWriter.ToString());
             }
             finally
@@ -134,7 +134,7 @@ namespace Zipper
         {
             public int RunCount { get; private set; }
 
-            public Task RunAsync(FileGenerationRequest request)
+            public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
             {
                 this.RunCount++;
                 return Task.CompletedTask;
@@ -150,7 +150,7 @@ namespace Zipper
                 this.message = message;
             }
 
-            public Task RunAsync(FileGenerationRequest request) =>
+            public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default) =>
                 throw new InvalidOperationException(this.message);
         }
 
@@ -158,11 +158,27 @@ namespace Zipper
         {
             public FileGenerationRequest? LastRequest { get; private set; }
 
-            public Task RunAsync(FileGenerationRequest request)
+            public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
             {
                 this.LastRequest = request;
                 return Task.CompletedTask;
             }
+        }
+
+        private sealed class CancellingMode : IGenerationMode
+        {
+            public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
+            {
+                throw new OperationCanceledException("Cancelled by test");
+            }
+        }
+
+        [Fact]
+        public async Task RunAsync_OperationCanceledException_Returns130AndPrintsMessage()
+        {
+            var (exit, _, err) = await RunWithCapture(new CancellingMode(), DefaultRequest());
+            Assert.Equal(130, exit);
+            Assert.Contains("\nOperation cancelled.", err, StringComparison.Ordinal);
         }
     }
 }

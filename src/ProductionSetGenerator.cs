@@ -14,7 +14,7 @@ internal static class ProductionSetGenerator
     /// </summary>
     /// <param name="request">File generation request with production set settings.</param>
     /// <returns>Result containing paths and performance metrics.</returns>
-    public static async Task<ProductionSetResult> GenerateAsync(FileGenerationRequest request)
+    public static async Task<ProductionSetResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -30,7 +30,7 @@ internal static class ProductionSetGenerator
 
         try
         {
-            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch).ConfigureAwait(false);
+            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -52,7 +52,7 @@ internal static class ProductionSetGenerator
     }
 
     private static async Task<ProductionSetResult> GenerateCoreAsync(
-        FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch)
+        FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch, CancellationToken cancellationToken)
     {
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
@@ -92,6 +92,8 @@ internal static class ProductionSetGenerator
 
         foreach (var plan in plans)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var workItem = new FileWorkItem
             {
                 Index = plan.Index + 1,
@@ -178,7 +180,7 @@ internal static class ProductionSetGenerator
         var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (datStream.ConfigureAwait(false))
         {
-            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine).ConfigureAwait(false);
+            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine, cancellationToken).ConfigureAwait(false);
         }
 
         var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datPath, request, totalRecords, datChaosEngine?.Anomalies, LoadFileFormat.Dat);
@@ -194,7 +196,7 @@ internal static class ProductionSetGenerator
         var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (optStream.ConfigureAwait(false))
         {
-            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine).ConfigureAwait(false);
+            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine, cancellationToken).ConfigureAwait(false);
         }
 
         var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optPath, request, optTotalLines, optChaosEngine?.Anomalies, LoadFileFormat.Opt);
