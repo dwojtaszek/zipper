@@ -55,5 +55,11 @@ namespace Zipper
         public TimeSpan GenerationTime { get; set; }
 
         public double FilesPerSecond { get; set; }
+
+        public long ActualZipSize { get; set; }
+
+        public ZipSizeVerificationResult? ZipSizeVerification { get; set; }
     }
+
+    public record ZipSizeVerificationResult(bool IsWithinTolerance, double Deviation);
 }
