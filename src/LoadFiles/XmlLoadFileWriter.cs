@@ -20,7 +20,8 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
+        ChaosEngine? chaosEngine = null,
+        CancellationToken cancellationToken = default)
     {
         var settings = new XmlWriterSettings
         {
@@ -53,8 +54,10 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
                 foreach (var fileData in processedFiles)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
-                    await element.WriteToAsync(writer, CancellationToken.None);
+                    await element.WriteToAsync(writer, cancellationToken);
                 }
 
                 await writer.WriteEndElementAsync(); // </Batch>

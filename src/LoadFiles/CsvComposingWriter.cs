@@ -15,13 +15,14 @@ internal sealed class CsvComposingWriter : ILoadFileWriter
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
+        ChaosEngine? chaosEngine = null,
+        CancellationToken cancellationToken = default)
     {
         var composer = new CsvComposer(request);
         var serializer = new CsvSerializer();
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null).ConfigureAwait(false);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), encoding, Environment.NewLine, chaosEngine: null, cancellationToken).ConfigureAwait(false);
     }
 }

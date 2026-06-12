@@ -24,7 +24,8 @@ namespace Zipper
             string loadFileName,
             string loadFilePath,
             FileGenerationRequest request,
-            ChannelReader<FileData> fileDataReader)
+            ChannelReader<FileData> fileDataReader,
+            CancellationToken cancellationToken = default)
         {
             using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
             using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
@@ -45,7 +46,7 @@ namespace Zipper
 
             try
             {
-                await foreach (var incomingFileData in fileDataReader.ReadAllAsync().ConfigureAwait(false))
+                await foreach (var incomingFileData in fileDataReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                 {
                     if (incomingFileData.WorkItem.Index == nextExpectedIndex)
                     {

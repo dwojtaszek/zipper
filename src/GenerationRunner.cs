@@ -11,16 +11,21 @@ namespace Zipper
         /// Exception messages are written to standard error in the legacy format
         /// (<c>"\nAn error occurred: {message}"</c>).
         /// </summary>
-        public static async Task<int> RunAsync(IGenerationMode mode, FileGenerationRequest request)
+        public static async Task<int> RunAsync(IGenerationMode mode, FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             try
             {
-                await mode.RunAsync(request).ConfigureAwait(false);
+                await mode.RunAsync(request, cancellationToken).ConfigureAwait(false);
                 return 0;
+            }
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested || ex.CancellationToken == cancellationToken)
+            {
+                await Console.Error.WriteLineAsync("\nOperation cancelled.").ConfigureAwait(false);
+                return 130;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\nAn error occurred: {0}", ex.Message));
+                await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\nAn error occurred: {0}", ex.Message)).ConfigureAwait(false);
                 return 1;
             }
         }

@@ -40,17 +40,18 @@ internal static class LoadFileEmitter
         IEnumerable<LoadFileRecord> records,
         Encoding encoding,
         string eol,
-        ChaosEngine? chaosEngine)
+        ChaosEngine? chaosEngine,
+        CancellationToken cancellationToken = default)
     {
         bool hasHeader = headerColumns is { Count: > 0 };
 
         if (chaosEngine == null)
         {
-            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol).ConfigureAwait(false);
+            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine).ConfigureAwait(false);
+            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -61,7 +62,8 @@ internal static class LoadFileEmitter
         IReadOnlyList<string> headerColumns,
         IEnumerable<LoadFileRecord> records,
         Encoding encoding,
-        string eol)
+        string eol,
+        CancellationToken cancellationToken)
     {
         // A StreamWriter owns the encoding preamble (written once) and chunks output to the
         // underlying stream by its internal buffer, so records stream out without the whole
@@ -77,6 +79,8 @@ internal static class LoadFileEmitter
 
             foreach (var record in records)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 await writer.WriteAsync(serializer.RenderRecord(record)).ConfigureAwait(false);
                 await writer.WriteAsync(eol).ConfigureAwait(false);
             }
@@ -93,7 +97,8 @@ internal static class LoadFileEmitter
         IEnumerable<LoadFileRecord> records,
         Encoding encoding,
         string eol,
-        ChaosEngine chaosEngine)
+        ChaosEngine chaosEngine,
+        CancellationToken cancellationToken)
     {
         // Records stream lazily: raw encoding-anomaly bytes are written straight to the stream
         // after each line's encoded text, so byte ordering is correct without materializing the
@@ -107,13 +112,15 @@ internal static class LoadFileEmitter
         long lineNumber = 1;
         if (hasHeader)
         {
-            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderHeader(headerColumns), "HEADER", encoding, eol).ConfigureAwait(false);
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderHeader(headerColumns), "HEADER", encoding, eol, cancellationToken).ConfigureAwait(false);
             lineNumber++;
         }
 
         foreach (var record in records)
         {
-            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol, cancellationToken).ConfigureAwait(false);
             lineNumber++;
         }
     }
@@ -125,18 +132,19 @@ internal static class LoadFileEmitter
         string originalLine,
         string recordId,
         Encoding encoding,
-        string eol)
+        string eol,
+        CancellationToken cancellationToken)
     {
         var text = chaosEngine.ShouldIntercept(lineNumber)
             ? chaosEngine.Intercept(lineNumber, originalLine, recordId)
             : originalLine;
 
-        await stream.WriteAsync(encoding.GetBytes(text + eol)).ConfigureAwait(false);
+        await stream.WriteAsync(encoding.GetBytes(text + eol), cancellationToken).ConfigureAwait(false);
 
         var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
         if (anomaly != null)
         {
-            await stream.WriteAsync(anomaly).ConfigureAwait(false);
+            await stream.WriteAsync(anomaly, cancellationToken).ConfigureAwait(false);
         }
     }
 }
