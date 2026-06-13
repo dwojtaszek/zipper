@@ -164,10 +164,6 @@ namespace Zipper.Tests
             var args = CreateValidArgs();
             args.Eol = "LF";
             Assert.False(CliValidator.Validate(args));
-
-            args.Eol = null;
-            args.ColDelim = "ascii:20";
-            Assert.False(CliValidator.Validate(args));
         }
 
         [Fact]

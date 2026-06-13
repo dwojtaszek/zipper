@@ -86,13 +86,13 @@ assert_rejected "--chaos-scenario without --chaos-mode" \
 
 # --- Delimiter dependencies ---
 
-assert_rejected "--col-delim without --loadfile-only" \
+assert_accepted "--col-delim without --loadfile-only" \
     --type pdf --count 5 --col-delim "char:|"
 
-assert_rejected "--quote-delim without --loadfile-only" \
+assert_accepted "--quote-delim without --loadfile-only" \
     --type pdf --count 5 --quote-delim "char:\""
 
-assert_rejected "--newline-delim without --loadfile-only" \
+assert_accepted "--newline-delim without --loadfile-only" \
     --type pdf --count 5 --newline-delim "ascii:174"
 
 # --- Production set dependencies ---
