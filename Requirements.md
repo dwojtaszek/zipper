@@ -127,7 +127,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).
 - `--include-load-file`: (Optional) Includes the generated Load File in the root of the output Archive.
-- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See [Section 8](#8-load-file-format-standards-e-discovery-industry-specifications) for format specifications and [Section 9](#9-updated-command-line-arguments) for format aliases. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see Section 8.7).
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See [Section 8](#8-load-file-format-standards-e-discovery-industry-specifications) for format specifications and [Section 9](#9-updated-command-line-arguments) for format aliases. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see [Section 8.7](#87-concordance-database-import-format-specification)).
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
@@ -544,7 +544,7 @@ The following arguments are added or modified by the Load File and column profil
 
 ### Load File Arguments
 
-- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` as an alias for `edrm-xml`. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat`.
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` as an alias for `edrm-xml`. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see [Section 8.7](#87-concordance-database-import-format-specification)).
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple Load File formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 - `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.

@@ -209,7 +209,7 @@ Compatibility checklist:
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
 | `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
-| `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
+| `--nested-delim` | `\\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
