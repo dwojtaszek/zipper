@@ -118,13 +118,26 @@ public class BuildPropsTests
     [InlineData("TreatWarningsAsErrors", "true")]
     [InlineData("AnalysisModeSecurity", "All")]
     [InlineData("Deterministic", "true")]
-    [InlineData("ContinuousIntegrationBuild", "true")]
     public void DirectoryBuildProps_ShouldHave_Property(string propertyName, string expectedValue)
     {
         var doc = LoadBuildProps();
         var elements = GetPropertyElements(doc, propertyName).ToList();
         var element = Assert.Single(elements);
         Assert.Equal(expectedValue, element.Value.Trim(), ignoreCase: true);
+    }
+
+    [Fact]
+    public void DirectoryBuildProps_ShouldHave_ContinuousIntegrationBuild_Conditional()
+    {
+        var doc = LoadBuildProps();
+        var elements = GetPropertyElements(doc, "ContinuousIntegrationBuild").ToList();
+        var element = Assert.Single(elements);
+        Assert.Equal("true", element.Value.Trim(), ignoreCase: true);
+
+        var condition = element.Attribute("Condition")?.Value;
+        Assert.NotNull(condition);
+        Assert.Contains("CI", condition, StringComparison.Ordinal);
+        Assert.Contains("GITHUB_ACTIONS", condition, StringComparison.Ordinal);
     }
 
     [Fact]
