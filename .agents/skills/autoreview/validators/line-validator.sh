@@ -18,8 +18,7 @@ if [[ -z "${input// /}" ]]; then
 fi
 
 jq -c '.[]' <<< "$input" | while IFS= read -r finding; do
-    file=$(jq -r '.file // empty' <<< "$finding")
-    line=$(jq -r '.line // empty' <<< "$finding")
+    IFS=$'\t' read -r file line < <(jq -r '[.file // "", .line // ""] | @tsv' <<< "$finding")
 
     if [[ -z "$file" || "$file" == "null" ]]; then
         # Missing file, keep it if it's a general repo finding?
@@ -33,7 +32,7 @@ jq -c '.[]' <<< "$input" | while IFS= read -r finding; do
     fi
 
     # Check if line exists in file
-    if [[ -n "$line" && "$line" != "null" ]]; then
+    if [[ -n "$line" && "$line" =~ ^[0-9]+$ ]]; then
         # wc -l might return 0 for a 1-line file with no newline.
         # A safer way to count lines:
         max_line=$(awk 'END{print NR}' "$file")
@@ -43,4 +42,4 @@ jq -c '.[]' <<< "$input" | while IFS= read -r finding; do
     fi
 
     echo "$finding"
-done | jq -s '.' | sed 's/null/\[\]/' 
+done | jq -s '. // []'

@@ -31,7 +31,7 @@ rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
 
 # Create dummy file with 3 lines
-echo -e "line1\nline2\nline3" > "$TEST_OUTPUT_DIR/dummy.ts"
+printf "line1\nline2\nline3\n" > "$TEST_OUTPUT_DIR/dummy.ts"
 
 # Create input JSON
 cat <<EOF > "$TEST_OUTPUT_DIR/input.json"
