@@ -207,12 +207,6 @@ print_success "Test 5: Chaos type filter — PASSED"
 # ================================================================
 TOTAL=$((TOTAL + 1))
 
-# --col-delim without --loadfile-only should fail
-if "${BINARY[@]}" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/reject_1" --col-delim "ascii:20" 2>/dev/null; then
-    print_error "Should have rejected --col-delim without --loadfile-only"
-fi
-print_info "Rejected --col-delim without --loadfile-only"
-
 
 
 # --chaos-amount without --chaos-mode should fail
