@@ -111,4 +111,46 @@ public class BuildPropsTests
         var element = Assert.Single(elements);
         Assert.Equal("true", element.Value.Trim(), ignoreCase: true);
     }
+
+    [Theory]
+    [InlineData("EnableNETAnalyzers", "true")]
+    [InlineData("EnforceCodeStyleInBuild", "true")]
+    [InlineData("TreatWarningsAsErrors", "true")]
+    [InlineData("AnalysisModeSecurity", "All")]
+    [InlineData("Deterministic", "true")]
+    [InlineData("ContinuousIntegrationBuild", "true")]
+    public void DirectoryBuildProps_ShouldHave_Property(string propertyName, string expectedValue)
+    {
+        var doc = LoadBuildProps();
+        var elements = GetPropertyElements(doc, propertyName).ToList();
+        var element = Assert.Single(elements);
+        Assert.Equal(expectedValue, element.Value.Trim(), ignoreCase: true);
+    }
+
+    [Fact]
+    public void DirectoryBuildProps_ShouldHave_RequiredAnalyzers()
+    {
+        var doc = LoadBuildProps();
+        var packageReferences = GetPropertyElements(doc, "PackageReference")
+            .Select(e => e.Attribute("Include")?.Value)
+            .Where(v => v != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains("Roslynator.Analyzers", packageReferences);
+        Assert.Contains("Roslynator.Formatting.Analyzers", packageReferences);
+        Assert.Contains("Roslynator.CodeAnalysis.Analyzers", packageReferences);
+        Assert.Contains("Meziantou.Analyzer", packageReferences);
+        Assert.Contains("Microsoft.CodeAnalysis.BannedApiAnalyzers", packageReferences);
+    }
+
+    [Fact]
+    public void DirectoryBuildProps_ShouldHave_BannedSymbols()
+    {
+        var doc = LoadBuildProps();
+        var additionalFiles = GetPropertyElements(doc, "AdditionalFiles")
+            .Select(e => e.Attribute("Include")?.Value)
+            .ToList();
+
+        Assert.Contains("$(MSBuildThisFileDirectory)BannedSymbols.txt", additionalFiles);
+    }
 }
