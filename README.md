@@ -106,6 +106,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 
 **Utility Options:**
 - `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
+- `--version`: Print the version string and exit. No startup banner is printed on normal invocations
 
 ### `_properties.json` Audit File
 
@@ -199,7 +200,7 @@ Compatibility checklist:
 | `--seed` | none | integer | Random seed |
 | `--date-format` | yyyy-MM-dd | format string | Date format override |
 | `--empty-percentage` | 15 | 0-100 | Empty value % override |
-| `--custodian-count` | none | 1-1000 | Custodian count override |
+| `--custodian-count` | 10 | 1-1000 | Custodian count override |
 | `--with-families` | false | flag | Family relationships |
 | `--loadfile-only` | false | flag | Standalone Load File (no Archive) |
 | `--loadfile-format` | dat | dat, opt | Alias for `--load-file-format` in loadfile-only mode |
@@ -218,6 +219,7 @@ Compatibility checklist:
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
 | `--benchmark` | false | flag | Run benchmark suite and exit |
+| `--version` | false | flag | Print version string and exit |
 
 ### Argument Interactions
 

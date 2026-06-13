@@ -152,7 +152,7 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 
 ## 7. Versioning
 
-### FR-017: Semantic Versioning and Release Automation
+### FR-024: Semantic Versioning and Release Automation
 - **REQ-030**: The application's version will follow Semantic Versioning in the format `MAJOR.MINOR.PATCH`.
 - **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically increments the patch version.
 - **REQ-032**: Manual version control is supported by pushing specific tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`).

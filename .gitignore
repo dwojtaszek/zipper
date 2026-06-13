@@ -84,3 +84,7 @@ _parity.sh
 
 # Serena MCP
 .serena/
+
+# Stray diff dumps
+diff.txt
+*.diff
