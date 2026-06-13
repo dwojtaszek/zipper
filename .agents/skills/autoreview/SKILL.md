@@ -156,7 +156,7 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
 
    **Cache discipline (cost):** assemble the prompt as a stable prefix + volatile suffix — the agent file, effort, insights, and repo context come first (identical across runs of the same repo), and the `<diff>` block comes **last**. Across the fix→re-review cycles (up to 3 per the Contract) keep that prefix **byte-identical** so the host prompt cache hits and only the changed diff is re-billed. Do not reorder or reword the prefix between cycles. See `references/improvements.md` (C1).
 
-4. **Collect responses.** Tag each finding with its specialist. Merge and dedup per `references/review-policy.md` (Finding Merging & Fingerprinting).
+4. **Collect responses.** Tag each finding with its specialist. Pass the structured JSON findings through `validators/line-validator.sh` to deterministically verify that the referenced files and lines exist. Merge and dedup per `references/review-policy.md` (Finding Merging & Fingerprinting).
 
 5. **Merge + synthesize** once all subagents (specialists + adversarial) return. Emit the required **merge table** (fingerprint dedup + multi-source confidence boost) and the **SYNTHESIS** block, both per `references/review-policy.md`. These are mandatory output, not optional — multi-source agreement must be made visible, not left implicit.
 
