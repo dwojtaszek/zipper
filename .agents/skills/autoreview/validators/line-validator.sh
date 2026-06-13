@@ -17,6 +17,12 @@ if [[ -z "${input// /}" ]]; then
     exit 0
 fi
 
+# Validate input is an array
+if ! jq -e 'type == "array"' <<< "$input" > /dev/null 2>&1; then
+    echo "[]"
+    exit 0
+fi
+
 jq -c '.[]' <<< "$input" | while IFS= read -r finding; do
     IFS=$'\t' read -r file line < <(jq -r '[.file // "", .line // ""] | @tsv' <<< "$finding")
 

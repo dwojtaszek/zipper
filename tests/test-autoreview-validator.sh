@@ -11,15 +11,18 @@ VALIDATOR_SCRIPT="./.agents/skills/autoreview/validators/line-validator.sh"
 # --- Helper Functions ---
 
 function print_success() {
-  echo -e "\e[42m[ SUCCESS ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[42m[ SUCCESS ]\e[0m $msg"
 }
 
 function print_info() {
-  echo -e "\e[44m[ INFO ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[44m[ INFO ]\e[0m $msg"
 }
 
 function print_error() {
-  echo -e "\e[41m[ ERROR ]\e[0m $1"
+  local msg="$1"
+  echo -e "\e[41m[ ERROR ]\e[0m $msg" >&2
   exit 1
 }
 
