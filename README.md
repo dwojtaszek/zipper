@@ -207,8 +207,8 @@ Compatibility checklist:
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
-| `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
-| `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
+| `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
+| `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
@@ -218,6 +218,17 @@ Compatibility checklist:
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
 | `--benchmark` | false | flag | Run benchmark suite and exit |
+
+### Delimiter Arguments Guide
+
+Zipper uses different delimiter defaults depending on the generation context:
+- **Standard Archive Generation**: Standard DAT output strictly uses Concordance defaults (ASCII 20 / ASCII 254 / ASCII 174) with fixed multi-value (`;`) and nested-value (`\`) delimiters.
+- **Loadfile-Only Mode**: Provides explicit configuration for all delimiters. Defaults are the same as standard DAT, but can be overridden using strict-prefix arguments.
+
+| Argument Family | Flags | Applies To | Value Format | Precedence |
+|-----------------|-------|------------|--------------|------------|
+| **Old-Style** | `--delimiter-column`<br>`--delimiter-quote`<br>`--delimiter-newline` | Standard Generation & Loadfile-Only | Raw characters or ASCII codes | Overridden by strict-prefix flags |
+| **Strict-Prefix** | `--col-delim`<br>`--quote-delim`<br>`--newline-delim`<br>`--multi-delim`<br>`--nested-delim` | **Loadfile-Only mode only** | `ascii:N` or `char:C` | **Highest** (wins if both are given) |
 
 ### Argument Interactions
 

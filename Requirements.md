@@ -127,7 +127,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).
 - `--include-load-file`: (Optional) Includes the generated Load File in the root of the output Archive.
-- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see Section 8.7).
+- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications and Section 9 for format aliases. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see Section 8.7).
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
@@ -612,6 +612,7 @@ This section clarifies behavior when multiple arguments interact:
   - `--newline-delim <ascii:N|char:C>`: In-field newline replacement
   - `--multi-delim <ascii:N|char:C>`: Multi-value separator
   - `--nested-delim <ascii:N|char:C>`: Nested value separator
+- **REQ-123**: A new optional argument `--loadfile-format` shall be introduced as an alias for `--load-file-format` when in `--loadfile-only` mode.
 
 > [!NOTE]
 > The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values. The strict-prefix arguments are only available in loadfile-only mode.
