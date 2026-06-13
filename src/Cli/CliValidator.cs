@@ -283,15 +283,10 @@ public static class CliValidator
 
     private static bool ValidateLoadFileOnlyDelimiters(ParsedArguments parsed)
     {
-        var loadfileOnlyArgs = new[] { parsed.Eol, parsed.ColDelim, parsed.QuoteDelim, parsed.NewlineDelim, parsed.MultiDelim, parsed.NestedDelim };
-        var loadfileOnlyNames = new[] { "--eol", "--col-delim", "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim" };
-        for (int idx = 0; idx < loadfileOnlyArgs.Length; idx++)
+        if (!string.IsNullOrEmpty(parsed.Eol) && !parsed.LoadfileOnly)
         {
-            if (!string.IsNullOrEmpty(loadfileOnlyArgs[idx]) && !parsed.LoadfileOnly)
-            {
-                Console.Error.WriteLine($"Error: {loadfileOnlyNames[idx]} requires --loadfile-only.");
-                return false;
-            }
+            Console.Error.WriteLine("Error: --eol requires --loadfile-only.");
+            return false;
         }
 
         return true;

@@ -550,13 +550,13 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndParseArguments_ColDelim_WithoutLoadfileOnly_ShouldReturnNull()
+        public void ValidateAndParseArguments_ColDelim_WithoutLoadfileOnly_ShouldNotReturnNull()
         {
             var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--col-delim", "ascii:20" };
 
             var result = Cli.Pipeline.Build(args);
 
-            Assert.Null(result);
+            Assert.NotNull(result);
         }
 
         [Fact]
