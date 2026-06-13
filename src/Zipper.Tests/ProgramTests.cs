@@ -156,6 +156,68 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task Main_WithVersionFlag_PrintsVersionAndReturnsZero()
+        {
+            // Arrange
+            string[] args = { "--version" };
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            string output;
+            int exitCode;
+
+            // Act
+            try
+            {
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
+                exitCode = await Program.Main(args);
+                output = outWriter.ToString();
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+
+            // Assert
+            Assert.Equal(0, exitCode);
+            Assert.Contains("Zipper v", output, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task Main_WithoutVersionFlag_DoesNotPrintStartupBanner()
+        {
+            // Arrange — any invocation other than --version must not emit the
+            // version banner (REQ-034). Empty args fail fast to the help path,
+            // proving banner suppression without touching the filesystem.
+            string[] args = [];
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            string output;
+
+            // Act
+            try
+            {
+                using var outWriter = new StringWriter();
+                using var errWriter = new StringWriter();
+                Console.SetOut(outWriter);
+                Console.SetError(errWriter);
+                _ = await Program.Main(args);
+                output = outWriter.ToString();
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+
+            // Assert
+            Assert.DoesNotContain("https://github.com/dwojtaszek/zipper/", output, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task Main_WithSameSeed_ProducesIdenticalOutputSizes()
         {
             // Arrange

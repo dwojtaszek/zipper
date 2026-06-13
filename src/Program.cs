@@ -8,9 +8,14 @@ namespace Zipper
         {
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
-            Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
-            Console.WriteLine();
+            args ??= [];
+
+            if (args.Contains("--version", StringComparer.OrdinalIgnoreCase))
+            {
+                var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+                Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
+                return 0;
+            }
 
             if (args.Contains("--benchmark", StringComparer.OrdinalIgnoreCase))
             {

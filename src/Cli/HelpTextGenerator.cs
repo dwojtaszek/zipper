@@ -74,5 +74,6 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine();
         Console.Error.WriteLine("Utility Options:");
         Console.Error.WriteLine("  --benchmark              Run performance benchmark suite and exit");
+        Console.Error.WriteLine("  --version                Print the version string and exit");
     }
 }
