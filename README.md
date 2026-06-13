@@ -208,8 +208,8 @@ Compatibility checklist:
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
-| `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
-| `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
+| `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
+| `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
@@ -248,6 +248,17 @@ Compatibility checklist:
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
+
+### Delimiter Argument Modes
+
+The application supports two distinct sets of delimiter arguments. Standard DAT generation uses implicit default values (e.g., ASCII 20 column, ASCII 254 `þ` quote, `;` multi-value, `\` nested-value). Loadfile-Only Mode supports explicitly overriding all of these using strict-prefix arguments.
+
+| Argument Type | Mode Applied To | Format Example | Overrides |
+|---------------|-----------------|----------------|-----------|
+| Old-style (`--delimiter-column`, etc.) | Standard DAT & Loadfile-Only | Bare value (`20`, `,`) | `--dat-delimiters` preset |
+| Strict-prefix (`--col-delim`, etc.) | Loadfile-Only Mode only | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
+
+If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Note that the strict-prefix arguments (`--col-delim`, `--quote-delim`, `--newline-delim`, `--multi-delim`, `--nested-delim`) are ONLY permitted in `--loadfile-only` mode.
 
 ### Maintainer Notes for Issue Authors
 
