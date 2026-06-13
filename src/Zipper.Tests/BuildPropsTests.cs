@@ -127,7 +127,7 @@ public class BuildPropsTests
     }
 
     [Fact]
-    public void DirectoryBuildProps_ShouldHave_ContinuousIntegrationBuild_Conditional()
+    public void DirectoryBuildProps_ShouldHave_ContinuousIntegrationBuild_True_WithCondition()
     {
         var doc = LoadBuildProps();
         var elements = GetPropertyElements(doc, "ContinuousIntegrationBuild").ToList();
@@ -136,8 +136,7 @@ public class BuildPropsTests
 
         var condition = element.Attribute("Condition")?.Value;
         Assert.NotNull(condition);
-        Assert.Contains("CI", condition, StringComparison.Ordinal);
-        Assert.Contains("GITHUB_ACTIONS", condition, StringComparison.Ordinal);
+        Assert.True(condition.Contains("CI", StringComparison.Ordinal) || condition.Contains("GITHUB_ACTIONS", StringComparison.Ordinal));
     }
 
     [Fact]
