@@ -544,7 +544,7 @@ The following arguments are added or modified by the Load File and column profil
 
 ### Load File Arguments
 
-- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` and `concordance` as aliases.
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` as an alias for `edrm-xml`. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see [Section 8.7](#87-concordance-database-import-format-specification)).
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple Load File formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 - `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.
