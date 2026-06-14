@@ -10,6 +10,7 @@ namespace Zipper.Utils;
 internal static class NamingConventionHelper
 {
     private static readonly ConcurrentDictionary<(string Name, string? Convention), string> Cache = new();
+    private const int MaxStackallocThreshold = 256;
 
     /// <summary>
     /// Applies the specified naming convention to a field name.
@@ -37,7 +38,7 @@ internal static class NamingConventionHelper
             });
     }
 
-    private static string ToPascalCase(string name)
+    internal static string ToPascalCase(string name)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -52,6 +53,17 @@ internal static class NamingConventionHelper
         normalized = Regex.Replace(normalized, @"([A-Z])([A-Z][a-z])", "$1 $2", RegexOptions.None, timeout);
 
         var words = Regex.Split(normalized, @"[\s_-]+", RegexOptions.None, timeout);
+        int maxTailLen = 0;
+        foreach (var word in words)
+        {
+            if (word.Length - 1 > maxTailLen)
+            {
+                maxTailLen = word.Length - 1;
+            }
+        }
+
+        Span<char> buffer = maxTailLen <= MaxStackallocThreshold ? stackalloc char[maxTailLen] : new char[maxTailLen];
+
         var sb = new StringBuilder();
         foreach (var word in words)
         {
@@ -60,7 +72,16 @@ internal static class NamingConventionHelper
                 sb.Append(char.ToUpperInvariant(word[0]));
                 if (word.Length > 1)
                 {
-                    sb.Append(word.Substring(1).ToLowerInvariant());
+                    var tail = word.AsSpan(1);
+                    var slice = buffer[..tail.Length];
+                    if (tail.ToLowerInvariant(slice) < 0)
+                    {
+                        sb.Append(word.Substring(1).ToLowerInvariant());
+                    }
+                    else
+                    {
+                        sb.Append(slice);
+                    }
                 }
             }
         }
