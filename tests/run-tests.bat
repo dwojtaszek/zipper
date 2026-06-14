@@ -196,7 +196,7 @@ REM %2: Target size in MB
     set "temp_extract=%test_dir%\_verify_temp"
     if exist "%temp_extract%" rmdir /s /q "%temp_extract%"
     mkdir "%temp_extract%"
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $e = $z.Entries | Where { $_.Name -match '\.dat$' } | Select -First 1; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, '%temp_extract%\' + $e.Name, $true); $z.Dispose() } catch { exit 1 }"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $e = $z.Entries | Where { $_.Name -match '\.dat$' } | Select -First 1; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, ('%temp_extract%\' + $e.Name), $true); $z.Dispose() } catch { exit 1 }"
 
     for %%F in ("%temp_extract%\*.dat") do set "extracted_dat=%%F"
     if not defined extracted_dat (
