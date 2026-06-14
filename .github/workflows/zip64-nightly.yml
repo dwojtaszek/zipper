@@ -51,5 +51,5 @@ jobs:
               --body "The Zip64 boundary test workflow failed. Please investigate the E2E regression. Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               --label "bug"
           else
-            gh issue comment $EXISTING_ISSUE --body "Workflow failed again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            gh issue comment "$EXISTING_ISSUE" --body "Workflow failed again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
