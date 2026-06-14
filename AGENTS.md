@@ -59,7 +59,7 @@ Do not silently skip blocked work or switch to adjacent tasks. A stuck report is
 ## How To Use This File
 
 - This file is the agent workflow guide. Product behavior → [Requirements.md](Requirements.md). User-facing usage → [README.md](README.md). Domain terms → [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md). CI/CD pipeline map (local hooks → PR checks → release) → [docs/cicd.md](docs/cicd.md); external-check operations → [CI.md](CI.md).
-- If an issue body, README.md, Requirements.md, and implementation disagree, stop and identify the conflict explicitly before coding. Do not silently choose one source.
+- If an issue body, its comments, README.md, Requirements.md, and implementation disagree, stop and identify the conflict explicitly before coding. Do not silently choose one source. (Exception: a newer issue comment superseding the issue body is not a conflict — see the issue workflow, step 4.)
 
 ---
 
@@ -74,6 +74,7 @@ dotnet run --project src/Zipper.csproj -- [args]  # Run
 # Tests
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # Unit tests (must pass before commit)
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"  # Single test class
+dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # Analyzer tests (must pass when touching src/Zipper.Analyzers/)
 
 # Lint
 dotnet format --verify-no-changes src/   # Format check (run after every code change)
@@ -122,7 +123,10 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 1. `git checkout main && git pull`
 2. `git checkout -b fix/ISSUE-NNN-short-desc` (prefix: `fix/` for bugs, `feat/` for features, `refactor/`, `test/`, `docs/` per issue type)
 3. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
-4. Read the issue body; refresh labels, comments, and linked blockers before coding
+4. Read the issue body **and all comments** (`gh issue view NNN --comments`); refresh labels and linked blockers before coding:
+   - Comments are part of the spec: design decisions, implementation guides, and staleness notes posted after the body supersede it.
+   - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
+   - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 5. Write a failing test first (TDD), then implement the fix
 6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
 7. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*

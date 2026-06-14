@@ -10,6 +10,6 @@ namespace Zipper
         /// <summary>
         /// Runs the mode end-to-end. Throws on failure; the runner translates exceptions into exit code 1.
         /// </summary>
-        Task RunAsync(FileGenerationRequest request);
+        Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default);
     }
 }

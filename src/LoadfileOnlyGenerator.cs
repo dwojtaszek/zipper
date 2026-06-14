@@ -14,7 +14,7 @@ internal static class LoadfileOnlyGenerator
     /// </summary>
     /// <param name="request">File generation request with loadfile-only settings.</param>
     /// <returns>Result containing generated file paths and performance metrics.</returns>
-    public static async Task<LoadfileOnlyResult> GenerateAsync(FileGenerationRequest request)
+    public static async Task<LoadfileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
         request = request.Clone();
 
@@ -31,88 +31,96 @@ internal static class LoadfileOnlyGenerator
         string primaryLoadFilePath = string.Empty;
         string primaryPropertiesPath = string.Empty;
 
-        foreach (var format in formatsToGenerate)
+        var generatedFiles = new List<string>();
+
+        try
         {
-            var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
-            var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
-
-            long totalLines = format == LoadFileFormat.Opt
-                ? request.Output.FileCount
-                : request.Output.FileCount + 1;
-
-            // Resolve a named chaos scenario for display and audit, then let ChaosEngineBuilder
-            // own engine construction (including the format-keyed delimiter defaults). This
-            // removes the previous per-caller delimiter leak.
-            if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
+            foreach (var format in formatsToGenerate)
             {
-                var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
-                if (scenario != null)
+                var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
+                var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
+                generatedFiles.Add(loadFilePath);
+
+                long totalLines = format == LoadFileFormat.Opt
+                    ? request.Output.FileCount
+                    : request.Output.FileCount + 1;
+
+                if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
                 {
-                    if (string.IsNullOrEmpty(request.Chaos.ChaosAmount))
+                    var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
+                    if (scenario != null)
                     {
-                        request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
+                        if (string.IsNullOrEmpty(request.Chaos.ChaosAmount))
+                        {
+                            request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
+                        }
+
+                        request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
+
+                        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                     }
-
-                    request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
-
-                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                    else
+                    {
+                        Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
+                    }
                 }
-                else
+
+                ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
+
+                ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
+                    format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
+                    WriterMode.LoadfileOnly);
+
+                var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+                await using (fileStream.ConfigureAwait(false))
                 {
-                    Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
+                    await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
-            }
 
-            ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
-
-            // DatComposingWriter handles the column-profile path internally, so loadfile-only
-            // DAT generation no longer needs a separate profile writer branch here.
-            ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
-                format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
-                WriterMode.LoadfileOnly);
-
-            var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
-            await using (fileStream.ConfigureAwait(false))
-            {
-                await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine).ConfigureAwait(false);
-            }
-
-            string propertiesPath;
-            try
-            {
-                propertiesPath = await LoadfileAuditWriter.WriteAsync(
+                string propertiesPath = await LoadfileAuditWriter.WriteAsync(
                     loadFilePath,
                     request,
                     request.Output.FileCount,
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
-            }
-            catch
-            {
-                if (File.Exists(loadFilePath))
+                generatedFiles.Add(propertiesPath);
+
+                if (format == request.LoadFile.LoadFileFormat || string.IsNullOrEmpty(primaryLoadFilePath))
                 {
-                    File.Delete(loadFilePath);
+                    primaryLoadFilePath = loadFilePath;
+                    primaryPropertiesPath = propertiesPath;
                 }
-
-                throw;
             }
 
-            if (format == request.LoadFile.LoadFileFormat || string.IsNullOrEmpty(primaryLoadFilePath))
+            stopwatch.Stop();
+
+            return new LoadfileOnlyResult
             {
-                primaryLoadFilePath = loadFilePath;
-                primaryPropertiesPath = propertiesPath;
-            }
+                LoadFilePath = primaryLoadFilePath,
+                PropertiesFilePath = primaryPropertiesPath,
+                TotalRecords = request.Output.FileCount,
+                GenerationTime = stopwatch.Elapsed,
+            };
         }
-
-        stopwatch.Stop();
-
-        return new LoadfileOnlyResult
+        catch
         {
-            LoadFilePath = primaryLoadFilePath,
-            PropertiesFilePath = primaryPropertiesPath,
-            TotalRecords = request.Output.FileCount,
-            GenerationTime = stopwatch.Elapsed,
-        };
+            foreach (var file in generatedFiles)
+            {
+                if (File.Exists(file))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch
+                    {
+                        // Best effort cleanup
+                    }
+                }
+            }
+
+            throw;
+        }
     }
 }
 

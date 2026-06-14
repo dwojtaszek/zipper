@@ -20,6 +20,7 @@ internal static class CliOptions
         "--loadfile-only",
         "--production-set",
         "--production-zip",
+        "--version",
         "--with-families",
         "--with-metadata",
         "--with-text",

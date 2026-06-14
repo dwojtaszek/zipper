@@ -106,6 +106,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 
 **Utility Options:**
 - `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
+- `--version`: Print the version string and exit. No startup banner is printed on normal invocations
 
 ### `_properties.json` Audit File
 
@@ -199,7 +200,7 @@ Compatibility checklist:
 | `--seed` | none | integer | Random seed |
 | `--date-format` | yyyy-MM-dd | format string | Date format override |
 | `--empty-percentage` | 15 | 0-100 | Empty value % override |
-| `--custodian-count` | none | 1-1000 | Custodian count override |
+| `--custodian-count` | 10 | 1-1000 | Custodian count override |
 | `--with-families` | false | flag | Family relationships |
 | `--loadfile-only` | false | flag | Standalone Load File (no Archive) |
 | `--loadfile-format` | dat | dat, opt | Alias for `--load-file-format` in loadfile-only mode |
@@ -207,8 +208,8 @@ Compatibility checklist:
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
-| `--multi-delim` | none | `ascii:N` or `char:C` | Multi-value separator |
-| `--nested-delim` | none | `ascii:N` or `char:C` | Nested value separator |
+| `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
+| `--nested-delim` | `\\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
 | `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
 | `--chaos-types` | all | comma-separated types | Anomaly type filter |
@@ -218,6 +219,7 @@ Compatibility checklist:
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
 | `--benchmark` | false | flag | Run benchmark suite and exit |
+| `--version` | false | flag | Print version string and exit |
 
 ### Argument Interactions
 
@@ -246,6 +248,17 @@ Compatibility checklist:
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
+
+### Delimiter Argument Modes
+
+The application supports two distinct sets of delimiter arguments. Standard DAT generation uses implicit default values (e.g., ASCII 20 column, ASCII 254 `þ` quote, `;` multi-value, `\` nested-value). Loadfile-Only Mode supports explicitly overriding all of these using strict-prefix arguments.
+
+| Argument Type | Mode Applied To | Format Example | Overrides |
+|---------------|-----------------|----------------|-----------|
+| Old-style (`--delimiter-column`, etc.) | Standard DAT & Loadfile-Only | Bare value (`20`, `,`) | `--dat-delimiters` preset |
+| Strict-prefix (`--col-delim`, etc.) | Loadfile-Only Mode only | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
+
+If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Note that the strict-prefix arguments (`--col-delim`, `--quote-delim`, `--newline-delim`, `--multi-delim`, `--nested-delim`) are ONLY permitted in `--loadfile-only` mode.
 
 ### Maintainer Notes for Issue Authors
 

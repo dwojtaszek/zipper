@@ -5,7 +5,7 @@ namespace Zipper
     /// </summary>
     internal class LoadfileOnlyMode : IGenerationMode
     {
-        public async Task RunAsync(FileGenerationRequest request)
+        public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             Console.WriteLine("Starting loadfile-only generation...");
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Format: {0}", request.LoadFile.LoadFileFormat));
@@ -23,7 +23,7 @@ namespace Zipper
                 }
             }
 
-            var result = await LoadfileOnlyGenerator.GenerateAsync(request).ConfigureAwait(false);
+            var result = await LoadfileOnlyGenerator.GenerateAsync(request, cancellationToken).ConfigureAwait(false);
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file: {0}", result.LoadFilePath));

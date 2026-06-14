@@ -10,6 +10,11 @@
 
 The `zipper` application is a .NET Core command-line tool designed to generate large, highly compressed Archives containing a specified number of Native Files. It also generates a corresponding Load File compatible with import specifications.
 
+The application operates in three distinct generation modes:
+- **Standard Mode** (default): Generates Native Files within a compressed Archive alongside a Load File.
+- **Loadfile-Only Mode** (`--loadfile-only`): Bypasses Native File generation to quickly generate mock Load Files directly to disk.
+- **Production Set Mode** (`--production-set`): Generates a fully structured E-Discovery production volume with nested `DATA`, `IMAGES`, `NATIVES`, and `TEXT` directories instead of a flat Archive.
+
 ## 2. Features
 
 ### FR_E-002: Core File Generation
@@ -127,7 +132,7 @@ The `zipper` application is a .NET Core command-line tool designed to generate l
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).
 - `--include-load-file`: (Optional) Includes the generated Load File in the root of the output Archive.
-- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See Section 8 for format specifications. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see Section 8.7).
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) The format of the Load File. Defaults to `dat`. See [Section 8](#8-load-file-format-standards-e-discovery-industry-specifications) for format specifications and [Section 9](#9-updated-command-line-arguments) for format aliases. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see [Section 8.7](#87-concordance-database-import-format-specification)).
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
@@ -152,7 +157,7 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 
 ## 7. Versioning
 
-### FR-017: Semantic Versioning and Release Automation
+### FR-024: Semantic Versioning and Release Automation
 - **REQ-030**: The application's version will follow Semantic Versioning in the format `MAJOR.MINOR.PATCH`.
 - **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically increments the patch version.
 - **REQ-032**: Manual version control is supported by pushing specific tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`).
@@ -352,6 +357,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
 - **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`. `concordance` is NOT an alias of `dat`; it is a distinct format with its own writer producing fully quote-wrapped, ASCII 20-delimited database-import output with a different column set (see Section 8.7).
+- **REQ-124**: The `csv` format shall respect the `--encoding` argument for its output encoding, defaulting to UTF-8.
 
 #### FR-011: Multi-Format Output
 
@@ -433,7 +439,7 @@ Based on the above research, the following requirements apply to the Zipper Load
   - `weighted`: Custom weights per value
 
 - **REQ-069**: Data sources (e.g., custodians) shall be pre-generated and reused across documents following the specified distribution pattern.
-- **REQ-070**: A new argument `--seed <number>` shall allow reproducible random data generation.
+- **REQ-070**: A new argument `--seed <number>` shall allow reproducible random data generation. This applies both to Load File content and EML pipeline generation.
 - **REQ-071**: Per-column empty value percentages shall control the frequency of null/empty values.
 - **REQ-072**: Multi-value fields shall support configurable value counts with `multiValueCount` range.
 
@@ -472,7 +478,7 @@ Based on the above research, the following requirements apply to the Zipper Load
   - Column delimiter: ASCII 20 (Concordance standard)
   - Quote delimiter: ASCII 254 (Concordance standard)
   - Newline delimiter: ASCII 174 (Concordance standard)
-- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption.
+- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption across all DAT-family writers (including `dat` and `concordance` formats).
 
 ### 8.7 Concordance (Database Import) Format Specification
 
@@ -544,7 +550,7 @@ The following arguments are added or modified by the Load File and column profil
 
 ### Load File Arguments
 
-- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` and `concordance` as aliases.
+- `--load-file-format <dat|opt|csv|edrm-xml|xml|concordance>`: (Optional) Output format for the Load File. Defaults to `dat`. Accepts `xml` as an alias for `edrm-xml`. Note: `concordance` is a distinct database-import variant, NOT an alias of `dat` (see [Section 8.7](#87-concordance-database-import-format-specification)).
 - `--load-file-formats <format1,format2,...>`: (Optional) Generate multiple Load File formats simultaneously.
 - `--dat-delimiters <standard|csv>`: (Optional) Delimiter style for DAT files. Defaults to `standard` (ASCII 20/254/174).
 - `--delimiter-column <char|code>`: (Optional) Custom column delimiter for DAT files. Overrides `--dat-delimiters` preset.
@@ -586,7 +592,7 @@ This section clarifies behavior when multiple arguments interact:
 | `--production-set` + `--bates-prefix` | **Required**: `--bates-prefix` is mandatory when `--production-set` is used |
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
 | `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
-| `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
+| `--col-delim`, `--quote-delim`, etc. | Supported in all modes; use `ascii:N` or `char:C` prefix |
 | `--chaos-mode` | Requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
@@ -601,12 +607,13 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-018: Standalone Load File Generation
 
 - **REQ-087**: A new optional command-line argument `--loadfile-only` shall be introduced.
-- **REQ-088**: When `--loadfile-only` is specified, the application shall generate Load Files (DAT or OPT) directly to disk without creating Archives or Native Files.
+- **REQ-088**: When `--loadfile-only` is specified, the application shall generate Load Files (DAT or OPT) directly to disk without creating Archives or Native Files. If a format other than `dat` or `opt` is requested, the application must explicitly reject it with a validation error.
 - **REQ-089**: When `--loadfile-only` or `--production-set` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
-- **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest.
+- **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest, including a `totalRecords` count of data records (excluding the header row).
 - **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
 - **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`.
-- **REQ-093**: New strict-prefix delimiter arguments shall be introduced, requiring `--loadfile-only`:
+- **REQ-123**: A new optional argument `--loadfile-format <dat|opt>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. Defaults to `dat`.
+- **REQ-093**: New strict-prefix delimiter arguments shall be introduced (supported in both standard and `--loadfile-only` modes):
   - `--col-delim <ascii:N|char:C>`: Column delimiter
   - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter (supports `none` to omit quotes)
   - `--newline-delim <ascii:N|char:C>`: In-field newline replacement
@@ -614,7 +621,7 @@ This section clarifies behavior when multiple arguments interact:
   - `--nested-delim <ascii:N|char:C>`: Nested value separator
 
 > [!NOTE]
-> The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values. The strict-prefix arguments are only available in loadfile-only mode.
+> The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values.
 
 ---
 
@@ -637,7 +644,7 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-pagecount`: Replace the page count integer with an invalid value
   - `opt-path`: Corrupt the image path in column 3 with an invalid traversal path
   - `opt-batesid`: Remove the Bates ID from column 1
-- **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description.
+- **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description. The `totalRecords` count in the audit file must reflect only the data records, not including the header.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
 
 ---

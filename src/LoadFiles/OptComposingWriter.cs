@@ -30,7 +30,8 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
+        ChaosEngine? chaosEngine = null,
+        CancellationToken cancellationToken = default)
     {
         if (this.mode == WriterMode.Standard)
         {
@@ -49,7 +50,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
             : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos).ConfigureAwait(false);
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

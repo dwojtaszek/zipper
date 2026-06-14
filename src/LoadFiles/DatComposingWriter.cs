@@ -28,7 +28,8 @@ internal sealed class DatComposingWriter : ILoadFileWriter
         Stream stream,
         FileGenerationRequest request,
         System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
-        ChaosEngine? chaosEngine = null)
+        ChaosEngine? chaosEngine = null,
+        CancellationToken cancellationToken = default)
     {
         var composer = new DatComposer(request, this.mode);
         var serializer = new DatSerializer(request);
@@ -41,6 +42,6 @@ internal sealed class DatComposingWriter : ILoadFileWriter
             : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine).ConfigureAwait(false);
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine, cancellationToken).ConfigureAwait(false);
     }
 }
