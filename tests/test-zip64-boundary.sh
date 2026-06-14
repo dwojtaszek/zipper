@@ -25,7 +25,7 @@ print_info "Generating archive with $COUNT files to cross 65,535 boundary..."
 # Use zipper command defined in _zipper-cli.sh
 zipper --type jpg --count "$COUNT" --output-path "$TEST_OUTPUT_DIR" --seed 42 
 
-ZIP_FILE=$(find "$TEST_OUTPUT_DIR" -name "*.zip" -print | head -n 1)
+ZIP_FILE=$(find "$TEST_OUTPUT_DIR" -name "*.zip" -print | head -n 1 || true)
 
 if [[ -z "$ZIP_FILE" ]]; then
     print_error "No zip file generated"
@@ -99,7 +99,7 @@ if [[ "${RUN_4GB_CASE:-false}" == "true" ]]; then
     
     zipper --type pdf --count 10 --target-zip-size 4500MB --output-path "$OUT_4GB" --seed 42 
     
-    ZIP_4GB=$(find "$OUT_4GB" -name "*.zip" -print | head -n 1)
+    ZIP_4GB=$(find "$OUT_4GB" -name "*.zip" -print | head -n 1 || true)
     if [[ -z "$ZIP_4GB" ]]; then
         print_error "No 4GB zip file generated"
         FAILED=$((FAILED + 1))
