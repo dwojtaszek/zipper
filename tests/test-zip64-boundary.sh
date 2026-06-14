@@ -25,7 +25,7 @@ print_info "Generating archive with $COUNT files to cross 65,535 boundary..."
 # Use zipper command defined in _zipper-cli.sh
 zipper --type jpg --count "$COUNT" --output-path "$TEST_OUTPUT_DIR" --seed 42 
 
-ZIP_FILE=$(find "$TEST_OUTPUT_DIR" -name "*.zip" -print -quit)
+ZIP_FILE=$(find "$TEST_OUTPUT_DIR" -name "*.zip" -print | head -n 1)
 
 if [[ -z "$ZIP_FILE" ]]; then
     print_error "No zip file generated"
@@ -35,7 +35,7 @@ fi
 print_info "Found generated archive: $ZIP_FILE"
 
 # 1. Entry count assertions using unzip -Z1
-JPG_COUNT=$(unzip -Z1 "$ZIP_FILE" | grep -cE '\.jpg$') || true
+JPG_COUNT=$(unzip -Z1 "$ZIP_FILE" | awk '/\.jpg$/ {count++} END {print count+0}')
 TOTAL_COUNT=$(unzip -Z1 "$ZIP_FILE" | wc -l | xargs)
 
 if [[ "$JPG_COUNT" -eq 70000 ]]; then
@@ -79,11 +79,11 @@ DAT_FILE="${ZIP_FILE%.zip}.opt"
 if [[ -f "$DAT_FILE" ]]; then
     # Load files have a header row, so 70000 files = 70001 lines
     DAT_LINES=$(wc -l < "$DAT_FILE" | xargs)
-    if [[ "$DAT_LINES" -eq 70000 ]]; then
-        print_info "Assertion OK: Load file (.opt) has 70000 lines"
+    if [[ "$DAT_LINES" -eq 70001 ]]; then
+        print_info "Assertion OK: Load file (.opt) has 70001 lines"
         PASSED=$((PASSED + 1))
     else
-        print_error "Assertion FAILED: Load file has $DAT_LINES lines, expected 70000"
+        print_error "Assertion FAILED: Load file has $DAT_LINES lines, expected 70001"
         FAILED=$((FAILED + 1))
     fi
 else
@@ -99,12 +99,12 @@ if [[ "${RUN_4GB_CASE:-false}" == "true" ]]; then
     
     zipper --type pdf --count 10 --target-zip-size 4500MB --output-path "$OUT_4GB" --seed 42 
     
-    ZIP_4GB=$(find "$OUT_4GB" -name "*.zip" -print -quit)
+    ZIP_4GB=$(find "$OUT_4GB" -name "*.zip" -print | head -n 1)
     if [[ -z "$ZIP_4GB" ]]; then
         print_error "No 4GB zip file generated"
         FAILED=$((FAILED + 1))
     else
-        SIZE=$(stat -c%s "$ZIP_4GB" 2>/dev/null || stat -f%z "$ZIP_4GB")
+        SIZE=$(wc -c < "$ZIP_4GB" | xargs)
         if (( SIZE > 4294967296 )); then
             print_info "Assertion OK: 4GB archive generated successfully ($SIZE bytes)"
             PASSED=$((PASSED + 1))

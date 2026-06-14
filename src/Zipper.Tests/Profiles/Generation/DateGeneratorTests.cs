@@ -29,7 +29,7 @@ public class DateGeneratorTests
     [Fact]
     public void DateGenerator_WithNonUsCulture_ParsesIsoDatesCorrectly()
     {
-#pragma warning disable RS0030 // Do not use banned APIs
+
         var originalCulture = CultureInfo.CurrentCulture;
         var originalUiCulture = CultureInfo.CurrentUICulture;
 
@@ -73,7 +73,7 @@ public class DateGeneratorTests
             CultureInfo.CurrentCulture = originalCulture;
             CultureInfo.CurrentUICulture = originalUiCulture;
         }
-#pragma warning restore RS0030 // Do not use banned APIs
+
     }
 
     /// <summary>

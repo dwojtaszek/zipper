@@ -117,9 +117,15 @@ public static class CliValidator
 
         if (!string.IsNullOrEmpty(parsed.TargetZipSize))
         {
-            if (RequestBuilder.ParseSize(parsed.TargetZipSize) == null)
+            var parsedSize = RequestBuilder.ParseSize(parsed.TargetZipSize);
+            if (parsedSize == null)
             {
                 Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
+                return false;
+            }
+            if (parsedSize.Value <= 0)
+            {
+                Console.Error.WriteLine("Error: --target-zip-size must be positive.");
                 return false;
             }
         }
