@@ -493,7 +493,7 @@ internal class ChaosEngine
         int firstComma = line.IndexOf(',', StringComparison.Ordinal);
         if (firstComma >= 0)
         {
-            return new string(line.AsSpan(firstComma)); // Leaves empty Bates Number
+            return line.Substring(firstComma); // Leaves empty Bates Number
         }
 
         return string.Empty;
