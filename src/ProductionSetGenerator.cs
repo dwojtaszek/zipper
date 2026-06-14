@@ -115,10 +115,11 @@ internal static class ProductionSetGenerator
             if (generated.PageCount > 1)
             {
                 var imageExt = Path.GetExtension(plan.ImageRelPath);
+                var imagePathWithoutExt = plan.ImageRelPath[..^imageExt.Length];
 
                 for (int pageIdx = 1; pageIdx <= generated.PageCount; pageIdx++)
                 {
-                    var pageImageRelPath = $"{plan.ImageRelPath.AsSpan()[..^imageExt.Length]}_{pageIdx:D3}{imageExt}";
+                    var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
                     await File.WriteAllBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
                 }
             }
