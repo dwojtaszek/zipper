@@ -125,14 +125,11 @@ internal sealed class OptComposer : ILoadFileComposer
         if (actualPages > 1)
         {
             var ext = Path.GetExtension(baseImagePath);
-            var pathWithoutExt = baseImagePath.Length >= ext.Length
-                ? baseImagePath.Substring(0, baseImagePath.Length - ext.Length)
-                : baseImagePath;
 
             for (int pageIdx = 1; pageIdx <= actualPages; pageIdx++)
             {
                 var pageBates = $"{baseBates}_{pageIdx:D3}";
-                var pageImagePath = $"{pathWithoutExt}_{pageIdx:D3}{ext}";
+                var pageImagePath = $"{baseImagePath.AsSpan()[..^ext.Length]}_{pageIdx:D3}{ext}";
                 var docBreak = pageIdx == 1 ? "Y" : string.Empty;
                 var pageCountStr = pageIdx == 1 ? actualPages.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
 

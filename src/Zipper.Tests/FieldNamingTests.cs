@@ -138,6 +138,43 @@ public class FieldNamingTests : IDisposable
     }
 
     [Fact]
+    public void NamingConventionHelper_PascalCase_ShouldHaveLowAllocations()
+    {
+        var input = "Some_Very_Long_Word_To_Convert_To_Pascal_Case_With_Many_Words";
+        // Warm up
+        _ = NamingConventionHelper.ToPascalCase(input);
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++)
+        {
+            _ = NamingConventionHelper.ToPascalCase(input);
+        }
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        long allocated = after - before;
+
+        // Assert that the allocated bytes are less than 1,500,000 bytes.
+        // The current unoptimized code allocates more than this due to Substring + ToLowerInvariant per word.
+        Assert.True(allocated < 1500000, $"Allocated too much: {allocated} bytes");
+    }
+
+    [Fact]
+    public void NamingConventionHelper_ToPascalCase_WithWordLongerThan256Characters_ShouldSucceed()
+    {
+        var input = "A" + new string('b', 300);
+        var result = NamingConventionHelper.ToPascalCase(input);
+        Assert.Equal("A" + new string('b', 300), result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void NamingConventionHelper_ToPascalCase_WithNullOrEmpty_ReturnsOriginal(string? input)
+    {
+        var result = NamingConventionHelper.ToPascalCase(input!);
+        Assert.Equal(input, result);
+    }
+
+    [Fact]
     public void ColumnProfileLoader_ShouldThrowOnInvalidConvention()
     {
         var profile = new ColumnProfile
