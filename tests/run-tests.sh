@@ -84,11 +84,36 @@ function verify_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
+  local first_bytes=$(head -c 3 "$dat_file" | xxd -p | tr -d ' ' | tr a-z A-Z)
+  if [[ "$encoding" = "UTF-8" ]]; then
+    if [[ "$first_bytes" != "EFBBBF" ]]; then
+      print_error "Missing UTF-8 BOM in .dat file."
+      AGGREGATE_FAILURE=1; return 0
+    fi
+  elif [[ "$encoding" = "UTF-16" ]]; then
+    if [[ "${first_bytes:0:4}" != "FFFE" ]]; then
+      print_error "Missing UTF-16LE BOM in .dat file."
+      AGGREGATE_FAILURE=1; return 0
+    fi
+  elif [[ "$encoding" = "ANSI" ]]; then
+    if [[ "${first_bytes:0:6}" == "EFBBBF" ]] || [[ "${first_bytes:0:4}" == "FFFE" ]]; then
+      print_error "Unexpected BOM in ANSI .dat file."
+      AGGREGATE_FAILURE=1; return 0
+    fi
+  fi
+
+  # Ensure trailing newline
+  local last_char=$($dat_content_cmd < "$dat_file" | tail -c 1)
+  if [[ -n "$last_char" ]]; then
+    print_error "Missing trailing newline in .dat file."
+    AGGREGATE_FAILURE=1; return 0
+  fi
+
   # Read and process .dat file content once
   local dat_content=$($dat_content_cmd < "$dat_file")
 
   # Verify line count in .dat file (+1 for header)
-  local line_count=$(echo "$dat_content" | wc -l)
+  local line_count=$($dat_content_cmd < "$dat_file" | wc -l)
   line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
   local expected_line_count=$((expected_count + 1))
   if [[ "$line_count" -ne "$expected_line_count" ]]; then
@@ -109,7 +134,7 @@ function verify_output() {
   print_info ".dat file header is correct."
 
   # Verify file count in zip (using cached zip listing)
-  local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
+  local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type$" || true)
   if [[ "$zip_file_count" -ne "$expected_count" ]]; then
     print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     AGGREGATE_FAILURE=1; return 0
@@ -124,7 +149,7 @@ function verify_output() {
       txt_count=$(echo "$zip_listing" | grep "\.txt$" | grep -v "attachment" | wc -l)
     else
       # For other file types, count all text files
-      txt_count=$(echo "$zip_listing" | grep -c "\.txt" || true)
+      txt_count=$(echo "$zip_listing" | grep -c "\.txt$" || true)
     fi
     if [[ "$txt_count" -ne "$expected_count" ]]; then
       print_error "Incorrect .txt file count in .zip file. Expected $expected_count, found $txt_count."
@@ -141,6 +166,7 @@ function verify_output() {
 # $4: File type (e.g., "eml")
 # $5: Check for text files (true/false)
 # $6: Encoding of the .dat file (e.g., "UTF-8", "UTF-16", "ANSI")
+# $7: Expected attachment count
 function verify_eml_output() {
   local test_dir="$1"
   local expected_count="$2"
@@ -148,6 +174,7 @@ function verify_eml_output() {
   local file_type="$4"
   local check_text="$5"
   local encoding="$6"
+  local expected_attachment_count="$7"
 
   verify_output "$@"
 
@@ -171,27 +198,23 @@ function verify_eml_output() {
   # Verify that attachment files are present (using cached zip listing)
   local attachment_files=$(echo "$zip_listing" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
 
-  # Count EML files to calculate expected attachments (50% attachment rate)
-  local eml_files=$(echo "$zip_listing" | grep "\.eml$" | wc -l)
-  local min_expected_attachments=$((eml_files / 10)) # Should be at least ~10% due to 50% rate randomness
-
-  if [[ "$attachment_files" -lt "$min_expected_attachments" ]]; then
-    print_error "Expected at least $min_expected_attachments attachment files in ZIP, but found $attachment_files."
+  if [[ "$attachment_files" -ne "$expected_attachment_count" ]]; then
+    print_error "Expected exactly $expected_attachment_count attachment files in ZIP, but found $attachment_files."
   fi
-  print_info "Found $attachment_files attachment files in ZIP archive (expected at least $min_expected_attachments)."
+  print_info "Found $attachment_files attachment files in ZIP archive (expected exactly $expected_attachment_count)."
 
   # Verify that some attachments are listed in the .dat file (using cached content)
   local attachment_count=$(echo "$dat_content" | grep -c "attachment" || true)
-  if [[ "$attachment_count" -lt 2 ]]; then
-    print_error "No attachments found in .dat file, but they were expected."
+  if [[ "$attachment_count" -ne "$expected_attachment_count" ]]; then
+    print_error "Expected exactly $expected_attachment_count attachments in .dat file, found $attachment_count."
   fi
-  print_info "Found attachments in .dat file."
+  print_info "Found $attachment_count attachments in .dat file."
 
   # Verify attachment text files if text extraction is enabled (using cached zip listing)
   if [[ "$check_text" = "true" ]]; then
     local attachment_text_files=$(echo "$zip_listing" | grep "attachment.*\.txt$" | wc -l)
-    if [[ "$attachment_text_files" -lt "$min_expected_attachments" ]]; then
-      print_error "Expected at least $min_expected_attachments attachment text files, but found $attachment_text_files."
+    if [[ "$attachment_text_files" -ne "$expected_attachment_count" ]]; then
+      print_error "Expected exactly $expected_attachment_count attachment text files, but found $attachment_text_files."
     fi
     print_info "Found $attachment_text_files attachment text files in ZIP archive."
   fi
@@ -283,11 +306,36 @@ function verify_load_file_included() {
         dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
     fi
 
+    local first_bytes=$(head -c 3 "$extracted_dat" | xxd -p | tr -d ' ' | tr a-z A-Z)
+    if [[ "$encoding" = "UTF-8" ]]; then
+        if [[ "$first_bytes" != "EFBBBF" ]]; then
+            print_error "Missing UTF-8 BOM in extracted .dat file."
+            AGGREGATE_FAILURE=1; return 0
+        fi
+    elif [[ "$encoding" = "UTF-16" ]]; then
+        if [[ "${first_bytes:0:4}" != "FFFE" ]]; then
+            print_error "Missing UTF-16LE BOM in extracted .dat file."
+            AGGREGATE_FAILURE=1; return 0
+        fi
+    elif [[ "$encoding" = "ANSI" ]]; then
+        if [[ "${first_bytes:0:6}" == "EFBBBF" ]] || [[ "${first_bytes:0:4}" == "FFFE" ]]; then
+            print_error "Unexpected BOM in ANSI extracted .dat file."
+            AGGREGATE_FAILURE=1; return 0
+        fi
+    fi
+
+    # Ensure trailing newline
+    local last_char=$($dat_content_cmd < "$extracted_dat" | tail -c 1)
+    if [[ -n "$last_char" ]]; then
+        print_error "Missing trailing newline in extracted .dat file."
+        AGGREGATE_FAILURE=1; return 0
+    fi
+
     # Read content once for verification
     local dat_content=$($dat_content_cmd < "$extracted_dat")
 
     # Verify line count in extracted .dat file (+1 for header)
-    local line_count=$(echo "$dat_content" | wc -l)
+    local line_count=$($dat_content_cmd < "$extracted_dat" | wc -l)
     line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
     local expected_line_count=$((expected_count + 1))
     if [[ "$line_count" -ne "$expected_line_count" ]]; then
@@ -308,7 +356,7 @@ function verify_load_file_included() {
     print_info ".dat file header is correct."
 
     # Verify file count in zip (excluding the .dat file, using cached listing)
-    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type" || true)
+    local zip_file_count=$(echo "$zip_listing" | grep -c "\.$file_type$" || true)
     if [[ "$zip_file_count" -ne "$expected_count" ]]; then
         print_error "Incorrect file count in .zip file. Expected $expected_count, found $zip_file_count."
     AGGREGATE_FAILURE=1; return 0
@@ -389,7 +437,7 @@ print_success "Test Case 9 passed."
 
 # Test Case 10: EML generation with attachments
 run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "$TEST_OUTPUT_DIR/eml_attachments" --attachment-rate 50 --seed 42
-verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8" 14
 print_success "Test Case 10 passed."
 
 # Test Case 11: EML generation with metadata
@@ -419,7 +467,7 @@ print_success "Test Case 15 passed."
 
 # Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
 print_success "Test Case 16 passed."
 
 # Test Case 17: Maximum folders edge case (100 folders)
