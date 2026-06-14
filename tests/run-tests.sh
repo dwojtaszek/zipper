@@ -6,6 +6,9 @@ set -euo pipefail
 TOTAL_FAILURES=0
 AGGREGATE_FAILURE=0
 
+readonly UTF8_BOM_HEX="EFBBBF"
+readonly UTF16LE_BOM_HEX="FFFE"
+
 # --- Test Configuration ---
 
 # The directory where test output will be generated.
@@ -86,17 +89,17 @@ function verify_output() {
 
   local first_bytes=$(head -c 3 "$dat_file" | xxd -p | tr -d ' ' | tr a-z A-Z)
   if [[ "$encoding" = "UTF-8" ]]; then
-    if [[ "$first_bytes" != "EFBBBF" ]]; then
+    if [[ "$first_bytes" != "$UTF8_BOM_HEX" ]]; then
       print_error "Missing UTF-8 BOM in .dat file."
       AGGREGATE_FAILURE=1; return 0
     fi
   elif [[ "$encoding" = "UTF-16" ]]; then
-    if [[ "${first_bytes:0:4}" != "FFFE" ]]; then
+    if [[ "${first_bytes:0:4}" != "$UTF16LE_BOM_HEX" ]]; then
       print_error "Missing UTF-16LE BOM in .dat file."
       AGGREGATE_FAILURE=1; return 0
     fi
   elif [[ "$encoding" = "ANSI" ]]; then
-    if [[ "${first_bytes:0:6}" == "EFBBBF" ]] || [[ "${first_bytes:0:4}" == "FFFE" ]]; then
+    if [[ "${first_bytes:0:6}" == "$UTF8_BOM_HEX" ]] || [[ "${first_bytes:0:4}" == "$UTF16LE_BOM_HEX" ]]; then
       print_error "Unexpected BOM in ANSI .dat file."
       AGGREGATE_FAILURE=1; return 0
     fi
@@ -196,7 +199,7 @@ function verify_eml_output() {
   local dat_content=$($dat_content_cmd < "$dat_file")
 
   # Verify that attachment files are present (using cached zip listing)
-  local attachment_files=$(echo "$zip_listing" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
+  local attachment_files=$(echo "$zip_listing" | grep -c "attachment.*\.\(pdf\|jpg\|tiff\)$" || true)
 
   if [[ "$attachment_files" -ne "$expected_attachment_count" ]]; then
     print_error "Expected exactly $expected_attachment_count attachment files in ZIP, but found $attachment_files."
@@ -212,7 +215,7 @@ function verify_eml_output() {
 
   # Verify attachment text files if text extraction is enabled (using cached zip listing)
   if [[ "$check_text" = "true" ]]; then
-    local attachment_text_files=$(echo "$zip_listing" | grep "attachment.*\.txt$" | wc -l)
+    local attachment_text_files=$(echo "$zip_listing" | grep -c "attachment.*\.txt$" || true)
     if [[ "$attachment_text_files" -ne "$expected_attachment_count" ]]; then
       print_error "Expected exactly $expected_attachment_count attachment text files, but found $attachment_text_files."
     fi

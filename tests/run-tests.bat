@@ -327,67 +327,67 @@ mkdir "%TEST_OUTPUT_DIR%"
 
 REM Test Case 1: Basic PDF generation
 call :run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_basic" 10 "Control Number,File Path" "pdf" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_basic" 10 "Control Number,File Path" "pdf" "false" "UTF-8"
 call :print_success "Test Case 1 passed."
 
 REM Test Case 2: JPG generation with different encoding
 call :run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
-call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 call :print_success "Test Case 2 passed."
 
 REM Test Case 3: TIFF generation with multiple folders and proportional distribution
 call :run_test_case "Test Case 3: TIFF generation" --type tiff --count 20 --output-path "%TEST_OUTPUT_DIR%\tiff_folders" --folders 5 --distribution proportional
-call :verify_output "%TEST_OUTPUT_DIR%\tiff_folders" 20 "Control Number,File Path" "tiff" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\tiff_folders" 20 "Control Number,File Path" "tiff" "false" "UTF-8"
 call :print_success "Test Case 3 passed."
 
 REM Test Case 4: PDF generation with Gaussian distribution
 call :run_test_case "Test Case 4: PDF generation with Gaussian distribution" --type pdf --count 20 --output-path "%TEST_OUTPUT_DIR%\pdf_gaussian" --folders 5 --distribution gaussian
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_gaussian" 20 "Control Number,File Path" "pdf" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_gaussian" 20 "Control Number,File Path" "pdf" "false" "UTF-8"
 call :print_success "Test Case 4 passed."
 
 REM Test Case 5: JPG generation with Exponential distribution
 call :run_test_case "Test Case 5: JPG generation with Exponential distribution" --type jpg --count 20 --output-path "%TEST_OUTPUT_DIR%\jpg_exponential" --folders 5 --distribution exponential
-call :verify_output "%TEST_OUTPUT_DIR%\jpg_exponential" 20 "Control Number,File Path" "jpg" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\jpg_exponential" 20 "Control Number,File Path" "jpg" "false" "UTF-8"
 call :print_success "Test Case 5 passed."
 
 REM Test Case 6: PDF generation with metadata
 call :run_test_case "Test Case 6: PDF generation with metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_metadata" --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false" "UTF-8"
 call :print_success "Test Case 6 passed."
 
 REM Test Case 7: All options combined
 call :run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
 call :print_success "Test Case 7 passed."
 
 REM Test Case 8: With text
 call :run_test_case "Test Case 8: With text" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text" --with-text
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text" 10 "Control Number,File Path,Extracted Text" "pdf" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text" 10 "Control Number,File Path,Extracted Text" "pdf" "true" "UTF-8"
 call :print_success "Test Case 8 passed."
 
 REM Test Case 9: With text and metadata
 call :run_test_case "Test Case 9: With text and metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" --with-text --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true" "UTF-8"
 call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
 call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50 --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8" 14
 call :print_success "Test Case 10 passed."
 
 REM Test Case 11: EML generation with metadata
 call :run_test_case "Test Case 11: EML generation with metadata" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata" --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false" "UTF-8"
 call :print_success "Test Case 11 passed."
 
 REM Test Case 12: EML generation with text
 call :run_test_case "Test Case 12: EML generation with text" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_text" --with-text
-call :verify_output "%TEST_OUTPUT_DIR%\eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\eml_text" 10 "Control Number,File Path,To,From,Subject,Sent Date,Attachment,Extracted Text" "eml" "true" "UTF-8"
 call :print_success "Test Case 12 passed."
 
 REM Test Case 13: EML generation with metadata and text
 call :run_test_case "Test Case 13: EML generation with metadata and text" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata_text" --with-metadata --with-text
-call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
 call :print_success "Test Case 13 passed."
 
 REM Test Case 14: Target zip size
@@ -402,7 +402,7 @@ call :print_success "Test Case 15 passed."
 
 REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
 call :print_success "Test Case 16 passed."
 
 REM Test Case 17: Maximum folders edge case (100 folders)
