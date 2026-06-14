@@ -1,0 +1,55 @@
+name: Zip64 Boundary E2E Test
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      run_4gb:
+        description: 'Run the >4GB size boundary test'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+
+jobs:
+  test-zip64-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5
+        with:
+          global-json-file: global.json
+
+      - name: Run Zip64 Boundary (Count)
+        run: ./tests/test-zip64-boundary.sh
+
+      - name: Check free disk space for 4GB test
+        if: ${{ github.event.inputs.run_4gb == 'true' }}
+        run: df -h
+
+      - name: Run Zip64 Boundary (4GB Size)
+        if: ${{ github.event.inputs.run_4gb == 'true' }}
+        run: RUN_4GB_CASE=true ./tests/test-zip64-boundary.sh
+
+      - name: Report Failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if an issue already exists
+          EXISTING_ISSUE=$(gh issue list --state open --search "in:title \"Nightly Zip64 E2E Test Failed\"" --json number -q '.[0].number')
+          
+          if [ -z "$EXISTING_ISSUE" ] || [ "$EXISTING_ISSUE" == "null" ]; then
+            gh issue create \
+              --title "Nightly Zip64 E2E Test Failed" \
+              --body "The Zip64 boundary test workflow failed. Please investigate the E2E regression. Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              --label "bug"
+          else
+            gh issue comment "$EXISTING_ISSUE" --body "Workflow failed again: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
