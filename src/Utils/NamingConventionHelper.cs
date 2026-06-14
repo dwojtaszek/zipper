@@ -53,14 +53,7 @@ internal static class NamingConventionHelper
         normalized = Regex.Replace(normalized, @"([A-Z])([A-Z][a-z])", "$1 $2", RegexOptions.None, timeout);
 
         var words = Regex.Split(normalized, @"[\s_-]+", RegexOptions.None, timeout);
-        int maxTailLen = 0;
-        foreach (var word in words)
-        {
-            if (word.Length - 1 > maxTailLen)
-            {
-                maxTailLen = word.Length - 1;
-            }
-        }
+        int maxTailLen = GetMaxTailLength(words);
 
         Span<char> buffer = maxTailLen <= MaxStackallocThreshold ? stackalloc char[maxTailLen] : new char[maxTailLen];
 
@@ -72,21 +65,40 @@ internal static class NamingConventionHelper
                 sb.Append(char.ToUpperInvariant(word[0]));
                 if (word.Length > 1)
                 {
-                    var tail = word.AsSpan(1);
-                    var slice = buffer[..tail.Length];
-                    if (tail.ToLowerInvariant(slice) < 0)
-                    {
-                        sb.Append(word.Substring(1).ToLowerInvariant());
-                    }
-                    else
-                    {
-                        sb.Append(slice);
-                    }
+                    AppendWordTail(sb, word, buffer);
                 }
             }
         }
 
         return sb.ToString();
+    }
+
+    private static int GetMaxTailLength(string[] words)
+    {
+        int maxTailLen = 0;
+        foreach (var word in words)
+        {
+            if (word.Length - 1 > maxTailLen)
+            {
+                maxTailLen = word.Length - 1;
+            }
+        }
+        return maxTailLen;
+    }
+
+    private static void AppendWordTail(StringBuilder sb, string word, Span<char> buffer)
+    {
+        var tail = word.AsSpan(1);
+        var slice = buffer[..tail.Length];
+        int charsWritten = tail.ToLowerInvariant(slice);
+        if (charsWritten < 0)
+        {
+            sb.Append(word.Substring(1).ToLowerInvariant());
+        }
+        else
+        {
+            sb.Append(slice[..charsWritten]);
+        }
     }
 
     private static string ToSnakeCase(string name)
