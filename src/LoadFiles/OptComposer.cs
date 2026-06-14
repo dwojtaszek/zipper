@@ -94,7 +94,7 @@ internal sealed class OptComposer : ILoadFileComposer
             string volume = isProductionSet ? workItem.FolderName : "VOL001";
             string baseImagePath = isProductionSet
                 ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                    .Replace(Path.GetExtension(workItem.FilePathInZip), ".tif", StringComparison.Ordinal)
+                    .Replace(Path.GetExtension(workItem.FilePathInZip) ?? string.Empty, ".tif", StringComparison.Ordinal)
                     .Replace('/', '\\') // FilePathInZip uses '/' (ZIP spec); normalize on all platforms incl. Windows
                 : $"IMAGES\\{baseBatesNumber}.tif";
 
@@ -124,7 +124,7 @@ internal sealed class OptComposer : ILoadFileComposer
     {
         if (actualPages > 1)
         {
-            var ext = Path.GetExtension(baseImagePath);
+            var ext = Path.GetExtension(baseImagePath) ?? string.Empty;
             var pathWithoutExt = baseImagePath[..^ext.Length];
 
             for (int pageIdx = 1; pageIdx <= actualPages; pageIdx++)

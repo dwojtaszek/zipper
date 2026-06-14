@@ -114,7 +114,7 @@ internal static class ProductionSetGenerator
             // Write placeholder TIFF image (single-pixel stub)
             if (generated.PageCount > 1)
             {
-                var imageExt = Path.GetExtension(plan.ImageRelPath);
+                var imageExt = Path.GetExtension(plan.ImageRelPath) ?? string.Empty;
                 var imagePathWithoutExt = plan.ImageRelPath[..^imageExt.Length];
 
                 for (int pageIdx = 1; pageIdx <= generated.PageCount; pageIdx++)
@@ -141,7 +141,7 @@ internal static class ProductionSetGenerator
             {
                 var attach = generated.Attachment.Value;
                 var childBates = $"{plan.BatesNumber}_A001";
-                var childExt = Path.GetExtension(attach.filename);
+                var childExt = Path.GetExtension(attach.filename) ?? string.Empty;
 
                 var childNativeRelPath = Path.Combine("NATIVES", plan.VolumeName, $"{childBates}{childExt}");
                 var childTextRelPath = Path.Combine("TEXT", plan.VolumeName, $"{childBates}.txt");
