@@ -2,7 +2,7 @@
 REM Regression guard for #442: run-tests.bat must exit non-zero if a test fails.
 
 echo [ INFO ] Running meta-test to verify run-tests.bat fatal error behavior...
-call "%~dp0run-tests.bat" --meta-test-fail-only
+cmd /c "%~dp0run-tests.bat" --meta-test-fail-only
 
 if errorlevel 1 (
     echo [ SUCCESS ] run-tests.bat correctly exited non-zero on failure.
