@@ -30,8 +30,9 @@ REM --- Helper Functions ---
     set "expected_header_str=%~3"
     set "file_type=%~4"
     set "check_text=%~5"
+    set "encoding=%~6"
 
-    call :print_info "Verifying output in %test_dir%"
+    call :print_info "Verifying output in %test_dir% (Encoding: %encoding%)"
 
     for %%F in ("%test_dir%\*.zip") do set "zip_file=%%F"
     for %%F in ("%test_dir%\*.dat") do set "dat_file=%%F"
@@ -43,18 +44,47 @@ REM --- Helper Functions ---
         call :print_error "No .dat file found in %test_dir%"
     )
 
-    REM Verify line count in .dat file (+1 for header) using PowerShell
-    powershell -Command "(Get-Content -Path '%dat_file%').Count" > "%temp%\line_count.txt"
-    set /p line_count=<"%temp%\line_count.txt"
+    set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%dat_file%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
+    powershell -Command "%bom_cmd%" > "%temp%\bom.txt"
+    set /p first_bytes=<"%temp%\bom.txt"
+
+    if "%encoding%" == "UTF-8" (
+        if not "%first_bytes%" == "EFBBBF" (
+            call :print_error "Missing UTF-8 BOM in .dat file."
+        )
+    ) else if "%encoding%" == "UTF-16" (
+        echo %first_bytes% | findstr /b "FFFE" >nul
+        if errorlevel 1 (
+            call :print_error "Missing UTF-16LE BOM in .dat file."
+        )
+    ) else if "%encoding%" == "ANSI" (
+        if "%first_bytes%" == "EFBBBF" (
+            call :print_error "Unexpected BOM in ANSI .dat file."
+        )
+        echo %first_bytes% | findstr /b "FFFE" >nul
+        if not errorlevel 1 (
+            call :print_error "Unexpected BOM in ANSI .dat file."
+        )
+    )
+
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%dat_file%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = ($c.ToCharArray() | Where-Object { $_ -eq \"`n\" }).Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
+    for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
+        set "has_nl=%%A"
+        set "line_count=%%B"
+        set "header=%%C"
+    )
+
+    if "%has_nl%" == "False" (
+        call :print_error "Missing trailing newline in .dat file."
+    )
+
     set /a expected_line_count=%expected_count% + 1
     if "%line_count%" neq "%expected_line_count%" (
         call :print_error "Incorrect line count in .dat file. Expected %expected_line_count%, found %line_count%."
     )
     call :print_info ".dat file line count is correct (%line_count%)."
 
-    REM Verify header using PowerShell
-    powershell -Command "(Get-Content -Path '%dat_file%' -TotalCount 1)" > "%temp%\header.txt"
-    set /p header=<"%temp%\header.txt"
     for %%H in (%expected_header_str%) do (
         echo "%header%" | findstr /c:"%%H" >nul
         if errorlevel 1 (
@@ -64,7 +94,7 @@ REM --- Helper Functions ---
     call :print_info ".dat file header is correct."
 
     REM Verify file count in zip using PowerShell
-    powershell -Command "[System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -like '*.' + '%file_type%'}).Count" > "%temp%\zip_count.txt"
+    powershell -Command "[System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.%file_type%$'}).Count" > "%temp%\zip_count.txt"
     set /p zip_file_count=<"%temp%\zip_count.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
@@ -73,7 +103,11 @@ REM --- Helper Functions ---
 
     REM Verify text file count if required
     if "%check_text%" == "true" (
-        powershell -Command "[System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -like '*.txt'}).Count" > "%temp%\zip_txt_count.txt"
+        if "%file_type%" == "eml" (
+            powershell -Command "[System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment'}).Count" > "%temp%\zip_txt_count.txt"
+        ) else (
+            powershell -Command "[System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$'}).Count" > "%temp%\zip_txt_count.txt"
+        )
         set /p txt_count=<"%temp%\zip_txt_count.txt"
         if "%txt_count%" neq "%expected_count%" (
             call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
@@ -121,6 +155,7 @@ REM %2: Target size in MB
     set "file_type=%~4"
     set "check_text=%~5"
     set "encoding=%~6"
+    set "expected_attachment_count=%~7"
 
     call :verify_output "%test_dir%" "%expected_count%" "%expected_header_str%" "%file_type%" "%check_text%" "%encoding%"
 
@@ -137,29 +172,26 @@ REM %2: Target size in MB
     powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match 'attachment.*\.(pdf|jpg|tiff)$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_count.txt"
     set /p attachment_files=<"%temp%\att_count.txt"
 
-    REM Count EML files for expected attachment baseline
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.eml$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\eml_count.txt"
-    set /p eml_files=<"%temp%\eml_count.txt"
-
-    set /a min_expected_attachments=eml_files / 10
-    if %attachment_files% lss %min_expected_attachments% (
-        call :print_error "Expected at least %min_expected_attachments% attachment files in ZIP, but found %attachment_files%."
+    if "%attachment_files%" neq "%expected_attachment_count%" (
+        call :print_error "Expected exactly %expected_attachment_count% attachment files in ZIP, but found %attachment_files%."
     )
-    call :print_info "Found %attachment_files% attachment files in ZIP archive (expected at least %min_expected_attachments%)."
+    call :print_info "Found %attachment_files% attachment files in ZIP archive (expected exactly %expected_attachment_count%)."
 
     REM Check attachments in .dat file
-    findstr /c:"attachment" "%dat_file%" >nul
-    if errorlevel 1 (
-        call :print_error "No attachments found in .dat file, but they were expected."
+    set "att_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $lines = [System.IO.File]::ReadAllLines('%dat_file%', $enc); Write-Host ($lines | Where-Object { $_ -match 'attachment' }).Count"
+    powershell -Command "%att_cmd%" > "%temp%\dat_att_count.txt"
+    set /p dat_attachment_count=<"%temp%\dat_att_count.txt"
+    if "%dat_attachment_count%" neq "%expected_attachment_count%" (
+        call :print_error "Expected exactly %expected_attachment_count% attachments in .dat file, found %dat_attachment_count%."
     )
-    call :print_info "Found attachments in .dat file."
+    call :print_info "Found %dat_attachment_count% attachments in .dat file."
 
     REM Verify attachment text files if text extraction enabled
     if "%check_text%" == "true" (
         powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
         set /p attachment_text_files=<"%temp%\att_txt_count.txt"
-        if %attachment_text_files% lss %min_expected_attachments% (
-            call :print_error "Expected at least %min_expected_attachments% attachment text files, but found %attachment_text_files%."
+        if "%attachment_text_files%" neq "%expected_attachment_count%" (
+            call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
         )
         call :print_info "Found %attachment_text_files% attachment text files in ZIP archive."
     )
@@ -203,18 +235,47 @@ REM %2: Target size in MB
         call :print_error "Failed to extract .dat file from zip archive"
     )
 
-    REM Verify line count (+1 for header)
-    powershell -Command "(Get-Content -Path '%extracted_dat%').Count" > "%temp%\line_count2.txt"
-    set /p line_count=<"%temp%\line_count2.txt"
+    set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%extracted_dat%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
+    powershell -Command "%bom_cmd%" > "%temp%\bom.txt"
+    set /p first_bytes=<"%temp%\bom.txt"
+
+    if "%encoding%" == "UTF-8" (
+        if not "%first_bytes%" == "EFBBBF" (
+            call :print_error "Missing UTF-8 BOM in extracted .dat file."
+        )
+    ) else if "%encoding%" == "UTF-16" (
+        echo %first_bytes% | findstr /b "FFFE" >nul
+        if errorlevel 1 (
+            call :print_error "Missing UTF-16LE BOM in extracted .dat file."
+        )
+    ) else if "%encoding%" == "ANSI" (
+        if "%first_bytes%" == "EFBBBF" (
+            call :print_error "Unexpected BOM in ANSI extracted .dat file."
+        )
+        echo %first_bytes% | findstr /b "FFFE" >nul
+        if not errorlevel 1 (
+            call :print_error "Unexpected BOM in ANSI extracted .dat file."
+        )
+    )
+
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%extracted_dat%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = ($c.ToCharArray() | Where-Object { $_ -eq \"`n\" }).Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
+    for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
+        set "has_nl=%%A"
+        set "line_count=%%B"
+        set "header=%%C"
+    )
+
+    if "%has_nl%" == "False" (
+        call :print_error "Missing trailing newline in extracted .dat file."
+    )
+
     set /a expected_line_count=%expected_count% + 1
     if "%line_count%" neq "%expected_line_count%" (
-        call :print_error "Incorrect line count in .dat file. Expected %expected_line_count%, found %line_count%."
+        call :print_error "Incorrect line count in extracted .dat file. Expected %expected_line_count%, found %line_count%."
     )
     call :print_info ".dat file line count is correct (%line_count%)."
 
-    REM Verify header
-    powershell -Command "(Get-Content -Path '%extracted_dat%' -TotalCount 1)" > "%temp%\header2.txt"
-    set /p header=<"%temp%\header2.txt"
     for %%H in (%expected_header_str%) do (
         echo "%header%" | findstr /c:"%%H" >nul
         if errorlevel 1 (
