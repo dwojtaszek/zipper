@@ -4,6 +4,7 @@ REM --- Test Configuration ---
 
 REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
+set FAILED=0
 
 REM The .NET project to run.
 set PROJECT=src\Zipper.csproj
@@ -20,6 +21,7 @@ REM --- Helper Functions ---
 
 :print_error
     echo [ ERROR ] %~1
+    set /a FAILED+=1
     exit /b 1
 
 :verify_output
@@ -184,7 +186,7 @@ REM %2: Target size in MB
     )
 
     REM Verify .dat file exists in zip
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); exit ($c -eq 1 ? 0 : 1) } catch { exit 1 }"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); exit ($c -eq 1 ? 0 : 1) } catch { exit 1 }"
     if errorlevel 1 (
         call :print_error "Expected 1 .dat file in zip archive"
     )
@@ -194,7 +196,7 @@ REM %2: Target size in MB
     set "temp_extract=%test_dir%\_verify_temp"
     if exist "%temp_extract%" rmdir /s /q "%temp_extract%"
     mkdir "%temp_extract%"
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $e = $z.Entries | Where { $_.Name -match '\.dat$' } | Select -First 1; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, '%temp_extract%\%e.Name%', $true); $z.Dispose() } catch { exit 1 }"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $e = $z.Entries | Where { $_.Name -match '\.dat$' } | Select -First 1; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, ('%temp_extract%\' + $e.Name), $true); $z.Dispose() } catch { exit 1 }"
 
     for %%F in ("%temp_extract%\*.dat") do set "extracted_dat=%%F"
     if not defined extracted_dat (
@@ -234,6 +236,11 @@ REM %2: Target size in MB
     goto :eof
 
 REM --- Test Cases ---
+
+if "%~1"=="--meta-test-fail-only" (
+    call :print_error "Deliberate failure for regression guard"
+    goto :end_of_tests
+)
 
 call :print_info "Starting test suite..."
 
@@ -526,4 +533,19 @@ if errorlevel 1 (
 )
 call :print_success "Column-profile empty-percentage tests passed."
 
+REM Meta-Test: Validate that run-tests.bat behaves fatally on error
+call :print_info "Running run-tests.bat fatal error behavior meta-test..."
+call .\tests\test-run-tests-fatal.bat
+if errorlevel 1 (
+    echo [ ERROR ] run-tests.bat fatal error behavior meta-test failed.
+    exit /b 1
+)
+call :print_success "run-tests.bat fatal error behavior meta-test passed."
+
+
+:end_of_tests
+if %FAILED% gtr 0 (
+    echo [ ERROR ] %FAILED% assertion^(s^) failed.
+    exit /b 1
+)
 call :print_success "All tests passed successfully!"
