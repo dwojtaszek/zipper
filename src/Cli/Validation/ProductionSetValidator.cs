@@ -4,6 +4,13 @@ internal static class ProductionSetValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
+        return ValidateDependencies(parsed) &&
+               ValidateParameters(parsed) &&
+               ValidatePrefix(parsed);
+    }
+
+    private static bool ValidateDependencies(ParsedArguments parsed)
+    {
         if (parsed.ProductionSet)
         {
             if (parsed.LoadfileOnly)
@@ -37,6 +44,11 @@ internal static class ProductionSetValidator
             return false;
         }
 
+        return true;
+    }
+
+    private static bool ValidateParameters(ParsedArguments parsed)
+    {
         if (parsed.BatesStart.HasValue && parsed.BatesStart.Value < 0)
         {
             Console.Error.WriteLine("Error: Bates start number must be non-negative.");
@@ -49,6 +61,11 @@ internal static class ProductionSetValidator
             return false;
         }
 
+        return true;
+    }
+
+    private static bool ValidatePrefix(ParsedArguments parsed)
+    {
         if (!string.IsNullOrEmpty(parsed.BatesPrefix))
         {
             if (parsed.BatesPrefix.Contains('/', StringComparison.Ordinal) || parsed.BatesPrefix.Contains('\\', StringComparison.Ordinal))

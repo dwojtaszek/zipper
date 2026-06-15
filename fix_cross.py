@@ -1,4 +1,5 @@
-using System;
+with open('src/Cli/Validation/CrossCuttingValidator.cs', 'w') as f:
+    f.write("""using System;
 using System.Collections.Generic;
 using System.IO;
 using Zipper.Profiles;
@@ -78,7 +79,7 @@ internal static class CrossCuttingValidator
     {
         if (!string.IsNullOrEmpty(parsed.ColumnProfile) && !ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile) && !File.Exists(parsed.ColumnProfile))
         {
-            Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
+            Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.\\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
             return false;
         }
 
@@ -153,7 +154,7 @@ internal static class CrossCuttingValidator
             var scenario = ChaosScenarios.GetByName(parsed.ChaosScenario);
             if (scenario == null)
             {
-                Console.Error.WriteLine($"Error: Unknown chaos scenario '{parsed.ChaosScenario}'.\n       Available scenarios: {string.Join(", ", ChaosScenarios.ScenarioNames)}");
+                Console.Error.WriteLine($"Error: Unknown chaos scenario '{parsed.ChaosScenario}'.\\n       Available scenarios: {string.Join(", ", ChaosScenarios.ScenarioNames)}");
                 return false;
             }
 
@@ -249,17 +250,17 @@ internal static class CrossCuttingValidator
 
     public static bool IsValidChaosAmount(string value) => value switch
     {
-        _ when value.EndsWith("%", StringComparison.Ordinal) => double.TryParse(value.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture, out var pct) && pct > 0,
+        _ when value.EndsWith("%") => double.TryParse(value.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture, out var pct) && pct > 0,
         _ => int.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var count) && count > 0
     };
 
     internal static string ParseDelimiterArgument(string arg)
     {
         if (string.IsNullOrEmpty(arg)) throw new ArgumentException("Delimiter argument cannot be empty.");
-        if (string.Equals(arg, "\\t", StringComparison.Ordinal)) return "\t";
-        if (string.Equals(arg, "\\n", StringComparison.Ordinal)) return "\n";
-        if (string.Equals(arg, "\\r", StringComparison.Ordinal)) return "\r";
-        if (string.Equals(arg, "\\r\\n", StringComparison.Ordinal)) return "\r\n";
+        if (string.Equals(arg, "\\\\t", StringComparison.Ordinal)) return "\\t";
+        if (string.Equals(arg, "\\\\n", StringComparison.Ordinal)) return "\\n";
+        if (string.Equals(arg, "\\\\r", StringComparison.Ordinal)) return "\\r";
+        if (string.Equals(arg, "\\\\r\\\\n", StringComparison.Ordinal)) return "\\r\\n";
         if (int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255) return ((char)asciiCode).ToString();
         if (arg.Length > 1) Console.Error.WriteLine($"Warning: Delimiter argument '{arg}' is longer than 1 character. Using first character: '{arg[0]}'");
         return arg[0].ToString();
@@ -282,3 +283,4 @@ internal static class CrossCuttingValidator
         throw new ArgumentException($"Delimiter must use 'ascii:<N>' or 'char:<c>' prefix: '{arg}'");
     }
 }
+""")

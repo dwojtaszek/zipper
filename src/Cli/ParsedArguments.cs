@@ -77,22 +77,6 @@ public class ParsedArguments
 
     public string? NestedDelim { get; set; }
 
-    public string? ParsedColDelim { get; set; }
-
-    public string? ParsedQuoteDelim { get; set; }
-
-    public string? ParsedNewlineDelim { get; set; }
-
-    public string? ParsedMultiDelim { get; set; }
-
-    public string? ParsedNestedDelim { get; set; }
-
-    public string? ParsedDelimiterColumn { get; set; }
-
-    public string? ParsedDelimiterQuote { get; set; }
-
-    public string? ParsedDelimiterNewline { get; set; }
-
 
     public bool ChaosMode { get; set; }
 

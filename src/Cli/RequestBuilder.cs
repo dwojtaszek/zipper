@@ -62,46 +62,46 @@ public static class RequestBuilder
             }
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterColumn) && !string.IsNullOrEmpty(parsed.ParsedDelimiterColumn))
+        if (!string.IsNullOrEmpty(parsed.DelimiterColumn))
         {
-            columnDelim = parsed.ParsedDelimiterColumn;
+            columnDelim = ParseDelimiterArgument(parsed.DelimiterColumn);
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterQuote) && !string.IsNullOrEmpty(parsed.ParsedDelimiterQuote))
+        if (!string.IsNullOrEmpty(parsed.DelimiterQuote))
         {
-            quoteDelim = parsed.ParsedDelimiterQuote;
+            quoteDelim = ParseDelimiterArgument(parsed.DelimiterQuote);
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterNewline) && !string.IsNullOrEmpty(parsed.ParsedDelimiterNewline))
+        if (!string.IsNullOrEmpty(parsed.DelimiterNewline))
         {
-            newlineDelim = parsed.ParsedDelimiterNewline;
+            newlineDelim = ParseDelimiterArgument(parsed.DelimiterNewline);
         }
 
-        if (!string.IsNullOrEmpty(parsed.ColDelim) && !string.IsNullOrEmpty(parsed.ParsedColDelim))
+        if (!string.IsNullOrEmpty(parsed.ColDelim))
         {
-            columnDelim = parsed.ParsedColDelim;
+            columnDelim = ParseStrictDelimiter(parsed.ColDelim);
         }
 
-        if (!string.IsNullOrEmpty(parsed.QuoteDelim) && parsed.ParsedQuoteDelim != null)
+        if (!string.IsNullOrEmpty(parsed.QuoteDelim))
         {
-            quoteDelim = parsed.ParsedQuoteDelim;
+            quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase) ? string.Empty : ParseStrictDelimiter(parsed.QuoteDelim);
         }
 
-        if (!string.IsNullOrEmpty(parsed.NewlineDelim) && !string.IsNullOrEmpty(parsed.ParsedNewlineDelim))
+        if (!string.IsNullOrEmpty(parsed.NewlineDelim))
         {
-            newlineDelim = parsed.ParsedNewlineDelim;
+            newlineDelim = ParseStrictDelimiter(parsed.NewlineDelim);
         }
 
         string multiDelim = ";";
-        if (!string.IsNullOrEmpty(parsed.MultiDelim) && !string.IsNullOrEmpty(parsed.ParsedMultiDelim))
+        if (!string.IsNullOrEmpty(parsed.MultiDelim))
         {
-            multiDelim = parsed.ParsedMultiDelim;
+            multiDelim = ParseStrictDelimiter(parsed.MultiDelim);
         }
 
         string nestedDelim = "\\";
-        if (!string.IsNullOrEmpty(parsed.NestedDelim) && !string.IsNullOrEmpty(parsed.ParsedNestedDelim))
+        if (!string.IsNullOrEmpty(parsed.NestedDelim))
         {
-            nestedDelim = parsed.ParsedNestedDelim;
+            nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
         }
 
         var encodingName = (encoding != null && !string.IsNullOrEmpty(parsed.Encoding))
