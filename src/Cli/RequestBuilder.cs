@@ -62,48 +62,46 @@ public static class RequestBuilder
             }
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterColumn))
+        if (!string.IsNullOrEmpty(parsed.DelimiterColumn) && !string.IsNullOrEmpty(parsed.ParsedDelimiterColumn))
         {
-            columnDelim = ParseDelimiterArgument(parsed.DelimiterColumn);
+            columnDelim = parsed.ParsedDelimiterColumn;
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterQuote))
+        if (!string.IsNullOrEmpty(parsed.DelimiterQuote) && !string.IsNullOrEmpty(parsed.ParsedDelimiterQuote))
         {
-            quoteDelim = ParseDelimiterArgument(parsed.DelimiterQuote);
+            quoteDelim = parsed.ParsedDelimiterQuote;
         }
 
-        if (!string.IsNullOrEmpty(parsed.DelimiterNewline))
+        if (!string.IsNullOrEmpty(parsed.DelimiterNewline) && !string.IsNullOrEmpty(parsed.ParsedDelimiterNewline))
         {
-            newlineDelim = ParseDelimiterArgument(parsed.DelimiterNewline);
+            newlineDelim = parsed.ParsedDelimiterNewline;
         }
 
-        if (!string.IsNullOrEmpty(parsed.ColDelim))
+        if (!string.IsNullOrEmpty(parsed.ColDelim) && !string.IsNullOrEmpty(parsed.ParsedColDelim))
         {
-            columnDelim = ParseStrictDelimiter(parsed.ColDelim);
+            columnDelim = parsed.ParsedColDelim;
         }
 
-        if (!string.IsNullOrEmpty(parsed.QuoteDelim))
+        if (!string.IsNullOrEmpty(parsed.QuoteDelim) && parsed.ParsedQuoteDelim != null)
         {
-            quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase)
-                ? string.Empty
-                : ParseStrictDelimiter(parsed.QuoteDelim);
+            quoteDelim = parsed.ParsedQuoteDelim;
         }
 
-        if (!string.IsNullOrEmpty(parsed.NewlineDelim))
+        if (!string.IsNullOrEmpty(parsed.NewlineDelim) && !string.IsNullOrEmpty(parsed.ParsedNewlineDelim))
         {
-            newlineDelim = ParseStrictDelimiter(parsed.NewlineDelim);
+            newlineDelim = parsed.ParsedNewlineDelim;
         }
 
         string multiDelim = ";";
-        if (!string.IsNullOrEmpty(parsed.MultiDelim))
+        if (!string.IsNullOrEmpty(parsed.MultiDelim) && !string.IsNullOrEmpty(parsed.ParsedMultiDelim))
         {
-            multiDelim = ParseStrictDelimiter(parsed.MultiDelim);
+            multiDelim = parsed.ParsedMultiDelim;
         }
 
         string nestedDelim = "\\";
-        if (!string.IsNullOrEmpty(parsed.NestedDelim))
+        if (!string.IsNullOrEmpty(parsed.NestedDelim) && !string.IsNullOrEmpty(parsed.ParsedNestedDelim))
         {
-            nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
+            nestedDelim = parsed.ParsedNestedDelim;
         }
 
         var encodingName = (encoding != null && !string.IsNullOrEmpty(parsed.Encoding))
@@ -222,70 +220,7 @@ public static class RequestBuilder
         };
     }
 
-    internal static string ParseDelimiterArgument(string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            throw new ArgumentException("Delimiter argument cannot be empty.");
-        }
+    internal static string ParseDelimiterArgument(string arg) => Validation.CrossCuttingValidator.ParseDelimiterArgument(arg);
 
-        if (string.Equals(arg, "\\t", StringComparison.Ordinal))
-        {
-            return "\t";
-        }
-
-        if (string.Equals(arg, "\\n", StringComparison.Ordinal))
-        {
-            return "\n";
-        }
-
-        if (string.Equals(arg, "\\r", StringComparison.Ordinal))
-        {
-            return "\r";
-        }
-
-        if (string.Equals(arg, "\\r\\n", StringComparison.Ordinal))
-        {
-            return "\r\n";
-        }
-
-        if (int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
-        {
-            return ((char)asciiCode).ToString();
-        }
-
-        if (arg.Length > 1)
-        {
-            Console.Error.WriteLine($"Warning: Delimiter argument '{arg}' is longer than 1 character. Using first character: '{arg[0]}'");
-        }
-
-        return arg[0].ToString();
-    }
-
-    internal static string ParseStrictDelimiter(string arg)
-    {
-        if (arg.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
-        {
-            var numPart = arg.Substring(6);
-            if (int.TryParse(numPart, System.Globalization.CultureInfo.InvariantCulture, out var code) && code >= 0 && code <= 255)
-            {
-                return ((char)code).ToString();
-            }
-
-            throw new ArgumentException($"Invalid ASCII code in delimiter: '{arg}'");
-        }
-
-        if (arg.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
-        {
-            var charPart = arg.Substring(5);
-            if (charPart.Length >= 1)
-            {
-                return charPart[0].ToString();
-            }
-
-            throw new ArgumentException($"Missing character in delimiter: '{arg}'");
-        }
-
-        throw new ArgumentException($"Delimiter must use 'ascii:<N>' or 'char:<c>' prefix: '{arg}'");
-    }
+    internal static string ParseStrictDelimiter(string arg) => Validation.CrossCuttingValidator.ParseStrictDelimiter(arg);
 }

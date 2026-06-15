@@ -8,6 +8,9 @@ public class ParsedArguments
 
     public DirectoryInfo? OutputDirectory { get; set; }
 
+    public string? OutputPathStr { get; set; }
+
+
     public int Folders { get; set; } = 1;
 
     public string? Encoding { get; set; } = "UTF-8";
@@ -73,6 +76,23 @@ public class ParsedArguments
     public string? MultiDelim { get; set; }
 
     public string? NestedDelim { get; set; }
+
+    public string? ParsedColDelim { get; set; }
+
+    public string? ParsedQuoteDelim { get; set; }
+
+    public string? ParsedNewlineDelim { get; set; }
+
+    public string? ParsedMultiDelim { get; set; }
+
+    public string? ParsedNestedDelim { get; set; }
+
+    public string? ParsedDelimiterColumn { get; set; }
+
+    public string? ParsedDelimiterQuote { get; set; }
+
+    public string? ParsedDelimiterNewline { get; set; }
+
 
     public bool ChaosMode { get; set; }
 

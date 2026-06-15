@@ -224,9 +224,11 @@ namespace Zipper.Tests
         {
             // "../escape" resolves to the parent of CWD — outside the allowed base directory.
             var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "../escape" });
+            Assert.NotNull(result);
 
-            // Parse must return null (error path) so the caller exits with a non-zero code.
-            Assert.Null(result);
+            // Validation must fail (error path) so the caller exits with a non-zero code.
+            var isValid = CliValidator.Validate(result!);
+            Assert.False(isValid);
         }
 
         /// <summary>
@@ -243,6 +245,9 @@ namespace Zipper.Tests
                 var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", uniqueDirName });
 
                 Assert.NotNull(result);
+
+                var isValid = CliValidator.Validate(result!);
+                Assert.True(isValid);
                 Assert.NotNull(result!.OutputDirectory);
             }
             finally

@@ -14,3 +14,10 @@
 - **lessons**: none
 - **suppressions**: none
 
+### 2026-06-15 claude-code:branch:issue-470
+
+- **findings**: 9 (2 ACTION, 7 INFO) - False positive missing required parameters, explicitly requested coupling.
+- **outcome**: rejected all ACTION findings (false positives from diff tool / explicit requirements).
+- **telemetry**: host=claude-code mode=branch specialists=7 bundle=50K
+- **lessons**: Subagents misread the diff context when a method wrapper is removed but its contents are preserved inline, leading to multiple false positives for "deleted code".
+- **suppressions**: Suppress: "Missing required parameter checks" when the checks were merely moved inline.
