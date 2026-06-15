@@ -11,6 +11,7 @@ internal class DatAnomalyApplier : IAnomalyApplier
     private readonly string quoteDelimiter;
     private readonly string eol;
     private readonly HashSet<long> encodingAnomalyLines = new();
+    private readonly char[] alternatives;
 
     public DatAnomalyApplier(Random random, string columnDelimiter, string quoteDelimiter, string eol)
     {
@@ -18,6 +19,7 @@ internal class DatAnomalyApplier : IAnomalyApplier
         this.columnDelimiter = columnDelimiter;
         this.quoteDelimiter = quoteDelimiter;
         this.eol = eol;
+        this.alternatives = AlternativeDelimiters.Where(c => !string.Equals(c.ToString(), columnDelimiter, StringComparison.Ordinal)).ToArray();
     }
 
     public string Apply(long lineNumber, string line, string recordId, string chaosType, List<ChaosAnomaly> anomalies)
@@ -136,13 +138,12 @@ internal class DatAnomalyApplier : IAnomalyApplier
         delimiterIndex = random.Next(positions.Count) + 1;
         int targetPos = positions[delimiterIndex - 1];
 
-        var alternatives = AlternativeDelimiters.Where(c => !string.Equals(c.ToString(), columnDelimiter, StringComparison.Ordinal)).ToArray();
-        if (alternatives.Length == 0)
+        if (this.alternatives.Length == 0)
         {
             return line;
         }
 
-        char replacementChar = alternatives[random.Next(alternatives.Length)];
+        char replacementChar = this.alternatives[random.Next(this.alternatives.Length)];
 
         return string.Concat(
             line.AsSpan(0, targetPos),
@@ -152,6 +153,12 @@ internal class DatAnomalyApplier : IAnomalyApplier
 
     private string ApplyDroppedQuote(string line, out string column)
     {
+        if (string.IsNullOrEmpty(quoteDelimiter) || string.IsNullOrEmpty(columnDelimiter))
+        {
+            column = "Unknown";
+            return line;
+        }
+
         int lastQuotePos = line.LastIndexOf(quoteDelimiter, StringComparison.Ordinal);
         if (lastQuotePos < 0)
         {

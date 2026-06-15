@@ -7,14 +7,14 @@ public class ChaosSamplerTests
     [Fact]
     public void Constructor_TotalLinesExceedsIntMax_ThrowsArgumentOutOfRangeException()
     {
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosSampler((long)int.MaxValue + 1, "1%", 42));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosSampler((long)int.MaxValue + 1, "1%", new Random(42)));
         Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Constructor_TotalLinesZero_ThrowsArgumentOutOfRangeException()
     {
-        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosSampler(0, "1%", 42));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosSampler(0, "1%", new Random(42)));
         Assert.Contains("Chaos Engine requires a positive totalLines count", ex.Message, StringComparison.Ordinal);
     }
 

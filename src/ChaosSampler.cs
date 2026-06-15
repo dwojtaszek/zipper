@@ -4,7 +4,7 @@ internal class ChaosSampler
 {
     private readonly HashSet<long> targetLines;
 
-    public ChaosSampler(long totalLines, string? chaosAmount, int? seed = null)
+    public ChaosSampler(long totalLines, string? chaosAmount, Random random)
     {
         if (totalLines > int.MaxValue)
         {
@@ -17,10 +17,6 @@ internal class ChaosSampler
         }
 
         int targetCount = ParseChaosAmount(chaosAmount, (int)totalLines);
-
-#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
-        Random random = seed.HasValue ? new Random(seed.Value) : new Random();
-#pragma warning restore S2245
 
         this.targetLines = SelectTargetLines((int)totalLines, targetCount, random);
     }

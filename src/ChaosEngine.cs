@@ -42,12 +42,12 @@ internal class ChaosEngine
         string eol,
         int? seed = null)
     {
-        // Initialize Sampler
-        this.sampler = new ChaosSampler(totalLines, chaosAmount, seed);
-
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
+
+        // Initialize Sampler
+        this.sampler = new ChaosSampler(totalLines, chaosAmount, random);
 
         // Determine enabled types
         var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
