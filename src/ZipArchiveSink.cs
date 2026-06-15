@@ -8,7 +8,7 @@ namespace Zipper
     /// Handles ZIP archive creation and file writing operations
     /// Extracted from ParallelFileGenerator to follow single responsibility principle.
     /// </summary>
-    internal static class ZipArchiveService
+    internal sealed class ZipArchiveSink : IArchiveSink
     {
         /// <summary>
         /// Creates a ZIP archive containing the generated files and optionally a load file.
@@ -19,7 +19,7 @@ namespace Zipper
         /// <param name="request">File generation request parameters.</param>
         /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
         /// <returns>The actual load file path that was created (or original if included in ZIP).</returns>
-        public static async Task<string> CreateArchiveAsync(
+        public async Task<string> CreateArchiveAsync(
             string zipFilePath,
             string loadFileName,
             string loadFilePath,

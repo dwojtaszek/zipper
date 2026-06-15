@@ -41,7 +41,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -82,7 +82,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -126,7 +126,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -171,7 +171,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -219,7 +219,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -305,7 +305,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -359,7 +359,7 @@ namespace Zipper.Tests
             writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load", loadPathBase, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load", loadPathBase, request, channel.Reader);
 
             // Assert
             Assert.True(File.Exists(zipPath));
@@ -423,7 +423,7 @@ namespace Zipper.Tests
             channel.Writer.Complete();
 
             // Act
-            await ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
             // Assert — audit file totalRecords should equal fileCount, not fileCount+1
             var propertiesPath = loadPath + "_properties.json";
@@ -459,7 +459,7 @@ namespace Zipper.Tests
 
             channel.Writer.Complete();
 
-            await Assert.ThrowsAnyAsync<Exception>(() => ZipArchiveService.CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+            await Assert.ThrowsAnyAsync<Exception>(() => new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
 
             Assert.True(owner1.IsDisposed, "Current item memory owner should be disposed");
             Assert.True(owner2.IsDisposed, "Buffered item memory owner should be disposed");
