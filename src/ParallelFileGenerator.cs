@@ -14,14 +14,13 @@ namespace Zipper
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
         private readonly IArchiveSink archiveSink;
 
-        public ParallelFileGenerator()
+        public ParallelFileGenerator() : this(new ZipArchiveSink())
         {
-            this.archiveSink = new ZipArchiveSink();
         }
 
         internal ParallelFileGenerator(IArchiveSink archiveSink)
         {
-            this.archiveSink = archiveSink;
+            this.archiveSink = archiveSink ?? throw new ArgumentNullException(nameof(archiveSink));
         }
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)

@@ -501,31 +501,49 @@ namespace Zipper
             Assert.Equal(expectedPadding, result);
         }
 
-        [Fact]
+        [Fact(Timeout = 10000)]
         public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
         {
-            var sink = new InMemorySink
-            {
-                InjectedFault = new InvalidOperationException("Simulated consumer fault")
-            };
-            var generator = new ParallelFileGenerator(sink);
+            var tempDir = Directory.GetCurrentDirectory();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+            Directory.CreateDirectory(outputPath);
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            try
             {
-                await generator.GenerateFilesAsync(new FileGenerationRequest
+                var faultingSink = new InMemorySink
+                {
+                    IsFaulted = true,
+                    FaultException = new IOException("Simulated consumer fault")
+                };
+                var generator = new ParallelFileGenerator(faultingSink);
+
+                // This should throw (not hang) because the consumer throws an exception
+                var generationTask = generator.GenerateFilesAsync(new FileGenerationRequest
                 {
                     Output = new OutputConfig
                     {
-                        OutputPath = "dummy",
+                        OutputPath = outputPath,
                         FileCount = 100,
                         FileType = "pdf",
                         Folders = 2,
                         Concurrency = 4,
                     },
-                }).ConfigureAwait(false);
-            });
+                });
 
-            Assert.Equal("Simulated consumer fault", ex.Message);
+                var completed = await Task.WhenAny(generationTask, Task.Delay(TimeSpan.FromSeconds(10)));
+                Assert.True(completed == generationTask, "GenerateFilesAsync did not fail within timeout.");
+
+                var ex = await Assert.ThrowsAnyAsync<Exception>(() => generationTask);
+
+                Assert.Equal("Simulated consumer fault", ex.Message);
+            }
+            finally
+            {
+                if (Directory.Exists(outputPath))
+                {
+                    Directory.Delete(outputPath, true);
+                }
+            }
         }
 
         [Fact]

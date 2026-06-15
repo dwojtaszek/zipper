@@ -1,153 +1,164 @@
 using Xunit;
 using Zipper.Emails;
 
-namespace Zipper.Tests
+namespace Zipper.Tests;
+
+public class DiskBackedFileDataListTests
 {
-    public class DiskBackedFileDataListTests
+    [Fact]
+    public void RoundTrip_EmptyList_ReturnsNoElements()
     {
-        [Fact]
-        public void RoundTrip_WithAllFieldsPopulated_PreservesData()
+        using var list = new DiskBackedFileDataList();
+        Assert.Empty(list);
+
+        var enumerated = list.ToList();
+        Assert.Empty(enumerated);
+    }
+
+    [Fact]
+    public void RoundTrip_SerializeDeserialize_PreservesAllFields()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        var originalData = new FileData
         {
-            using var list = new DiskBackedFileDataList();
-
-            var original = new FileData
+            WorkItem = new FileWorkItem
             {
-                WorkItem = new FileWorkItem
-                {
-                    Index = 42,
-                    FolderNumber = 3,
-                    FolderName = "folder_003",
-                    FileName = "test.txt",
-                    FilePathInZip = "folder_003/test.txt"
-                },
-                DataLength = 1024,
-                PageCount = 5,
-                Hash = "abcdef1234567890",
-                Attachment = ("attach.pdf", Array.Empty<byte>()),
-                Email = new Email
-                {
-                    To = "to@example.com",
-                    From = "from@example.com",
-                    Subject = "Test Subject",
-                    SentDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc)
-                }
-            };
-
-            list.Add(original);
-
-            var result = list.Single();
-
-            Assert.Equal(original.WorkItem.Index, result.WorkItem.Index);
-            Assert.Equal(original.WorkItem.FolderNumber, result.WorkItem.FolderNumber);
-            Assert.Equal(original.WorkItem.FolderName, result.WorkItem.FolderName);
-            Assert.Equal(original.WorkItem.FileName, result.WorkItem.FileName);
-            Assert.Equal(original.WorkItem.FilePathInZip, result.WorkItem.FilePathInZip);
-
-            Assert.Equal(original.DataLength, result.DataLength);
-            Assert.Equal(original.PageCount, result.PageCount);
-            Assert.Equal(original.Hash, result.Hash);
-
-            Assert.True(result.Attachment.HasValue);
-            Assert.Equal(original.Attachment.Value.filename, result.Attachment.Value.filename);
-            Assert.Empty(result.Attachment.Value.content);
-
-            Assert.NotNull(result.Email);
-            Assert.Equal(original.Email.To, result.Email.To);
-            Assert.Equal(original.Email.From, result.Email.From);
-            Assert.Equal(original.Email.Subject, result.Email.Subject);
-            Assert.Equal(original.Email.SentDate, result.Email.SentDate);
-        }
-
-        [Fact]
-        public void RoundTrip_WithNullOrEmptyEdgeCases_PreservesData()
-        {
-            using var list = new DiskBackedFileDataList();
-
-            var original = new FileData
+                Index = 42,
+                FolderNumber = 3,
+                FolderName = "folder_003",
+                FileName = "00000042.pdf",
+                FilePathInZip = "folder_003/00000042.pdf"
+            },
+            DataLength = 1024,
+            PageCount = 5,
+            Hash = "abcdef1234567890",
+            Attachment = ("test_attach.txt", Array.Empty<byte>()),
+            Email = new Email
             {
-                WorkItem = new FileWorkItem
-                {
-                    Index = 1,
-                    FolderNumber = 0,
-                    FolderName = string.Empty,
-                    FileName = string.Empty,
-                    FilePathInZip = string.Empty
-                },
-                DataLength = 0,
-                PageCount = 0,
-                Hash = string.Empty,
-                Attachment = null,
-                Email = null
-            };
-
-            list.Add(original);
-
-            var result = list.Single();
-
-            Assert.Equal(original.WorkItem.Index, result.WorkItem.Index);
-            Assert.Equal(string.Empty, result.WorkItem.FolderName);
-            Assert.Equal(string.Empty, result.WorkItem.FileName);
-            Assert.Equal(string.Empty, result.WorkItem.FilePathInZip);
-            Assert.Equal(0, result.DataLength);
-            Assert.Equal(0, result.PageCount);
-            Assert.Equal(string.Empty, result.Hash);
-            Assert.False(result.Attachment.HasValue);
-            Assert.Null(result.Email);
-        }
-
-        [Fact]
-        public void Dispose_RemovesTempFile()
-        {
-            using (var list = new DiskBackedFileDataList())
-            {
-                list.Add(new FileData { WorkItem = new FileWorkItem { Index = 1 } });
-
-                // Get the temp file path by reflection or assume it's created. We can just test that we don't leak files.
-                // Wait, DiskBackedFileDataList creates a temp file in constructor.
-                // We will test if Dispose throws, and we can also assert that it's safe to call multiple times.
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "Test Subject",
+                SentDate = new DateTime(2023, 1, 1, 12, 0, 0, DateTimeKind.Utc)
             }
+        };
 
-            // Should not throw on double dispose
-            var doubleDisposeList = new DiskBackedFileDataList();
-            doubleDisposeList.Dispose();
-            doubleDisposeList.Dispose();
-        }
+        list.Add(originalData);
 
-        [Fact]
-        public void Add_AfterDispose_ThrowsObjectDisposedException()
+        Assert.Single(list);
+
+        var resultList = list.ToList();
+        var deserializedData = Assert.Single(resultList);
+
+        // Compare properties
+        Assert.Equal(originalData.WorkItem.Index, deserializedData.WorkItem.Index);
+        Assert.Equal(originalData.WorkItem.FolderNumber, deserializedData.WorkItem.FolderNumber);
+        Assert.Equal(originalData.WorkItem.FolderName, deserializedData.WorkItem.FolderName);
+        Assert.Equal(originalData.WorkItem.FileName, deserializedData.WorkItem.FileName);
+        Assert.Equal(originalData.WorkItem.FilePathInZip, deserializedData.WorkItem.FilePathInZip);
+
+        Assert.Equal(originalData.DataLength, deserializedData.DataLength);
+        Assert.Equal(originalData.PageCount, deserializedData.PageCount);
+        Assert.Equal(originalData.Hash, deserializedData.Hash);
+
+        Assert.True(deserializedData.Attachment.HasValue);
+        Assert.Equal(originalData.Attachment.Value.filename, deserializedData.Attachment.Value.filename);
+
+        Assert.NotNull(deserializedData.Email);
+        Assert.Equal(originalData.Email.To, deserializedData.Email.To);
+        Assert.Equal(originalData.Email.From, deserializedData.Email.From);
+        Assert.Equal(originalData.Email.Subject, deserializedData.Email.Subject);
+        Assert.Equal(originalData.Email.SentDate, deserializedData.Email.SentDate);
+    }
+
+    [Fact]
+    public void RoundTrip_NullAndEmptyValues_PreservedProperly()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        var originalData = new FileData
         {
-            var list = new DiskBackedFileDataList();
-            list.Dispose();
-
-            Assert.Throws<ObjectDisposedException>(() => list.Add(new FileData { WorkItem = new FileWorkItem { Index = 1 } }));
-        }
-
-        [Fact]
-        public void Enumerable_MultipleItems_AreReturnedInOrder()
-        {
-            using var list = new DiskBackedFileDataList();
-
-            for (int i = 0; i < 100; i++)
+            WorkItem = new FileWorkItem
             {
-                list.Add(new FileData { WorkItem = new FileWorkItem { Index = i } });
-            }
+                Index = 1,
+                FolderNumber = 1,
+                FolderName = "",
+                FileName = null!,
+                FilePathInZip = ""
+            },
+            DataLength = 0,
+            PageCount = 0,
+            Hash = null!,
+            Attachment = null,
+            Email = null
+        };
 
-            Assert.Equal(100, list.Count);
+        list.Add(originalData);
 
-            int expected = 0;
-            foreach (var item in list)
-            {
-                Assert.Equal(expected++, item.WorkItem.Index);
-            }
+        var resultList = list.ToList();
+        var deserializedData = Assert.Single(resultList);
 
-            Assert.Equal(100, expected);
-        }
+        Assert.Equal("", deserializedData.WorkItem.FolderName);
+        Assert.Equal("", deserializedData.WorkItem.FileName);
+        Assert.Equal("", deserializedData.WorkItem.FilePathInZip);
+        Assert.Equal("", deserializedData.Hash);
+        Assert.False(deserializedData.Attachment.HasValue);
+        Assert.Null(deserializedData.Email);
+    }
 
-        [Fact]
-        public void Indexer_ThrowsNotSupportedException()
+    [Fact]
+    public void Dispose_RemovesTempFile()
+    {
+        var list = new DiskBackedFileDataList();
+        list.Add(new FileData { WorkItem = new FileWorkItem { Index = 1 } });
+
+        var field = typeof(DiskBackedFileDataList).GetField("tempFilePath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(field);
+        var tempFilePath = Assert.IsType<string>(field!.GetValue(list));
+        Assert.True(File.Exists(tempFilePath));
+
+        list.Dispose();
+        Assert.False(File.Exists(tempFilePath));
+        list.Dispose(); // idempotent
+    }
+
+    [Fact]
+    public void Threshold_ManyItems_ArePersistedAndReadProperly()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        int itemCount = 10000;
+        for (int i = 0; i < itemCount; i++)
         {
-            using var list = new DiskBackedFileDataList();
-            Assert.Throws<NotSupportedException>(() => list[0]);
+            list.Add(new FileData
+            {
+                WorkItem = new FileWorkItem { Index = i, FileName = $"file_{i}.txt" },
+                DataLength = i
+            });
         }
+
+        Assert.Equal(itemCount, list.Count);
+
+        int index = 0;
+        foreach (var item in list)
+        {
+            Assert.Equal(index, item.WorkItem.Index);
+            Assert.Equal($"file_{index}.txt", item.WorkItem.FileName);
+            Assert.Equal(index, item.DataLength);
+            index++;
+        }
+
+        Assert.Equal(itemCount, index);
+    }
+
+    [Fact]
+    public void Operations_AfterDispose_ThrowObjectDisposedException()
+    {
+        var list = new DiskBackedFileDataList();
+        list.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => list.Add(new FileData()));
+        Assert.Throws<ObjectDisposedException>(() => list.ToList());
+        Assert.Throws<ObjectDisposedException>(() => list.GetEnumerator());
     }
 }

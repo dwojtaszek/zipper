@@ -4,10 +4,11 @@ namespace Zipper
 {
     internal class InMemorySink : IArchiveSink
     {
-        public List<FileData> CapturedFiles { get; } = new();
-        public Exception? InjectedFault { get; set; }
+        public List<FileData> CapturedEntries { get; } = new List<FileData>();
+        public bool IsFaulted { get; set; }
+        public Exception? FaultException { get; set; }
 
-        public async Task<string> CreateArchiveAsync(
+        public async Task<string?> CreateArchiveAsync(
             string zipFilePath,
             string loadFileName,
             string loadFilePath,
@@ -15,19 +16,34 @@ namespace Zipper
             ChannelReader<FileData> fileDataReader,
             CancellationToken cancellationToken = default)
         {
-            if (InjectedFault != null)
+            try
             {
-                throw InjectedFault;
+                if (IsFaulted && FaultException != null)
+                {
+                    throw FaultException;
+                }
+
+                await foreach (var fileData in fileDataReader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var snapshot = fileData.Data.ToArray();
+                    CapturedEntries.Add(fileData with
+                    {
+                        Data = snapshot,
+                        DataLength = snapshot.Length,
+                        MemoryOwner = null,
+                    });
+                    fileData.MemoryOwner?.Dispose();
+                }
+            }
+            finally
+            {
+                while (fileDataReader.TryRead(out var leftover))
+                {
+                    leftover.MemoryOwner?.Dispose();
+                }
             }
 
-            await foreach (var file in fileDataReader.ReadAllAsync(cancellationToken))
-            {
-                CapturedFiles.Add(file);
-                // The real sink disposes MemoryOwner when done
-                file.MemoryOwner?.Dispose();
-            }
-
-            return loadFilePath;
+            return "in-memory-loadfile.dat";
         }
     }
 }
