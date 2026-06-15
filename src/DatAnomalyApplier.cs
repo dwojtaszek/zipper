@@ -24,41 +24,34 @@ internal class DatAnomalyApplier : IAnomalyApplier
 
     public string Apply(long lineNumber, string line, string recordId, string chaosType, List<ChaosAnomaly> anomalies)
     {
-        string result = line;
-        string column = "N/A";
-        string description;
-
-        switch (chaosType)
+        if (chaosType == "encoding")
         {
-            case "mixed-delimiters":
-                result = ApplyMixedDelimiters(line, out int delimIndex);
-                column = $"Delimiter {delimIndex}";
-                description = $"Replaced delimiter {delimIndex} with an alternative delimiter character.";
-                break;
-            case "quotes":
-                result = ApplyDroppedQuote(line, out string affectedColumn);
-                column = affectedColumn;
-                description = $"Omitted the closing {FormatDelimiterDisplay(quoteDelimiter)} character on column {affectedColumn}.";
-                break;
-            case "columns":
-                bool added = random.Next(2) == 0;
-                result = ApplyColumnShift(line, added);
-                description = added
-                    ? "Added an extra column delimiter to break expected column count."
-                    : "Removed a column delimiter to break expected column count.";
-                break;
-            case "eol":
-                result = ApplyRawNewline(line, out string eolColumn);
-                column = eolColumn;
-                description = $"Injected raw unescaped newline into field {eolColumn}.";
-                break;
-            case "encoding":
-                encodingAnomalyLines.Add(lineNumber);
-                return line;
-            default:
-                description = $"Unknown chaos type: {chaosType}";
-                break;
+            encodingAnomalyLines.Add(lineNumber);
+            return line;
         }
+
+        (string result, string column, string description) = chaosType switch
+        {
+            "mixed-delimiters" => (
+                ApplyMixedDelimiters(line, out int delimIndex),
+                $"Delimiter {delimIndex}",
+                $"Replaced delimiter {delimIndex} with an alternative delimiter character."
+            ),
+            "quotes" => (
+                ApplyDroppedQuote(line, out string affectedColumn),
+                affectedColumn,
+                $"Omitted the closing {FormatDelimiterDisplay(quoteDelimiter)} character on column {affectedColumn}."
+            ),
+            "columns" => random.Next(2) == 0
+                ? (ApplyColumnShift(line, true), "N/A", "Added an extra column delimiter to break expected column count.")
+                : (ApplyColumnShift(line, false), "N/A", "Removed a column delimiter to break expected column count."),
+            "eol" => (
+                ApplyRawNewline(line, out string eolColumn),
+                eolColumn,
+                $"Injected raw unescaped newline into field {eolColumn}."
+            ),
+            _ => (line, "N/A", $"Unknown chaos type: {chaosType}")
+        };
 
         anomalies.Add(new ChaosAnomaly
         {

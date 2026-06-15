@@ -65,14 +65,26 @@ internal class OptAnomalyApplier : IAnomalyApplier
 
     private string ApplyOptBoundaryFlip(string line)
     {
-        var parts = line.Split(',');
-        if (parts.Length >= 4)
-        {
-            parts[3] = string.Equals(parts[3].Trim(), "Y", StringComparison.Ordinal) ? string.Empty : "Y";
-            return string.Join(",", parts);
-        }
+        int comma1 = line.IndexOf(',');
+        if (comma1 < 0) return line;
+        int comma2 = line.IndexOf(',', comma1 + 1);
+        if (comma2 < 0) return line;
+        int comma3 = line.IndexOf(',', comma2 + 1);
+        if (comma3 < 0) return line;
+        int comma4 = line.IndexOf(',', comma3 + 1);
 
-        return line;
+        int fieldStart = comma3 + 1;
+        int fieldLength = (comma4 < 0 ? line.Length : comma4) - fieldStart;
+
+        ReadOnlySpan<char> field = line.AsSpan(fieldStart, fieldLength).Trim();
+        bool isY = field.Equals("Y", StringComparison.Ordinal);
+        string newValue = isY ? string.Empty : "Y";
+
+        return string.Concat(
+            line.AsSpan(0, fieldStart),
+            newValue,
+            comma4 < 0 ? ReadOnlySpan<char>.Empty : line.AsSpan(comma4)
+        );
     }
 
     private string RemoveOneComma(string line)
@@ -100,14 +112,19 @@ internal class OptAnomalyApplier : IAnomalyApplier
 
     private static string ApplyOptPathCorruption(string line)
     {
-        var parts = line.Split(',');
-        if (parts.Length >= 3)
-        {
-            parts[2] = "IMAGES\\..\\..\\invalid\\path.tif";
-            return string.Join(",", parts);
-        }
+        int comma1 = line.IndexOf(',');
+        if (comma1 < 0) return line;
+        int comma2 = line.IndexOf(',', comma1 + 1);
+        if (comma2 < 0) return line;
+        int comma3 = line.IndexOf(',', comma2 + 1);
 
-        return line;
+        int fieldStart = comma2 + 1;
+
+        return string.Concat(
+            line.AsSpan(0, fieldStart),
+            "IMAGES\\..\\..\\invalid\\path.tif",
+            comma3 < 0 ? ReadOnlySpan<char>.Empty : line.AsSpan(comma3)
+        );
     }
 
     private static string ApplyOptBatesNumberCorruption(string line)
