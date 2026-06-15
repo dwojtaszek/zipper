@@ -146,7 +146,7 @@ internal class ZipArchiveSink : IArchiveSink
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
         ILoadFileWriter loadFileWriter,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         string actualLoadFileName)
     {
         var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
@@ -158,7 +158,7 @@ internal class ZipArchiveSink : IArchiveSink
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
         ILoadFileWriter loadFileWriter,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         string currentFilePath)
     {
         var fileStream = new FileStream(currentFilePath, FileMode.Create);
@@ -173,7 +173,7 @@ internal class ZipArchiveSink : IArchiveSink
         ZipArchive archive,
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         LoadFileFormat format,
         string actualLoadFileName)
     {
@@ -187,7 +187,7 @@ internal class ZipArchiveSink : IArchiveSink
     private async Task EmitAuditToDiskAsync(
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         LoadFileFormat format,
         string currentFilePath)
     {

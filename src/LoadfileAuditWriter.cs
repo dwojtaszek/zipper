@@ -61,24 +61,45 @@ internal static class LoadfileAuditWriter
         }
         else
         {
-            if (format == LoadFileFormat.Opt)
+            totalRecords = format switch
             {
-                totalRecords = composedRecords.Sum(f =>
-                    (request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
-                    + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0));
-            }
-            else
-            {
-                totalRecords = composedRecords.Count;
-                if (request.Metadata.WithFamilies && request.Output.IsEml)
-                {
-                    totalRecords += composedRecords.Count(f => f.Attachment.HasValue);
-                }
-            }
+                LoadFileFormat.Opt => ComputeOptRecordCount(request, composedRecords),
+                _ => ComputeDatRecordCount(request, composedRecords)
+            };
         }
 
         long totalLines = format == LoadFileFormat.Opt ? totalRecords : totalRecords + 1;
         return (totalRecords, totalLines);
+    }
+
+    private static long ComputeOptRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
+    {
+        long total = 0;
+        bool includePageCount = request.Tiff.ShouldIncludePageCount(request.Output);
+        bool withFamilies = request.Metadata.WithFamilies && request.Output.IsEml;
+
+        foreach (var f in composedRecords)
+        {
+            total += (includePageCount ? Math.Max(1, f.PageCount) : 1) +
+                     (withFamilies && f.Attachment.HasValue ? 1 : 0);
+        }
+        return total;
+    }
+
+    private static long ComputeDatRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
+    {
+        long total = composedRecords.Count;
+        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        {
+            foreach (var f in composedRecords)
+            {
+                if (f.Attachment.HasValue)
+                {
+                    total++;
+                }
+            }
+        }
+        return total;
     }
 
     /// <summary>
