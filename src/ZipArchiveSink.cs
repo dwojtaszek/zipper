@@ -19,7 +19,7 @@ internal class ZipArchiveSink : IArchiveSink
     /// <param name="request">File generation request parameters.</param>
     /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
     /// <returns>The actual load file path that was created (or original if included in ZIP).</returns>
-    public async Task<string?> CreateArchiveAsync(
+    public async Task<string> CreateArchiveAsync(
         string zipFilePath,
         string loadFileName,
         string loadFilePath,

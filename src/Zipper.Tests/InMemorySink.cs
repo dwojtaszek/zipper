@@ -8,7 +8,7 @@ namespace Zipper
         public bool IsFaulted { get; set; }
         public Exception? FaultException { get; set; }
 
-        public async Task<string?> CreateArchiveAsync(
+        public async Task<string> CreateArchiveAsync(
             string zipFilePath,
             string loadFileName,
             string loadFilePath,
