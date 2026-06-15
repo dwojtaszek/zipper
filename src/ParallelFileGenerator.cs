@@ -12,6 +12,16 @@ namespace Zipper
     public class ParallelFileGenerator
     {
         private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
+        private readonly IArchiveSink archiveSink;
+
+        public ParallelFileGenerator() : this(new ZipArchiveSink())
+        {
+        }
+
+        internal ParallelFileGenerator(IArchiveSink archiveSink)
+        {
+            this.archiveSink = archiveSink ?? throw new ArgumentNullException(nameof(archiveSink));
+        }
 
         public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
@@ -72,7 +82,7 @@ namespace Zipper
                 });
 
                 // Start the consumer task to write the archive concurrently
-                var consumerTask = ZipArchiveService.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+                var consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
 
                 // Generate files in parallel (producers)
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)

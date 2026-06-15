@@ -501,53 +501,44 @@ namespace Zipper
             Assert.Equal(expectedPadding, result);
         }
 
-        [SkippableFact(Timeout = 10000)]
+        [Fact(Timeout = 10000)]
         public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
         {
-            Skip.If(OperatingSystem.IsWindows(), "Directory permissions don't prevent file creation on Windows");
-
-            var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+            var tempDir = Directory.GetCurrentDirectory();
+            var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
             Directory.CreateDirectory(outputPath);
 
             try
             {
-                // Make directory read-only so zip file creation fails inside the consumer
-                File.SetAttributes(outputPath, FileAttributes.ReadOnly);
-                // On Linux, directory write permission controls file creation
-                System.Diagnostics.Process.Start("chmod", $"555 {outputPath}")?.WaitForExit();
-
-                var generator = new ParallelFileGenerator();
-
-                // This should throw (not hang) because the consumer cannot create the zip
-                await Assert.ThrowsAnyAsync<Exception>(async () =>
+                var faultingSink = new InMemorySink
                 {
-                    await generator.GenerateFilesAsync(new FileGenerationRequest
+                    IsFaulted = true,
+                    FaultException = new IOException("Simulated consumer fault")
+                };
+                var generator = new ParallelFileGenerator(faultingSink);
+
+                // This should throw (not hang) because the consumer throws an exception
+                var generationTask = generator.GenerateFilesAsync(new FileGenerationRequest
+                {
+                    Output = new OutputConfig
                     {
-                        Output = new OutputConfig
-                        {
-                            OutputPath = outputPath,
-                            FileCount = 100,
-                            FileType = "pdf",
-                            Folders = 2,
-                            Concurrency = 4,
-                        },
-                    }).ConfigureAwait(false);
+                        OutputPath = outputPath,
+                        FileCount = 100,
+                        FileType = "pdf",
+                        Folders = 2,
+                        Concurrency = 4,
+                    },
                 });
+
+                var completed = await Task.WhenAny(generationTask, Task.Delay(TimeSpan.FromSeconds(10)));
+                Assert.True(completed == generationTask, "GenerateFilesAsync did not fail within timeout.");
+
+                var ex = await Assert.ThrowsAnyAsync<Exception>(() => generationTask);
+
+                Assert.Equal("Simulated consumer fault", ex.Message);
             }
             finally
             {
-                if (!OperatingSystem.IsWindows())
-                {
-                    System.Diagnostics.Process.Start("chmod", $"755 {outputPath}")?.WaitForExit();
-                }
-                else
-                {
-                    if (Directory.Exists(outputPath))
-                    {
-                        File.SetAttributes(outputPath, FileAttributes.Normal);
-                    }
-                }
-
                 if (Directory.Exists(outputPath))
                 {
                     Directory.Delete(outputPath, true);

@@ -37,10 +37,16 @@ namespace Zipper
         {
             lock (this.syncRoot)
             {
+                ObjectDisposedException.ThrowIf(this.writer is null, this);
                 this.writer?.Flush();
                 this.writeStream?.Flush(true);
             }
 
+            return GetEnumeratorCore();
+        }
+
+        private IEnumerator<FileData> GetEnumeratorCore()
+        {
             using var readStream = new FileStream(this.tempFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 4096);
             using var reader = new BinaryReader(readStream, Encoding.UTF8);
 
