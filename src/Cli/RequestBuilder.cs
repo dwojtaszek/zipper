@@ -84,9 +84,7 @@ public static class RequestBuilder
 
         if (!string.IsNullOrEmpty(parsed.QuoteDelim))
         {
-            quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase)
-                ? string.Empty
-                : ParseStrictDelimiter(parsed.QuoteDelim);
+            quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase) ? string.Empty : ParseStrictDelimiter(parsed.QuoteDelim);
         }
 
         if (!string.IsNullOrEmpty(parsed.NewlineDelim))
@@ -222,70 +220,7 @@ public static class RequestBuilder
         };
     }
 
-    internal static string ParseDelimiterArgument(string arg)
-    {
-        if (string.IsNullOrEmpty(arg))
-        {
-            throw new ArgumentException("Delimiter argument cannot be empty.");
-        }
+    internal static string ParseDelimiterArgument(string arg) => Validation.CrossCuttingValidator.ParseDelimiterArgument(arg);
 
-        if (string.Equals(arg, "\\t", StringComparison.Ordinal))
-        {
-            return "\t";
-        }
-
-        if (string.Equals(arg, "\\n", StringComparison.Ordinal))
-        {
-            return "\n";
-        }
-
-        if (string.Equals(arg, "\\r", StringComparison.Ordinal))
-        {
-            return "\r";
-        }
-
-        if (string.Equals(arg, "\\r\\n", StringComparison.Ordinal))
-        {
-            return "\r\n";
-        }
-
-        if (int.TryParse(arg, System.Globalization.CultureInfo.InvariantCulture, out var asciiCode) && asciiCode >= 0 && asciiCode <= 255)
-        {
-            return ((char)asciiCode).ToString();
-        }
-
-        if (arg.Length > 1)
-        {
-            Console.Error.WriteLine($"Warning: Delimiter argument '{arg}' is longer than 1 character. Using first character: '{arg[0]}'");
-        }
-
-        return arg[0].ToString();
-    }
-
-    internal static string ParseStrictDelimiter(string arg)
-    {
-        if (arg.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
-        {
-            var numPart = arg.Substring(6);
-            if (int.TryParse(numPart, System.Globalization.CultureInfo.InvariantCulture, out var code) && code >= 0 && code <= 255)
-            {
-                return ((char)code).ToString();
-            }
-
-            throw new ArgumentException($"Invalid ASCII code in delimiter: '{arg}'");
-        }
-
-        if (arg.StartsWith("char:", StringComparison.OrdinalIgnoreCase))
-        {
-            var charPart = arg.Substring(5);
-            if (charPart.Length >= 1)
-            {
-                return charPart[0].ToString();
-            }
-
-            throw new ArgumentException($"Missing character in delimiter: '{arg}'");
-        }
-
-        throw new ArgumentException($"Delimiter must use 'ascii:<N>' or 'char:<c>' prefix: '{arg}'");
-    }
+    internal static string ParseStrictDelimiter(string arg) => Validation.CrossCuttingValidator.ParseStrictDelimiter(arg);
 }

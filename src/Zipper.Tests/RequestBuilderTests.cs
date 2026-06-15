@@ -130,6 +130,7 @@ namespace Zipper.Tests
             var parsed = CreateParsedArgs();
             parsed.DatDelimiters = "csv";
             parsed.DelimiterColumn = "|";
+            Assert.True(CliValidator.Validate(parsed));
 
             var result = RequestBuilder.Build(parsed);
 
@@ -144,6 +145,7 @@ namespace Zipper.Tests
             parsed.LoadfileOnly = true;
             parsed.DelimiterColumn = ",";
             parsed.ColDelim = "ascii:20";
+            Assert.True(CliValidator.Validate(parsed));
 
             var result = RequestBuilder.Build(parsed);
 

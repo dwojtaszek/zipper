@@ -8,6 +8,9 @@ public class ParsedArguments
 
     public DirectoryInfo? OutputDirectory { get; set; }
 
+    public string? OutputPathStr { get; set; }
+
+
     public int Folders { get; set; } = 1;
 
     public string? Encoding { get; set; } = "UTF-8";
@@ -73,6 +76,7 @@ public class ParsedArguments
     public string? MultiDelim { get; set; }
 
     public string? NestedDelim { get; set; }
+
 
     public bool ChaosMode { get; set; }
 
