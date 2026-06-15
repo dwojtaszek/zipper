@@ -41,9 +41,7 @@ internal static class LoadfileOnlyGenerator
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
                 generatedFiles.Add(loadFilePath);
 
-                long totalLines = format == LoadFileFormat.Opt
-                    ? request.Output.FileCount
-                    : request.Output.FileCount + 1;
+                var emptyRecords = Array.Empty<FileData>();
 
                 if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
                 {
@@ -65,7 +63,7 @@ internal static class LoadfileOnlyGenerator
                     }
                 }
 
-                ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
+                ChaosEngine? chaosEngine = LoadfileAuditWriter.BuildChaosEngine(request, emptyRecords, format);
 
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
@@ -74,13 +72,13 @@ internal static class LoadfileOnlyGenerator
                 var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
                 await using (fileStream.ConfigureAwait(false))
                 {
-                    await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine, cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(fileStream, request, emptyRecords, chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
                 string propertiesPath = await LoadfileAuditWriter.WriteAsync(
                     loadFilePath,
                     request,
-                    request.Output.FileCount,
+                    emptyRecords,
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
                 generatedFiles.Add(propertiesPath);

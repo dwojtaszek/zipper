@@ -20,21 +20,86 @@ internal static class LoadfileAuditWriter
     /// </summary>
     /// <param name="outputPath">Path to the generated load file.</param>
     /// <param name="request">File generation request.</param>
-    /// <param name="totalRecords">Total records written.</param>
+    /// <param name="composedRecords">The generated records.</param>
     /// <param name="anomalies">List of chaos anomalies (empty if chaos disabled).</param>
     /// <param name="format">The explicit load file format.</param>
     /// <returns>Path to the generated properties file.</returns>
     public static async Task<string> WriteAsync(
         string outputPath,
         FileGenerationRequest request,
-        long totalRecords,
+        IReadOnlyCollection<FileData> composedRecords,
         IReadOnlyList<ChaosAnomaly>? anomalies = null,
         LoadFileFormat? format = null)
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
-        var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies, format);
+        var json = GenerateAuditJson(outputPath, request, composedRecords, anomalies, format);
         await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
         return propertiesPath;
+    }
+
+    /// <summary>
+    /// Computes total lines and builds the ChaosEngine for the specified format.
+    /// </summary>
+    public static ChaosEngine? BuildChaosEngine(
+        FileGenerationRequest request,
+        IReadOnlyCollection<FileData> composedRecords,
+        LoadFileFormat format)
+    {
+        var (_, totalLines) = ComputeRecordCounts(request, composedRecords, format);
+        return ChaosEngineBuilder.Build(request, totalLines, format);
+    }
+
+    private static (long TotalRecords, long TotalLines) ComputeRecordCounts(
+        FileGenerationRequest request,
+        IReadOnlyCollection<FileData> composedRecords,
+        LoadFileFormat format)
+    {
+        long totalRecords;
+        if (composedRecords.Count == 0 && request.Output.FileCount > 0)
+        {
+            totalRecords = request.Output.FileCount;
+        }
+        else
+        {
+            totalRecords = format switch
+            {
+                LoadFileFormat.Opt => ComputeOptRecordCount(request, composedRecords),
+                _ => ComputeDatRecordCount(request, composedRecords)
+            };
+        }
+
+        long totalLines = format == LoadFileFormat.Opt ? totalRecords : totalRecords + 1;
+        return (totalRecords, totalLines);
+    }
+
+    private static long ComputeOptRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
+    {
+        long total = 0;
+        bool includePageCount = request.Tiff.ShouldIncludePageCount(request.Output);
+        bool withFamilies = request.Metadata.WithFamilies && request.Output.IsEml;
+
+        foreach (var f in composedRecords)
+        {
+            total += (includePageCount ? Math.Max(1, f.PageCount) : 1) +
+                     (withFamilies && f.Attachment.HasValue ? 1 : 0);
+        }
+        return total;
+    }
+
+    private static long ComputeDatRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
+    {
+        long total = composedRecords.Count;
+        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        {
+            foreach (var f in composedRecords)
+            {
+                if (f.Attachment.HasValue)
+                {
+                    total++;
+                }
+            }
+        }
+        return total;
     }
 
     /// <summary>
@@ -42,18 +107,19 @@ internal static class LoadfileAuditWriter
     /// </summary>
     /// <param name="outputPath">Path to the generated load file.</param>
     /// <param name="request">File generation request.</param>
-    /// <param name="totalRecords">Total records written.</param>
+    /// <param name="composedRecords">The generated records.</param>
     /// <param name="anomalies">List of chaos anomalies.</param>
     /// <param name="format">The explicit load file format.</param>
     /// <returns>The properties JSON string.</returns>
     public static string GenerateAuditJson(
         string outputPath,
         FileGenerationRequest request,
-        long totalRecords,
+        IReadOnlyCollection<FileData> composedRecords,
         IReadOnlyList<ChaosAnomaly>? anomalies = null,
         LoadFileFormat? format = null)
     {
         var activeFormat = format ?? request.LoadFile.LoadFileFormat;
+        var (totalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
         var formatName = activeFormat == LoadFileFormat.Opt
             ? "OPT (Image)"
             : "DAT (Metadata)";

@@ -17,9 +17,10 @@ public class LoadfileAuditWriterTests
             IsEncodingExplicit = false
         };
         request.Chaos = request.Chaos with { ChaosMode = false };
+        request.Output = request.Output with { FileCount = 100 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.opt", request, 100, null);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.opt", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -65,9 +66,10 @@ public class LoadfileAuditWriterTests
             NestedValueDelimiter = ":",
             EndOfLine = "CRLF"
         };
+        request.Output = request.Output with { FileCount = 50 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 50, null);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -112,9 +114,10 @@ public class LoadfileAuditWriterTests
                 Description = "Mixed delimiters injected"
             }
         };
+        request.Output = request.Output with { FileCount = 200 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 200, anomalies);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), anomalies);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -148,9 +151,10 @@ public class LoadfileAuditWriterTests
             ColumnDelimiter = "\u0014", // Device Control 4
             QuoteDelimiter = "\u00fe" // Thorn character
         };
+        request.Output = request.Output with { FileCount = 10 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 10, null);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -175,9 +179,10 @@ public class LoadfileAuditWriterTests
             QuoteDelimiter = null!,
             NewlineDelimiter = string.Empty
         };
+        request.Output = request.Output with { FileCount = 10 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 10, null);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -201,8 +206,9 @@ public class LoadfileAuditWriterTests
 
         try
         {
+            request.Output = request.Output with { FileCount = 42 };
             // Act
-            var path = await LoadfileAuditWriter.WriteAsync(tempFile, request, 42, null);
+            var path = await LoadfileAuditWriter.WriteAsync(tempFile, request, Array.Empty<FileData>(), null);
 
             // Assert
             Assert.Equal(expectedPropertiesFile, path);
