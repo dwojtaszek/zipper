@@ -50,16 +50,19 @@ public class ChaosEngineBuilderTests
         // Assert
         Assert.NotNull(engine);
 
-        var colDelim = GetPrivateField(engine, "columnDelimiter") as string;
-        var quoteDelim = GetPrivateField(engine, "quoteDelimiter") as string;
-        var eol = GetPrivateField(engine, "eol") as string;
-        var format = GetPrivateField(engine, "format");
+        var applier = GetPrivateField(engine, "applier");
+        Assert.NotNull(applier);
+        Assert.IsType<DatAnomalyApplier>(applier);
+
+        var colDelim = GetPrivateField(applier, "columnDelimiter") as string;
+        var quoteDelim = GetPrivateField(applier, "quoteDelimiter") as string;
+        var eol = GetPrivateField(applier, "eol") as string;
+
         var enabledTypes = GetPrivateField(engine, "enabledTypes") as HashSet<string>;
 
         Assert.Equal("|", colDelim);
         Assert.Equal("\"", quoteDelim);
         Assert.Equal("\r\n", eol);
-        Assert.Equal(LoadFileFormat.Dat, format);
 
         Assert.NotNull(enabledTypes);
         Assert.Contains("mixed-delimiters", enabledTypes);
@@ -86,7 +89,9 @@ public class ChaosEngineBuilderTests
         // Assert
         Assert.NotNull(engine);
         var enabledTypes = GetPrivateField(engine, "enabledTypes") as HashSet<string>;
-        var targetLines = GetPrivateField(engine, "targetLines") as HashSet<long>;
+        var sampler = GetPrivateField(engine, "sampler");
+        Assert.NotNull(sampler);
+        var targetLines = GetPrivateField(sampler, "targetLines") as HashSet<long>;
 
         var scenario = ChaosScenarios.GetByName(scenarioName);
         Assert.NotNull(scenario);
@@ -122,7 +127,9 @@ public class ChaosEngineBuilderTests
 
         // Assert
         Assert.NotNull(engine);
-        var targetLines = GetPrivateField(engine, "targetLines") as HashSet<long>;
+        var sampler = GetPrivateField(engine, "sampler");
+        Assert.NotNull(sampler);
+        var targetLines = GetPrivateField(sampler, "targetLines") as HashSet<long>;
 
         Assert.NotNull(targetLines);
         Assert.Equal(20, targetLines.Count);
@@ -147,7 +154,9 @@ public class ChaosEngineBuilderTests
         // Assert
         Assert.NotNull(engine);
         var enabledTypes = GetPrivateField(engine, "enabledTypes") as HashSet<string>;
-        var targetLines = GetPrivateField(engine, "targetLines") as HashSet<long>;
+        var sampler = GetPrivateField(engine, "sampler");
+        Assert.NotNull(sampler);
+        var targetLines = GetPrivateField(sampler, "targetLines") as HashSet<long>;
 
         Assert.NotNull(enabledTypes);
         Assert.Contains("mixed-delimiters", enabledTypes);
@@ -174,13 +183,10 @@ public class ChaosEngineBuilderTests
 
         // Assert
         Assert.NotNull(engine);
-        var colDelim = GetPrivateField(engine, "columnDelimiter") as string;
-        var quoteDelim = GetPrivateField(engine, "quoteDelimiter") as string;
-        var format = GetPrivateField(engine, "format");
+        var applier = GetPrivateField(engine, "applier");
 
-        Assert.Equal(",", colDelim); // Opt always uses comma
-        Assert.Equal(string.Empty, quoteDelim); // Opt has no quote delimiter
-        Assert.Equal(LoadFileFormat.Opt, format);
+        Assert.NotNull(applier);
+        Assert.IsType<OptAnomalyApplier>(applier);
     }
 
     [Fact]
@@ -200,8 +206,12 @@ public class ChaosEngineBuilderTests
 
         // Assert
         Assert.NotNull(engine);
-        var colDelim = GetPrivateField(engine, "columnDelimiter") as string;
-        var quoteDelim = GetPrivateField(engine, "quoteDelimiter") as string;
+        var applier = GetPrivateField(engine, "applier");
+        Assert.NotNull(applier);
+        Assert.IsType<DatAnomalyApplier>(applier);
+
+        var colDelim = GetPrivateField(applier, "columnDelimiter") as string;
+        var quoteDelim = GetPrivateField(applier, "quoteDelimiter") as string;
 
         Assert.Equal("\u0014", colDelim); // Defaults to Device Control 4 (Thorn-like delimiter in Concordance)
         Assert.Equal("\u00fe", quoteDelim); // Defaults to thorn quote
