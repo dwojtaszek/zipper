@@ -25,12 +25,14 @@ internal sealed class DatComposer : ILoadFileComposer
     // Profile path (loadfile-only with an explicit ColumnProfile) only.
     private readonly DataGenerator? profileGenerator;
     private readonly List<string>? profileColumnNames;
+    private readonly BatesSequence? batesSequence;
 
     public DatComposer(FileGenerationRequest request, WriterMode mode)
     {
         this.request = request;
         this.mode = mode;
         this.namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
+        this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
         if (mode == WriterMode.LoadfileOnly && request.Metadata.ColumnProfile != null)
         {
@@ -135,7 +137,7 @@ internal sealed class DatComposer : ILoadFileComposer
         foreach (var fileData in processedFiles)
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request);
+            var (parentId, childId, hasAttachment) = this.GetFamilyIdentifiers(fileData, this.request);
 
             yield return this.MakeRecord(
                 parentId,
@@ -189,7 +191,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.request.Bates != null)
         {
-            v.Add(ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates, wi.Index - 1));
+            v.Add(ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString());
         }
 
         if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
@@ -231,7 +233,7 @@ internal sealed class DatComposer : ILoadFileComposer
     {
         foreach (var fileData in processedFiles)
         {
-            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request);
+            var (parentId, childId, hasAttachment) = this.GetFamilyIdentifiers(fileData, this.request);
 
             yield return this.MakeRecord(
                 parentId,
@@ -267,7 +269,7 @@ internal sealed class DatComposer : ILoadFileComposer
     private List<string> ProductionRowValues(FileData fileData, RowCtx ctx)
     {
         var wi = fileData.WorkItem;
-        var batesNumber = ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1);
+        var batesNumber = ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString();
         var imagePath = ctx.ImagePathOverride ?? wi.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
             .Replace(Path.GetExtension(wi.FilePathInZip), ".tif", StringComparison.Ordinal);
         // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
@@ -320,8 +322,8 @@ internal sealed class DatComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            var recordId = this.request.Bates != null
-                ? BatesNumberGenerator.Generate(this.request.Bates, i - 1)
+            var recordId = this.batesSequence != null
+                ? this.batesSequence.Next().ToString()
                 : $"DOC{i:D8}";
 
             // Draw order must match the legacy writer: dateSent, author, fileSize, sentTime.
@@ -378,11 +380,11 @@ internal sealed class DatComposer : ILoadFileComposer
         }
     }
 
-    private static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request)
+    private (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request)
     {
         bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-        string parentId = request.Bates != null
-            ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
+        string parentId = this.batesSequence != null
+            ? this.batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
             : $"DOC{fileData.WorkItem.Index:D8}";
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
         return (parentId, childId, hasAttachment);

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Zipper
 {
-    public class BatesNumberGeneratorTests
+    public class BatesSequenceTests
     {
         [Fact]
         public void Generate_WithDefaultConfig_ShouldGenerateCorrectNumber()
@@ -17,7 +17,7 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.Generate(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).ToString();
 
             // Assert
             Assert.Equal("DOC00000001", result);
@@ -36,7 +36,7 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.Generate(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).ToString();
 
             // Assert
             Assert.Equal("CLIENT00100000001", result);
@@ -55,9 +55,9 @@ namespace Zipper
             };
 
             // Act
-            var result1 = BatesNumberGenerator.Generate(config, 0);
-            var result2 = BatesNumberGenerator.Generate(config, 1);
-            var result3 = BatesNumberGenerator.Generate(config, 2);
+            var result1 = BatesSequence.FromConfig(config).Format(0).ToString();
+            var result2 = BatesSequence.FromConfig(config).Format(1).ToString();
+            var result3 = BatesSequence.FromConfig(config).Format(2).ToString();
 
             // Assert
             Assert.Equal("DOC00000001", result1);
@@ -78,7 +78,7 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.Generate(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).ToString();
 
             // Assert
             Assert.Equal("DOC00000100", result);
@@ -97,9 +97,9 @@ namespace Zipper
             };
 
             // Act
-            var result1 = BatesNumberGenerator.Generate(config, 0);
-            var result2 = BatesNumberGenerator.Generate(config, 1);
-            var result3 = BatesNumberGenerator.Generate(config, 2);
+            var result1 = BatesSequence.FromConfig(config).Format(0).ToString();
+            var result2 = BatesSequence.FromConfig(config).Format(1).ToString();
+            var result3 = BatesSequence.FromConfig(config).Format(2).ToString();
 
             // Assert
             Assert.Equal("DOC00000001", result1);
@@ -116,9 +116,9 @@ namespace Zipper
             var config10Digits = new BatesNumberConfig { Prefix = "C", Start = 1, Digits = 10 };
 
             // Act
-            var result4 = BatesNumberGenerator.Generate(config4Digits, 0);
-            var result6 = BatesNumberGenerator.Generate(config6Digits, 0);
-            var result10 = BatesNumberGenerator.Generate(config10Digits, 0);
+            var result4 = BatesSequence.FromConfig(config4Digits).Format(0).ToString();
+            var result6 = BatesSequence.FromConfig(config6Digits).Format(0).ToString();
+            var result10 = BatesSequence.FromConfig(config10Digits).Format(0).ToString();
 
             // Assert
             Assert.Equal("A0001", result4);
@@ -139,7 +139,7 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.Generate(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).ToString();
 
             // Assert
             Assert.Equal("DOC00999999", result);
@@ -158,14 +158,14 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.Generate(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).ToString();
 
             // Assert
             Assert.Equal("DOC00000000", result);
         }
 
         [Fact]
-        public void GenerateWithoutPrefix_WithDefaultConfig_ShouldGenerateNumberOnly()
+        public void Format_WithDefaultConfig_ShouldGenerateNumberOnly()
         {
             // Arrange
             var config = new BatesNumberConfig
@@ -177,14 +177,14 @@ namespace Zipper
             };
 
             // Act
-            var result = BatesNumberGenerator.GenerateWithoutPrefix(config, 0);
+            var result = BatesSequence.FromConfig(config).Format(0).WithoutPrefix();
 
             // Assert
             Assert.Equal("00000001", result);
         }
 
         [Fact]
-        public void GenerateWithoutPrefix_WithMultipleIndices_ShouldIncrementCorrectly()
+        public void Format_WithMultipleIndices_ShouldIncrementCorrectly()
         {
             // Arrange
             var config = new BatesNumberConfig
@@ -196,9 +196,9 @@ namespace Zipper
             };
 
             // Act
-            var result1 = BatesNumberGenerator.GenerateWithoutPrefix(config, 0);
-            var result2 = BatesNumberGenerator.GenerateWithoutPrefix(config, 1);
-            var result3 = BatesNumberGenerator.GenerateWithoutPrefix(config, 2);
+            var result1 = BatesSequence.FromConfig(config).Format(0).WithoutPrefix();
+            var result2 = BatesSequence.FromConfig(config).Format(1).WithoutPrefix();
+            var result3 = BatesSequence.FromConfig(config).Format(2).WithoutPrefix();
 
             // Assert
             Assert.Equal("000100", result1);
