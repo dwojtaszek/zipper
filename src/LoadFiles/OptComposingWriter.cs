@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Zipper.LoadFiles;
 
 /// <summary>
