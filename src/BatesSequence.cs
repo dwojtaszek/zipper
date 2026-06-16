@@ -59,6 +59,12 @@ public sealed class BatesSequence
             return false;
         }
 
+        if (config.Increment < 1)
+        {
+            errorMessage = "Bates increment must be at least 1.";
+            return false;
+        }
+
         if (!string.IsNullOrEmpty(config.Prefix))
         {
             if (config.Prefix.Contains('/', StringComparison.Ordinal) || config.Prefix.Contains('\\', StringComparison.Ordinal))
@@ -86,13 +92,17 @@ public sealed class BatesSequence
 
     public BatesNumber Next()
     {
-        var result = Format(_currentIndex);
-        _currentIndex++;
-        return result;
+        var index = Interlocked.Increment(ref _currentIndex) - 1;
+        return Format(index);
     }
 
     public BatesNumber Format(long index)
     {
+        if (index < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), "Index must be non-negative.");
+        }
+
         checked
         {
             var number = _config.Start + (index * _config.Increment);
