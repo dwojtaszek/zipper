@@ -126,7 +126,28 @@ internal class ZipArchiveSink : IArchiveSink
         var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
         var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
-        var auditContext = LoadfileAuditWriter.CreateContext(request, processedFiles, format);
+        long totalRecordsOverride;
+        if (format == LoadFileFormat.Opt)
+        {
+            totalRecordsOverride = request.Tiff.ShouldIncludePageCount(request.Output)
+                ? processedFiles.TotalPageCount
+                : processedFiles.Count;
+
+            if (request.Metadata.WithFamilies && request.Output.IsEml)
+            {
+                totalRecordsOverride += processedFiles.AttachmentCount;
+            }
+        }
+        else
+        {
+            totalRecordsOverride = processedFiles.Count;
+            if (request.Metadata.WithFamilies && request.Output.IsEml)
+            {
+                totalRecordsOverride += processedFiles.AttachmentCount;
+            }
+        }
+
+        var auditContext = LoadfileAuditWriter.CreateContext(request, processedFiles, format, totalRecordsOverride);
         var chaosEngine = auditContext.ChaosEngine;
 
         if (request.Output.IncludeLoadFile)

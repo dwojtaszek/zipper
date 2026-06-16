@@ -21,6 +21,10 @@ namespace Zipper
 
         public int Count => this.count;
 
+        public int AttachmentCount { get; private set; }
+
+        public int TotalPageCount { get; private set; }
+
         public FileData this[int index] => throw new NotSupportedException("DiskBackedFileDataList only supports sequential enumeration.");
 
         public void Add(FileData data)
@@ -30,6 +34,11 @@ namespace Zipper
                 ObjectDisposedException.ThrowIf(this.writer is null, this);
                 FileDataSerializer.Serialize(this.writer, data);
                 this.count++;
+                if (data.Attachment.HasValue)
+                {
+                    this.AttachmentCount++;
+                }
+                this.TotalPageCount += Math.Max(1, data.PageCount);
             }
         }
 

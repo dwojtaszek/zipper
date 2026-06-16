@@ -65,6 +65,16 @@ public sealed class BatesSequence
             throw new ArgumentException("Bates digits must be between 1 and 20.");
         }
 
+        if (config.Digits < 19 && config.Start >= (long)System.Math.Pow(10, config.Digits))
+        {
+            throw new ArgumentException("Bates start number exceeds the maximum value allowed by the configured digits.");
+        }
+
+        if (config.Increment <= 0)
+        {
+            throw new ArgumentException("Bates increment must be positive.");
+        }
+
         if (!string.IsNullOrEmpty(config.Prefix))
         {
             if (config.Prefix.Contains('/', StringComparison.Ordinal) || config.Prefix.Contains('\\', StringComparison.Ordinal))

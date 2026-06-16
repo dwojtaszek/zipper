@@ -10,10 +10,14 @@ internal static class LoadfileAuditWriter
 {
     public record AuditContext(long TotalRecords, ChaosEngine? ChaosEngine, LoadFileFormat Format);
 
-    public static AuditContext CreateContext(FileGenerationRequest request, IReadOnlyCollection<FileData> files, LoadFileFormat format)
+    public static AuditContext CreateContext(FileGenerationRequest request, IReadOnlyCollection<FileData> files, LoadFileFormat format, long? totalRecordsOverride = null)
     {
         long totalRecords;
-        if (request.LoadfileOnly)
+        if (totalRecordsOverride.HasValue)
+        {
+            totalRecords = totalRecordsOverride.Value;
+        }
+        else if (request.LoadfileOnly)
         {
             totalRecords = request.Output.FileCount;
         }
