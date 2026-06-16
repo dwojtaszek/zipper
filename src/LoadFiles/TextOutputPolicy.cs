@@ -22,27 +22,21 @@ internal sealed class TextOutputPolicy
     {
         var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
 
-        if (format == LoadFileFormat.Opt)
+        return format switch
         {
-            return (request.LoadFile?.IsEncodingExplicit == true) || resolvedEncoding.CodePage != Encoding.UTF8.CodePage
-                ? resolvedEncoding
-                : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
-        }
-
-        return resolvedEncoding;
+            LoadFileFormat.Opt when request.LoadFile?.IsEncodingExplicit == true || resolvedEncoding.CodePage != Encoding.UTF8.CodePage => resolvedEncoding,
+            LoadFileFormat.Opt => EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8,
+            _ => resolvedEncoding
+        };
     }
 
     private static string ResolveEndOfLine(FileGenerationRequest request, LoadFileFormat format, WriterMode mode, bool hasChaos)
     {
-        if (format == LoadFileFormat.Csv || format == LoadFileFormat.Concordance)
+        return (format, mode, hasChaos) switch
         {
-            return Environment.NewLine;
-        }
-
-        // EOL quirk preserved: standard (in-archive) generation used the platform newline,
-        // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
-        return (mode == WriterMode.Standard && !hasChaos)
-            ? Environment.NewLine
-            : LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
+            (LoadFileFormat.Csv or LoadFileFormat.Concordance, _, _) => Environment.NewLine,
+            (_, WriterMode.Standard, false) => Environment.NewLine,
+            _ => LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!)
+        };
     }
 }
