@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -40,28 +38,13 @@ internal sealed class OptComposingWriter : ILoadFileWriter
 
         var composer = new OptComposer(request, this.mode);
         var serializer = new OptSerializer();
-        var encoding = GetOptEncoding(request);
 
-        // Standard (in-archive) OPT used the platform newline and ignored chaos entirely;
-        // loadfile-only and production used the configured EOL and applied chaos.
+        // Standard (in-archive) OPT ignored chaos entirely; loadfile-only and production applied chaos.
         var effectiveChaos = this.mode == WriterMode.Standard ? null : chaosEngine;
-        var eol = this.mode == WriterMode.Standard
-            ? Environment.NewLine
-            : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Opt, this.mode, effectiveChaos != null);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, effectiveChaos, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Gets the OPT encoding, defaulting to Windows-1252 (ANSI) when no explicit encoding is set.
-    /// </summary>
-    private static Encoding GetOptEncoding(FileGenerationRequest request)
-    {
-        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        return request.LoadFile.IsEncodingExplicit || !object.Equals(resolvedEncoding, Encoding.UTF8)
-            ? resolvedEncoding
-            : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, effectiveChaos, cancellationToken).ConfigureAwait(false);
     }
 
     private static void WarnUnsupportedStandardColumns(FileGenerationRequest request)

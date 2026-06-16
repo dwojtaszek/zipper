@@ -33,15 +33,9 @@ internal sealed class DatComposingWriter : ILoadFileWriter
     {
         var composer = new DatComposer(request, this.mode);
         var serializer = new DatSerializer(request);
-        var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-
-        // EOL quirk preserved: standard (in-archive) generation used the platform newline,
-        // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
-        var eol = this.mode == WriterMode.Standard && chaosEngine == null
-            ? Environment.NewLine
-            : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Dat, this.mode, chaosEngine != null);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, encoding, eol, chaosEngine, cancellationToken).ConfigureAwait(false);
+        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);
     }
 }
