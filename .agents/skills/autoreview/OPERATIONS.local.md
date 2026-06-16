@@ -22,7 +22,7 @@
 - **lessons**: Subagents misread the diff context when a method wrapper is removed but its contents are preserved inline, leading to multiple false positives for "deleted code".
 - **suppressions**: Suppress: "Missing required parameter checks" when the checks were merely moved inline.
 
-### 2026-06-16 antigravity:commit:issue-486
+### 2026-06-16 antigravity:commit:issue-487
 
 - **findings**: 0
 - **outcome**: accepted

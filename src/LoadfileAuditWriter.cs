@@ -24,8 +24,8 @@ internal static class LoadfileAuditWriter
         else if (format == LoadFileFormat.Opt)
         {
             totalRecords = files.Sum(f =>
-                (request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
-                + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0));
+                (long)((request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
+                + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0)));
         }
         else
         {

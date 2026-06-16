@@ -260,7 +260,7 @@ public class LoadfileAuditWriterTests
     }
 
     [Fact]
-    public void CreateContext_OptFormat_SumsPageCounts()
+    public void CreateContext_OptFormat_Default_UsesFileCount()
     {
         // Arrange
         var request = new FileGenerationRequest();

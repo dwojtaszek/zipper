@@ -41,7 +41,6 @@ internal static class LoadfileOnlyGenerator
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
                 generatedFiles.Add(loadFilePath);
 
-                var auditContext = LoadfileAuditWriter.CreateContext(request, Array.Empty<FileData>(), format);
 
                 if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
                 {
@@ -62,6 +61,8 @@ internal static class LoadfileOnlyGenerator
                         Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
                     }
                 }
+
+                var auditContext = LoadfileAuditWriter.CreateContext(request, Array.Empty<FileData>(), format);
 
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
