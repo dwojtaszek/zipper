@@ -37,6 +37,8 @@ internal sealed class TextOutputPolicy
             return Environment.NewLine;
         }
 
+        // EOL quirk preserved: standard (in-archive) generation used the platform newline,
+        // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
         return (mode == WriterMode.Standard && !hasChaos)
             ? Environment.NewLine
             : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);

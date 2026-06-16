@@ -39,8 +39,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         var composer = new OptComposer(request, this.mode);
         var serializer = new OptSerializer();
 
-        // Standard (in-archive) OPT used the platform newline and ignored chaos entirely;
-        // loadfile-only and production used the configured EOL and applied chaos.
+        // Standard (in-archive) OPT ignored chaos entirely; loadfile-only and production applied chaos.
         var effectiveChaos = this.mode == WriterMode.Standard ? null : chaosEngine;
         var policy = new TextOutputPolicy(request, LoadFileFormat.Opt, this.mode, effectiveChaos != null);
 

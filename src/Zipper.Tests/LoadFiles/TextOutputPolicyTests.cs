@@ -87,4 +87,53 @@ public class TextOutputPolicyTests
 
         Assert.Equal(Encoding.ASCII.CodePage, policy.Encoding.CodePage);
     }
+
+    [Fact]
+    public void Csv_WithChaos_PlatformNewLine()
+    {
+        var req = Req(LoadFileFormat.Csv, eol: "LF");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Csv, WriterMode.Standard, hasChaos: true);
+
+        // Csv should always use Environment.NewLine even with chaos
+        Assert.Equal(Environment.NewLine, policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Concordance_Standard_NoChaos_PlatformNewLine()
+    {
+        var req = Req(LoadFileFormat.Concordance, eol: "LF");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.Standard, hasChaos: false);
+
+        Assert.Equal(Environment.NewLine, policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Concordance_WithChaos_PlatformNewLine()
+    {
+        var req = Req(LoadFileFormat.Concordance, eol: "LF");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.Standard, hasChaos: true);
+
+        // Concordance should always use Environment.NewLine even with chaos
+        Assert.Equal(Environment.NewLine, policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Concordance_LoadfileOnly_PlatformNewLine()
+    {
+        var req = Req(LoadFileFormat.Concordance, eol: "LF");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.LoadfileOnly, hasChaos: false);
+
+        // Concordance should always use Environment.NewLine even outside Standard mode
+        Assert.Equal(Environment.NewLine, policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Opt_ImplicitNonUtf8_UsesResolvedEncoding()
+    {
+        var req = Req(LoadFileFormat.Opt, encoding: "ASCII", isExplicit: false);
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Opt, WriterMode.Standard, hasChaos: false);
+
+        // If implicit but not UTF8, it should preserve the requested encoding
+        Assert.Equal(Encoding.ASCII.CodePage, policy.Encoding.CodePage);
+    }
 }
