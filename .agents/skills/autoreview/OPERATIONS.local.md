@@ -26,6 +26,6 @@
 
 - **findings**: 6 (0 ACTION, 6 INFO) - 3 coverage gaps (Concordance tests, opt/csv fallbacks), 2 stale comments, 1 structural/abstraction warning.
 - **outcome**: partial - accepted 5 INFO findings (added 5 tests, updated 2 stale comments). Rejected the structural warning about "unnecessary object abstraction" because consolidating the logic into a central policy was the explicitly documented purpose of the spike (Issue #488).
-- **telemetry**: host=antigravity mode=branch specialists=5 bundle=242c
+- **telemetry**: host=claude-code mode=branch specialists=5 bundle=242c
 - **lessons**: The correctness specialist will naturally complain about abstraction boundaries (object allocation instead of inline static method) when code is extracted from a focused writer into a broad policy class. Project-specific spike goals override these generic structural preferences.
 - **suppressions**: none

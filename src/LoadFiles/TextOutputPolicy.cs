@@ -12,17 +12,19 @@ internal sealed class TextOutputPolicy
 
     public TextOutputPolicy(FileGenerationRequest request, LoadFileFormat format, WriterMode mode, bool hasChaos)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
         this.Encoding = ResolveEncoding(request, format);
         this.EndOfLine = ResolveEndOfLine(request, format, mode, hasChaos);
     }
 
     private static Encoding ResolveEncoding(FileGenerationRequest request, LoadFileFormat format)
     {
-        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
 
         if (format == LoadFileFormat.Opt)
         {
-            return request.LoadFile.IsEncodingExplicit || !object.Equals(resolvedEncoding, Encoding.UTF8)
+            return (request.LoadFile?.IsEncodingExplicit == true) || resolvedEncoding.CodePage != Encoding.UTF8.CodePage
                 ? resolvedEncoding
                 : EncodingHelper.GetEncoding("ANSI") ?? Encoding.UTF8;
         }
@@ -41,6 +43,6 @@ internal sealed class TextOutputPolicy
         // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
         return (mode == WriterMode.Standard && !hasChaos)
             ? Environment.NewLine
-            : LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
+            : LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
     }
 }

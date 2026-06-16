@@ -136,4 +136,20 @@ public class TextOutputPolicyTests
         // If implicit but not UTF8, it should preserve the requested encoding
         Assert.Equal(Encoding.ASCII.CodePage, policy.Encoding.CodePage);
     }
+
+    [Fact]
+    public void Dat_ProductionSet_ConfiguredNewLine()
+    {
+        var req = Req(LoadFileFormat.Dat, eol: "LF");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Dat, WriterMode.ProductionSet, hasChaos: false);
+        Assert.Equal("\n", policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Opt_ProductionSet_NoExplicitEncoding_DefaultsToAnsi()
+    {
+        var req = Req(LoadFileFormat.Opt, encoding: "UTF-8", isExplicit: false);
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Opt, WriterMode.ProductionSet, hasChaos: false);
+        Assert.Equal(1252, policy.Encoding.CodePage);
+    }
 }
