@@ -16,11 +16,13 @@ internal sealed class OptComposer : ILoadFileComposer
 
     private readonly FileGenerationRequest request;
     private readonly WriterMode mode;
+    private readonly BatesSequence? batesSequence;
 
     public OptComposer(FileGenerationRequest request, WriterMode mode)
     {
         this.request = request;
         this.mode = mode;
+        this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
     }
 
     public IReadOnlyList<string> HeaderColumns => Array.Empty<string>();
@@ -55,8 +57,8 @@ internal sealed class OptComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            string batesId = this.request.Bates != null
-                ? BatesNumberGenerator.Generate(this.request.Bates, i - 1)
+            string batesId = this.batesSequence != null
+                ? this.batesSequence.Next().ToString()
                 : $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
@@ -80,11 +82,11 @@ internal sealed class OptComposer : ILoadFileComposer
             string baseBatesNumber;
             if (isProductionSet)
             {
-                baseBatesNumber = BatesNumberGenerator.Generate(this.request.Bates!, workItem.Index - 1);
+                baseBatesNumber = this.batesSequence!.Format(workItem.Index - 1).ToString();
             }
-            else if (this.request.Bates != null)
+            else if (this.batesSequence != null)
             {
-                baseBatesNumber = BatesNumberGenerator.Generate(this.request.Bates, workItem.Index - 1);
+                baseBatesNumber = this.batesSequence.Format(workItem.Index - 1).ToString();
             }
             else
             {

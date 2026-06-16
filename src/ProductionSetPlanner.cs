@@ -43,12 +43,13 @@ internal static class ProductionSetPlanner
 
         var plans = new List<ProductionDocumentPlan>((int)request.Output.FileCount);
         var nativeExt = request.Output.FileTypeLower;
+        var batesSequence = BatesSequence.FromConfig(batesConfig);
 
         for (long i = 0; i < request.Output.FileCount; i++)
         {
             int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
             var volName = $"VOL{volumeIndex:D3}";
-            var batesNumber = BatesNumberGenerator.Generate(batesConfig, i);
+            var batesNumber = batesSequence.Next().ToString();
 
             plans.Add(new ProductionDocumentPlan
             {

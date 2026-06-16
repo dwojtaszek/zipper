@@ -11,12 +11,14 @@ internal abstract class StandardRowComposer : ILoadFileComposer
     protected readonly FileGenerationRequest request;
     private readonly List<string> orderedKeys;
     private readonly List<string> headerColumns;
+    private readonly BatesSequence? batesSequence;
 
     protected StandardRowComposer(FileGenerationRequest request)
     {
         this.request = request;
         this.orderedKeys = this.BuildOrderedKeys();
         this.headerColumns = this.orderedKeys.Select(this.HeaderName).ToList();
+        this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
     }
 
     public IReadOnlyList<string> HeaderColumns => this.headerColumns;
@@ -111,7 +113,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "SUBJECT" => eml.Subject,
             "SENTDATE" => eml.SentDate,
             "ATTACHMENT" => eml.Attachment,
-            "BATES" => BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1),
+            "BATES" => this.batesSequence!.Format(wi.Index - 1).ToString(),
             "PAGECOUNT" => fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
             // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.

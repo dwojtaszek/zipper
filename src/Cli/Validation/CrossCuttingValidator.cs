@@ -8,7 +8,8 @@ internal static class CrossCuttingValidator
     {
         return ValidateFormattingAndProfiles(parsed) &&
                ValidateChaos(parsed) &&
-               ValidateDelimiters(parsed);
+               ValidateDelimiters(parsed) &&
+               ValidateBates(parsed);
     }
 
     private static bool ValidateFormattingAndProfiles(ParsedArguments parsed)
@@ -277,5 +278,24 @@ internal static class CrossCuttingValidator
             throw new ArgumentException($"Missing character in delimiter: '{arg}'");
         }
         throw new ArgumentException($"Delimiter must use 'ascii:<N>' or 'char:<c>' prefix: '{arg}'");
+    }
+
+    private static bool ValidateBates(ParsedArguments parsed)
+    {
+        if (parsed.BatesPrefix != null || parsed.BatesStart != null || parsed.BatesDigits != null)
+        {
+            var config = new BatesNumberConfig
+            {
+                Prefix = parsed.BatesPrefix ?? "DOC",
+                Start = parsed.BatesStart ?? 1,
+                Digits = parsed.BatesDigits ?? 8
+            };
+            if (!BatesSequence.TryCreate(config, out _, out var error))
+            {
+                Console.Error.WriteLine($"Error: {error}");
+                return false;
+            }
+        }
+        return true;
     }
 }
