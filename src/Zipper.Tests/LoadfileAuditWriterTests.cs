@@ -19,7 +19,8 @@ public class LoadfileAuditWriterTests
         request.Chaos = request.Chaos with { ChaosMode = false };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.opt", request, 100, null);
+        var context = new LoadfileAuditWriter.AuditContext(100, null, LoadFileFormat.Opt);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.opt", request, context);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -67,7 +68,8 @@ public class LoadfileAuditWriterTests
         };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 50, null);
+        var context = new LoadfileAuditWriter.AuditContext(50, null, LoadFileFormat.Dat);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, context);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -113,8 +115,14 @@ public class LoadfileAuditWriterTests
             }
         };
 
+        var engine = new ChaosEngine(201, "5%", "mixed-delimiters", LoadFileFormat.Dat, "|", "\"", "\r\n", null);
+        var anomaliesField = typeof(ChaosEngine).GetField("anomalies", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var internalAnomalies = (List<ChaosAnomaly>)anomaliesField!.GetValue(engine)!;
+        internalAnomalies.AddRange(anomalies);
+
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 200, anomalies);
+        var context = new LoadfileAuditWriter.AuditContext(200, engine, LoadFileFormat.Dat);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, context);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -150,7 +158,8 @@ public class LoadfileAuditWriterTests
         };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 10, null);
+        var context = new LoadfileAuditWriter.AuditContext(10, null, LoadFileFormat.Dat);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, context);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -177,7 +186,8 @@ public class LoadfileAuditWriterTests
         };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, 10, null);
+        var context = new LoadfileAuditWriter.AuditContext(10, null, LoadFileFormat.Dat);
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, context);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -202,7 +212,8 @@ public class LoadfileAuditWriterTests
         try
         {
             // Act
-            var path = await LoadfileAuditWriter.WriteAsync(tempFile, request, 42, null);
+            var context = new LoadfileAuditWriter.AuditContext(42, null, LoadFileFormat.Dat);
+            var path = await LoadfileAuditWriter.WriteAsync(tempFile, request, context);
 
             // Assert
             Assert.Equal(expectedPropertiesFile, path);
@@ -225,5 +236,46 @@ public class LoadfileAuditWriterTests
                 File.Delete(expectedPropertiesFile);
             }
         }
+    }
+
+    [Fact]
+    public void CreateContext_DatFormat_ReturnsCorrectRecordsAndLines()
+    {
+        // Arrange
+        var request = new FileGenerationRequest();
+        request.Output = request.Output with { FileCount = 5 };
+        var files = new List<FileData>
+        {
+            new FileData { WorkItem = new FileWorkItem { Index = 1 } },
+            new FileData { WorkItem = new FileWorkItem { Index = 2 } }
+        };
+
+        // Act
+        var context = LoadfileAuditWriter.CreateContext(request, files, LoadFileFormat.Dat);
+
+        // Assert
+        Assert.Equal(2, context.TotalRecords);
+        Assert.Null(context.ChaosEngine);
+        Assert.Equal(LoadFileFormat.Dat, context.Format);
+    }
+
+    [Fact]
+    public void CreateContext_OptFormat_SumsPageCounts()
+    {
+        // Arrange
+        var request = new FileGenerationRequest();
+        request.Output = request.Output with { FileCount = 5 };
+        var files = new List<FileData>
+        {
+            new FileData { WorkItem = new FileWorkItem { Index = 1 }, PageCount = 3 },
+            new FileData { WorkItem = new FileWorkItem { Index = 2 }, PageCount = 2 }
+        };
+
+        // Act
+        var context = LoadfileAuditWriter.CreateContext(request, files, LoadFileFormat.Opt);
+
+        // Assert
+        Assert.Equal(2, context.TotalRecords);
+        Assert.Equal(LoadFileFormat.Opt, context.Format);
     }
 }

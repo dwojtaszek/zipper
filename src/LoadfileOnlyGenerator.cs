@@ -41,9 +41,7 @@ internal static class LoadfileOnlyGenerator
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
                 generatedFiles.Add(loadFilePath);
 
-                long totalLines = format == LoadFileFormat.Opt
-                    ? request.Output.FileCount
-                    : request.Output.FileCount + 1;
+                var auditContext = LoadfileAuditWriter.CreateContext(request, Array.Empty<FileData>(), format);
 
                 if (request.Chaos.ChaosMode && !string.IsNullOrEmpty(request.Chaos.ChaosScenario))
                 {
@@ -65,8 +63,6 @@ internal static class LoadfileOnlyGenerator
                     }
                 }
 
-                ChaosEngine? chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
-
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
                     WriterMode.LoadfileOnly);
@@ -74,15 +70,13 @@ internal static class LoadfileOnlyGenerator
                 var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
                 await using (fileStream.ConfigureAwait(false))
                 {
-                    await writer.WriteAsync(fileStream, request, new List<FileData>(), chaosEngine, cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(fileStream, request, new List<FileData>(), auditContext.ChaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
                 string propertiesPath = await LoadfileAuditWriter.WriteAsync(
                     loadFilePath,
                     request,
-                    request.Output.FileCount,
-                    chaosEngine?.Anomalies,
-                    format).ConfigureAwait(false);
+                    auditContext).ConfigureAwait(false);
                 generatedFiles.Add(propertiesPath);
 
                 if (format == request.LoadFile.LoadFileFormat || string.IsNullOrEmpty(primaryLoadFilePath))

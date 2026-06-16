@@ -8,6 +8,35 @@ namespace Zipper;
 /// </summary>
 internal static class LoadfileAuditWriter
 {
+    public record AuditContext(long TotalRecords, ChaosEngine? ChaosEngine, LoadFileFormat Format);
+
+    public static AuditContext CreateContext(FileGenerationRequest request, IReadOnlyCollection<FileData> files, LoadFileFormat format)
+    {
+        long totalRecords;
+        if (request.LoadfileOnly)
+        {
+            totalRecords = request.Output.FileCount;
+        }
+        else if (format == LoadFileFormat.Opt)
+        {
+            totalRecords = files.Sum(f =>
+                (request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
+                + (request.Metadata.WithFamilies && request.Output.IsEml && f.Attachment.HasValue ? 1 : 0));
+        }
+        else
+        {
+            totalRecords = files.Count;
+            if (request.Metadata.WithFamilies && request.Output.IsEml)
+            {
+                totalRecords += files.Count(f => f.Attachment.HasValue);
+            }
+        }
+
+        long totalLines = format == LoadFileFormat.Opt ? totalRecords : totalRecords + 1;
+        var chaosEngine = ChaosEngineBuilder.Build(request, totalLines, format);
+
+        return new AuditContext(totalRecords, chaosEngine, format);
+    }
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -20,19 +49,14 @@ internal static class LoadfileAuditWriter
     /// </summary>
     /// <param name="outputPath">Path to the generated load file.</param>
     /// <param name="request">File generation request.</param>
-    /// <param name="totalRecords">Total records written.</param>
-    /// <param name="anomalies">List of chaos anomalies (empty if chaos disabled).</param>
-    /// <param name="format">The explicit load file format.</param>
     /// <returns>Path to the generated properties file.</returns>
     public static async Task<string> WriteAsync(
         string outputPath,
         FileGenerationRequest request,
-        long totalRecords,
-        IReadOnlyList<ChaosAnomaly>? anomalies = null,
-        LoadFileFormat? format = null)
+        AuditContext context)
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
-        var json = GenerateAuditJson(outputPath, request, totalRecords, anomalies, format);
+        var json = GenerateAuditJson(outputPath, request, context);
         await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
         return propertiesPath;
     }
@@ -42,18 +66,13 @@ internal static class LoadfileAuditWriter
     /// </summary>
     /// <param name="outputPath">Path to the generated load file.</param>
     /// <param name="request">File generation request.</param>
-    /// <param name="totalRecords">Total records written.</param>
-    /// <param name="anomalies">List of chaos anomalies.</param>
-    /// <param name="format">The explicit load file format.</param>
     /// <returns>The properties JSON string.</returns>
     public static string GenerateAuditJson(
         string outputPath,
         FileGenerationRequest request,
-        long totalRecords,
-        IReadOnlyList<ChaosAnomaly>? anomalies = null,
-        LoadFileFormat? format = null)
+        AuditContext context)
     {
-        var activeFormat = format ?? request.LoadFile.LoadFileFormat;
+        var activeFormat = context.Format;
         var formatName = activeFormat == LoadFileFormat.Opt
             ? "OPT (Image)"
             : "DAT (Metadata)";
@@ -95,7 +114,7 @@ internal static class LoadfileAuditWriter
         {
             FileName = Path.GetFileName(outputPath),
             Format = formatName,
-            TotalRecords = totalRecords,
+            TotalRecords = context.TotalRecords,
             Properties = new AuditProperties
             {
                 Encoding = encodingName,
@@ -106,9 +125,9 @@ internal static class LoadfileAuditWriter
             {
                 Enabled = request.Chaos.ChaosMode,
                 TargetAmount = request.Chaos.ChaosAmount,
-                TotalAnomalies = anomalies?.Count ?? 0,
-                InjectedAnomalies = anomalies != null && anomalies.Count > 0
-                    ? anomalies.Select(a => new AuditAnomalyEntry
+                TotalAnomalies = context.ChaosEngine?.Anomalies?.Count ?? 0,
+                InjectedAnomalies = context.ChaosEngine?.Anomalies != null && context.ChaosEngine.Anomalies.Count > 0
+                    ? context.ChaosEngine.Anomalies.Select(a => new AuditAnomalyEntry
                     {
                         LineNumber = a.LineNumber,
                         RecordID = a.RecordID,

@@ -52,11 +52,13 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 #pragma warning restore S2245
                 var now = request.Metadata.Seed.HasValue ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) : DateTime.UtcNow;
 
+                var batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
+
                 foreach (var fileData in processedFiles)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now);
+                    var element = CreateDocumentElement(fileData.WorkItem, fileData, request, random, now, batesSequence);
                     await element.WriteToAsync(writer, cancellationToken);
                 }
 
@@ -91,7 +93,8 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         FileData fileData,
         FileGenerationRequest request,
         Random random,
-        DateTime now)
+        DateTime now,
+        BatesSequence? batesSequence)
     {
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var docElement = new XElement("Document", new XAttribute("DocID", GenerateDocumentId(workItem)));
@@ -162,7 +165,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Bates != null)
         {
-            AddTag(tagsElement, "BatesNumber", GenerateBatesNumber(request, workItem), namingConvention);
+            AddTag(tagsElement, "BatesNumber", batesSequence?.Next() ?? string.Empty, namingConvention);
         }
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
@@ -187,10 +190,5 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
     private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
         => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
-
-    private static string GenerateBatesNumber(FileGenerationRequest request, FileWorkItem workItem)
-        => request.Bates != null
-            ? BatesNumberGenerator.Generate(request.Bates, workItem.Index - 1)
-            : string.Empty;
 
 }

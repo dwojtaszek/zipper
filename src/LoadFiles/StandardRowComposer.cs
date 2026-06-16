@@ -37,15 +37,18 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         bool includeMeta = this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output);
         bool includeEml = this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output);
 
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
+
         foreach (var fileData in processedFiles)
         {
             var wi = fileData.WorkItem;
+            string batesNumber = batesSequence?.Next() ?? string.Empty;
 
             // Draw order must stay metadata-then-email to match historical output.
             var meta = includeMeta ? SyntheticRowValues.Metadata(wi, fileData, random, now) : default;
             var eml = includeEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
 
-            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml)).ToList();
+            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, batesNumber)).ToList();
             yield return LoadFileRecordBuilder.Build(this.headerColumns, values, $"DOC{wi.Index:D8}");
         }
     }
@@ -95,7 +98,8 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         FileWorkItem wi,
         FileData fileData,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
-        (string To, string From, string Subject, string SentDate, string Attachment) eml)
+        (string To, string From, string Subject, string SentDate, string Attachment) eml,
+        string batesNumber)
         => key switch
         {
             "BEGATTY" => string.Empty,
@@ -111,7 +115,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "SUBJECT" => eml.Subject,
             "SENTDATE" => eml.SentDate,
             "ATTACHMENT" => eml.Attachment,
-            "BATES" => BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1),
+            "BATES" => batesNumber,
             "PAGECOUNT" => fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
             // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.

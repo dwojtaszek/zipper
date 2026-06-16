@@ -159,7 +159,7 @@ public class CsvLoadFileWriterTests : TempDirectoryTestBase
         var files = this.CreateTestFileData(1);
         files[0] = files[0] with { WorkItem = files[0].WorkItem with { Index = 10 } };
         var content = await this.CaptureCsvOutput(request, files);
-        Assert.Contains("TEST001009", content, StringComparison.Ordinal);
+        Assert.Contains("TEST001000", content, StringComparison.Ordinal);
     }
 
     [Fact]

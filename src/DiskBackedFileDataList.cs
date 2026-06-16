@@ -35,6 +35,12 @@ namespace Zipper
 
         public IEnumerator<FileData> GetEnumerator()
         {
+            ObjectDisposedException.ThrowIf(this.writer is null, this);
+            return this.GetEnumeratorImpl();
+        }
+
+        private IEnumerator<FileData> GetEnumeratorImpl()
+        {
             lock (this.syncRoot)
             {
                 this.writer?.Flush();

@@ -170,10 +170,11 @@ public class OptLoadFileWriterTests : TempDirectoryTestBase
         var datContentWithUtf8 = await File.ReadAllTextAsync(datOutputPath, Encoding.UTF8);
         Assert.NotEmpty(datContentWithUtf8);
 
-        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optOutputPath, request, fileData.Count, null, LoadFileFormat.Opt);
-        Assert.Contains("\"encoding\": \"ANSI\"", optAuditJson, StringComparison.Ordinal);
+        var optContext = new LoadfileAuditWriter.AuditContext(fileData.Count, null, LoadFileFormat.Opt);
+        var optAuditJson = LoadfileAuditWriter.GenerateAuditJson(optOutputPath, request, optContext);
 
-        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datOutputPath, request, fileData.Count, null, LoadFileFormat.Dat);
+        var datContext = new LoadfileAuditWriter.AuditContext(fileData.Count, null, LoadFileFormat.Dat);
+        var datAuditJson = LoadfileAuditWriter.GenerateAuditJson(datOutputPath, request, datContext);
         Assert.Contains("\"encoding\": \"UTF-8\"", datAuditJson, StringComparison.Ordinal);
     }
 

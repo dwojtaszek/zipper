@@ -126,26 +126,20 @@ internal class ZipArchiveSink : IArchiveSink
         var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
         var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
-        long totalRecords = format == LoadFileFormat.Opt
-            ? processedFiles.Sum(f => request.Tiff.ShouldIncludePageCount(request.Output) ? Math.Max(1, f.PageCount) : 1)
-            : processedFiles.Count;
-
-        long totalChaosLines = format == LoadFileFormat.Opt
-            ? totalRecords
-            : totalRecords + 1;
-        var chaosEngine = ChaosEngineBuilder.Build(request, totalChaosLines, format);
+        var auditContext = LoadfileAuditWriter.CreateContext(request, processedFiles, format);
+        var chaosEngine = auditContext.ChaosEngine;
 
         if (request.Output.IncludeLoadFile)
         {
             await GenerateLoadFileToArchiveAsync(archive, request, processedFiles, loadFileWriter, chaosEngine, actualLoadFileName).ConfigureAwait(false);
-            await EmitAuditToArchiveAsync(archive, request, totalRecords, chaosEngine, format, actualLoadFileName).ConfigureAwait(false);
+            await EmitAuditToArchiveAsync(archive, request, auditContext, actualLoadFileName).ConfigureAwait(false);
             return actualLoadFileName;
         }
         else
         {
             var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
             await GenerateLoadFileToDiskAsync(request, processedFiles, loadFileWriter, chaosEngine, currentFilePath).ConfigureAwait(false);
-            await EmitAuditToDiskAsync(request, totalRecords, chaosEngine, format, currentFilePath).ConfigureAwait(false);
+            await EmitAuditToDiskAsync(request, auditContext, currentFilePath).ConfigureAwait(false);
             return currentFilePath;
         }
     }
@@ -155,7 +149,7 @@ internal class ZipArchiveSink : IArchiveSink
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
         ILoadFileWriter loadFileWriter,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         string actualLoadFileName)
     {
         var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
@@ -167,7 +161,7 @@ internal class ZipArchiveSink : IArchiveSink
         FileGenerationRequest request,
         DiskBackedFileDataList processedFiles,
         ILoadFileWriter loadFileWriter,
-        dynamic? chaosEngine,
+        ChaosEngine? chaosEngine,
         string currentFilePath)
     {
         var fileStream = new FileStream(currentFilePath, FileMode.Create);
@@ -181,12 +175,10 @@ internal class ZipArchiveSink : IArchiveSink
     private async Task EmitAuditToArchiveAsync(
         ZipArchive archive,
         FileGenerationRequest request,
-        long totalRecords,
-        dynamic? chaosEngine,
-        LoadFileFormat format,
+        LoadfileAuditWriter.AuditContext context,
         string actualLoadFileName)
     {
-        var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, totalRecords, chaosEngine?.Anomalies, format);
+        var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, context);
         var propertiesEntry = archive.CreateEntry(actualLoadFileName + "_properties.json", CompressionLevel.Optimal);
         using var propertiesStream = propertiesEntry.Open();
         using var propertiesWriter = new StreamWriter(propertiesStream);
@@ -195,12 +187,10 @@ internal class ZipArchiveSink : IArchiveSink
 
     private async Task EmitAuditToDiskAsync(
         FileGenerationRequest request,
-        long totalRecords,
-        dynamic? chaosEngine,
-        LoadFileFormat format,
+        LoadfileAuditWriter.AuditContext context,
         string currentFilePath)
     {
-        var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, totalRecords, chaosEngine?.Anomalies, format);
+        var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, context);
         await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson).ConfigureAwait(false);
     }
 

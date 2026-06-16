@@ -131,15 +131,16 @@ internal sealed class DatComposer : ILoadFileComposer
     private IEnumerable<LoadFileRecord> ComposeStandard(IReadOnlyList<FileData> processedFiles)
     {
         var generator = GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
 
         foreach (var fileData in processedFiles)
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
-            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request);
+            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request, batesSequence);
 
             yield return this.MakeRecord(
                 parentId,
-                this.StandardRowValues(fileData, profileValues, new RowCtx { BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.StandardRowValues(fileData, profileValues, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
@@ -189,7 +190,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.request.Bates != null)
         {
-            v.Add(ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates, wi.Index - 1));
+            v.Add(ctx.IdOverride!);
         }
 
         if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
@@ -229,13 +230,15 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ComposeProduction(IReadOnlyList<FileData> processedFiles)
     {
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
+
         foreach (var fileData in processedFiles)
         {
-            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request);
+            var (parentId, childId, hasAttachment) = GetFamilyIdentifiers(fileData, this.request, batesSequence);
 
             yield return this.MakeRecord(
                 parentId,
-                this.ProductionRowValues(fileData, new RowCtx { BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.ProductionRowValues(fileData, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
@@ -267,7 +270,7 @@ internal sealed class DatComposer : ILoadFileComposer
     private List<string> ProductionRowValues(FileData fileData, RowCtx ctx)
     {
         var wi = fileData.WorkItem;
-        var batesNumber = ctx.IdOverride ?? BatesNumberGenerator.Generate(this.request.Bates!, wi.Index - 1);
+        var batesNumber = ctx.IdOverride!;
         var imagePath = ctx.ImagePathOverride ?? wi.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
             .Replace(Path.GetExtension(wi.FilePathInZip), ".tif", StringComparison.Ordinal);
         // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
@@ -318,10 +321,12 @@ internal sealed class DatComposer : ILoadFileComposer
         var random = this.request.Metadata.Seed.HasValue ? new Random(this.request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
+
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            var recordId = this.request.Bates != null
-                ? BatesNumberGenerator.Generate(this.request.Bates, i - 1)
+            var recordId = batesSequence != null
+                ? batesSequence.Next()
                 : $"DOC{i:D8}";
 
             // Draw order must match the legacy writer: dateSent, author, fileSize, sentTime.
@@ -378,11 +383,11 @@ internal sealed class DatComposer : ILoadFileComposer
         }
     }
 
-    private static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request)
+    private static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request, BatesSequence? batesSequence)
     {
         bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-        string parentId = request.Bates != null
-            ? BatesNumberGenerator.Generate(request.Bates, fileData.WorkItem.Index - 1)
+        string parentId = batesSequence != null
+            ? batesSequence.Next()
             : $"DOC{fileData.WorkItem.Index:D8}";
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
         return (parentId, childId, hasAttachment);

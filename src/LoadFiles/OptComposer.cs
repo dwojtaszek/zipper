@@ -53,10 +53,12 @@ internal sealed class OptComposer : ILoadFileComposer
         var random = this.request.Metadata.Seed.HasValue ? new Random(this.request.Metadata.Seed.Value + 1) : new Random();
 #pragma warning restore S2245
 
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
+
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            string batesId = this.request.Bates != null
-                ? BatesNumberGenerator.Generate(this.request.Bates, i - 1)
+            string batesId = batesSequence != null
+                ? batesSequence.Next()
                 : $"IMG{i:D8}";
             string volume = "VOL001";
             string imagePath = $"IMAGES\\{batesId}.tif";
@@ -74,17 +76,15 @@ internal sealed class OptComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ComposeFromFiles(IReadOnlyList<FileData> processedFiles, bool isProductionSet)
     {
+        var batesSequence = this.request.Bates != null ? BatesSequence.FromConfig(this.request.Bates) : null;
+
         foreach (var fileData in processedFiles)
         {
             var workItem = fileData.WorkItem;
             string baseBatesNumber;
-            if (isProductionSet)
+            if (batesSequence != null)
             {
-                baseBatesNumber = BatesNumberGenerator.Generate(this.request.Bates!, workItem.Index - 1);
-            }
-            else if (this.request.Bates != null)
-            {
-                baseBatesNumber = BatesNumberGenerator.Generate(this.request.Bates, workItem.Index - 1);
+                baseBatesNumber = batesSequence.Next();
             }
             else
             {

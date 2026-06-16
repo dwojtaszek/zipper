@@ -5,8 +5,7 @@ internal static class ProductionSetValidator
     public static bool Validate(ParsedArguments parsed)
     {
         return ValidateDependencies(parsed) &&
-               ValidateParameters(parsed) &&
-               ValidatePrefix(parsed);
+               ValidateBatesSequence(parsed);
     }
 
     private static bool ValidateDependencies(ParsedArguments parsed)
@@ -47,46 +46,29 @@ internal static class ProductionSetValidator
         return true;
     }
 
-    private static bool ValidateParameters(ParsedArguments parsed)
+    private static bool ValidateBatesSequence(ParsedArguments parsed)
     {
-        if (parsed.BatesStart.HasValue && parsed.BatesStart.Value < 0)
+        if (string.IsNullOrEmpty(parsed.BatesPrefix))
         {
-            Console.Error.WriteLine("Error: Bates start number must be non-negative.");
+            return true; // Validated in dependencies if production-set, otherwise ignored
+        }
+
+        var config = new Zipper.BatesNumberConfig
+        {
+            Prefix = parsed.BatesPrefix,
+            Start = parsed.BatesStart ?? 1,
+            Digits = parsed.BatesDigits ?? 8,
+        };
+
+        try
+        {
+            Zipper.BatesSequence.FromConfig(config);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
             return false;
         }
-
-        if (parsed.BatesDigits.HasValue && (parsed.BatesDigits.Value < 1 || parsed.BatesDigits.Value > 20))
-        {
-            Console.Error.WriteLine("Error: Bates digits must be between 1 and 20.");
-            return false;
-        }
-
-        return true;
-    }
-
-    private static bool ValidatePrefix(ParsedArguments parsed)
-    {
-        if (!string.IsNullOrEmpty(parsed.BatesPrefix))
-        {
-            if (parsed.BatesPrefix.Contains('/', StringComparison.Ordinal) || parsed.BatesPrefix.Contains('\\', StringComparison.Ordinal))
-            {
-                Console.Error.WriteLine("Error: --bates-prefix must not contain path separators.");
-                return false;
-            }
-
-            if (string.Equals(parsed.BatesPrefix, "..", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("../", StringComparison.Ordinal) || parsed.BatesPrefix.Contains("..\\", StringComparison.Ordinal))
-            {
-                Console.Error.WriteLine("Error: --bates-prefix must not contain directory traversal sequences.");
-                return false;
-            }
-
-            if (!parsed.BatesPrefix.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
-            {
-                Console.Error.WriteLine("Error: --bates-prefix must only contain letters, digits, underscores, and hyphens.");
-                return false;
-            }
-        }
-
-        return true;
     }
 }
