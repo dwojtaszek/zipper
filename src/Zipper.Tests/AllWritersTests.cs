@@ -122,9 +122,9 @@ public class AllWritersTests : TempDirectoryTestBase
             }
             else
             {
-                var line1 = lines.FirstOrDefault(l => l.Contains("DOC00000001"));
-                var line2 = lines.FirstOrDefault(l => l.Contains("DOC00000002"));
-                var line3 = lines.FirstOrDefault(l => l.Contains("DOC00000003"));
+                var line1 = lines.FirstOrDefault(l => l.Contains("DOC00000001", StringComparison.Ordinal));
+                var line2 = lines.FirstOrDefault(l => l.Contains("DOC00000002", StringComparison.Ordinal));
+                var line3 = lines.FirstOrDefault(l => l.Contains("DOC00000003", StringComparison.Ordinal));
 
                 Assert.NotNull(line1);
                 Assert.NotNull(line2);

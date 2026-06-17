@@ -361,7 +361,7 @@ namespace Zipper
                 {
                     return;
                 }
-                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege") || ex.HResult == -2147024564)
+                catch (System.IO.IOException ex) when (ex.Message.Contains("privilege", StringComparison.Ordinal) || ex.HResult == -2147024564)
                 {
                     return;
                 }

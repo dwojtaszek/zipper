@@ -557,7 +557,7 @@ namespace Zipper
             // Verify first page of first document
             var parts1 = lines[0].Split(',');
             Assert.StartsWith("ABC001_00001", parts1[0], StringComparison.Ordinal);
-            if (parts1[0].Contains("_"))
+            if (parts1[0].Contains("_", StringComparison.Ordinal))
             {
                 Assert.Equal("ABC001_00001_001", parts1[0]);
             }

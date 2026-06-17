@@ -529,7 +529,7 @@ namespace Zipper
             Assert.NotEqual(baseOutput, chaosOutput);
             Assert.True(chaosEngine.Anomalies.Count > 0);
             Assert.All(chaosEngine.Anomalies, a => Assert.Equal("mixed-delimiters", a.ErrorType));
-            Assert.True(chaosOutput.Contains(",") || chaosOutput.Contains("\t") || chaosOutput.Contains("|"), "Should contain alternative delimiters");
+            Assert.True(chaosOutput.Contains(",", StringComparison.Ordinal) || chaosOutput.Contains("\t", StringComparison.Ordinal) || chaosOutput.Contains("|", StringComparison.Ordinal), "Should contain alternative delimiters");
 
             var anomaly = chaosEngine.Anomalies.First();
             Assert.Contains("Replaced delimiter", anomaly.Description, StringComparison.Ordinal);
