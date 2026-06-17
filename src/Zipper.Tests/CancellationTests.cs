@@ -12,6 +12,7 @@ namespace Zipper;
 ///   3. <see cref="GenerationRunner.RunAsync"/> returns exit code 130 on cancellation.
 /// These tests do NOT require real Ctrl-C: they pass a pre-cancelled token.
 /// </summary>
+[Collection("ConsoleTests")]
 public class CancellationTests
 {
     // -----------------------------------------------------------------------
@@ -202,7 +203,7 @@ public class CancellationTests
 
         // A mode that immediately honours the token
         var mode = new TokenCheckingMode();
-        int exitCode = await GenerationRunner.RunAsync(mode, BuildStandardRequest("/tmp"), cts.Token);
+        int exitCode = await GenerationRunner.RunAsync(mode, BuildStandardRequest(Path.GetTempPath()), cts.Token);
 
         Assert.Equal(130, exitCode);
     }
@@ -219,14 +220,14 @@ public class CancellationTests
         Console.SetError(errWriter);
         try
         {
-            await GenerationRunner.RunAsync(mode, BuildStandardRequest("/tmp"), cts.Token);
+            await GenerationRunner.RunAsync(mode, BuildStandardRequest(Path.GetTempPath()), cts.Token);
         }
         finally
         {
             Console.SetError(originalError);
         }
 
-        Assert.Contains("\nOperation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
+        Assert.Contains("Operation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
     }
 
     // -----------------------------------------------------------------------
