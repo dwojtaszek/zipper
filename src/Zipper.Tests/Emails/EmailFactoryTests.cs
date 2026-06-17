@@ -411,13 +411,13 @@ namespace Zipper
 
             Assert.NotNull(email);
             Assert.True(
-                email.Subject.Contains("Business") ||
-                email.Subject.Contains("Contract") ||
-                email.Subject.Contains("Meeting") ||
-                email.Subject.Contains("Partnership") ||
-                email.Subject.Contains("Budget") ||
-                email.Subject.Contains("Review") ||
-                email.Subject.Contains("Proposal"),
+                email.Subject.Contains("Business", StringComparison.Ordinal) ||
+                email.Subject.Contains("Contract", StringComparison.Ordinal) ||
+                email.Subject.Contains("Meeting", StringComparison.Ordinal) ||
+                email.Subject.Contains("Partnership", StringComparison.Ordinal) ||
+                email.Subject.Contains("Budget", StringComparison.Ordinal) ||
+                email.Subject.Contains("Review", StringComparison.Ordinal) ||
+                email.Subject.Contains("Proposal", StringComparison.Ordinal),
                 $"Expected business-related subject, got: {email.Subject}");
         }
 

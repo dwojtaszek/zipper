@@ -197,7 +197,7 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
             var row = generator.GenerateRow(workItem, fileData);
 
             var emailToValue = row["EMAILTO"];
-            if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(delimiter))
+            if (!string.IsNullOrEmpty(emailToValue) && emailToValue.Contains(delimiter, StringComparison.Ordinal))
             {
                 Assert.Contains(delimiter, emailToValue, StringComparison.Ordinal);
                 var parts = emailToValue.Split(delimiter);
