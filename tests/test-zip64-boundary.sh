@@ -77,13 +77,13 @@ fi
 DAT_FILE="${ZIP_FILE%.zip}.opt"
 
 if [[ -f "$DAT_FILE" ]]; then
-    # Load files have a header row, so 70000 files = 70001 lines
+    # .opt load files do not have a header row, so 70000 files = 70000 lines
     DAT_LINES=$(wc -l < "$DAT_FILE" | xargs)
-    if [[ "$DAT_LINES" -eq 70001 ]]; then
-        print_info "Assertion OK: Load file (.opt) has 70001 lines"
+    if [[ "$DAT_LINES" -eq 70000 ]]; then
+        print_info "Assertion OK: Load file (.opt) has 70000 lines"
         PASSED=$((PASSED + 1))
     else
-        print_error "Assertion FAILED: Load file has $DAT_LINES lines, expected 70001"
+        print_error "Assertion FAILED: Load file has $DAT_LINES lines, expected 70000"
         FAILED=$((FAILED + 1))
     fi
 else
