@@ -15,7 +15,7 @@ personas:
   - name: default
     description: 'CLI user running zipper with standard arguments'
     credentials_source: none
-    test_focus: ['standard-mode', 'loadfile-only', 'production-set', 'target-zip-size', 'help-version']
+    test_focus: ['standard-mode', 'loadfile-only', 'production-set', 'target-zip-size']
     cannot_do: []
 
 apps:

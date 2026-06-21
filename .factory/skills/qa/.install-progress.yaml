@@ -18,7 +18,6 @@ categories:
       - production-set
       - bates-numbering
       - target-zip-size
-      - help-version
   external_services:
     answer: none
   cleanup:

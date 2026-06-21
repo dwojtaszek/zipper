@@ -21,7 +21,25 @@ The default target is `local`. Zipper is a CLI tool with no deployed environment
 
 ## Step 3: Analyze Git Diff
 
-Run `git diff` to determine what changed. Map changed files to apps using the path_patterns in config.yaml.
+Determine the diff base. In a PR context, compare against the PR base SHA:
+
+```bash
+git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD
+```
+
+If running locally (no PR context), compare against the main branch:
+
+```bash
+git diff --name-only origin/main HEAD
+```
+
+If there are no uncommitted or unpushed changes, compare the latest commit against its parent:
+
+```bash
+git diff --name-only HEAD~1 HEAD
+```
+
+Map changed files to apps using the path_patterns in config.yaml.
 
 Files that don't match ANY app's path_patterns (e.g., `.factory/skills/**`, `docs/**`, `.github/**`, `droid-wiki/**`, `*.md`) are NOT associated with any app. Do NOT run app test flows for them.
 
@@ -40,8 +58,14 @@ If NO app is affected by the diff (e.g., docs-only, CI-only, or config-only chan
 
 For the CLI app (if affected):
 
-1. Build the binary: `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin`
-2. Verify the binary exists: `test -f ./publish-bin/Zipper`
+1. Build the binary using the `build_command` from config.yaml (includes `-p:Version=qa-test` for meaningful `--version` output):
+   ```bash
+   dotnet publish src/Zipper.csproj -c Release -o ./publish-bin -p:Version=qa-test
+   ```
+2. Verify the binary exists (check both Linux/macOS and Windows names):
+   ```bash
+   test -f ./publish-bin/Zipper || test -f ./publish-bin/Zipper.exe
+   ```
 3. If build fails, report BLOCKED with the build error
 
 Do NOT run pre-flight checks if the CLI app is not affected by the diff.
