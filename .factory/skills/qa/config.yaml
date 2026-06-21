@@ -1,0 +1,46 @@
+project: Zipper
+imagemagick: true
+environments:
+  local:
+    url: localhost
+    restrictions: []
+
+default_target: local
+
+auth:
+  method: none
+  provider: none
+
+personas:
+  - name: default
+    description: 'CLI user running zipper with standard arguments'
+    credentials_source: none
+    test_focus: ['standard-mode', 'loadfile-only', 'production-set', 'target-zip-size', 'help-version']
+    cannot_do: []
+
+apps:
+  cli:
+    path_patterns:
+      - "src/**/*.cs"
+      - "src/**/*.csproj"
+      - "Directory.Build.props"
+      - "global.json"
+      - ".editorconfig"
+      - "BannedSymbols.txt"
+    skill: qa-cli
+    test_tool: shell
+    build_command: 'dotnet publish src/Zipper.csproj -c Release -o ./publish-bin -p:Version=qa-test'
+
+feature_flags:
+  provider: none
+  dashboard_url: ''
+  how_to_override: ''
+
+integrations: {}
+
+cleanup:
+  auto_cleanup: true
+  strategy: delete-output-files
+  instructions: 'Remove generated output files (archive.zip, *.dat, *.opt, *.csv, production directories) from the working directory after each test run'
+
+failure_learning: open_pr
