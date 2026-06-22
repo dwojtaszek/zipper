@@ -1,0 +1,31 @@
+questionnaire_completed: true
+date: 2026-06-21
+
+categories:
+  default_qa_target:
+    answer: local
+  personas:
+    answer:
+      - name: default
+        description: CLI user running zipper with standard arguments
+        credentials_source: none
+  critical_flows:
+    answer: all_detected_flows_correct
+    flows:
+      - standard-mode
+      - loadfile-only
+      - loadfile-only-with-chaos
+      - production-set
+      - bates-numbering
+      - target-zip-size
+  external_services:
+    answer: none
+  cleanup:
+    answer: delete-output-files
+    auto_cleanup: true
+  imagemagick:
+    installed: true
+  github_action:
+    answer: no
+  failure_learning:
+    answer: open_pr
