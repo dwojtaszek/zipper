@@ -180,5 +180,54 @@ namespace Zipper
             Assert.NotNull(lastLineAnomaly);
             Assert.True(chaosBytes.Length > baseBytes.Length, "Encoding chaos should inject extra bytes");
         }
+
+        [Fact]
+        public async Task WriteAsync_WithChaosEngine_AltersOutputAndPreservesHeaders()
+        {
+            var profile = MakeMinimalProfile();
+            var request = MakeRequest(profile, 3);
+            request.LoadfileOnly = true;
+            request.Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "100%",
+                ChaosTypes = "encoding"
+            };
+            request.Metadata = request.Metadata with { Seed = 42 };
+
+            using var baseStream = new MemoryStream();
+            await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(baseStream, request, []);
+            var baseBytes = baseStream.ToArray();
+            var baseLines = Encoding.UTF8.GetString(baseBytes).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            int totalLines = baseLines.Length;
+            var chaosEngine = ChaosEngineBuilder.Build(request, totalLines, LoadFileFormat.Dat);
+            Assert.NotNull(chaosEngine);
+            Assert.NotNull(chaosEngine.Anomalies);
+
+            using var chaosStream = new MemoryStream();
+            await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(chaosStream, request, [], chaosEngine);
+            var chaosBytes = chaosStream.ToArray();
+            var chaosLines = Encoding.UTF8.GetString(chaosBytes).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            // (a) output differs from the no-chaos baseline
+            Assert.NotEqual(baseBytes, chaosBytes);
+            Assert.True(chaosEngine.Anomalies.Count > 0, "Chaos anomalies should be generated");
+
+            // (b) header columns still come from the profile
+            Assert.Contains("DOCID", chaosLines[0], StringComparison.Ordinal);
+            Assert.Contains("FILEPATH", chaosLines[0], StringComparison.Ordinal);
+
+            // (c) with chaosEngine: null output is byte-identical
+            using var nullChaosStream = new MemoryStream();
+            await new DatComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly).WriteAsync(nullChaosStream, request, [], null);
+            var nullChaosBytes = nullChaosStream.ToArray();
+            Assert.Equal(baseBytes, nullChaosBytes);
+
+            // Verify specific corrupted lines based on seed 42
+            var corruptedLines = chaosEngine.Anomalies.Select(a => a.LineNumber).ToList();
+            Assert.Contains("Boundary 1-2", corruptedLines);
+            Assert.Contains("Boundary 4-5", corruptedLines);
+        }
     }
 }
