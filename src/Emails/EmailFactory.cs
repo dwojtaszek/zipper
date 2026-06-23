@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.Emails;
 
 internal static class EmailFactory
@@ -279,13 +281,13 @@ internal static class EmailFactory
 
     private static string ApplyReplacements(string template, Dictionary<string, string> replacements)
     {
-        var result = template;
+        var sb = new StringBuilder(template);
         foreach (var replacement in replacements)
         {
-            result = result.Replace(replacement.Key, replacement.Value, StringComparison.Ordinal);
+            sb.Replace(replacement.Key, replacement.Value);
         }
 
-        return result;
+        return sb.ToString();
     }
 
     private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
