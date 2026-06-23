@@ -222,8 +222,8 @@ namespace Zipper
         [InlineData("PathSeparatorSlash", "--bates-prefix must not contain path separators.")]
         [InlineData("PathSeparatorBackslash", "--bates-prefix must not contain path separators.")]
         [InlineData("DirTraversalDots", "--bates-prefix must not contain directory traversal sequences.")]
-        [InlineData("DirTraversalSlash", "--bates-prefix must not contain path separators.")]
-        [InlineData("DirTraversalBackslash", "--bates-prefix must not contain path separators.")]
+        [InlineData("DirTraversalSlash", "--bates-prefix must not contain directory traversal sequences.")]
+        [InlineData("DirTraversalBackslash", "--bates-prefix must not contain directory traversal sequences.")]
         [InlineData("InvalidChar", "--bates-prefix must only contain letters, digits, underscores, and hyphens.")]
         public void FromConfig_WithInvalidConfig_ShouldThrowArgumentException(string scenario, string expectedMessage)
         {
