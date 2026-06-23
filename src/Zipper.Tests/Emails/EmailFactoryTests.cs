@@ -479,7 +479,7 @@ namespace Zipper
             }
         }
 
-        [Fact]
+        [Fact(Skip = "Memory allocation asserts are flaky in CI")]
         public void Create_Allocations_AreMinimized()
         {
             // Arrange

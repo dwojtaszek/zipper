@@ -281,13 +281,22 @@ internal static class EmailFactory
 
     private static string ApplyReplacements(string template, Dictionary<string, string> replacements)
     {
-        var sb = new StringBuilder(template);
-        foreach (var replacement in replacements)
+        if (string.IsNullOrEmpty(template) || !template.Contains('{'))
         {
-            sb.Replace(replacement.Key, replacement.Value);
+            return template;
         }
 
-        return sb.ToString();
+        StringBuilder? sb = null;
+        foreach (var replacement in replacements)
+        {
+            if (template.Contains(replacement.Key, StringComparison.Ordinal))
+            {
+                sb ??= new StringBuilder(template);
+                sb.Replace(replacement.Key, replacement.Value);
+            }
+        }
+
+        return sb?.ToString() ?? template;
     }
 
     private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
