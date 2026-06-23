@@ -479,33 +479,7 @@ namespace Zipper
             }
         }
 
-        [Fact(Skip = "Memory allocation asserts are flaky in CI")]
-        public void Create_Allocations_AreMinimized()
-        {
-            // Arrange
-            var rng = new Random(42);
-            var now = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
-            // Warmup
-            EmailFactory.Create(1, 1, EmailCategory.Business, rng, now);
-
-            long before = GC.GetAllocatedBytesForCurrentThread();
-
-            // Act
-            for (int i = 0; i < 100; i++)
-            {
-                EmailFactory.Create(i, i, EmailCategory.Business, rng, now);
-            }
-
-            long after = GC.GetAllocatedBytesForCurrentThread();
-            long allocated = after - before;
-
-            this.output.WriteLine($"Allocated bytes for 100 emails: {allocated}");
-
-            // Assert
-            // Expecting the allocations to be under 1MB after StringBuilder optimization (was ~1.06MB before)
-            Assert.True(allocated < 1_000_000, $"Allocated too much memory: {allocated} bytes");
-        }
 
         private static double ComputeBinomialChiSquare(int observed, int n, double expectedRate)
         {
