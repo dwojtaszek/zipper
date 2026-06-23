@@ -67,15 +67,15 @@ public sealed class BatesSequence
 
         if (!string.IsNullOrEmpty(config.Prefix))
         {
-            if (config.Prefix.Contains('/', StringComparison.Ordinal) || config.Prefix.Contains('\\', StringComparison.Ordinal))
-            {
-                errorMessage = "--bates-prefix must not contain path separators.";
-                return false;
-            }
-
             if (string.Equals(config.Prefix, "..", StringComparison.Ordinal) || config.Prefix.Contains("../", StringComparison.Ordinal) || config.Prefix.Contains("..\\", StringComparison.Ordinal))
             {
                 errorMessage = "--bates-prefix must not contain directory traversal sequences.";
+                return false;
+            }
+
+            if (config.Prefix.Contains('/', StringComparison.Ordinal) || config.Prefix.Contains('\\', StringComparison.Ordinal))
+            {
+                errorMessage = "--bates-prefix must not contain path separators.";
                 return false;
             }
 

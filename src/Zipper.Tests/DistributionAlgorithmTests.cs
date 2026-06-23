@@ -270,5 +270,13 @@ namespace Zipper.Tests
                 Assert.InRange(result, 1, totalFolders);
             }
         }
+
+        [Fact]
+        public void GetFolderNumber_UnknownDistributionType_ShouldThrowArgumentException()
+        {
+            var unknown = (DistributionType)999;
+            Assert.Throws<ArgumentException>(() =>
+                Distributions.GetFolderNumber(1, 100, 10, unknown));
+        }
     }
 }
