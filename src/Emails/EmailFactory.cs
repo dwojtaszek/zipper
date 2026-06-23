@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.Emails;
 
 internal static class EmailFactory
@@ -279,13 +281,63 @@ internal static class EmailFactory
 
     private static string ApplyReplacements(string template, Dictionary<string, string> replacements)
     {
-        var result = template;
-        foreach (var replacement in replacements)
+        if (string.IsNullOrEmpty(template))
         {
-            result = result.Replace(replacement.Key, replacement.Value, StringComparison.Ordinal);
+            return template;
         }
 
-        return result;
+        int openBraceIndex = template.IndexOf('{');
+        if (openBraceIndex == -1)
+        {
+            return template;
+        }
+
+        StringBuilder? sb = null;
+        int currentIndex = 0;
+
+        while (openBraceIndex != -1)
+        {
+            int closeBraceIndex = template.IndexOf('}', openBraceIndex + 1);
+            if (closeBraceIndex == -1)
+            {
+                break;
+            }
+
+            int length = closeBraceIndex - openBraceIndex + 1;
+            var key = template.Substring(openBraceIndex, length);
+
+            if (replacements.TryGetValue(key, out var value))
+            {
+                if (sb == null)
+                {
+                    sb = new StringBuilder(template.Length * 2);
+                    sb.Append(template, 0, openBraceIndex);
+                }
+                else
+                {
+                    sb.Append(template, currentIndex, openBraceIndex - currentIndex);
+                }
+                sb.Append(value);
+                currentIndex = closeBraceIndex + 1;
+                openBraceIndex = template.IndexOf('{', currentIndex);
+            }
+            else
+            {
+                openBraceIndex = template.IndexOf('{', openBraceIndex + 1);
+            }
+        }
+
+        if (sb == null)
+        {
+            return template;
+        }
+
+        if (currentIndex < template.Length)
+        {
+            sb.Append(template, currentIndex, template.Length - currentIndex);
+        }
+
+        return sb.ToString();
     }
 
     private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
