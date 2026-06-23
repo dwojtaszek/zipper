@@ -205,5 +205,46 @@ namespace Zipper
             Assert.Equal("000110", result2);
             Assert.Equal("000120", result3);
         }
+
+        [Fact]
+        public void Format_WithNegativeIndex_ShouldThrowArgumentOutOfRangeException()
+        {
+            var seq = BatesSequence.FromConfig(new BatesNumberConfig());
+            Assert.Throws<ArgumentOutOfRangeException>(() => seq.Format(-1));
+        }
+
+        [Theory]
+        [InlineData("NullConfig", "Config cannot be null.")]
+        [InlineData("NegativeStart", "Bates start number must be non-negative.")]
+        [InlineData("ZeroDigits", "Bates digits must be between 1 and 20.")]
+        [InlineData("TooManyDigits", "Bates digits must be between 1 and 20.")]
+        [InlineData("ZeroIncrement", "Bates increment must be at least 1.")]
+        [InlineData("PathSeparatorSlash", "--bates-prefix must not contain path separators.")]
+        [InlineData("PathSeparatorBackslash", "--bates-prefix must not contain path separators.")]
+        [InlineData("DirTraversalDots", "--bates-prefix must not contain directory traversal sequences.")]
+        [InlineData("DirTraversalSlash", "--bates-prefix must not contain path separators.")]
+        [InlineData("DirTraversalBackslash", "--bates-prefix must not contain path separators.")]
+        [InlineData("InvalidChar", "--bates-prefix must only contain letters, digits, underscores, and hyphens.")]
+        public void FromConfig_WithInvalidConfig_ShouldThrowArgumentException(string scenario, string expectedMessage)
+        {
+            BatesNumberConfig badConfig = scenario switch
+            {
+                "NullConfig" => null!,
+                "NegativeStart" => new BatesNumberConfig { Start = -1 },
+                "ZeroDigits" => new BatesNumberConfig { Digits = 0 },
+                "TooManyDigits" => new BatesNumberConfig { Digits = 21 },
+                "ZeroIncrement" => new BatesNumberConfig { Increment = 0 },
+                "PathSeparatorSlash" => new BatesNumberConfig { Prefix = "a/b" },
+                "PathSeparatorBackslash" => new BatesNumberConfig { Prefix = "a\\b" },
+                "DirTraversalDots" => new BatesNumberConfig { Prefix = ".." },
+                "DirTraversalSlash" => new BatesNumberConfig { Prefix = "../a" },
+                "DirTraversalBackslash" => new BatesNumberConfig { Prefix = "..\\a" },
+                "InvalidChar" => new BatesNumberConfig { Prefix = "a b" },
+                _ => throw new System.ArgumentException("Unknown scenario")
+            };
+
+            var ex = Assert.Throws<System.ArgumentException>(() => BatesSequence.FromConfig(badConfig));
+            Assert.Contains(expectedMessage, ex.Message, StringComparison.Ordinal);
+        }
     }
 }
