@@ -41,4 +41,4 @@ Minor shared logic (e.g., a few lines of shared constructor parse logic in `Date
 
 ## 5. Already-covered test gaps
 
-Before flagging missing test coverage for specific exception paths (e.g., `NotImplementedException` or `ArgumentException`), ensure existing tests (like `GenerateContent_WithPptx_ShouldThrowNotImplementedException` or `WithInvalidCharactersInFileName`) don't already assert these paths.
+Before flagging missing test coverage for specific exception paths (e.g., `NotImplementedException` or `ArgumentException`), ensure existing tests (like `GenerateContent_WithPptx_ShouldThrowNotImplementedException` or `ValidateAndCreateDirectory_WithInvalidCharactersInFileName_HandlesGracefully`) don't already assert these paths.
