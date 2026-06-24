@@ -73,11 +73,14 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
   - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
   - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
 - `--load-file-formats <format1,format2,...>`: Generate multiple Load File formats simultaneously (e.g., `dat,opt,csv`)
+- `--delimiter-column <char|code>`: Custom column delimiter for DAT format. Accepts ASCII decimal code, escape sequence, or single character. Overrides `--dat-delimiters` preset. Default: ASCII 20
+- `--delimiter-quote <char|code>`: Custom quote delimiter for DAT format. Overrides `--dat-delimiters` preset. Default: ASCII 254
+- `--delimiter-newline <char|code>`: Custom newline replacement for DAT format. Overrides `--dat-delimiters` preset. Default: ASCII 174
 - `--dat-delimiters <standard|csv>`: DAT delimiter style. `standard` uses ASCII 20/254/174, `csv` uses comma/quote. Defaults to `standard`
 - `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
 - `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
 - `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
-- `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1"
+- `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1". **Important:** Default differs by mode. Standard mode defaults to 1-1 (single page). Loadfile-Only OPT mode defaults to random 1-10 pages when omitted.
 
 **Column Profile Options:**
 - `--column-profile <name|path>`: Column profile for configurable metadata generation. Use built-in profiles (`minimal`, `standard`, `litigation`, `full`) or path to custom JSON file
@@ -85,20 +88,22 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns; `dat` format only). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise)
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns; `dat` format only). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise). **Supported in:** DAT format in Standard and Production Set modes. **Not supported in:** CSV, Concordance, EDRM-XML, OPT formats, or Loadfile-Only mode.
 
 **Loadfile-Only Options:**
 - `--loadfile-only`: Generate standalone Load Files directly to disk without creating Archives or Native Files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
 - `--loadfile-format <dat|opt>`: Alias for `--load-file-format` in loadfile-only mode. Accepts `dat` or `opt`. Defaults to `dat`
-- `--eol <CRLF|LF|CR>`: Line ending format for the generated Load File. Defaults to `CRLF`
-- `--col-delim <ascii:N|char:C>`: Column delimiter using strict prefix format. Requires `--loadfile-only`. Example: `ascii:20` or `char:|`
-- `--quote-delim <ascii:N|char:C|none>`: Quote delimiter using strict prefix format, or `none` to omit quotes. Requires `--loadfile-only`. Example: `ascii:254` or `none`
-- `--newline-delim <ascii:N|char:C>`: In-field newline replacement using strict prefix format. Requires `--loadfile-only`. Example: `ascii:174`
-- `--multi-delim <ascii:N|char:C>`: Multi-value separator for fields with multiple values. Requires `--loadfile-only`. Example: `char:;`
-- `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Requires `--loadfile-only`. Example: `char:\`
+- `--eol <CRLF|LF|CR>`: Line ending format for the generated Load File. Defaults to `CRLF`. Note: standard (Archive) mode uses the platform default line ending regardless of this flag. This flag only affects Loadfile-Only and Production Set modes.
+
+**Strict-Prefix Delimiter Options (Works in all modes):**
+- `--col-delim <ascii:N|char:C>`: Column delimiter using strict prefix format. Example: `ascii:20` or `char:|`
+- `--quote-delim <ascii:N|char:C|none>`: Quote delimiter using strict prefix format, or `none` to omit quotes. Example: `ascii:254` or `none`
+- `--newline-delim <ascii:N|char:C>`: In-field newline replacement using strict prefix format. Example: `ascii:174`
+- `--multi-delim <ascii:N|char:C>`: Multi-value separator for fields with multiple values. Example: `char:;`
+- `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Example: `char:\`
 
 **Chaos Engine Options:**
-- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into Load Files. Requires `--loadfile-only`. Only supported for dat and opt Load File formats.
+- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into Load Files. Requires `--loadfile-only`. Only supported for dat and opt Load File formats. Not available in Production Set mode.
 - `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
 - `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesid`
 - `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
@@ -204,7 +209,7 @@ Compatibility checklist:
 | `--with-families` | false | flag | Family relationships |
 | `--loadfile-only` | false | flag | Standalone Load File (no Archive) |
 | `--loadfile-format` | dat | dat, opt | Alias for `--load-file-format` in loadfile-only mode |
-| `--eol` | CRLF | CRLF, LF, CR | Load File line endings |
+| `--eol` | CRLF (loadfile-only/production-set) | CRLF, LF, CR | Load File line endings |
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
@@ -241,24 +246,27 @@ Compatibility checklist:
 | `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
-| `--col-delim`, `--quote-delim`, etc. | Require `--loadfile-only`; use `ascii:N` or `char:C` prefix |
+| `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
 | `--chaos-mode` | Requires `--loadfile-only` |
+| `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
+| `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
+| `--with-families` + non-dat format | Ignored. Family columns are DAT-format only. |
 
 ### Delimiter Argument Modes
 
-The application supports two distinct sets of delimiter arguments. Standard DAT generation uses implicit default values (e.g., ASCII 20 column, ASCII 254 `þ` quote, `;` multi-value, `\` nested-value). Loadfile-Only Mode supports explicitly overriding all of these using strict-prefix arguments.
+The application supports two distinct sets of delimiter arguments. Standard DAT generation uses implicit default values (e.g., ASCII 20 column, ASCII 254 `þ` quote, `;` multi-value, `\` nested-value). All modes support overriding delimiters using strict-prefix arguments.
 
 | Argument Type | Mode Applied To | Format Example | Overrides |
 |---------------|-----------------|----------------|-----------|
 | Old-style (`--delimiter-column`, etc.) | Standard DAT & Loadfile-Only | Bare value (`20`, `,`) | `--dat-delimiters` preset |
-| Strict-prefix (`--col-delim`, etc.) | Loadfile-Only Mode only | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
+| Strict-prefix (`--col-delim`, etc.) | All modes | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
 
-If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Note that the strict-prefix arguments (`--col-delim`, `--quote-delim`, `--newline-delim`, `--multi-delim`, `--nested-delim`) are ONLY permitted in `--loadfile-only` mode.
+If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Strict-prefix arguments require the `ascii:` or `char:` prefix format (see examples above).
 
 ### Maintainer Notes for Issue Authors
 
