@@ -263,7 +263,7 @@ The application supports two distinct sets of delimiter arguments. Standard DAT 
 
 | Argument Type | Mode Applied To | Format Example | Overrides |
 |---------------|-----------------|----------------|-----------|
-| Old-style (`--delimiter-column`, etc.) | Standard DAT & Loadfile-Only | Bare value (`20`, `,`) | `--dat-delimiters` preset |
+| Old-style (`--delimiter-column`, etc.) | All modes | Bare value (`20`, `,`) | `--dat-delimiters` preset |
 | Strict-prefix (`--col-delim`, etc.) | All modes | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
 
 If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Strict-prefix arguments require the `ascii:` or `char:` prefix format (see examples above).
