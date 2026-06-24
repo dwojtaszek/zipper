@@ -479,8 +479,6 @@ namespace Zipper
             }
         }
 
-
-
         private static double ComputeBinomialChiSquare(int observed, int n, double expectedRate)
         {
             double expectedYes = n * expectedRate;
