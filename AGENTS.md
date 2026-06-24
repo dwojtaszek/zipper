@@ -258,6 +258,7 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 - Distribution algorithms must be O(1) per file. Use `Span<T>`, `ArrayPool<T>`, avoid allocations in hot paths
 - ZIP entry paths always use `/`; normalize to backslashes with `.Replace('/', '\\')`, never `Replace(Path.DirectorySeparatorChar, '\\')` (a no-op on Windows, where the separator is already `\`)
 - **No copyright headers** — do not add `// <copyright ...>` to any files
+- **Review guardrails:** Before filing a finding, check `docs/code-review-guidelines.md` for project-specific patterns that look like issues but are deliberate. Applies to human review, robot reviewers (CodeRabbit, Gemini, Codex), and the autoreview skill.
 
 ### Test Naming Convention
 
