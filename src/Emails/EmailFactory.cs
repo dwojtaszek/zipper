@@ -292,6 +292,7 @@ internal static class EmailFactory
             return template;
         }
 
+        var lookup = replacements.GetAlternateLookup<ReadOnlySpan<char>>();
         StringBuilder? sb = null;
         int currentIndex = 0;
 
@@ -304,9 +305,9 @@ internal static class EmailFactory
             }
 
             int length = closeBraceIndex - openBraceIndex + 1;
-            var key = template.Substring(openBraceIndex, length);
+            var keySpan = template.AsSpan(openBraceIndex, length);
 
-            if (replacements.TryGetValue(key, out var value))
+            if (lookup.TryGetValue(keySpan, out var value))
             {
                 if (sb == null)
                 {
