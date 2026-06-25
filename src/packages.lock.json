@@ -17,9 +17,9 @@
       },
       "Meziantou.Analyzer": {
         "type": "Direct",
-        "requested": "[3.0.109, )",
-        "resolved": "3.0.109",
-        "contentHash": "xbI7aijl022p02G1YXuqTSbxqLfgJa9nU6ju5tiHRm0jYsCjPDEvp9AoLl1UbaaRC9ZsCpZfGt50ALcEmTe0vQ=="
+        "requested": "[3.0.113, )",
+        "resolved": "3.0.113",
+        "contentHash": "hPfXcUFwRumRAaEXkQ7PSa0dFLn9R7EqxdDkoz9e080QhaRwFSqnZQr4SKZfeFfOoqgpPqm9vDigs8fTiaW1Sw=="
       },
       "Microsoft.CodeAnalysis.BannedApiAnalyzers": {
         "type": "Direct",
@@ -29,9 +29,9 @@
       },
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[10.0.9, )",
-        "resolved": "10.0.9",
-        "contentHash": "4Iw41e2h7I4t70SJcX2GCmbyKJIlA273Cfm9RJMM050/3VBejGAG1KcthP5Z2L6SQcbfbf6BhNWO26+ZG+GzMg=="
+        "requested": "[10.0.8, )",
+        "resolved": "10.0.8",
+        "contentHash": "dVbSXGIFNR5nZcv2tOLoWI+a9T4jtFd77IYjuND+QVe360qWgAF7H0WtoopYhRw/+SgpGUTyrkrh+65+ClNnfw=="
       },
       "Roslynator.Analyzers": {
         "type": "Direct",
