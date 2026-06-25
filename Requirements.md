@@ -243,9 +243,15 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 - All paths should be relative to production root
 
 #### Conditional Column Ordering
-- **Standard mode:** Control Number, File Path, [if metadata/eml] Custodian, Date Sent, Author, File Size, [if eml] To, From, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if eml] Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, [if eml] Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate, [if not eml] ExtractedText
+**Non-EML Output:**
+- **Standard mode:** Control Number, File Path, [if metadata] Custodian, Date Sent, Author, File Size, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, ExtractedText
+
+**EML Output (`--type eml`):**
+- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, To, From, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate
 
 ### 8.3 Opticon (OPT) Format Specification
 
