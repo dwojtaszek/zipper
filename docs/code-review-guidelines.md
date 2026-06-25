@@ -27,19 +27,18 @@ ToList() is correct, not wasteful, when the result is:
   (b) passed to LoadFileRecordBuilder.Build, which indexes by position
       and reads .Count on IReadOnlyList<string>.
 
-Lazy `IEnumerable` would re-run the Select or fail to index.
+Lazy IEnumerable would re-run the Select or fail to index.
 
 ## 3. Deliberate-difference "duplication"
 
-Do not flag duplicated code that differs in subtle formatting rules. For example, `FormatDelimiter` in `LoadfileAuditWriter` vs `ProductionManifestWriter`:
-The two implementations differ on empty sentinel (`"none"` vs `""`), ascii range (`<32` vs `<32 && >126`), and char fallback (first char vs full string). Different JSON output formats — merging adds parameters for a single-use case. YAGNI.
+Implementations that look similar may have deliberate differences for specific formats. For example, `FormatDelimiter` in `LoadfileAuditWriter` vs `ProductionManifestWriter` differ on empty sentinel (`"none"` vs `""`), ascii range (`<32` vs `<32 && >126`), and char fallback (first char vs full string).
+
+Different output formats shouldn't be merged if it adds parameters for a single-use case. YAGNI.
 
 ## 4. Trivial-to-abstract duplication
 
-Do not flag trivial shared logic between two classes as needing a base class.
-For example, `DateGenerator` vs `DateTimeColumnGenerator`: ~4 lines of shared constructor parse logic; `Generate` bodies differ (days-only vs days+hours+minutes). A base class for 4 lines is YAGNI.
+Minor shared logic (e.g., a few lines of shared constructor parse logic in `DateGenerator` vs `DateTimeColumnGenerator`) should not be abstracted if the main bodies differ significantly. A base class for a few lines is YAGNI.
 
 ## 5. Already-covered test gaps
 
-Before flagging missing tests for edge cases, check if existing tests already assert those paths.
-For example, `PPTX` `NotImplementedException`, `PathValidator` `ArgumentException`. Existing tests (`GenerateContent_WithPptx_ShouldThrowNotImplementedException`, `WithInvalidCharactersInFileName`) already assert these paths.
+Before flagging missing test coverage for specific exception paths (e.g., `NotImplementedException` or `ArgumentException`), ensure existing tests (like `GenerateContent_WithPptx_ShouldThrowNotImplementedException` or `WithInvalidCharactersInFileName`) don't already assert these paths.
