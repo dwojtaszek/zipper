@@ -99,7 +99,7 @@ The application operates in three distinct generation modes:
 - **REQ-044**: The argument accepts a range specification (e.g., "1-20") to define the minimum and maximum page count.
 - **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF Native File shall have a random page count within the specified range.
 - **REQ-046**: When `--tiff-pages` is specified (with `--type tiff`), the Load File must include a `Page Count` column indicating the number of pages in each TIFF file. When `--tiff-pages` is omitted, no `Page Count` column is emitted, preserving backward-compatible output (see REQ-047).
-- **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility.
+- **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility. Note: this default applies to Standard mode only. Loadfile-Only OPT defaults to random 1-10 per document when --tiff-pages is omitted.
 
 ## 3. Technical Requirements
 
@@ -242,6 +242,17 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 - Prefer ASCII or UTF-8 encoding
 - All paths should be relative to production root
 
+#### Conditional Column Ordering
+**Non-EML Output:**
+- **Standard mode:** Control Number, File Path, [if metadata] Custodian, Date Sent, Author, File Size, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, ExtractedText
+
+**EML Output (`--type eml`):**
+- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, To, From, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate
+
 ### 8.3 Opticon (OPT) Format Specification
 
 The Opticon format is a page-level Load File that links Bates numbers to image file locations, defining document boundaries.
@@ -252,7 +263,9 @@ The Opticon format is a page-level Load File that links Bates numbers to image f
 - **Delimiter**: Comma (`,`) or Tab
 - **Records**: One line per image page
 
-#### Column Structure (7 Columns)
+#### Column Structure (7 Columns - Fixed Layout)
+
+Note: OPT format uses a 7-column fixed layout (no header): Bates, Volume, ImagePath, DocBreak, empty, empty, PageCount.
 
 | Column | Name | Description | Example |
 |--------|------|-------------|---------|
@@ -356,6 +369,8 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
+- **REQ-053**: **DEPRECATED** — Original requirement for CSV delimiter customization. Superseded by REQ-124.
+- **REQ-054**: **DEPRECATED** — Original requirement for OPT encoding override. Superseded by REQ-059.
 - **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`. `concordance` is NOT an alias of `dat`; it is a distinct format with its own writer producing fully quote-wrapped, ASCII 20-delimited database-import output with a different column set (see Section 8.7).
 - **REQ-124**: The `csv` format shall respect the `--encoding` argument for its output encoding, defaulting to UTF-8.
 
@@ -368,12 +383,20 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 - **REQ-057**: When `--type tiff` or `--type jpg` is used **and no Load File format is explicitly selected** (neither `--load-file-format` nor `--load-file-formats` is passed), the tool shall automatically generate both a DAT and an OPT file. If an explicit format is selected, only that format is produced and auto-OPT generation is suppressed (e.g. `--type tiff --load-file-format edrm-xml` yields EDRM-XML only). Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
 - **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`). Note: in `--loadfile-only` OPT mode there are no real Native Files, so page counts are synthetic — when `--tiff-pages` is supplied the page count is drawn from that range, otherwise it defaults to a synthetic multi-page distribution (random 1–10 pages per document), independent of the REQ-047 `1-1` Native-File default.
+
+| Mode | Format | `--tiff-pages` Default |
+|------|--------|------------------------|
+| Standard | OPT | `1-1` (single page) |
+| Standard | DAT | No PAGECOUNT column |
+| Loadfile-Only | OPT | Random `1-10` |
+| Loadfile-Only | DAT | No PAGECOUNT column |
+| Loadfile-Only (Profile) | DAT | Random `1-10` (if column exists) |
 - **REQ-059**: OPT files shall default to ANSI (Windows-1252) encoding for maximum platform compatibility. An explicit `--encoding` argument overrides this default (e.g. to UTF-8 or UTF-16), consistent with REQ-051's "by default" wording; note that UTF-8/UTF-16 OPT has limited platform support (Section 8.5).
 
 #### FR-013: Family Relationship Support
 
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
-- **REQ-061**: When `--with-families` is specified, the **DAT** Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns. Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns are currently supported only for the `dat` format (and OPT document-break semantics); the `csv`, `concordance`, and `edrm-xml` writers do not emit family columns.
+- **REQ-061**: When `--with-families` is specified, the **DAT** Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns. Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns are currently supported only for the `dat` format (and OPT document-break semantics); the `csv`, `concordance`, and `edrm-xml` writers do not emit family columns. Family columns are not emitted in Loadfile-Only DAT mode.
 - **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
 - **REQ-122**: When `--with-families` is specified without `--type eml` or with `--attachment-rate 0`, a soft warning shall be emitted to stderr, but the execution shall not be rejected.
 
@@ -383,6 +406,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-064**: The argument shall accept either a built-in profile name or a path to a custom JSON profile file.
 - **REQ-065**: Column profiles shall be embedded in the application binary as resources.
 - **REQ-066**: If `--column-profile` is not specified, only base columns (Control Number, File Path) shall be included in the Load File. The `--with-metadata` flag adds its columns independently.
+- **REQ-067**: **DEPRECATED** — Original requirement for custom field naming. Superseded by REQ-121.
 - **REQ-076**: When both `--column-profile` and `--with-metadata` are specified, the profile columns take precedence, and `--with-metadata` is ignored with a warning.
 - **REQ-077**: When `--type eml` is specified, email-intrinsic columns (From, To, CC, Subject, Sent Date) are always included regardless of the column profile or `--with-metadata` flag.
 - **REQ-078**: Custom profiles shall have a maximum of 200 columns. Profiles exceeding this limit shall produce a validation error.
@@ -492,7 +516,9 @@ The `concordance` format (`--load-file-format concordance`) is a **distinct** da
 - **Header Row**: Present; field names UPPERCASE, no spaces, each quote-wrapped
 - **In-field quote escaping**: Embedded quote characters are doubled (DAT-style escaping)
 
-#### Column Order
+#### Conditional Column Ordering
+**Concordance Standard mode:** BEGATTY (always, empty), ENDATTY (always, empty), CONTROLNUMBER, PATH, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, [if eml] TO, FROM, SUBJECT, SENTDATE, ATTACHMENT, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH
+
 Leading columns (always present):
 
 | Column | Notes |
@@ -524,8 +550,8 @@ The `csv` format (`--load-file-format csv`) produces a standard RFC 4180 comma-s
 - Embedded double quotes are escaped by doubling (`"` → `""`).
 - Empty values are emitted as an empty field (no quotes).
 
-#### Columns
-Same conditional column set and order as the DAT writer: base (`Control Number`, `File Path`), then metadata (`Custodian`, `Date Sent`, `Author`, `File Size`), email (`To`, `From`, `Subject`, `Sent Date`, `Attachment`), `Bates Number`, `Page Count`, `Extracted Text` — each gated by the corresponding feature flag.
+#### Conditional Column Ordering
+**CSV Standard mode:** CONTROL NUMBER, FILE PATH, [if metadata/eml] CUSTODIAN, DATE SENT, AUTHOR, FILE SIZE, [if eml] TO, FROM, SUBJECT, SENT DATE, ATTACHMENT, [if --bates-prefix] BATES NUMBER, [if type=tiff + --tiff-pages] PAGE COUNT, [if --with-text] EXTRACTED TEXT
 
 #### `--load-file-format csv` vs `--dat-delimiters csv`
 
@@ -589,11 +615,13 @@ This section clarifies behavior when multiple arguments interact:
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--production-set` | **Conflict**: cannot use both |
+| `--load-file-format` + `--production-set` | **Ignored**: See REQ-117. |
 | `--production-set` + `--bates-prefix` | **Required**: `--bates-prefix` is mandatory when `--production-set` is used |
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
 | `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
 | `--col-delim`, `--quote-delim`, etc. | Supported in all modes; use `ascii:N` or `char:C` prefix |
 | `--chaos-mode` | Requires `--loadfile-only` |
+| `--chaos-mode` + `--production-set` | **Conflict**: cannot use both. |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
@@ -611,9 +639,9 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-089**: When `--loadfile-only` or `--production-set` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
 - **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest, including a `totalRecords` count of data records (excluding the header row).
 - **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
-- **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`.
+- **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`. Standard mode uses the platform newline irrespective of this argument.
 - **REQ-123**: A new optional argument `--loadfile-format <dat|opt>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. Defaults to `dat`.
-- **REQ-093**: New strict-prefix delimiter arguments shall be introduced (supported in both standard and `--loadfile-only` modes):
+- **REQ-093**: New strict-prefix delimiter arguments shall be introduced (supported in all modes (standard, loadfile-only, production-set)):
   - `--col-delim <ascii:N|char:C>`: Column delimiter
   - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter (supports `none` to omit quotes)
   - `--newline-delim <ascii:N|char:C>`: In-field newline replacement
@@ -665,6 +693,7 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-021: Path Traversal Prevention
 
 - **REQ-106**: The application shall validate the `--output-path` argument to prevent directory traversal attacks. Paths containing `..` components that resolve outside the intended base directory shall be rejected with a clear error message.
+- **TODO-001**: The --column-profile argument accepts user-supplied file paths. A future enhancement should validate that custom profile paths do not escape the intended base directory. Currently unaddressed.
 
 ---
 
@@ -698,7 +727,7 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-114**: A new command-line argument `--production-set` shall be introduced to generate structured production deliveries instead of flat mock files.
 - **REQ-115**: When `--production-set` is specified, the application shall create a root production directory (e.g., `PRODUCTION_YYYYMMDD_HHMMSS`) and distribute generated Native Files into `DATA`, `IMAGES`, `NATIVES`, and `TEXT` subdirectories.
 - **REQ-116**: A new command-line argument `--volume-size <number>` shall control the maximum number of Native Files per Volume (e.g., `VOL001`, `VOL002`) within the output directories. Defaults to 5,000.
-- **REQ-117**: The generator shall create both a standard DAT Load File (metadata) and an OPT Load File (image cross-reference) within the `DATA` directory.
+- **REQ-117**: The generator shall always create both a standard DAT Load File and an OPT Load File within the DATA directory. The --load-file-format and --load-file-formats flags do not affect Production Set output format. For column ordering, see Section 8.2 conditional column ordering for Production Sets.
 - **REQ-118**: A `_manifest.json` file shall be generated at the root of the production folder containing top-level properties like volume structure, document counts, and the Bates numbering range.
 - **REQ-119**: A new command-line argument `--production-zip` shall be introduced. When specified alongside `--production-set`, the application shall compress the entire production set directory structure into a single Archive named after the production root directory.
 - **REQ-120**: `--production-set` requires `--bates-prefix` to be specified and conflicts with `--loadfile-only`.

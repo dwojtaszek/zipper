@@ -34,7 +34,7 @@ Each script below is called by `run-tests.sh` and has a `.bat` parity file.
 | `test-column-profile-custom-kinds` | Custom column-profile kinds (every generator type) |
 | `test-column-profile-empty-pct` | Empty-percentage distribution correctness |
 | `test-cross-platform` | Output is consistent across Linux/Windows line endings |
-| `test-eml-comprehensive` | Email generation: structure, attachments, headers |
+| `test-eml-comprehensive` | Email generation: structure, attachments, headers. EML golden tests use structural comparison (tree listing + DAT row count/header), not byte-exact diff. See tests/goldens/README.md for rationale. |
 | `test-load-file-formats` | All 5 load file formats (DAT, OPT, CSV, EDRM-XML, Concordance) |
 | `test-multipage-tiff` | Multi-page TIFF generation and OPT page entries |
 | `test-office-formats` | DOCX/XLSX generation |
