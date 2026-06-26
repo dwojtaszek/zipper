@@ -148,6 +148,23 @@ dotnet_diagnostic.MA0002.severity = none
 dotnet_diagnostic.MA0006.severity = none
 dotnet_diagnostic.MA0072.severity = none
 
+# Phase 1: Zero-risk promotions
+dotnet_diagnostic.MA0009.severity = error
+dotnet_diagnostic.MA0054.severity = error
+dotnet_diagnostic.MA0056.severity = error
+dotnet_diagnostic.MA0060.severity = error
+dotnet_diagnostic.MA0100.severity = error
+dotnet_diagnostic.MA0134.severity = error
+dotnet_diagnostic.MA0143.severity = error
+
+# Phase 2: Opt-in rules
+dotnet_diagnostic.MA0141.severity = warning
+dotnet_diagnostic.MA0142.severity = warning
+dotnet_diagnostic.MA0112.severity = warning
+dotnet_diagnostic.MA0137.severity = warning
+dotnet_diagnostic.MA0138.severity = warning
+
+
 
 # --- Performance quick wins ---
 dotnet_diagnostic.CA1510.severity = warning   # use ArgumentNullException.ThrowIfNull
@@ -196,6 +213,7 @@ dotnet_diagnostic.RCS1139.severity = none
 # assertions and fixtures. Scope the rules enabled above to production code only.
 [**/{Zipper.Tests,Zipper.Analyzers.Tests}/**.cs]
 dotnet_diagnostic.CA1304.severity = none
+dotnet_diagnostic.MA0137.severity = none
 dotnet_diagnostic.CA1305.severity = none
 dotnet_diagnostic.CA1307.severity = none
 dotnet_diagnostic.CA1310.severity = none

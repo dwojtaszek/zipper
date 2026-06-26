@@ -23,7 +23,7 @@ public static class RequestBuilder
         if (!string.IsNullOrEmpty(parsed.ColumnProfile))
         {
             profile = ColumnProfileLoader.Load(parsed.ColumnProfile);
-            if (profile == null)
+            if (profile is null)
             {
                 Console.Error.WriteLine($"Warning: Failed to load column profile '{parsed.ColumnProfile}'.");
             }
@@ -104,7 +104,7 @@ public static class RequestBuilder
             nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
         }
 
-        var encodingName = (encoding != null && !string.IsNullOrEmpty(parsed.Encoding))
+        var encodingName = (encoding is not null && !string.IsNullOrEmpty(parsed.Encoding))
             ? parsed.Encoding.ToUpperInvariant()
             : "UTF-8";
 

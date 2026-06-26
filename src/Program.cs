@@ -21,7 +21,7 @@ namespace Zipper
             {
                 try
                 {
-                    await PerformanceBenchmarkRunner.RunBenchmarks().ConfigureAwait(false);
+                    await PerformanceBenchmarkRunner.RunBenchmarksAsync().ConfigureAwait(false);
                     return 0;
                 }
                 catch (Exception ex)
@@ -38,7 +38,7 @@ namespace Zipper
             }
 
             var request = Cli.Pipeline.Build(args);
-            if (request == null)
+            if (request is null)
             {
                 return 1;
             }

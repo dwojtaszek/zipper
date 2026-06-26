@@ -33,7 +33,7 @@ internal sealed class DatComposingWriter : ILoadFileWriter
     {
         var composer = new DatComposer(request, this.mode);
         var serializer = new DatSerializer(request);
-        var policy = new TextOutputPolicy(request, LoadFileFormat.Dat, this.mode, chaosEngine != null);
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Dat, this.mode, chaosEngine is not null);
 
         var records = composer.Compose(processedFiles);
         await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);

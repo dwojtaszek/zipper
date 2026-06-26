@@ -31,7 +31,7 @@ namespace Zipper
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  DAT: {0}", result.DatFilePath));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  OPT: {0}", result.OptFilePath));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Manifest: {0}", result.ManifestPath));
-            if (result.ZipFilePath != null)
+            if (result.ZipFilePath is not null)
             {
                 Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  ZIP: {0}", result.ZipFilePath));
             }

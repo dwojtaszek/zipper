@@ -18,7 +18,7 @@ internal class InMemorySink : IArchiveSink
     {
         try
         {
-            if (IsFaulted && FaultException != null)
+            if (IsFaulted && FaultException is not null)
             {
                 throw FaultException;
             }

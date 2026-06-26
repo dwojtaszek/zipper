@@ -49,7 +49,7 @@ internal sealed class CodedGenerator : IColumnValueGenerator
 
     private string PickValue(ColumnGenerationContext context)
     {
-        if (this.distributionIndices != null)
+        if (this.distributionIndices is not null)
         {
             var idx = this.distributionIndices[context.DocumentIndex % this.distributionIndices.Length];
             return this.values[idx % this.values.Length];

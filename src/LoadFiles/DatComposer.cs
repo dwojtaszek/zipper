@@ -34,7 +34,7 @@ internal sealed class DatComposer : ILoadFileComposer
         this.namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
-        if (mode == WriterMode.LoadfileOnly && request.Metadata.ColumnProfile != null)
+        if (mode is WriterMode.LoadfileOnly && request.Metadata.ColumnProfile is not null)
         {
             var profile = request.Metadata.ColumnProfile;
             this.profileGenerator = new DataGenerator(
@@ -57,7 +57,7 @@ internal sealed class DatComposer : ILoadFileComposer
     public IEnumerable<LoadFileRecord> Compose(IReadOnlyList<FileData> processedFiles)
         => this.mode switch
         {
-            WriterMode.LoadfileOnly => this.profileGenerator != null
+            WriterMode.LoadfileOnly => this.profileGenerator is not null
                 ? this.ComposeProfile()
                 : this.ComposeLoadfileOnly(),
             WriterMode.ProductionSet => this.ComposeProduction(processedFiles),
@@ -322,7 +322,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            var recordId = this.batesSequence != null
+            var recordId = this.batesSequence is not null
                 ? this.batesSequence.Next().ToString()
                 : $"DOC{i:D8}";
 
@@ -383,7 +383,7 @@ internal sealed class DatComposer : ILoadFileComposer
     private (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request)
     {
         bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
-        string parentId = this.batesSequence != null
+        string parentId = this.batesSequence is not null
             ? this.batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
             : $"DOC{fileData.WorkItem.Index:D8}";
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
@@ -393,14 +393,14 @@ internal sealed class DatComposer : ILoadFileComposer
     private static DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
     {
         var profile = request.Metadata.ColumnProfile;
-        if (profile == null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+        if (profile is null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             profile = request.Output.IsEml
                 ? BuiltInProfiles.LegacyEml
                 : BuiltInProfiles.LegacyWithMetadata;
         }
 
-        return profile != null ? new DataGenerator(profile, request.Metadata.Seed, now) : null;
+        return profile is not null ? new DataGenerator(profile, request.Metadata.Seed, now) : null;
     }
 
     private sealed record RowCtx

@@ -23,13 +23,13 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateEncodingAndDistribution(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.Encoding) && RequestBuilder.GetEncodingFromName(parsed.Encoding) == null)
+        if (!string.IsNullOrEmpty(parsed.Encoding) && RequestBuilder.GetEncodingFromName(parsed.Encoding) is null)
         {
             Console.Error.WriteLine($"Error: Invalid encoding '{parsed.Encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
             return false;
         }
 
-        if (!string.IsNullOrEmpty(parsed.Distribution) && RequestBuilder.GetDistributionFromName(parsed.Distribution) == null)
+        if (!string.IsNullOrEmpty(parsed.Distribution) && RequestBuilder.GetDistributionFromName(parsed.Distribution) is null)
         {
             Console.Error.WriteLine($"Error: Invalid distribution '{parsed.Distribution}'. Supported values are proportional, gaussian, exponential.");
             return false;
@@ -41,7 +41,7 @@ internal static class CrossCuttingValidator
     {
         if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
         {
-            if (RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) == null)
+            if (RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) is null)
             {
                 Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.");
                 return false;
@@ -52,7 +52,7 @@ internal static class CrossCuttingValidator
         {
             foreach (var fmt in parsed.LoadFileFormats.Split(','))
             {
-                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) == null)
+                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) is null)
                 {
                     Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml, xml, concordance.");
                     return false;
@@ -64,7 +64,7 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateTiffPagesRange(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.TiffPagesRange) && TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange) == null)
+        if (!string.IsNullOrEmpty(parsed.TiffPagesRange) && TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange) is null)
         {
             Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");
             return false;
@@ -282,7 +282,7 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateBates(ParsedArguments parsed)
     {
-        if (parsed.BatesPrefix != null || parsed.BatesStart != null || parsed.BatesDigits != null)
+        if (parsed.BatesPrefix is not null || parsed.BatesStart is not null || parsed.BatesDigits is not null)
         {
             var config = new BatesNumberConfig
             {

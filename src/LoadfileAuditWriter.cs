@@ -173,7 +173,7 @@ internal static class LoadfileAuditWriter
                 Enabled = request.Chaos.ChaosMode,
                 TargetAmount = request.Chaos.ChaosAmount,
                 TotalAnomalies = anomalies?.Count ?? 0,
-                InjectedAnomalies = anomalies != null && anomalies.Count > 0
+                InjectedAnomalies = anomalies is not null && anomalies.Count > 0
                     ? anomalies.Select(a => new AuditAnomalyEntry
                     {
                         LineNumber = a.LineNumber,

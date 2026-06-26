@@ -74,8 +74,8 @@ public class ColumnProfile
                     Count = kv.Value.Count,
                     Distribution = kv.Value.Distribution,
                     Prefix = kv.Value.Prefix,
-                    Values = kv.Value.Values != null ? new List<string>(kv.Value.Values) : null,
-                    Weights = kv.Value.Weights != null ? new List<int>(kv.Value.Weights) : null,
+                    Values = kv.Value.Values is not null ? new List<string>(kv.Value.Values) : null,
+                    Weights = kv.Value.Weights is not null ? new List<int>(kv.Value.Weights) : null,
                 }, StringComparer.Ordinal),
             Columns = this.Columns.Select(col => new ColumnDefinition
             {
@@ -84,16 +84,16 @@ public class ColumnProfile
                 Required = col.Required,
                 EmptyPercentage = col.EmptyPercentage,
                 MultiValue = col.MultiValue,
-                MultiValueCount = col.MultiValueCount != null ? new RangeConfig { Min = col.MultiValueCount.Min, Max = col.MultiValueCount.Max } : null,
+                MultiValueCount = col.MultiValueCount is not null ? new RangeConfig { Min = col.MultiValueCount.Min, Max = col.MultiValueCount.Max } : null,
                 DataSource = col.DataSource,
-                Range = col.Range != null ? new RangeConfig { Min = col.Range.Min, Max = col.Range.Max } : null,
-                DateRange = col.DateRange != null ? new DateRangeConfig { Min = col.DateRange.Min, Max = col.DateRange.Max } : null,
+                Range = col.Range is not null ? new RangeConfig { Min = col.Range.Min, Max = col.Range.Max } : null,
+                DateRange = col.DateRange is not null ? new DateRangeConfig { Min = col.DateRange.Min, Max = col.DateRange.Max } : null,
                 Distribution = col.Distribution,
                 Format = col.Format,
                 TruePercentage = col.TruePercentage,
-                Weights = col.Weights != null ? new List<int>(col.Weights) : null,
+                Weights = col.Weights is not null ? new List<int>(col.Weights) : null,
                 Generator = col.Generator,
-                GeneratorParams = col.GeneratorParams != null ? new Dictionary<string, object>(col.GeneratorParams, StringComparer.Ordinal) : null,
+                GeneratorParams = col.GeneratorParams is not null ? new Dictionary<string, object>(col.GeneratorParams, StringComparer.Ordinal) : null,
             }).ToList(),
         };
         return cloned;
