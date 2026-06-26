@@ -241,26 +241,23 @@ namespace Zipper
             Console.WriteLine();
         }
 
-        private static Task GenerateSequentialFilesAsync(long count, string outputPath)
+        private static async Task GenerateSequentialFilesAsync(long count, string outputPath)
         {
-            return Task.Run(async () =>
+            var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+            var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
+
+            using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
+            using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+
+            var placeholderContent = PlaceholderFiles.GetContent("pdf");
+
+            for (long i = 1; i <= count; i++)
             {
-                var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-                var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
-
-                using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-                using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
-
-                var placeholderContent = PlaceholderFiles.GetContent("pdf");
-
-                for (long i = 1; i <= count; i++)
-                {
-                    var fileName = $"{i:D8}.pdf";
-                    var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-                    using var entryStream = entry.Open();
-                    await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
-                }
-            });
+                var fileName = $"{i:D8}.pdf";
+                var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
+                using var entryStream = entry.Open();
+                await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
+            }
         }
 
         private static void CleanupDirectory(string path)
