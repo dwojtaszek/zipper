@@ -192,7 +192,7 @@ namespace Zipper
 
                 engine.Intercept(i, "Value1\u0014Value2", $"DOC{i:D8}");
                 var bytes = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
-                if (bytes != null)
+                if (bytes is not null)
                 {
                     Assert.True(bytes.Length > 0);
                     gotAnomaly = true;

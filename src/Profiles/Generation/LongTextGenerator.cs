@@ -11,7 +11,7 @@ internal sealed class LongTextGenerator : IColumnValueGenerator
         this.generatorName = col.Generator;
         this.minParagraphs = 1;
         this.maxParagraphs = 3;
-        if (col.GeneratorParams != null)
+        if (col.GeneratorParams is not null)
         {
             if (col.GeneratorParams.TryGetValue("min", out var minObj))
             {

@@ -25,7 +25,7 @@ namespace Zipper
                 // Let the OS resolve the full canonical path, resolving any ".." or "." components
                 string fullPath = GetRealPath(path);
 
-                if (baseDirectory != null)
+                if (baseDirectory is not null)
                 {
                     // Determine the base directory to restrict access to
                     string restrictToBase = GetRealPath(baseDirectory);
@@ -89,7 +89,7 @@ namespace Zipper
             {
                 string fullPath = GetRealPath(path);
 
-                if (baseDirectory != null)
+                if (baseDirectory is not null)
                 {
                     string restrictToBase = GetRealPath(baseDirectory);
                     string fullPathWithTrailing = fullPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -129,12 +129,12 @@ namespace Zipper
             DirectoryInfo? current = new DirectoryInfo(fullPath);
             var parts = new System.Collections.Generic.List<string>();
 
-            while (current != null)
+            while (current is not null)
             {
-                if (current.Exists && current.LinkTarget != null)
+                if (current.Exists && current.LinkTarget is not null)
                 {
                     var resolved = current.ResolveLinkTarget(true);
-                    if (resolved != null)
+                    if (resolved is not null)
                     {
                         parts.Reverse();
                         return (resolved.FullName, parts);

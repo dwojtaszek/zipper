@@ -45,7 +45,7 @@ internal static class LoadFileEmitter
     {
         bool hasHeader = headerColumns is { Count: > 0 };
 
-        if (chaosEngine == null)
+        if (chaosEngine is null)
         {
             await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, cancellationToken).ConfigureAwait(false);
         }
@@ -142,7 +142,7 @@ internal static class LoadFileEmitter
         await stream.WriteAsync(encoding.GetBytes(text + eol), cancellationToken).ConfigureAwait(false);
 
         var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
-        if (anomaly != null)
+        if (anomaly is not null)
         {
             await stream.WriteAsync(anomaly, cancellationToken).ConfigureAwait(false);
         }

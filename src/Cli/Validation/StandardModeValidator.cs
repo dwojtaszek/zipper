@@ -4,7 +4,7 @@ internal static class StandardModeValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        if (parsed.OutputDirectory == null && !string.IsNullOrWhiteSpace(parsed.OutputPathStr))
+        if (parsed.OutputDirectory is null && !string.IsNullOrWhiteSpace(parsed.OutputPathStr))
         {
             parsed.OutputDirectory = PathValidator.ValidateAndCreateDirectory(parsed.OutputPathStr, Directory.GetCurrentDirectory());
         }
@@ -36,7 +36,7 @@ internal static class StandardModeValidator
         if (!string.IsNullOrEmpty(parsed.TargetZipSize))
         {
             var parsedSize = RequestBuilder.ParseSize(parsed.TargetZipSize);
-            if (parsedSize == null)
+            if (parsedSize is null)
             {
                 Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
                 return false;

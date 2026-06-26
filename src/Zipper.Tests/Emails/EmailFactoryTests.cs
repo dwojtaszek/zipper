@@ -113,7 +113,7 @@ namespace Zipper
             for (int i = 0; i < n; i++)
             {
                 var t = EmailFactory.Create(i, i, category, rng);
-                if (t.Cc != null)
+                if (t.Cc is not null)
                 {
                     withCc++;
                 }
@@ -150,7 +150,7 @@ namespace Zipper
             for (int i = 0; i < n; i++)
             {
                 var t = EmailFactory.Create(i, i, category, rng);
-                if (t.ReplyTo != null)
+                if (t.ReplyTo is not null)
                 {
                     withReplyTo++;
                 }

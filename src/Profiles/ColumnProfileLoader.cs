@@ -24,7 +24,7 @@ public static class ColumnProfileLoader
     {
         // Check if it's a built-in profile name
         var builtIn = BuiltInProfiles.GetProfile(nameOrPath);
-        if (builtIn != null)
+        if (builtIn is not null)
         {
             return builtIn;
         }
@@ -51,7 +51,7 @@ public static class ColumnProfileLoader
             var json = File.ReadAllText(filePath);
             var profile = JsonSerializer.Deserialize<ColumnProfile>(json, ProfileSerializerOptions);
 
-            if (profile == null)
+            if (profile is null)
             {
                 throw new InvalidOperationException($"Failed to parse column profile from '{filePath}'.");
             }
@@ -90,12 +90,12 @@ public static class ColumnProfileLoader
         }
 
         // Null guards
-        if (profile.Columns == null || profile.Columns.Count == 0)
+        if (profile.Columns is null || profile.Columns.Count is 0)
         {
             throw new InvalidOperationException("Column profile must have at least one column.");
         }
 
-        if (profile.DataSources == null)
+        if (profile.DataSources is null)
         {
             throw new InvalidOperationException("Column profile must have a DataSources dictionary (can be empty).");
         }
@@ -146,7 +146,7 @@ public static class ColumnProfileLoader
         }
 
         // Validate date ranges
-        foreach (var column in profile.Columns.Where(c => c.DateRange != null))
+        foreach (var column in profile.Columns.Where(c => c.DateRange is not null))
         {
             if (!DateTime.TryParse(column.DateRange!.Min, CultureInfo.InvariantCulture, DateTimeStyles.None, out var minDate))
             {
@@ -185,9 +185,9 @@ public static class ColumnProfileLoader
         // Validate data source weights
         foreach (var (name, cfg) in profile.DataSources)
         {
-            if (cfg.Weights != null && cfg.Weights.Count > 0)
+            if (cfg.Weights is not null && cfg.Weights.Count > 0)
             {
-                var valCount = (cfg.Values != null && cfg.Values.Count > 0) ? cfg.Values.Count : cfg.Count;
+                var valCount = (cfg.Values is not null && cfg.Values.Count > 0) ? cfg.Values.Count : cfg.Count;
                 if (cfg.Weights.Count > valCount)
                 {
                     throw new InvalidOperationException(

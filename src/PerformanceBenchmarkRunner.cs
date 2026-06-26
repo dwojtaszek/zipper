@@ -10,20 +10,19 @@ namespace Zipper
     /// </summary>
     public static class PerformanceBenchmarkRunner
     {
-        public static async Task RunBenchmarks()
+        public static async Task RunBenchmarksAsync()
         {
             Console.WriteLine("=== Performance Benchmark Suite ===");
             Console.WriteLine();
-
-            await BenchmarkParallelVsSequential().ConfigureAwait(false);
-            await BenchmarkMemoryPooling().ConfigureAwait(false);
-            await BenchmarkScalability().ConfigureAwait(false);
-            await BenchmarkAllocation().ConfigureAwait(false);
+            await BenchmarkParallelVsSequentialAsync().ConfigureAwait(false);
+            await BenchmarkMemoryPoolingAsync().ConfigureAwait(false);
+            await BenchmarkScalabilityAsync().ConfigureAwait(false);
+            await BenchmarkAllocationAsync().ConfigureAwait(false);
 
             Console.WriteLine("=== Benchmark Suite Complete ===");
         }
 
-        private static async Task BenchmarkAllocation()
+        private static async Task BenchmarkAllocationAsync()
         {
             Console.WriteLine("4. Allocation Impact");
             Console.WriteLine("===================");
@@ -76,7 +75,7 @@ namespace Zipper
             Console.WriteLine();
         }
 
-        private static async Task BenchmarkParallelVsSequential()
+        private static async Task BenchmarkParallelVsSequentialAsync()
         {
             Console.WriteLine("1. Parallel vs Sequential Generation");
             Console.WriteLine("=====================================");
@@ -94,7 +93,7 @@ namespace Zipper
             {
                 // Sequential baseline
                 var sw = Stopwatch.StartNew();
-                await GenerateSequentialFiles(fileCount, outputPath1).ConfigureAwait(false);
+                await GenerateSequentialFilesAsync(fileCount, outputPath1).ConfigureAwait(false);
                 sw.Stop();
                 var sequentialTime = sw.ElapsedMilliseconds;
 
@@ -133,7 +132,7 @@ namespace Zipper
             Console.WriteLine();
         }
 
-        private static Task BenchmarkMemoryPooling()
+        private static Task BenchmarkMemoryPoolingAsync()
         {
             Console.WriteLine("2. Memory Pool Performance");
             Console.WriteLine("===========================");
@@ -191,7 +190,7 @@ namespace Zipper
             return Task.CompletedTask;
         }
 
-        private static async Task BenchmarkScalability()
+        private static async Task BenchmarkScalabilityAsync()
         {
             Console.WriteLine("3. Scalability Test");
             Console.WriteLine("===================");
@@ -242,7 +241,7 @@ namespace Zipper
             Console.WriteLine();
         }
 
-        private static Task GenerateSequentialFiles(long count, string outputPath)
+        private static Task GenerateSequentialFilesAsync(long count, string outputPath)
         {
             return Task.Run(async () =>
             {

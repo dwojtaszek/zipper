@@ -137,7 +137,7 @@ namespace Zipper
                 long actualZipSize = 0;
                 ZipSizeVerificationResult? zipSizeVerification = null;
 
-                if (zipFilePath != null && File.Exists(zipFilePath))
+                if (zipFilePath is not null && File.Exists(zipFilePath))
                 {
                     actualZipSize = new FileInfo(zipFilePath).Length;
                     if (request.Output.TargetZipSize.HasValue)
@@ -163,8 +163,8 @@ namespace Zipper
                 this.performanceMonitor.Stop();
                 try
                 {
-                    if (zipFilePath != null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
-                    if (loadFilePath != null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
+                    if (zipFilePath is not null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
+                    if (loadFilePath is not null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
                 }
 #pragma warning disable CA1031
 #pragma warning disable RCS1075
@@ -274,7 +274,7 @@ namespace Zipper
                 ? MemoryPool<byte>.Shared.Rent(rentSize)
                 : null;
 
-            if (memoryOwner == null)
+            if (memoryOwner is null)
             {
                 var data = new byte[(int)totalSize];
                 Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);

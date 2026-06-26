@@ -146,7 +146,7 @@ public class BuildPropsTests
         var doc = LoadBuildProps();
         var packageReferences = GetPropertyElements(doc, "PackageReference")
             .Select(e => e.Attribute("Include")?.Value)
-            .Where(v => v != null)
+            .Where(v => v is not null)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Assert.Contains("Roslynator.Analyzers", packageReferences);

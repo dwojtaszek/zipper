@@ -57,7 +57,7 @@ internal sealed class OptComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            string batesId = this.batesSequence != null
+            string batesId = this.batesSequence is not null
                 ? this.batesSequence.Next().ToString()
                 : $"IMG{i:D8}";
             string volume = "VOL001";
@@ -84,7 +84,7 @@ internal sealed class OptComposer : ILoadFileComposer
             {
                 baseBatesNumber = this.batesSequence!.Format(workItem.Index - 1).ToString();
             }
-            else if (this.batesSequence != null)
+            else if (this.batesSequence is not null)
             {
                 baseBatesNumber = this.batesSequence.Format(workItem.Index - 1).ToString();
             }

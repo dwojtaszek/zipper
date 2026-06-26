@@ -309,7 +309,7 @@ internal static class EmailFactory
 
             if (lookup.TryGetValue(keySpan, out var value))
             {
-                if (sb == null)
+                if (sb is null)
                 {
                     sb = new StringBuilder(template.Length * 2);
                     sb.Append(template, 0, openBraceIndex);
@@ -328,7 +328,7 @@ internal static class EmailFactory
             }
         }
 
-        if (sb == null)
+        if (sb is null)
         {
             return template;
         }

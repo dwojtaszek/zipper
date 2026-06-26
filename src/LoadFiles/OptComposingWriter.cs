@@ -41,7 +41,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
 
         // Standard (in-archive) OPT ignored chaos entirely; loadfile-only and production applied chaos.
         var effectiveChaos = this.mode == WriterMode.Standard ? null : chaosEngine;
-        var policy = new TextOutputPolicy(request, LoadFileFormat.Opt, this.mode, effectiveChaos != null);
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Opt, this.mode, effectiveChaos is not null);
 
         var records = composer.Compose(processedFiles);
         await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, effectiveChaos, cancellationToken).ConfigureAwait(false);

@@ -32,9 +32,9 @@ internal sealed class TextGenerator : IColumnValueGenerator
             return Path.GetExtension(context.FileData?.WorkItem.FilePathInZip ?? string.Empty).TrimStart('.');
         }
 
-        if (this.dataSourceValues != null)
+        if (this.dataSourceValues is not null)
         {
-            if (this.distributionIndices != null)
+            if (this.distributionIndices is not null)
             {
                 var idx = this.distributionIndices[context.DocumentIndex % this.distributionIndices.Length];
                 return this.dataSourceValues[idx % this.dataSourceValues.Length];

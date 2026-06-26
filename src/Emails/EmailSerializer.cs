@@ -178,7 +178,7 @@ internal static class EmailSerializer
 
     private static string GenerateBoundary(Random? seeded)
     {
-        if (seeded != null)
+        if (seeded is not null)
         {
             return $"----={seeded.Next():x8}{seeded.Next():x8}{seeded.Next():x8}{seeded.Next():x8}";
         }
