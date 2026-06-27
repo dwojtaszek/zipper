@@ -18,7 +18,7 @@ public static class RequestBuilder
         ArgumentNullException.ThrowIfNull(parsed);
 
         var resolved = PathValidator.ResolveSecurePath(
-            parsed.OutputPathStr!,
+            parsed.OutputPathStr,
             Directory.GetCurrentDirectory());
         if (resolved is null)
             return null;
