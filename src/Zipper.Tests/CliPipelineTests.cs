@@ -157,6 +157,20 @@ namespace Zipper
         }
 
         [Fact]
+        public void ValidateAndParseArguments_WithInsecureOutputPath_ShouldReturnNull()
+        {
+            // Arrange
+            var insecurePath = OperatingSystem.IsWindows() ? "C:\\Windows\\System32" : "/etc";
+            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", insecurePath };
+
+            // Act
+            var result = Cli.Pipeline.Build(args);
+
+            // Assert
+            Assert.Null(result);
+        }
+
+        [Fact]
         public void ValidateAndParseArguments_WithInvalidFoldersRange_ShouldReturnNull()
         {
             // Arrange
