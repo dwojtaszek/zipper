@@ -13,9 +13,15 @@ public static class RequestBuilder
         ["GB"] = 1024 * 1024 * 1024,
     };
 
-    public static FileGenerationRequest Build(ParsedArguments parsed)
+    public static FileGenerationRequest? Build(ParsedArguments parsed)
     {
         ArgumentNullException.ThrowIfNull(parsed);
+
+        var resolved = PathValidator.ResolveSecurePath(
+            parsed.OutputPathStr!,
+            Directory.GetCurrentDirectory());
+        if (resolved == null)
+            return null;
 
         var encoding = GetEncodingFromName(parsed.Encoding ?? "UTF-8");
 
@@ -112,7 +118,7 @@ public static class RequestBuilder
         {
             Output = new OutputConfig
             {
-                OutputPath = parsed.OutputDirectory!.FullName,
+                OutputPath = resolved.FullName,
                 FileCount = parsed.Count!.Value,
                 FileType = (parsed.FileType ?? "pdf").ToLowerInvariant(),
                 Folders = parsed.Folders,

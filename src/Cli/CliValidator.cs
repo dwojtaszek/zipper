@@ -40,11 +40,7 @@ public static class CliValidator
             return false;
         }
 
-        if (parsed.OutputDirectory == null)
-        {
-            Console.Error.WriteLine("Error: --output-path is required or was invalid.");
-            return false;
-        }
+
 
         return true;
     }

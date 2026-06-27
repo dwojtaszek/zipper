@@ -199,7 +199,7 @@ public class FieldNamingTests : IDisposable
             LoadfileOnly = true,
             LoadFileFormat = "csv",
             Count = 100,
-            OutputDirectory = new DirectoryInfo(this.tempDir),
+            OutputPathStr = this.tempDir,
             FileType = "pdf"
         };
 
