@@ -4,9 +4,10 @@ internal static class StandardModeValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        if (parsed.OutputDirectory is null && !string.IsNullOrWhiteSpace(parsed.OutputPathStr))
+        if (string.IsNullOrWhiteSpace(parsed.OutputPathStr))
         {
-            parsed.OutputDirectory = PathValidator.ValidateAndCreateDirectory(parsed.OutputPathStr, Directory.GetCurrentDirectory());
+            Console.Error.WriteLine("Error: Output path is required.");
+            return false;
         }
 
         if (!string.IsNullOrEmpty(parsed.FileType) && !FileGeneratorFactory.IsKnownType(parsed.FileType))

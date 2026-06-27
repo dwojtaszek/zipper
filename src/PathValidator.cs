@@ -12,7 +12,7 @@ namespace Zipper
         /// <param name="path">The path to validate and create DirectoryInfo from.</param>
         /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
         /// <returns>Validated DirectoryInfo if safe, null if path is invalid.</returns>
-        public static DirectoryInfo? ValidateAndCreateDirectory(string path, string? baseDirectory = null)
+        public static DirectoryInfo? ResolveSecurePath(string path, string? baseDirectory = null)
         {
             if (string.IsNullOrWhiteSpace(path))
             {

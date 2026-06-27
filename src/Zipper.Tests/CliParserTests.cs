@@ -226,9 +226,11 @@ namespace Zipper.Tests
             var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "../escape" });
             Assert.NotNull(result);
 
-            // Validation must fail (error path) so the caller exits with a non-zero code.
+            // Validation will pass because it's a structural check, but Build will reject it
             var isValid = CliValidator.Validate(result!);
-            Assert.False(isValid);
+            Assert.True(isValid);
+            var buildResult = RequestBuilder.Build(result!);
+            Assert.Null(buildResult);
         }
 
         /// <summary>
@@ -248,7 +250,9 @@ namespace Zipper.Tests
 
                 var isValid = CliValidator.Validate(result!);
                 Assert.True(isValid);
-                Assert.NotNull(result!.OutputDirectory);
+
+                var buildResult = RequestBuilder.Build(result!);
+                Assert.NotNull(buildResult);
             }
             finally
             {
