@@ -9,6 +9,7 @@ namespace Zipper
 
         public StandardMode(Func<FileGenerationRequest, CancellationToken, Task<FileGenerationResult>> generate)
         {
+            ArgumentNullException.ThrowIfNull(generate);
             _generate = generate;
         }
 

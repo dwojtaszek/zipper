@@ -67,6 +67,12 @@ namespace Zipper.Tests
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request, CancellationToken.None));
         }
+
+        [Fact]
+        public void Constructor_WithNullGenerate_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => new StandardMode(null!));
+        }
     }
 
     [Collection("ConsoleTests")]
@@ -120,6 +126,12 @@ namespace Zipper.Tests
             {
                 Console.SetOut(originalOut);
             }
+        }
+
+        [Fact]
+        public void Constructor_WithNullGenerate_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => new LoadfileOnlyMode(null!));
         }
     }
 
@@ -182,6 +194,12 @@ namespace Zipper.Tests
             {
                 Console.SetOut(originalOut);
             }
+        }
+
+        [Fact]
+        public void Constructor_WithNullGenerate_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => new ProductionSetMode(null!));
         }
     }
 }

@@ -9,6 +9,7 @@ namespace Zipper
 
         public LoadfileOnlyMode(Func<FileGenerationRequest, CancellationToken, Task<LoadfileOnlyResult>> generate)
         {
+            ArgumentNullException.ThrowIfNull(generate);
             _generate = generate;
         }
 

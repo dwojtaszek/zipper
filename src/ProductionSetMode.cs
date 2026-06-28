@@ -9,6 +9,7 @@ namespace Zipper
 
         public ProductionSetMode(Func<FileGenerationRequest, CancellationToken, Task<ProductionSetResult>> generate)
         {
+            ArgumentNullException.ThrowIfNull(generate);
             _generate = generate;
         }
 
