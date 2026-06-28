@@ -36,3 +36,12 @@
 - **telemetry**: host=antigravity mode=local specialists=0 bundle=1200c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-06-28 antigravity:local:issue-546
+
+- **findings**: 0
+- **outcome**: accepted / clean review
+- **telemetry**: host=antigravity mode=local specialists=1 bundle=890c
+- **lessons**: none
+- **suppressions**: none
+

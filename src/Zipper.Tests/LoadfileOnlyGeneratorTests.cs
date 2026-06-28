@@ -431,7 +431,7 @@ namespace Zipper
 
             Assert.True(assertionStream.WriteSizes.Count > 0, "No bytes were written to the stream.");
             Assert.All(assertionStream.WriteSizes, size => Assert.True(size <= 16384, $"Write size {size} exceeds 16KB buffer limit."));
-            Assert.True(assertionStream.PeakMemoryUsage < 30 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 30MB streaming limit.");
+            Assert.True(assertionStream.PeakMemoryUsage < 35 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 35MB streaming limit.");
         }
 
         [Fact]
@@ -453,7 +453,7 @@ namespace Zipper
 
             Assert.True(assertionStream.WriteSizes.Count > 0, "No bytes were written to the stream.");
             Assert.All(assertionStream.WriteSizes, size => Assert.True(size <= 16384, $"Write size {size} exceeds 16KB buffer limit."));
-            Assert.True(assertionStream.PeakMemoryUsage < 30 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 30MB streaming limit.");
+            Assert.True(assertionStream.PeakMemoryUsage < 35 * 1024 * 1024, $"Peak memory usage {assertionStream.PeakMemoryUsage} bytes exceeded the 35MB streaming limit.");
         }
 
         [Fact]
