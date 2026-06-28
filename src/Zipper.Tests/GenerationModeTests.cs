@@ -119,4 +119,40 @@ public class GenerationModeTests
             }
         }
     }
+
+    [Fact]
+    public async Task Main_LoadfileOnlyModeWithChaosScenario_PrintsResolvedChaosAmount()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+
+        var originalOut = Console.Out;
+        using var sw = new StringWriter();
+        Console.SetOut(sw);
+
+        try
+        {
+            var args = new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", tempDir,
+                "--chaos-mode", "--chaos-scenario", "structured-import-failures", "--seed", "42",
+            };
+            var result = await Program.Main(args);
+
+            Assert.Equal(0, result);
+            var output = sw.ToString();
+
+            // structured-import-failures has a default amount of 3%
+            Assert.Contains("Chaos Mode: Enabled (amount: 3%)", output, StringComparison.Ordinal);
+            Assert.DoesNotContain("Chaos Mode: Enabled (amount: 1%)", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
