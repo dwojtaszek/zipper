@@ -46,6 +46,20 @@ namespace Zipper
         }
 
         [Fact]
+        public async Task WriteAsync_StandardMode_WithColumnProfile_UsesProfileColumns()
+        {
+            var request = DefaultRequest();
+            request.Metadata = request.Metadata with { ColumnProfile = Profiles.BuiltInProfiles.Litigation };
+            var files = new List<FileData> { MakeFileData(1) };
+
+            var (_, lines) = await WriteAndCapture(request, files);
+            var header = lines[0];
+
+            Assert.Contains("BEGBATES", header, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PAGECOUNT", header, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task WriteAsync_WithBatesConfig_IncludesBatesNumberColumn()
         {
             var request = DefaultRequest();

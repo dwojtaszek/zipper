@@ -34,7 +34,7 @@ internal sealed class DatComposer : ILoadFileComposer
         this.namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
-        if (mode is WriterMode.LoadfileOnly && request.Metadata.ColumnProfile is not null)
+        if (mode != WriterMode.ProductionSet && request.Metadata.ColumnProfile is not null)
         {
             var profile = request.Metadata.ColumnProfile;
             this.profileGenerator = new DataGenerator(
@@ -132,7 +132,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ComposeStandard(IReadOnlyList<FileData> processedFiles)
     {
-        var generator = GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
+        var generator = this.profileGenerator ?? GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
 
         foreach (var fileData in processedFiles)
         {
@@ -166,6 +166,71 @@ internal sealed class DatComposer : ILoadFileComposer
     private List<string> StandardRowValues(FileData fileData, Dictionary<string, string>? profileValues, RowCtx ctx)
     {
         var wi = fileData.WorkItem;
+
+        if (this.profileColumnNames is not null && profileValues is not null)
+        {
+            var values = new Dictionary<string, string>(profileValues, StringComparer.OrdinalIgnoreCase);
+
+            void UpdateKey(string val, string k1, string? k2 = null, string? k3 = null, string? k4 = null, string? k5 = null, string? k6 = null)
+            {
+                if (values.ContainsKey(k1)) values[k1] = val;
+                if (k2 is not null && values.ContainsKey(k2)) values[k2] = val;
+                if (k3 is not null && values.ContainsKey(k3)) values[k3] = val;
+                if (k4 is not null && values.ContainsKey(k4)) values[k4] = val;
+                if (k5 is not null && values.ContainsKey(k5)) values[k5] = val;
+                if (k6 is not null && values.ContainsKey(k6)) values[k6] = val;
+            }
+
+            string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
+            UpdateKey(id, "DOCID", "CONTROLNUMBER", "BEGBATES", "ENDBATES", "CONTROL_NUMBER", "CONTROL NUMBER");
+
+            UpdateKey(ctx.FilePathOverride ?? wi.FilePathInZip, "FILEPATH", "FILE_PATH", "FILE PATH", "NATIVEPATH", "NATIVE_PATH", "NATIVE PATH");
+
+            var fileSize = ctx.FileSizeOverride ?? (ctx.IsChild ? null : fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (fileSize is not null)
+            {
+                UpdateKey(fileSize, "FILESIZE", "FILE_SIZE", "FILE SIZE");
+            }
+
+            if (this.request.Metadata.WithFamilies)
+            {
+                UpdateKey(ctx.BegAttach, "BEGATTACH", "BEG_ATTACH", "BEG ATTACH");
+                UpdateKey(ctx.EndAttach, "ENDATTACH", "END_ATTACH", "END ATTACH");
+                UpdateKey(ctx.ParentDocId, "PARENTDOCID", "PARENT_DOC_ID", "PARENT DOC ID");
+            }
+
+            if (ctx.IsChild)
+            {
+                UpdateKey(string.Empty, "DATESENT", "DATE_SENT", "DATE SENT");
+                UpdateKey(string.Empty, "AUTHOR");
+                UpdateKey(string.Empty, "EMAILTO", "EMAIL_TO", "EMAIL TO");
+                UpdateKey(string.Empty, "EMAILFROM", "EMAIL_FROM", "EMAIL FROM");
+                UpdateKey(string.Empty, "EMAILSUBJECT", "EMAIL_SUBJECT", "EMAIL SUBJECT");
+                UpdateKey(string.Empty, "EMAILSENTDATE", "EMAIL_SENT_DATE", "EMAIL SENT DATE");
+                UpdateKey(string.Empty, "EMAILATTACHMENT", "EMAIL_ATTACHMENT", "EMAIL ATTACHMENT");
+            }
+
+            if (values.ContainsKey("PAGECOUNT") || values.ContainsKey("PAGE_COUNT") || values.ContainsKey("PAGE COUNT"))
+            {
+                var pageCountStr = ctx.IsChild ? "1" : fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                UpdateKey(pageCountStr, "PAGECOUNT", "PAGE_COUNT", "PAGE COUNT");
+            }
+
+            if (values.ContainsKey("TEXTPATH") || values.ContainsKey("TEXT_PATH") || values.ContainsKey("TEXT PATH"))
+            {
+                var val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
+                UpdateKey(val, "TEXTPATH", "TEXT_PATH", "TEXT PATH");
+            }
+
+            var result = new List<string>(this.profileColumnNames.Count);
+            for (int i = 0; i < this.profileColumnNames.Count; i++)
+            {
+                var n = this.profileColumnNames[i];
+                result.Add(values.TryGetValue(n, out var x) ? x : string.Empty);
+            }
+            return result;
+        }
+
         var v = new List<string>(this.headerColumns.Count)
         {
             ctx.IdOverride ?? $"DOC{wi.Index:D8}",
