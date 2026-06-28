@@ -5,6 +5,13 @@ namespace Zipper
     /// </summary>
     internal class StandardMode : IGenerationMode
     {
+        private readonly Func<FileGenerationRequest, CancellationToken, Task<FileGenerationResult>> _generate;
+
+        public StandardMode(Func<FileGenerationRequest, CancellationToken, Task<FileGenerationResult>> generate)
+        {
+            _generate = generate;
+        }
+
         public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             if (request.Chaos.ChaosMode)
@@ -39,10 +46,7 @@ namespace Zipper
                 Console.WriteLine("  Load File: Will be included in zip archive.");
             }
 
-            // Use parallel file generator for improved performance
-            var generator = new ParallelFileGenerator();
-
-            var result = await generator.GenerateFilesAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = await _generate(request, cancellationToken).ConfigureAwait(false);
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "\n\nGeneration complete in {0:F1} seconds.", result.GenerationTime.TotalSeconds));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Archive created: {0}", result.ZipFilePath));

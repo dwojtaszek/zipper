@@ -71,9 +71,9 @@ namespace Zipper
         {
             return (request.LoadfileOnly, request.Production.ProductionSet) switch
             {
-                (true, _) => new LoadfileOnlyMode(),
-                (_, true) => new ProductionSetMode(),
-                _ => new StandardMode(),
+                (true, _) => new LoadfileOnlyMode((req, ct) => LoadfileOnlyGenerator.GenerateAsync(req, ct)),
+                (_, true) => new ProductionSetMode((req, ct) => ProductionSetGenerator.GenerateAsync(req, ct)),
+                _ => new StandardMode((req, ct) => new ParallelFileGenerator().GenerateFilesAsync(req, ct)),
             };
         }
     }

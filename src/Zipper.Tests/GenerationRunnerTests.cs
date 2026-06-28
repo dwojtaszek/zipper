@@ -91,7 +91,7 @@ namespace Zipper
             request.Chaos = request.Chaos with { ChaosMode = true };
             request.LoadfileOnly = false; // ensure we're targeting standard/generation mode
 
-            var mode = new StandardMode();
+            var mode = new StandardMode((req, ct) => new ParallelFileGenerator().GenerateFilesAsync(req, ct));
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
         }
