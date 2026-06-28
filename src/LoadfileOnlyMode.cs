@@ -16,6 +16,26 @@ namespace Zipper
 
             if (request.Chaos.ChaosMode)
             {
+                if (!string.IsNullOrEmpty(request.Chaos.ChaosScenario))
+                {
+                    var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
+                    if (scenario != null)
+                    {
+                        if (string.IsNullOrEmpty(request.Chaos.ChaosAmount))
+                        {
+                            request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
+                        }
+
+                        request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
+
+                        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine($"  Warning: Chaos scenario '{request.Chaos.ChaosScenario}' not found; falling back to the supplied --chaos-types/--chaos-amount (if any).");
+                    }
+                }
+
                 Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Mode: Enabled (amount: {0})", request.Chaos.ChaosAmount ?? "1%"));
                 if (!string.IsNullOrEmpty(request.Chaos.ChaosTypes))
                 {
