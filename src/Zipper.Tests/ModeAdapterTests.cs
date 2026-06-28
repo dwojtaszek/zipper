@@ -1,11 +1,8 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace Zipper.Tests
 {
+    [Collection("ConsoleTests")]
     public class StandardModeTests
     {
         [Fact]
@@ -72,6 +69,7 @@ namespace Zipper.Tests
         }
     }
 
+    [Collection("ConsoleTests")]
     public class LoadfileOnlyModeTests
     {
         [Fact]
@@ -125,6 +123,7 @@ namespace Zipper.Tests
         }
     }
 
+    [Collection("ConsoleTests")]
     public class ProductionSetModeTests
     {
         [Fact]
