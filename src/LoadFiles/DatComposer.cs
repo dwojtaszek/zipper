@@ -171,48 +171,64 @@ internal sealed class DatComposer : ILoadFileComposer
         {
             var values = new Dictionary<string, string>(profileValues, StringComparer.OrdinalIgnoreCase);
 
-            string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
-            if (values.ContainsKey("DOCID")) values["DOCID"] = id;
-            if (values.ContainsKey("CONTROLNUMBER")) values["CONTROLNUMBER"] = id;
-            if (values.ContainsKey("BEGBATES")) values["BEGBATES"] = id;
-            if (values.ContainsKey("ENDBATES")) values["ENDBATES"] = id;
-
-            if (ctx.FilePathOverride is not null)
+            void UpdateKey(string val, string k1, string? k2 = null, string? k3 = null, string? k4 = null, string? k5 = null, string? k6 = null)
             {
-                if (values.ContainsKey("FILEPATH")) values["FILEPATH"] = ctx.FilePathOverride;
+                if (values.ContainsKey(k1)) values[k1] = val;
+                if (k2 is not null && values.ContainsKey(k2)) values[k2] = val;
+                if (k3 is not null && values.ContainsKey(k3)) values[k3] = val;
+                if (k4 is not null && values.ContainsKey(k4)) values[k4] = val;
+                if (k5 is not null && values.ContainsKey(k5)) values[k5] = val;
+                if (k6 is not null && values.ContainsKey(k6)) values[k6] = val;
             }
 
-            if (ctx.FileSizeOverride is not null)
+            string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
+            UpdateKey(id, "DOCID", "CONTROLNUMBER", "BEGBATES", "ENDBATES", "CONTROL_NUMBER", "CONTROL NUMBER");
+
+            UpdateKey(ctx.FilePathOverride ?? wi.FilePathInZip, "FILEPATH", "FILE_PATH", "FILE PATH", "NATIVEPATH", "NATIVE_PATH", "NATIVE PATH");
+
+            var fileSize = ctx.FileSizeOverride ?? (ctx.IsChild ? null : fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            if (fileSize is not null)
             {
-                if (values.ContainsKey("FILESIZE")) values["FILESIZE"] = ctx.FileSizeOverride;
+                UpdateKey(fileSize, "FILESIZE", "FILE_SIZE", "FILE SIZE");
             }
 
             if (this.request.Metadata.WithFamilies)
             {
-                if (values.ContainsKey("BEGATTACH")) values["BEGATTACH"] = ctx.BegAttach;
-                if (values.ContainsKey("ENDATTACH")) values["ENDATTACH"] = ctx.EndAttach;
-                if (values.ContainsKey("PARENTDOCID")) values["PARENTDOCID"] = ctx.ParentDocId;
+                UpdateKey(ctx.BegAttach, "BEGATTACH", "BEG_ATTACH", "BEG ATTACH");
+                UpdateKey(ctx.EndAttach, "ENDATTACH", "END_ATTACH", "END ATTACH");
+                UpdateKey(ctx.ParentDocId, "PARENTDOCID", "PARENT_DOC_ID", "PARENT DOC ID");
             }
 
             if (ctx.IsChild)
             {
-                foreach (var k in new[] { "DATESENT", "AUTHOR", "EMAILTO", "EMAILFROM", "EMAILSUBJECT", "EMAILSENTDATE", "EMAILATTACHMENT" })
-                {
-                    if (values.ContainsKey(k)) values[k] = string.Empty;
-                }
+                UpdateKey(string.Empty, "DATESENT", "DATE_SENT", "DATE SENT");
+                UpdateKey(string.Empty, "AUTHOR");
+                UpdateKey(string.Empty, "EMAILTO", "EMAIL_TO", "EMAIL TO");
+                UpdateKey(string.Empty, "EMAILFROM", "EMAIL_FROM", "EMAIL FROM");
+                UpdateKey(string.Empty, "EMAILSUBJECT", "EMAIL_SUBJECT", "EMAIL SUBJECT");
+                UpdateKey(string.Empty, "EMAILSENTDATE", "EMAIL_SENT_DATE", "EMAIL SENT DATE");
+                UpdateKey(string.Empty, "EMAILATTACHMENT", "EMAIL_ATTACHMENT", "EMAIL ATTACHMENT");
             }
 
-            if (values.ContainsKey("PAGECOUNT"))
+            if (values.ContainsKey("PAGECOUNT") || values.ContainsKey("PAGE_COUNT") || values.ContainsKey("PAGE COUNT"))
             {
-                values["PAGECOUNT"] = (ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var pageCountStr = ctx.IsChild ? "1" : fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                UpdateKey(pageCountStr, "PAGECOUNT", "PAGE_COUNT", "PAGE COUNT");
             }
 
-            if (this.request.Output.WithText)
+            if (values.ContainsKey("TEXTPATH") || values.ContainsKey("TEXT_PATH") || values.ContainsKey("TEXT PATH"))
             {
-                if (values.ContainsKey("TEXTPATH")) values["TEXTPATH"] = this.StandardTextPath(fileData, ctx);
+                var val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
+                UpdateKey(val, "TEXTPATH", "TEXT_PATH", "TEXT PATH");
             }
 
-            return this.profileColumnNames.Select(n => values.TryGetValue(n, out var x) ? x : string.Empty).ToList();
+            var result = new List<string>(this.profileColumnNames.Count);
+            for (int i = 0; i < this.profileColumnNames.Count; i++)
+            {
+                var n = this.profileColumnNames[i];
+                result.Add(values.TryGetValue(n, out var x) ? x : string.Empty);
+            }
+            return result;
         }
 
         var v = new List<string>(this.headerColumns.Count)
