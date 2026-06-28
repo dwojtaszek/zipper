@@ -6,13 +6,13 @@ namespace Zipper
     public class PathValidatorTests
     {
         [Fact]
-        public void ValidateAndCreateDirectory_ValidPath_ReturnsDirectoryInfo()
+        public void ResolveSecurePath_ValidPath_ReturnsDirectoryInfo()
         {
             // Arrange
             string validPath = Directory.GetCurrentDirectory();
 
             // Act
-            var result = PathValidator.ValidateAndCreateDirectory(validPath);
+            var result = PathValidator.ResolveSecurePath(validPath);
 
             // Assert
             Assert.NotNull(result);
@@ -20,16 +20,16 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_NullOrEmptyPath_ReturnsNull()
+        public void ResolveSecurePath_NullOrEmptyPath_ReturnsNull()
         {
             // Arrange & Act & Assert
-            Assert.Null(PathValidator.ValidateAndCreateDirectory(null!));
-            Assert.Null(PathValidator.ValidateAndCreateDirectory(string.Empty));
-            Assert.Null(PathValidator.ValidateAndCreateDirectory("   "));
+            Assert.Null(PathValidator.ResolveSecurePath(null!));
+            Assert.Null(PathValidator.ResolveSecurePath(string.Empty));
+            Assert.Null(PathValidator.ResolveSecurePath("   "));
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_PathWithTraversal_ReturnsNull()
+        public void ResolveSecurePath_PathWithTraversal_ReturnsNull()
         {
             // Arrange
             string baseDir = Directory.GetCurrentDirectory();
@@ -44,13 +44,13 @@ namespace Zipper
             // Act & Assert
             foreach (string path in traversalPaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                var result = PathValidator.ResolveSecurePath(path, baseDir);
                 Assert.Null(result); // Traversal escaping base directory should be blocked
             }
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_RelativePathWithTraversal_ReturnsNull()
+        public void ResolveSecurePath_RelativePathWithTraversal_ReturnsNull()
         {
             // Arrange
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
@@ -68,7 +68,7 @@ namespace Zipper
                 // Act & Assert
                 foreach (string path in relativePaths)
                 {
-                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    var result = PathValidator.ResolveSecurePath(path, baseDir);
                     Assert.Null(result);
                 }
             }
@@ -79,7 +79,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_MixedSlashesWithTraversal_ReturnsNull()
+        public void ResolveSecurePath_MixedSlashesWithTraversal_ReturnsNull()
         {
             // Arrange
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
@@ -97,7 +97,7 @@ namespace Zipper
                 // Act & Assert
                 foreach (string path in mixedPaths)
                 {
-                    var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                    var result = PathValidator.ResolveSecurePath(path, baseDir);
                     Assert.Null(result);
                 }
             }
@@ -108,7 +108,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_DotPaths_Valid()
+        public void ResolveSecurePath_DotPaths_Valid()
         {
             // Arrange - These are safe paths (no traversal)
             string[] dotPaths =
@@ -123,7 +123,7 @@ namespace Zipper
             // Act & Assert
             foreach (string path in dotPaths)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path);
+                var result = PathValidator.ResolveSecurePath(path);
                 Assert.NotNull(result); // Dot paths without traversal are valid
             }
         }
@@ -162,7 +162,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithInvalidCharactersInFileName_HandlesGracefully()
+        public void ResolveSecurePath_WithInvalidCharactersInFileName_HandlesGracefully()
         {
             // Arrange - Test that PathValidator handles various edge cases without crashing
             // PathValidator.GetInvalidFileNameChars() returns different results on different platforms
@@ -176,26 +176,26 @@ namespace Zipper
             // Act & Assert - Should not throw exceptions, returns null or DirectoryInfo depending on platform
             foreach (string path in edgeCasePaths)
             {
-                var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(path));
+                var exception = Record.Exception(() => PathValidator.ResolveSecurePath(path));
                 Assert.Null(exception);
             }
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithPathTooLong_DoesNotThrow()
+        public void ResolveSecurePath_WithPathTooLong_DoesNotThrow()
         {
             // Arrange - Create a path longer than max path length
             string longPath = Path.Combine(Directory.GetCurrentDirectory(), new string('a', 300));
 
             // Act
-            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(longPath));
+            var exception = Record.Exception(() => PathValidator.ResolveSecurePath(longPath));
 
             // Assert
             Assert.Null(exception);
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithComplexTraversalAttempts_ReturnsNull()
+        public void ResolveSecurePath_WithComplexTraversalAttempts_ReturnsNull()
         {
             // Arrange - Complex traversal attack patterns
             string baseDir = Directory.GetCurrentDirectory();
@@ -211,13 +211,13 @@ namespace Zipper
             // Act & Assert
             foreach (string path in complexTraversals)
             {
-                var result = PathValidator.ValidateAndCreateDirectory(path, baseDir);
+                var result = PathValidator.ResolveSecurePath(path, baseDir);
                 Assert.Null(result); // Complex traversal attacks should be blocked
             }
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithVariousExceptionPaths_HandlesGracefully()
+        public void ResolveSecurePath_WithVariousExceptionPaths_HandlesGracefully()
         {
             // Arrange - Paths that might trigger different exceptions
             string[] exceptionPaths =
@@ -232,7 +232,7 @@ namespace Zipper
             // Act & Assert
             foreach (string path in exceptionPaths)
             {
-                var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(path));
+                var exception = Record.Exception(() => PathValidator.ResolveSecurePath(path));
                 Assert.Null(exception);
             }
         }
@@ -254,7 +254,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_CanonicalTraversalAttempt_ReturnsNull()
+        public void ResolveSecurePath_CanonicalTraversalAttempt_ReturnsNull()
         {
             // Arrange
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
@@ -266,7 +266,7 @@ namespace Zipper
                 string escapePath = Path.Combine(baseDir, "..", "..", "etc", "passwd");
 
                 // Act
-                var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+                var result = PathValidator.ResolveSecurePath(escapePath, baseDir);
 
                 // Assert
                 Assert.Null(result); // Canonical path escapes baseDir, should be rejected
@@ -278,29 +278,29 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithUncPath_DoesNotThrow()
+        public void ResolveSecurePath_WithUncPath_DoesNotThrow()
         {
             var baseDir = Directory.GetCurrentDirectory();
             var uncPath = @"\\server\share\folder";
-            var exception = Record.Exception(() => PathValidator.ValidateAndCreateDirectory(uncPath, baseDir));
+            var exception = Record.Exception(() => PathValidator.ResolveSecurePath(uncPath, baseDir));
             Assert.Null(exception);
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithUnicodeCharacters_ReturnsDirectoryInfo()
+        public void ResolveSecurePath_WithUnicodeCharacters_ReturnsDirectoryInfo()
         {
             var tempPath = Directory.GetCurrentDirectory();
             var unicodePath = Path.Combine(tempPath, "über-cool_文件_パス");
-            var result = PathValidator.ValidateAndCreateDirectory(unicodePath);
+            var result = PathValidator.ResolveSecurePath(unicodePath);
             Assert.NotNull(result);
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_WithTrailingSeparator_NormalizesPath()
+        public void ResolveSecurePath_WithTrailingSeparator_NormalizesPath()
         {
             var tempPath = Directory.GetCurrentDirectory().TrimEnd(Path.DirectorySeparatorChar);
             var pathWithTrailing = tempPath + Path.DirectorySeparatorChar;
-            var result = PathValidator.ValidateAndCreateDirectory(pathWithTrailing);
+            var result = PathValidator.ResolveSecurePath(pathWithTrailing);
             Assert.NotNull(result);
             Assert.Equal(tempPath, result.FullName.TrimEnd(Path.DirectorySeparatorChar));
         }
@@ -333,7 +333,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_SymlinkEscapingBase_ReturnsNull()
+        public void ResolveSecurePath_SymlinkEscapingBase_ReturnsNull()
         {
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSymlinkTest_" + Guid.NewGuid().ToString());
             string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSymlinkTest_" + Guid.NewGuid().ToString());
@@ -366,7 +366,7 @@ namespace Zipper
                     return;
                 }
 
-                var result = PathValidator.ValidateAndCreateDirectory(linkPath, baseDir);
+                var result = PathValidator.ResolveSecurePath(linkPath, baseDir);
                 Assert.Null(result);
             }
             finally
@@ -385,7 +385,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_SymlinkWithChildSuffix_EscapingBase_ReturnsNull()
+        public void ResolveSecurePath_SymlinkWithChildSuffix_EscapingBase_ReturnsNull()
         {
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSuffixTest_" + Guid.NewGuid().ToString());
             string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSuffixTest_" + Guid.NewGuid().ToString());
@@ -421,7 +421,7 @@ namespace Zipper
                 // The child segment does not exist on disk, so resolution must walk up to the
                 // symlink and rebuild the path from the resolved target plus the child suffix.
                 var escapePath = Path.Combine(linkPath, "child");
-                var result = PathValidator.ValidateAndCreateDirectory(escapePath, baseDir);
+                var result = PathValidator.ResolveSecurePath(escapePath, baseDir);
                 Assert.Null(result);
             }
             finally
@@ -432,7 +432,7 @@ namespace Zipper
         }
 
         [Fact]
-        public void ValidateAndCreateDirectory_SymlinkWithChildSuffix_InsideBase_ReturnsDirectoryInfo()
+        public void ResolveSecurePath_SymlinkWithChildSuffix_InsideBase_ReturnsDirectoryInfo()
         {
             string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString());
             string targetDir = Path.Combine(baseDir, "real");
@@ -465,7 +465,7 @@ namespace Zipper
                 }
 
                 var insidePath = Path.Combine(linkPath, "child");
-                var result = PathValidator.ValidateAndCreateDirectory(insidePath, baseDir);
+                var result = PathValidator.ResolveSecurePath(insidePath, baseDir);
 
                 Assert.NotNull(result);
                 var comparison = OperatingSystem.IsWindows()

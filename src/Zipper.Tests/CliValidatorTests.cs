@@ -12,7 +12,7 @@ namespace Zipper.Tests
             {
                 FileType = "pdf",
                 Count = 10,
-                OutputDirectory = new DirectoryInfo(Directory.GetCurrentDirectory()),
+                OutputPathStr = Directory.GetCurrentDirectory(),
             };
         }
 
@@ -88,10 +88,10 @@ namespace Zipper.Tests
         }
 
         [Fact]
-        public void Validate_NullOutputDirectory_ReturnsFalse()
+        public void Validate_NullOutputPathStr_ReturnsFalse()
         {
             var args = CreateValidArgs();
-            args.OutputDirectory = null;
+            args.OutputPathStr = null;
             Assert.False(CliValidator.Validate(args));
         }
 
