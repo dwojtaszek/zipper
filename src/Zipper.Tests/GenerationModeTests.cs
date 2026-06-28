@@ -6,6 +6,7 @@ namespace Zipper;
 /// End-to-end tests for the generation mode orchestration branches
 /// (StandardMode, ProductionSetMode, LoadfileOnlyMode) driven through Program.Main.
 /// </summary>
+[Collection("Sequential")]
 public class GenerationModeTests
 {
     [Fact]

@@ -48,14 +48,13 @@ internal static class LoadfileOnlyGenerator
                     var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
                     if (scenario != null)
                     {
-                        if (string.IsNullOrEmpty(request.Chaos.ChaosAmount))
+                        request.Chaos = request.Chaos with
                         {
-                            request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
-                        }
+                            ChaosAmount = string.IsNullOrEmpty(request.Chaos.ChaosAmount) ? scenario.DefaultAmount : request.Chaos.ChaosAmount,
+                            ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes
+                        };
 
-                        request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
-
-                        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
+                        Console.WriteLine($"  Chaos Scenario: {scenario.Name} ({scenario.Description})");
                     }
                     else
                     {
