@@ -169,64 +169,90 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.profileColumnNames is not null && profileValues is not null)
         {
-            var values = new Dictionary<string, string>(profileValues, StringComparer.OrdinalIgnoreCase);
-
-            void UpdateKey(string val, string k1, string? k2 = null, string? k3 = null, string? k4 = null, string? k5 = null, string? k6 = null)
-            {
-                if (values.ContainsKey(k1)) values[k1] = val;
-                if (k2 is not null && values.ContainsKey(k2)) values[k2] = val;
-                if (k3 is not null && values.ContainsKey(k3)) values[k3] = val;
-                if (k4 is not null && values.ContainsKey(k4)) values[k4] = val;
-                if (k5 is not null && values.ContainsKey(k5)) values[k5] = val;
-                if (k6 is not null && values.ContainsKey(k6)) values[k6] = val;
-            }
-
             string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
-            UpdateKey(id, "DOCID", "CONTROLNUMBER", "BEGBATES", "ENDBATES", "CONTROL_NUMBER", "CONTROL NUMBER");
-
-            UpdateKey(ctx.FilePathOverride ?? wi.FilePathInZip, "FILEPATH", "FILE_PATH", "FILE PATH", "NATIVEPATH", "NATIVE_PATH", "NATIVE PATH");
-
             var fileSize = ctx.FileSizeOverride ?? (ctx.IsChild ? null : fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            if (fileSize is not null)
-            {
-                UpdateKey(fileSize, "FILESIZE", "FILE_SIZE", "FILE SIZE");
-            }
-
-            if (this.request.Metadata.WithFamilies)
-            {
-                UpdateKey(ctx.BegAttach, "BEGATTACH", "BEG_ATTACH", "BEG ATTACH");
-                UpdateKey(ctx.EndAttach, "ENDATTACH", "END_ATTACH", "END ATTACH");
-                UpdateKey(ctx.ParentDocId, "PARENTDOCID", "PARENT_DOC_ID", "PARENT DOC ID");
-            }
-
-            if (ctx.IsChild)
-            {
-                UpdateKey(string.Empty, "DATESENT", "DATE_SENT", "DATE SENT");
-                UpdateKey(string.Empty, "AUTHOR");
-                UpdateKey(string.Empty, "EMAILTO", "EMAIL_TO", "EMAIL TO");
-                UpdateKey(string.Empty, "EMAILFROM", "EMAIL_FROM", "EMAIL FROM");
-                UpdateKey(string.Empty, "EMAILSUBJECT", "EMAIL_SUBJECT", "EMAIL SUBJECT");
-                UpdateKey(string.Empty, "EMAILSENTDATE", "EMAIL_SENT_DATE", "EMAIL SENT DATE");
-                UpdateKey(string.Empty, "EMAILATTACHMENT", "EMAIL_ATTACHMENT", "EMAIL ATTACHMENT");
-            }
-
-            if (values.ContainsKey("PAGECOUNT") || values.ContainsKey("PAGE_COUNT") || values.ContainsKey("PAGE COUNT"))
-            {
-                var pageCountStr = ctx.IsChild ? "1" : fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                UpdateKey(pageCountStr, "PAGECOUNT", "PAGE_COUNT", "PAGE COUNT");
-            }
-
-            if (values.ContainsKey("TEXTPATH") || values.ContainsKey("TEXT_PATH") || values.ContainsKey("TEXT PATH"))
-            {
-                var val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
-                UpdateKey(val, "TEXTPATH", "TEXT_PATH", "TEXT PATH");
-            }
 
             var result = new List<string>(this.profileColumnNames.Count);
             for (int i = 0; i < this.profileColumnNames.Count; i++)
             {
                 var n = this.profileColumnNames[i];
-                result.Add(values.TryGetValue(n, out var x) ? x : string.Empty);
+                var upper = n.ToUpperInvariant();
+
+                string val;
+                switch (upper)
+                {
+                    case "DOCID":
+                    case "CONTROLNUMBER":
+                    case "BEGBATES":
+                    case "ENDBATES":
+                    case "CONTROL_NUMBER":
+                    case "CONTROL NUMBER":
+                        val = id;
+                        break;
+                    case "FILEPATH":
+                    case "FILE_PATH":
+                    case "FILE PATH":
+                    case "NATIVEPATH":
+                    case "NATIVE_PATH":
+                    case "NATIVE PATH":
+                        val = ctx.FilePathOverride ?? wi.FilePathInZip;
+                        break;
+                    case "FILESIZE":
+                    case "FILE_SIZE":
+                    case "FILE SIZE":
+                        val = fileSize ?? (profileValues.TryGetValue(n, out var fs) ? fs : string.Empty);
+                        break;
+                    case "BEGATTACH":
+                    case "BEG_ATTACH":
+                    case "BEG ATTACH":
+                        val = this.request.Metadata.WithFamilies ? ctx.BegAttach : (profileValues.TryGetValue(n, out var ba) ? ba : string.Empty);
+                        break;
+                    case "ENDATTACH":
+                    case "END_ATTACH":
+                    case "END ATTACH":
+                        val = this.request.Metadata.WithFamilies ? ctx.EndAttach : (profileValues.TryGetValue(n, out var ea) ? ea : string.Empty);
+                        break;
+                    case "PARENTDOCID":
+                    case "PARENT_DOC_ID":
+                    case "PARENT DOC ID":
+                        val = this.request.Metadata.WithFamilies ? ctx.ParentDocId : (profileValues.TryGetValue(n, out var pd) ? pd : string.Empty);
+                        break;
+                    case "DATESENT":
+                    case "DATE_SENT":
+                    case "DATE SENT":
+                    case "AUTHOR":
+                    case "EMAILTO":
+                    case "EMAIL_TO":
+                    case "EMAIL TO":
+                    case "EMAILFROM":
+                    case "EMAIL_FROM":
+                    case "EMAIL FROM":
+                    case "EMAILSUBJECT":
+                    case "EMAIL_SUBJECT":
+                    case "EMAIL SUBJECT":
+                    case "EMAILSENTDATE":
+                    case "EMAIL_SENT_DATE":
+                    case "EMAIL SENT DATE":
+                    case "EMAILATTACHMENT":
+                    case "EMAIL_ATTACHMENT":
+                    case "EMAIL ATTACHMENT":
+                        val = ctx.IsChild ? string.Empty : (profileValues.TryGetValue(n, out var ce) ? ce : string.Empty);
+                        break;
+                    case "PAGECOUNT":
+                    case "PAGE_COUNT":
+                    case "PAGE COUNT":
+                        val = ctx.IsChild ? "1" : fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        break;
+                    case "TEXTPATH":
+                    case "TEXT_PATH":
+                    case "TEXT PATH":
+                        val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
+                        break;
+                    default:
+                        val = profileValues.TryGetValue(n, out var x) ? x : string.Empty;
+                        break;
+                }
+                result.Add(val);
             }
             return result;
         }
