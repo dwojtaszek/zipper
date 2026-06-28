@@ -97,8 +97,8 @@ public class FieldNamingTests : IDisposable
     }
 
     [Theory]
-    [InlineData("UPPERCASE", "^CONTROL NUMBER^|^FILE PATH^|^CUSTODIAN^|^DATE SENT^|^AUTHOR^|^FILE SIZE^")]
-    [InlineData("lowercase", "^control number^|^file path^|^custodian^|^date sent^|^author^|^file size^")]
+    [InlineData("UPPERCASE", "^DOCID^|^CUSTODIANNAME^")]
+    [InlineData("lowercase", "^docid^|^custodianname^")]
     public async Task DatWriter_ShouldRespectFieldNamingConvention(string convention, string expectedHeader)
     {
         ArgumentNullException.ThrowIfNull(expectedHeader);

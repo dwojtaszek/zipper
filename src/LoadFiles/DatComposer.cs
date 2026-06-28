@@ -34,7 +34,7 @@ internal sealed class DatComposer : ILoadFileComposer
         this.namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
-        if (mode is WriterMode.LoadfileOnly && request.Metadata.ColumnProfile is not null)
+        if (mode != WriterMode.ProductionSet && request.Metadata.ColumnProfile is not null)
         {
             var profile = request.Metadata.ColumnProfile;
             this.profileGenerator = new DataGenerator(
@@ -132,7 +132,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ComposeStandard(IReadOnlyList<FileData> processedFiles)
     {
-        var generator = GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
+        var generator = this.profileGenerator ?? GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
 
         foreach (var fileData in processedFiles)
         {
@@ -166,6 +166,55 @@ internal sealed class DatComposer : ILoadFileComposer
     private List<string> StandardRowValues(FileData fileData, Dictionary<string, string>? profileValues, RowCtx ctx)
     {
         var wi = fileData.WorkItem;
+
+        if (this.profileColumnNames is not null && profileValues is not null)
+        {
+            var values = new Dictionary<string, string>(profileValues, StringComparer.OrdinalIgnoreCase);
+
+            string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
+            if (values.ContainsKey("DOCID")) values["DOCID"] = id;
+            if (values.ContainsKey("CONTROLNUMBER")) values["CONTROLNUMBER"] = id;
+            if (values.ContainsKey("BEGBATES")) values["BEGBATES"] = id;
+            if (values.ContainsKey("ENDBATES")) values["ENDBATES"] = id;
+
+            if (ctx.FilePathOverride is not null)
+            {
+                if (values.ContainsKey("FILEPATH")) values["FILEPATH"] = ctx.FilePathOverride;
+            }
+
+            if (ctx.FileSizeOverride is not null)
+            {
+                if (values.ContainsKey("FILESIZE")) values["FILESIZE"] = ctx.FileSizeOverride;
+            }
+
+            if (this.request.Metadata.WithFamilies)
+            {
+                if (values.ContainsKey("BEGATTACH")) values["BEGATTACH"] = ctx.BegAttach;
+                if (values.ContainsKey("ENDATTACH")) values["ENDATTACH"] = ctx.EndAttach;
+                if (values.ContainsKey("PARENTDOCID")) values["PARENTDOCID"] = ctx.ParentDocId;
+            }
+
+            if (ctx.IsChild)
+            {
+                foreach (var k in new[] { "DATESENT", "AUTHOR", "EMAILTO", "EMAILFROM", "EMAILSUBJECT", "EMAILSENTDATE", "EMAILATTACHMENT" })
+                {
+                    if (values.ContainsKey(k)) values[k] = string.Empty;
+                }
+            }
+
+            if (values.ContainsKey("PAGECOUNT"))
+            {
+                values["PAGECOUNT"] = (ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            if (this.request.Output.WithText)
+            {
+                if (values.ContainsKey("TEXTPATH")) values["TEXTPATH"] = this.StandardTextPath(fileData, ctx);
+            }
+
+            return this.profileColumnNames.Select(n => values.TryGetValue(n, out var x) ? x : string.Empty).ToList();
+        }
+
         var v = new List<string>(this.headerColumns.Count)
         {
             ctx.IdOverride ?? $"DOC{wi.Index:D8}",
