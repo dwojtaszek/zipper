@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using Xunit;
+using Zipper.Tests;
 
 namespace Zipper;
 
@@ -12,29 +13,7 @@ public class BuildPropsTests
 {
     private const string BuildPropsFileName = "Directory.Build.props";
 
-    private static readonly string RepoRoot = FindRepoRoot(AppContext.BaseDirectory);
-
-    /// <summary>
-    /// Walks up the directory tree to locate the root directory containing the build properties file.
-    /// </summary>
-    /// <param name="startDir">The directory to start the search from.</param>
-    /// <returns>The path to the repository root directory.</returns>
-    private static string FindRepoRoot(string startDir)
-    {
-        var dir = new DirectoryInfo(startDir);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, BuildPropsFileName)))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new InvalidOperationException(
-            $"Could not find repo root ({BuildPropsFileName}) walking up from: {startDir}");
-    }
+    private static readonly string RepoRoot = RepoRootFinder.Find();
 
     /// <summary>
     /// Loads the root <c>Directory.Build.props</c> file as an XML document.
