@@ -45,3 +45,10 @@
 - **lessons**: none
 - **suppressions**: none
 
+### 2026-06-29 antigravity:branch:issue-535
+
+- **findings**: 2 ACTION, 7 INFO (across 4 specialists). Empty formats list index out of range checks, test clone isolation, stale analyzer check.
+- **outcome**: accepted all findings (fixed RequestBuilder fallback, added defensive checks to index-0 access sites, corrected clone test isolation, and updated FgrFlatAccessAnalyzer to guard Formats). All 1155 tests passed.
+- **telemetry**: host=antigravity mode=branch specialists=4 bundle=21736c
+- **lessons**: The clone isolation test was using re-assignment which masked reference equality bugs. Asserting NotSame immediately after cloning ensures list isolation is verified properly.
+- **suppressions**: none

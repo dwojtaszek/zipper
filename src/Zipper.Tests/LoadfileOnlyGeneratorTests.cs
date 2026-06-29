@@ -40,7 +40,7 @@ namespace Zipper
                 },
                 LoadFile = new LoadFileConfig
                 {
-                    LoadFileFormat = format,
+                    Formats = new List<LoadFileFormat> { format },
                     Encoding = "UTF-8",
                 },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
@@ -470,8 +470,7 @@ namespace Zipper
                 },
                 LoadFile = new LoadFileConfig
                 {
-                    LoadFileFormat = LoadFileFormat.Dat,
-                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+                    Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
                     Encoding = "UTF-8",
                 },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
@@ -504,8 +503,7 @@ namespace Zipper
                 },
                 LoadFile = new LoadFileConfig
                 {
-                    LoadFileFormat = LoadFileFormat.Dat,
-                    LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+                    Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
                     Encoding = "UTF-8",
                 },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
@@ -535,7 +533,7 @@ namespace Zipper
                 },
                 LoadFile = new LoadFileConfig
                 {
-                    LoadFileFormat = LoadFileFormat.Opt,
+                    Formats = new List<LoadFileFormat> { LoadFileFormat.Opt },
                     Encoding = "UTF-8",
                 },
                 Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },

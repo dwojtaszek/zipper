@@ -30,9 +30,7 @@ namespace Zipper
                 Metadata = this.Metadata,
                 LoadFile = this.LoadFile with
                 {
-                    LoadFileFormats = this.LoadFile.LoadFileFormats is null
-                        ? null
-                        : new List<LoadFileFormat>(this.LoadFile.LoadFileFormats),
+                    Formats = new List<LoadFileFormat>(this.LoadFile.Formats),
                 },
                 Delimiters = this.Delimiters,
                 Bates = this.Bates,

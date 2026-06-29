@@ -114,6 +114,10 @@ public static class RequestBuilder
             ? parsed.Encoding.ToUpperInvariant()
             : "UTF-8";
 
+        var formats = (multiFormats is not null && multiFormats.Count > 0)
+            ? multiFormats
+            : new List<LoadFileFormat> { GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat };
+
         return new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -139,8 +143,7 @@ public static class RequestBuilder
             },
             LoadFile = new LoadFileConfig
             {
-                LoadFileFormat = GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat,
-                LoadFileFormats = multiFormats,
+                Formats = formats,
                 Encoding = encodingName,
                 IsEncodingExplicit = parsed.IsEncodingExplicit,
                 Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,

@@ -52,7 +52,7 @@ public abstract class TempDirectoryTestBase : IDisposable
             LoadFile = new LoadFileConfig
             {
                 Encoding = "Unicode (UTF-8)",
-                LoadFileFormat = LoadFileFormat.Dat,
+                Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
             },
             Metadata = new MetadataConfig { WithMetadata = true },
         };

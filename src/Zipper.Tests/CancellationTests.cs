@@ -258,7 +258,7 @@ public class CancellationTests
             },
             LoadFile = new LoadFileConfig
             {
-                LoadFileFormat = LoadFileFormat.Dat,
+                Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
                 Encoding = "UTF-8",
             },
             Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
@@ -276,7 +276,7 @@ public class CancellationTests
             },
             LoadFile = new LoadFileConfig
             {
-                LoadFileFormat = LoadFileFormat.Dat,
+                Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
                 Encoding = "UTF-8",
             },
             Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },

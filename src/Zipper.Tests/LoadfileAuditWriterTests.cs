@@ -12,7 +12,7 @@ public class LoadfileAuditWriterTests
         var request = new FileGenerationRequest();
         request.LoadFile = request.LoadFile with
         {
-            LoadFileFormat = LoadFileFormat.Opt,
+            Formats = new List<LoadFileFormat> { LoadFileFormat.Opt },
             Encoding = "UTF-8",
             IsEncodingExplicit = false
         };
@@ -53,7 +53,7 @@ public class LoadfileAuditWriterTests
         var request = new FileGenerationRequest();
         request.LoadFile = request.LoadFile with
         {
-            LoadFileFormat = LoadFileFormat.Dat,
+            Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
             Encoding = "UTF-8",
             IsEncodingExplicit = true
         };
@@ -96,7 +96,7 @@ public class LoadfileAuditWriterTests
     {
         // Arrange
         var request = new FileGenerationRequest();
-        request.LoadFile = request.LoadFile with { LoadFileFormat = LoadFileFormat.Dat };
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } };
         request.Chaos = request.Chaos with
         {
             ChaosMode = true,
@@ -145,7 +145,7 @@ public class LoadfileAuditWriterTests
     {
         // Arrange
         var request = new FileGenerationRequest();
-        request.LoadFile = request.LoadFile with { LoadFileFormat = LoadFileFormat.Dat };
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } };
         request.Delimiters = request.Delimiters with
         {
             ColumnDelimiter = "\u0014", // Device Control 4
@@ -172,7 +172,7 @@ public class LoadfileAuditWriterTests
     {
         // Arrange
         var request = new FileGenerationRequest();
-        request.LoadFile = request.LoadFile with { LoadFileFormat = LoadFileFormat.Dat };
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } };
         request.Delimiters = request.Delimiters with
         {
             ColumnDelimiter = string.Empty,
@@ -202,7 +202,7 @@ public class LoadfileAuditWriterTests
         var expectedPropertiesFile = Path.ChangeExtension(tempFile, null) + "_properties.json";
 
         var request = new FileGenerationRequest();
-        request.LoadFile = request.LoadFile with { LoadFileFormat = LoadFileFormat.Dat };
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } };
 
         try
         {

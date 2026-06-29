@@ -50,9 +50,9 @@ internal class ZipArchiveSink : IArchiveSink
             CleanupOperations(outOfOrderBuffer, fileDataReader);
         }
 
-        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
-            ? request.LoadFile.LoadFileFormats
-            : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
+        var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
+            ? request.LoadFile.Formats
+            : new List<LoadFileFormat> { LoadFileFormat.Dat };
 
         string actualLoadFilePath = loadFilePath;
         var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);

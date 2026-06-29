@@ -24,9 +24,9 @@ internal static class LoadfileOnlyGenerator
 
         var baseFileName = $"loadfile_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
 
-        var formatsToGenerate = request.LoadFile.LoadFileFormats?.Count > 0
-            ? request.LoadFile.LoadFileFormats
-            : new List<LoadFileFormat> { request.LoadFile.LoadFileFormat };
+        var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
+            ? request.LoadFile.Formats
+            : new List<LoadFileFormat> { LoadFileFormat.Dat };
 
         string primaryLoadFilePath = string.Empty;
         string primaryPropertiesPath = string.Empty;
@@ -65,7 +65,7 @@ internal static class LoadfileOnlyGenerator
                     format).ConfigureAwait(false);
                 generatedFiles.Add(propertiesPath);
 
-                if (format == request.LoadFile.LoadFileFormat || string.IsNullOrEmpty(primaryLoadFilePath))
+                if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
                 {
                     primaryLoadFilePath = loadFilePath;
                     primaryPropertiesPath = propertiesPath;

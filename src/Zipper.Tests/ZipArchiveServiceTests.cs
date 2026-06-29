@@ -340,7 +340,7 @@ namespace Zipper.Tests
                     Concurrency = 1,
                     IncludeLoadFile = true,
                 },
-                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt } },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt } },
             };
 
             var testFiles = new List<FileData>();
