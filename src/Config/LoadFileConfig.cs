@@ -2,9 +2,7 @@ namespace Zipper.Config;
 
 public record LoadFileConfig
 {
-    public LoadFileFormat LoadFileFormat { get; init; } = LoadFileFormat.Dat;
-
-    public List<LoadFileFormat>? LoadFileFormats { get; init; }
+    public IReadOnlyList<LoadFileFormat> Formats { get; init; } = [LoadFileFormat.Dat];
 
     public string Encoding { get; init; } = "UTF-8";
 

@@ -118,7 +118,7 @@ internal static class LoadfileAuditWriter
         IReadOnlyList<ChaosAnomaly>? anomalies = null,
         LoadFileFormat? format = null)
     {
-        var activeFormat = format ?? request.LoadFile.LoadFileFormat;
+        var activeFormat = format ?? (request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat);
         var (totalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
         var formatName = activeFormat == LoadFileFormat.Opt
             ? "OPT (Image)"

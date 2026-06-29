@@ -13,7 +13,7 @@ public class TextOutputPolicyTests
         {
             LoadFile = new LoadFileConfig
             {
-                LoadFileFormat = format,
+                Formats = new List<LoadFileFormat> { format },
                 Encoding = encoding ?? "UTF-8",
                 IsEncodingExplicit = isExplicit
             },

@@ -16,7 +16,7 @@ namespace Zipper
         public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
             Console.WriteLine("Starting loadfile-only generation...");
-            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Format: {0}", request.LoadFile.LoadFileFormat));
+            Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Format: {0}", string.Join(", ", request.LoadFile.Formats)));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Count: {0:N0}", request.Output.FileCount));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Output Path: {0}", request.Output.OutputPath));
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Encoding: {0}", request.LoadFile.Encoding));

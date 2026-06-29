@@ -99,7 +99,7 @@ namespace Zipper.Tests
                 {
                     LoadFile = new Config.LoadFileConfig
                     {
-                        LoadFileFormat = LoadFileFormat.Dat,
+                        Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
                         Encoding = "utf-8"
                     },
                     Output = new Config.OutputConfig

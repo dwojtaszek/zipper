@@ -565,7 +565,7 @@ public class ProductionSetTests : IDisposable
                 Production = new ProductionConfig { ProductionSet = true },
                 Bates = new BatesNumberConfig { Prefix = "PLAN", Start = 1, Digits = 8 },
                 Tiff = new TiffConfig { PageRange = (3, 3) }, // Multi-page TIFF (3 pages)
-                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Opt } }
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Opt } }
             };
 
             // Act

@@ -49,7 +49,7 @@ public class FieldNamingTests : IDisposable
             },
             LoadFile = new LoadFileConfig
             {
-                LoadFileFormat = LoadFileFormat.Dat,
+                Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
                 Encoding = "UTF-8"
             },
             Metadata = new MetadataConfig

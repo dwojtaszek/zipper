@@ -67,9 +67,10 @@ public sealed class FgrFlatAccessAnalyzer : DiagnosticAnalyzer
             ["CustodianCountOverride"] = MetadataSub,
             ["WithFamilies"] = MetadataSub,
 
-            // LoadFile sub-config (5)
+            // LoadFile sub-config (6)
             ["LoadFileFormat"] = LoadFileSub,
             ["LoadFileFormats"] = LoadFileSub,
+            ["Formats"] = LoadFileSub,
             ["Encoding"] = LoadFileSub,
             ["Distribution"] = LoadFileSub,
             ["AttachmentRate"] = LoadFileSub,

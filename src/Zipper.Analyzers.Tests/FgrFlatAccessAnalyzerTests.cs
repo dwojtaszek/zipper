@@ -10,7 +10,7 @@ namespace Zipper.Analyzers.Tests;
 
 /// <summary>
 /// Fixture-driven tests for <see cref="FgrFlatAccessAnalyzer"/>.
-/// Verifies that all 35 flat pass-through properties on FileGenerationRequest
+/// Verifies that all 36 flat pass-through properties on FileGenerationRequest
 /// are detected, sub-config accesses are not reported, and accesses inside
 /// FileGenerationRequest.cs itself are suppressed.
 /// </summary>
@@ -48,12 +48,12 @@ class T
             .Select(name => new object[] { name });
 
     /// <summary>
-    /// Exactly 35 flat pass-through property names are tracked.
+    /// Exactly 36 flat pass-through property names are tracked.
     /// </summary>
     [Fact]
-    public void FlatPropertyNames_Contains35Names()
+    public void FlatPropertyNames_Contains36Names()
     {
-        Assert.Equal(35, FgrFlatAccessAnalyzer.FlatPropertyNames.Count);
+        Assert.Equal(36, FgrFlatAccessAnalyzer.FlatPropertyNames.Count);
     }
 
     /// <summary>

@@ -169,27 +169,21 @@ namespace Zipper.Tests
         }
 
         [Fact]
-        public void Clone_LoadFileFormatsList_IsIsolatedFromOriginal()
+        public void Clone_FormatsList_IsIsolatedFromOriginal()
         {
             var original = new FileGenerationRequest
             {
-                LoadFile = new LoadFileConfig { LoadFileFormats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
             };
             var clone = original.Clone();
 
-            clone.LoadFile.LoadFileFormats!.Add(LoadFileFormat.Csv);
+            Assert.NotSame(original.LoadFile.Formats, clone.LoadFile.Formats);
 
-            Assert.Single(original.LoadFile.LoadFileFormats!);
-            Assert.Equal(2, clone.LoadFile.LoadFileFormats!.Count);
-            Assert.NotSame(original.LoadFile.LoadFileFormats, clone.LoadFile.LoadFileFormats);
-        }
+            var newFormats = new List<LoadFileFormat>(clone.LoadFile.Formats) { LoadFileFormat.Csv };
+            clone.LoadFile = clone.LoadFile with { Formats = newFormats };
 
-        [Fact]
-        public void Clone_NullLoadFileFormats_RemainsNull()
-        {
-            var original = new FileGenerationRequest();
-            var clone = original.Clone();
-            Assert.Null(clone.LoadFile.LoadFileFormats);
+            Assert.Single(original.LoadFile.Formats);
+            Assert.Equal(2, clone.LoadFile.Formats.Count);
         }
     }
 }

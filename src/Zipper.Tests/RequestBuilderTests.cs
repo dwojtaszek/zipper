@@ -92,7 +92,8 @@ namespace Zipper.Tests
 
             Assert.True(result!.LoadfileOnly);
             Assert.Equal("LF", result!.Delimiters.EndOfLine);
-            Assert.Equal(LoadFileFormat.Opt, result!.LoadFile.LoadFileFormat);
+            Assert.Single(result!.LoadFile.Formats);
+            Assert.Equal(LoadFileFormat.Opt, result!.LoadFile.Formats[0]);
         }
 
         [Fact]
@@ -183,10 +184,10 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.NotNull(result!.LoadFile.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.LoadFileFormats);
-            Assert.Contains(LoadFileFormat.Csv, result!.LoadFile.LoadFileFormats);
+            Assert.Equal(3, result!.LoadFile.Formats.Count);
+            Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
+            Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.Formats);
+            Assert.Contains(LoadFileFormat.Csv, result!.LoadFile.Formats);
         }
 
         [Fact]
