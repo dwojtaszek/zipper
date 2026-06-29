@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 
 namespace Zipper.Tests;

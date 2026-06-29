@@ -1,9 +1,18 @@
 using Xunit;
+using Zipper.Config;
 
 namespace Zipper
 {
     public class BatesSequenceTests
     {
+        [Fact]
+        public void BatesNumberConfig_ShouldBeInConfigNamespace()
+        {
+            var type = typeof(BatesSequence).Assembly.GetType("Zipper.Config.BatesNumberConfig");
+            Assert.NotNull(type);
+            Assert.Equal("Zipper.Config", type.Namespace);
+        }
+
         [Fact]
         public void Generate_WithDefaultConfig_ShouldGenerateCorrectNumber()
         {
