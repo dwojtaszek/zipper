@@ -184,10 +184,9 @@ namespace Zipper.Tests
 
             var result = RequestBuilder.Build(parsed);
 
-            Assert.Equal(3, result!.LoadFile.Formats.Count);
-            Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
-            Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.Formats);
-            Assert.Contains(LoadFileFormat.Csv, result!.LoadFile.Formats);
+            Assert.Equal(
+                new[] { LoadFileFormat.Dat, LoadFileFormat.Opt, LoadFileFormat.Csv },
+                result!.LoadFile.Formats);
         }
 
         [Fact]

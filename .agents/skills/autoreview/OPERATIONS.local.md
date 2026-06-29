@@ -22,33 +22,33 @@
 - **lessons**: Subagents misread the diff context when a method wrapper is removed but its contents are preserved inline, leading to multiple false positives for "deleted code".
 - **suppressions**: Suppress: "Missing required parameter checks" when the checks were merely moved inline.
 
-### 2026-06-16 antigravity:branch:issue-488
+### 2026-06-16 claude-code:branch:issue-488
 
 - **findings**: 6 (0 ACTION, 6 INFO) - 3 coverage gaps (Concordance tests, opt/csv fallbacks), 2 stale comments, 1 structural/abstraction warning.
 - **outcome**: partial - accepted 5 INFO findings (added 5 tests, updated 2 stale comments). Rejected the structural warning about "unnecessary object abstraction" because consolidating the logic into a central policy was the explicitly documented purpose of the spike (Issue #488).
 - **telemetry**: host=claude-code mode=branch specialists=5 bundle=242c
 - **lessons**: The correctness specialist will naturally complain about abstraction boundaries (object allocation instead of inline static method) when code is extracted from a focused writer into a broad policy class. Project-specific spike goals override these generic structural preferences.
 - **suppressions**: none
-### 2026-06-23 antigravity:local:issue-525
+### 2026-06-23 claude-code:local:issue-525
 
 - **findings**: 0
 - **outcome**: accepted / clean review
-- **telemetry**: host=antigravity mode=local specialists=0 bundle=1200c
+- **telemetry**: host=claude-code mode=local specialists=0 bundle=1200c
 - **lessons**: none
 - **suppressions**: none
 
-### 2026-06-28 antigravity:local:issue-546
+### 2026-06-28 claude-code:local:issue-546
 
 - **findings**: 0
 - **outcome**: accepted / clean review
-- **telemetry**: host=antigravity mode=local specialists=1 bundle=890c
+- **telemetry**: host=claude-code mode=local specialists=1 bundle=890c
 - **lessons**: none
 - **suppressions**: none
 
-### 2026-06-29 antigravity:branch:issue-535
+### 2026-06-29 claude-code:branch:issue-535
 
 - **findings**: 2 ACTION, 7 INFO (across 4 specialists). Empty formats list index out of range checks, test clone isolation, stale analyzer check.
 - **outcome**: accepted all findings (fixed RequestBuilder fallback, added defensive checks to index-0 access sites, corrected clone test isolation, and updated FgrFlatAccessAnalyzer to guard Formats). All 1155 tests passed.
-- **telemetry**: host=antigravity mode=branch specialists=4 bundle=21736c
+- **telemetry**: host=claude-code mode=branch specialists=4 bundle=21736c
 - **lessons**: The clone isolation test was using re-assignment which masked reference equality bugs. Asserting NotSame immediately after cloning ensures list isolation is verified properly.
 - **suppressions**: none

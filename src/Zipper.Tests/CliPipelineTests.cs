@@ -418,6 +418,7 @@ namespace Zipper
 
             // Assert
             Assert.NotNull(result);
+            Assert.Single(result.LoadFile.Formats);
             Assert.Equal(expected, result.LoadFile.Formats[0]);
         }
 

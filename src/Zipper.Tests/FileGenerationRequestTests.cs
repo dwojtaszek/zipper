@@ -178,6 +178,7 @@ namespace Zipper.Tests
             var clone = original.Clone();
 
             Assert.NotSame(original.LoadFile.Formats, clone.LoadFile.Formats);
+            Assert.Equal(original.LoadFile.Formats, clone.LoadFile.Formats);
 
             var newFormats = new List<LoadFileFormat>(clone.LoadFile.Formats) { LoadFileFormat.Csv };
             clone.LoadFile = clone.LoadFile with { Formats = newFormats };

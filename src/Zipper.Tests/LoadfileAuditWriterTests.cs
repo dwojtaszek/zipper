@@ -92,6 +92,31 @@ public class LoadfileAuditWriterTests
     }
 
     [Fact]
+    public void GenerateAuditJson_EmptyFormats_FallsBackToDat()
+    {
+        // Arrange
+        var request = new FileGenerationRequest();
+        request.LoadFile = request.LoadFile with
+        {
+            Formats = new List<LoadFileFormat>(),
+            Encoding = "UTF-8",
+            IsEncodingExplicit = true
+        };
+        request.Output = request.Output with { FileCount = 10 };
+
+        // Act
+        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
+
+        // Assert
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal("test.dat", root.GetProperty("fileName").GetString());
+        Assert.Equal("DAT (Metadata)", root.GetProperty("format").GetString());
+        Assert.Equal(10, root.GetProperty("totalRecords").GetInt64());
+    }
+
+    [Fact]
     public void GenerateAuditJson_WithAnomalies_SerializesAnomaliesAndEnablesChaosMode()
     {
         // Arrange
