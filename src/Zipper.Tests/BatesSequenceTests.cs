@@ -6,7 +6,7 @@ namespace Zipper
     public class BatesSequenceTests
     {
         [Fact]
-        public void BatesNumberConfig_ShouldBeInConfigNamespace()
+        public void GetType_WhenResolvingBatesNumberConfig_ReturnsConfigNamespace()
         {
             var type = typeof(BatesSequence).Assembly.GetType("Zipper.Config.BatesNumberConfig");
             Assert.NotNull(type);
