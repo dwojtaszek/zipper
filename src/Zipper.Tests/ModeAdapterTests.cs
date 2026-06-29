@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.Config;
 
 namespace Zipper.Tests
 {

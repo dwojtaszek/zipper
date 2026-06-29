@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Config;
 using Zipper.Profiles;
 
 namespace Zipper.Tests;
