@@ -8,28 +8,10 @@ namespace Zipper.Tests;
 /// </summary>
 public class EditorConfigTests
 {
-    private const string SolutionFileName = "zipper.sln";
     private const string EditorConfigFileName = ".editorconfig";
     private const int RegexTimeoutSeconds = 1;
 
-    private static readonly string RepoRoot = FindRepoRoot(System.AppContext.BaseDirectory);
-
-    private static string FindRepoRoot(string startDir)
-    {
-        var dir = new DirectoryInfo(startDir);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, SolutionFileName)))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new System.InvalidOperationException(
-            $"Could not find repo root ({SolutionFileName}) walking up from: {startDir}");
-    }
+    private static readonly string RepoRoot = RepoRootFinder.Find();
 
     [Fact]
     public void EditorConfig_ShouldHave_SecurityCategory_SetToError()

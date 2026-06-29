@@ -25,11 +25,15 @@ gha-creds-*.json
 TODO.md
 
 # Claude Code
-.claude/
+!.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
 !.claude/skills/test-driven-development/
 !.claude/skills/testing-anti-patterns/
 !.claude/skills/systematic-debugging/
 !.claude/skills/root-cause-tracing/
+!.claude/skills/architecture-deepening/
 
 # Test Results
 **/TestResults/
