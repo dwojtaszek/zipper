@@ -475,55 +475,62 @@ public class ZipArchiveServiceTests
         // Arrange
         var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
-        var zipPath = Path.Combine(tempDir, "test.zip");
-        var loadPath = Path.Combine(tempDir, "load.dat");
-        const int fileCount = 5;
-
-        var request = new FileGenerationRequest
+        try
         {
-            Output = new OutputConfig
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            const int fileCount = 5;
+
+            var request = new FileGenerationRequest
             {
-                FileType = "pdf",
-                FileCount = fileCount,
-                Concurrency = 1,
-                IncludeLoadFile = false,
-            },
-            Chaos = new ChaosConfig
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = fileCount,
+                    Concurrency = 1,
+                    IncludeLoadFile = false,
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = true,
+                    ChaosAmount = "100%",
+                    ChaosTypes = "columns",
+                }
+            };
+
+            var testFiles = new List<FileData>();
+            for (int i = 1; i <= fileCount; i++)
             {
-                ChaosMode = true,
-                ChaosAmount = "100%",
-                ChaosTypes = "columns",
+                testFiles.Add(this.CreateTestFileData(i));
             }
-        };
 
-        var testFiles = new List<FileData>();
-        for (int i = 1; i <= fileCount; i++)
-        {
-            testFiles.Add(this.CreateTestFileData(i));
+            var channel = Channel.CreateUnbounded<FileData>();
+            foreach (var file in testFiles)
+            {
+                await channel.Writer.WriteAsync(file);
+            }
+            channel.Writer.Complete();
+
+            // Act
+            await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+            // Assert — audit file totalRecords should equal fileCount
+            var propertiesPath = loadPath + "_properties.json";
+            Assert.True(File.Exists(propertiesPath));
+            var json = await File.ReadAllTextAsync(propertiesPath);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var chaosModeElement = doc.RootElement.GetProperty("chaosMode");
+
+            // Assert that chaos was NOT enabled in the audit properties
+            Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
         }
-
-        var channel = Channel.CreateUnbounded<FileData>();
-        foreach (var file in testFiles)
+        finally
         {
-            await channel.Writer.WriteAsync(file);
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
         }
-        channel.Writer.Complete();
-
-        // Act
-        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
-
-        // Assert — audit file totalRecords should equal fileCount
-        var propertiesPath = loadPath + "_properties.json";
-        Assert.True(File.Exists(propertiesPath));
-        var json = await File.ReadAllTextAsync(propertiesPath);
-        var doc = System.Text.Json.JsonDocument.Parse(json);
-        var chaosModeElement = doc.RootElement.GetProperty("chaosMode");
-
-        // Assert that chaos was NOT enabled in the audit properties
-        Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
-
-        // Cleanup
-        Directory.Delete(tempDir, true);
     }
 
     private class MockMemoryOwner : System.Buffers.IMemoryOwner<byte>

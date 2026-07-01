@@ -170,8 +170,8 @@ internal static class LoadFileAuditWriter
             },
             ChaosMode = new AuditChaosMode
             {
-                Enabled = request.Chaos.ChaosMode,
-                TargetAmount = request.Chaos.ChaosAmount,
+                Enabled = request.Chaos.ChaosMode && anomalies is not null,
+                TargetAmount = request.Chaos.ChaosMode && anomalies is not null ? request.Chaos.ChaosAmount : null,
                 TotalAnomalies = anomalies?.Count ?? 0,
                 InjectedAnomalies = anomalies is not null && anomalies.Count > 0
                     ? anomalies.Select(a => new AuditAnomalyEntry

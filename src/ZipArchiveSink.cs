@@ -148,7 +148,7 @@ internal class ZipArchiveSink : IArchiveSink
     {
         var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
         using var loadFileStream = loadFileEntry.Open();
-        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles, null).ConfigureAwait(false);
+        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles).ConfigureAwait(false);
     }
 
     private async Task GenerateLoadFileToDiskAsync(
@@ -160,7 +160,7 @@ internal class ZipArchiveSink : IArchiveSink
         var fileStream = new FileStream(currentFilePath, FileMode.Create);
         await using (fileStream.ConfigureAwait(false))
         {
-            await loadFileWriter.WriteAsync(fileStream, request, processedFiles, null).ConfigureAwait(false);
+            await loadFileWriter.WriteAsync(fileStream, request, processedFiles).ConfigureAwait(false);
             await fileStream.FlushAsync().ConfigureAwait(false);
         }
     }

@@ -172,7 +172,7 @@ internal static class ProductionSetGenerator
         var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (datStream.ConfigureAwait(false))
         {
-            await datWriter.WriteAsync(datStream, request, fileDataList, null, cancellationToken).ConfigureAwait(false);
+            await datWriter.WriteAsync(datStream, request, fileDataList, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(datPath, request, fileDataList, null, LoadFileFormat.Dat);
@@ -184,7 +184,7 @@ internal static class ProductionSetGenerator
         var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (optStream.ConfigureAwait(false))
         {
-            await optWriter.WriteAsync(optStream, request, fileDataList, null, cancellationToken).ConfigureAwait(false);
+            await optWriter.WriteAsync(optStream, request, fileDataList, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(optPath, request, fileDataList, null, LoadFileFormat.Opt);
