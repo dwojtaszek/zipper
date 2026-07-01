@@ -335,9 +335,9 @@ internal sealed class DatComposer : ILoadFileComposer
                 var attach = fileData.Attachment!.Value;
                 var childExt = Path.GetExtension(attach.filename);
                 var childBates = childId;
-                var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace(Path.DirectorySeparatorChar, '\\');
-                var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace(Path.DirectorySeparatorChar, '\\');
-                var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\');
+                var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace('/', '\\');
+                var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\');
+                var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace('/', '\\');
 
                 yield return this.MakeRecord(
                     childId,

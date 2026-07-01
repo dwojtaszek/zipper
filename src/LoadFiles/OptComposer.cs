@@ -112,7 +112,7 @@ internal sealed class OptComposer : ILoadFileComposer
             {
                 string childBates = $"{baseBatesNumber}_A001";
                 string childImagePath = isProductionSet
-                    ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace(Path.DirectorySeparatorChar, '\\')
+                    ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace('/', '\\')
                     : $"IMAGES\\{childBates}.tif";
                 yield return MakeRecord(childBates, volume, childImagePath, "Y", "1");
             }
