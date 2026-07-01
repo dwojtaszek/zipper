@@ -61,3 +61,11 @@
 - **lessons**: none
 - **suppressions**: none
 
+### 2026-07-01 antigravity:branch:issue-561
+
+- **findings**: 1 INFO (unused chaosEngine parameters in ZipArchiveSink helper methods)
+- **outcome**: accepted (cleaned up unused parameters from the four helper methods in ZipArchiveSink.cs).
+- **telemetry**: host=antigravity mode=branch specialists=1 bundle=2800c
+- **lessons**: none
+- **suppressions**: none
+

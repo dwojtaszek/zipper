@@ -639,4 +639,32 @@ public class ProductionSetTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task GenerateAsync_ChaosModeEnabled_DoesNotApplyChaos()
+    {
+        // Arrange
+        var request = this.CreateTestRequest(count: 5, batesPrefix: "ABC", batesDigits: 6);
+        request.Chaos = new ChaosConfig
+        {
+            ChaosMode = true,
+            ChaosAmount = "100%",
+            ChaosTypes = "columns",
+        };
+        request.LoadfileOnly = true; // bypass the exception guard in ProductionSetGenerator
+
+        // Act
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Assert
+        var propertiesPath = Path.Combine(result.ProductionPath, "DATA", "loadfile_properties.json");
+        Assert.True(File.Exists(propertiesPath));
+        var json = await File.ReadAllTextAsync(propertiesPath);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var chaosModeElement = doc.RootElement.GetProperty("chaosMode");
+
+        // Assert that totalAnomalies is 0 because ChaosEngine should not be constructed/used in ProductionSetGenerator
+        Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
+    }
 }
+
