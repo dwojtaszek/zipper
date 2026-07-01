@@ -4,7 +4,7 @@ using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
 
-public class CsvLoadFileWriterTests : TempDirectoryTestBase
+public class CsvComposingWriterTests : TempDirectoryTestBase
 {
     private async Task<string> CaptureCsvOutput(FileGenerationRequest request, List<FileData> files)
     {

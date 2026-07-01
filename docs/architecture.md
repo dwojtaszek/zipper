@@ -19,7 +19,7 @@ The diagrams in this file are a **contract**, not just documentation:
 | Mode | Trigger | Adapter | Generator |
 |------|---------|---------|-----------|
 | **Standard** | default | `StandardMode` | `ParallelFileGenerator.GenerateFilesAsync()` → Archive (.zip) + Load File |
-| **Loadfile-Only** | `--loadfile-only` | `LoadfileOnlyMode` | `LoadfileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit |
+| **Loadfile-Only** | `--loadfile-only` | `LoadFileOnlyMode` | `LoadFileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit |
 | **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
 
 ## Standard Pipeline
@@ -33,7 +33,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 ## Chaos Engine (Loadfile-Only Mode only)
 
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. DAT and OPT anomaly types are cataloged in `ChaosAnomalyTypes.cs` — see source for current list. Tracked in `_properties.json` via `LoadfileAuditWriter`.
+`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. DAT and OPT anomaly types are cataloged in `ChaosAnomalyTypes.cs` — see source for current list. Tracked in `_properties.json` via `LoadFileAuditWriter`.
 
 ## Three-Mode Pipeline
 
@@ -42,7 +42,7 @@ graph TD
     CLI["CLI (Program.cs)"]
     CLI --> SelectMode["SelectMode(request)"]
     SelectMode -->|"default"| StandardMode["StandardMode"]
-    SelectMode -->|"--loadfile-only"| LoadfileOnlyMode["LoadfileOnlyMode"]
+    SelectMode -->|"--loadfile-only"| LoadFileOnlyMode["LoadFileOnlyMode"]
     SelectMode -->|"--production-set"| ProductionSetMode["ProductionSetMode"]
 
     StandardMode --> PFG["ParallelFileGenerator"]
@@ -51,7 +51,7 @@ graph TD
     ZAS --> ZIP["ZIP Archive"]
     ZAS --> LF1["Load Files (all formats)"]
 
-    LoadfileOnlyMode --> LOG["LoadfileOnlyGenerator"]
+    LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
     LOG --> LF2["Load Files (DAT/OPT)"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
     Chaos --> Audit["_properties.json Audit"]

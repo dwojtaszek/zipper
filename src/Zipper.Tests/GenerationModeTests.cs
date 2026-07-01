@@ -1,10 +1,10 @@
 using Xunit;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 /// <summary>
 /// End-to-end tests for the generation mode orchestration branches
-/// (StandardMode, ProductionSetMode, LoadfileOnlyMode) driven through Program.Main.
+/// (StandardMode, ProductionSetMode, LoadFileOnlyMode) driven through Program.Main.
 /// </summary>
 public class GenerationModeTests
 {
@@ -94,7 +94,7 @@ public class GenerationModeTests
     }
 
     [Fact]
-    public async Task Main_LoadfileOnlyModeWithChaosTypes_GeneratesLoadFile()
+    public async Task Main_LoadFileOnlyModeWithChaosTypes_GeneratesLoadFile()
     {
         var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
@@ -121,7 +121,7 @@ public class GenerationModeTests
     }
 
     [Fact]
-    public async Task Main_LoadfileOnlyModeWithChaosScenario_PrintsResolvedChaosAmount()
+    public async Task Main_LoadFileOnlyModeWithChaosScenario_PrintsResolvedChaosAmount()
     {
         var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);

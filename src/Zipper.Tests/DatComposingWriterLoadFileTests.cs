@@ -5,7 +5,7 @@ using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
 
-public class DatLoadFileWriterTests : TempDirectoryTestBase
+public class DatComposingWriterLoadFileTests : TempDirectoryTestBase
 {
 
 

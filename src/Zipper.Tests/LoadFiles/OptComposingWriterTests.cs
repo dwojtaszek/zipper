@@ -5,7 +5,7 @@ using Zipper.LoadFiles;
 
 namespace Zipper.Tests.LoadFiles;
 
-public class OptWriterTests : TempDirectoryTestBase
+public class OptComposingWriterTests : TempDirectoryTestBase
 {
     [Fact]
     public void OptWriter_FormatName_ReturnsExpectedValuePerMode()
@@ -59,7 +59,7 @@ public class OptWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task WriteAsync_LoadfileOnlyMode_GeneratesImages()
+    public async Task WriteAsync_LoadFileOnlyMode_GeneratesImages()
     {
         var request = new FileGenerationRequest
         {

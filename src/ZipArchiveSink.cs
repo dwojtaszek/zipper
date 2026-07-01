@@ -124,7 +124,7 @@ internal class ZipArchiveSink : IArchiveSink
         var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
         var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
 
-        var chaosEngine = LoadfileAuditWriter.BuildChaosEngine(request, processedFiles, format);
+        var chaosEngine = LoadFileAuditWriter.BuildChaosEngine(request, processedFiles, format);
 
         if (request.Output.IncludeLoadFile)
         {
@@ -177,7 +177,7 @@ internal class ZipArchiveSink : IArchiveSink
         LoadFileFormat format,
         string actualLoadFileName)
     {
-        var auditJson = LoadfileAuditWriter.GenerateAuditJson(actualLoadFileName, request, processedFiles, chaosEngine?.Anomalies, format);
+        var auditJson = LoadFileAuditWriter.GenerateAuditJson(actualLoadFileName, request, processedFiles, chaosEngine?.Anomalies, format);
         var propertiesEntry = archive.CreateEntry(actualLoadFileName + "_properties.json", CompressionLevel.Optimal);
         using var propertiesStream = propertiesEntry.Open();
         using var propertiesWriter = new StreamWriter(propertiesStream);
@@ -191,7 +191,7 @@ internal class ZipArchiveSink : IArchiveSink
         LoadFileFormat format,
         string currentFilePath)
     {
-        var auditJson = LoadfileAuditWriter.GenerateAuditJson(currentFilePath, request, processedFiles, chaosEngine?.Anomalies, format);
+        var auditJson = LoadFileAuditWriter.GenerateAuditJson(currentFilePath, request, processedFiles, chaosEngine?.Anomalies, format);
         await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson).ConfigureAwait(false);
     }
 

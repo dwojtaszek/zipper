@@ -3,45 +3,211 @@ using System.Diagnostics;
 using System.IO.Compression;
 using Zipper.Config;
 
-namespace Zipper
-{
-    /// <summary>
-    /// Simple performance benchmark runner for quick performance validation.
-    /// </summary>
-    public static class PerformanceBenchmarkRunner
-    {
-        public static async Task RunBenchmarksAsync()
-        {
-            Console.WriteLine("=== Performance Benchmark Suite ===");
-            Console.WriteLine();
-            await BenchmarkParallelVsSequentialAsync().ConfigureAwait(false);
-            await BenchmarkMemoryPoolingAsync().ConfigureAwait(false);
-            await BenchmarkScalabilityAsync().ConfigureAwait(false);
-            await BenchmarkAllocationAsync().ConfigureAwait(false);
+namespace Zipper;
 
-            Console.WriteLine("=== Benchmark Suite Complete ===");
+/// <summary>
+/// Simple performance benchmark runner for quick performance validation.
+/// </summary>
+public static class PerformanceBenchmarkRunner
+{
+    public static async Task RunBenchmarksAsync()
+    {
+        Console.WriteLine("=== Performance Benchmark Suite ===");
+        Console.WriteLine();
+        await BenchmarkParallelVsSequentialAsync().ConfigureAwait(false);
+        await BenchmarkMemoryPoolingAsync().ConfigureAwait(false);
+        await BenchmarkScalabilityAsync().ConfigureAwait(false);
+        await BenchmarkAllocationAsync().ConfigureAwait(false);
+
+        Console.WriteLine("=== Benchmark Suite Complete ===");
+    }
+
+    private static async Task BenchmarkAllocationAsync()
+    {
+        Console.WriteLine("4. Allocation Impact");
+        Console.WriteLine("===================");
+
+        const int fileCount = 1000;
+#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
+        var tempDir = Path.GetTempPath();
+#pragma warning restore S5443
+        var outputPath = Path.Combine(tempDir, $"bench_alloc_{Guid.NewGuid()}");
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            // Force full GC before starting
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = fileCount,
+                    FileType = "pdf",
+                    Folders = 10,
+                    Concurrency = PerformanceConstants.DefaultConcurrency,
+                },
+                LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
+            };
+
+            await generator.GenerateFilesAsync(request).ConfigureAwait(false);
+
+            var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
+            var totalAllocated = allocatedAfter - allocatedBefore;
+            var bytesPerFile = totalAllocated / fileCount;
+
+            Console.WriteLine($"  Files Generated: {fileCount}");
+            Console.WriteLine($"  Total Allocated: {totalAllocated:N0} bytes");
+            Console.WriteLine($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
+        }
+        finally
+        {
+            CleanupDirectory(outputPath);
         }
 
-        private static async Task BenchmarkAllocationAsync()
-        {
-            Console.WriteLine("4. Allocation Impact");
-            Console.WriteLine("===================");
+        Console.WriteLine();
+    }
 
-            const int fileCount = 1000;
+    private static async Task BenchmarkParallelVsSequentialAsync()
+    {
+        Console.WriteLine("1. Parallel vs Sequential Generation");
+        Console.WriteLine("=====================================");
+
+        const int fileCount = 500;
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
-            var tempDir = Path.GetTempPath();
+        var tempDir = Path.GetTempPath();
 #pragma warning restore S5443
-            var outputPath = Path.Combine(tempDir, $"bench_alloc_{Guid.NewGuid()}");
+        var outputPath1 = Path.Combine(tempDir, $"bench_seq_{Guid.NewGuid()}");
+        var outputPath2 = Path.Combine(tempDir, $"bench_par_{Guid.NewGuid()}");
+        Directory.CreateDirectory(outputPath1);
+        Directory.CreateDirectory(outputPath2);
+
+        try
+        {
+            // Sequential baseline
+            var sw = Stopwatch.StartNew();
+            await GenerateSequentialFilesAsync(fileCount, outputPath1).ConfigureAwait(false);
+            sw.Stop();
+            var sequentialTime = sw.ElapsedMilliseconds;
+
+            // Parallel generation
+            sw.Restart();
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath2,
+                    FileCount = fileCount,
+                    FileType = "pdf",
+                    Folders = 3,
+                    Concurrency = PerformanceConstants.DefaultConcurrency,
+                },
+                LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
+            };
+            await generator.GenerateFilesAsync(request).ConfigureAwait(false);
+            sw.Stop();
+            var parallelTime = sw.ElapsedMilliseconds;
+
+            var speedup = (double)sequentialTime / parallelTime;
+
+            Console.WriteLine($"  Sequential: {sequentialTime}ms");
+            Console.WriteLine($"  Parallel:   {parallelTime}ms");
+            Console.WriteLine($"  Speedup:    {speedup:F2}x");
+            Console.WriteLine($"  Status:     {(speedup >= 1.0 ? "✓ PASS" : "✗ FAIL")}");
+        }
+        finally
+        {
+            CleanupDirectory(outputPath1);
+            CleanupDirectory(outputPath2);
+        }
+
+        Console.WriteLine();
+    }
+
+    private static Task BenchmarkMemoryPoolingAsync()
+    {
+        Console.WriteLine("2. Memory Pool Performance");
+        Console.WriteLine("===========================");
+
+        const int iterations = 50;
+        const int bufferSize = 2 * 1024 * 1024; // 2MB
+
+        // Without pooling
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        var memoryBefore = GC.GetTotalMemory(false);
+        var sw = Stopwatch.StartNew();
+
+        for (int i = 0; i < iterations; i++)
+        {
+            var buffer = new byte[bufferSize];
+            buffer[0] = (byte)i;
+        }
+
+        sw.Stop();
+        var memoryAfterWithoutPool = GC.GetTotalMemory(false);
+        var timeWithoutPool = sw.ElapsedMilliseconds;
+
+        // With pooling
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        memoryBefore = GC.GetTotalMemory(false);
+        sw.Restart();
+
+        for (int i = 0; i < iterations; i++)
+        {
+            using var memoryOwner = MemoryPool<byte>.Shared.Rent(bufferSize);
+            memoryOwner.Memory.Span[0] = (byte)i;
+        }
+
+        sw.Stop();
+        var memoryAfterWithPool = GC.GetTotalMemory(false);
+        var timeWithPool = sw.ElapsedMilliseconds;
+
+        var timeSpeedup = (double)timeWithoutPool / timeWithPool;
+        var memoryReduction = (double)(memoryAfterWithoutPool - memoryAfterWithPool) / memoryAfterWithoutPool * 100;
+
+        Console.WriteLine($"  Without Pool: {timeWithoutPool}ms, {memoryAfterWithoutPool:N0} bytes");
+        Console.WriteLine($"  With Pool:    {timeWithPool}ms, {memoryAfterWithPool:N0} bytes");
+        Console.WriteLine($"  Time Speedup: {timeSpeedup:F2}x");
+        Console.WriteLine($"  Memory Reduction: {memoryReduction:F1}%");
+        Console.WriteLine($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
+
+        Console.WriteLine();
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task BenchmarkScalabilityAsync()
+    {
+        Console.WriteLine("3. Scalability Test");
+        Console.WriteLine("===================");
+
+        var fileCounts = new[] { 100, 500, 1000, 2000 };
+#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
+        var tempDir = Path.GetTempPath();
+#pragma warning restore S5443
+
+        foreach (var fileCount in fileCounts)
+        {
+            var outputPath = Path.Combine(tempDir, $"bench_scale_{fileCount}_{Guid.NewGuid()}");
             Directory.CreateDirectory(outputPath);
 
             try
             {
-                // Force full GC before starting
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-                GC.Collect();
-
-                var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+                var sw = Stopwatch.StartNew();
 
                 var generator = new ParallelFileGenerator();
                 var request = new FileGenerationRequest
@@ -51,227 +217,60 @@ namespace Zipper
                         OutputPath = outputPath,
                         FileCount = fileCount,
                         FileType = "pdf",
-                        Folders = 10,
-                        Concurrency = PerformanceConstants.DefaultConcurrency,
+                        Folders = Math.Max(1, fileCount / 200),
+                        Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, (fileCount / 50) + 1),
                     },
                     LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
                 };
 
-                await generator.GenerateFilesAsync(request).ConfigureAwait(false);
+                var result = await generator.GenerateFilesAsync(request).ConfigureAwait(false);
+                sw.Stop();
 
-                var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
-                var totalAllocated = allocatedAfter - allocatedBefore;
-                var bytesPerFile = totalAllocated / fileCount;
+                var throughput = result.FilesPerSecond;
+                var avgTimePerFile = sw.ElapsedMilliseconds / (double)fileCount;
 
-                Console.WriteLine($"  Files Generated: {fileCount}");
-                Console.WriteLine($"  Total Allocated: {totalAllocated:N0} bytes");
-                Console.WriteLine($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
+                Console.WriteLine($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file");
             }
             finally
             {
                 CleanupDirectory(outputPath);
             }
-
-            Console.WriteLine();
         }
 
-        private static async Task BenchmarkParallelVsSequentialAsync()
+        Console.WriteLine("  Status: ✓ PASS (scalability verified)");
+        Console.WriteLine();
+    }
+
+    private static async Task GenerateSequentialFilesAsync(long count, string outputPath)
+    {
+        var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
+
+        using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
+        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+
+        var placeholderContent = PlaceholderFiles.GetContent("pdf");
+
+        for (long i = 1; i <= count; i++)
         {
-            Console.WriteLine("1. Parallel vs Sequential Generation");
-            Console.WriteLine("=====================================");
+            var fileName = $"{i:D8}.pdf";
+            var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
+            using var entryStream = entry.Open();
+            await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
+        }
+    }
 
-            const int fileCount = 500;
-#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
-            var tempDir = Path.GetTempPath();
-#pragma warning restore S5443
-            var outputPath1 = Path.Combine(tempDir, $"bench_seq_{Guid.NewGuid()}");
-            var outputPath2 = Path.Combine(tempDir, $"bench_par_{Guid.NewGuid()}");
-            Directory.CreateDirectory(outputPath1);
-            Directory.CreateDirectory(outputPath2);
-
+    private static void CleanupDirectory(string path)
+    {
+        if (Directory.Exists(path))
+        {
             try
             {
-                // Sequential baseline
-                var sw = Stopwatch.StartNew();
-                await GenerateSequentialFilesAsync(fileCount, outputPath1).ConfigureAwait(false);
-                sw.Stop();
-                var sequentialTime = sw.ElapsedMilliseconds;
-
-                // Parallel generation
-                sw.Restart();
-                var generator = new ParallelFileGenerator();
-                var request = new FileGenerationRequest
-                {
-                    Output = new OutputConfig
-                    {
-                        OutputPath = outputPath2,
-                        FileCount = fileCount,
-                        FileType = "pdf",
-                        Folders = 3,
-                        Concurrency = PerformanceConstants.DefaultConcurrency,
-                    },
-                    LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
-                };
-                await generator.GenerateFilesAsync(request).ConfigureAwait(false);
-                sw.Stop();
-                var parallelTime = sw.ElapsedMilliseconds;
-
-                var speedup = (double)sequentialTime / parallelTime;
-
-                Console.WriteLine($"  Sequential: {sequentialTime}ms");
-                Console.WriteLine($"  Parallel:   {parallelTime}ms");
-                Console.WriteLine($"  Speedup:    {speedup:F2}x");
-                Console.WriteLine($"  Status:     {(speedup >= 1.0 ? "✓ PASS" : "✗ FAIL")}");
+                Directory.Delete(path, true);
             }
-            finally
+            catch
             {
-                CleanupDirectory(outputPath1);
-                CleanupDirectory(outputPath2);
-            }
-
-            Console.WriteLine();
-        }
-
-        private static Task BenchmarkMemoryPoolingAsync()
-        {
-            Console.WriteLine("2. Memory Pool Performance");
-            Console.WriteLine("===========================");
-
-            const int iterations = 50;
-            const int bufferSize = 2 * 1024 * 1024; // 2MB
-
-            // Without pooling
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            var memoryBefore = GC.GetTotalMemory(false);
-            var sw = Stopwatch.StartNew();
-
-            for (int i = 0; i < iterations; i++)
-            {
-                var buffer = new byte[bufferSize];
-                buffer[0] = (byte)i;
-            }
-
-            sw.Stop();
-            var memoryAfterWithoutPool = GC.GetTotalMemory(false);
-            var timeWithoutPool = sw.ElapsedMilliseconds;
-
-            // With pooling
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-
-            memoryBefore = GC.GetTotalMemory(false);
-            sw.Restart();
-
-            for (int i = 0; i < iterations; i++)
-            {
-                using var memoryOwner = MemoryPool<byte>.Shared.Rent(bufferSize);
-                memoryOwner.Memory.Span[0] = (byte)i;
-            }
-
-            sw.Stop();
-            var memoryAfterWithPool = GC.GetTotalMemory(false);
-            var timeWithPool = sw.ElapsedMilliseconds;
-
-            var timeSpeedup = (double)timeWithoutPool / timeWithPool;
-            var memoryReduction = (double)(memoryAfterWithoutPool - memoryAfterWithPool) / memoryAfterWithoutPool * 100;
-
-            Console.WriteLine($"  Without Pool: {timeWithoutPool}ms, {memoryAfterWithoutPool:N0} bytes");
-            Console.WriteLine($"  With Pool:    {timeWithPool}ms, {memoryAfterWithPool:N0} bytes");
-            Console.WriteLine($"  Time Speedup: {timeSpeedup:F2}x");
-            Console.WriteLine($"  Memory Reduction: {memoryReduction:F1}%");
-            Console.WriteLine($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
-
-            Console.WriteLine();
-
-            return Task.CompletedTask;
-        }
-
-        private static async Task BenchmarkScalabilityAsync()
-        {
-            Console.WriteLine("3. Scalability Test");
-            Console.WriteLine("===================");
-
-            var fileCounts = new[] { 100, 500, 1000, 2000 };
-#pragma warning disable S5443 // Using temp path is safe for local benchmark execution
-            var tempDir = Path.GetTempPath();
-#pragma warning restore S5443
-
-            foreach (var fileCount in fileCounts)
-            {
-                var outputPath = Path.Combine(tempDir, $"bench_scale_{fileCount}_{Guid.NewGuid()}");
-                Directory.CreateDirectory(outputPath);
-
-                try
-                {
-                    var sw = Stopwatch.StartNew();
-
-                    var generator = new ParallelFileGenerator();
-                    var request = new FileGenerationRequest
-                    {
-                        Output = new OutputConfig
-                        {
-                            OutputPath = outputPath,
-                            FileCount = fileCount,
-                            FileType = "pdf",
-                            Folders = Math.Max(1, fileCount / 200),
-                            Concurrency = Math.Min(PerformanceConstants.DefaultConcurrency, (fileCount / 50) + 1),
-                        },
-                        LoadFile = new LoadFileConfig { Distribution = DistributionType.Proportional },
-                    };
-
-                    var result = await generator.GenerateFilesAsync(request).ConfigureAwait(false);
-                    sw.Stop();
-
-                    var throughput = result.FilesPerSecond;
-                    var avgTimePerFile = sw.ElapsedMilliseconds / (double)fileCount;
-
-                    Console.WriteLine($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file");
-                }
-                finally
-                {
-                    CleanupDirectory(outputPath);
-                }
-            }
-
-            Console.WriteLine("  Status: ✓ PASS (scalability verified)");
-            Console.WriteLine();
-        }
-
-        private static async Task GenerateSequentialFilesAsync(long count, string outputPath)
-        {
-            var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-            var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
-
-            using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-            using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
-
-            var placeholderContent = PlaceholderFiles.GetContent("pdf");
-
-            for (long i = 1; i <= count; i++)
-            {
-                var fileName = $"{i:D8}.pdf";
-                var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-                using var entryStream = entry.Open();
-                await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
-            }
-        }
-
-        private static void CleanupDirectory(string path)
-        {
-            if (Directory.Exists(path))
-            {
-                try
-                {
-                    Directory.Delete(path, true);
-                }
-                catch
-                {
-                    // Best effort cleanup
-                }
+                // Best effort cleanup
             }
         }
     }

@@ -1,5 +1,7 @@
 namespace Zipper.Profiles.Generation;
 
+using Zipper.Profiles.Data;
+
 internal sealed class TextGenerator : IColumnValueGenerator
 {
     private readonly string colName;

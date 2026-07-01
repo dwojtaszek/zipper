@@ -1,8 +1,7 @@
 using System.Xml.Linq;
 using Xunit;
-using Zipper.Tests;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 /// <summary>
 /// Tests that verify Directory.Build.props contains the required build property settings.

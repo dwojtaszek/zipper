@@ -6,7 +6,7 @@ namespace Zipper;
 /// <summary>
 /// Generates the companion _properties.json audit file for loadfile-only mode.
 /// </summary>
-internal static class LoadfileAuditWriter
+internal static class LoadFileAuditWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

@@ -77,7 +77,7 @@ public class StandardModeTests
 }
 
 [Collection("ConsoleTests")]
-public class LoadfileOnlyModeTests
+public class LoadFileOnlyModeTests
 {
     [Fact]
     public async Task RunAsync_WithValidRequest_LogsResult()
@@ -88,7 +88,7 @@ public class LoadfileOnlyModeTests
 
         try
         {
-            var mode = new LoadfileOnlyMode((req, ct) => Task.FromResult(new LoadfileOnlyResult
+            var mode = new LoadFileOnlyMode((req, ct) => Task.FromResult(new LoadFileOnlyResult
             {
                 LoadFilePath = "/out/test.dat",
                 PropertiesFilePath = "/out/test.json",
@@ -132,7 +132,7 @@ public class LoadfileOnlyModeTests
     [Fact]
     public void Constructor_WithNullGenerate_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new LoadfileOnlyMode(null!));
+        Assert.Throws<ArgumentNullException>(() => new LoadFileOnlyMode(null!));
     }
 }
 

@@ -10,7 +10,7 @@
       process-global Console.SetOut/SetError, which races if collections run in
       parallel (rare, load-dependent flake in Main_WithSeedAndTargetZipSize...,
       issue #433). The assembly attribute [CollectionBehavior(DisableTest-
-      Parallelization = true)] in LoadfileOnlyGeneratorTests.cs enforces this;
+      Parallelization = true)] in LoadFileOnlyGeneratorTests.cs enforces this;
       do NOT re-add <ParallelizeTestCollections> here — under the MTP runner it
       can override that attribute and re-enable the race.
     -->

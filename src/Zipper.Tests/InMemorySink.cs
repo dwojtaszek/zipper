@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 internal class InMemorySink : IArchiveSink
 {

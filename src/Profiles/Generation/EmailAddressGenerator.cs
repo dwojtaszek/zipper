@@ -1,5 +1,7 @@
 namespace Zipper.Profiles.Generation;
 
+using Zipper.Profiles.Data;
+
 internal sealed class EmailAddressGenerator : IColumnValueGenerator
 {
     private static readonly string[] Domains = { "example.com", "company.org", "corp.net", "business.io", "enterprise.co" };

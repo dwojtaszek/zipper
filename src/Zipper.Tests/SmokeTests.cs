@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 public class SmokeTests
 {

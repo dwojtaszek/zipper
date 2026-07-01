@@ -4,7 +4,7 @@ using Zipper.LoadFiles;
 
 namespace Zipper.Tests.LoadFiles;
 
-public class ConcordanceWriterTests : TempDirectoryTestBase
+public class ConcordanceComposingWriterTests : TempDirectoryTestBase
 {
     [Fact]
     public async Task WriteAsync_ConcordanceWriter_ProducesConcordanceFormattedOutput()
