@@ -29,4 +29,17 @@ public class ArchitectureNamingTests
             Assert.True(exists, $"Renamed type '{name}' should exist in the production codebase.");
         }
     }
+
+    [Fact]
+    public void ProductionNativeFilePlan_ShouldBeNamedCorrectly()
+    {
+        var productionAssembly = typeof(Zipper.Program).Assembly;
+        var types = productionAssembly.GetTypes();
+
+        var documentPlanExists = types.Any(t => t.Name == "ProductionDocumentPlan" || t.FullName == "Zipper.ProductionDocumentPlan");
+        Assert.False(documentPlanExists, "ProductionDocumentPlan should be renamed to ProductionNativeFilePlan");
+
+        var nativeFilePlanExists = types.Any(t => t.Name == "ProductionNativeFilePlan" || t.FullName == "Zipper.ProductionNativeFilePlan");
+        Assert.True(nativeFilePlanExists, "ProductionNativeFilePlan should exist in the production codebase.");
+    }
 }

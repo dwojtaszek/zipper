@@ -425,12 +425,12 @@ public class ChaosEngineTests
     }
 
     [Fact]
-    public void OptBatesId_RemovesBatesNumber()
+    public void OptBatesNumber_RemovesBatesNumber()
     {
         var engine = new ChaosEngine(
             totalLines: 2,
             chaosAmount: "2",
-            chaosTypes: "opt-batesid",
+            chaosTypes: "opt-batesnumber",
             format: LoadFileFormat.Opt,
             columnDelimiter: ",",
             quoteDelimiter: string.Empty,
@@ -754,9 +754,9 @@ public class ChaosEngineTests
     [Theory]
     [InlineData(",VOL001,IMAGES\\IMG001.tif,Y,,,1", ",VOL001,IMAGES\\IMG001.tif,Y,,,1")]
     [InlineData("NO_COMMAS_HERE", "")]
-    public void OptBatesId_WithEdgeCaseLines_HandlesCorrectly(string input, string expected)
+    public void OptBatesNumber_WithEdgeCaseLines_HandlesCorrectly(string input, string expected)
     {
-        var engine = new ChaosEngine(1, "1", "opt-batesid", LoadFileFormat.Opt, ",", "", "\n", 42);
+        var engine = new ChaosEngine(1, "1", "opt-batesnumber", LoadFileFormat.Opt, ",", "", "\n", 42);
         var result = engine.Intercept(1, input, "DOC");
         Assert.Equal(expected, result);
     }

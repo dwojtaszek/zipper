@@ -37,7 +37,7 @@ internal class OptAnomalyApplier : IAnomalyApplier
                 result = ApplyOptPathCorruption(line);
                 description = "Corrupted the image path (Column 3).";
                 break;
-            case "opt-batesid":
+            case "opt-batesnumber":
                 result = ApplyOptBatesNumberCorruption(line);
                 description = "Removed the Bates Number (Column 1).";
                 break;

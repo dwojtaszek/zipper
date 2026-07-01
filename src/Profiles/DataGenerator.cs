@@ -3,7 +3,7 @@ using Zipper.Profiles.Generation;
 namespace Zipper.Profiles;
 
 /// <summary>
-/// Generates column values for a document using a ColumnProfile and registered IColumnValueGenerators.
+/// Generates column values for a Native File using a ColumnProfile and registered IColumnValueGenerators.
 /// </summary>
 internal class DataGenerator
 {

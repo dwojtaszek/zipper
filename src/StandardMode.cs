@@ -1,7 +1,7 @@
 namespace Zipper;
 
 /// <summary>
-/// Standard parallel file generation mode — produces a ZIP archive plus a load file.
+/// Standard parallel file generation mode — produces an Archive plus a Load File.
 /// </summary>
 internal class StandardMode : IGenerationMode
 {

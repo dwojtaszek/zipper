@@ -1,10 +1,10 @@
 namespace Zipper;
 
 /// <summary>
-/// Immutable plan for a single document in a Production Set.
+/// Immutable plan for a single Native File in a Production Set.
 /// Separates path planning from file writing.
 /// </summary>
-internal sealed record ProductionDocumentPlan
+internal sealed record ProductionNativeFilePlan
 {
     public required long Index { get; init; }
 
@@ -22,11 +22,11 @@ internal sealed record ProductionDocumentPlan
 }
 
 /// <summary>
-/// Plans the document layout for a Production Set without performing I/O.
+/// Plans the Native File layout for a Production Set without performing I/O.
 /// </summary>
 internal static class ProductionSetPlanner
 {
-    public static IReadOnlyList<ProductionDocumentPlan> Plan(FileGenerationRequest request)
+    public static IReadOnlyList<ProductionNativeFilePlan> Plan(FileGenerationRequest request)
     {
         var batesConfig = request.Bates
             ?? throw new InvalidOperationException("Production set requires Bates configuration.");
@@ -41,7 +41,7 @@ internal static class ProductionSetPlanner
             throw new InvalidOperationException("Production set requires VolumeSize > 0.");
         }
 
-        var plans = new List<ProductionDocumentPlan>((int)request.Output.FileCount);
+        var plans = new List<ProductionNativeFilePlan>((int)request.Output.FileCount);
         var nativeExt = request.Output.FileTypeLower;
         var batesSequence = BatesSequence.FromConfig(batesConfig);
 
@@ -51,7 +51,7 @@ internal static class ProductionSetPlanner
             var volName = $"VOL{volumeIndex:D3}";
             var batesNumber = batesSequence.Next().ToString();
 
-            plans.Add(new ProductionDocumentPlan
+            plans.Add(new ProductionNativeFilePlan
             {
                 Index = i,
                 VolumeIndex = volumeIndex,

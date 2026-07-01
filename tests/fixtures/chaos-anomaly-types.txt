@@ -11,4 +11,4 @@ opt-boundary
 opt-columns
 opt-pagecount
 opt-path
-opt-batesid
+opt-batesnumber

@@ -671,7 +671,7 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-columns`: Add or remove a comma to break the 7-column format
   - `opt-pagecount`: Replace the page count integer with an invalid value
   - `opt-path`: Corrupt the image path in column 3 with an invalid traversal path
-  - `opt-batesid`: Remove the Bates ID from column 1
+  - `opt-batesnumber`: Remove the Bates Number from column 1
 - **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description. The `totalRecords` count in the audit file must reflect only the data records, not including the header.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
 
