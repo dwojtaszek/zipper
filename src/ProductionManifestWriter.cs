@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Zipper;
 
 /// <summary>
-/// Writes a _manifest.json file describing a generated production set.
+/// Writes a Production Manifest describing a generated Production Set.
 /// </summary>
 internal static class ProductionManifestWriter
 {
@@ -15,15 +15,15 @@ internal static class ProductionManifestWriter
     };
 
     /// <summary>
-    /// Writes the production manifest to the specified directory.
+    /// Writes the Production Manifest to the specified directory.
     /// </summary>
-    /// <param name="productionPath">Root directory of the production set.</param>
+    /// <param name="productionPath">Root directory of the Production Set.</param>
     /// <param name="request">The file generation request.</param>
-    /// <param name="batesStart">First Bates number in the production.</param>
-    /// <param name="batesEnd">Last Bates number in the production.</param>
+    /// <param name="batesStart">First Bates Number in the Production Set.</param>
+    /// <param name="batesEnd">Last Bates Number in the Production Set.</param>
     /// <param name="volumeCount">Number of volume subfolders created.</param>
     /// <param name="generationTime">Total time for generation.</param>
-    /// <returns>Path to the manifest file.</returns>
+    /// <returns>Path to the Production Manifest.</returns>
     public static async Task<string> WriteAsync(
         string productionPath,
         FileGenerationRequest request,

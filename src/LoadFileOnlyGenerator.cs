@@ -4,15 +4,16 @@ using Zipper.LoadFiles;
 namespace Zipper;
 
 /// <summary>
-/// Generates standalone load files (DAT or OPT) without creating native files or ZIP archives.
+/// Generates standalone Load Files (DAT or OPT) without creating Native Files or Archives.
 /// Used when --loadfile-only flag is specified.
 /// </summary>
 internal static class LoadFileOnlyGenerator
 {
     /// <summary>
-    /// Generates a standalone load file and its companion properties JSON.
+    /// Generates a standalone Load File and its companion properties JSON.
     /// </summary>
     /// <param name="request">File generation request with loadfile-only settings.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result containing generated file paths and performance metrics.</returns>
     public static async Task<LoadFileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {

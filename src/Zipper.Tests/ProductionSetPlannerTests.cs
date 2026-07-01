@@ -52,7 +52,7 @@ public class ProductionSetPlannerTests
     }
 
     [Fact]
-    public void Plan_GeneratesCorrectDocumentPlansAndVolumeBoundaries()
+    public void Plan_GeneratesCorrectNativeFilePlansAndVolumeBoundaries()
     {
         // Arrange
         var request = new FileGenerationRequest();

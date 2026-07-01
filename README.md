@@ -105,7 +105,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 **Chaos Engine Options:**
 - `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into Load Files. Requires `--loadfile-only`. Only supported for dat and opt Load File formats. Not available in Production Set mode.
 - `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
-- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesid`
+- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`
 - `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
 - `--chaos-list`: List all available chaos scenarios with descriptions and exit
 

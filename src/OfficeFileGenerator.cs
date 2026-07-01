@@ -3,14 +3,14 @@ using System.IO.Compression;
 namespace Zipper;
 
 /// <summary>
-/// Generates Microsoft Office format documents (DOCX, XLSX).
+/// Generates Microsoft Office format Native Files (DOCX, XLSX).
 /// Implements <see cref="IFileGenerator"/> directly for pipeline use.
 /// Pre-computes minimal valid Office files at static init for O(1) generation.
 /// </summary>
 internal sealed class OfficeFileGenerator : IFileGenerator
 {
     /// <summary>
-    /// Pre-computed minimal valid DOCX document.
+    /// Pre-computed minimal valid DOCX Native File.
     /// </summary>
     private static readonly byte[] PrecomputedDocx = CreateMinimalDocx();
 
@@ -37,10 +37,10 @@ internal sealed class OfficeFileGenerator : IFileGenerator
     }
 
     /// <summary>
-    /// Returns a pre-computed minimal DOCX document.
+    /// Returns a pre-computed minimal DOCX Native File.
     /// </summary>
     /// <param name="workItem">File work item containing index and metadata.</param>
-    /// <returns>Byte array containing a valid DOCX document.</returns>
+    /// <returns>Byte array containing a valid DOCX Native File.</returns>
     public static byte[] GenerateDocx(FileWorkItem workItem)
     {
         return PrecomputedDocx;
@@ -61,7 +61,7 @@ internal sealed class OfficeFileGenerator : IFileGenerator
     /// </summary>
     /// <param name="fileType">The Office file type (docx or xlsx).</param>
     /// <param name="workItem">File work item containing index and metadata.</param>
-    /// <returns>Byte array containing the generated document.</returns>
+    /// <returns>Byte array containing the generated Native File.</returns>
     /// <exception cref="System.ArgumentException">Thrown when file type is not a supported Office format.</exception>
     public static byte[] GenerateContent(string fileType, FileWorkItem workItem)
     {
@@ -87,7 +87,7 @@ internal sealed class OfficeFileGenerator : IFileGenerator
     }
 
     /// <summary>
-    /// Creates a minimal valid DOCX document once at static init.
+    /// Creates a minimal valid DOCX Native File once at static init.
     /// </summary>
     private static byte[] CreateMinimalDocx()
     {

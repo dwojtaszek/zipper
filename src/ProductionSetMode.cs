@@ -1,7 +1,7 @@
 namespace Zipper;
 
 /// <summary>
-/// Production Set generation mode — emits a Bates-numbered, volumed production with DAT, OPT, and manifest sidecars.
+/// Production Set generation mode — emits a Bates-numbered, volumed Production Set with DAT, OPT, and Production Manifest sidecars.
 /// </summary>
 internal class ProductionSetMode : IGenerationMode
 {

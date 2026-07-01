@@ -3,7 +3,7 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Column authority for the OPT (Opticon) format across Standard, Loadfile-Only, and
 /// Production Set modes. OPT has no header row; each record is one page-level entry expanded
-/// from a file (multipage documents, doc-break markers, and child attachment rows).
+/// from a Native File (multipage Native Files, Native File break markers, and child Attachment rows).
 /// </summary>
 internal sealed class OptComposer : ILoadFileComposer
 {
@@ -57,17 +57,17 @@ internal sealed class OptComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            string batesId = this.batesSequence is not null
+            string batesNumber = this.batesSequence is not null
                 ? this.batesSequence.Next().ToString()
                 : $"IMG{i:D8}";
             string volume = "VOL001";
-            string imagePath = $"IMAGES\\{batesId}.tif";
+            string imagePath = $"IMAGES\\{batesNumber}.tif";
 
             int pageCount = this.request.Tiff.PageRange.HasValue
                 ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
                 : random.Next(1, 11);
 
-            foreach (var entry in GeneratePageEntries(batesId, imagePath, pageCount))
+            foreach (var entry in GeneratePageEntries(batesNumber, imagePath, pageCount))
             {
                 yield return MakeRecord(entry.Bates, volume, entry.ImagePath, entry.DocBreak, entry.PageCountStr);
             }

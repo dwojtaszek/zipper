@@ -22,7 +22,7 @@ public class ChaosAnomalyTypesTests
         Assert.Contains("opt-columns", ChaosAnomalyTypes.Opt);
         Assert.Contains("opt-pagecount", ChaosAnomalyTypes.Opt);
         Assert.Contains("opt-path", ChaosAnomalyTypes.Opt);
-        Assert.Contains("opt-batesid", ChaosAnomalyTypes.Opt);
+        Assert.Contains("opt-batesnumber", ChaosAnomalyTypes.Opt);
         Assert.Equal(5, ChaosAnomalyTypes.Opt.Count);
     }
 

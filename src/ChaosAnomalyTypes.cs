@@ -13,7 +13,7 @@ internal static class ChaosAnomalyTypes
 
     public static readonly IReadOnlyList<string> Opt = new[]
     {
-        "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesid",
+        "opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesnumber",
     };
 
     /// <summary>

@@ -5,20 +5,20 @@ using Zipper.LoadFiles;
 namespace Zipper;
 
 /// <summary>
-/// Handles ZIP archive creation and file writing operations
+/// Handles Archive creation and Native File writing operations
 /// Extracted from ParallelFileGenerator to follow single responsibility principle.
 /// </summary>
 internal class ZipArchiveSink : IArchiveSink
 {
     /// <summary>
-    /// Creates a ZIP archive containing the generated files and optionally a load file.
+    /// Creates an Archive containing the generated Native Files and optionally a Load File.
     /// </summary>
-    /// <param name="zipFilePath">Path where the ZIP file should be created.</param>
-    /// <param name="loadFileName">Name of the load file (if included).</param>
-    /// <param name="loadFilePath">Path where load file should be saved separately (if not included in ZIP).</param>
+    /// <param name="zipFilePath">Path where the Archive should be created.</param>
+    /// <param name="loadFileName">Name of the Load File (if included).</param>
+    /// <param name="loadFilePath">Path where Load File should be saved separately (if not included in Archive).</param>
     /// <param name="request">File generation request parameters.</param>
     /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
-    /// <returns>The actual load file path that was created (or original if included in ZIP).</returns>
+    /// <returns>The actual Load File path that was created (or original if included in Archive).</returns>
     public async Task<string> CreateArchiveAsync(
         string zipFilePath,
         string loadFileName,
@@ -238,7 +238,7 @@ internal class ZipArchiveSink : IArchiveSink
     }
 
     /// <summary>
-    /// Writes an attachment file to the ZIP archive. Skips if the entry path already exists.
+    /// Writes an Attachment to the Archive. Skips if the entry path already exists.
     /// </summary>
     private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {
@@ -260,7 +260,7 @@ internal class ZipArchiveSink : IArchiveSink
     }
 
     /// <summary>
-    /// Writes the extracted text for an attachment to the ZIP archive. Skips if the entry path already exists.
+    /// Writes the extracted text for an Attachment to the Archive. Skips if the entry path already exists.
     /// </summary>
     private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {
@@ -283,7 +283,7 @@ internal class ZipArchiveSink : IArchiveSink
     }
 
     /// <summary>
-    /// Writes an extracted text version of a file to the ZIP archive. Skips if the entry path already exists.
+    /// Writes an extracted text version of a Native File to the Archive. Skips if the entry path already exists.
     /// </summary>
     private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths)
     {
