@@ -85,78 +85,89 @@ public class ParallelFileGenerator
             var consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
 
             // Generate files in parallel (producers)
-            var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator, cancellationToken))
-                .ToList();
-
-            // Wait for all producers to complete, wrapped in a task that ensures completion
-            var allProducersTask = Task.WhenAll(producerTasks);
-
-            // Race producers against consumer — if consumer faults, unblock producers
-            Exception? producerException = null;
             try
             {
-                var completed = await Task.WhenAny(allProducersTask, consumerTask).ConfigureAwait(false);
-                if (completed == consumerTask && consumerTask.IsFaulted)
+                var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator, cancellationToken))
+                    .ToList();
+
+                // Wait for all producers to complete, wrapped in a task that ensures completion
+                var allProducersTask = Task.WhenAll(producerTasks);
+
+                // Race producers against consumer — if consumer faults, unblock producers
+                Exception? producerException = null;
+                try
                 {
-                    // Consumer died — complete channel with its exception to unblock producers
-                    resultChannel.Writer.TryComplete(consumerTask.Exception);
-                    try
+                    var completed = await Task.WhenAny(allProducersTask, consumerTask).ConfigureAwait(false);
+                    if (completed == consumerTask && consumerTask.IsFaulted)
                     {
+                        // Consumer died — complete channel with its exception to unblock producers
+                        resultChannel.Writer.TryComplete(consumerTask.Exception);
+                        try
+                        {
+                            await allProducersTask.ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            // Producers will get ChannelClosedException — expected
+                        }
+                    }
+                    else
+                    {
+                        // Producers finished first (normal path)
                         await allProducersTask.ConfigureAwait(false);
                     }
-                    catch
+                }
+                catch (Exception ex)
+                {
+                    producerException = ex;
+                }
+                finally
+                {
+                    // Signal production done so consumer can drain and exit
+                    resultChannel.Writer.TryComplete(null);
+                }
+
+                // Always wait for consumer (releases zip file handles)
+                var actualLoadFilePath = await consumerTask.ConfigureAwait(false);
+
+                RethrowIfNotNull(producerException);
+
+                this.performanceMonitor.FinalizeProgress();
+                var performanceMetrics = this.performanceMonitor.Stop();
+
+                long actualZipSize = 0;
+                ZipSizeVerificationResult? zipSizeVerification = null;
+
+                if (zipFilePath is not null && File.Exists(zipFilePath))
+                {
+                    actualZipSize = new FileInfo(zipFilePath).Length;
+                    if (request.Output.TargetZipSize.HasValue)
                     {
-                        // Producers will get ChannelClosedException — expected
+                        var (isWithinTolerance, deviation) = ZipSizeVerifier.Verify(request.Output.TargetZipSize.Value, actualZipSize);
+                        zipSizeVerification = new ZipSizeVerificationResult(isWithinTolerance, deviation);
                     }
                 }
-                else
+
+                return new FileGenerationResult
                 {
-                    // Producers finished first (normal path)
-                    await allProducersTask.ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                producerException = ex;
+                    ZipFilePath = zipFilePath ?? string.Empty,
+                    LoadFilePath = actualLoadFilePath ?? string.Empty,
+                    FilesGenerated = request.Output.FileCount,
+                    GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
+                    FilesPerSecond = performanceMetrics.FilesPerSecond,
+                    ActualZipSize = actualZipSize,
+                    ZipSizeVerification = zipSizeVerification,
+                };
             }
             finally
             {
-                // Signal production done so consumer can drain and exit
-                resultChannel.Writer.TryComplete(null);
-            }
-
-            // Always wait for consumer (releases zip file handles)
-            var actualLoadFilePath = await consumerTask.ConfigureAwait(false);
-
-            RethrowIfNotNull(producerException);
-
-            this.performanceMonitor.FinalizeProgress();
-            var performanceMetrics = this.performanceMonitor.Stop();
-
-            long actualZipSize = 0;
-            ZipSizeVerificationResult? zipSizeVerification = null;
-
-            if (zipFilePath is not null && File.Exists(zipFilePath))
-            {
-                actualZipSize = new FileInfo(zipFilePath).Length;
-                if (request.Output.TargetZipSize.HasValue)
+                resultChannel.Writer.TryComplete();
+                while (resultChannel.Reader.TryRead(out var fileData))
                 {
-                    var (isWithinTolerance, deviation) = ZipSizeVerifier.Verify(request.Output.TargetZipSize.Value, actualZipSize);
-                    zipSizeVerification = new ZipSizeVerificationResult(isWithinTolerance, deviation);
+                    fileData.MemoryOwner?.Dispose();
                 }
             }
-
-            return new FileGenerationResult
-            {
-                ZipFilePath = zipFilePath ?? string.Empty,
-                LoadFilePath = actualLoadFilePath ?? string.Empty,
-                FilesGenerated = request.Output.FileCount,
-                GenerationTime = TimeSpan.FromMilliseconds(performanceMetrics.ElapsedMilliseconds),
-                FilesPerSecond = performanceMetrics.FilesPerSecond,
-                ActualZipSize = actualZipSize,
-                ZipSizeVerification = zipSizeVerification,
-            };
         }
         catch
         {

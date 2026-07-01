@@ -112,13 +112,23 @@ public static class PathValidator
 
     private static string GetRealPath(string path)
     {
+        return GetRealPathInternal(path, 0);
+    }
+
+    private static string GetRealPathInternal(string path, int depth)
+    {
+        if (depth > 32)
+        {
+            throw new System.IO.IOException("Too many levels of symbolic links (possible circular reference).");
+        }
+
         string fullPath = Path.GetFullPath(path);
         var linkResult = ResolveLinkTargetWithSuffix(fullPath);
 
         if (linkResult.HasValue)
         {
             string rebuilt = RebuildPathFromParts(linkResult.Value.resolvedRootPath, linkResult.Value.suffixParts);
-            return GetRealPath(rebuilt);
+            return GetRealPathInternal(rebuilt, depth + 1);
         }
 
         return fullPath;

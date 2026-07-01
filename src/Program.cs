@@ -69,7 +69,8 @@ public static class Program
     /// </summary>
     internal static IGenerationMode SelectMode(FileGenerationRequest request)
     {
-        return (request.LoadfileOnly, request.Production.ProductionSet) switch
+        ArgumentNullException.ThrowIfNull(request);
+        return (request.LoadfileOnly, request.Production?.ProductionSet ?? false) switch
         {
             (true, _) => new LoadFileOnlyMode((req, ct) => LoadFileOnlyGenerator.GenerateAsync(req, ct)),
             (_, true) => new ProductionSetMode((req, ct) => ProductionSetGenerator.GenerateAsync(req, ct)),
