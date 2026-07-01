@@ -169,27 +169,25 @@ internal static class ProductionSetGenerator
         // Write DAT load file — build a fresh ChaosEngine per format (engines are stateful)
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var datWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat, LoadFiles.WriterMode.ProductionSet);
-        var datChaosEngine = LoadFileAuditWriter.BuildChaosEngine(request, fileDataList, LoadFileFormat.Dat);
         var datStream = new FileStream(datPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (datStream.ConfigureAwait(false))
         {
-            await datWriter.WriteAsync(datStream, request, fileDataList, datChaosEngine, cancellationToken).ConfigureAwait(false);
+            await datWriter.WriteAsync(datStream, request, fileDataList, null, cancellationToken).ConfigureAwait(false);
         }
 
-        var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(datPath, request, fileDataList, datChaosEngine?.Anomalies, LoadFileFormat.Dat);
+        var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(datPath, request, fileDataList, null, LoadFileFormat.Dat);
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile_properties.json"), datAuditJson).ConfigureAwait(false);
 
         // Write OPT load file
         var optPath = Path.Combine(dataDir, "loadfile.opt");
         var optWriter = LoadFiles.LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, LoadFiles.WriterMode.ProductionSet);
-        var optChaosEngine = LoadFileAuditWriter.BuildChaosEngine(request, fileDataList, LoadFileFormat.Opt);
         var optStream = new FileStream(optPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         await using (optStream.ConfigureAwait(false))
         {
-            await optWriter.WriteAsync(optStream, request, fileDataList, optChaosEngine, cancellationToken).ConfigureAwait(false);
+            await optWriter.WriteAsync(optStream, request, fileDataList, null, cancellationToken).ConfigureAwait(false);
         }
 
-        var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(optPath, request, fileDataList, optChaosEngine?.Anomalies, LoadFileFormat.Opt);
+        var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(optPath, request, fileDataList, null, LoadFileFormat.Opt);
 
         // Save OPT properties with a slightly different name to avoid overwriting DAT properties
         await File.WriteAllTextAsync(Path.Combine(dataDir, "loadfile.opt_properties.json"), optAuditJson).ConfigureAwait(false);

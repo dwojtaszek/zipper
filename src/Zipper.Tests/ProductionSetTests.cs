@@ -639,4 +639,64 @@ public class ProductionSetTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task GenerateAsync_ChaosModeEnabled_DoesNotApplyChaos()
+    {
+        // Arrange
+        var tempDir = Directory.GetCurrentDirectory();
+        var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 5,
+                    FileType = "pdf",
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = true,
+                    ChaosAmount = "100%",
+                    ChaosTypes = "columns",
+                },
+                Production = new ProductionConfig
+                {
+                    ProductionSet = true,
+                },
+                Bates = new BatesNumberConfig
+                {
+                    Prefix = "ABC",
+                    Start = 1,
+                    Digits = 6,
+                },
+                LoadfileOnly = true, // bypass the exception guard in ProductionSetGenerator
+            };
+
+            // Act
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+
+            // Assert
+            var propertiesPath = Path.Combine(result.ProductionPath, "DATA", "loadfile_properties.json");
+            Assert.True(File.Exists(propertiesPath));
+            var json = await File.ReadAllTextAsync(propertiesPath);
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var chaosModeElement = doc.RootElement.GetProperty("chaosMode");
+
+            // Assert that totalAnomalies is 0 because ChaosEngine should not be constructed/used in ProductionSetGenerator
+            Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
 }
+
