@@ -11,7 +11,7 @@ public class ProportionalDistributionTests
     [InlineData(6, 5, 1)]
     [InlineData(10, 5, 5)]
     [InlineData(11, 5, 1)]
-    public void CalculateFolder_RoundRobinAssignment_ReturnsExpectedFolder(long fileIndex, int totalFolders, int expectedFolder)
+    public void Proportional_RoundRobinAssignment_ReturnsExpectedFolder(long fileIndex, int totalFolders, int expectedFolder)
     {
         // Act
         int result = Distributions.Proportional(fileIndex, totalFolders);
@@ -23,7 +23,7 @@ public class ProportionalDistributionTests
     [Theory]
     [InlineData(1, 1, 1)]
     [InlineData(100, 1, 1)]
-    public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
+    public void Proportional_SingleFolder_ReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
     {
         // Act
         int result = Distributions.Proportional(fileIndex, totalFolders);
@@ -33,7 +33,7 @@ public class ProportionalDistributionTests
     }
 
     [Fact]
-    public void CalculateFolder_LargeFileIndex_DistributesEvenly()
+    public void Proportional_LargeFileIndex_DistributesEvenly()
     {
         // Arrange
         int totalFolders = 7;

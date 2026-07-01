@@ -7,7 +7,7 @@ public class ExponentialDistributionTests
     [Theory]
     [InlineData(1, 1, 1)]
     [InlineData(100, 1, 1)]
-    public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
+    public void Exponential_SingleFolder_ReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
     {
         // Act
         int result = Distributions.Exponential(fileIndex, 100, totalFolders);
@@ -17,7 +17,7 @@ public class ExponentialDistributionTests
     }
 
     [Fact]
-    public void CalculateFolder_MultipleFiles_ReturnsValidFolderRange()
+    public void Exponential_MultipleFiles_ReturnsValidFolderRange()
     {
         // Arrange
         int totalFiles = 1000;
@@ -43,7 +43,7 @@ public class ExponentialDistributionTests
     }
 
     [Fact]
-    public void CalculateFolder_EdgeCases_HandlesGracefully()
+    public void Exponential_EdgeCases_ReturnsFolderInRange()
     {
         // Test minimum values
         int result1 = Distributions.Exponential(1, 1, 1);
@@ -59,7 +59,7 @@ public class ExponentialDistributionTests
     [InlineData(10, 100, 51, 4)]
     [InlineData(10, 100, 100, 10)]
     [InlineData(100, 100, 1, 1)]
-    public void CalculateFolder_WithLambda2_ReturnsExpectedFolders(int totalFolders, long totalFiles, long fileIndex, int expectedFolder)
+    public void Exponential_WithLambda2_ReturnsExpectedFolders(int totalFolders, long totalFiles, long fileIndex, int expectedFolder)
     {
         // C2: with lambda = 2.0/totalFolders, verify known folder assignments
         int result = Distributions.Exponential(fileIndex, totalFiles, totalFolders);
@@ -67,7 +67,7 @@ public class ExponentialDistributionTests
     }
 
     [Fact]
-    public void CalculateFolder_Lambda2_DistributionSpreadWithinExpectedRange()
+    public void Exponential_Lambda2_SpreadWithinExpectedRange()
     {
         // C2: with lambda = 2.0/totalFolders, verify no single folder
         // gets more than 35% of files (would indicate concentration bug)

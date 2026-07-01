@@ -7,7 +7,7 @@ public class GaussianDistributionTests
     [Theory]
     [InlineData(1, 1, 1)]
     [InlineData(100, 1, 1)]
-    public void CalculateFolder_SingleFolder_AlwaysReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
+    public void Gaussian_SingleFolder_ReturnsOne(long fileIndex, int totalFolders, int expectedFolder)
     {
         // Act
         int result = Distributions.Gaussian(fileIndex, 100, totalFolders);
@@ -17,7 +17,7 @@ public class GaussianDistributionTests
     }
 
     [Fact]
-    public void CalculateFolder_MultipleFiles_ReturnsValidFolderRange()
+    public void Gaussian_MultipleFiles_ReturnsValidFolderRange()
     {
         // Arrange
         int totalFiles = 1000;
@@ -33,16 +33,17 @@ public class GaussianDistributionTests
 
         // Verify Gaussian distribution characteristics (bell curve)
         var distribution = folderNumbers.GroupBy(f => f)
-            .ToDictionary(g => g.Key, g => g.Count())
-            .OrderBy(kvp => kvp.Key);
+            .ToDictionary(g => g.Key, g => g.Count());
 
-        // Middle folders should have more files than edge folders (Gaussian characteristic)
-        Assert.True(distribution.Skip(totalFolders / 3).Take(totalFolders / 3)
-            .Sum(kvp => kvp.Value) > distribution.Take(2).Sum(kvp => kvp.Value));
+        // Stricter center-vs-edge assertions to distinguish Gaussian from uniform distribution
+        Assert.True(distribution.ContainsKey(5) && distribution[5] > 200, "Center folder 5 should have > 200 files in Gaussian distribution.");
+        Assert.True(distribution.ContainsKey(1) && distribution[1] < 30, "Edge folder 1 should have < 30 files in Gaussian distribution.");
+        Assert.True(distribution.ContainsKey(10) && distribution[10] < 10, "Edge folder 10 should have < 10 files in Gaussian distribution.");
+        Assert.True(distribution[5] > distribution[1] * 5, "Center folder 5 should have at least 5x more files than edge folder 1.");
     }
 
     [Fact]
-    public void CalculateFolder_EdgeCases_HandlesGracefully()
+    public void Gaussian_EdgeCases_ReturnsFolderInRange()
     {
         // Test minimum values
         int result1 = Distributions.Gaussian(1, 1, 1);

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Zipper.Tests;
 
-public class FileDistributionHelperTests
+public class DistributionsTests
 {
     [Theory]
     [InlineData(1, 10, 5, DistributionType.Proportional)]
@@ -57,19 +57,19 @@ public class FileDistributionHelperTests
         // Test with various parameters
         var testCases = new[]
         {
-            (fileIndex: 1L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Proportional),
-            (fileIndex: 50L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Gaussian),
-            (fileIndex: 25L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Exponential),
-            (fileIndex: 999L, totalFiles: 1000L, totalFolders: 100, type: DistributionType.Proportional),
+            (fileIndex: 1L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Proportional, expected: 1),
+            (fileIndex: 50L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Gaussian, expected: 5),
+            (fileIndex: 25L, totalFiles: 100L, totalFolders: 10, type: DistributionType.Exponential, expected: 2),
+            (fileIndex: 999L, totalFiles: 1000L, totalFolders: 100, type: DistributionType.Proportional, expected: 99),
         };
 
-        foreach (var (fileIndex, totalFiles, totalFolders, type) in testCases)
+        foreach (var (fileIndex, totalFiles, totalFolders, type, expected) in testCases)
         {
             // Act
             int result = Distributions.GetFolderNumber(fileIndex, totalFiles, totalFolders, type);
 
-            // Assert - Result should be within expected range
-            Assert.InRange(result, 1, totalFolders);
+            // Assert
+            Assert.Equal(expected, result);
         }
     }
 
