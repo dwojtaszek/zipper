@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Xunit;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
 public class ChaosScenarioTests

@@ -1,865 +1,864 @@
 using Xunit;
 
-namespace Zipper
+namespace Zipper.Tests;
+
+[Collection("ConsoleTests")]
+public class CliPipelineTests : IDisposable
 {
-    [Collection("ConsoleTests")]
-    public class CliPipelineTests : IDisposable
+    private readonly string tempDir;
+
+    public CliPipelineTests()
     {
-        private readonly string tempDir;
+        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(this.tempDir);
+    }
 
-        public CliPipelineTests()
+    public void Dispose()
+    {
+        if (Directory.Exists(this.tempDir))
         {
-            this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
-            Directory.CreateDirectory(this.tempDir);
+            Directory.Delete(this.tempDir, true);
         }
+    }
 
-        public void Dispose()
-        {
-            if (Directory.Exists(this.tempDir))
-            {
-                Directory.Delete(this.tempDir, true);
-            }
-        }
+    [Fact]
+    public void ValidateAndParseArguments_WithValidRequiredArguments_ShouldReturnValidRequest()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir };
 
-        [Fact]
-        public void ValidateAndParseArguments_WithValidRequiredArguments_ShouldReturnValidRequest()
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(this.tempDir, result!.Output.OutputPath);
+        Assert.Equal(100, result.Output.FileCount);
+        Assert.Equal("pdf", result.Output.FileType);
+        Assert.Equal(1, result.Output.Folders);
+        Assert.Equal("UTF-8", result.LoadFile.Encoding);
+        Assert.Equal(DistributionType.Proportional, result.LoadFile.Distribution);
+        Assert.False(result.Metadata.WithMetadata);
+        Assert.False(result.Output.WithText);
+        Assert.False(result.Output.IncludeLoadFile);
+        Assert.Equal(0, result.LoadFile.AttachmentRate);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithAllArguments_ShouldReturnValidRequest()
+    {
+        // Arrange
+        var args = new[]
         {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir };
+            "--type", "jpg",
+            "--count", "500",
+            "--output-path", this.tempDir,
+            "--folders", "5",
+            "--encoding", "UTF-16",
+            "--distribution", "gaussian",
+            "--with-metadata",
+            "--with-text",
+            "--attachment-rate", "25",
+            "--target-zip-size", "10MB",
+            "--include-load-file",
+        };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(this.tempDir, result!.Output.OutputPath);
+        Assert.Equal(500, result.Output.FileCount);
+        Assert.Equal("jpg", result.Output.FileType);
+        Assert.Equal(5, result.Output.Folders);
+        Assert.Equal("UTF-16", result.LoadFile.Encoding);
+        Assert.Equal(DistributionType.Gaussian, result.LoadFile.Distribution);
+        Assert.True(result.Metadata.WithMetadata);
+        Assert.True(result.Output.WithText);
+        Assert.True(result.Output.IncludeLoadFile);
+        Assert.Equal(25, result.LoadFile.AttachmentRate);
+        Assert.Equal(10 * 1024 * 1024, result.Output.TargetZipSize);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithNullArgs_ShouldReturnNull()
+    {
+        // Act
+        var result = Cli.Pipeline.Build(null!);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithEmptyArgs_ShouldReturnNull()
+    {
+        // Arrange
+        var args = Array.Empty<string>();
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_MissingType_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--count", "100", "--output-path", this.tempDir };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_MissingCount_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--output-path", this.tempDir };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_MissingOutputPath_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidOutputPath_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", string.Empty };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInsecureOutputPath_ShouldReturnNull()
+    {
+        // Arrange
+        var insecurePath = OperatingSystem.IsWindows() ? "C:\\Windows\\System32" : "/etc";
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", insecurePath };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidFoldersRange_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "0" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithFoldersTooHigh_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "101" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidAttachmentRate_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "-1" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithAttachmentRateTooHigh_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "101" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidEncoding_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", "INVALID" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidDistribution_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", "INVALID" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidTargetZipSize_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", "INVALID" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithTargetZipSizeWithoutCount_ShouldReturnNull()
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--output-path", this.tempDir, "--target-zip-size", "10MB" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("UTF-8", "UTF-8")]
+    [InlineData("utf-8", "UTF-8")]
+    [InlineData("UTF-16", "UTF-16")]
+    [InlineData("utf-16", "UTF-16")]
+    [InlineData("ANSI", "ANSI")]
+    [InlineData("ansi", "ANSI")]
+    public void ValidateAndParseArguments_WithValidEncodings_ShouldReturnValidRequest(string inputEncoding, string expectedEncoding)
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", inputEncoding };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expectedEncoding, result!.LoadFile.Encoding);
+    }
+
+    [Theory]
+    [InlineData("proportional", DistributionType.Proportional)]
+    [InlineData("PROPORTIONAL", DistributionType.Proportional)]
+    [InlineData("gaussian", DistributionType.Gaussian)]
+    [InlineData("GAUSSIAN", DistributionType.Gaussian)]
+    [InlineData("exponential", DistributionType.Exponential)]
+    [InlineData("EXPONENTIAL", DistributionType.Exponential)]
+    public void ValidateAndParseArguments_WithValidDistributions_ShouldReturnValidRequest(string inputDistribution, DistributionType expectedDistribution)
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", inputDistribution };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expectedDistribution, result!.LoadFile.Distribution);
+    }
+
+    [Theory]
+    [InlineData("1KB", 1024)]
+    [InlineData("1MB", 1024 * 1024)]
+    [InlineData("1GB", 1024L * 1024 * 1024)]
+    [InlineData("500MB", 500L * 1024 * 1024)]
+    [InlineData("10GB", 10L * 1024 * 1024 * 1024)]
+    public void ValidateAndParseArguments_WithValidTargetZipSizes_ShouldReturnValidRequest(string inputSize, long expectedBytes)
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", inputSize };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expectedBytes, result!.Output.TargetZipSize);
+    }
+
+    [Theory]
+    [InlineData("pdf", "pdf")]
+    [InlineData("PDF", "pdf")]
+    [InlineData("jpg", "jpg")]
+    [InlineData("JPG", "jpg")]
+    [InlineData("tiff", "tiff")]
+    [InlineData("TIFF", "tiff")]
+    [InlineData("eml", "eml")]
+    [InlineData("EML", "eml")]
+    public void ValidateAndParseArguments_WithValidFileTypes_ShouldReturnValidRequest(string inputType, string expectedType)
+    {
+        // Arrange
+        var args = new[] { "--type", inputType, "--count", "100", "--output-path", this.tempDir };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expectedType, result!.Output.FileType);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly()
+    {
+        // Arrange
+        var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", "5-20" };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.NotNull(result.Tiff.PageRange);
+        Assert.Equal(5, result.Tiff.PageRange.Value.Min);
+        Assert.Equal(20, result.Tiff.PageRange.Value.Max);
+    }
+
+    [Theory]
+    [InlineData("invalid")]
+    [InlineData("1-")]
+    [InlineData("-10")]
+    [InlineData("10-5")] // min > max
+    public void ValidateAndParseArguments_WithInvalidTiffPagesRange_ShouldReturnNull(string range)
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
 
             // Act
             var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(this.tempDir, result!.Output.OutputPath);
-            Assert.Equal(100, result.Output.FileCount);
-            Assert.Equal("pdf", result.Output.FileType);
-            Assert.Equal(1, result.Output.Folders);
-            Assert.Equal("UTF-8", result.LoadFile.Encoding);
-            Assert.Equal(DistributionType.Proportional, result.LoadFile.Distribution);
-            Assert.False(result.Metadata.WithMetadata);
-            Assert.False(result.Output.WithText);
-            Assert.False(result.Output.IncludeLoadFile);
-            Assert.Equal(0, result.LoadFile.AttachmentRate);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithAllArguments_ShouldReturnValidRequest()
-        {
-            // Arrange
-            var args = new[]
-            {
-                "--type", "jpg",
-                "--count", "500",
-                "--output-path", this.tempDir,
-                "--folders", "5",
-                "--encoding", "UTF-16",
-                "--distribution", "gaussian",
-                "--with-metadata",
-                "--with-text",
-                "--attachment-rate", "25",
-                "--target-zip-size", "10MB",
-                "--include-load-file",
-            };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(this.tempDir, result!.Output.OutputPath);
-            Assert.Equal(500, result.Output.FileCount);
-            Assert.Equal("jpg", result.Output.FileType);
-            Assert.Equal(5, result.Output.Folders);
-            Assert.Equal("UTF-16", result.LoadFile.Encoding);
-            Assert.Equal(DistributionType.Gaussian, result.LoadFile.Distribution);
-            Assert.True(result.Metadata.WithMetadata);
-            Assert.True(result.Output.WithText);
-            Assert.True(result.Output.IncludeLoadFile);
-            Assert.Equal(25, result.LoadFile.AttachmentRate);
-            Assert.Equal(10 * 1024 * 1024, result.Output.TargetZipSize);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithNullArgs_ShouldReturnNull()
-        {
-            // Act
-            var result = Cli.Pipeline.Build(null!);
 
             // Assert
             Assert.Null(result);
+            var output = errorOutput.ToString();
+            Assert.Contains("Error: Invalid TIFF pages range", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithEmptyArgs_ShouldReturnNull()
+        finally
         {
-            // Arrange
-            var args = Array.Empty<string>();
+            Console.SetError(originalError);
+            errorOutput.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData("dat", LoadFileFormat.Dat)]
+    [InlineData("opt", LoadFileFormat.Opt)]
+    [InlineData("csv", LoadFileFormat.Csv)]
+    [InlineData("xml", LoadFileFormat.EdrmXml)]
+    [InlineData("concordance", LoadFileFormat.Concordance)]
+    public void ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly(string format, LoadFileFormat expected)
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expected, result.LoadFile.Formats[0]);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithInvalidLoadFileFormat_ShouldReturnNull()
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
 
             // Act
             var result = Cli.Pipeline.Build(args);
 
             // Assert
             Assert.Null(result);
+            var output = errorOutput.ToString();
+            Assert.Contains("Error: Invalid load file format", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_MissingType_ShouldReturnNull()
+        finally
         {
-            // Arrange
-            var args = new[] { "--count", "100", "--output-path", this.tempDir };
+            Console.SetError(originalError);
+            errorOutput.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData("|", "|")]
+    [InlineData("20", "\u0014")] // ASCII 20
+    [InlineData("254", "\u00fe")] // ASCII 254
+    [InlineData("\\t", "\t")] // Tab
+    public void ValidateAndParseArguments_WithDelimiterArguments_ShouldParseCorrectly(string input, string expected)
+    {
+        // Arrange
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--delimiter-column", input };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(expected, result.Delimiters.ColumnDelimiter);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithDelimiterOverride_ShouldOverridePreset()
+    {
+        // Arrange
+        var args = new[]
+        {
+            "--type", "pdf",
+            "--count", "10",
+            "--output-path", this.tempDir,
+            "--dat-delimiters", "csv",
+            "--delimiter-column", "|",
+        };
+
+        // Act
+        var result = Cli.Pipeline.Build(args);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("|", result.Delimiters.ColumnDelimiter);  // Should override CSV preset
+        Assert.Equal("\"", result.Delimiters.QuoteDelimiter);   // Should use CSV preset
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithUnknownArgument_ShouldOutputWarning()
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            // --unknown-arg is an invalid parameter
+            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
 
             // Act
             var result = Cli.Pipeline.Build(args);
 
             // Assert
-            Assert.Null(result);
+            Assert.NotNull(result); // The valid args should still parse into a valid request
+            var output = errorOutput.ToString();
+            Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_MissingCount_ShouldReturnNull()
+        finally
         {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--output-path", this.tempDir };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
+            Console.SetError(originalError);
+            errorOutput.Dispose();
         }
+    }
 
-        [Fact]
-        public void ValidateAndParseArguments_MissingOutputPath_ShouldReturnNull()
+    // === Loadfile-Only CLI Validation Tests ===
+    [Fact]
+    public void ValidateAndParseArguments_LoadfileOnly_WithoutType_ShouldSucceed()
+    {
+        var args = new[] { "--loadfile-only", "--count", "50", "--output-path", this.tempDir };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        Assert.True(result!.LoadfileOnly);
+        Assert.Equal("pdf", result.Output.FileType); // defaults to pdf
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_LoadfileOnly_WithStrictDelimiters_ShouldParseCorrectly()
+    {
+        var args = new[]
         {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100" };
+            "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
+            "--col-delim", "ascii:20", "--quote-delim", "ascii:254",
+            "--multi-delim", "char:;", "--nested-delim", "char:\\",
+        };
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
+        var result = Cli.Pipeline.Build(args);
 
-            // Assert
-            Assert.Null(result);
-        }
+        Assert.NotNull(result);
+        Assert.Equal("\u0014", result!.Delimiters.ColumnDelimiter); // ASCII 20
+        Assert.Equal("\u00fe", result.Delimiters.QuoteDelimiter); // ASCII 254
+        Assert.Equal(";", result.Delimiters.MultiValueDelimiter);
+        Assert.Equal("\\", result.Delimiters.NestedValueDelimiter);
+    }
 
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidOutputPath_ShouldReturnNull()
+    [Fact]
+    public void ValidateAndParseArguments_LoadfileOnly_QuoteDelimNone_ShouldSetEmpty()
+    {
+        var args = new[]
         {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", string.Empty };
+            "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
+            "--quote-delim", "none",
+        };
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
+        var result = Cli.Pipeline.Build(args);
 
-            // Assert
-            Assert.Null(result);
-        }
+        Assert.NotNull(result);
+        Assert.Equal(string.Empty, result!.Delimiters.QuoteDelimiter);
+    }
 
-        [Fact]
-        public void ValidateAndParseArguments_WithInsecureOutputPath_ShouldReturnNull()
+    [Fact]
+    public void ValidateAndParseArguments_ColDelim_WithoutLoadfileOnly_ShouldNotReturnNull()
+    {
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--col-delim", "ascii:20" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_ChaosMode_WithoutLoadfileOnly_ShouldReturnNull()
+    {
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_ChaosAmount_WithoutChaosMode_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_ChaosTypes_WithoutChaosMode_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-types", "quotes" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_LoadfileOnly_WithTargetZipSize_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--target-zip-size", "100MB" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_LoadfileOnly_WithIncludeLoadFile_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--include-load-file" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_Eol_ValidValues_ShouldSucceed()
+    {
+        foreach (var eol in new[] { "CRLF", "LF", "CR" })
         {
-            // Arrange
-            var insecurePath = OperatingSystem.IsWindows() ? "C:\\Windows\\System32" : "/etc";
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", insecurePath };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidFoldersRange_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "0" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithFoldersTooHigh_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "101" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidAttachmentRate_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "-1" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithAttachmentRateTooHigh_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "101" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidEncoding_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", "INVALID" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidDistribution_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", "INVALID" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidTargetZipSize_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", "INVALID" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithTargetZipSizeWithoutCount_ShouldReturnNull()
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--output-path", this.tempDir, "--target-zip-size", "10MB" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-        }
-
-        [Theory]
-        [InlineData("UTF-8", "UTF-8")]
-        [InlineData("utf-8", "UTF-8")]
-        [InlineData("UTF-16", "UTF-16")]
-        [InlineData("utf-16", "UTF-16")]
-        [InlineData("ANSI", "ANSI")]
-        [InlineData("ansi", "ANSI")]
-        public void ValidateAndParseArguments_WithValidEncodings_ShouldReturnValidRequest(string inputEncoding, string expectedEncoding)
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", inputEncoding };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expectedEncoding, result!.LoadFile.Encoding);
-        }
-
-        [Theory]
-        [InlineData("proportional", DistributionType.Proportional)]
-        [InlineData("PROPORTIONAL", DistributionType.Proportional)]
-        [InlineData("gaussian", DistributionType.Gaussian)]
-        [InlineData("GAUSSIAN", DistributionType.Gaussian)]
-        [InlineData("exponential", DistributionType.Exponential)]
-        [InlineData("EXPONENTIAL", DistributionType.Exponential)]
-        public void ValidateAndParseArguments_WithValidDistributions_ShouldReturnValidRequest(string inputDistribution, DistributionType expectedDistribution)
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", inputDistribution };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expectedDistribution, result!.LoadFile.Distribution);
-        }
-
-        [Theory]
-        [InlineData("1KB", 1024)]
-        [InlineData("1MB", 1024 * 1024)]
-        [InlineData("1GB", 1024L * 1024 * 1024)]
-        [InlineData("500MB", 500L * 1024 * 1024)]
-        [InlineData("10GB", 10L * 1024 * 1024 * 1024)]
-        public void ValidateAndParseArguments_WithValidTargetZipSizes_ShouldReturnValidRequest(string inputSize, long expectedBytes)
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", inputSize };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expectedBytes, result!.Output.TargetZipSize);
-        }
-
-        [Theory]
-        [InlineData("pdf", "pdf")]
-        [InlineData("PDF", "pdf")]
-        [InlineData("jpg", "jpg")]
-        [InlineData("JPG", "jpg")]
-        [InlineData("tiff", "tiff")]
-        [InlineData("TIFF", "tiff")]
-        [InlineData("eml", "eml")]
-        [InlineData("EML", "eml")]
-        public void ValidateAndParseArguments_WithValidFileTypes_ShouldReturnValidRequest(string inputType, string expectedType)
-        {
-            // Arrange
-            var args = new[] { "--type", inputType, "--count", "100", "--output-path", this.tempDir };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expectedType, result!.Output.FileType);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly()
-        {
-            // Arrange
-            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", "5-20" };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.NotNull(result.Tiff.PageRange);
-            Assert.Equal(5, result.Tiff.PageRange.Value.Min);
-            Assert.Equal(20, result.Tiff.PageRange.Value.Max);
-        }
-
-        [Theory]
-        [InlineData("invalid")]
-        [InlineData("1-")]
-        [InlineData("-10")]
-        [InlineData("10-5")] // min > max
-        public void ValidateAndParseArguments_WithInvalidTiffPagesRange_ShouldReturnNull(string range)
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.Null(result);
-                var output = errorOutput.ToString();
-                Assert.Contains("Error: Invalid TIFF pages range", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        [Theory]
-        [InlineData("dat", LoadFileFormat.Dat)]
-        [InlineData("opt", LoadFileFormat.Opt)]
-        [InlineData("csv", LoadFileFormat.Csv)]
-        [InlineData("xml", LoadFileFormat.EdrmXml)]
-        [InlineData("concordance", LoadFileFormat.Concordance)]
-        public void ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly(string format, LoadFileFormat expected)
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expected, result.LoadFile.Formats[0]);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithInvalidLoadFileFormat_ShouldReturnNull()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.Null(result);
-                var output = errorOutput.ToString();
-                Assert.Contains("Error: Invalid load file format", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        [Theory]
-        [InlineData("|", "|")]
-        [InlineData("20", "\u0014")] // ASCII 20
-        [InlineData("254", "\u00fe")] // ASCII 254
-        [InlineData("\\t", "\t")] // Tab
-        public void ValidateAndParseArguments_WithDelimiterArguments_ShouldParseCorrectly(string input, string expected)
-        {
-            // Arrange
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--delimiter-column", input };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal(expected, result.Delimiters.ColumnDelimiter);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithDelimiterOverride_ShouldOverridePreset()
-        {
-            // Arrange
-            var args = new[]
-            {
-                "--type", "pdf",
-                "--count", "10",
-                "--output-path", this.tempDir,
-                "--dat-delimiters", "csv",
-                "--delimiter-column", "|",
-            };
-
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.Equal("|", result.Delimiters.ColumnDelimiter);  // Should override CSV preset
-            Assert.Equal("\"", result.Delimiters.QuoteDelimiter);   // Should use CSV preset
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithUnknownArgument_ShouldOutputWarning()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                // --unknown-arg is an invalid parameter
-                var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.NotNull(result); // The valid args should still parse into a valid request
-                var output = errorOutput.ToString();
-                Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        // === Loadfile-Only CLI Validation Tests ===
-        [Fact]
-        public void ValidateAndParseArguments_LoadfileOnly_WithoutType_ShouldSucceed()
-        {
-            var args = new[] { "--loadfile-only", "--count", "50", "--output-path", this.tempDir };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.NotNull(result);
-            Assert.True(result!.LoadfileOnly);
-            Assert.Equal("pdf", result.Output.FileType); // defaults to pdf
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_LoadfileOnly_WithStrictDelimiters_ShouldParseCorrectly()
-        {
-            var args = new[]
-            {
-                "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
-                "--col-delim", "ascii:20", "--quote-delim", "ascii:254",
-                "--multi-delim", "char:;", "--nested-delim", "char:\\",
-            };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.NotNull(result);
-            Assert.Equal("\u0014", result!.Delimiters.ColumnDelimiter); // ASCII 20
-            Assert.Equal("\u00fe", result.Delimiters.QuoteDelimiter); // ASCII 254
-            Assert.Equal(";", result.Delimiters.MultiValueDelimiter);
-            Assert.Equal("\\", result.Delimiters.NestedValueDelimiter);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_LoadfileOnly_QuoteDelimNone_ShouldSetEmpty()
-        {
-            var args = new[]
-            {
-                "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
-                "--quote-delim", "none",
-            };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.NotNull(result);
-            Assert.Equal(string.Empty, result!.Delimiters.QuoteDelimiter);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ColDelim_WithoutLoadfileOnly_ShouldNotReturnNull()
-        {
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--col-delim", "ascii:20" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.NotNull(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ChaosMode_WithoutLoadfileOnly_ShouldReturnNull()
-        {
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ChaosAmount_WithoutChaosMode_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ChaosTypes_WithoutChaosMode_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-types", "quotes" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_LoadfileOnly_WithTargetZipSize_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--target-zip-size", "100MB" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_LoadfileOnly_WithIncludeLoadFile_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--include-load-file" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_Eol_ValidValues_ShouldSucceed()
-        {
-            foreach (var eol in new[] { "CRLF", "LF", "CR" })
-            {
-                var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", eol };
-
-                var result = Cli.Pipeline.Build(args);
-
-                Assert.NotNull(result);
-                Assert.Equal(eol.ToUpperInvariant(), result!.Delimiters.EndOfLine.ToUpperInvariant());
-            }
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_Eol_InvalidValue_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LFCR" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ColDelim_WithoutPrefix_ShouldReturnNull()
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--col-delim", "20" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Theory]
-        [InlineData("abc")]
-        [InlineData("10.5x%")]
-        public void ValidateAndParseArguments_ChaosAmount_InvalidFormat_ShouldReturnNull(string amount)
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", amount };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Theory]
-        [InlineData("csv")]
-        [InlineData("xml")]
-        public void ValidateAndParseArguments_ChaosMode_WithUnsupportedFormat_ShouldReturnNull(string format)
-        {
-            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.Null(result);
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithCountZero_ShouldReturnNull()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.Null(result);
-                var output = errorOutput.ToString();
-                Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithCountNegative_ShouldReturnNull()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.Null(result);
-                var output = errorOutput.ToString();
-                Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithCountExceedingMax_ShouldReturnNull()
-        {
-            // Arrange
-            var originalError = Console.Error;
-            var errorOutput = new StringWriter();
-            Console.SetError(errorOutput);
-
-            try
-            {
-                var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
-
-                // Act
-                var result = Cli.Pipeline.Build(args);
-
-                // Assert
-                Assert.Null(result);
-                var output = errorOutput.ToString();
-                Assert.Contains("--count must not exceed", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-                errorOutput.Dispose();
-            }
-        }
-
-        [Fact]
-        public void ValidateAndParseArguments_ChaosMode_WithValidArgs_ShouldSucceed()
-        {
-            var args = new[]
-            {
-                "--loadfile-only", "--count", "100", "--output-path", this.tempDir,
-                "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
-            };
+            var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", eol };
 
             var result = Cli.Pipeline.Build(args);
 
             Assert.NotNull(result);
-            Assert.True(result!.Chaos.ChaosMode);
-            Assert.Equal("5%", result.Chaos.ChaosAmount);
-            Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
+            Assert.Equal(eol.ToUpperInvariant(), result!.Delimiters.EndOfLine.ToUpperInvariant());
         }
+    }
 
-        // === B2: Bates prefix path traversal prevention ===
-        [Theory]
-        [InlineData("../../../")]
-        [InlineData("..\\..\\")]
-        [InlineData("foo/bar")]
-        [InlineData("foo\\bar")]
-        [InlineData("evil/path")]
-        public void ValidateAndParseArguments_WithBatesPrefixContainingPathSeparator_ReturnsNull(string maliciousPrefix)
+    [Fact]
+    public void ValidateAndParseArguments_Eol_InvalidValue_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LFCR" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_ColDelim_WithoutPrefix_ShouldReturnNull()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--col-delim", "20" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("10.5x%")]
+    public void ValidateAndParseArguments_ChaosAmount_InvalidFormat_ShouldReturnNull(string amount)
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", amount };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("csv")]
+    [InlineData("xml")]
+    public void ValidateAndParseArguments_ChaosMode_WithUnsupportedFormat_ShouldReturnNull(string format)
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithCountZero_ShouldReturnNull()
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
         {
-            var args = new[]
-            {
-                "--production-set", "--bates-prefix", maliciousPrefix,
-                "--count", "10", "--output-path", this.tempDir,
-            };
+            var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
 
+            // Act
             var result = Cli.Pipeline.Build(args);
 
+            // Assert
             Assert.Null(result);
+            var output = errorOutput.ToString();
+            Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithBatesPrefixContainingDotDot_ReturnsNull()
+        finally
         {
-            var args = new[]
-            {
-                "--production-set", "--bates-prefix", "..",
-                "--count", "10", "--output-path", this.tempDir,
-            };
+            Console.SetError(originalError);
+            errorOutput.Dispose();
+        }
+    }
 
+    [Fact]
+    public void ValidateAndParseArguments_WithCountNegative_ShouldReturnNull()
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
+
+            // Act
             var result = Cli.Pipeline.Build(args);
 
+            // Assert
             Assert.Null(result);
+            var output = errorOutput.ToString();
+            Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithBatesPrefixContainingSpecialChars_ReturnsNull()
+        finally
         {
-            var args = new[]
-            {
-                "--production-set", "--bates-prefix", "hello world!@#",
-                "--count", "10", "--output-path", this.tempDir,
-            };
+            Console.SetError(originalError);
+            errorOutput.Dispose();
+        }
+    }
 
+    [Fact]
+    public void ValidateAndParseArguments_WithCountExceedingMax_ShouldReturnNull()
+    {
+        // Arrange
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
+
+            // Act
             var result = Cli.Pipeline.Build(args);
 
+            // Assert
             Assert.Null(result);
+            var output = errorOutput.ToString();
+            Assert.Contains("--count must not exceed", output, StringComparison.Ordinal);
         }
-
-        [Fact]
-        public void ValidateAndParseArguments_WithValidBatesPrefix_ReturnsValidRequest()
+        finally
         {
-            var args = new[]
-            {
-                "--production-set", "--bates-prefix", "CLIENT001",
-                "--count", "10", "--output-path", this.tempDir,
-            };
-
-            var result = Cli.Pipeline.Build(args);
-
-            Assert.NotNull(result);
-            Assert.Equal("CLIENT001", result!.Bates?.Prefix);
+            Console.SetError(originalError);
+            errorOutput.Dispose();
         }
+    }
 
-        [Theory]
-        [InlineData("CLIENT_001")]
-        [InlineData("PREFIX-ABC")]
-        [InlineData("Doc_v1")]
-        [InlineData("ABC")]
-        [InlineData("123")]
-        public void ValidateAndParseArguments_WithValidBatesPrefixVariations_ReturnsValidRequest(string validPrefix)
+    [Fact]
+    public void ValidateAndParseArguments_ChaosMode_WithValidArgs_ShouldSucceed()
+    {
+        var args = new[]
         {
-            var args = new[]
-            {
-                "--production-set", "--bates-prefix", validPrefix,
-                "--count", "10", "--output-path", this.tempDir,
-            };
+            "--loadfile-only", "--count", "100", "--output-path", this.tempDir,
+            "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
+        };
 
-            var result = Cli.Pipeline.Build(args);
+        var result = Cli.Pipeline.Build(args);
 
-            Assert.NotNull(result);
-            Assert.Equal(validPrefix, result!.Bates?.Prefix);
-        }
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("5%", result.Chaos.ChaosAmount);
+        Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
+    }
+
+    // === B2: Bates prefix path traversal prevention ===
+    [Theory]
+    [InlineData("../../../")]
+    [InlineData("..\\..\\")]
+    [InlineData("foo/bar")]
+    [InlineData("foo\\bar")]
+    [InlineData("evil/path")]
+    public void ValidateAndParseArguments_WithBatesPrefixContainingPathSeparator_ReturnsNull(string maliciousPrefix)
+    {
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", maliciousPrefix,
+            "--count", "10", "--output-path", this.tempDir,
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithBatesPrefixContainingDotDot_ReturnsNull()
+    {
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", "..",
+            "--count", "10", "--output-path", this.tempDir,
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithBatesPrefixContainingSpecialChars_ReturnsNull()
+    {
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", "hello world!@#",
+            "--count", "10", "--output-path", this.tempDir,
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ValidateAndParseArguments_WithValidBatesPrefix_ReturnsValidRequest()
+    {
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", "CLIENT001",
+            "--count", "10", "--output-path", this.tempDir,
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        Assert.Equal("CLIENT001", result!.Bates?.Prefix);
+    }
+
+    [Theory]
+    [InlineData("CLIENT_001")]
+    [InlineData("PREFIX-ABC")]
+    [InlineData("Doc_v1")]
+    [InlineData("ABC")]
+    [InlineData("123")]
+    public void ValidateAndParseArguments_WithValidBatesPrefixVariations_ReturnsValidRequest(string validPrefix)
+    {
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", validPrefix,
+            "--count", "10", "--output-path", this.tempDir,
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        Assert.Equal(validPrefix, result!.Bates?.Prefix);
     }
 }

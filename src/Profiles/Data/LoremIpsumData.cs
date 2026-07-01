@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Zipper.Profiles;
+namespace Zipper.Profiles.Data;
 
 /// <summary>
 /// Lorem ipsum text generator.

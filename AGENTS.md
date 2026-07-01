@@ -217,11 +217,11 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
 | `src/FileGenerationRequest.cs` | Configuration root (8 sub-configs + `LoadfileOnly` flag) |
 | `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher |
-| `src/StandardMode.cs` / `LoadfileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
+| `src/StandardMode.cs` / `LoadFileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
 | `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
 | `src/ParallelFileGenerator.cs` | Standard mode file generation pipeline |
 | `src/ZipArchiveService.cs` | Archive creation + Load File writing |
-| `src/LoadfileOnlyGenerator.cs` | Standalone Load File generation |
+| `src/LoadFileOnlyGenerator.cs` | Standalone Load File generation |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
 | `src/ChaosAnomalyTypes.cs` | Canonical anomaly type catalog |

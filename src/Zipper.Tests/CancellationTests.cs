@@ -1,8 +1,7 @@
 using Xunit;
-
 using Zipper.Config;
 
-namespace Zipper;
+namespace Zipper.Tests;
 
 /// <summary>
 /// Tests covering cooperative cancellation (Ctrl-C / CancellationToken) across all three
@@ -94,11 +93,11 @@ public class CancellationTests
     }
 
     // -----------------------------------------------------------------------
-    // LoadfileOnlyGenerator
+    // LoadFileOnlyGenerator
     // -----------------------------------------------------------------------
 
     [Fact(Timeout = 10000)]
-    public async Task LoadfileOnlyGenerator_PreCancelledToken_ThrowsOperationCanceledException()
+    public async Task LoadFileOnlyGenerator_PreCancelledToken_ThrowsOperationCanceledException()
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
@@ -108,7 +107,7 @@ public class CancellationTests
             cts.Cancel();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                LoadfileOnlyGenerator.GenerateAsync(BuildLoadfileOnlyRequest(outputPath), cts.Token));
+                LoadFileOnlyGenerator.GenerateAsync(BuildLoadfileOnlyRequest(outputPath), cts.Token));
         }
         finally
         {
@@ -117,7 +116,7 @@ public class CancellationTests
     }
 
     [Fact(Timeout = 10000)]
-    public async Task LoadfileOnlyGenerator_PreCancelledToken_LeavesNoPartialFiles()
+    public async Task LoadFileOnlyGenerator_PreCancelledToken_LeavesNoPartialFiles()
     {
         var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
@@ -128,7 +127,7 @@ public class CancellationTests
 
             try
             {
-                await LoadfileOnlyGenerator.GenerateAsync(BuildLoadfileOnlyRequest(outputPath), cts.Token);
+                await LoadFileOnlyGenerator.GenerateAsync(BuildLoadfileOnlyRequest(outputPath), cts.Token);
             }
             catch (OperationCanceledException) { /* expected */ }
 

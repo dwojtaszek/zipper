@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Zipper.Tests;
 
-public class LoadfileAuditWriterTests
+public class LoadFileAuditWriterTests
 {
     [Fact]
     public void GenerateAuditJson_OptFormat_SetsCorrectDefaultDelimitersAndEncoding()
@@ -20,7 +20,7 @@ public class LoadfileAuditWriterTests
         request.Output = request.Output with { FileCount = 100 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.opt", request, Array.Empty<FileData>(), null);
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.opt", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -69,7 +69,7 @@ public class LoadfileAuditWriterTests
         request.Output = request.Output with { FileCount = 50 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -117,7 +117,7 @@ public class LoadfileAuditWriterTests
         request.Output = request.Output with { FileCount = 200 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), anomalies);
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), anomalies);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -154,7 +154,7 @@ public class LoadfileAuditWriterTests
         request.Output = request.Output with { FileCount = 10 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -182,7 +182,7 @@ public class LoadfileAuditWriterTests
         request.Output = request.Output with { FileCount = 10 };
 
         // Act
-        var json = LoadfileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
 
         // Assert
         using var doc = JsonDocument.Parse(json);
@@ -208,7 +208,7 @@ public class LoadfileAuditWriterTests
         {
             request.Output = request.Output with { FileCount = 42 };
             // Act
-            var path = await LoadfileAuditWriter.WriteAsync(tempFile, request, Array.Empty<FileData>(), null);
+            var path = await LoadFileAuditWriter.WriteAsync(tempFile, request, Array.Empty<FileData>(), null);
 
             // Assert
             Assert.Equal(expectedPropertiesFile, path);

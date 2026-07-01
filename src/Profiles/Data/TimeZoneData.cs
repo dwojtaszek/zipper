@@ -1,4 +1,4 @@
-namespace Zipper.Profiles;
+namespace Zipper.Profiles.Data;
 
 /// <summary>
 /// Time zone names.

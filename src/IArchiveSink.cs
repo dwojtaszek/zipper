@@ -1,15 +1,14 @@
 using System.Threading.Channels;
 
-namespace Zipper
+namespace Zipper;
+
+internal interface IArchiveSink
 {
-    internal interface IArchiveSink
-    {
-        Task<string> CreateArchiveAsync(
-            string zipFilePath,
-            string loadFileName,
-            string loadFilePath,
-            FileGenerationRequest request,
-            ChannelReader<FileData> fileDataReader,
-            CancellationToken cancellationToken = default);
-    }
+    Task<string> CreateArchiveAsync(
+        string zipFilePath,
+        string loadFileName,
+        string loadFilePath,
+        FileGenerationRequest request,
+        ChannelReader<FileData> fileDataReader,
+        CancellationToken cancellationToken = default);
 }

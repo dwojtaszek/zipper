@@ -1,5 +1,5 @@
 using Xunit;
-using Zipper.Profiles;
+using Zipper.Profiles.Data;
 
 namespace Zipper.Tests;
 

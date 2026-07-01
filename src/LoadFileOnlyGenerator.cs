@@ -7,14 +7,14 @@ namespace Zipper;
 /// Generates standalone load files (DAT or OPT) without creating native files or ZIP archives.
 /// Used when --loadfile-only flag is specified.
 /// </summary>
-internal static class LoadfileOnlyGenerator
+internal static class LoadFileOnlyGenerator
 {
     /// <summary>
     /// Generates a standalone load file and its companion properties JSON.
     /// </summary>
     /// <param name="request">File generation request with loadfile-only settings.</param>
     /// <returns>Result containing generated file paths and performance metrics.</returns>
-    public static async Task<LoadfileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
+    public static async Task<LoadFileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
         request = request.Clone();
 
@@ -45,7 +45,7 @@ internal static class LoadfileOnlyGenerator
 
 
 
-                ChaosEngine? chaosEngine = LoadfileAuditWriter.BuildChaosEngine(request, emptyRecords, format);
+                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(request, emptyRecords, format);
 
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
@@ -57,7 +57,7 @@ internal static class LoadfileOnlyGenerator
                     await writer.WriteAsync(fileStream, request, emptyRecords, chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
-                string propertiesPath = await LoadfileAuditWriter.WriteAsync(
+                string propertiesPath = await LoadFileAuditWriter.WriteAsync(
                     loadFilePath,
                     request,
                     emptyRecords,
@@ -74,7 +74,7 @@ internal static class LoadfileOnlyGenerator
 
             stopwatch.Stop();
 
-            return new LoadfileOnlyResult
+            return new LoadFileOnlyResult
             {
                 LoadFilePath = primaryLoadFilePath,
                 PropertiesFilePath = primaryPropertiesPath,
@@ -107,7 +107,7 @@ internal static class LoadfileOnlyGenerator
 /// <summary>
 /// Result of a loadfile-only generation operation.
 /// </summary>
-internal class LoadfileOnlyResult
+internal class LoadFileOnlyResult
 {
     /// <summary>
     /// Gets or sets the path to the generated load file.
