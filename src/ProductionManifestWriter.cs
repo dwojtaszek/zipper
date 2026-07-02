@@ -44,7 +44,7 @@ internal static class ProductionManifestWriter
                 Prefix = request.Bates?.Prefix ?? string.Empty,
                 Digits = request.Bates?.Digits ?? 8,
             },
-            DocumentCount = request.Output.FileCount,
+            NativeFileCount = request.Output.FileCount,
             FileType = request.Output.FileType,
             VolumeCount = volumeCount,
             VolumeSize = request.Production.VolumeSize,
@@ -101,8 +101,8 @@ internal class ProductionManifest
     [JsonPropertyName("batesRange")]
     public BatesRange BatesRange { get; set; } = new();
 
-    [JsonPropertyName("documentCount")]
-    public long DocumentCount { get; set; }
+    [JsonPropertyName("nativeFileCount")]
+    public long NativeFileCount { get; set; }
 
     [JsonPropertyName("fileType")]
     public string FileType { get; set; } = string.Empty;

@@ -77,7 +77,7 @@ public class ProductionManifestWriterTests
             Assert.Equal(8, batesRange.GetProperty("digits").GetInt32());
 
             // Counts and Volume
-            Assert.Equal(120, root.GetProperty("documentCount").GetInt64());
+            Assert.Equal(120, root.GetProperty("nativeFileCount").GetInt64());
             Assert.Equal("eml", root.GetProperty("fileType").GetString());
             Assert.Equal(3, root.GetProperty("volumeCount").GetInt32());
             Assert.Equal(50, root.GetProperty("volumeSize").GetInt32());

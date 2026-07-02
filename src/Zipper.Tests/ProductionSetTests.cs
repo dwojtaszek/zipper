@@ -208,7 +208,7 @@ public class ProductionSetTests : IDisposable
         var json = await File.ReadAllTextAsync(result.ManifestPath);
         var manifest = JsonSerializer.Deserialize<JsonElement>(json);
 
-        Assert.Equal(8, manifest.GetProperty("documentCount").GetInt64());
+        Assert.Equal(8, manifest.GetProperty("nativeFileCount").GetInt64());
         Assert.Equal(2, manifest.GetProperty("volumeCount").GetInt32());
         Assert.Equal(5, manifest.GetProperty("volumeSize").GetInt32());
         Assert.Equal("TEST", manifest.GetProperty("batesRange").GetProperty("prefix").GetString());
