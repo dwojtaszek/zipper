@@ -6,7 +6,7 @@
     "prefix": "CLIENT",
     "digits": 8
   },
-  "documentCount": 1500,
+  "nativeFileCount": 1500,
   "fileType": "pdf",
   "volumeCount": 3,
   "volumeSize": 500,
