@@ -49,6 +49,23 @@ internal static class LoadFileAuditWriter
         return ChaosEngineBuilder.Build(request, totalLines, format);
     }
 
+    public static long ComputeOptRecordCountForLoadFileOnly(FileGenerationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        long totalRecords = 0;
+#pragma warning disable S2245
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
+#pragma warning restore S2245
+        for (long i = 1; i <= request.Output.FileCount; i++)
+        {
+            int pageCount = request.Tiff.PageRange.HasValue
+                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, i)
+                : random.Next(1, 11);
+            totalRecords += pageCount;
+        }
+        return totalRecords;
+    }
+
     private static (long TotalRecords, long TotalLines) ComputeRecordCounts(
         FileGenerationRequest request,
         IReadOnlyCollection<FileData> composedRecords,
@@ -57,7 +74,11 @@ internal static class LoadFileAuditWriter
         long totalRecords;
         if (composedRecords.Count == 0 && request.Output.FileCount > 0)
         {
-            totalRecords = request.Output.FileCount;
+            totalRecords = format switch
+            {
+                LoadFileFormat.Opt => ComputeOptRecordCountForLoadFileOnly(request),
+                _ => request.Output.FileCount
+            };
         }
         else
         {

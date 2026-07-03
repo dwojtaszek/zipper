@@ -563,8 +563,8 @@ public static class CliParser
 
                     break;
                 default:
-                    Console.Error.WriteLine($"Warning: Unknown argument or unconsumed value '{args[i]}' ignored.");
-                    break;
+                    Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
+                    return null;
             }
         }
 
@@ -573,7 +573,7 @@ public static class CliParser
 
     private static bool TryGetValue(string[] args, int currentIndex, out string value)
     {
-        if (currentIndex + 1 < args.Length && !IsParameterlessFlag(args[currentIndex + 1]))
+        if (currentIndex + 1 < args.Length && !args[currentIndex + 1].StartsWith("--", StringComparison.Ordinal))
         {
             value = args[currentIndex + 1];
             return true;
@@ -583,13 +583,4 @@ public static class CliParser
         return false;
     }
 
-    private static bool IsParameterlessFlag(string arg)
-    {
-        if (!arg.StartsWith("--", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return CliOptions.ParameterlessFlags.Contains(arg);
-    }
 }

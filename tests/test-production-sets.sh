@@ -100,6 +100,56 @@ if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSO
 
 print_success "Test Case 2: Production ZIP passed"
 
+# --- Test Case 3: Production Set Line Ending and manifest counts ---
+
+print_info "Test Case 3: Production set LF line endings and Attachment counts"
+
+zipper \
+  --production-set \
+  --type eml \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test3" \
+  --bates-prefix "FAM" \
+  --attachment-rate 100 \
+  --with-families \
+  --seed 42 \
+  --eol LF
+
+prod_dir=$(find "$TEST_OUTPUT_DIR/test3" -type d -name "PRODUCTION_*" -print -quit)
+if [[ -z "$prod_dir" ]]; then
+  print_error "Test 3: No production directory found."
+fi
+
+python3 - "$prod_dir" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+for rel in ("DATA/loadfile.dat", "DATA/loadfile.opt"):
+    data = (root / rel).read_bytes()
+    if b"\r" in data:
+        raise SystemExit(f"{rel} contains CR bytes despite --eol LF")
+
+for rel in ("DATA/loadfile_properties.json", "DATA/loadfile.opt_properties.json"):
+    doc = json.loads((root / rel).read_text())
+    if doc["properties"]["lineEnding"] != "LF":
+        raise SystemExit(f"{rel} did not report LF line ending")
+
+manifest = json.loads((root / "_manifest.json").read_text())
+actual_natives = len(list((root / "NATIVES").glob("*/*")))
+if manifest["nativeFileCount"] != actual_natives:
+    raise SystemExit(f"nativeFileCount {manifest['nativeFileCount']} != actual {actual_natives}")
+if manifest["parentNativeFileCount"] != 5:
+    raise SystemExit("parentNativeFileCount should be 5")
+if manifest["attachmentNativeFileCount"] <= 0:
+    raise SystemExit("attachmentNativeFileCount should be positive")
+if manifest["nativeFileCount"] != manifest["parentNativeFileCount"] + manifest["attachmentNativeFileCount"]:
+    raise SystemExit("manifest Native File counts do not add up")
+PY
+
+print_success "Test Case 3: Production Set LF line endings and Attachment counts passed"
+
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"

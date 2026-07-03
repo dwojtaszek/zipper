@@ -462,6 +462,62 @@ public class ProductionSetTests : IDisposable
         Assert.Equal(fileCount, doc.RootElement.GetProperty("totalRecords").GetInt64());
     }
 
+    [Fact]
+    public async Task ProductionSet_WithEolLF_GeneratesLfDatAndOpt()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Delimiters = request.Delimiters with { EndOfLine = "LF" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datBytes = await File.ReadAllBytesAsync(result.DatFilePath);
+        var datContent = System.Text.Encoding.UTF8.GetString(datBytes);
+        Assert.Contains("\n", datContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n", datContent, StringComparison.Ordinal);
+
+        var optBytes = await File.ReadAllBytesAsync(result.OptFilePath);
+        var optContent = System.Text.Encoding.UTF8.GetString(optBytes);
+        Assert.Contains("\n", optContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n", optContent, StringComparison.Ordinal);
+
+        var datPropsPath = Path.Combine(result.ProductionPath, "DATA", "loadfile_properties.json");
+        var datPropsJson = await File.ReadAllTextAsync(datPropsPath);
+        var datDoc = JsonDocument.Parse(datPropsJson);
+        Assert.Equal("LF", datDoc.RootElement.GetProperty("properties").GetProperty("lineEnding").GetString());
+
+        var optPropsPath = Path.Combine(result.ProductionPath, "DATA", "loadfile.opt_properties.json");
+        var optPropsJson = await File.ReadAllTextAsync(optPropsPath);
+        var optDoc = JsonDocument.Parse(optPropsJson);
+        Assert.Equal("LF", optDoc.RootElement.GetProperty("properties").GetProperty("lineEnding").GetString());
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithAttachments_ManifestCountsMatchFilesOnDisk()
+    {
+        var request = this.CreateTestRequest(count: 5);
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithFamilies = true, Seed = 42 };
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var nativesDir = Path.Combine(result.ProductionPath, "NATIVES");
+        var filesOnDisk = Directory.GetFiles(nativesDir, "*.*", SearchOption.AllDirectories);
+        long actualFilesCount = filesOnDisk.Length;
+
+        var manifestPath = Path.Combine(result.ProductionPath, "_manifest.json");
+        var manifestJson = await File.ReadAllTextAsync(manifestPath);
+        var doc = JsonDocument.Parse(manifestJson);
+
+        long manifestNativeCount = doc.RootElement.GetProperty("nativeFileCount").GetInt64();
+        long parentCount = doc.RootElement.GetProperty("parentNativeFileCount").GetInt64();
+        long attachmentCount = doc.RootElement.GetProperty("attachmentNativeFileCount").GetInt64();
+
+        Assert.Equal(actualFilesCount, manifestNativeCount);
+        Assert.Equal(5, parentCount);
+        Assert.True(attachmentCount > 0);
+        Assert.Equal(parentCount + attachmentCount, manifestNativeCount);
+    }
+
     [SkippableFact]
     public async Task ProductionSet_OnFailure_CleansUpPartialOutput()
     {

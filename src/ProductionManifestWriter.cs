@@ -30,9 +30,19 @@ internal static class ProductionManifestWriter
         string batesStart,
         string batesEnd,
         int volumeCount,
-        TimeSpan generationTime)
+        TimeSpan generationTime,
+        System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null)
     {
         var manifestPath = Path.Combine(productionPath, "_manifest.json");
+
+        fileDataList ??= Array.Empty<FileData>();
+        long parentCount = fileDataList.Count > 0 ? fileDataList.Count : request.Output.FileCount;
+        long attachmentCount = 0;
+        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        {
+            attachmentCount = fileDataList.Count(f => f.Attachment.HasValue);
+        }
+        long totalNativeCount = parentCount + attachmentCount;
 
         var manifest = new ProductionManifest
         {
@@ -44,7 +54,9 @@ internal static class ProductionManifestWriter
                 Prefix = request.Bates?.Prefix ?? string.Empty,
                 Digits = request.Bates?.Digits ?? 8,
             },
-            NativeFileCount = request.Output.FileCount,
+            NativeFileCount = totalNativeCount,
+            ParentNativeFileCount = attachmentCount > 0 ? parentCount : null,
+            AttachmentNativeFileCount = attachmentCount > 0 ? attachmentCount : null,
             FileType = request.Output.FileType,
             VolumeCount = volumeCount,
             VolumeSize = request.Production.VolumeSize,
@@ -103,6 +115,12 @@ internal class ProductionManifest
 
     [JsonPropertyName("nativeFileCount")]
     public long NativeFileCount { get; set; }
+
+    [JsonPropertyName("parentNativeFileCount")]
+    public long? ParentNativeFileCount { get; set; }
+
+    [JsonPropertyName("attachmentNativeFileCount")]
+    public long? AttachmentNativeFileCount { get; set; }
 
     [JsonPropertyName("fileType")]
     public string FileType { get; set; } = string.Empty;

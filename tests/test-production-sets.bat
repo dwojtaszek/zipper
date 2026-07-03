@@ -94,6 +94,50 @@ if not exist "%PROD_DIR2%\_manifest.json" ( echo [ ERROR ] Missing manifest JSON
 
 echo [ SUCCESS ] Test Case 2: Production ZIP passed
 
+:: --- Test Case 3: Production Set Line Ending and manifest counts ---
+
+echo [ INFO ] Test Case 3: Production set LF line endings and Attachment counts
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --type eml ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test3" ^
+  --bates-prefix "FAM" ^
+  --attachment-rate 100 ^
+  --with-families ^
+  --seed 42 ^
+  --eol LF
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 3 failed during execution
+  exit /b 1
+)
+
+set PROD_DIR3=
+for /d %%d in ("%TEST_OUTPUT_DIR%\test3\PRODUCTION_*") do set PROD_DIR3=%%d
+if not defined PROD_DIR3 (
+  echo [ ERROR ] Test 3: No production directory found.
+  exit /b 1
+)
+
+powershell -NoProfile -Command ^
+  "$root = '%PROD_DIR3%';" ^
+  "foreach ($rel in @('DATA/loadfile.dat','DATA/loadfile.opt')) { $bytes = [IO.File]::ReadAllBytes((Join-Path $root $rel)); if ($bytes -contains 13) { throw \"$rel contains CR bytes despite --eol LF\" } }" ^
+  "foreach ($rel in @('DATA/loadfile_properties.json','DATA/loadfile.opt_properties.json')) { $doc = Get-Content (Join-Path $root $rel) -Raw | ConvertFrom-Json; if ($doc.properties.lineEnding -ne 'LF') { throw \"$rel did not report LF line ending\" } }" ^
+  "$manifest = Get-Content (Join-Path $root '_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "$actual = (Get-ChildItem -Path (Join-Path $root 'NATIVES') -File -Recurse).Count;" ^
+  "if ($manifest.nativeFileCount -ne $actual) { throw \"nativeFileCount mismatch\" }" ^
+  "if ($manifest.parentNativeFileCount -ne 5) { throw \"parentNativeFileCount should be 5\" }" ^
+  "if ($manifest.attachmentNativeFileCount -le 0) { throw \"attachmentNativeFileCount should be positive\" }" ^
+  "if ($manifest.nativeFileCount -ne ($manifest.parentNativeFileCount + $manifest.attachmentNativeFileCount)) { throw \"manifest Native File counts do not add up\" }"
+if errorlevel 1 (
+  echo [ ERROR ] Test 3 validation failed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 3: Production Set LF line endings and Attachment counts passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

@@ -45,10 +45,24 @@ public class CliParserTests
     }
 
     [Fact]
-    public void Parse_UnknownFlag_OutputsWarningButContinues()
+    public void Parse_UnknownFlag_ReturnsNull()
     {
         var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--unknown-flag" });
-        Assert.NotNull(result);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Parse_UnknownPositionalValue_ReturnsNull()
+    {
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "extra_value" });
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Parse_UnknownFlagInValuePosition_ReturnsNull()
+    {
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "--unknown-flag" });
+        Assert.Null(result);
     }
 
     [Fact]

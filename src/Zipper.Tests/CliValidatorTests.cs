@@ -167,6 +167,16 @@ public class CliValidatorTests
     }
 
     [Fact]
+    public void Validate_EolWithProductionSet_ReturnsTrue()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "CL001";
+        args.Eol = "LF";
+        Assert.True(CliValidator.Validate(args));
+    }
+
+    [Fact]
     public void Validate_ChaosMode_WithoutLoadfileOnly_ReturnsFalse()
     {
         var args = CreateValidArgs();
