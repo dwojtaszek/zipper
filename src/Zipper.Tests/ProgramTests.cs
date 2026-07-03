@@ -156,6 +156,46 @@ public class ProgramTests
     }
 
     [Fact]
+    public async Task Main_WithUnknownFlag_ReturnsErrorCode()
+    {
+        string[] args = { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--unknown-flag" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithUnknownPositionalValue_ReturnsErrorCode()
+    {
+        string[] args = { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "extra_value" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithUnknownFlagInValuePosition_ReturnsErrorCode()
+    {
+        string[] args = { "--type", "pdf", "--count", "10", "--output-path", "--unknown-flag" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithBenchmarkAndUnknownFlag_BypassesValidationAndReturnsZero()
+    {
+        string[] args = { "--benchmark", "--unknown-flag" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithChaosListAndUnknownFlag_BypassesValidationAndReturnsZero()
+    {
+        string[] args = { "--chaos-list", "--unknown-flag" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
     public async Task Main_WithVersionFlag_PrintsVersionAndReturnsZero()
     {
         // Arrange
@@ -184,6 +224,14 @@ public class ProgramTests
         // Assert
         Assert.Equal(0, exitCode);
         Assert.Contains("Zipper v", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Main_WithVersionAndUnknownFlag_ReturnsErrorCode()
+    {
+        string[] args = { "--version", "--unknown-flag" };
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
     }
 
     [Fact]

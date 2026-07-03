@@ -4,9 +4,9 @@ internal static class LoadfileOnlyValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.Eol) && !parsed.LoadfileOnly)
+        if (!string.IsNullOrEmpty(parsed.Eol) && !parsed.LoadfileOnly && !parsed.ProductionSet)
         {
-            Console.Error.WriteLine("Error: --eol requires --loadfile-only.");
+            Console.Error.WriteLine("Error: --eol requires --loadfile-only or --production-set.");
             return false;
         }
 

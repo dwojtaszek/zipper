@@ -196,7 +196,7 @@ internal static class ProductionSetGenerator
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
         var manifestPath = await ProductionManifestWriter.WriteAsync(
-            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed).ConfigureAwait(false);
+            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList).ConfigureAwait(false);
 
         // Optionally wrap in ZIP
         string? zipPath = null;

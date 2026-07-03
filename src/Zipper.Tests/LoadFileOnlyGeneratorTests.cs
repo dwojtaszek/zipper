@@ -226,6 +226,45 @@ public class LoadFileOnlyGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_OptWithPageRangeAndSeed_TotalRecordsEqualsActualLines()
+    {
+        var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
+        request.Tiff = request.Tiff with { PageRange = (3, 5) };
+        request.Metadata = request.Metadata with { Seed = 42 };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        var propsJson = await File.ReadAllTextAsync(result.PropertiesFilePath);
+        var propsDoc = JsonDocument.Parse(propsJson);
+        long totalRecordsAudit = propsDoc.RootElement.GetProperty("totalRecords").GetInt64();
+
+        var optLines = await File.ReadAllLinesAsync(result.LoadFilePath);
+        long actualLinesCount = optLines.Length;
+
+        Assert.Equal(actualLinesCount, totalRecordsAudit);
+        Assert.Equal(actualLinesCount, result.TotalRecords);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_OptWithoutSeed_TotalRecordsEqualsActualLines()
+    {
+        var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 5);
+        request.Metadata = request.Metadata with { Seed = null };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        var propsJson = await File.ReadAllTextAsync(result.PropertiesFilePath);
+        var propsDoc = JsonDocument.Parse(propsJson);
+        long totalRecordsAudit = propsDoc.RootElement.GetProperty("totalRecords").GetInt64();
+
+        var optLines = await File.ReadAllLinesAsync(result.LoadFilePath);
+        long actualLinesCount = optLines.Length;
+
+        Assert.Equal(actualLinesCount, totalRecordsAudit);
+        Assert.Equal(actualLinesCount, result.TotalRecords);
+    }
+
+    [Fact]
     public async Task GenerateAsync_Dat_FileCountOne_CreatesHeaderAndOneRow()
     {
         var request = this.CreateRequest(format: LoadFileFormat.Dat, count: 1);
@@ -338,6 +377,7 @@ public class LoadFileOnlyGeneratorTests : IDisposable
     public async Task GenerateAsync_PropertiesJson_ContainsFormatAndRecordCount()
     {
         var request = this.CreateRequest(format: LoadFileFormat.Opt, count: 25);
+        request.Tiff = request.Tiff with { PageRange = (1, 1) };
         var result = await LoadFileOnlyGenerator.GenerateAsync(request);
 
         var json = await File.ReadAllTextAsync(result.PropertiesFilePath);

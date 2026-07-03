@@ -10,7 +10,7 @@ public static class Program
 
         args ??= [];
 
-        if (args.Contains("--version", StringComparer.OrdinalIgnoreCase))
+        if (args.Length == 1 && string.Equals(args[0], "--version", StringComparison.OrdinalIgnoreCase))
         {
             var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");

@@ -31,6 +31,7 @@ internal static class LoadFileOnlyGenerator
 
         string primaryLoadFilePath = string.Empty;
         string primaryPropertiesPath = string.Empty;
+        long totalRecords = request.Output.FileCount;
 
         var generatedFiles = new List<string>();
 
@@ -38,6 +39,7 @@ internal static class LoadFileOnlyGenerator
         {
             foreach (var format in formatsToGenerate)
             {
+                var formatRequest = EnsureStableOptPageCounts(request, format);
                 var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
                 generatedFiles.Add(loadFilePath);
@@ -46,7 +48,7 @@ internal static class LoadFileOnlyGenerator
 
 
 
-                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(request, emptyRecords, format);
+                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, emptyRecords, format);
 
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
@@ -55,12 +57,12 @@ internal static class LoadFileOnlyGenerator
                 var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
                 await using (fileStream.ConfigureAwait(false))
                 {
-                    await writer.WriteAsync(fileStream, request, emptyRecords, chaosEngine, cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(fileStream, formatRequest, emptyRecords, chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
                 string propertiesPath = await LoadFileAuditWriter.WriteAsync(
                     loadFilePath,
-                    request,
+                    formatRequest,
                     emptyRecords,
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
@@ -70,6 +72,9 @@ internal static class LoadFileOnlyGenerator
                 {
                     primaryLoadFilePath = loadFilePath;
                     primaryPropertiesPath = propertiesPath;
+                    totalRecords = format == LoadFileFormat.Opt
+                        ? LoadFileAuditWriter.ComputeOptRecordCountForLoadFileOnly(formatRequest)
+                        : formatRequest.Output.FileCount;
                 }
             }
 
@@ -79,7 +84,7 @@ internal static class LoadFileOnlyGenerator
             {
                 LoadFilePath = primaryLoadFilePath,
                 PropertiesFilePath = primaryPropertiesPath,
-                TotalRecords = request.Output.FileCount,
+                TotalRecords = totalRecords,
                 GenerationTime = stopwatch.Elapsed,
             };
         }
@@ -102,6 +107,18 @@ internal static class LoadFileOnlyGenerator
 
             throw;
         }
+    }
+
+    private static FileGenerationRequest EnsureStableOptPageCounts(FileGenerationRequest request, LoadFileFormat format)
+    {
+        if (format != LoadFileFormat.Opt || request.Tiff.PageRange.HasValue || request.Metadata.Seed.HasValue)
+        {
+            return request;
+        }
+
+        var stableRequest = request.Clone();
+        stableRequest.Metadata = request.Metadata with { Seed = Random.Shared.Next() };
+        return stableRequest;
     }
 }
 

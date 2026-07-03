@@ -489,7 +489,7 @@ public class CliPipelineTests : IDisposable
     }
 
     [Fact]
-    public void ValidateAndParseArguments_WithUnknownArgument_ShouldOutputWarning()
+    public void ValidateAndParseArguments_WithUnknownArgument_ShouldFail()
     {
         // Arrange
         var originalError = Console.Error;
@@ -505,9 +505,9 @@ public class CliPipelineTests : IDisposable
             var result = Cli.Pipeline.Build(args);
 
             // Assert
-            Assert.NotNull(result); // The valid args should still parse into a valid request
+            Assert.Null(result); // The parse should fail
             var output = errorOutput.ToString();
-            Assert.Contains("Warning: Unknown argument or unconsumed value '--unknown-arg' ignored.", output, StringComparison.Ordinal);
+            Assert.Contains("Error: Unknown argument or unconsumed value '--unknown-arg'", output, StringComparison.Ordinal);
         }
         finally
         {

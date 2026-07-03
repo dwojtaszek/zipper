@@ -144,7 +144,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
 | **Encoding** | The character encoding for the **Load File** output. Supported: UTF-8 (default), UTF-16, ANSI (Windows-1252). | Character set, code page |
-| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only Mode**. Options: CRLF, LF, CR. Note: in **Standard** (archive) mode, line endings follow the platform default rather than `--eol`, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
+| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only and Production Set modes**. Options: CRLF, LF, CR. Note: in **Standard** (archive) mode, line endings follow the platform default rather than `--eol`, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
 | **Placeholder Content** | The minimal valid content generated for each **Native File** to ensure maximum compression. Identical across all files of the same **File Type**. | Template content, default content |
 | **Placeholder Text** | The fixed block of text used in **Extracted Text** files to ensure compressibility. | Template text, default text |
 

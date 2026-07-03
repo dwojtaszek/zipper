@@ -517,6 +517,25 @@ run_test_case "Test Case 20: High-volume smoke test" --type pdf --count 5000 --o
 verify_output "$TEST_OUTPUT_DIR/pdf_high_volume" 5000 "Control Number,File Path" "pdf" "false" "UTF-8"
 print_success "Test Case 20 passed."
 
+# Test Case 21: Unknown CLI arguments hard-fail, including value position
+print_info "START: Test Case 21: Unknown CLI arguments hard-fail"
+if zipper --type pdf --count 1 --output-path "$TEST_OUTPUT_DIR/unknown_arg" --unknown-flag > /tmp/zipper_unknown_arg.out 2> /tmp/zipper_unknown_arg.err; then
+  print_error "Test 21: Unknown flag should fail"
+fi
+if ! grep -q "Unknown argument or unconsumed value '--unknown-flag'" /tmp/zipper_unknown_arg.err; then
+  print_error "Test 21: Unknown flag error message not found"
+fi
+if zipper --type pdf --count 1 --output-path --unknown-flag > /tmp/zipper_unknown_value.out 2> /tmp/zipper_unknown_value.err; then
+  print_error "Test 21: Unknown flag in value position should fail"
+fi
+if ! grep -q "requires a value" /tmp/zipper_unknown_value.err; then
+  print_error "Test 21: Unknown flag in value position did not fail as a missing value"
+fi
+if zipper --version --unknown-flag > /tmp/zipper_version_unknown.out 2> /tmp/zipper_version_unknown.err; then
+  print_error "Test 21: --version with unknown flag should fail"
+fi
+print_success "Test Case 21 passed."
+
 # --- Cleanup ---
 
 print_info "Cleaning up test output..."

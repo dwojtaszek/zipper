@@ -18,6 +18,7 @@ public class LoadFileAuditWriterTests
         };
         request.Chaos = request.Chaos with { ChaosMode = false };
         request.Output = request.Output with { FileCount = 100 };
+        request.Tiff = request.Tiff with { PageRange = (1, 1) };
 
         // Act
         var json = LoadFileAuditWriter.GenerateAuditJson("test.opt", request, Array.Empty<FileData>(), null);

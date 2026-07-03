@@ -176,6 +176,12 @@ Compatibility checklist:
 - Repository unit tests and Loadfile-Only Mode E2E tests use the camelCase audit schema.
 - Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` and were written against PascalCase field names must be updated.
 
+### `_manifest.json` Production Manifest
+
+Production Set Mode writes a `_manifest.json` file at the Production Set root. The manifest records the Bates Number range, Volume layout, output directories, Load File paths, generation settings, and generated Native File counts.
+
+When family relationships create child Attachment Native Files, `nativeFileCount` reports the total Native Files written to `NATIVES` (parents plus Attachments). The manifest also includes `parentNativeFileCount` and `attachmentNativeFileCount` when Attachment Native Files are present.
+
 ### Arguments Quick Reference
 
 | Argument | Default | Range/Values | Description |

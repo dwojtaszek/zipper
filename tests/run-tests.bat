@@ -455,6 +455,30 @@ call :run_test_case "Test Case 20: High-volume smoke test" --type pdf --count 50
 call :verify_output "%TEST_OUTPUT_DIR%\pdf_high_volume" 5000 "Control Number,File Path" "pdf" "false" "UTF-8"
 call :print_success "Test Case 20 passed."
 
+REM Test Case 21: Unknown CLI arguments hard-fail, including value position
+call :print_info "START: Test Case 21: Unknown CLI arguments hard-fail"
+%ZIPPER_CMD% --type pdf --count 1 --output-path "%TEST_OUTPUT_DIR%\unknown_arg" --unknown-flag > "%TEMP%\zipper_unknown_arg.out" 2> "%TEMP%\zipper_unknown_arg.err"
+if not errorlevel 1 (
+    call :print_error "Test 21: Unknown flag should fail"
+)
+findstr /C:"Unknown argument or unconsumed value '--unknown-flag'" "%TEMP%\zipper_unknown_arg.err" >nul
+if errorlevel 1 (
+    call :print_error "Test 21: Unknown flag error message not found"
+)
+%ZIPPER_CMD% --type pdf --count 1 --output-path --unknown-flag > "%TEMP%\zipper_unknown_value.out" 2> "%TEMP%\zipper_unknown_value.err"
+if not errorlevel 1 (
+    call :print_error "Test 21: Unknown flag in value position should fail"
+)
+findstr /C:"requires a value" "%TEMP%\zipper_unknown_value.err" >nul
+if errorlevel 1 (
+    call :print_error "Test 21: Unknown flag in value position did not fail as a missing value"
+)
+%ZIPPER_CMD% --version --unknown-flag > "%TEMP%\zipper_version_unknown.out" 2> "%TEMP%\zipper_version_unknown.err"
+if not errorlevel 1 (
+    call :print_error "Test 21: --version with unknown flag should fail"
+)
+call :print_success "Test Case 21 passed."
+
 REM --- Cleanup ---
 
 call :print_info "Cleaning up test output..."
