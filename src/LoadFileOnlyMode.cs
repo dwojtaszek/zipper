@@ -60,7 +60,7 @@ internal class LoadFileOnlyMode : IGenerationMode
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Properties: {0}", result.PropertiesFilePath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Records: {0:N0}", result.TotalRecords));
 
-        if (!string.IsNullOrEmpty(result.LoadFilePath))
+        if (!string.IsNullOrEmpty(result.LoadFilePath) && !request.Chaos.ChaosMode)
         {
             ValidateGeneratedLoadFile(result.LoadFilePath, request);
         }
