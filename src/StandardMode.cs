@@ -1,3 +1,5 @@
+using Zipper.Validation;
+
 namespace Zipper;
 
 /// <summary>
@@ -80,6 +82,34 @@ internal class StandardMode : IGenerationMode
         if (!request.Output.IncludeLoadFile)
         {
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file created: {0}", result.LoadFilePath));
+        }
+
+        if (!string.IsNullOrEmpty(result.LoadFilePath))
+        {
+            ValidateGeneratedLoadFile(result.LoadFilePath, request);
+        }
+    }
+
+    private static void ValidateGeneratedLoadFile(string loadFilePath, FileGenerationRequest request)
+    {
+        if (!File.Exists(loadFilePath)) return;
+        var format = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat;
+        var formatName = format switch
+        {
+            LoadFileFormat.Opt => "opt",
+            LoadFileFormat.Csv => "csv",
+            LoadFileFormat.Concordance => "concordance",
+            _ => "dat"
+        };
+        // ponytail: StandardMode uses Environment.NewLine regardless of --eol config,
+        // so skip EOL validation here. Only LoadFileOnlyMode/ProductionSetMode respect --eol.
+        var runner = new ValidatorRunner();
+        var vr = runner.ValidateLoadFile(loadFilePath, formatName, null, null);
+        if (vr.HasErrors || vr.HasWarnings)
+        {
+            Console.Error.WriteLine(vr.GetSummary());
+            if (vr.HasErrors)
+                throw new InvalidOperationException("Post-generation validation failed.");
         }
     }
 }

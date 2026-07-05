@@ -1,3 +1,5 @@
+using Zipper.Validation;
+
 namespace Zipper;
 
 /// <summary>
@@ -57,5 +59,40 @@ internal class LoadFileOnlyMode : IGenerationMode
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file: {0}", result.LoadFilePath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Properties: {0}", result.PropertiesFilePath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Records: {0:N0}", result.TotalRecords));
+
+        if (!string.IsNullOrEmpty(result.LoadFilePath))
+        {
+            ValidateGeneratedLoadFile(result.LoadFilePath, request);
+        }
+    }
+
+    private static void ValidateGeneratedLoadFile(string loadFilePath, FileGenerationRequest request)
+    {
+        if (!File.Exists(loadFilePath)) return;
+        foreach (var format in request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat })
+        {
+            var formatName = format switch
+            {
+                LoadFileFormat.Opt => "opt",
+                LoadFileFormat.Csv => "csv",
+                LoadFileFormat.Concordance => "concordance",
+                _ => "dat"
+            };
+            var eol = request.Delimiters.EndOfLine?.ToUpperInvariant() switch
+            {
+                "CRLF" => "\r\n",
+                "LF" => "\n",
+                "CR" => "\r",
+                _ => null
+            };
+            var runner = new ValidatorRunner();
+            var vr = runner.ValidateLoadFile(loadFilePath, formatName, null, eol);
+            if (vr.HasErrors || vr.HasWarnings)
+            {
+                Console.Error.WriteLine(vr.GetSummary());
+                if (vr.HasErrors)
+                    throw new InvalidOperationException("Post-generation validation failed.");
+            }
+        }
     }
 }
