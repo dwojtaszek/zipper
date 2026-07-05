@@ -1,3 +1,5 @@
+using Zipper.Validation;
+
 namespace Zipper;
 
 /// <summary>
@@ -42,6 +44,38 @@ internal class ProductionSetMode : IGenerationMode
         if (result.ZipFilePath is not null)
         {
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  ZIP: {0}", result.ZipFilePath));
+        }
+
+        var eol = request.Delimiters.EndOfLine?.ToUpperInvariant() switch
+        {
+            "CRLF" => "\r\n",
+            "LF" => "\n",
+            "CR" => "\r",
+            _ => null
+        };
+
+        if (!string.IsNullOrEmpty(result.DatFilePath) && File.Exists(result.DatFilePath))
+        {
+            var runner = new ValidatorRunner();
+            var vr = runner.ValidateLoadFile(result.DatFilePath, "concordance", null, eol);
+            if (vr.HasErrors || vr.HasWarnings)
+            {
+                Console.Error.WriteLine(vr.GetSummary());
+                if (vr.HasErrors)
+                    throw new InvalidOperationException("Post-generation validation failed (DAT).");
+            }
+        }
+
+        if (!string.IsNullOrEmpty(result.OptFilePath) && File.Exists(result.OptFilePath))
+        {
+            var runner = new ValidatorRunner();
+            var vr = runner.ValidateLoadFile(result.OptFilePath, "opt", null, eol);
+            if (vr.HasErrors || vr.HasWarnings)
+            {
+                Console.Error.WriteLine(vr.GetSummary());
+                if (vr.HasErrors)
+                    throw new InvalidOperationException("Post-generation validation failed (OPT).");
+            }
         }
     }
 }
