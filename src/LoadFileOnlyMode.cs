@@ -78,6 +78,10 @@ internal class LoadFileOnlyMode : IGenerationMode
                 LoadFileFormat.Concordance => "concordance",
                 _ => "dat"
             };
+            var fileForFormat = format == LoadFileFormat.Opt
+                ? Path.ChangeExtension(loadFilePath, ".opt")
+                : loadFilePath;
+            if (!File.Exists(fileForFormat)) continue;
             var eol = request.Delimiters.EndOfLine?.ToUpperInvariant() switch
             {
                 "CRLF" => "\r\n",
@@ -86,7 +90,7 @@ internal class LoadFileOnlyMode : IGenerationMode
                 _ => null
             };
             var runner = new ValidatorRunner();
-            var vr = runner.ValidateLoadFile(loadFilePath, formatName, null, eol);
+            var vr = runner.ValidateLoadFile(fileForFormat, formatName, null, eol);
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());
