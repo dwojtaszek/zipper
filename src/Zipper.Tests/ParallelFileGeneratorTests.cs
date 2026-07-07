@@ -641,9 +641,9 @@ public class ParallelFileGeneratorTests
     }
 
     [Fact]
-#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
     public void GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes()
     {
+#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
         var generator = new ParallelFileGenerator();
         var workItem = new FileWorkItem { Index = 1 };
         const int paddingPerFile = 0;
@@ -698,6 +698,7 @@ public class ParallelFileGeneratorTests
         {
             fileData.MemoryOwner?.Dispose();
         }
+#pragma warning restore S4426
     }
 
     [Fact]

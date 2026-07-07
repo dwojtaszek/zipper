@@ -118,6 +118,13 @@ public static class RequestBuilder
             ? multiFormats
             : new List<LoadFileFormat> { GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat };
 
+        var hashConfig = ParseHashConfig(parsed);
+        if (parsed.LoadfileOnly && hashConfig.Mode == HashMode.Actual)
+        {
+            Console.Error.WriteLine("error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash)");
+            return null;
+        }
+
         return new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -183,7 +190,7 @@ public static class RequestBuilder
                 VolumeSize = parsed.VolumeSize ?? 5000,
             },
             LoadfileOnly = parsed.LoadfileOnly,
-            Hash = ParseHashConfig(parsed),
+            Hash = hashConfig,
         };
     }
 

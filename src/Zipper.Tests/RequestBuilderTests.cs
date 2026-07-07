@@ -387,4 +387,16 @@ public class RequestBuilderTests
         Assert.Equal(Config.HashMode.None, config.Mode);
         Assert.Empty(config.Algorithms);
     }
+
+    [Fact]
+    public void Build_LoadfileOnlyWithActualHashMode_ReturnsNull()
+    {
+        var parsed = CreateParsedArgs();
+        parsed.LoadfileOnly = true;
+        parsed.HashMode = "actual";
+        parsed.HashAlgorithms = "md5";
+
+        var result = RequestBuilder.Build(parsed);
+        Assert.Null(result);
+    }
 }
