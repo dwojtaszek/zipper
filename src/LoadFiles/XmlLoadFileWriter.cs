@@ -101,15 +101,36 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         var filesElement = new XElement("Files");
 
         // Native file reference
-        var nativeFile = new XElement(
-            "File",
-            new XAttribute("FileType", "Native"),
-            new XElement(
-                "ExternalFile",
-                new XAttribute("FilePath", workItem.FilePathInZip),
-                new XAttribute("FileName", workItem.FileName),
-                new XAttribute("FileSize", fileData.DataLength),
-                new XAttribute("Hash", fileData.Hash)));
+        var nativeExternalFile = new XElement(
+            "ExternalFile",
+            new XAttribute("FilePath", workItem.FilePathInZip),
+            new XAttribute("FileName", workItem.FileName),
+            new XAttribute("FileSize", fileData.DataLength),
+            new XAttribute("Hash", fileData.Hash));
+
+        // Add algorithm-specific hash attributes when multiple algorithms exist
+        if (fileData.Hashes is not null)
+        {
+            foreach (var kvp in fileData.Hashes)
+            {
+                if (kvp.Key == Config.HashAlgorithm.MD5)
+                    continue; // Already written as "Hash"
+
+                var attrName = kvp.Key switch
+                {
+                    Config.HashAlgorithm.SHA1 => "Sha1Hash",
+                    Config.HashAlgorithm.SHA256 => "Sha256Hash",
+                    _ => null,
+                };
+
+                if (attrName is not null)
+                {
+                    nativeExternalFile.Add(new XAttribute(attrName, kvp.Value));
+                }
+            }
+        }
+
+        var nativeFile = new XElement("File", new XAttribute("FileType", "Native"), nativeExternalFile);
         filesElement.Add(nativeFile);
 
         // Extracted Text file reference if applicable

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using Zipper.Config;
 using Zipper.Profiles.Data;
 
 
@@ -53,6 +54,51 @@ internal static class ProductionSetGenerator
         }
     }
 
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeActualHashes(
+        byte[] content, HashConfig hashConfig)
+    {
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+        foreach (var algo in hashConfig.Algorithms)
+            dict[algo] = HashUtility.ComputeHashHex(content, algo);
+
+        return dict;
+    }
+
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeSimulatedHashes(
+        FileWorkItem workItem, HashConfig hashConfig, FileGenerationRequest request)
+    {
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+
+#pragma warning disable S2245
+        var seed = request.Metadata.Seed.HasValue
+            ? unchecked((int)(request.Metadata.Seed.Value + workItem.Index))
+            : (int)workItem.Index;
+        var rng = new Random(seed);
+#pragma warning restore S2245
+
+        const string chars = "0123456789abcdef";
+        Span<char> buffer = stackalloc char[64];
+        foreach (var algo in hashConfig.Algorithms)
+        {
+            var length = algo switch
+            {
+                Config.HashAlgorithm.MD5 => 32,
+                Config.HashAlgorithm.SHA1 => 40,
+                Config.HashAlgorithm.SHA256 => 64,
+                _ => 32,
+            };
+
+            for (int i = 0; i < length; i++)
+            {
+                buffer[i] = chars[rng.Next(chars.Length)];
+            }
+
+            dict[algo] = new string(buffer[..length]);
+        }
+
+        return dict;
+    }
+
     private static async Task<ProductionSetResult> GenerateCoreAsync(
         FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch, CancellationToken cancellationToken)
     {
@@ -91,6 +137,7 @@ internal static class ProductionSetGenerator
 
         // Generate files using the plan
         var fileDataList = new List<FileData>();
+        var hashConfig = request.Hash;
 
         foreach (var plan in plans)
         {
@@ -130,6 +177,28 @@ internal static class ProductionSetGenerator
                 await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
             }
 
+            var fileDataHash = string.Empty;
+            IReadOnlyDictionary<Config.HashAlgorithm, string>? fileDataHashes = null;
+            if (hashConfig.IsEnabled)
+            {
+                if (hashConfig.Mode == HashMode.Actual)
+                {
+                    fileDataHashes = ComputeActualHashes(nativeContent, hashConfig);
+                    if (fileDataHashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5))
+                    {
+                        fileDataHash = md5;
+                    }
+                }
+                else if (hashConfig.Mode == HashMode.Simulated)
+                {
+                    fileDataHashes = ComputeSimulatedHashes(workItem, hashConfig, request);
+                    if (fileDataHashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5))
+                    {
+                        fileDataHash = md5;
+                    }
+                }
+            }
+
             fileDataList.Add(new FileData
             {
                 WorkItem = workItem,
@@ -137,6 +206,8 @@ internal static class ProductionSetGenerator
                 Attachment = generated.Attachment,
                 PageCount = generated.PageCount,
                 Email = generated.Email,
+                Hash = fileDataHash,
+                Hashes = fileDataHashes,
             });
 
             if (request.Metadata.WithFamilies && request.Output.IsEml && generated.Attachment.HasValue)

@@ -293,4 +293,98 @@ public class RequestBuilderTests
     {
         Assert.Throws<ArgumentException>(() => RequestBuilder.ParseStrictDelimiter("20"));
     }
+
+    [Fact]
+    public void Build_HashModeActualAndAlgorithms_SetsHashConfig()
+    {
+        var parsed = CreateParsedArgs();
+        parsed.HashMode = "actual";
+        parsed.HashAlgorithms = "md5,sha256";
+
+        var result = RequestBuilder.Build(parsed);
+        Assert.NotNull(result);
+
+        var hash = result!.Hash;
+        Assert.Equal(Config.HashMode.Actual, hash.Mode);
+        Assert.Contains(Config.HashAlgorithm.MD5, hash.Algorithms);
+        Assert.Contains(Config.HashAlgorithm.SHA256, hash.Algorithms);
+        Assert.DoesNotContain(Config.HashAlgorithm.SHA1, hash.Algorithms);
+        Assert.True(hash.IsEnabled);
+    }
+
+    [Fact]
+    public void Build_HashModeSimulated_SetsSimulatedMode()
+    {
+        var parsed = CreateParsedArgs();
+        parsed.HashMode = "simulated";
+        parsed.HashAlgorithms = "sha1";
+
+        var result = RequestBuilder.Build(parsed);
+        Assert.NotNull(result);
+
+        var hash = result!.Hash;
+        Assert.Equal(Config.HashMode.Simulated, hash.Mode);
+        Assert.Contains(Config.HashAlgorithm.SHA1, hash.Algorithms);
+        Assert.True(hash.IsEnabled);
+    }
+
+    [Fact]
+    public void Build_HashModeNone_DefaultsToDisabled()
+    {
+        var parsed = CreateParsedArgs();
+
+        var result = RequestBuilder.Build(parsed);
+        Assert.NotNull(result);
+
+        var hash = result!.Hash;
+        Assert.Equal(Config.HashMode.None, hash.Mode);
+        Assert.Empty(hash.Algorithms);
+        Assert.False(hash.IsEnabled);
+    }
+
+    [Fact]
+    public void ParseHashConfig_ActualMode_ReturnsCorrectConfig()
+    {
+        var parsed = new ParsedArguments
+        {
+            HashMode = "actual",
+            HashAlgorithms = "md5,sha1,sha256",
+        };
+
+        var config = RequestBuilder.ParseHashConfig(parsed);
+        Assert.Equal(Config.HashMode.Actual, config.Mode);
+        Assert.Equal(3, config.Algorithms.Count);
+        Assert.Contains(Config.HashAlgorithm.MD5, config.Algorithms);
+        Assert.Contains(Config.HashAlgorithm.SHA1, config.Algorithms);
+        Assert.Contains(Config.HashAlgorithm.SHA256, config.Algorithms);
+    }
+
+    [Fact]
+    public void ParseHashConfig_SimulatedMode_ReturnsSimulatedMode()
+    {
+        var parsed = new ParsedArguments { HashMode = "simulated" };
+
+        var config = RequestBuilder.ParseHashConfig(parsed);
+        Assert.Equal(Config.HashMode.Simulated, config.Mode);
+        Assert.Empty(config.Algorithms);
+    }
+
+    [Fact]
+    public void ParseHashConfig_InvalidMode_DefaultsToNone()
+    {
+        var parsed = new ParsedArguments { HashMode = "invalid" };
+
+        var config = RequestBuilder.ParseHashConfig(parsed);
+        Assert.Equal(Config.HashMode.None, config.Mode);
+    }
+
+    [Fact]
+    public void ParseHashConfig_Default_NoneModeEmptyAlgorithms()
+    {
+        var parsed = new ParsedArguments();
+
+        var config = RequestBuilder.ParseHashConfig(parsed);
+        Assert.Equal(Config.HashMode.None, config.Mode);
+        Assert.Empty(config.Algorithms);
+    }
 }

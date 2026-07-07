@@ -21,6 +21,24 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
     }
 
+    /// <summary>Gets the hash column keys to emit based on request configuration.</summary>
+    protected static IReadOnlyList<string> GetHashColumnKeys(FileGenerationRequest request)
+    {
+        if (!request.Hash.IsEnabled)
+        {
+            return Array.Empty<string>();
+        }
+
+        var keys = new List<string>(request.Hash.Algorithms.Count);
+        if (request.Hash.Algorithms.Contains(Config.HashAlgorithm.MD5))
+            keys.Add("MD5HASH");
+        if (request.Hash.Algorithms.Contains(Config.HashAlgorithm.SHA1))
+            keys.Add("SHA1HASH");
+        if (request.Hash.Algorithms.Contains(Config.HashAlgorithm.SHA256))
+            keys.Add("SHA256HASH");
+        return keys;
+    }
+
     public IReadOnlyList<string> HeaderColumns => this.headerColumns;
 
     /// <summary>Gets a value indicating whether leading BEGATTY/ENDATTY columns are emitted.</summary>
@@ -89,6 +107,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             keys.Add("TEXT");
         }
 
+        if (this.request.Hash.IsEnabled)
+        {
+            keys.AddRange(GetHashColumnKeys(this.request));
+        }
+
         return keys;
     }
 
@@ -118,6 +141,14 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
             // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.
             "TEXT" => wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal),
+            "MD5HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.MD5),
+            "SHA1HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA1),
+            "SHA256HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA256),
             _ => string.Empty,
         };
+
+    private static string ResolveHashFromFileData(FileData fileData, Config.HashAlgorithm algorithm)
+        => fileData.Hashes is not null && fileData.Hashes.TryGetValue(algorithm, out var hash)
+            ? hash
+            : string.Empty;
 }

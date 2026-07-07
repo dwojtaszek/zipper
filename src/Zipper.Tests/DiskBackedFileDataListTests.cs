@@ -107,6 +107,66 @@ public class DiskBackedFileDataListTests
     }
 
     [Fact]
+    public void RoundTrip_WithHashes_PreservesHashDictionary()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem
+            {
+                Index = 1,
+                FolderNumber = 1,
+                FolderName = "folder_001",
+                FileName = "doc1.pdf",
+                FilePathInZip = "folder_001/doc1.pdf"
+            },
+            DataLength = 100,
+            PageCount = 1,
+            Hash = "md5hashvalue",
+            Hashes = new Dictionary<Config.HashAlgorithm, string>
+            {
+                [Config.HashAlgorithm.MD5] = "md5hashvalue",
+                [Config.HashAlgorithm.SHA1] = "sha1hashvalue",
+                [Config.HashAlgorithm.SHA256] = "sha256hashvalue",
+            },
+        };
+
+        list.Add(originalData);
+
+        var resultList = list.ToList();
+        var deserializedData = Assert.Single(resultList);
+
+        Assert.Equal(originalData.Hash, deserializedData.Hash);
+        Assert.NotNull(deserializedData.Hashes);
+        Assert.Equal(3, deserializedData.Hashes!.Count);
+        Assert.Equal("md5hashvalue", deserializedData.Hashes[Config.HashAlgorithm.MD5]);
+        Assert.Equal("sha1hashvalue", deserializedData.Hashes[Config.HashAlgorithm.SHA1]);
+        Assert.Equal("sha256hashvalue", deserializedData.Hashes[Config.HashAlgorithm.SHA256]);
+    }
+
+    [Fact]
+    public void RoundTrip_WithoutHashes_HashesIsNull()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            DataLength = 100,
+            Hash = "somehash",
+        };
+
+        list.Add(originalData);
+
+        var resultList = list.ToList();
+        var deserializedData = Assert.Single(resultList);
+
+        Assert.Equal("somehash", deserializedData.Hash);
+        Assert.Null(deserializedData.Hashes);
+    }
+
+    [Fact]
     public void Dispose_RemovesTempFile()
     {
         var list = new DiskBackedFileDataList();

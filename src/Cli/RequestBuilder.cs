@@ -183,6 +183,48 @@ public static class RequestBuilder
                 VolumeSize = parsed.VolumeSize ?? 5000,
             },
             LoadfileOnly = parsed.LoadfileOnly,
+            Hash = ParseHashConfig(parsed),
+        };
+    }
+
+    internal static HashConfig ParseHashConfig(ParsedArguments parsed)
+    {
+        var mode = HashMode.None;
+        if (!string.IsNullOrEmpty(parsed.HashMode))
+        {
+            mode = parsed.HashMode.ToLowerInvariant() switch
+            {
+                "actual" => HashMode.Actual,
+                "simulated" => HashMode.Simulated,
+                "none" => HashMode.None,
+                _ => HashMode.None,
+            };
+        }
+
+        var algorithms = new HashSet<HashAlgorithm>();
+        if (!string.IsNullOrEmpty(parsed.HashAlgorithms))
+        {
+            foreach (var alg in parsed.HashAlgorithms.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parsedAlg = alg.ToLowerInvariant() switch
+                {
+                    "md5" => HashAlgorithm.MD5,
+                    "sha1" => HashAlgorithm.SHA1,
+                    "sha256" => HashAlgorithm.SHA256,
+                    _ => (HashAlgorithm?)null,
+                };
+
+                if (parsedAlg.HasValue)
+                {
+                    algorithms.Add(parsedAlg.Value);
+                }
+            }
+        }
+
+        return new HashConfig
+        {
+            Mode = mode,
+            Algorithms = algorithms,
         };
     }
 

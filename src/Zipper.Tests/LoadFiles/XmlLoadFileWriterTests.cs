@@ -93,6 +93,114 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
+    public async Task WriteAsync_WithHashModeActual_WritesAlgorithmSpecificHashAttributes()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Metadata = new MetadataConfig { WithMetadata = false },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5, Config.HashAlgorithm.SHA1, Config.HashAlgorithm.SHA256 },
+            },
+        };
+
+        var contentBytes = "test content"u8.ToArray();
+#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
+#pragma warning disable CA5350 // Weak cryptographic algorithm is used for e-discovery compat
+        var sha1Hash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(contentBytes)).ToLowerInvariant();
+#pragma warning restore CA5350
+#pragma warning restore S4426
+        var sha256Hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(contentBytes)).ToLowerInvariant();
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.pdf",
+                    FilePathInZip = "folder/doc1.pdf"
+                },
+                Data = contentBytes,
+                DataLength = contentBytes.Length,
+                Hash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(contentBytes)).ToLowerInvariant(),
+                Hashes = new Dictionary<Config.HashAlgorithm, string>
+                {
+                    [Config.HashAlgorithm.MD5] = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(contentBytes)).ToLowerInvariant(),
+                    [Config.HashAlgorithm.SHA1] = sha1Hash,
+                    [Config.HashAlgorithm.SHA256] = sha256Hash,
+                },
+            }
+        };
+
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        stream.Position = 0;
+        var doc = XDocument.Load(stream);
+        var nativeFile = doc.Root!.Element("Batch")!.Element("Document")!.Element("Files")!.Element("File")!.Element("ExternalFile");
+        Assert.NotNull(nativeFile);
+
+        Assert.Equal(sha1Hash, nativeFile.Attribute("Sha1Hash")?.Value);
+        Assert.Equal(sha256Hash, nativeFile.Attribute("Sha256Hash")?.Value);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithHashModeMD5Only_DoesNotWriteExtraHashAttributes()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Metadata = new MetadataConfig { WithMetadata = false },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 },
+            },
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.pdf",
+                    FilePathInZip = "folder/doc1.pdf"
+                },
+                DataLength = 500,
+                Hash = "abcdef1234567890",
+                Hashes = new Dictionary<Config.HashAlgorithm, string>
+                {
+                    [Config.HashAlgorithm.MD5] = "abcdef1234567890",
+                },
+            }
+        };
+
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        stream.Position = 0;
+        var doc = XDocument.Load(stream);
+        var nativeFile = doc.Root!.Element("Batch")!.Element("Document")!.Element("Files")!.Element("File")!.Element("ExternalFile");
+        Assert.NotNull(nativeFile);
+
+        Assert.Null(nativeFile.Attribute("Sha1Hash"));
+        Assert.Null(nativeFile.Attribute("Sha256Hash"));
+    }
+
+    [Fact]
     public async Task XmlLoadFileWriter_WhenOperationCanceledException_Rethrows()
     {
         var request = this.CreateTestRequest();

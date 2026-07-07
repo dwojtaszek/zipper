@@ -641,6 +641,148 @@ public class ParallelFileGeneratorTests
     }
 
     [Fact]
+#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
+    public void GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes()
+    {
+        var generator = new ParallelFileGenerator();
+        var workItem = new FileWorkItem { Index = 1 };
+        const int paddingPerFile = 0;
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = "dummy",
+                FileType = "docx",
+                FileCount = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5, Config.HashAlgorithm.SHA1, Config.HashAlgorithm.SHA256 },
+            },
+        };
+        var fileGenerator = new OfficeFileGenerator("docx");
+
+        var fileData = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+        try
+        {
+            Assert.NotNull(fileData.Hashes);
+            Assert.Equal(3, fileData.Hashes!.Count);
+            Assert.True(fileData.Hashes.ContainsKey(Config.HashAlgorithm.MD5));
+            Assert.True(fileData.Hashes.ContainsKey(Config.HashAlgorithm.SHA1));
+            Assert.True(fileData.Hashes.ContainsKey(Config.HashAlgorithm.SHA256));
+
+            // Verify each hash is a valid lowercase hex string of correct length
+            Assert.Equal(32, fileData.Hashes[Config.HashAlgorithm.MD5].Length);
+            Assert.Equal(40, fileData.Hashes[Config.HashAlgorithm.SHA1].Length);
+            Assert.Equal(64, fileData.Hashes[Config.HashAlgorithm.SHA256].Length);
+
+            // Verify MD5 is also set on the Hash property (backward compat)
+            Assert.Equal(fileData.Hashes[Config.HashAlgorithm.MD5], fileData.Hash);
+
+            // Verify hashes are actual hashes of the content bytes
+            var contentSpan = fileData.Data.Span;
+            var expectedMd5 = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(contentSpan)).ToLowerInvariant();
+#pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
+#pragma warning disable CA5350 // Weak cryptographic algorithm is used for e-discovery compat
+            var expectedSha1 = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(contentSpan)).ToLowerInvariant();
+#pragma warning restore CA5350
+#pragma warning restore S4426
+            var expectedSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(contentSpan)).ToLowerInvariant();
+            Assert.Equal(expectedMd5, fileData.Hashes[Config.HashAlgorithm.MD5]);
+            Assert.Equal(expectedSha1, fileData.Hashes[Config.HashAlgorithm.SHA1]);
+            Assert.Equal(expectedSha256, fileData.Hashes[Config.HashAlgorithm.SHA256]);
+        }
+        finally
+        {
+            fileData.MemoryOwner?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void GenerateFileData_WithHashModeNone_HashesIsNull()
+    {
+        var generator = new ParallelFileGenerator();
+        var workItem = new FileWorkItem { Index = 1 };
+        const int paddingPerFile = 0;
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = "dummy",
+                FileType = "docx",
+                FileCount = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.None,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 },
+            },
+        };
+        var fileGenerator = new OfficeFileGenerator("docx");
+
+        var fileData = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+        try
+        {
+            Assert.Null(fileData.Hashes);
+            Assert.NotEmpty(fileData.Hash); // MD5 is still computed internally
+        }
+        finally
+        {
+            fileData.MemoryOwner?.Dispose();
+        }
+    }
+
+    [Fact]
+    public void GenerateFileData_WithHashModeSimulated_GeneratesDeterministicSimulatedHashes()
+    {
+        var generator = new ParallelFileGenerator();
+        var workItem = new FileWorkItem { Index = 1 };
+        const int paddingPerFile = 0;
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = "dummy",
+                FileType = "docx",
+                FileCount = 1,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Simulated,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5, Config.HashAlgorithm.SHA256 },
+            },
+        };
+        var fileGenerator = new OfficeFileGenerator("docx");
+
+        var fileData1 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+        var fileData2 = generator.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+
+        try
+        {
+            Assert.NotNull(fileData1.Hashes);
+            Assert.NotNull(fileData2.Hashes);
+            Assert.Equal(fileData1.Hashes![Config.HashAlgorithm.MD5], fileData2.Hashes![Config.HashAlgorithm.MD5]);
+            Assert.Equal(fileData1.Hashes[Config.HashAlgorithm.SHA256], fileData2.Hashes[Config.HashAlgorithm.SHA256]);
+            Assert.Equal(32, fileData1.Hashes[Config.HashAlgorithm.MD5].Length);
+            Assert.Equal(64, fileData1.Hashes[Config.HashAlgorithm.SHA256].Length);
+
+            // Simulated hashes should NOT match actual content hashes
+            var contentSpan = fileData1.Data.Span;
+            var actualMd5 = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(contentSpan)).ToLowerInvariant();
+            Assert.NotEqual(actualMd5, fileData1.Hashes[Config.HashAlgorithm.MD5]);
+        }
+        finally
+        {
+            fileData1.MemoryOwner?.Dispose();
+            fileData2.MemoryOwner?.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task GenerateFilesAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
     {
         var tempDir = Directory.GetCurrentDirectory();
