@@ -118,6 +118,13 @@ public static class RequestBuilder
             ? multiFormats
             : new List<LoadFileFormat> { GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat };
 
+        var hashConfig = ParseHashConfig(parsed);
+        if (parsed.LoadfileOnly && hashConfig.Mode == HashMode.Actual)
+        {
+            Console.Error.WriteLine("error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash)");
+            return null;
+        }
+
         return new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -183,6 +190,48 @@ public static class RequestBuilder
                 VolumeSize = parsed.VolumeSize ?? 5000,
             },
             LoadfileOnly = parsed.LoadfileOnly,
+            Hash = hashConfig,
+        };
+    }
+
+    internal static HashConfig ParseHashConfig(ParsedArguments parsed)
+    {
+        var mode = HashMode.None;
+        if (!string.IsNullOrEmpty(parsed.HashMode))
+        {
+            mode = parsed.HashMode.ToLowerInvariant() switch
+            {
+                "actual" => HashMode.Actual,
+                "simulated" => HashMode.Simulated,
+                "none" => HashMode.None,
+                _ => HashMode.None,
+            };
+        }
+
+        var algorithms = new HashSet<HashAlgorithm>();
+        if (!string.IsNullOrEmpty(parsed.HashAlgorithms))
+        {
+            foreach (var alg in parsed.HashAlgorithms.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parsedAlg = alg.ToLowerInvariant() switch
+                {
+                    "md5" => HashAlgorithm.MD5,
+                    "sha1" => HashAlgorithm.SHA1,
+                    "sha256" => HashAlgorithm.SHA256,
+                    _ => (HashAlgorithm?)null,
+                };
+
+                if (parsedAlg.HasValue)
+                {
+                    algorithms.Add(parsedAlg.Value);
+                }
+            }
+        }
+
+        return new HashConfig
+        {
+            Mode = mode,
+            Algorithms = algorithms,
         };
     }
 

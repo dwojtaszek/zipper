@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
+using Zipper.Config;
 using Zipper.Emails;
 
 namespace Zipper;
@@ -320,6 +321,7 @@ public class ParallelFileGenerator
             var hashBytes = MD5.HashData(data);
 #pragma warning restore S4790
             var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            var hashes = ComputeHashes(data, workItem, request);
 
             return new FileData
             {
@@ -330,6 +332,7 @@ public class ParallelFileGenerator
                 PageCount = pageCount,
                 Email = email,
                 Hash = hash,
+                Hashes = hashes,
             };
         }
 
@@ -357,6 +360,7 @@ public class ParallelFileGenerator
             var finalHashBytes = MD5.HashData(finalMemory.Span);
 #pragma warning restore S4790
             var finalHash = Convert.ToHexString(finalHashBytes).ToLowerInvariant();
+            var hashes = ComputeHashes(finalMemory.Span, workItem, request);
 
             return new FileData
             {
@@ -368,6 +372,7 @@ public class ParallelFileGenerator
                 PageCount = pageCount,
                 Email = email,
                 Hash = finalHash,
+                Hashes = hashes,
             };
         }
         catch
@@ -375,6 +380,39 @@ public class ParallelFileGenerator
             memoryOwner.Dispose();
             throw;
         }
+    }
+
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string>? ComputeHashes(
+        ReadOnlySpan<byte> data, FileWorkItem workItem, FileGenerationRequest request)
+    {
+        var hashConfig = request.Hash;
+        if (!hashConfig.IsEnabled)
+        {
+            return null;
+        }
+
+        if (hashConfig.Mode == HashMode.Simulated)
+        {
+            return ComputeSimulatedHashes(workItem, request);
+        }
+
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+        foreach (var algo in hashConfig.Algorithms)
+            dict[algo] = HashUtility.ComputeHashHex(data, algo);
+
+        return dict;
+    }
+
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeSimulatedHashes(
+        FileWorkItem workItem, FileGenerationRequest request)
+    {
+        var hashConfig = request.Hash;
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+        var rng = HashUtility.CreateSeededRandom(request, workItem.Index);
+        foreach (var algo in hashConfig.Algorithms)
+            dict[algo] = HashUtility.GenerateSimulatedHash(algo, rng);
+
+        return dict;
     }
 
     internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
@@ -474,4 +512,6 @@ internal record FileData
     public Email? Email { get; init; }
 
     public string Hash { get; init; } = string.Empty;
+
+    public IReadOnlyDictionary<Config.HashAlgorithm, string>? Hashes { get; init; }
 }

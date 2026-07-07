@@ -249,7 +249,7 @@ internal sealed class DatComposer : ILoadFileComposer
                         val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
                         break;
                     default:
-                        val = profileValues.TryGetValue(n, out var x) ? x : string.Empty;
+                        val = ResolveHashColumn(upper, fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty);
                         break;
                 }
                 result.Add(val);
@@ -447,6 +447,7 @@ internal sealed class DatComposer : ILoadFileComposer
 #pragma warning restore S2245
 
         var fileTypeLower = this.request.Output.FileTypeLower;
+        var hashConfig = this.request.Hash;
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
@@ -463,12 +464,34 @@ internal sealed class DatComposer : ILoadFileComposer
                 WorkItem = workItem,
                 DataLength = rowRandom.Next(1024, 10_485_760),
                 PageCount = rowRandom.Next(1, 11),
+                Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
             };
 
             var values = generator.GenerateRow(workItem, fileData);
-            var ordered = columnNames.Select(n => values.TryGetValue(n, out var x) ? x : string.Empty).ToList();
+            var ordered = columnNames.Select(n =>
+            {
+                var hv = values.TryGetValue(n, out var x) ? x : string.Empty;
+                var hashVal = ResolveHashColumn(n.ToUpperInvariant(), fileData);
+                return hashVal ?? hv;
+            }).ToList();
             yield return this.MakeRecord($"DOC{i:D8}", ordered);
         }
+    }
+
+    private IReadOnlyDictionary<Config.HashAlgorithm, string>? GenerateSimulatedHashes(FileWorkItem workItem)
+    {
+        var hashConfig = this.request.Hash;
+        if (!hashConfig.IsEnabled)
+        {
+            return null;
+        }
+
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+        var rng = Config.HashUtility.CreateSeededRandom(this.request, workItem.Index);
+        foreach (var algo in hashConfig.Algorithms)
+            dict[algo] = Config.HashUtility.GenerateSimulatedHash(algo, rng);
+
+        return dict;
     }
 
     private (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(FileData fileData, FileGenerationRequest request)
@@ -479,6 +502,29 @@ internal sealed class DatComposer : ILoadFileComposer
             : $"DOC{fileData.WorkItem.Index:D8}";
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
         return (parentId, childId, hasAttachment);
+    }
+
+    private static string? ResolveHashColumn(string upperColumnName, FileData fileData)
+    {
+        if (fileData.Hashes is null)
+        {
+            return null;
+        }
+
+        var algo = upperColumnName switch
+        {
+            "MD5HASH" or "MD5_HASH" or "MD5 HASH" => Config.HashAlgorithm.MD5,
+            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" => Config.HashAlgorithm.SHA1,
+            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH" => Config.HashAlgorithm.SHA256,
+            _ => (Config.HashAlgorithm?)null,
+        };
+
+        if (algo.HasValue && fileData.Hashes.TryGetValue(algo.Value, out var hashValue))
+        {
+            return hashValue;
+        }
+
+        return null;
     }
 
     private static DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)

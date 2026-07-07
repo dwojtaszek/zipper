@@ -20,6 +20,8 @@ public class FileGenerationRequest
 
     public ProductionConfig Production { get; set; } = new();
 
+    public HashConfig Hash { get; set; } = new();
+
     public bool LoadfileOnly { get; set; }
 
     public FileGenerationRequest Clone()
@@ -37,6 +39,7 @@ public class FileGenerationRequest
             Tiff = this.Tiff,
             Chaos = this.Chaos,
             Production = this.Production,
+            Hash = this.Hash,
             LoadfileOnly = this.LoadfileOnly,
         };
     }

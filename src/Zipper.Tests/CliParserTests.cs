@@ -32,9 +32,9 @@ public class CliParserTests
             "--folders", "--encoding", "--distribution", "--attachment-rate", "--target-zip-size",
             "--load-file-format", "--bates-prefix", "--bates-start", "--bates-digits", "--tiff-pages",
             "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
-            "--load-file-formats", "--dat-delimiters", "--loadfile-format", "--eol", "--col-delim",
+                "--load-file-formats", "--dat-delimiters", "--loadfile-format", "--eol", "--col-delim",
             "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim", "--chaos-amount",
-            "--chaos-types", "--chaos-scenario", "--volume-size"
+            "--chaos-types", "--chaos-scenario", "--volume-size", "--hash-mode", "--hash-algorithms"
         };
 
         foreach (var flag in flags)
@@ -115,6 +115,33 @@ public class CliParserTests
         Assert.Equal(100, result.BatesStart);
         Assert.Equal(6, result.BatesDigits);
         Assert.Equal(1000, result.VolumeSize);
+    }
+
+    [Fact]
+    public void Parse_HashModeArgs_ParsesCorrectly()
+    {
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--hash-mode", "actual", "--hash-algorithms", "md5,sha256" });
+        Assert.NotNull(result);
+        Assert.Equal("actual", result!.HashMode);
+        Assert.Equal("md5,sha256", result.HashAlgorithms);
+    }
+
+    [Fact]
+    public void Parse_HashModeOnly_ParsesCorrectly()
+    {
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--hash-mode", "simulated" });
+        Assert.NotNull(result);
+        Assert.Equal("simulated", result!.HashMode);
+        Assert.Null(result.HashAlgorithms);
+    }
+
+    [Fact]
+    public void Parse_InvalidHashMode_IsParsedAsString()
+    {
+        // Invalid hash mode is accepted by parser; validation happens at request building
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--hash-mode", "invalid" });
+        Assert.NotNull(result);
+        Assert.Equal("invalid", result!.HashMode);
     }
 
     [Fact]

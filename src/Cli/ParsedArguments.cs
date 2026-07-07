@@ -91,4 +91,8 @@ public class ParsedArguments
     public bool ProductionZip { get; set; }
 
     public int? VolumeSize { get; set; }
+
+    public string? HashMode { get; set; }
+
+    public string? HashAlgorithms { get; set; }
 }

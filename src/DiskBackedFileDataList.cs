@@ -95,6 +95,21 @@ internal static class FileDataSerializer
         writer.Write(data.PageCount);
         writer.Write(data.Hash ?? string.Empty);
 
+        if (data.Hashes is not null)
+        {
+            writer.Write(true);
+            writer.Write(data.Hashes.Count);
+            foreach (var kvp in data.Hashes)
+            {
+                writer.Write((int)kvp.Key);
+                writer.Write(kvp.Value);
+            }
+        }
+        else
+        {
+            writer.Write(false);
+        }
+
         writer.Write(data.Attachment.HasValue);
         if (data.Attachment.HasValue)
         {
@@ -121,6 +136,21 @@ internal static class FileDataSerializer
         var dataLength = reader.ReadInt32();
         var pageCount = reader.ReadInt32();
         var hash = reader.ReadString();
+
+        IReadOnlyDictionary<Config.HashAlgorithm, string>? hashes = null;
+        if (reader.ReadBoolean())
+        {
+            var count = reader.ReadInt32();
+            var dict = new Dictionary<Config.HashAlgorithm, string>(count);
+            for (int i = 0; i < count; i++)
+            {
+                var algo = (Config.HashAlgorithm)reader.ReadInt32();
+                var value = reader.ReadString();
+                dict[algo] = value;
+            }
+
+            hashes = dict;
+        }
 
         (string filename, byte[] content)? attachment = null;
         if (reader.ReadBoolean())
@@ -158,6 +188,7 @@ internal static class FileDataSerializer
             DataLength = dataLength,
             PageCount = pageCount,
             Hash = hash,
+            Hashes = hashes,
             Attachment = attachment,
             Email = email
         };

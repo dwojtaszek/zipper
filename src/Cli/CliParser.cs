@@ -562,6 +562,32 @@ public static class CliParser
                     }
 
                     break;
+                case "--hash-mode":
+                    if (TryGetValue(args, i, out var hashModeVal))
+                    {
+                        parsed.HashMode = hashModeVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --hash-mode requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--hash-algorithms":
+                    if (TryGetValue(args, i, out var hashAlgsVal))
+                    {
+                        parsed.HashAlgorithms = hashAlgsVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --hash-algorithms requires a value.");
+                        return null;
+                    }
+
+                    break;
                 default:
                     Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
                     return null;
