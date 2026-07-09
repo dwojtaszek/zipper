@@ -26,5 +26,6 @@
     "quoteDelimiter": "char:\u00FE",
     "seed": 42
   },
+  "validationReport": "_validation_report.json",
   "generationTime": "NORMALIZED"
 }
