@@ -31,7 +31,7 @@ internal static class LoadFileOnlyGenerator
 
         string primaryLoadFilePath = string.Empty;
         string primaryPropertiesPath = string.Empty;
-        long totalRecords = request.Output.FileCount;
+        long totalRecords = 0;
 
         var generatedFiles = new List<string>();
 
@@ -72,16 +72,12 @@ internal static class LoadFileOnlyGenerator
                 {
                     primaryLoadFilePath = loadFilePath;
                     primaryPropertiesPath = propertiesPath;
-                    totalRecords = format == LoadFileFormat.Opt
-                        ? LoadFileAuditWriter.ComputeOptRecordCountForLoadFileOnly(formatRequest)
-                        : formatRequest.Output.FileCount;
+                    var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(formatRequest, emptyRecords, format);
+                    totalRecords = total;
                 }
             }
 
             stopwatch.Stop();
-
-            var primaryFormat = formatsToGenerate.Count > 0 ? formatsToGenerate[0] : LoadFileFormat.Dat;
-            var (totalRecords, _) = LoadFileAuditWriter.ComputeRecordCounts(request, Array.Empty<FileData>(), primaryFormat);
 
             return new LoadFileOnlyResult
             {

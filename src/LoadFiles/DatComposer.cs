@@ -252,7 +252,7 @@ internal sealed class DatComposer : ILoadFileComposer
                     case "TEXTPATH":
                     case "TEXT_PATH":
                     case "TEXT PATH":
-                        val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : string.Empty;
+                        val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : (profileValues.TryGetValue(n, out var tp) ? tp : string.Empty);
                         break;
                     default:
                         val = ResolveHashColumn(upper, fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty);
