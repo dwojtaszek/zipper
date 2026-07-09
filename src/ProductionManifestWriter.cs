@@ -81,6 +81,7 @@ internal static class ProductionManifestWriter
                 Seed = request.Metadata.Seed,
             },
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
+            ValidationReport = "_validation_report.json",
         };
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
@@ -139,6 +140,9 @@ internal class ProductionManifest
 
     [JsonPropertyName("settings")]
     public ProductionSettings Settings { get; set; } = new();
+
+    [JsonPropertyName("validationReport")]
+    public string? ValidationReport { get; set; }
 
     [JsonPropertyName("generationTime")]
     public string GenerationTime { get; set; } = string.Empty;

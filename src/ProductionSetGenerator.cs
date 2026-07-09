@@ -12,6 +12,12 @@ namespace Zipper;
 /// </summary>
 internal static class ProductionSetGenerator
 {
+    private static readonly System.Text.Json.JsonSerializerOptions ValidationReportSerializerOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
     /// <summary>
     /// Generates a complete production set.
     /// </summary>
@@ -35,10 +41,10 @@ internal static class ProductionSetGenerator
         {
             return await GenerateCoreAsync(request, productionPath, productionName, stopwatch, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            // Clean up partial output on failure
-            if (Directory.Exists(productionPath))
+            // Clean up partial output on failure, except for validation failures
+            if (ex is not Validation.ValidationFailedException && Directory.Exists(productionPath))
             {
                 try
                 {
@@ -269,6 +275,12 @@ internal static class ProductionSetGenerator
         var manifestPath = await ProductionManifestWriter.WriteAsync(
             productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList).ConfigureAwait(false);
 
+        // Run validation
+        var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
+        var reportPath = Path.Combine(productionPath, "_validation_report.json");
+        var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
+        await File.WriteAllTextAsync(reportPath, reportJson).ConfigureAwait(false);
+
         // Optionally wrap in ZIP
         string? zipPath = null;
         if (request.Production.ProductionZip)
@@ -280,6 +292,11 @@ internal static class ProductionSetGenerator
         }
 
         stopwatch.Stop();
+
+        if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
+        }
 
         return new ProductionSetResult
         {
