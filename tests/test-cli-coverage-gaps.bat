@@ -133,11 +133,11 @@ echo [ INFO ] Test: --with-families warning emitted with --loadfile-only
 set ZIPPER_EXIT=!ERRORLEVEL!
 if !ZIPPER_EXIT! equ 0 (
     findstr /i /c:"Warning: --with-families has no effect in --loadfile-only mode." "%TEMP%\warn3.txt" >nul 2>&1
-    if not errorlevel 1 (
-        echo [ INFO ] PASS: --with-families warning emitted for loadfile-only mode
+    if errorlevel 1 (
+        echo [ INFO ] PASS: --with-families is supported in --loadfile-only mode without warning
         set /a PASSED+=1
     ) else (
-        echo [ ERROR ] FAIL: --with-families warning not emitted for loadfile-only mode
+        echo [ ERROR ] FAIL: --with-families warning emitted for loadfile-only mode
         set /a FAILED+=1
     )
 ) else (

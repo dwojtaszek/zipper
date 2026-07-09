@@ -238,9 +238,9 @@ err_file=$(mktemp)
 if zipper --type eml --count 5 --output-path "$TEST_OUTPUT_DIR/families-warn3" \
     --with-families --attachment-rate 50 --loadfile-only 2> "$err_file"; then
     if grep -q "Warning: --with-families has no effect in --loadfile-only mode." "$err_file"; then
-        pass "--with-families warning emitted for --loadfile-only mode"
+        fail "--with-families warning emitted for --loadfile-only mode"
     else
-        fail "--with-families warning NOT emitted for --loadfile-only mode"
+        pass "--with-families is supported in --loadfile-only mode without warning"
     fi
 else
     fail "--with-families loadfile-only command failed"

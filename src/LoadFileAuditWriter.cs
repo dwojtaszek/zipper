@@ -49,24 +49,7 @@ internal static class LoadFileAuditWriter
         return ChaosEngineBuilder.Build(request, totalLines, format);
     }
 
-    public static long ComputeOptRecordCountForLoadFileOnly(FileGenerationRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        long totalRecords = 0;
-#pragma warning disable S2245
-        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
-#pragma warning restore S2245
-        for (long i = 1; i <= request.Output.FileCount; i++)
-        {
-            int pageCount = request.Tiff.PageRange.HasValue
-                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, i)
-                : random.Next(1, 11);
-            totalRecords += pageCount;
-        }
-        return totalRecords;
-    }
-
-    private static (long TotalRecords, long TotalLines) ComputeRecordCounts(
+    internal static (long TotalRecords, long TotalLines) ComputeRecordCounts(
         FileGenerationRequest request,
         IReadOnlyCollection<FileData> composedRecords,
         LoadFileFormat format)
@@ -74,11 +57,9 @@ internal static class LoadFileAuditWriter
         long totalRecords;
         if (composedRecords.Count == 0 && request.Output.FileCount > 0)
         {
-            totalRecords = format switch
-            {
-                LoadFileFormat.Opt => ComputeOptRecordCountForLoadFileOnly(request),
-                _ => request.Output.FileCount
-            };
+            totalRecords = format == LoadFileFormat.Opt
+                ? SimulateOptRecordCount(request)
+                : SimulateNonOptRecordCount(request);
         }
         else
         {
@@ -91,6 +72,37 @@ internal static class LoadFileAuditWriter
 
         long totalLines = format == LoadFileFormat.Opt ? totalRecords : totalRecords + 1;
         return (totalRecords, totalLines);
+    }
+
+    private static long SimulateOptRecordCount(FileGenerationRequest request)
+    {
+        long total = 0;
+#pragma warning disable S2245
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value + 1) : new Random();
+#pragma warning restore S2245
+        bool withFamilies = request.Metadata.WithFamilies && request.Output.IsEml && request.LoadFile.AttachmentRate > 0;
+        for (long i = 1; i <= request.Output.FileCount; i++)
+        {
+            int pageCount = request.Tiff.PageRange.HasValue
+                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, i)
+                : random.Next(1, 11);
+            total += pageCount;
+            if (withFamilies && LoadFiles.FamilyPlan.HasAttachment(request, i))
+            {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    private static long SimulateNonOptRecordCount(FileGenerationRequest request)
+    {
+        if (request.Metadata.WithFamilies && request.Output.IsEml && request.LoadFile.AttachmentRate > 0)
+        {
+            long childCount = LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
+            return request.Output.FileCount + childCount;
+        }
+        return request.Output.FileCount;
     }
 
     private static long ComputeOptRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)

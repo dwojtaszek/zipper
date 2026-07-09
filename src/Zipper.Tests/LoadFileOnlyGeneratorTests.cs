@@ -701,4 +701,44 @@ public class LoadFileOnlyGeneratorTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task GenerateAsync_WithFamilies_SimulatesFamilyDataset()
+    {
+        var request = this.CreateRequest(count: 10);
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithFamilies = true, Seed = 42 };
+        request.LoadFile = request.LoadFile with { AttachmentRate = 50 };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        Assert.True(File.Exists(result.LoadFilePath));
+        var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+
+        // Header must contain family columns
+        Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
+
+        // Let's verify that the total number of lines in DAT is header + parent count + child count
+        long childCount = 0;
+        for (long i = 1; i <= 10; i++)
+        {
+            if (Zipper.LoadFiles.FamilyPlan.HasAttachment(request, i))
+            {
+                childCount++;
+            }
+        }
+
+        Assert.True(childCount > 0, "Seeded random did not yield any attachments");
+        Assert.Equal(1 + 10 + childCount, lines.Length);
+
+        // Check companion properties audit file
+        Assert.True(File.Exists(result.PropertiesFilePath));
+        var jsonContent = await File.ReadAllTextAsync(result.PropertiesFilePath);
+        using var doc = JsonDocument.Parse(jsonContent);
+        var totalRecords = doc.RootElement.GetProperty("totalRecords").GetInt64();
+        Assert.Equal(10 + childCount, totalRecords);
+        Assert.Equal(10 + childCount, result.TotalRecords);
+    }
 }

@@ -78,4 +78,42 @@ public class OptComposingWriterTests : TempDirectoryTestBase
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         Assert.True(lines.Length >= 3);
     }
+
+    [Fact]
+    public async Task WriteAsync_WithFamilies_IncludesFamilyAttachments()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "eml" },
+            LoadFile = new LoadFileConfig { Encoding = "ANSI" },
+            Metadata = new MetadataConfig { WithFamilies = true }
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.eml",
+                    FilePathInZip = "NATIVES\\001\\doc1.eml"
+                },
+                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                PageCount = 1
+            }
+        };
+
+        var writer = new OptComposingWriter(WriterMode.Standard);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(2, lines.Length);
+        Assert.StartsWith("DOC00000001,VOL001,IMAGES\\DOC00000001.tif,Y", lines[0], StringComparison.Ordinal);
+        Assert.StartsWith("DOC00000001_A001,VOL001,IMAGES\\DOC00000001_A001.tif,Y", lines[1], StringComparison.Ordinal);
+    }
 }

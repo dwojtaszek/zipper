@@ -261,4 +261,71 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
             throw new OperationCanceledException();
         }
     }
+
+    [Fact]
+    public async Task XmlLoadFileWriter_WithFamilies_ProducesParentChildDocumentsAndRelationships()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "eml", WithText = true },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Metadata = new MetadataConfig { WithFamilies = true, Seed = 42 }
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.eml",
+                    FilePathInZip = "folder/doc1.eml"
+                },
+                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                DataLength = 100
+            }
+        };
+
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        stream.Position = 0;
+        var doc = XDocument.Load(stream);
+        var root = doc.Root;
+        Assert.NotNull(root);
+
+        var documents = root.Element("Batch")?.Elements("Document").ToList();
+        Assert.NotNull(documents);
+        Assert.Equal(2, documents.Count);
+
+        var parentDoc = documents[0];
+        Assert.Equal("DOC00000001", parentDoc.Attribute("DocID")?.Value);
+
+        var childDoc = documents[1];
+        Assert.Equal("DOC00000001_A001", childDoc.Attribute("DocID")?.Value);
+
+        // Check tags for parent and child
+        var parentTags = parentDoc.Element("Tags")?.Elements("Tag").ToDictionary(t => t.Attribute("TagName")?.Value ?? "", t => t.Attribute("TagValue")?.Value ?? "");
+        Assert.NotNull(parentTags);
+        Assert.Equal("DOC00000001", parentTags["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", parentTags["ENDATTACH"]);
+        Assert.Equal("", parentTags["PARENTDOCID"]);
+
+        var childTags = childDoc.Element("Tags")?.Elements("Tag").ToDictionary(t => t.Attribute("TagName")?.Value ?? "", t => t.Attribute("TagValue")?.Value ?? "");
+        Assert.NotNull(childTags);
+        Assert.Equal("DOC00000001", childTags["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", childTags["ENDATTACH"]);
+        Assert.Equal("DOC00000001", childTags["PARENTDOCID"]);
+
+        // Check Relationships section
+        var relationship = root.Element("Batch")?.Element("Relationships")?.Element("Relationship");
+        Assert.NotNull(relationship);
+        Assert.Equal("Attachment", relationship.Attribute("Type")?.Value);
+        Assert.Equal("DOC00000001", relationship.Attribute("ParentDocID")?.Value);
+        Assert.Equal("DOC00000001_A001", relationship.Attribute("ChildDocID")?.Value);
+    }
 }
+
