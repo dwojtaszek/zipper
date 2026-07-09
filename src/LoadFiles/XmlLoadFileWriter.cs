@@ -164,7 +164,6 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         {
             var attach = actualAttachment!.Value;
             var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-            var childExt = Path.GetExtension(sanitizedFilename) ?? string.Empty;
             var childNativePath = $"{workItem.FolderName}/{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
             var childTextPath = $"{workItem.FolderName}/{workItem.Index}_{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt".Replace('\\', '/');
 

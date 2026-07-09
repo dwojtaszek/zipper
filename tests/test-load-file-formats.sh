@@ -444,6 +444,24 @@ if ! grep -q "BEGATTACH" "$csv_file"; then
   print_error "Test 11: 'BEGATTACH' column not found in .csv header"
 fi
 
+# Standard mode EML with families for Concordance
+zipper \
+  --type eml \
+  --count 5 \
+  --attachment-rate 100 \
+  --with-families \
+  --output-path "$TEST_OUTPUT_DIR/test11_concordance" \
+  --load-file-format concordance
+
+concordance_file=$(find "$TEST_OUTPUT_DIR/test11_concordance" -name "*.dat" -print -quit)
+if [[ -z "$concordance_file" ]]; then
+  print_error "Test 11: No Concordance (.dat) file found"
+fi
+
+if ! grep -q "BEGATTACH" "$concordance_file"; then
+  print_error "Test 11: 'BEGATTACH' column not found in Concordance file"
+fi
+
 # Standard mode EML with families for XML (EDRM-XML)
 zipper \
   --type eml \

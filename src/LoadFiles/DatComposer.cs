@@ -316,9 +316,19 @@ internal sealed class DatComposer : ILoadFileComposer
         var wi = fileData.WorkItem;
         if (ctx.IsChild)
         {
-            var filename = fileData.Attachment.HasValue
-                ? fileData.Attachment.Value.filename
-                : (ctx.FilePathOverride is not null ? Path.GetFileName(ctx.FilePathOverride) : $"{ctx.IdOverride ?? $"{wi.Index}_A001"}.pdf");
+            string filename;
+            if (fileData.Attachment.HasValue)
+            {
+                filename = fileData.Attachment.Value.filename;
+            }
+            else if (ctx.FilePathOverride is not null)
+            {
+                filename = Path.GetFileName(ctx.FilePathOverride);
+            }
+            else
+            {
+                filename = $"{ctx.IdOverride ?? $"{wi.Index}_A001"}.pdf";
+            }
             var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(filename))}.txt";
             return $"{wi.FolderName}/{wi.Index}_{attachmentTextFileName}";
         }

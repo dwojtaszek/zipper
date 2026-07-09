@@ -17,7 +17,9 @@ internal static class FamilyPlan
         }
 
         var seedVal = request.Metadata.Seed ?? 42L;
+#pragma warning disable S2245
         var random = new Random(unchecked((int)(seedVal + index)));
+#pragma warning restore S2245
 
         SimulateEmailRandomConsumption(random);
 

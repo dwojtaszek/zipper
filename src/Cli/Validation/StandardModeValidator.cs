@@ -61,12 +61,9 @@ internal static class StandardModeValidator
             return false;
         }
 
-        if (parsed.WithFamilies)
+        if (parsed.WithFamilies && (!string.Equals(parsed.FileType, "eml", StringComparison.OrdinalIgnoreCase) || parsed.AttachmentRate <= 0))
         {
-            if (!string.Equals(parsed.FileType, "eml", StringComparison.OrdinalIgnoreCase) || parsed.AttachmentRate <= 0)
-            {
-                Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
-            }
+            Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.");
         }
 
         return true;

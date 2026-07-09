@@ -413,6 +413,33 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Standard mode EML with families for Concordance
+%ZIPPER_CMD% ^
+  --type eml ^
+  --count 5 ^
+  --attachment-rate 100 ^
+  --with-families ^
+  --output-path "%TEST_OUTPUT_DIR%\test11_concordance" ^
+  --load-file-format concordance
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 11 failed during execution for Concordance
+  exit /b 1
+)
+
+set CONCORDANCE_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test11_concordance\*.dat") do set CONCORDANCE_FILE=%%f
+if not exist "!CONCORDANCE_FILE!" (
+  echo [ ERROR ] Test 11: No Concordance (.dat) file found
+  exit /b 1
+)
+
+findstr /C:"BEGATTACH" "!CONCORDANCE_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 11: 'BEGATTACH' column not found in Concordance file
+  exit /b 1
+)
+
 :: Standard mode EML with families for XML (EDRM-XML)
 %ZIPPER_CMD% ^
   --type eml ^
@@ -464,6 +491,19 @@ set DAT_FILE=
 for %%f in ("%TEST_OUTPUT_DIR%\test11_loadfile_only\*.dat") do set DAT_FILE=%%f
 if not exist "!DAT_FILE!" (
   echo [ ERROR ] Test 11: No .dat file found in loadfile-only mode
+  exit /b 1
+)
+
+set PROPERTIES_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test11_loadfile_only\*_properties.json") do set PROPERTIES_FILE=%%f
+if not exist "!PROPERTIES_FILE!" (
+  echo [ ERROR ] Test 11: No properties JSON file found
+  exit /b 1
+)
+
+findstr /C:"\"totalRecords\": 10" "!PROPERTIES_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 11: Expected totalRecords 10 in properties.json
   exit /b 1
 )
 
