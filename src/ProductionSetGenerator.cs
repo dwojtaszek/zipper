@@ -34,30 +34,52 @@ internal static class ProductionSetGenerator
 
         var stopwatch = Stopwatch.StartNew();
 
-        var productionName = $"PRODUCTION_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-        var productionPath = Path.Combine(request.Output.OutputPath, productionName);
-
-        try
+        int rollingCount = request.Production.RollingCount;
+        if (rollingCount < 1)
         {
-            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch, cancellationToken).ConfigureAwait(false);
+            rollingCount = 1;
         }
-        catch (Exception ex)
+
+        var prodIds = Cli.Validation.ProductionSetValidator.GenerateProductionIds(request.Production.ProductionId, rollingCount);
+        ProductionSetResult? lastResult = null;
+
+        for (int i = 0; i < rollingCount; i++)
         {
-            // Clean up partial output on failure, except for validation failures
-            if (ex is not Validation.ValidationFailedException && Directory.Exists(productionPath))
+            var productionName = prodIds[i];
+            var productionPath = Path.Combine(request.Output.OutputPath, productionName);
+
+            try
             {
-                try
-                {
-                    Directory.Delete(productionPath, true);
-                }
-                catch
-                {
-                    // Best-effort cleanup; don't mask the original exception
-                }
+                var stepStopwatch = Stopwatch.StartNew();
+                lastResult = await GenerateCoreAsync(request, productionPath, productionName, i, stepStopwatch, cancellationToken).ConfigureAwait(false);
             }
+            catch (Exception ex)
+            {
+                // Clean up partial output on failure, except for validation failures
+                if (ex is not Validation.ValidationFailedException && Directory.Exists(productionPath))
+                {
+                    try
+                    {
+                        Directory.Delete(productionPath, true);
+                    }
+                    catch
+                    {
+                        // Best-effort cleanup; don't mask the original exception
+                    }
+                }
 
-            throw;
+                throw;
+            }
         }
+
+        stopwatch.Stop();
+        if (lastResult is not null)
+        {
+            lastResult.GenerationTime = stopwatch.Elapsed;
+            return lastResult;
+        }
+
+        throw new InvalidOperationException("No production sets were generated.");
     }
 
     private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeActualHashes(
@@ -106,7 +128,7 @@ internal static class ProductionSetGenerator
     }
 
     private static async Task<ProductionSetResult> GenerateCoreAsync(
-        FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch, CancellationToken cancellationToken)
+        FileGenerationRequest request, string productionPath, string productionName, int rollingIndex, Stopwatch stopwatch, CancellationToken cancellationToken)
     {
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
@@ -124,7 +146,7 @@ internal static class ProductionSetGenerator
 #pragma warning restore S2245
 
         // Plan document layout (no I/O)
-        var plans = ProductionSetPlanner.Plan(request);
+        var plans = ProductionSetPlanner.Plan(request, rollingIndex);
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
@@ -273,7 +295,16 @@ internal static class ProductionSetGenerator
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
         var manifestPath = await ProductionManifestWriter.WriteAsync(
-            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList).ConfigureAwait(false);
+            productionPath,
+            request,
+            batesStart,
+            batesEnd,
+            volumeCount,
+            stopwatch.Elapsed,
+            fileDataList,
+            productionId: productionName,
+            rollingSequenceNumber: rollingIndex + 1,
+            batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant()).ConfigureAwait(false);
 
         // Run validation
         var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);

@@ -722,5 +722,180 @@ public class ProductionSetTests : IDisposable
         // Assert that totalAnomalies is 0 because ChaosEngine should not be constructed/used in ProductionSetGenerator
         Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
     }
+
+    [Fact]
+    public void ProductionSet_RollingArgs_ParsesCorrectly()
+
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "10", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--production-id", "PROD001",
+            "--rolling-count", "3",
+            "--rolling-bates-mode", "continuous"
+        };
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.Equal("PROD001", request.Production.ProductionId);
+        Assert.Equal(3, request.Production.RollingCount);
+        Assert.Equal(RollingBatesMode.Continuous, request.Production.RollingBatesMode);
+    }
+
+    [Fact]
+    public void ProductionSet_RollingCountNonPositive_FailsValidation()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "10", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--rolling-count", "0"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void ProductionSet_DuplicateProductionIds_FailsValidation()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "10", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--rolling-count", "2",
+            "--production-id", "PROD001,PROD001"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void ProductionSet_RollingBatesModeInvalid_FailsValidation()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "10", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--rolling-bates-mode", "invalid"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void ProductionSet_ContinuousBatesOverlap_FailsValidation()
+    {
+        // If they specify multiple bates prefixes and starts that overlap in continuous mode
+        var args = new[]
+        {
+            "--production-set", "--count", "10", "--output-path", this.testOutputPath,
+            "--rolling-count", "2",
+            "--bates-prefix", "PROD,PROD",
+            "--bates-start", "1,5", // Range 1: 1..10 (size 10), Range 2: 5..14 (size 10) -> overlaps!
+            "--production-id", "PROD001,PROD002"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public async Task ProductionSet_ContinuousBates_GeneratesSequentialRanges()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "5", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--bates-start", "1",
+            "--production-id", "PROD001",
+            "--rolling-count", "3",
+            "--rolling-bates-mode", "continuous"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        // Check directories exist
+        var dir1 = Path.Combine(this.testOutputPath, "PROD001");
+        var dir2 = Path.Combine(this.testOutputPath, "PROD002");
+        var dir3 = Path.Combine(this.testOutputPath, "PROD003");
+        Assert.True(Directory.Exists(dir1));
+        Assert.True(Directory.Exists(dir2));
+        Assert.True(Directory.Exists(dir3));
+
+        // Check manifest metadata for Set 1
+        var manifest1Path = Path.Combine(dir1, "_manifest.json");
+        var json1 = await File.ReadAllTextAsync(manifest1Path);
+        using var doc1 = JsonDocument.Parse(json1);
+        Assert.Equal("PROD001", doc1.RootElement.GetProperty("productionId").GetString());
+        Assert.Equal(1, doc1.RootElement.GetProperty("rollingSequenceNumber").GetInt32());
+        Assert.Equal("PROD00000001", doc1.RootElement.GetProperty("batesNumberStart").GetString());
+        Assert.Equal("PROD00000005", doc1.RootElement.GetProperty("batesNumberEnd").GetString());
+        Assert.Equal("continuous", doc1.RootElement.GetProperty("batesRangeMode").GetString());
+
+        // Check manifest metadata for Set 2
+        var manifest2Path = Path.Combine(dir2, "_manifest.json");
+        var json2 = await File.ReadAllTextAsync(manifest2Path);
+        using var doc2 = JsonDocument.Parse(json2);
+        Assert.Equal("PROD002", doc2.RootElement.GetProperty("productionId").GetString());
+        Assert.Equal(2, doc2.RootElement.GetProperty("rollingSequenceNumber").GetInt32());
+        Assert.Equal("PROD00000006", doc2.RootElement.GetProperty("batesNumberStart").GetString());
+        Assert.Equal("PROD00000010", doc2.RootElement.GetProperty("batesNumberEnd").GetString());
+
+        // Check manifest metadata for Set 3
+        var manifest3Path = Path.Combine(dir3, "_manifest.json");
+        var json3 = await File.ReadAllTextAsync(manifest3Path);
+        using var doc3 = JsonDocument.Parse(json3);
+        Assert.Equal("PROD003", doc3.RootElement.GetProperty("productionId").GetString());
+        Assert.Equal(3, doc3.RootElement.GetProperty("rollingSequenceNumber").GetInt32());
+        Assert.Equal("PROD00000011", doc3.RootElement.GetProperty("batesNumberStart").GetString());
+        Assert.Equal("PROD00000015", doc3.RootElement.GetProperty("batesNumberEnd").GetString());
+    }
+
+    [Fact]
+    public async Task ProductionSet_RestartBates_GeneratesRestartedRanges()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "5", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD",
+            "--bates-start", "1",
+            "--production-id", "PROD001",
+            "--rolling-count", "2",
+            "--rolling-bates-mode", "restart"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        // Check directories exist
+        var dir1 = Path.Combine(this.testOutputPath, "PROD001");
+        var dir2 = Path.Combine(this.testOutputPath, "PROD002");
+        Assert.True(Directory.Exists(dir1));
+        Assert.True(Directory.Exists(dir2));
+
+        // Check manifest metadata for Set 1
+        var manifest1Path = Path.Combine(dir1, "_manifest.json");
+        var json1 = await File.ReadAllTextAsync(manifest1Path);
+        using var doc1 = JsonDocument.Parse(json1);
+        Assert.Equal("PROD001", doc1.RootElement.GetProperty("productionId").GetString());
+        Assert.Equal("PROD00000001", doc1.RootElement.GetProperty("batesNumberStart").GetString());
+        Assert.Equal("PROD00000005", doc1.RootElement.GetProperty("batesNumberEnd").GetString());
+        Assert.Equal("restart", doc1.RootElement.GetProperty("batesRangeMode").GetString());
+
+        // Check manifest metadata for Set 2
+        var manifest2Path = Path.Combine(dir2, "_manifest.json");
+        var json2 = await File.ReadAllTextAsync(manifest2Path);
+        using var doc2 = JsonDocument.Parse(json2);
+        Assert.Equal("PROD002", doc2.RootElement.GetProperty("productionId").GetString());
+        Assert.Equal("PROD00000001", doc2.RootElement.GetProperty("batesNumberStart").GetString());
+        Assert.Equal("PROD00000005", doc2.RootElement.GetProperty("batesNumberEnd").GetString());
+    }
 }
+
+
 
