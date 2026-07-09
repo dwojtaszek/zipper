@@ -184,4 +184,16 @@ public class ProductionSetValidationTests : IDisposable
         Assert.True(report.ErrorCount > 0);
         Assert.Contains(report.Findings, f => f.Code == "BatesConsistency" && f.Path == "DATA/loadfile.dat" && f.Message.Contains("Bates range inconsistency", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void ParseDatLine_WithDoubledQuotes_ShouldUnescapeLiteralQuotes()
+    {
+        var lineInput = "\"value1\",\"value \"\"2\"\" hello\",\"value3\"";
+        var fields = ProductionSetPostValidator.ParseDatLine(lineInput, ',', '"');
+
+        Assert.Equal(3, fields.Count);
+        Assert.Equal("value1", fields[0]);
+        Assert.Equal("value \"2\" hello", fields[1]);
+        Assert.Equal("value3", fields[2]);
+    }
 }

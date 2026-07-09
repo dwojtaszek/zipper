@@ -81,167 +81,122 @@ internal sealed class ProductionSetPostValidator
         else
         {
             var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-            var datLines = File.ReadAllLines(datPath, encoding);
-            datRowsChecked = datLines.Length;
+            var datLines = File.ReadLines(datPath, encoding);
 
-            if (datLines.Length > 0)
+            using (var enumerator = datLines.GetEnumerator())
             {
-                var colDelimChar = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? '\x14' : request.Delimiters.ColumnDelimiter[0];
-                var quoteDelimChar = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? '\xfe' : request.Delimiters.QuoteDelimiter[0];
-
-                var headers = ParseDatLine(datLines[0], colDelimChar, quoteDelimChar);
-                int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
-                int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase));
-                int nativeIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase));
-                int textIdx = headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase));
-                int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase));
-                int parentIdIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase));
-
-                for (int i = 1; i < datLines.Length; i++)
+                if (enumerator.MoveNext())
                 {
-                    var line = datLines[i];
-                    if (string.IsNullOrEmpty(line))
-                        continue;
+                    datRowsChecked++;
+                    var headerLine = enumerator.Current;
+                    var colDelimChar = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? '\x14' : request.Delimiters.ColumnDelimiter[0];
+                    var quoteDelimChar = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? '\xfe' : request.Delimiters.QuoteDelimiter[0];
 
-                    var fields = ParseDatLine(line, colDelimChar, quoteDelimChar);
-                    if (fields.Count != headers.Count)
-                    {
-                        findings.Add(new ValidationReportFinding
-                        {
-                            Code = "ColumnCount",
-                            Severity = "error",
-                            Path = datRelPath,
-                            Line = i + 1,
-                            Message = $"Expected {headers.Count} columns, got {fields.Count} on line {i + 1}"
-                        });
-                    }
+                    var headers = ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
+                    int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
+                    int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase));
+                    int nativeIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase));
+                    int textIdx = headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase));
+                    int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase));
+                    int parentIdIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase));
 
-                    // DOCID uniqueness
-                    if (docIdIdx >= 0 && docIdIdx < fields.Count)
+                    int i = 0;
+                    while (enumerator.MoveNext())
                     {
-                        var docId = fields[docIdIdx];
-                        if (!string.IsNullOrEmpty(docId))
+                        i++;
+                        datRowsChecked++;
+                        var line = enumerator.Current;
+                        if (string.IsNullOrEmpty(line))
+                            continue;
+
+                        var fields = ParseDatLine(line, colDelimChar, quoteDelimChar);
+                        if (fields.Count != headers.Count)
                         {
-                            if (!seenDocIds.Add(docId))
+                            findings.Add(new ValidationReportFinding
                             {
-                                findings.Add(new ValidationReportFinding
+                                Code = "ColumnCount",
+                                Severity = "error",
+                                Path = datRelPath,
+                                Line = i + 1,
+                                Message = $"Expected {headers.Count} columns, got {fields.Count} on line {i + 1}"
+                            });
+                        }
+
+                        // DOCID uniqueness
+                        if (docIdIdx >= 0 && docIdIdx < fields.Count)
+                        {
+                            var docId = fields[docIdIdx];
+                            if (!string.IsNullOrEmpty(docId))
+                            {
+                                if (!seenDocIds.Add(docId))
                                 {
-                                    Code = "UniqueId",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"Duplicate DOCID: '{docId}'"
-                                });
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "UniqueId",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Duplicate DOCID: '{docId}'"
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    // BATES_NUMBER uniqueness and consistency
-                    string batesVal = string.Empty;
-                    if (batesIdx >= 0 && batesIdx < fields.Count)
-                    {
-                        batesVal = fields[batesIdx];
+                        // BATES_NUMBER uniqueness and consistency
+                        string batesVal = string.Empty;
+                        if (batesIdx >= 0 && batesIdx < fields.Count)
+                        {
+                            batesVal = fields[batesIdx];
+                            if (!string.IsNullOrEmpty(batesVal))
+                            {
+                                if (!seenBatesNumbers.Add(batesVal))
+                                {
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "UniqueId",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Duplicate Bates Number: '{batesVal}'"
+                                    });
+                                }
+                            }
+                        }
+
+                        // Parent/Child Bates range consistency check
                         if (!string.IsNullOrEmpty(batesVal))
                         {
-                            if (!seenBatesNumbers.Add(batesVal))
+                            bool isParent = parentIdIdx == -1 || parentIdIdx >= fields.Count || string.IsNullOrEmpty(fields[parentIdIdx]);
+                            if (isParent)
                             {
-                                findings.Add(new ValidationReportFinding
+                                parentBatesList.Add(batesVal);
+                            }
+                            else
+                            {
+                                var parentDocId = fields[parentIdIdx];
+                                if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
                                 {
-                                    Code = "UniqueId",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"Duplicate Bates Number: '{batesVal}'"
-                                });
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "BatesConsistency",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'"
+                                    });
+                                }
                             }
                         }
-                    }
 
-                    // Parent/Child Bates range consistency check
-                    if (!string.IsNullOrEmpty(batesVal))
-                    {
-                        bool isParent = parentIdIdx == -1 || parentIdIdx >= fields.Count || string.IsNullOrEmpty(fields[parentIdIdx]);
-                        if (isParent)
+                        // Native path existence
+                        if (nativeIdx >= 0 && nativeIdx < fields.Count)
                         {
-                            parentBatesList.Add(batesVal);
-                        }
-                        else
-                        {
-                            var parentDocId = fields[parentIdIdx];
-                            if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
+                            var nativePath = fields[nativeIdx];
+                            if (!string.IsNullOrEmpty(nativePath))
                             {
-                                findings.Add(new ValidationReportFinding
-                                {
-                                    Code = "BatesConsistency",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'"
-                                });
-                            }
-                        }
-                    }
-
-                    // Native path existence
-                    if (nativeIdx >= 0 && nativeIdx < fields.Count)
-                    {
-                        var nativePath = fields[nativeIdx];
-                        if (!string.IsNullOrEmpty(nativePath))
-                        {
-                            checkedNativesCount++;
-                            var fullNativePath = Path.Combine(productionPath, nativePath.Replace('\\', '/'));
-                            if (!File.Exists(fullNativePath))
-                            {
-                                findings.Add(new ValidationReportFinding
-                                {
-                                    Code = "PathExistence",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"Referenced native file '{nativePath}' does not exist."
-                                });
-                            }
-                        }
-                    }
-
-                    // Text path existence
-                    if (textIdx >= 0 && textIdx < fields.Count)
-                    {
-                        var textPath = fields[textIdx];
-                        if (!string.IsNullOrEmpty(textPath))
-                        {
-                            checkedTextsCount++;
-                            var fullTextPath = Path.Combine(productionPath, textPath.Replace('\\', '/'));
-                            if (!File.Exists(fullTextPath))
-                            {
-                                findings.Add(new ValidationReportFinding
-                                {
-                                    Code = "PathExistence",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"Referenced text file '{textPath}' does not exist."
-                                });
-                            }
-                        }
-                    }
-
-                    // Image path existence
-                    if (imageIdx >= 0 && imageIdx < fields.Count)
-                    {
-                        var imagePath = fields[imageIdx];
-                        if (!string.IsNullOrEmpty(imagePath))
-                        {
-                            checkedImagesCount++;
-                            var fullImagePath = Path.Combine(productionPath, imagePath.Replace('\\', '/'));
-                            if (!File.Exists(fullImagePath))
-                            {
-                                var dir = Path.GetDirectoryName(fullImagePath) ?? string.Empty;
-                                var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fullImagePath);
-                                var ext = Path.GetExtension(fullImagePath);
-                                var pageOnePath = Path.Combine(dir, $"{fileNameWithoutExt}_001{ext}");
-
-                                if (!File.Exists(pageOnePath))
+                                checkedNativesCount++;
+                                var fullNativePath = Path.Combine(productionPath, nativePath.Replace('\\', '/'));
+                                if (!File.Exists(fullNativePath))
                                 {
                                     findings.Add(new ValidationReportFinding
                                     {
@@ -249,8 +204,60 @@ internal sealed class ProductionSetPostValidator
                                         Severity = "error",
                                         Path = datRelPath,
                                         Line = i + 1,
-                                        Message = $"Referenced image file '{imagePath}' does not exist."
+                                        Message = $"Referenced native file '{nativePath}' does not exist."
                                     });
+                                }
+                            }
+                        }
+
+                        // Text path existence
+                        if (textIdx >= 0 && textIdx < fields.Count)
+                        {
+                            var textPath = fields[textIdx];
+                            if (!string.IsNullOrEmpty(textPath))
+                            {
+                                checkedTextsCount++;
+                                var fullTextPath = Path.Combine(productionPath, textPath.Replace('\\', '/'));
+                                if (!File.Exists(fullTextPath))
+                                {
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "PathExistence",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Referenced text file '{textPath}' does not exist."
+                                    });
+                                }
+                            }
+                        }
+
+                        // Image path existence
+                        if (imageIdx >= 0 && imageIdx < fields.Count)
+                        {
+                            var imagePath = fields[imageIdx];
+                            if (!string.IsNullOrEmpty(imagePath))
+                            {
+                                checkedImagesCount++;
+                                var fullImagePath = Path.Combine(productionPath, imagePath.Replace('\\', '/'));
+                                if (!File.Exists(fullImagePath))
+                                {
+                                    var dir = Path.GetDirectoryName(fullImagePath) ?? string.Empty;
+                                    var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fullImagePath);
+                                    var ext = Path.GetExtension(fullImagePath);
+                                    var pageOnePath = Path.Combine(dir, $"{fileNameWithoutExt}_001{ext}");
+
+                                    if (!File.Exists(pageOnePath))
+                                    {
+                                        findings.Add(new ValidationReportFinding
+                                        {
+                                            Code = "PathExistence",
+                                            Severity = "error",
+                                            Path = datRelPath,
+                                            Line = i + 1,
+                                            Message = $"Referenced image file '{imagePath}' does not exist."
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -293,12 +300,11 @@ internal sealed class ProductionSetPostValidator
         }
         else
         {
-            var optLines = File.ReadAllLines(optPath);
-            optRowsChecked = optLines.Length;
-
-            for (int i = 0; i < optLines.Length; i++)
+            int i = -1;
+            foreach (var line in File.ReadLines(optPath))
             {
-                var line = optLines[i];
+                i++;
+                optRowsChecked++;
                 if (string.IsNullOrEmpty(line))
                     continue;
 
@@ -389,9 +395,17 @@ internal sealed class ProductionSetPostValidator
         for (int i = 0; i < line.Length; i++)
         {
             char c = line[i];
-            if (c == quoteDelim)
+            if (quoteDelim != '\0' && c == quoteDelim)
             {
-                inQuotes = !inQuotes;
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == quoteDelim)
+                {
+                    currentField.Append(quoteDelim);
+                    i++; // Skip the second quote
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
             }
             else if (c == colDelim && !inQuotes)
             {

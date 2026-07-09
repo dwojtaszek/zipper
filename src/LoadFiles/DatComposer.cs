@@ -386,7 +386,7 @@ internal sealed class DatComposer : ILoadFileComposer
         // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
         // backslash normalization also works on Windows (where DirectorySeparatorChar is '\').
         var nativePath = ctx.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
-        var textPath = ctx.TextPathOverride ?? nativePath.Replace("NATIVES", "TEXT", StringComparison.OrdinalIgnoreCase).Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
+        var textPath = ctx.TextPathOverride ?? (nativePath.StartsWith("NATIVES\\", StringComparison.OrdinalIgnoreCase) ? "TEXT\\" + nativePath.Substring(8) : nativePath).Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
         var imagesPath = imagePath.Replace('/', '\\');
 
 #pragma warning disable S2245

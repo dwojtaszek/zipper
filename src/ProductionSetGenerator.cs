@@ -281,6 +281,11 @@ internal static class ProductionSetGenerator
         var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
         await File.WriteAllTextAsync(reportPath, reportJson).ConfigureAwait(false);
 
+        if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
+        }
+
         // Optionally wrap in ZIP
         string? zipPath = null;
         if (request.Production.ProductionZip)
@@ -292,11 +297,6 @@ internal static class ProductionSetGenerator
         }
 
         stopwatch.Stop();
-
-        if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
-        }
 
         return new ProductionSetResult
         {
