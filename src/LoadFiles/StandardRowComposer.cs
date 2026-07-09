@@ -16,9 +16,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
     protected StandardRowComposer(FileGenerationRequest request)
     {
         this.request = request;
+        this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
         this.orderedKeys = this.BuildOrderedKeys();
         this.headerColumns = this.orderedKeys.Select(this.HeaderName).ToList();
-        this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
     }
 
     /// <summary>Gets the hash column keys to emit based on request configuration.</summary>
@@ -90,6 +90,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                 var childCtx = new RowCtx
                 {
                     IdOverride = childId,
+                    ControlOverride = $"DOC{wi.Index:D8}_A001",
                     FilePathOverride = attachmentPath,
                     FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     IsChild = true,
@@ -108,12 +109,10 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         var keys = new List<string>();
         if (this.IncludeAttachmentBoundaryColumns)
         {
-            keys.Add("BEGATTY");
-            keys.Add("ENDATTY");
+            keys.AddRange(new[] { "BEGATTY", "ENDATTY" });
         }
 
-        keys.Add("CONTROL");
-        keys.Add("PATH");
+        keys.AddRange(new[] { "CONTROL", "PATH" });
 
         if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
         {
@@ -125,7 +124,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             keys.AddRange(new[] { "TO", "FROM", "SUBJECT", "SENTDATE", "ATTACHMENT" });
         }
 
-        if (this.request.Bates != null)
+        if (this.batesSequence is not null)
         {
             keys.Add("BATES");
         }
@@ -164,7 +163,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         {
             "BEGATTY" => this.request.Metadata.WithFamilies ? ctx.BegAttach : string.Empty,
             "ENDATTY" => this.request.Metadata.WithFamilies ? ctx.EndAttach : string.Empty,
-            "CONTROL" => ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}"),
+            "CONTROL" => ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
             "PATH" => ctx.FilePathOverride ?? wi.FilePathInZip,
             "CUSTODIAN" => meta.Custodian,
             "DATESENT" => ctx.IsChild ? string.Empty : meta.DateSent,
@@ -199,6 +198,8 @@ internal abstract class StandardRowComposer : ILoadFileComposer
     protected sealed record RowCtx
     {
         public string? IdOverride { get; init; }
+
+        public string? ControlOverride { get; init; }
 
         public string? FilePathOverride { get; init; }
 

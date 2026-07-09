@@ -158,6 +158,7 @@ internal sealed class DatComposer : ILoadFileComposer
                     this.StandardRowValues(fileData, profileValues, new RowCtx
                     {
                         IdOverride = childId,
+                        ControlOverride = $"DOC{fileData.WorkItem.Index:D8}_A001",
                         FilePathOverride = attachmentPath,
                         FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
@@ -265,7 +266,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         var v = new List<string>(this.headerColumns.Count)
         {
-            ctx.IdOverride ?? $"DOC{wi.Index:D8}",
+            ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
             ctx.FilePathOverride ?? wi.FilePathInZip,
         };
 
@@ -537,6 +538,7 @@ internal sealed class DatComposer : ILoadFileComposer
                     this.StandardRowValues(fileData, parentValues, new RowCtx
                     {
                         IdOverride = childId,
+                        ControlOverride = $"DOC{i:D8}_A001",
                         FilePathOverride = childPath,
                         FileSizeOverride = rowRandom.Next(1024, 10_485_760).ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
@@ -613,6 +615,8 @@ internal sealed class DatComposer : ILoadFileComposer
     private sealed record RowCtx
     {
         public string? IdOverride { get; init; }
+
+        public string? ControlOverride { get; init; }
 
         public string? FilePathOverride { get; init; }
 
