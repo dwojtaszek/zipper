@@ -300,8 +300,9 @@ internal sealed class ProductionSetPostValidator
         }
         else
         {
+            var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
             int i = -1;
-            foreach (var line in File.ReadLines(optPath))
+            foreach (var line in File.ReadLines(optPath, optEncoding))
             {
                 i++;
                 optRowsChecked++;
