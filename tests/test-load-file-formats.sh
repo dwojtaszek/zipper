@@ -422,6 +422,78 @@ fi
 
 print_success "Test Case 10: Auto OPT generation passed"
 
+# --- Test Case 11: Families support across CSV, XML, Concordance, and Loadfile-only ---
+
+print_info "Test Case 11: Families support across load file formats"
+
+# Standard mode EML with families for CSV
+zipper \
+  --type eml \
+  --count 5 \
+  --attachment-rate 100 \
+  --with-families \
+  --output-path "$TEST_OUTPUT_DIR/test11_csv" \
+  --load-file-format csv
+
+csv_file=$(find "$TEST_OUTPUT_DIR/test11_csv" -name "*.csv" -print -quit)
+if [[ -z "$csv_file" ]]; then
+  print_error "Test 11: No .csv file found"
+fi
+
+if ! grep -q "BEGATTACH" "$csv_file"; then
+  print_error "Test 11: 'BEGATTACH' column not found in .csv header"
+fi
+
+# Standard mode EML with families for XML (EDRM-XML)
+zipper \
+  --type eml \
+  --count 5 \
+  --attachment-rate 100 \
+  --with-families \
+  --output-path "$TEST_OUTPUT_DIR/test11_xml" \
+  --load-file-format xml
+
+xml_file=$(find "$TEST_OUTPUT_DIR/test11_xml" -name "*.xml" -print -quit)
+if [[ -z "$xml_file" ]]; then
+  print_error "Test 11: No .xml file found"
+fi
+
+if ! grep -q "PARENTDOCID" "$xml_file"; then
+  print_error "Test 11: XML did not contain PARENTDOCID tag"
+fi
+
+if ! grep -q "ParentDocID" "$xml_file"; then
+  print_error "Test 11: XML did not contain relationship with correct ParentDocID casing"
+fi
+
+# Loadfile-Only mode with families
+zipper \
+  --type eml \
+  --count 5 \
+  --attachment-rate 100 \
+  --with-families \
+  --output-path "$TEST_OUTPUT_DIR/test11_loadfile_only" \
+  --loadfile-only
+
+dat_file=$(find "$TEST_OUTPUT_DIR/test11_loadfile_only" -name "*.dat" -print -quit)
+properties_file=$(find "$TEST_OUTPUT_DIR/test11_loadfile_only" -name "*_properties.json" -print -quit)
+
+if [[ -z "$dat_file" ]]; then
+  print_error "Test 11: No .dat file found in loadfile-only mode"
+fi
+
+if [[ -z "$properties_file" ]]; then
+  print_error "Test 11: No properties JSON file found"
+fi
+
+# Check that totalRecords in properties JSON is greater than 5 (due to simulated attachments)
+total_records=$(grep -o '"totalRecords":[[:space:]]*[0-9]*' "$properties_file" | tr -d -c 0-9)
+if [[ "$total_records" -le 5 ]]; then
+  print_error "Test 11: Expected totalRecords > 5 in properties.json, found $total_records"
+fi
+
+print_success "Test Case 11: Families support passed"
+
 # --- All Tests Passed ---
 
 print_success "All Load File Formats E2E tests passed!"

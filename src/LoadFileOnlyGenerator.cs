@@ -80,6 +80,9 @@ internal static class LoadFileOnlyGenerator
 
             stopwatch.Stop();
 
+            var primaryFormat = formatsToGenerate.Count > 0 ? formatsToGenerate[0] : LoadFileFormat.Dat;
+            var (totalRecords, _) = LoadFileAuditWriter.ComputeRecordCounts(request, Array.Empty<FileData>(), primaryFormat);
+
             return new LoadFileOnlyResult
             {
                 LoadFilePath = primaryLoadFilePath,

@@ -235,4 +235,44 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
         Assert.Equal(bytes, roundTripBytes);
         Assert.Contains("CONTROL NUMBER", content, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CsvWriter_WithFamilies_IncludesFamilyColumnsAndRows()
+    {
+        var request = this.CreateTestRequest("eml");
+        request.Metadata = request.Metadata with { WithFamilies = true };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.eml",
+                    FilePathInZip = "folder/doc1.eml"
+                },
+                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                DataLength = 100
+            }
+        };
+
+        var content = await this.CaptureCsvOutput(request, files);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(3, lines.Length);
+        Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
+        Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
+
+        var parentLine = lines[1];
+        Assert.Contains("DOC00000001", parentLine, StringComparison.Ordinal);
+        Assert.Contains("DOC00000001_A001", parentLine, StringComparison.Ordinal);
+
+        var childLine = lines[2];
+        Assert.Contains("DOC00000001_A001", childLine, StringComparison.Ordinal);
+        Assert.Contains("DOC00000001", childLine, StringComparison.Ordinal);
+    }
 }
+

@@ -88,11 +88,16 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.mode == WriterMode.LoadfileOnly)
         {
-            return new[]
+            var lfCols = new List<string>
             {
                 "Control Number", "File Path", "Custodian", "Date Sent", "Author", "File Size",
                 "EmailSubject", "EmailFrom", "EmailTo", "EmailSentDate", "ExtractedText",
-            }.Select(this.Apply).ToList();
+            };
+            if (this.request.Metadata.WithFamilies)
+            {
+                lfCols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
+            }
+            return lfCols.Select(this.Apply).ToList();
         }
 
         // Standard mode: columns depend on request flags.
@@ -141,12 +146,13 @@ internal sealed class DatComposer : ILoadFileComposer
 
             yield return this.MakeRecord(
                 parentId,
-                this.StandardRowValues(fileData, profileValues, new RowCtx { BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.StandardRowValues(fileData, profileValues, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
                 var attach = fileData.Attachment!.Value;
-                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attach.filename}";
+                var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
+                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{sanitizedFilename}";
                 yield return this.MakeRecord(
                     childId,
                     this.StandardRowValues(fileData, profileValues, new RowCtx
@@ -310,7 +316,10 @@ internal sealed class DatComposer : ILoadFileComposer
         var wi = fileData.WorkItem;
         if (ctx.IsChild)
         {
-            var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(fileData.Attachment!.Value.filename)}.txt";
+            var filename = fileData.Attachment.HasValue
+                ? fileData.Attachment.Value.filename
+                : (ctx.FilePathOverride is not null ? Path.GetFileName(ctx.FilePathOverride) : $"{ctx.IdOverride ?? $"{wi.Index}_A001"}.pdf");
+            var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(filename))}.txt";
             return $"{wi.FolderName}/{wi.Index}_{attachmentTextFileName}";
         }
 
@@ -328,12 +337,12 @@ internal sealed class DatComposer : ILoadFileComposer
 
             yield return this.MakeRecord(
                 parentId,
-                this.ProductionRowValues(fileData, new RowCtx { BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.ProductionRowValues(fileData, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
                 var attach = fileData.Attachment!.Value;
-                var childExt = Path.GetExtension(attach.filename);
+                var childExt = Path.GetExtension(FamilyPlan.SanitizeAttachmentFilename(attach.filename));
                 var childBates = childId;
                 var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace('/', '\\');
                 var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\');
@@ -413,11 +422,13 @@ internal sealed class DatComposer : ILoadFileComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
-            var recordId = this.batesSequence is not null
+            var parentId = this.batesSequence is not null
                 ? this.batesSequence.Next().ToString()
                 : $"DOC{i:D8}";
 
-            // Draw order must match the legacy writer: dateSent, author, fileSize, sentTime.
+            bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
+            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+
             var custodian = $"Custodian {(i % 10) + 1}";
             var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
             var author = $"Author {random.Next(1, 100):D3}";
@@ -426,14 +437,41 @@ internal sealed class DatComposer : ILoadFileComposer
             var senderAddr = $"sender{i}@example.com";
             var recipientAddr = $"recipient{i}@example.com";
             var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            var filePath = $"NATIVES\\{(i % 50) + 1:D3}\\{recordId}.pdf";
-            var extractedText = $"Sample extracted text content for document {recordId}.";
+            var filePath = $"NATIVES\\{(i % 50) + 1:D3}\\{parentId}.pdf";
+            var extractedText = $"Sample extracted text content for document {parentId}.";
 
-            yield return this.MakeRecord(recordId, new List<string>
+            var parentRecordValues = new List<string>
             {
-                recordId, filePath, custodian, dateSent, author, fileSize,
+                parentId, filePath, custodian, dateSent, author, fileSize,
                 subjLine, senderAddr, recipientAddr, sentTime, extractedText,
-            });
+            };
+
+            if (this.request.Metadata.WithFamilies)
+            {
+                parentRecordValues.AddRange(new[] { parentId, childId, string.Empty });
+            }
+
+            yield return this.MakeRecord(parentId, parentRecordValues);
+
+            if (hasAttachment)
+            {
+                var childFileSize = random.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var childPath = $"NATIVES\\{(i % 50) + 1:D3}\\{childId}.pdf";
+                var childExtractedText = $"Sample extracted text content for document {childId}.";
+
+                var childRecordValues = new List<string>
+                {
+                    childId, childPath, custodian, string.Empty, string.Empty, childFileSize,
+                    string.Empty, string.Empty, string.Empty, string.Empty, childExtractedText,
+                };
+
+                if (this.request.Metadata.WithFamilies)
+                {
+                    childRecordValues.AddRange(new[] { parentId, childId, parentId });
+                }
+
+                yield return this.MakeRecord(childId, childRecordValues);
+            }
         }
     }
 
@@ -456,6 +494,8 @@ internal sealed class DatComposer : ILoadFileComposer
             {
                 Index = i,
                 FolderNumber = folderNum,
+                FolderName = $"{folderNum:D3}",
+                FileName = $"DOC{i:D8}.{fileTypeLower}",
                 FilePathInZip = $"NATIVES/{folderNum:D3}/DOC{i:D8}.{fileTypeLower}",
             };
 
@@ -467,14 +507,34 @@ internal sealed class DatComposer : ILoadFileComposer
                 Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
             };
 
-            var values = generator.GenerateRow(workItem, fileData);
-            var ordered = columnNames.Select(n =>
+            bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
+            string parentId = this.batesSequence is not null
+                ? this.batesSequence.Format(i - 1).ToString()
+                : $"DOC{i:D8}";
+            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+
+            var parentValues = generator.GenerateRow(workItem, fileData);
+            yield return this.MakeRecord(
+                parentId,
+                this.StandardRowValues(fileData, parentValues, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+
+            if (hasAttachment)
             {
-                var hv = values.TryGetValue(n, out var x) ? x : string.Empty;
-                var hashVal = ResolveHashColumn(n.ToUpperInvariant(), fileData);
-                return hashVal ?? hv;
-            }).ToList();
-            yield return this.MakeRecord($"DOC{i:D8}", ordered);
+                var childExt = ".pdf";
+                var childPath = $"NATIVES/{folderNum:D3}/{childId}{childExt}";
+                yield return this.MakeRecord(
+                    childId,
+                    this.StandardRowValues(fileData, parentValues, new RowCtx
+                    {
+                        IdOverride = childId,
+                        FilePathOverride = childPath,
+                        FileSizeOverride = rowRandom.Next(1024, 10_485_760).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        IsChild = true,
+                        BegAttach = parentId,
+                        EndAttach = childId,
+                        ParentDocId = parentId,
+                    }));
+            }
         }
     }
 

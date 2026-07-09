@@ -88,7 +88,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
 - `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns; `dat` format only). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise). **Supported in:** DAT format in Standard and Production Set modes. **Not supported in:** CSV, Concordance, EDRM-XML, OPT formats, or Loadfile-Only mode.
+- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns/relationships). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise). **Supported in:** Standard, Production Set, and Loadfile-Only modes across DAT, CSV, Concordance, and EDRM-XML formats.
 
 **Loadfile-Only Options:**
 - `--loadfile-only`: Generate standalone Load Files directly to disk without creating Archives or Native Files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
@@ -261,7 +261,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
-| `--with-families` + non-dat format | Ignored. Family columns are DAT-format only. |
+| `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
 ### Delimiter Argument Modes
 

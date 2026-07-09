@@ -71,6 +71,14 @@ internal sealed class OptComposer : ILoadFileComposer
             {
                 yield return MakeRecord(entry.Bates, volume, entry.ImagePath, entry.DocBreak, entry.PageCountStr);
             }
+
+            bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
+            if (hasAttachment)
+            {
+                string childBates = $"{batesNumber}_A001";
+                string childImagePath = $"IMAGES\\{childBates}.tif";
+                yield return MakeRecord(childBates, volume, childImagePath, "Y", "1");
+            }
         }
     }
 

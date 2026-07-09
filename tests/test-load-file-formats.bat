@@ -382,6 +382,93 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 10: Auto OPT generation passed
 
+:: --- Test Case 11: Families support across CSV, XML, Concordance, and Loadfile-only ---
+
+echo [ INFO ] Test Case 11: Families support across load file formats
+
+:: Standard mode EML with families for CSV
+%ZIPPER_CMD% ^
+  --type eml ^
+  --count 5 ^
+  --attachment-rate 100 ^
+  --with-families ^
+  --output-path "%TEST_OUTPUT_DIR%\test11_csv" ^
+  --load-file-format csv
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 11 failed during execution for CSV
+  exit /b 1
+)
+
+set CSV_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test11_csv\*.csv") do set CSV_FILE=%%f
+if not exist "!CSV_FILE!" (
+  echo [ ERROR ] Test 11: No .csv file found
+  exit /b 1
+)
+
+findstr /C:"BEGATTACH" "!CSV_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 11: 'BEGATTACH' column not found in .csv header
+  exit /b 1
+)
+
+:: Standard mode EML with families for XML (EDRM-XML)
+%ZIPPER_CMD% ^
+  --type eml ^
+  --count 5 ^
+  --attachment-rate 100 ^
+  --with-families ^
+  --output-path "%TEST_OUTPUT_DIR%\test11_xml" ^
+  --load-file-format xml
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 11 failed during execution for XML
+  exit /b 1
+)
+
+set XML_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test11_xml\*.xml") do set XML_FILE=%%f
+if not exist "!XML_FILE!" (
+  echo [ ERROR ] Test 11: No .xml file found
+  exit /b 1
+)
+
+findstr /C:"PARENTDOCID" "!XML_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 11: XML did not contain PARENTDOCID tag
+  exit /b 1
+)
+
+findstr /C:"ParentDocID" "!XML_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 11: XML did not contain relationship with correct ParentDocID casing
+  exit /b 1
+)
+
+:: Loadfile-Only mode with families
+%ZIPPER_CMD% ^
+  --type eml ^
+  --count 5 ^
+  --attachment-rate 100 ^
+  --with-families ^
+  --output-path "%TEST_OUTPUT_DIR%\test11_loadfile_only" ^
+  --loadfile-only
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 11 failed during execution for loadfile-only
+  exit /b 1
+)
+
+set DAT_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test11_loadfile_only\*.dat") do set DAT_FILE=%%f
+if not exist "!DAT_FILE!" (
+  echo [ ERROR ] Test 11: No .dat file found in loadfile-only mode
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 11: Families support passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Load File Formats E2E tests passed!

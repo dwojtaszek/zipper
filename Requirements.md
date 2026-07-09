@@ -396,7 +396,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 #### FR-013: Family Relationship Support
 
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
-- **REQ-061**: When `--with-families` is specified, the **DAT** Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns. Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns are currently supported only for the `dat` format (and OPT document-break semantics); the `csv`, `concordance`, and `edrm-xml` writers do not emit family columns. Family columns are not emitted in Loadfile-Only DAT mode.
+- **REQ-061**: When `--with-families` is specified, the Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns (or corresponding relationships). Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns/relationships are supported in DAT, CSV, Concordance, and EDRM-XML formats across Standard, Production Set, and Loadfile-Only modes.
 - **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
 - **REQ-122**: When `--with-families` is specified without `--type eml` or with `--attachment-rate 0`, a soft warning shall be emitted to stderr, but the execution shall not be rejected.
 

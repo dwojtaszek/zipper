@@ -48,6 +48,30 @@ public class LoadFileAuditWriterTests
     }
 
     [Fact]
+    public void GenerateAuditJson_WithFamilies_IncludesChildRecords()
+    {
+        // Arrange
+        var request = new FileGenerationRequest();
+        request.LoadFile = request.LoadFile with
+        {
+            Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
+            AttachmentRate = 100
+        };
+        request.Metadata = request.Metadata with { WithFamilies = true, Seed = 42 };
+        request.Output = request.Output with { FileCount = 10, FileType = "eml" };
+
+        // Act
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.dat", request, Array.Empty<FileData>(), null);
+
+        // Assert
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        long childCount = Zipper.LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
+        Assert.Equal(10 + childCount, root.GetProperty("totalRecords").GetInt64());
+    }
+
+    [Fact]
     public void GenerateAuditJson_DatFormat_FormatsDelimitersAndIncludesExplicitEncoding()
     {
         // Arrange

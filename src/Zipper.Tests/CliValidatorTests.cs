@@ -481,7 +481,7 @@ public class CliValidatorTests
     [Fact]
     public void Validate_WithFamiliesAndLoadfileOnly_EmitsWarning()
     {
-        // REQ-122: Warn when --with-families is specified with --loadfile-only mode
+        // Warn when --with-families is specified with --loadfile-only mode but not type eml/attachment rate > 0
         var args = CreateValidArgs();
         args.WithFamilies = true;
         args.LoadfileOnly = true;
@@ -495,7 +495,7 @@ public class CliValidatorTests
                 var result = CliValidator.Validate(args);
                 Assert.True(result);
                 var output = errWriter.ToString();
-                Assert.Contains("Warning: --with-families has no effect in --loadfile-only mode.", output, StringComparison.Ordinal);
+                Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
             finally
             {

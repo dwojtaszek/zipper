@@ -181,4 +181,52 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
         Assert.Contains("þEmail Subject 2þ", lines[2], StringComparison.Ordinal);
         Assert.Contains("þfolder/doc2.txtþ", lines[2], StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task ConcordanceWriter_WithFamilies_IncludesFamilyColumnsAndRows()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "eml" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Metadata = new MetadataConfig { WithFamilies = true, Seed = 42 },
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.eml",
+                    FilePathInZip = "folder/doc1.eml",
+                },
+                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                DataLength = 100
+            }
+        };
+
+        var writer = new ConcordanceComposingWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(3, lines.Length);
+        Assert.Contains("þBEGATTACHþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þENDATTACHþ", lines[0], StringComparison.Ordinal);
+        Assert.Contains("þPARENTDOCIDþ", lines[0], StringComparison.Ordinal);
+
+        var parentLine = lines[1];
+        Assert.Contains("þDOC00000001þ", parentLine, StringComparison.Ordinal);
+        Assert.Contains("þDOC00000001_A001þ", parentLine, StringComparison.Ordinal);
+
+        var childLine = lines[2];
+        Assert.Contains("þDOC00000001_A001þ", childLine, StringComparison.Ordinal);
+        Assert.Contains("þDOC00000001þ", childLine, StringComparison.Ordinal);
+    }
 }
+

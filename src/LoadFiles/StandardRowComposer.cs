@@ -65,8 +65,41 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var meta = includeMeta ? SyntheticRowValues.Metadata(wi, fileData, random, now) : default;
             var eml = includeEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
 
-            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml)).ToList();
-            yield return LoadFileRecordBuilder.Build(this.headerColumns, values, $"DOC{wi.Index:D8}");
+            bool hasAttachment = this.request.Metadata.WithFamilies && this.request.Output.IsEml && fileData.Attachment.HasValue;
+            string parentId = this.batesSequence is not null
+                ? this.batesSequence.Format(wi.Index - 1).ToString()
+                : $"DOC{wi.Index:D8}";
+            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+
+            var parentCtx = new RowCtx
+            {
+                IdOverride = parentId,
+                BegAttach = parentId,
+                EndAttach = childId,
+                ParentDocId = string.Empty
+            };
+
+            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, parentCtx)).ToList();
+            yield return LoadFileRecordBuilder.Build(this.headerColumns, values, parentId);
+
+            if (hasAttachment)
+            {
+                var attach = fileData.Attachment!.Value;
+                var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
+                var attachmentPath = $"{wi.FolderName}/{wi.Index}_{sanitizedFilename}";
+                var childCtx = new RowCtx
+                {
+                    IdOverride = childId,
+                    FilePathOverride = attachmentPath,
+                    FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    IsChild = true,
+                    BegAttach = parentId,
+                    EndAttach = childId,
+                    ParentDocId = parentId,
+                };
+                var childValues = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, childCtx)).ToList();
+                yield return LoadFileRecordBuilder.Build(this.headerColumns, childValues, childId);
+            }
         }
     }
 
@@ -107,6 +140,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             keys.Add("TEXT");
         }
 
+        if (this.request.Metadata.WithFamilies)
+        {
+            keys.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
+        }
+
         if (this.request.Hash.IsEnabled)
         {
             keys.AddRange(GetHashColumnKeys(this.request));
@@ -120,27 +158,33 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         FileWorkItem wi,
         FileData fileData,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
-        (string To, string From, string Subject, string SentDate, string Attachment) eml)
+        (string To, string From, string Subject, string SentDate, string Attachment) eml,
+        RowCtx ctx)
         => key switch
         {
-            "BEGATTY" => string.Empty,
-            "ENDATTY" => string.Empty,
-            "CONTROL" => $"DOC{wi.Index:D8}",
-            "PATH" => wi.FilePathInZip,
+            "BEGATTY" => this.request.Metadata.WithFamilies ? ctx.BegAttach : string.Empty,
+            "ENDATTY" => this.request.Metadata.WithFamilies ? ctx.EndAttach : string.Empty,
+            "CONTROL" => ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}"),
+            "PATH" => ctx.FilePathOverride ?? wi.FilePathInZip,
             "CUSTODIAN" => meta.Custodian,
-            "DATESENT" => meta.DateSent,
-            "AUTHOR" => meta.Author,
-            "FILESIZE" => meta.FileSize,
-            "TO" => eml.To,
-            "FROM" => eml.From,
-            "SUBJECT" => eml.Subject,
-            "SENTDATE" => eml.SentDate,
-            "ATTACHMENT" => eml.Attachment,
-            "BATES" => this.batesSequence!.Format(wi.Index - 1).ToString(),
-            "PAGECOUNT" => fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "DATESENT" => ctx.IsChild ? string.Empty : meta.DateSent,
+            "AUTHOR" => ctx.IsChild ? string.Empty : meta.Author,
+            "FILESIZE" => ctx.FileSizeOverride ?? meta.FileSize,
+            "TO" => ctx.IsChild ? string.Empty : eml.To,
+            "FROM" => ctx.IsChild ? string.Empty : eml.From,
+            "SUBJECT" => ctx.IsChild ? string.Empty : eml.Subject,
+            "SENTDATE" => ctx.IsChild ? string.Empty : eml.SentDate,
+            "ATTACHMENT" => ctx.IsChild ? string.Empty : eml.Attachment,
+            "BATES" => ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString(),
+            "PAGECOUNT" => (ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture),
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
             // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.
-            "TEXT" => wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal),
+            "TEXT" => ctx.IsChild
+                ? $"{wi.FolderName}/{wi.Index}_{System.IO.Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(fileData.Attachment!.Value.filename))}.txt"
+                : wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal),
+            "BEGATTACH" => ctx.BegAttach,
+            "ENDATTACH" => ctx.EndAttach,
+            "PARENTDOCID" => ctx.ParentDocId,
             "MD5HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.MD5),
             "SHA1HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA1),
             "SHA256HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA256),
@@ -151,4 +195,22 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         => fileData.Hashes is not null && fileData.Hashes.TryGetValue(algorithm, out var hash)
             ? hash
             : string.Empty;
+
+    protected sealed record RowCtx
+    {
+        public string? IdOverride { get; init; }
+
+        public string? FilePathOverride { get; init; }
+
+        public string? FileSizeOverride { get; init; }
+
+        public bool IsChild { get; init; }
+
+        public string BegAttach { get; init; } = string.Empty;
+
+        public string EndAttach { get; init; } = string.Empty;
+
+        public string ParentDocId { get; init; } = string.Empty;
+    }
 }
+
