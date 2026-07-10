@@ -80,7 +80,7 @@ internal sealed class ProductionSetPostValidator
         }
         else
         {
-            var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+            var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
             var datLines = File.ReadLines(datPath, encoding);
 
             using (var enumerator = datLines.GetEnumerator())
@@ -89,8 +89,8 @@ internal sealed class ProductionSetPostValidator
                 {
                     datRowsChecked++;
                     var headerLine = enumerator.Current;
-                    var colDelimChar = string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter) ? '\x14' : request.Delimiters.ColumnDelimiter[0];
-                    var quoteDelimChar = string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter) ? '\xfe' : request.Delimiters.QuoteDelimiter[0];
+                    var colDelimChar = string.IsNullOrEmpty(request.Delimiters?.ColumnDelimiter) ? '\x14' : request.Delimiters.ColumnDelimiter[0];
+                    var quoteDelimChar = string.IsNullOrEmpty(request.Delimiters?.QuoteDelimiter) ? '\xfe' : request.Delimiters.QuoteDelimiter[0];
 
                     var headers = ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
                     int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
@@ -300,7 +300,7 @@ internal sealed class ProductionSetPostValidator
         }
         else
         {
-            var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+            var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
             int i = -1;
             foreach (var line in File.ReadLines(optPath, optEncoding))
             {

@@ -291,4 +291,28 @@ public class SupplementalValidationTests : IDisposable
 
         Assert.Contains("_manifest.json", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task ValidateAsync_WithPriorBatesWiderThanDigitsCapacity_ShouldPass()
+    {
+        // Arrange: prior has BATES number of length 9, but digits configuration is 8
+        var prior = CreateMockManifest("PROD100000000", "PROD100000005", "PROD", 8);
+        var request = new FileGenerationRequest
+        {
+            Bates = new BatesNumberConfig { Prefix = "PROD", Digits = 8 },
+            Production = new ProductionConfig
+            {
+                SupplementalProduction = true,
+                PriorManifests = new[] { prior },
+                SupplementalGapPolicy = "reject"
+            }
+        };
+
+        // Act
+        var report = await SupplementalValidator.ValidateAsync(request, "PROD100000006", "PROD100000010");
+
+        // Assert
+        Assert.NotNull(report);
+        Assert.Equal("PROD100000006", report.ExpectedNextBates);
+    }
 }

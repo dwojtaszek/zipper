@@ -192,7 +192,7 @@ public static class SupplementalValidator
             return false;
 
         var numPart = batesNumber.Substring(prefix.Length);
-        if (numPart.Length != digits)
+        if (numPart.Length < digits)
             return false;
 
         foreach (var c in numPart)

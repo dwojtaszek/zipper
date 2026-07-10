@@ -189,7 +189,7 @@ set SUPP_MANIFEST=%SUPP_DIR%\_manifest.json
 powershell -NoProfile -Command ^
   "$supp = Get-Content '%SUPP_MANIFEST%' -Raw | ConvertFrom-Json;" ^
   "if (-not $supp.priorManifests) { throw 'priorManifests missing' };" ^
-  "if ($supp.priorManifests -notcontains '%PRIOR_MANIFEST%'.Replace('\', '\\')) { throw 'prior path not found in priorManifests' };" ^
+  "if ($supp.priorManifests -notcontains '%PRIOR_MANIFEST%') { throw 'prior path not found in priorManifests' };" ^
   "if (-not $supp.supplementalValidation) { throw 'supplementalValidation missing' };" ^
   "if ($supp.supplementalValidation.expectedNextBates -ne 'SUPP00000006') { throw 'expectedNextBates should be SUPP00000006' };" ^
   "if ($supp.supplementalValidation.actualStartingBates -ne 'SUPP00000006') { throw 'actualStartingBates should be SUPP00000006' };"
