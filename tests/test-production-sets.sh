@@ -150,21 +150,132 @@ PY
 
 print_success "Test Case 3: Production Set LF line endings and Attachment counts passed"
 
-# --- Test Case 4: Successful supplemental Production Set after a prior manifest ---
+# --- Test Case 4: Rolling Production Sets - Continuous Mode ---
 
-print_info "Test Case 4: Successful supplemental Production Set after a prior manifest"
+print_info "Test Case 4: Rolling production sets continuous mode"
+
+zipper \
+  --production-set \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test4" \
+  --bates-prefix "CONT" \
+  --bates-start 10 \
+  --production-id "CONT_001" \
+  --rolling-count 3 \
+  --rolling-bates-mode continuous
+
+# Verify folders CONT_001, CONT_002, CONT_003 exist
+if [[ ! -d "$TEST_OUTPUT_DIR/test4/CONT_001" ]]; then print_error "Missing CONT_001 folder"; fi
+if [[ ! -d "$TEST_OUTPUT_DIR/test4/CONT_002" ]]; then print_error "Missing CONT_002 folder"; fi
+if [[ ! -d "$TEST_OUTPUT_DIR/test4/CONT_003" ]]; then print_error "Missing CONT_003 folder"; fi
+
+# Verify bates ranges:
+# CONT_001 should start at CONT00000010 and end at CONT00000014
+# CONT_002 should start at CONT00000015 and end at CONT00000019
+# CONT_003 should start at CONT00000020 and end at CONT00000024
+python3 - "$TEST_OUTPUT_DIR/test4" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+m1 = json.loads((root / "CONT_001" / "_manifest.json").read_text())
+m2 = json.loads((root / "CONT_002" / "_manifest.json").read_text())
+m3 = json.loads((root / "CONT_003" / "_manifest.json").read_text())
+
+if m1["productionId"] != "CONT_001": raise SystemExit("m1 prod ID invalid")
+if m2["productionId"] != "CONT_002": raise SystemExit("m2 prod ID invalid")
+if m3["productionId"] != "CONT_003": raise SystemExit("m3 prod ID invalid")
+
+if m1["rollingSequenceNumber"] != 1: raise SystemExit("m1 rolling seq invalid")
+if m2["rollingSequenceNumber"] != 2: raise SystemExit("m2 rolling seq invalid")
+if m3["rollingSequenceNumber"] != 3: raise SystemExit("m3 rolling seq invalid")
+
+if m1["batesNumberStart"] != "CONT00000010": raise SystemExit(f"m1 start: {m1['batesNumberStart']}")
+if m1["batesNumberEnd"] != "CONT00000014": raise SystemExit("m1 end invalid")
+if m2["batesNumberStart"] != "CONT00000015": raise SystemExit("m2 start invalid")
+if m2["batesNumberEnd"] != "CONT00000019": raise SystemExit("m2 end invalid")
+if m3["batesNumberStart"] != "CONT00000020": raise SystemExit("m3 start invalid")
+if m3["batesNumberEnd"] != "CONT00000024": raise SystemExit("m3 end invalid")
+
+if m1["batesRangeMode"] != "continuous": raise SystemExit("m1 mode invalid")
+PY
+
+print_success "Test Case 4: Rolling production sets continuous mode passed"
+
+
+# --- Test Case 5: Rolling Production Sets - Restart Mode ---
+
+print_info "Test Case 5: Rolling production sets restart mode"
+
+zipper \
+  --production-set \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test5" \
+  --bates-prefix "REST" \
+  --bates-start 100 \
+  --production-id "REST_A" \
+  --rolling-count 2 \
+  --rolling-bates-mode restart
+
+if [[ ! -d "$TEST_OUTPUT_DIR/test5/REST_A" ]]; then print_error "Missing REST_A folder"; fi
+if [[ ! -d "$TEST_OUTPUT_DIR/test5/REST_A_2" ]]; then print_error "Missing REST_A_2 folder"; fi
+
+python3 - "$TEST_OUTPUT_DIR/test5" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+m1 = json.loads((root / "REST_A" / "_manifest.json").read_text())
+m2 = json.loads((root / "REST_A_2" / "_manifest.json").read_text())
+
+if m1["batesNumberStart"] != "REST00000100" or m1["batesNumberEnd"] != "REST00000104":
+    raise SystemExit("m1 range invalid in restart mode")
+if m2["batesNumberStart"] != "REST00000100" or m2["batesNumberEnd"] != "REST00000104":
+    raise SystemExit("m2 range invalid in restart mode")
+
+if m1["batesRangeMode"] != "restart": raise SystemExit("m1 mode invalid")
+PY
+
+print_success "Test Case 5: Rolling production sets restart mode passed"
+
+
+# --- Test Case 6: Rolling Production Sets - Zip Packaging ---
+
+print_info "Test Case 6: Rolling production sets with zip packaging"
+
+zipper \
+  --production-set \
+  --production-zip \
+  --count 3 \
+  --output-path "$TEST_OUTPUT_DIR/test6" \
+  --bates-prefix "ROLLZIP" \
+  --production-id "ROLLZIP_01" \
+  --rolling-count 2
+
+# Verify zip files exist
+if [[ ! -f "$TEST_OUTPUT_DIR/test6/ROLLZIP_01.zip" ]]; then print_error "Missing ROLLZIP_01.zip"; fi
+if [[ ! -f "$TEST_OUTPUT_DIR/test6/ROLLZIP_02.zip" ]]; then print_error "Missing ROLLZIP_02.zip"; fi
+
+print_success "Test Case 6: Rolling production sets zip packaging passed"
+
+
+# --- Test Case 7: Successful supplemental Production Set after a prior manifest ---
+
+print_info "Test Case 7: Successful supplemental Production Set after a prior manifest"
 
 # 1. Generate prior
 zipper \
   --production-set \
   --count 5 \
-  --output-path "$TEST_OUTPUT_DIR/test4_prior" \
+  --output-path "$TEST_OUTPUT_DIR/test7_prior" \
   --bates-prefix "SUPP" \
   --bates-start 1
 
-prior_dir=$(find "$TEST_OUTPUT_DIR/test4_prior" -type d -name "PRODUCTION_*" -print -quit)
+prior_dir=$(find "$TEST_OUTPUT_DIR/test7_prior" -type d -name "PRODUCTION_*" -print -quit)
 if [[ -z "$prior_dir" ]]; then
-  print_error "Test 4: Prior production directory not found."
+  print_error "Test 7: Prior production directory not found."
 fi
 prior_manifest="$prior_dir/_manifest.json"
 
@@ -174,13 +285,13 @@ zipper \
   --supplemental-production \
   --prior-manifest "$prior_manifest" \
   --count 5 \
-  --output-path "$TEST_OUTPUT_DIR/test4_supp" \
+  --output-path "$TEST_OUTPUT_DIR/test7_supp" \
   --bates-prefix "SUPP" \
   --bates-start 6
 
-supp_dir=$(find "$TEST_OUTPUT_DIR/test4_supp" -type d -name "PRODUCTION_*" -print -quit)
+supp_dir=$(find "$TEST_OUTPUT_DIR/test7_supp" -type d -name "PRODUCTION_*" -print -quit)
 if [[ -z "$supp_dir" ]]; then
-  print_error "Test 4: Supplemental production directory not found."
+  print_error "Test 7: Supplemental production directory not found."
 fi
 supp_manifest="$supp_dir/_manifest.json"
 
@@ -211,12 +322,12 @@ if val.get("actualStartingBates") != "SUPP00000006":
     raise SystemExit(f"actualStartingBates was {val.get('actualStartingBates')}, expected SUPP00000006")
 PY
 
-print_success "Test Case 4: Successful supplemental Production Set passed"
+print_success "Test Case 7: Successful supplemental Production Set passed"
 
 
-# --- Test Case 5: Failing duplicate supplemental Bates range ---
+# --- Test Case 8: Failing duplicate supplemental Bates range ---
 
-print_info "Test Case 5: Failing duplicate supplemental Bates range"
+print_info "Test Case 8: Failing duplicate supplemental Bates range"
 
 # Generate overlapping/duplicate range which must fail
 if zipper \
@@ -224,15 +335,13 @@ if zipper \
   --supplemental-production \
   --prior-manifest "$prior_manifest" \
   --count 5 \
-  --output-path "$TEST_OUTPUT_DIR/test5_supp" \
+  --output-path "$TEST_OUTPUT_DIR/test8_supp" \
   --bates-prefix "SUPP" \
   --bates-start 4 2>/dev/null; then
-  print_error "Test 5: Supplemental generation succeeded but should have failed due to duplicate Bates numbers."
+  print_error "Test 8: Supplemental generation succeeded but should have failed due to duplicate Bates numbers."
 else
-  print_success "Test Case 5: Failing duplicate supplemental Bates range passed"
+  print_success "Test Case 8: Failing duplicate supplemental Bates range passed"
 fi
-
-
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"

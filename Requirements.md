@@ -735,11 +735,16 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-126**: The `--eol` argument is supported in both `--loadfile-only` and `--production-set` modes, controlling the line ending of the generated load files (DAT and OPT) and matching the LineEnding value in their companion property audit files.
 - **REQ-127**: The `totalRecords` field in the OPT audit file must reflect the actual count of page-level/emitted OPT records rather than the parent document count.
 - **REQ-128**: The `_manifest.json` file in a Production Set must report document counts matching actual generated files on disk, counting parent and attachment files in total as `nativeFileCount`, and reporting them separately via `parentNativeFileCount` and `attachmentNativeFileCount`.
-- **REQ-131**: Zipper shall support supplemental Production Set generation using one or more prior Production Manifest paths.
-- **REQ-132**: Supplemental generation shall parse prior Production Manifests and determine existing Bates Number ranges.
-- **REQ-133**: Supplemental generation shall reject duplicate Bates Numbers that overlap prior Production Manifests.
-- **REQ-134**: Supplemental generation shall detect skipped Bates Numbers when continuous supplemental mode is requested.
-- **REQ-135**: Supplemental Production Manifests shall record references to all prior Production Manifests used for validation.
-- **REQ-136**: Supplemental validation shall report duplicate ranges, skipped ranges, expected next Bates Number, and actual starting Bates Number.
-- **REQ-137**: Supplemental validation shall fail before writing output when prior Production Manifest input is missing, malformed, or incompatible with current Bates Prefix and Bates Digits.
-
+- **REQ-129**: Zipper shall support generating multiple rolling Production Sets from one Generation Request.
+- **REQ-130**: A Production Set shall support a configurable production ID used in output names, Production Manifest Metadata, and report identifiers.
+- **REQ-131**: Rolling Production Sets shall support continuous Bates Number ranges across all generated Production Sets.
+- **REQ-132**: Rolling Production Sets shall support restarted Bates Number ranges per Production Set when configured.
+- **REQ-133**: Each generated Production Manifest shall include production ID, rolling sequence number, Bates Number start, Bates Number end, Native File count, Volume count, and Bates range mode.
+- **REQ-134**: Invalid rolling configurations shall fail before output generation, including duplicate production IDs, non-positive rolling counts, and Bates Number settings that would create duplicate ranges in continuous mode.
+- **REQ-135**: Zipper shall support supplemental Production Set generation using one or more prior Production Manifest paths.
+- **REQ-136**: Supplemental generation shall parse prior Production Manifests and determine existing Bates Number ranges.
+- **REQ-137**: Supplemental generation shall reject duplicate Bates Numbers that overlap prior Production Manifests.
+- **REQ-138**: Supplemental generation shall detect skipped Bates Numbers when continuous supplemental mode is requested.
+- **REQ-139**: Supplemental Production Manifests shall record references to all prior Production Manifests used for validation.
+- **REQ-140**: Supplemental validation shall report duplicate ranges, skipped ranges, expected next Bates Number, and actual starting Bates Number.
+- **REQ-141**: Supplemental validation shall fail before writing output when prior Production Manifest input is missing, malformed, or incompatible with current Bates Prefix and Bates Digits.

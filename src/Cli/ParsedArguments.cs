@@ -101,4 +101,16 @@ public class ParsedArguments
     public string? PriorManifests { get; set; }
 
     public string? SupplementalGapPolicy { get; set; }
+
+    public string? ProductionId { get; set; }
+
+    public int RollingCount { get; set; } = 1;
+
+    public string RollingBatesMode { get; set; } = "continuous";
+
+    public List<long>? BatesStarts { get; set; }
+
+    public List<string>? BatesPrefixes { get; set; }
 }
+
+

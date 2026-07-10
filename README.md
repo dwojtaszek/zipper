@@ -227,6 +227,9 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
 | `--chaos-list` | false | flag | List scenarios and exit |
 | `--production-set` | false | flag | Generate structured production with DATA/IMAGES/NATIVES/TEXT |
+| `--production-id` | none | string | Configurable production ID (supports lists, defaults to auto-incrementing/timestamp) |
+| `--rolling-count` | 1 | number | Generate multiple rolling production sets |
+| `--rolling-bates-mode` | continuous | `continuous` or `restart` | Bates numbering mode across rolling production sets |
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
 | `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
@@ -266,6 +269,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--production-zip`, `--volume-size` | Require `--production-set` |
 | `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
 | `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
+| `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
 ### Delimiter Argument Modes
