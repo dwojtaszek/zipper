@@ -112,7 +112,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 **Production Set Comparison Options:**
 - `--compare-production-manifests <paths>`: Comma-separated paths to two or more Production Manifests (`_manifest.json` files or directories containing them) to compare
 - `--comparison-mode <replacement|supplemental|reproduction>`: The comparison logic/ruleset to apply
-- `--comparison-output <path>`: Output file path for the comparison JSON report. A human-readable Markdown summary is also written to `<path>.summary.md` and printed to standard output
+- `--comparison-output <path>`: Output file path for the comparison JSON report. A human-readable Markdown summary is also written to the same basename with a `.summary.md` extension and printed to standard output
 
 **Utility Options:**
 - `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead

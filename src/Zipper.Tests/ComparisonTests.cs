@@ -420,4 +420,60 @@ public class ComparisonTests
             }
         }
     }
+
+    [Fact]
+    public async Task Compare_CommandLineE2E_VerifiesSuccessfully()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var outputA = Path.Combine(tempDir, "SetA");
+            Directory.CreateDirectory(outputA);
+            var requestA = new FileGenerationRequest
+            {
+                Output = new OutputConfig { OutputPath = outputA, FileCount = 2, FileType = "pdf" },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODA" },
+                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
+            };
+            var resultA = await ProductionSetGenerator.GenerateAsync(requestA);
+
+            var outputB = Path.Combine(tempDir, "SetB");
+            Directory.CreateDirectory(outputB);
+            var requestB = new FileGenerationRequest
+            {
+                Output = new OutputConfig { OutputPath = outputB, FileCount = 2, FileType = "pdf" },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODB" },
+                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
+            };
+            var resultB = await ProductionSetGenerator.GenerateAsync(requestB);
+
+            var reportPath = Path.Combine(tempDir, "report_cli.json");
+
+            var args = new[]
+            {
+                "--compare-production-manifests", $"{resultA.ManifestPath},{resultB.ManifestPath}",
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(reportPath));
+
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var root = doc.RootElement;
+            Assert.Equal("replacement", root.GetProperty("comparisonMode").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

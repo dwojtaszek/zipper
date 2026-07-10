@@ -9,6 +9,15 @@ public static class CliValidator
         ArgumentNullException.ThrowIfNull(parsed);
 
         bool isComparisonMode = !string.IsNullOrEmpty(parsed.CompareProductionManifests);
+        if (!isComparisonMode)
+        {
+            if (!string.IsNullOrEmpty(parsed.ComparisonMode) || !string.IsNullOrEmpty(parsed.ComparisonOutput))
+            {
+                Console.Error.WriteLine("Error: --comparison-mode and --comparison-output require --compare-production-manifests to be specified.");
+                return false;
+            }
+        }
+
         if (isComparisonMode)
         {
             if (string.IsNullOrEmpty(parsed.ComparisonMode))

@@ -68,16 +68,22 @@ public static class ProductionManifestComparer
 
         // Load records
         var priorRecords = new List<ComparisonRecord>();
-        var priorDuplicates = new List<DuplicateDetail>();
         foreach (var pm in priorManifests)
         {
             var recs = await LoadRecordsAsync(pm.ResolvedPath, pm.Manifest).ConfigureAwait(false);
-            var dups = FindDuplicates(recs, "prior");
+            foreach (var r in recs)
+            {
+                r.ProductionId = pm.Manifest.ProductionId;
+            }
             priorRecords.AddRange(recs);
-            priorDuplicates.AddRange(dups);
         }
+        var priorDuplicates = FindDuplicates(priorRecords, "prior");
 
         var newRecords = await LoadRecordsAsync(newManifest.ResolvedPath, newManifest.Manifest).ConfigureAwait(false);
+        foreach (var r in newRecords)
+        {
+            r.ProductionId = newManifest.Manifest.ProductionId;
+        }
         var newDuplicates = FindDuplicates(newRecords, "new");
 
         // Normalize comparison and run matching logic
@@ -90,6 +96,15 @@ public static class ProductionManifestComparer
         result.BatesAnalysis.NewRange = newRecords.Count > 0
             ? $"{newRecords.Min(r => r.BatesNumber)} - {newRecords.Max(r => r.BatesNumber)}"
             : string.Empty;
+
+        // Populate per-production set prior ranges
+        foreach (var grp in priorRecords.GroupBy(r => r.ProductionId, StringComparer.OrdinalIgnoreCase))
+        {
+            if (grp.Any() && !string.IsNullOrEmpty(grp.Key))
+            {
+                result.BatesAnalysis.PriorRangesByProductionSet[grp.Key] = $"{grp.Min(r => r.BatesNumber)} - {grp.Max(r => r.BatesNumber)}";
+            }
+        }
 
         // Perform Bates range analysis and gap/overlap detection
         AnalyzeBatesRanges(priorRecords, newRecords, mode, result.BatesAnalysis, result.Details);
@@ -118,7 +133,21 @@ public static class ProductionManifestComparer
         var manifestDir = Path.GetDirectoryName(manifestPath) ?? string.Empty;
 
         var datRelPath = manifest.LoadFiles?.Dat ?? "DATA/loadfile.dat";
+
+        // Prevent path traversal and rooted paths
+        if (Path.IsPathRooted(datRelPath) || datRelPath.Contains("..", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Invalid DAT load file path: {datRelPath}");
+        }
+
         var datPath = Path.Combine(manifestDir, datRelPath);
+        var fullDatPath = Path.GetFullPath(datPath);
+        var fullManifestDir = Path.GetFullPath(manifestDir);
+
+        if (!fullDatPath.StartsWith(fullManifestDir, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"DAT load file path '{datRelPath}' escapes the manifest directory '{manifestDir}'.");
+        }
 
         if (!File.Exists(datPath))
         {
@@ -150,6 +179,11 @@ public static class ProductionManifestComparer
         var headers = ParseDatLine(headerLine, colDelim, quoteDelim);
 
         int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BEGDOC", StringComparison.OrdinalIgnoreCase));
+        if (batesIdx < 0)
+        {
+            throw new InvalidDataException("DAT load file is missing a required Bates number column (BATES_NUMBER, BATES, or BEGDOC).");
+        }
+
         int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "CONTROL", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "CONTROL_NUMBER", StringComparison.OrdinalIgnoreCase));
         int pathIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "FILE_PATH", StringComparison.OrdinalIgnoreCase));
         int volumeIdx = headers.FindIndex(h => string.Equals(h, "VOLUME", StringComparison.OrdinalIgnoreCase));
@@ -214,6 +248,7 @@ public static class ProductionManifestComparer
     private static char ParseDelimiter(string? formatted, char fallback)
     {
         if (string.IsNullOrEmpty(formatted)) return fallback;
+        if (string.Equals(formatted, "none", StringComparison.OrdinalIgnoreCase)) return '\x00';
         if (formatted.StartsWith("ascii:", StringComparison.OrdinalIgnoreCase))
         {
             if (int.TryParse(formatted.Substring(6), System.Globalization.CultureInfo.InvariantCulture, out int asciiVal))
@@ -342,8 +377,8 @@ public static class ProductionManifestComparer
             bool isOverlap = false;
             if (string.Equals(mode, "supplemental", StringComparison.OrdinalIgnoreCase))
             {
-                var priorBatesOverlap = priorRecords.Any(r => string.Equals(r.BatesNumber, nr.BatesNumber, StringComparison.OrdinalIgnoreCase));
-                var priorControlOverlap = priorRecords.Any(r => string.Equals(r.ControlNumber, nr.ControlNumber, StringComparison.OrdinalIgnoreCase));
+                var priorBatesOverlap = priorByBates.Contains(nr.BatesNumber);
+                var priorControlOverlap = priorByControl.Contains(nr.ControlNumber);
 
                 if (priorBatesOverlap || priorControlOverlap)
                 {
@@ -440,19 +475,22 @@ public static class ProductionManifestComparer
             });
         }
 
-        // 4. Identify Removed records from prior set
-        foreach (var pr in priorRecords)
+        // A supplemental manifest is additive and cannot establish removals.
+        if (!string.Equals(mode, "supplemental", StringComparison.OrdinalIgnoreCase))
         {
-            if (!matchedPriorBates.Contains(pr.BatesNumber) && !matchedPriorControls.Contains(pr.ControlNumber))
+            foreach (var pr in priorRecords)
             {
-                result.Details.Removed.Add(new RecordDetail
+                if (!matchedPriorBates.Contains(pr.BatesNumber) && !matchedPriorControls.Contains(pr.ControlNumber))
                 {
-                    BatesNumber = pr.BatesNumber,
-                    ControlNumber = pr.ControlNumber,
-                    FilePath = pr.FilePath,
-                    Hash = pr.Hash,
-                    Volume = pr.Volume
-                });
+                    result.Details.Removed.Add(new RecordDetail
+                    {
+                        BatesNumber = pr.BatesNumber,
+                        ControlNumber = pr.ControlNumber,
+                        FilePath = pr.FilePath,
+                        Hash = pr.Hash,
+                        Volume = pr.Volume
+                    });
+                }
             }
         }
 
@@ -530,10 +568,10 @@ public static class ProductionManifestComparer
             }
         }
 
-        result_summary_bates_analysis(batesAnalysis);
+        ResultSummaryBatesAnalysis(batesAnalysis);
     }
 
-    private static void result_summary_bates_analysis(BatesAnalysis batesAnalysis)
+    private static void ResultSummaryBatesAnalysis(BatesAnalysis batesAnalysis)
     {
         // Update summary skipped count
         int totalSkipped = 0;
@@ -678,71 +716,98 @@ public static class ProductionManifestComparer
         List<ComparisonRecord> newRecords,
         List<VolumeResult> volumeAnalysis)
     {
-        var priorVols = priorRecords.GroupBy(r => r.Volume, StringComparer.OrdinalIgnoreCase)
+        var priorGroups = priorRecords.GroupBy(r => r.ProductionId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var newVols = newRecords.GroupBy(r => r.Volume, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        var allVolNames = priorVols.Keys.Concat(newVols.Keys).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v).ToList();
-
-        foreach (var vol in allVolNames)
+        foreach (var priorKvp in priorGroups)
         {
-            bool inPrior = priorVols.TryGetValue(vol, out var priorList);
-            bool inNew = newVols.TryGetValue(vol, out var newList);
+            var priorProdId = priorKvp.Key;
+            var priorRecs = priorKvp.Value;
 
-            var priorRange = inPrior && priorList is not null && priorList.Count > 0
-                ? $"{priorList.Min(r => r.BatesNumber)} - {priorList.Max(r => r.BatesNumber)}"
-                : string.Empty;
+            var priorVols = priorRecs.GroupBy(r => r.Volume, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
-            var newRange = inNew && newList is not null && newList.Count > 0
+            var volNames = priorVols.Keys.OrderBy(v => v).ToList();
+
+            foreach (var vol in volNames)
+            {
+                var priorList = priorVols[vol];
+                bool inNew = newVols.TryGetValue(vol, out var newList);
+
+                var priorRange = priorList.Count > 0
+                    ? $"{priorList.Min(r => r.BatesNumber)} - {priorList.Max(r => r.BatesNumber)}"
+                    : string.Empty;
+
+                var newRange = inNew && newList is not null && newList.Count > 0
+                    ? $"{newList.Min(r => r.BatesNumber)} - {newList.Max(r => r.BatesNumber)}"
+                    : string.Empty;
+
+                var status = "unchanged";
+                if (!inNew)
+                {
+                    status = "removed";
+                }
+                else if (newList is not null)
+                {
+                    var priorSet = new Dictionary<string, ComparisonRecord>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var r in priorList)
+                    {
+                        if (!string.IsNullOrEmpty(r.BatesNumber))
+                        {
+                            priorSet[r.BatesNumber] = r;
+                        }
+                    }
+
+                    bool hasChanges = false;
+                    foreach (var nr in newList)
+                    {
+                        if (priorSet.TryGetValue(nr.BatesNumber, out var pr))
+                        {
+                            if (!string.Equals(nr.FilePath, pr.FilePath, StringComparison.OrdinalIgnoreCase) ||
+                                (!string.IsNullOrEmpty(nr.Hash) && !string.IsNullOrEmpty(pr.Hash) && !string.Equals(nr.Hash, pr.Hash, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                hasChanges = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (hasChanges || priorList.Count != newList.Count)
+                    {
+                        status = "changed";
+                    }
+                }
+
+                volumeAnalysis.Add(new VolumeResult
+                {
+                    ProductionId = priorProdId,
+                    VolumeName = vol,
+                    PriorBatesRange = priorRange,
+                    NewBatesRange = newRange,
+                    Status = status
+                });
+            }
+        }
+
+        // Also identify volumes in the new set that do not exist in ANY prior set
+        var newVolsOnly = newVols.Keys.Where(v => !priorRecords.Any(r => string.Equals(r.Volume, v, StringComparison.OrdinalIgnoreCase))).OrderBy(v => v).ToList();
+        foreach (var vol in newVolsOnly)
+        {
+            var newList = newVols[vol];
+            var newRange = newList.Count > 0
                 ? $"{newList.Min(r => r.BatesNumber)} - {newList.Max(r => r.BatesNumber)}"
                 : string.Empty;
 
-            var status = "unchanged";
-            if (!inPrior && inNew)
-            {
-                status = "added";
-            }
-            else if (inPrior && !inNew)
-            {
-                status = "removed";
-            }
-            else if (inPrior && inNew && priorList is not null && newList is not null)
-            {
-                // Check if any records inside the volume changed
-                var priorSet = priorList.ToDictionary(r => r.BatesNumber, r => r, StringComparer.OrdinalIgnoreCase);
-                bool hasChanges = false;
-                foreach (var nr in newList)
-                {
-                    if (priorSet.TryGetValue(nr.BatesNumber, out var pr))
-                    {
-                        if (!string.Equals(nr.FilePath, pr.FilePath, StringComparison.OrdinalIgnoreCase) ||
-                            (!string.IsNullOrEmpty(nr.Hash) && !string.IsNullOrEmpty(pr.Hash) && !string.Equals(nr.Hash, pr.Hash, StringComparison.OrdinalIgnoreCase)))
-                        {
-                            hasChanges = true;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        hasChanges = true;
-                        break;
-                    }
-                }
-
-                if (hasChanges || priorList.Count != newList.Count)
-                {
-                    status = "changed";
-                }
-            }
-
             volumeAnalysis.Add(new VolumeResult
             {
+                ProductionId = newRecords.FirstOrDefault()?.ProductionId ?? "NewSet",
                 VolumeName = vol,
-                PriorBatesRange = priorRange,
+                PriorBatesRange = string.Empty,
                 NewBatesRange = newRange,
-                Status = status
+                Status = "added"
             });
         }
     }
@@ -774,6 +839,17 @@ public static class ProductionManifestComparer
         sb.Append("* **New Bates Range:** ").Append(result.BatesAnalysis.NewRange).AppendLine();
         sb.AppendLine();
 
+        if (result.BatesAnalysis.PriorRangesByProductionSet.Count > 0)
+        {
+            sb.AppendLine("### Prior Bates Ranges by Production Set");
+            sb.AppendLine();
+            foreach (var kvp in result.BatesAnalysis.PriorRangesByProductionSet.OrderBy(k => k.Key))
+            {
+                sb.Append("* **").Append(kvp.Key).Append(":** ").Append(kvp.Value).AppendLine();
+            }
+            sb.AppendLine();
+        }
+
         if (result.BatesAnalysis.Gaps.Count > 0)
         {
             sb.AppendLine("### Skipped Bates Ranges (Gaps)");
@@ -798,11 +874,11 @@ public static class ProductionManifestComparer
 
         sb.AppendLine("## Volume Analysis");
         sb.AppendLine();
-        sb.AppendLine("| Volume | Prior Bates Range | New Bates Range | Status |");
-        sb.AppendLine("|--------|-------------------|-----------------|--------|");
+        sb.AppendLine("| Production Set | Volume | Prior Bates Range | New Bates Range | Status |");
+        sb.AppendLine("|----------------|--------|-------------------|-----------------|--------|");
         foreach (var vol in result.VolumeAnalysis)
         {
-            sb.Append("| ").Append(vol.VolumeName).Append(" | ").Append(vol.PriorBatesRange).Append(" | ").Append(vol.NewBatesRange).Append(" | ").Append(vol.Status).Append(" |").AppendLine();
+            sb.Append("| ").Append(vol.ProductionId).Append(" | ").Append(vol.VolumeName).Append(" | ").Append(vol.PriorBatesRange).Append(" | ").Append(vol.NewBatesRange).Append(" | ").Append(vol.Status).Append(" |").AppendLine();
         }
         sb.AppendLine();
 
@@ -876,6 +952,7 @@ public class ComparisonRecord
     public string Hash { get; set; } = string.Empty;
     public string Volume { get; set; } = string.Empty;
     public string ManifestPath { get; set; } = string.Empty;
+    public string ProductionId { get; set; } = string.Empty;
     public int SourceLine { get; set; }
 }
 
@@ -943,6 +1020,9 @@ public class BatesAnalysis
 
     [JsonPropertyName("totalSkippedBates")]
     public int TotalSkippedBates { get; set; }
+
+    [JsonPropertyName("priorRangesByProductionSet")]
+    public Dictionary<string, string> PriorRangesByProductionSet { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 public class BatesRangeReport
@@ -956,6 +1036,9 @@ public class BatesRangeReport
 
 public class VolumeResult
 {
+    [JsonPropertyName("productionId")]
+    public string ProductionId { get; set; } = string.Empty;
+
     [JsonPropertyName("volumeName")]
     public string VolumeName { get; set; } = string.Empty;
 

@@ -40,7 +40,12 @@ public static class Program
         if (args is not null && args.Length > 0)
         {
             var parsedArgs = Cli.CliParser.Parse(args);
-            if (parsedArgs is not null && !string.IsNullOrEmpty(parsedArgs.CompareProductionManifests))
+            if (parsedArgs is null)
+            {
+                return 1;
+            }
+
+            if (!string.IsNullOrEmpty(parsedArgs.CompareProductionManifests))
             {
                 if (!Cli.CliValidator.Validate(parsedArgs))
                 {
