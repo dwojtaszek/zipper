@@ -37,7 +37,38 @@ public static class Program
             return 0;
         }
 
-        var request = Cli.Pipeline.Build(args);
+        if (args is not null && args.Length > 0)
+        {
+            var parsedArgs = Cli.CliParser.Parse(args);
+            if (parsedArgs is null)
+            {
+                return 1;
+            }
+
+            if (!string.IsNullOrEmpty(parsedArgs.CompareProductionManifests))
+            {
+                if (!Cli.CliValidator.Validate(parsedArgs))
+                {
+                    return 1;
+                }
+
+                try
+                {
+                    var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
+                        parsedArgs.CompareProductionManifests,
+                        parsedArgs.ComparisonMode ?? "replacement",
+                        parsedArgs.ComparisonOutput ?? string.Empty).ConfigureAwait(false);
+                    return success ? 0 : 1;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error: {ex.Message}");
+                    return 1;
+                }
+            }
+        }
+
+        var request = Cli.Pipeline.Build(args!);
         if (request is null)
         {
             return 1;

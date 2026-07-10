@@ -748,3 +748,10 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-139**: Supplemental Production Manifests shall record references to all prior Production Manifests used for validation.
 - **REQ-140**: Supplemental validation shall report duplicate ranges, skipped ranges, expected next Bates Number, and actual starting Bates Number.
 - **REQ-141**: Supplemental validation shall fail before writing output when prior Production Manifest input is missing, malformed, or incompatible with current Bates Prefix and Bates Digits.
+- **REQ-157**: Zipper shall support comparing two or more Production Manifests.
+- **REQ-158**: Comparison reports shall support replacement workflows.
+- **REQ-159**: Comparison reports shall support supplemental workflows.
+- **REQ-160**: Comparison reports shall support re-production workflows.
+- **REQ-161**: Comparison reports shall identify added, removed, unchanged, replaced, duplicated, skipped, and changed records where data is available.
+- **REQ-162**: Comparison reports shall include Bates Number range analysis by Production Set and Volume.
+- **REQ-163**: Comparison reports shall be written in a machine-readable format and include a human-readable summary.

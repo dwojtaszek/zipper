@@ -111,6 +111,10 @@ public class ParsedArguments
     public List<long>? BatesStarts { get; set; }
 
     public List<string>? BatesPrefixes { get; set; }
+
+    public string? CompareProductionManifests { get; set; }
+
+    public string? ComparisonMode { get; set; }
+
+    public string? ComparisonOutput { get; set; }
 }
-
-
