@@ -190,6 +190,11 @@ public static class RequestBuilder
                 ProductionSet = parsed.ProductionSet,
                 ProductionZip = parsed.ProductionZip,
                 VolumeSize = parsed.VolumeSize ?? 5000,
+                SupplementalProduction = parsed.SupplementalProduction,
+                PriorManifests = !string.IsNullOrEmpty(parsed.PriorManifests)
+                    ? parsed.PriorManifests.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                    : Array.Empty<string>(),
+                SupplementalGapPolicy = parsed.SupplementalGapPolicy ?? "reject",
                 ProductionId = parsed.ProductionId,
                 RollingCount = parsed.RollingCount,
                 RollingBatesMode = (parsed.RollingBatesMode?.ToLowerInvariant()) switch

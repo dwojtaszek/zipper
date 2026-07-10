@@ -32,6 +32,8 @@ internal static class ProductionManifestWriter
         int volumeCount,
         TimeSpan generationTime,
         System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null,
+        System.Collections.Generic.IReadOnlyList<string>? priorManifests = null,
+        Validation.SupplementalValidationReport? supplementalValidation = null,
         string? productionId = null,
         int rollingSequenceNumber = 1,
         string? batesRangeMode = null,
@@ -91,6 +93,8 @@ internal static class ProductionManifestWriter
             },
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
             ValidationReport = "_validation_report.json",
+            PriorManifests = priorManifests is { Count: > 0 } ? priorManifests : null,
+            SupplementalValidation = supplementalValidation,
         };
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
@@ -170,6 +174,12 @@ internal class ProductionManifest
 
     [JsonPropertyName("generationTime")]
     public string GenerationTime { get; set; } = string.Empty;
+
+    [JsonPropertyName("priorManifests")]
+    public System.Collections.Generic.IReadOnlyList<string>? PriorManifests { get; set; }
+
+    [JsonPropertyName("supplementalValidation")]
+    public Validation.SupplementalValidationReport? SupplementalValidation { get; set; }
 }
 
 internal class BatesRange

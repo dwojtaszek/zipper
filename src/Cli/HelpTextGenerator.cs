@@ -54,6 +54,9 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --production-set         Generate structured production with DATA/IMAGES/NATIVES/TEXT");
         Console.Error.WriteLine("  --production-zip         Wrap production set output in a ZIP archive");
         Console.Error.WriteLine("  --volume-size <number>   Max files per volume subfolder (default: 5000)");
+        Console.Error.WriteLine("  --supplemental-production Enable supplemental production set generation mode");
+        Console.Error.WriteLine("  --prior-manifest <paths>  Comma-separated list of paths to prior production manifest files");
+        Console.Error.WriteLine("  --supplemental-gap-policy <reject|allow> Gap policy for supplemental mode: reject or allow (default: reject)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Bates Numbering:");
         Console.Error.WriteLine("  --bates-prefix <string>  Bates number prefix (e.g., CLIENT001)");

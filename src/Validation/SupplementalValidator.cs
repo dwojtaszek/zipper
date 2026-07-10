@@ -1,0 +1,283 @@
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Zipper.Validation;
+
+public class SupplementalValidationReport
+{
+    [JsonPropertyName("duplicateRanges")]
+    public List<BatesRangeReport> DuplicateRanges { get; set; } = new();
+
+    [JsonPropertyName("skippedRanges")]
+    public List<BatesRangeReport> SkippedRanges { get; set; } = new();
+
+    [JsonPropertyName("expectedNextBates")]
+    public string? ExpectedNextBates { get; set; }
+
+    [JsonPropertyName("actualStartingBates")]
+    public string? ActualStartingBates { get; set; }
+}
+
+public class BatesRangeReport
+{
+    [JsonPropertyName("start")]
+    public string Start { get; set; } = string.Empty;
+
+    [JsonPropertyName("end")]
+    public string End { get; set; } = string.Empty;
+}
+
+public static class SupplementalValidator
+{
+    private static readonly JsonSerializerOptions ParserOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    public static async Task<SupplementalValidationReport> ValidateAsync(
+        FileGenerationRequest request,
+        string actualStartBates,
+        string actualEndBates)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var currentPrefix = request.Bates?.Prefix ?? string.Empty;
+        var currentDigits = request.Bates?.Digits ?? 8;
+
+        var priorManifestPaths = request.Production.PriorManifests;
+        if (priorManifestPaths is null || priorManifestPaths.Count == 0)
+        {
+            throw new ValidationFailedException("Supplemental production requires at least one prior manifest path.");
+        }
+
+        var priorRanges = await LoadPriorRangesAsync(priorManifestPaths, currentPrefix, currentDigits).ConfigureAwait(false);
+
+        if (!TryParseBatesNumber(actualStartBates, currentPrefix, currentDigits, out long planStart) ||
+            !TryParseBatesNumber(actualEndBates, currentPrefix, currentDigits, out long planEnd))
+        {
+            throw new ValidationFailedException($"Planned range contains unparseable start/end Bates numbers: '{actualStartBates}' - '{actualEndBates}'");
+        }
+
+        return PerformRangeAnalysis(priorRanges, currentPrefix, currentDigits, planStart, planEnd, actualStartBates, request.Production.SupplementalGapPolicy);
+    }
+
+    private static async Task<List<(long Start, long End)>> LoadPriorRangesAsync(
+        IReadOnlyList<string> priorManifestPaths,
+        string currentPrefix,
+        int currentDigits)
+    {
+        var priorRanges = new List<(long Start, long End)>();
+
+        foreach (var path in priorManifestPaths)
+        {
+            var resolvedPath = path;
+            if (Directory.Exists(path))
+            {
+                resolvedPath = Path.Combine(path, "_manifest.json");
+            }
+
+            if (!File.Exists(resolvedPath))
+            {
+                throw new ValidationFailedException($"Prior Production Manifest file does not exist: {resolvedPath}");
+            }
+
+            PriorProductionManifest? manifest;
+            try
+            {
+                var content = await File.ReadAllTextAsync(resolvedPath).ConfigureAwait(false);
+                manifest = JsonSerializer.Deserialize<PriorProductionManifest>(content, ParserOptions);
+            }
+            catch (Exception ex)
+            {
+                throw new ValidationFailedException($"Prior Production Manifest is malformed: {resolvedPath}", ex);
+            }
+
+            ValidateManifestFields(manifest, resolvedPath, currentPrefix, currentDigits);
+
+            if (!TryParseBatesNumber(manifest!.BatesRange!.Start!, currentPrefix, currentDigits, out long priorStart) ||
+                !TryParseBatesNumber(manifest.BatesRange.End!, currentPrefix, currentDigits, out long priorEnd))
+            {
+                throw new ValidationFailedException($"Prior Production Manifest contains unparseable start/end Bates numbers: {resolvedPath}. Start: '{manifest.BatesRange.Start}', End: '{manifest.BatesRange.End}'");
+            }
+
+            if (priorStart > priorEnd)
+            {
+                throw new ValidationFailedException($"Prior Production Manifest contains invalid Bates range where start '{manifest.BatesRange.Start}' is greater than end '{manifest.BatesRange.End}': {resolvedPath}");
+            }
+
+            priorRanges.Add((priorStart, priorEnd));
+        }
+
+        return priorRanges;
+    }
+
+    private static void ValidateManifestFields(
+        PriorProductionManifest? manifest,
+        string resolvedPath,
+        string currentPrefix,
+        int currentDigits)
+    {
+        if (manifest?.BatesRange is null ||
+            string.IsNullOrEmpty(manifest.BatesRange.Start) ||
+            string.IsNullOrEmpty(manifest.BatesRange.End) ||
+            string.IsNullOrEmpty(manifest.BatesRange.Prefix) ||
+            manifest.BatesRange.Digits is null)
+        {
+            throw new ValidationFailedException($"Prior Production Manifest is malformed (missing required batesRange fields): {resolvedPath}");
+        }
+
+        if (!string.Equals(manifest.BatesRange.Prefix, currentPrefix, StringComparison.Ordinal))
+        {
+            throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Prefix: {resolvedPath}. Expected prefix '{currentPrefix}', got '{manifest.BatesRange.Prefix}'.");
+        }
+
+        if (manifest.BatesRange.Digits != currentDigits)
+        {
+            throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Digits: {resolvedPath}. Expected digits {currentDigits}, got {manifest.BatesRange.Digits}.");
+        }
+    }
+
+    private static SupplementalValidationReport PerformRangeAnalysis(
+        List<(long Start, long End)> priorRanges,
+        string currentPrefix,
+        int currentDigits,
+        long planStart,
+        long planEnd,
+        string actualStartBates,
+        string gapPolicy)
+    {
+        var report = new SupplementalValidationReport
+        {
+            ActualStartingBates = actualStartBates
+        };
+
+        // Determine duplicate/overlapping ranges
+        foreach (var prior in priorRanges)
+        {
+            var overlapStart = Math.Max(prior.Start, planStart);
+            var overlapEnd = Math.Min(prior.End, planEnd);
+
+            if (overlapStart <= overlapEnd)
+            {
+                report.DuplicateRanges.Add(new BatesRangeReport
+                {
+                    Start = FormatBates(overlapStart, currentPrefix, currentDigits),
+                    End = FormatBates(overlapEnd, currentPrefix, currentDigits)
+                });
+            }
+        }
+
+        // Sort and merge all ranges (priors + planned) to find truly skipped ranges
+        var allRanges = new List<(long Start, long End)>(priorRanges);
+        allRanges.Add((planStart, planEnd));
+
+        var mergedAll = new List<(long Start, long End)>();
+        foreach (var range in allRanges.OrderBy(r => r.Start))
+        {
+            if (mergedAll.Count == 0)
+            {
+                mergedAll.Add(range);
+            }
+            else
+            {
+                var last = mergedAll[^1];
+                if (range.Start <= last.End + 1)
+                {
+                    mergedAll[^1] = (last.Start, Math.Max(last.End, range.End));
+                }
+                else
+                {
+                    mergedAll.Add(range);
+                }
+            }
+        }
+
+        // Determine skipped ranges between the merged ranges
+        for (int i = 0; i < mergedAll.Count - 1; i++)
+        {
+            long gapStart = mergedAll[i].End + 1;
+            long gapEnd = mergedAll[i + 1].Start - 1;
+            if (gapStart <= gapEnd)
+            {
+                report.SkippedRanges.Add(new BatesRangeReport
+                {
+                    Start = FormatBates(gapStart, currentPrefix, currentDigits),
+                    End = FormatBates(gapEnd, currentPrefix, currentDigits)
+                });
+            }
+        }
+
+        long maxPriorEnd = priorRanges.Count > 0 ? priorRanges.Max(r => r.End) : 0;
+        long expectedNextVal = maxPriorEnd + 1;
+        report.ExpectedNextBates = FormatBates(expectedNextVal, currentPrefix, currentDigits);
+
+        // Validate duplicates
+        if (report.DuplicateRanges.Count > 0)
+        {
+            var dupStr = string.Join(", ", report.DuplicateRanges.Select(r => $"'{r.Start}-{r.End}'"));
+            throw new ValidationFailedException($"Supplemental validation failed: Duplicate Bates Numbers detected in ranges: {dupStr}");
+        }
+
+        // Validate skipped ranges
+        if (report.SkippedRanges.Count > 0 &&
+            string.Equals(gapPolicy, "reject", StringComparison.OrdinalIgnoreCase))
+        {
+            var skipStr = string.Join(", ", report.SkippedRanges.Select(r => $"'{r.Start}-{r.End}'"));
+            throw new ValidationFailedException($"Supplemental validation failed: Skipped Bates Numbers detected in ranges: {skipStr}");
+        }
+
+        return report;
+    }
+
+    private static string FormatBates(long value, string prefix, int digits)
+    {
+        return $"{prefix}{value.ToString($"D{digits}", System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    private static bool TryParseBatesNumber(string batesNumber, string prefix, int digits, out long numericValue)
+    {
+        numericValue = 0;
+        if (string.IsNullOrEmpty(batesNumber))
+            return false;
+
+        if (!batesNumber.StartsWith(prefix, StringComparison.Ordinal))
+            return false;
+
+        var numPart = batesNumber.Substring(prefix.Length);
+        if (numPart.Length < digits)
+            return false;
+
+        foreach (var c in numPart)
+        {
+            if (c < '0' || c > '9')
+                return false;
+        }
+
+        if (!long.TryParse(numPart, System.Globalization.CultureInfo.InvariantCulture, out numericValue))
+            return false;
+
+        return true;
+    }
+
+    internal class PriorProductionManifest
+    {
+        [JsonPropertyName("batesRange")]
+        public PriorBatesRange? BatesRange { get; set; }
+    }
+
+    internal class PriorBatesRange
+    {
+        [JsonPropertyName("start")]
+        public string? Start { get; set; }
+
+        [JsonPropertyName("end")]
+        public string? End { get; set; }
+
+        [JsonPropertyName("prefix")]
+        public string? Prefix { get; set; }
+
+        [JsonPropertyName("digits")]
+        public int? Digits { get; set; }
+    }
+}

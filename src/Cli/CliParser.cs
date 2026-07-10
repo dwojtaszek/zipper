@@ -593,6 +593,35 @@ public static class CliParser
                     }
 
                     break;
+                case "--supplemental-production":
+                    parsed.SupplementalProduction = true;
+                    break;
+                case "--prior-manifest":
+                    if (TryGetValue(args, i, out var priorManifestVal))
+                    {
+                        parsed.PriorManifests = priorManifestVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --prior-manifest requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--supplemental-gap-policy":
+                    if (TryGetValue(args, i, out var gapPolicyVal))
+                    {
+                        parsed.SupplementalGapPolicy = gapPolicyVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --supplemental-gap-policy requires a value.");
+                        return null;
+                    }
+
+                    break;
                 case "--hash-mode":
                     if (TryGetValue(args, i, out var hashModeVal))
                     {

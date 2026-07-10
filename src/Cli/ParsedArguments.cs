@@ -96,6 +96,12 @@ public class ParsedArguments
 
     public string? HashAlgorithms { get; set; }
 
+    public bool SupplementalProduction { get; set; }
+
+    public string? PriorManifests { get; set; }
+
+    public string? SupplementalGapPolicy { get; set; }
+
     public string? ProductionId { get; set; }
 
     public int RollingCount { get; set; } = 1;

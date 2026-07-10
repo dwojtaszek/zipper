@@ -247,6 +247,91 @@ if not exist "%TEST_OUTPUT_DIR%\test6\ROLLZIP_02.zip" ( echo [ ERROR ] Missing R
 
 echo [ SUCCESS ] Test Case 6: Rolling production sets zip packaging passed
 
+
+:: --- Test Case 7: Successful supplemental Production Set after a prior manifest ---
+
+echo [ INFO ] Test Case 7: Successful supplemental Production Set after a prior manifest
+
+:: 1. Generate prior
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test7_prior" ^
+  --bates-prefix "SUPP" ^
+  --bates-start 1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 prior generation failed
+  exit /b 1
+)
+
+set PRIOR_DIR=
+for /d %%d in ("%TEST_OUTPUT_DIR%\test7_prior\PRODUCTION_*") do set PRIOR_DIR=%%d
+if not defined PRIOR_DIR (
+  echo [ ERROR ] Test 7: Prior production directory not found.
+  exit /b 1
+)
+set PRIOR_MANIFEST=%PRIOR_DIR%\_manifest.json
+
+:: 2. Generate supplemental
+%ZIPPER_CMD% ^
+  --production-set ^
+  --supplemental-production ^
+  --prior-manifest "%PRIOR_MANIFEST%" ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test7_supp" ^
+  --bates-prefix "SUPP" ^
+  --bates-start 6
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 supplemental generation failed
+  exit /b 1
+)
+
+set SUPP_DIR=
+for /d %%d in ("%TEST_OUTPUT_DIR%\test7_supp\PRODUCTION_*") do set SUPP_DIR=%%d
+if not defined SUPP_DIR (
+  echo [ ERROR ] Test 7: Supplemental production directory not found.
+  exit /b 1
+)
+set SUPP_MANIFEST=%SUPP_DIR%\_manifest.json
+
+powershell -NoProfile -Command ^
+  "$supp = Get-Content '%SUPP_MANIFEST%' -Raw | ConvertFrom-Json;" ^
+  "if (-not $supp.priorManifests) { throw 'priorManifests missing' };" ^
+  "if ($supp.priorManifests -notcontains '%PRIOR_MANIFEST%') { throw 'prior path not found in priorManifests' };" ^
+  "if (-not $supp.supplementalValidation) { throw 'supplementalValidation missing' };" ^
+  "if ($supp.supplementalValidation.expectedNextBates -ne 'SUPP00000006') { throw 'expectedNextBates should be SUPP00000006' };" ^
+  "if ($supp.supplementalValidation.actualStartingBates -ne 'SUPP00000006') { throw 'actualStartingBates should be SUPP00000006' };"
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 validation failed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 7: Successful supplemental Production Set passed
+
+
+:: --- Test Case 8: Failing duplicate supplemental Bates range ---
+
+echo [ INFO ] Test Case 8: Failing duplicate supplemental Bates range
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --supplemental-production ^
+  --prior-manifest "%PRIOR_MANIFEST%" ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test8_supp" ^
+  --bates-prefix "SUPP" ^
+  --bates-start 4 >nul 2>&1
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 8: Supplemental generation succeeded but should have failed due to duplicate Bates numbers.
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 8: Failing duplicate supplemental Bates range passed
+
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

@@ -44,7 +44,7 @@ After building the project, you can run the executable directly. The examples be
 ### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--benchmark] [--chaos-list]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list]
 ```
 
 ### Arguments
@@ -232,6 +232,9 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--rolling-bates-mode` | continuous | `continuous` or `restart` | Bates numbering mode across rolling production sets |
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
+| `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
+| `--prior-manifest` | none | paths | Comma-separated list of paths to prior production manifest files |
+| `--supplemental-gap-policy` | reject | reject, allow | Gap policy for supplemental mode: reject or allow |
 | `--benchmark` | false | flag | Run benchmark suite and exit |
 | `--version` | false | flag | Print version string and exit |
 
@@ -264,6 +267,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
+| `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
+| `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
 | `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
