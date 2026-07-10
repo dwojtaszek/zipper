@@ -63,7 +63,7 @@ internal static class ProductionSetValidator
             return false;
         }
 
-        if (!string.IsNullOrEmpty(parsed.SupplementalGapPolicy))
+        if (parsed.SupplementalGapPolicy is not null)
         {
             if (!parsed.SupplementalProduction)
             {

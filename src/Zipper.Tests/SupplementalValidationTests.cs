@@ -315,4 +315,88 @@ public class SupplementalValidationTests : IDisposable
         Assert.NotNull(report);
         Assert.Equal("PROD100000006", report.ExpectedNextBates);
     }
+
+    [Fact]
+    public async Task ValidateAsync_WithGapsInPriorManifests_InRejectMode_ShouldFail()
+    {
+        // Arrange
+        var prior1 = CreateMockManifest("PROD00000001", "PROD00000010", "PROD", 8);
+        var prior2 = CreateMockManifest("PROD00000021", "PROD00000030", "PROD", 8);
+        var request = new FileGenerationRequest
+        {
+            Bates = new BatesNumberConfig { Prefix = "PROD", Digits = 8 },
+            Production = new ProductionConfig
+            {
+                SupplementalProduction = true,
+                PriorManifests = new[] { prior1, prior2 },
+                SupplementalGapPolicy = "reject"
+            }
+        };
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<ValidationFailedException>(async () =>
+        {
+            await SupplementalValidator.ValidateAsync(request, "PROD00000031", "PROD00000040");
+        });
+
+        Assert.Contains("Skipped", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("PROD00000011", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("PROD00000020", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_WithGapsInPriorManifests_InAllowMode_ShouldPassAndReportGaps()
+    {
+        // Arrange
+        var prior1 = CreateMockManifest("PROD00000001", "PROD00000010", "PROD", 8);
+        var prior2 = CreateMockManifest("PROD00000021", "PROD00000030", "PROD", 8);
+        var request = new FileGenerationRequest
+        {
+            Bates = new BatesNumberConfig { Prefix = "PROD", Digits = 8 },
+            Production = new ProductionConfig
+            {
+                SupplementalProduction = true,
+                PriorManifests = new[] { prior1, prior2 },
+                SupplementalGapPolicy = "allow"
+            }
+        };
+
+        // Act
+        var report = await SupplementalValidator.ValidateAsync(request, "PROD00000031", "PROD00000040");
+
+        // Assert
+        Assert.NotNull(report);
+        Assert.Empty(report.DuplicateRanges);
+        Assert.Single(report.SkippedRanges);
+        Assert.Equal("PROD00000011", report.SkippedRanges[0].Start);
+        Assert.Equal("PROD00000020", report.SkippedRanges[0].End);
+        Assert.Equal("PROD00000031", report.ExpectedNextBates);
+    }
+
+    [Fact]
+    public async Task ValidateAsync_WithPlanFillingGap_InRejectMode_ShouldPass()
+    {
+        // Arrange
+        var prior1 = CreateMockManifest("PROD00000001", "PROD00000010", "PROD", 8);
+        var prior2 = CreateMockManifest("PROD00000021", "PROD00000030", "PROD", 8);
+        var request = new FileGenerationRequest
+        {
+            Bates = new BatesNumberConfig { Prefix = "PROD", Digits = 8 },
+            Production = new ProductionConfig
+            {
+                SupplementalProduction = true,
+                PriorManifests = new[] { prior1, prior2 },
+                SupplementalGapPolicy = "reject"
+            }
+        };
+
+        // Act
+        var report = await SupplementalValidator.ValidateAsync(request, "PROD00000011", "PROD00000020");
+
+        // Assert
+        Assert.NotNull(report);
+        Assert.Empty(report.DuplicateRanges);
+        Assert.Empty(report.SkippedRanges);
+        Assert.Equal("PROD00000031", report.ExpectedNextBates);
+    }
 }

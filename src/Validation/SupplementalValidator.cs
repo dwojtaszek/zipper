@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -50,6 +51,22 @@ public static class SupplementalValidator
             throw new ValidationFailedException("Supplemental production requires at least one prior manifest path.");
         }
 
+        var priorRanges = await LoadPriorRangesAsync(priorManifestPaths, currentPrefix, currentDigits).ConfigureAwait(false);
+
+        if (!TryParseBatesNumber(actualStartBates, currentPrefix, currentDigits, out long planStart) ||
+            !TryParseBatesNumber(actualEndBates, currentPrefix, currentDigits, out long planEnd))
+        {
+            throw new ValidationFailedException($"Planned range contains unparseable start/end Bates numbers: '{actualStartBates}' - '{actualEndBates}'");
+        }
+
+        return PerformRangeAnalysis(priorRanges, currentPrefix, currentDigits, planStart, planEnd, actualStartBates, request.Production.SupplementalGapPolicy);
+    }
+
+    private static async Task<List<(long Start, long End)>> LoadPriorRangesAsync(
+        IReadOnlyList<string> priorManifestPaths,
+        string currentPrefix,
+        int currentDigits)
+    {
         var priorRanges = new List<(long Start, long End)>();
 
         foreach (var path in priorManifestPaths)
@@ -76,27 +93,10 @@ public static class SupplementalValidator
                 throw new ValidationFailedException($"Prior Production Manifest is malformed: {resolvedPath}", ex);
             }
 
-            if (manifest?.BatesRange is null ||
-                string.IsNullOrEmpty(manifest.BatesRange.Start) ||
-                string.IsNullOrEmpty(manifest.BatesRange.End) ||
-                string.IsNullOrEmpty(manifest.BatesRange.Prefix) ||
-                manifest.BatesRange.Digits is null)
-            {
-                throw new ValidationFailedException($"Prior Production Manifest is malformed (missing required batesRange fields): {resolvedPath}");
-            }
+            ValidateManifestFields(manifest, resolvedPath, currentPrefix, currentDigits);
 
-            if (!string.Equals(manifest.BatesRange.Prefix, currentPrefix, StringComparison.Ordinal))
-            {
-                throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Prefix: {resolvedPath}. Expected prefix '{currentPrefix}', got '{manifest.BatesRange.Prefix}'.");
-            }
-
-            if (manifest.BatesRange.Digits != currentDigits)
-            {
-                throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Digits: {resolvedPath}. Expected digits {currentDigits}, got {manifest.BatesRange.Digits}.");
-            }
-
-            if (!TryParseBatesNumber(manifest.BatesRange.Start, currentPrefix, currentDigits, out long priorStart) ||
-                !TryParseBatesNumber(manifest.BatesRange.End, currentPrefix, currentDigits, out long priorEnd))
+            if (!TryParseBatesNumber(manifest!.BatesRange!.Start!, currentPrefix, currentDigits, out long priorStart) ||
+                !TryParseBatesNumber(manifest.BatesRange.End!, currentPrefix, currentDigits, out long priorEnd))
             {
                 throw new ValidationFailedException($"Prior Production Manifest contains unparseable start/end Bates numbers: {resolvedPath}. Start: '{manifest.BatesRange.Start}', End: '{manifest.BatesRange.End}'");
             }
@@ -109,12 +109,44 @@ public static class SupplementalValidator
             priorRanges.Add((priorStart, priorEnd));
         }
 
-        if (!TryParseBatesNumber(actualStartBates, currentPrefix, currentDigits, out long planStart) ||
-            !TryParseBatesNumber(actualEndBates, currentPrefix, currentDigits, out long planEnd))
+        return priorRanges;
+    }
+
+    private static void ValidateManifestFields(
+        PriorProductionManifest? manifest,
+        string resolvedPath,
+        string currentPrefix,
+        int currentDigits)
+    {
+        if (manifest?.BatesRange is null ||
+            string.IsNullOrEmpty(manifest.BatesRange.Start) ||
+            string.IsNullOrEmpty(manifest.BatesRange.End) ||
+            string.IsNullOrEmpty(manifest.BatesRange.Prefix) ||
+            manifest.BatesRange.Digits is null)
         {
-            throw new ValidationFailedException($"Planned range contains unparseable start/end Bates numbers: '{actualStartBates}' - '{actualEndBates}'");
+            throw new ValidationFailedException($"Prior Production Manifest is malformed (missing required batesRange fields): {resolvedPath}");
         }
 
+        if (!string.Equals(manifest.BatesRange.Prefix, currentPrefix, StringComparison.Ordinal))
+        {
+            throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Prefix: {resolvedPath}. Expected prefix '{currentPrefix}', got '{manifest.BatesRange.Prefix}'.");
+        }
+
+        if (manifest.BatesRange.Digits != currentDigits)
+        {
+            throw new ValidationFailedException($"Prior Production Manifest is incompatible with current Bates Digits: {resolvedPath}. Expected digits {currentDigits}, got {manifest.BatesRange.Digits}.");
+        }
+    }
+
+    private static SupplementalValidationReport PerformRangeAnalysis(
+        List<(long Start, long End)> priorRanges,
+        string currentPrefix,
+        int currentDigits,
+        long planStart,
+        long planEnd,
+        string actualStartBates,
+        string gapPolicy)
+    {
         var report = new SupplementalValidationReport
         {
             ActualStartingBates = actualStartBates
@@ -136,28 +168,49 @@ public static class SupplementalValidator
             }
         }
 
-        // Determine max prior end
-        long maxPriorEnd = 0;
-        foreach (var prior in priorRanges)
+        // Sort and merge all ranges (priors + planned) to find truly skipped ranges
+        var allRanges = new List<(long Start, long End)>(priorRanges);
+        allRanges.Add((planStart, planEnd));
+
+        var mergedAll = new List<(long Start, long End)>();
+        foreach (var range in allRanges.OrderBy(r => r.Start))
         {
-            if (prior.End > maxPriorEnd)
+            if (mergedAll.Count == 0)
             {
-                maxPriorEnd = prior.End;
+                mergedAll.Add(range);
+            }
+            else
+            {
+                var last = mergedAll[^1];
+                if (range.Start <= last.End + 1)
+                {
+                    mergedAll[^1] = (last.Start, Math.Max(last.End, range.End));
+                }
+                else
+                {
+                    mergedAll.Add(range);
+                }
             }
         }
 
+        // Determine skipped ranges between the merged ranges
+        for (int i = 0; i < mergedAll.Count - 1; i++)
+        {
+            long gapStart = mergedAll[i].End + 1;
+            long gapEnd = mergedAll[i + 1].Start - 1;
+            if (gapStart <= gapEnd)
+            {
+                report.SkippedRanges.Add(new BatesRangeReport
+                {
+                    Start = FormatBates(gapStart, currentPrefix, currentDigits),
+                    End = FormatBates(gapEnd, currentPrefix, currentDigits)
+                });
+            }
+        }
+
+        long maxPriorEnd = priorRanges.Count > 0 ? priorRanges.Max(r => r.End) : 0;
         long expectedNextVal = maxPriorEnd + 1;
         report.ExpectedNextBates = FormatBates(expectedNextVal, currentPrefix, currentDigits);
-
-        // Determine skipped ranges
-        if (planStart > expectedNextVal)
-        {
-            report.SkippedRanges.Add(new BatesRangeReport
-            {
-                Start = FormatBates(expectedNextVal, currentPrefix, currentDigits),
-                End = FormatBates(planStart - 1, currentPrefix, currentDigits)
-            });
-        }
 
         // Validate duplicates
         if (report.DuplicateRanges.Count > 0)
@@ -168,7 +221,7 @@ public static class SupplementalValidator
 
         // Validate skipped ranges
         if (report.SkippedRanges.Count > 0 &&
-            string.Equals(request.Production.SupplementalGapPolicy, "reject", StringComparison.OrdinalIgnoreCase))
+            string.Equals(gapPolicy, "reject", StringComparison.OrdinalIgnoreCase))
         {
             var skipStr = string.Join(", ", report.SkippedRanges.Select(r => $"'{r.Start}-{r.End}'"));
             throw new ValidationFailedException($"Supplemental validation failed: Skipped Bates Numbers detected in ranges: {skipStr}");

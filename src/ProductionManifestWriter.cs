@@ -84,7 +84,7 @@ internal static class ProductionManifestWriter
             },
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
             ValidationReport = "_validation_report.json",
-            PriorManifests = priorManifests,
+            PriorManifests = priorManifests is { Count: > 0 } ? priorManifests : null,
             SupplementalValidation = supplementalValidation,
         };
 
