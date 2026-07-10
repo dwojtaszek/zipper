@@ -735,3 +735,9 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-126**: The `--eol` argument is supported in both `--loadfile-only` and `--production-set` modes, controlling the line ending of the generated load files (DAT and OPT) and matching the LineEnding value in their companion property audit files.
 - **REQ-127**: The `totalRecords` field in the OPT audit file must reflect the actual count of page-level/emitted OPT records rather than the parent document count.
 - **REQ-128**: The `_manifest.json` file in a Production Set must report document counts matching actual generated files on disk, counting parent and attachment files in total as `nativeFileCount`, and reporting them separately via `parentNativeFileCount` and `attachmentNativeFileCount`.
+- **REQ-129**: Zipper shall support generating multiple rolling Production Sets from one Generation Request.
+- **REQ-130**: A Production Set shall support a configurable production ID used in output names, Production Manifest Metadata, and report identifiers.
+- **REQ-131**: Rolling Production Sets shall support continuous Bates Number ranges across all generated Production Sets.
+- **REQ-132**: Rolling Production Sets shall support restarted Bates Number ranges per Production Set when configured.
+- **REQ-133**: Each generated Production Manifest shall include production ID, rolling sequence number, Bates Number start, Bates Number end, Native File count, Volume count, and Bates range mode.
+- **REQ-134**: Invalid rolling configurations shall fail before output generation, including duplicate production IDs, non-positive rolling counts, and Bates Number settings that would create duplicate ranges in continuous mode.

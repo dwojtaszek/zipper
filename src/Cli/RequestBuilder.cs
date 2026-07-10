@@ -170,6 +170,8 @@ public static class RequestBuilder
                 Prefix = parsed.BatesPrefix,
                 Start = parsed.BatesStart ?? 1,
                 Digits = parsed.BatesDigits ?? 8,
+                Prefixes = parsed.BatesPrefixes,
+                Starts = parsed.BatesStarts,
             }
             : null,
             Tiff = new TiffConfig
@@ -188,6 +190,13 @@ public static class RequestBuilder
                 ProductionSet = parsed.ProductionSet,
                 ProductionZip = parsed.ProductionZip,
                 VolumeSize = parsed.VolumeSize ?? 5000,
+                ProductionId = parsed.ProductionId,
+                RollingCount = parsed.RollingCount,
+                RollingBatesMode = (parsed.RollingBatesMode?.ToLowerInvariant()) switch
+                {
+                    "restart" => RollingBatesMode.Restart,
+                    _ => RollingBatesMode.Continuous,
+                },
             },
             LoadfileOnly = parsed.LoadfileOnly,
             Hash = hashConfig,

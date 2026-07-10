@@ -170,6 +170,14 @@ public static class CliParser
                     if (TryGetValue(args, i, out var batesPfx))
                     {
                         parsed.BatesPrefix = batesPfx;
+                        if (batesPfx.Contains(',', StringComparison.Ordinal))
+                        {
+                            parsed.BatesPrefixes = batesPfx.Split(',').Select(p => p.Trim()).ToList();
+                        }
+                        else
+                        {
+                            parsed.BatesPrefixes = new List<string> { batesPfx };
+                        }
                         i++;
                     }
                     else
@@ -182,14 +190,37 @@ public static class CliParser
                 case "--bates-start":
                     if (TryGetValue(args, i, out var batesStartStr))
                     {
-                        if (long.TryParse(batesStartStr, System.Globalization.CultureInfo.InvariantCulture, out var batesStart))
+                        if (batesStartStr.Contains(',', StringComparison.Ordinal))
                         {
-                            parsed.BatesStart = batesStart;
+                            var parts = batesStartStr.Split(',');
+                            var starts = new List<long>();
+                            foreach (var part in parts)
+                            {
+                                if (long.TryParse(part.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var sVal))
+                                {
+                                    starts.Add(sVal);
+                                }
+                                else
+                                {
+                                    Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
+                                    return null;
+                                }
+                            }
+                            parsed.BatesStarts = starts;
+                            parsed.BatesStart = starts[0];
                         }
                         else
                         {
-                            Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
-                            return null;
+                            if (long.TryParse(batesStartStr, System.Globalization.CultureInfo.InvariantCulture, out var batesStart))
+                            {
+                                parsed.BatesStart = batesStart;
+                                parsed.BatesStarts = new List<long> { batesStart };
+                            }
+                            else
+                            {
+                                Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
+                                return null;
+                            }
                         }
 
                         i++;
@@ -584,6 +615,54 @@ public static class CliParser
                     else
                     {
                         Console.Error.WriteLine("Error: --hash-algorithms requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--production-id":
+                    if (TryGetValue(args, i, out var prodIdVal))
+                    {
+                        parsed.ProductionId = prodIdVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --production-id requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--rolling-count":
+                    if (TryGetValue(args, i, out var rollingCountVal))
+                    {
+                        if (int.TryParse(rollingCountVal, System.Globalization.CultureInfo.InvariantCulture, out var rollingCount))
+                        {
+                            parsed.RollingCount = rollingCount;
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --rolling-count: '{rollingCountVal}'");
+                            return null;
+                        }
+
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --rolling-count requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--rolling-bates-mode":
+                    if (TryGetValue(args, i, out var batesModeVal))
+                    {
+                        parsed.RollingBatesMode = batesModeVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --rolling-bates-mode requires a value.");
                         return null;
                     }
 

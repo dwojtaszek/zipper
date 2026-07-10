@@ -26,7 +26,7 @@ internal sealed record ProductionNativeFilePlan
 /// </summary>
 internal static class ProductionSetPlanner
 {
-    public static IReadOnlyList<ProductionNativeFilePlan> Plan(FileGenerationRequest request)
+    public static IReadOnlyList<ProductionNativeFilePlan> Plan(FileGenerationRequest request, int rollingIndex = 0, long? overrideBatesStart = null)
     {
         var batesConfig = request.Bates
             ?? throw new InvalidOperationException("Production set requires Bates configuration.");
@@ -43,7 +43,46 @@ internal static class ProductionSetPlanner
 
         var plans = new List<ProductionNativeFilePlan>((int)request.Output.FileCount);
         var nativeExt = request.Output.FileTypeLower;
-        var batesSequence = BatesSequence.FromConfig(batesConfig);
+
+        // Resolve bates prefix for this rolling set
+        string prefix = batesConfig.Prefixes is not null && batesConfig.Prefixes.Count > rollingIndex
+            ? batesConfig.Prefixes[rollingIndex]
+            : batesConfig.Prefix;
+
+        // Resolve bates start for this rolling set
+        long start;
+        if (overrideBatesStart.HasValue)
+        {
+            start = overrideBatesStart.Value;
+        }
+        else if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
+        {
+            start = batesConfig.Starts is not null && batesConfig.Starts.Count > rollingIndex
+                ? batesConfig.Starts[rollingIndex]
+                : batesConfig.Start;
+        }
+        else // continuous
+        {
+            if (batesConfig.Starts is not null && batesConfig.Starts.Count > rollingIndex)
+            {
+                start = batesConfig.Starts[rollingIndex];
+            }
+            else
+            {
+                // Calculate continuous start: configured start + index * FileCount * Increment
+                start = batesConfig.Start + (rollingIndex * request.Output.FileCount * batesConfig.Increment);
+            }
+        }
+
+        var setBatesConfig = new Config.BatesNumberConfig
+        {
+            Prefix = prefix,
+            Start = start,
+            Digits = batesConfig.Digits,
+            Increment = batesConfig.Increment,
+        };
+
+        var batesSequence = BatesSequence.FromConfig(setBatesConfig);
 
         for (long i = 0; i < request.Output.FileCount; i++)
         {

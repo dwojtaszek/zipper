@@ -95,4 +95,16 @@ public class ParsedArguments
     public string? HashMode { get; set; }
 
     public string? HashAlgorithms { get; set; }
+
+    public string? ProductionId { get; set; }
+
+    public int RollingCount { get; set; } = 1;
+
+    public string RollingBatesMode { get; set; } = "continuous";
+
+    public List<long>? BatesStarts { get; set; }
+
+    public List<string>? BatesPrefixes { get; set; }
 }
+
+

@@ -6,4 +6,7 @@ public record BatesNumberConfig
     public long Start { get; init; } = 1;
     public int Digits { get; init; } = 8;
     public long Increment { get; init; } = 1;
+    public IReadOnlyList<string>? Prefixes { get; init; }
+    public IReadOnlyList<long>? Starts { get; init; }
 }
+

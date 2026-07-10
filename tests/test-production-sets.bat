@@ -138,6 +138,115 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 3: Production Set LF line endings and Attachment counts passed
 
+:: --- Test Case 4: Rolling Production Sets - Continuous Mode ---
+
+echo [ INFO ] Test Case 4: Rolling production sets continuous mode
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test4" ^
+  --bates-prefix "CONT" ^
+  --bates-start 10 ^
+  --production-id "CONT_001" ^
+  --rolling-count 3 ^
+  --rolling-bates-mode continuous
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 4 failed during execution
+  exit /b 1
+)
+
+if not exist "%TEST_OUTPUT_DIR%\test4\CONT_001\" ( echo [ ERROR ] Missing CONT_001 folder & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test4\CONT_002\" ( echo [ ERROR ] Missing CONT_002 folder & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test4\CONT_003\" ( echo [ ERROR ] Missing CONT_003 folder & exit /b 1 )
+
+powershell -NoProfile -Command ^
+  "$root = '%TEST_OUTPUT_DIR%\test4';" ^
+  "$m1 = Get-Content (Join-Path $root 'CONT_001\_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "$m2 = Get-Content (Join-Path $root 'CONT_002\_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "$m3 = Get-Content (Join-Path $root 'CONT_003\_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "if ($m1.productionId -ne 'CONT_001') { throw 'm1 prod ID invalid' }" ^
+  "if ($m2.productionId -ne 'CONT_002') { throw 'm2 prod ID invalid' }" ^
+  "if ($m3.productionId -ne 'CONT_003') { throw 'm3 prod ID invalid' }" ^
+  "if ($m1.rollingSequenceNumber -ne 1) { throw 'm1 rolling seq invalid' }" ^
+  "if ($m2.rollingSequenceNumber -ne 2) { throw 'm2 rolling seq invalid' }" ^
+  "if ($m3.rollingSequenceNumber -ne 3) { throw 'm3 rolling seq invalid' }" ^
+  "if ($m1.batesNumberStart -ne 'CONT00000010') { throw 'm1 start invalid' }" ^
+  "if ($m1.batesNumberEnd -ne 'CONT00000014') { throw 'm1 end invalid' }" ^
+  "if ($m2.batesNumberStart -ne 'CONT00000015') { throw 'm2 start invalid' }" ^
+  "if ($m2.batesNumberEnd -ne 'CONT00000019') { throw 'm2 end invalid' }" ^
+  "if ($m3.batesNumberStart -ne 'CONT00000020') { throw 'm3 start invalid' }" ^
+  "if ($m3.batesNumberEnd -ne 'CONT00000024') { throw 'm3 end invalid' }" ^
+  "if ($m1.batesRangeMode -ne 'continuous') { throw 'm1 mode invalid' }"
+if errorlevel 1 (
+  echo [ ERROR ] Test 4 validation failed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 4: Rolling production sets continuous mode passed
+
+
+:: --- Test Case 5: Rolling Production Sets - Restart Mode ---
+
+echo [ INFO ] Test Case 5: Rolling production sets restart mode
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 5 ^
+  --output-path "%TEST_OUTPUT_DIR%\test5" ^
+  --bates-prefix "REST" ^
+  --bates-start 100 ^
+  --production-id "REST_A" ^
+  --rolling-count 2 ^
+  --rolling-bates-mode restart
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 5 failed during execution
+  exit /b 1
+)
+
+if not exist "%TEST_OUTPUT_DIR%\test5\REST_A\" ( echo [ ERROR ] Missing REST_A folder & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test5\REST_A_2\" ( echo [ ERROR ] Missing REST_A_2 folder & exit /b 1 )
+
+powershell -NoProfile -Command ^
+  "$root = '%TEST_OUTPUT_DIR%\test5';" ^
+  "$m1 = Get-Content (Join-Path $root 'REST_A\_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "$m2 = Get-Content (Join-Path $root 'REST_A_2\_manifest.json') -Raw | ConvertFrom-Json;" ^
+  "if ($m1.batesNumberStart -ne 'REST00000100' -or $m1.batesNumberEnd -ne 'REST00000104') { throw 'm1 range invalid' }" ^
+  "if ($m2.batesNumberStart -ne 'REST00000100' -or $m2.batesNumberEnd -ne 'REST00000104') { throw 'm2 range invalid' }" ^
+  "if ($m1.batesRangeMode -ne 'restart') { throw 'm1 mode invalid' }"
+if errorlevel 1 (
+  echo [ ERROR ] Test 5 validation failed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 5: Rolling production sets restart mode passed
+
+
+:: --- Test Case 6: Rolling Production Sets - Zip Packaging ---
+
+echo [ INFO ] Test Case 6: Rolling production sets with zip packaging
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --production-zip ^
+  --count 3 ^
+  --output-path "%TEST_OUTPUT_DIR%\test6" ^
+  --bates-prefix "ROLLZIP" ^
+  --production-id "ROLLZIP_01" ^
+  --rolling-count 2
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 6 failed during execution
+  exit /b 1
+)
+
+if not exist "%TEST_OUTPUT_DIR%\test6\ROLLZIP_01.zip" ( echo [ ERROR ] Missing ROLLZIP_01.zip & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test6\ROLLZIP_02.zip" ( echo [ ERROR ] Missing ROLLZIP_02.zip & exit /b 1 )
+
+echo [ SUCCESS ] Test Case 6: Rolling production sets zip packaging passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

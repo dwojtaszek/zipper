@@ -34,30 +34,105 @@ internal static class ProductionSetGenerator
 
         var stopwatch = Stopwatch.StartNew();
 
-        var productionName = $"PRODUCTION_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-        var productionPath = Path.Combine(request.Output.OutputPath, productionName);
-
-        try
+        int rollingCount = request.Production.RollingCount;
+        if (rollingCount < 1)
         {
-            return await GenerateCoreAsync(request, productionPath, productionName, stopwatch, cancellationToken).ConfigureAwait(false);
+            rollingCount = 1;
         }
-        catch (Exception ex)
+
+        var prodIds = Cli.Validation.ProductionSetValidator.GenerateProductionIds(request.Production.ProductionId, rollingCount);
+        ProductionSetResult? lastResult = null;
+        long currentBatesStart = request.Bates?.Start ?? 1;
+
+        for (int i = 0; i < rollingCount; i++)
         {
-            // Clean up partial output on failure, except for validation failures
-            if (ex is not Validation.ValidationFailedException && Directory.Exists(productionPath))
+            var productionName = prodIds[i];
+            var productionPath = Path.Combine(request.Output.OutputPath, productionName);
+
+            if (Directory.Exists(productionPath))
             {
-                try
-                {
-                    Directory.Delete(productionPath, true);
-                }
-                catch
-                {
-                    // Best-effort cleanup; don't mask the original exception
-                }
+                throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
             }
 
-            throw;
+            try
+            {
+                long startToUse;
+                if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
+                {
+                    startToUse = request.Bates?.Starts is not null && request.Bates.Starts.Count > i
+                        ? request.Bates.Starts[i]
+                        : request.Bates?.Start ?? 1;
+                }
+                else
+                {
+                    startToUse = request.Bates?.Starts is not null && request.Bates.Starts.Count > i
+                        ? request.Bates.Starts[i]
+                        : currentBatesStart;
+                }
+
+                var stepStopwatch = Stopwatch.StartNew();
+                int batesConsumed = 0;
+                lastResult = await GenerateCoreAsync(
+                    request,
+                    productionPath,
+                    productionName,
+                    i,
+                    startToUse,
+                    count => batesConsumed = count,
+                    stepStopwatch,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (request.Production.RollingBatesMode == Config.RollingBatesMode.Continuous)
+                {
+                    currentBatesStart = startToUse + batesConsumed * (request.Bates?.Increment ?? 1);
+                }
+            }
+            catch (Exception ex)
+            {
+                if (ex is not Validation.ValidationFailedException)
+                {
+                    for (int j = 0; j <= i; j++)
+                    {
+                        var pathToDelete = Path.Combine(request.Output.OutputPath, prodIds[j]);
+                        if (Directory.Exists(pathToDelete))
+                        {
+                            try
+                            {
+                                Directory.Delete(pathToDelete, true);
+                            }
+                            catch
+                            {
+                                // Best-effort cleanup
+                            }
+                        }
+
+                        var zipToDelete = Path.Combine(request.Output.OutputPath, $"{prodIds[j]}.zip");
+                        if (File.Exists(zipToDelete))
+                        {
+                            try
+                            {
+                                File.Delete(zipToDelete);
+                            }
+                            catch
+                            {
+                                // Best-effort cleanup
+                            }
+                        }
+                    }
+                }
+
+                throw;
+            }
         }
+
+        stopwatch.Stop();
+        if (lastResult is not null)
+        {
+            lastResult.GenerationTime = stopwatch.Elapsed;
+            return lastResult;
+        }
+
+        throw new InvalidOperationException("No production sets were generated.");
     }
 
     private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeActualHashes(
@@ -106,7 +181,14 @@ internal static class ProductionSetGenerator
     }
 
     private static async Task<ProductionSetResult> GenerateCoreAsync(
-        FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch, CancellationToken cancellationToken)
+        FileGenerationRequest request,
+        string productionPath,
+        string productionName,
+        int rollingIndex,
+        long batesStartOverride,
+        Action<int> onPlansGenerated,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
     {
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
@@ -124,7 +206,8 @@ internal static class ProductionSetGenerator
 #pragma warning restore S2245
 
         // Plan document layout (no I/O)
-        var plans = ProductionSetPlanner.Plan(request);
+        var plans = ProductionSetPlanner.Plan(request, rollingIndex, batesStartOverride);
+        onPlansGenerated(plans.Count);
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
@@ -272,8 +355,23 @@ internal static class ProductionSetGenerator
         // Write manifest
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
+        var batesConfig = request.Bates;
+        string prefix = batesConfig?.Prefixes is not null && batesConfig.Prefixes.Count > rollingIndex
+            ? batesConfig.Prefixes[rollingIndex]
+            : batesConfig?.Prefix ?? string.Empty;
+
         var manifestPath = await ProductionManifestWriter.WriteAsync(
-            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList).ConfigureAwait(false);
+            productionPath,
+            request,
+            batesStart,
+            batesEnd,
+            volumeCount,
+            stopwatch.Elapsed,
+            fileDataList,
+            productionId: productionName,
+            rollingSequenceNumber: rollingIndex + 1,
+            batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant(),
+            batesPrefix: prefix).ConfigureAwait(false);
 
         // Run validation
         var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);

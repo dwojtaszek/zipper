@@ -1,5 +1,10 @@
 {
   "productionDate": "NORMALIZED",
+  "productionId": "PRODUCTION",
+  "rollingSequenceNumber": 1,
+  "batesNumberStart": "CLIENT00000001",
+  "batesNumberEnd": "CLIENT00001500",
+  "batesRangeMode": "continuous",
   "batesRange": {
     "start": "CLIENT00000001",
     "end": "CLIENT00001500",

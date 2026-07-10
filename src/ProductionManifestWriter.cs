@@ -31,7 +31,11 @@ internal static class ProductionManifestWriter
         string batesEnd,
         int volumeCount,
         TimeSpan generationTime,
-        System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null)
+        System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null,
+        string? productionId = null,
+        int rollingSequenceNumber = 1,
+        string? batesRangeMode = null,
+        string? batesPrefix = null)
     {
         var manifestPath = Path.Combine(productionPath, "_manifest.json");
 
@@ -47,11 +51,16 @@ internal static class ProductionManifestWriter
         var manifest = new ProductionManifest
         {
             ProductionDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
+            ProductionId = productionId ?? Path.GetFileName(productionPath),
+            RollingSequenceNumber = rollingSequenceNumber,
+            BatesNumberStart = batesStart,
+            BatesNumberEnd = batesEnd,
+            BatesRangeMode = batesRangeMode ?? "continuous",
             BatesRange = new BatesRange
             {
                 Start = batesStart,
                 End = batesEnd,
-                Prefix = request.Bates?.Prefix ?? string.Empty,
+                Prefix = batesPrefix ?? request.Bates?.Prefix ?? string.Empty,
                 Digits = request.Bates?.Digits ?? 8,
             },
             NativeFileCount = totalNativeCount,
@@ -110,6 +119,21 @@ internal class ProductionManifest
 {
     [JsonPropertyName("productionDate")]
     public string ProductionDate { get; set; } = string.Empty;
+
+    [JsonPropertyName("productionId")]
+    public string ProductionId { get; set; } = string.Empty;
+
+    [JsonPropertyName("rollingSequenceNumber")]
+    public int RollingSequenceNumber { get; set; }
+
+    [JsonPropertyName("batesNumberStart")]
+    public string BatesNumberStart { get; set; } = string.Empty;
+
+    [JsonPropertyName("batesNumberEnd")]
+    public string BatesNumberEnd { get; set; } = string.Empty;
+
+    [JsonPropertyName("batesRangeMode")]
+    public string BatesRangeMode { get; set; } = string.Empty;
 
     [JsonPropertyName("batesRange")]
     public BatesRange BatesRange { get; set; } = new();
