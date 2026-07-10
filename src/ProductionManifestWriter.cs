@@ -34,7 +34,8 @@ internal static class ProductionManifestWriter
         System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null,
         string? productionId = null,
         int rollingSequenceNumber = 1,
-        string? batesRangeMode = null)
+        string? batesRangeMode = null,
+        string? batesPrefix = null)
     {
         var manifestPath = Path.Combine(productionPath, "_manifest.json");
 
@@ -59,7 +60,7 @@ internal static class ProductionManifestWriter
             {
                 Start = batesStart,
                 End = batesEnd,
-                Prefix = request.Bates?.Prefix ?? string.Empty,
+                Prefix = batesPrefix ?? request.Bates?.Prefix ?? string.Empty,
                 Digits = request.Bates?.Digits ?? 8,
             },
             NativeFileCount = totalNativeCount,

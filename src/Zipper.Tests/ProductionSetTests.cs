@@ -244,6 +244,11 @@ public class ProductionSetTests : IDisposable
         var result1 = await ProductionSetGenerator.GenerateAsync(request1);
         var dat1 = await File.ReadAllTextAsync(result1.DatFilePath);
 
+        if (Directory.Exists(result1.ProductionPath))
+        {
+            Directory.Delete(result1.ProductionPath, true);
+        }
+
         var request2 = this.CreateTestRequest(count: 5, seed: 42);
         var result2 = await ProductionSetGenerator.GenerateAsync(request2);
         var dat2 = await File.ReadAllTextAsync(result2.DatFilePath);

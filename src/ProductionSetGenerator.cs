@@ -42,29 +42,82 @@ internal static class ProductionSetGenerator
 
         var prodIds = Cli.Validation.ProductionSetValidator.GenerateProductionIds(request.Production.ProductionId, rollingCount);
         ProductionSetResult? lastResult = null;
+        long currentBatesStart = request.Bates?.Start ?? 1;
 
         for (int i = 0; i < rollingCount; i++)
         {
             var productionName = prodIds[i];
             var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
+            if (Directory.Exists(productionPath))
+            {
+                throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
+            }
+
             try
             {
+                long startToUse;
+                if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
+                {
+                    startToUse = request.Bates?.Starts is not null && request.Bates.Starts.Count > i
+                        ? request.Bates.Starts[i]
+                        : request.Bates?.Start ?? 1;
+                }
+                else
+                {
+                    startToUse = request.Bates?.Starts is not null && request.Bates.Starts.Count > i
+                        ? request.Bates.Starts[i]
+                        : currentBatesStart;
+                }
+
                 var stepStopwatch = Stopwatch.StartNew();
-                lastResult = await GenerateCoreAsync(request, productionPath, productionName, i, stepStopwatch, cancellationToken).ConfigureAwait(false);
+                int batesConsumed = 0;
+                lastResult = await GenerateCoreAsync(
+                    request,
+                    productionPath,
+                    productionName,
+                    i,
+                    startToUse,
+                    count => batesConsumed = count,
+                    stepStopwatch,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (request.Production.RollingBatesMode == Config.RollingBatesMode.Continuous)
+                {
+                    currentBatesStart = startToUse + batesConsumed * (request.Bates?.Increment ?? 1);
+                }
             }
             catch (Exception ex)
             {
-                // Clean up partial output on failure, except for validation failures
-                if (ex is not Validation.ValidationFailedException && Directory.Exists(productionPath))
+                if (ex is not Validation.ValidationFailedException)
                 {
-                    try
+                    for (int j = 0; j <= i; j++)
                     {
-                        Directory.Delete(productionPath, true);
-                    }
-                    catch
-                    {
-                        // Best-effort cleanup; don't mask the original exception
+                        var pathToDelete = Path.Combine(request.Output.OutputPath, prodIds[j]);
+                        if (Directory.Exists(pathToDelete))
+                        {
+                            try
+                            {
+                                Directory.Delete(pathToDelete, true);
+                            }
+                            catch
+                            {
+                                // Best-effort cleanup
+                            }
+                        }
+
+                        var zipToDelete = Path.Combine(request.Output.OutputPath, $"{prodIds[j]}.zip");
+                        if (File.Exists(zipToDelete))
+                        {
+                            try
+                            {
+                                File.Delete(zipToDelete);
+                            }
+                            catch
+                            {
+                                // Best-effort cleanup
+                            }
+                        }
                     }
                 }
 
@@ -128,7 +181,14 @@ internal static class ProductionSetGenerator
     }
 
     private static async Task<ProductionSetResult> GenerateCoreAsync(
-        FileGenerationRequest request, string productionPath, string productionName, int rollingIndex, Stopwatch stopwatch, CancellationToken cancellationToken)
+        FileGenerationRequest request,
+        string productionPath,
+        string productionName,
+        int rollingIndex,
+        long batesStartOverride,
+        Action<int> onPlansGenerated,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
     {
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
@@ -146,7 +206,8 @@ internal static class ProductionSetGenerator
 #pragma warning restore S2245
 
         // Plan document layout (no I/O)
-        var plans = ProductionSetPlanner.Plan(request, rollingIndex);
+        var plans = ProductionSetPlanner.Plan(request, rollingIndex, batesStartOverride);
+        onPlansGenerated(plans.Count);
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
@@ -294,6 +355,11 @@ internal static class ProductionSetGenerator
         // Write manifest
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
+        var batesConfig = request.Bates;
+        string prefix = batesConfig?.Prefixes is not null && batesConfig.Prefixes.Count > rollingIndex
+            ? batesConfig.Prefixes[rollingIndex]
+            : batesConfig?.Prefix ?? string.Empty;
+
         var manifestPath = await ProductionManifestWriter.WriteAsync(
             productionPath,
             request,
@@ -304,7 +370,8 @@ internal static class ProductionSetGenerator
             fileDataList,
             productionId: productionName,
             rollingSequenceNumber: rollingIndex + 1,
-            batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant()).ConfigureAwait(false);
+            batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant(),
+            batesPrefix: prefix).ConfigureAwait(false);
 
         // Run validation
         var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);

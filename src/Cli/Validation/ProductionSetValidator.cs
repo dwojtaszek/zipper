@@ -86,10 +86,18 @@ internal static class ProductionSetValidator
             }
 
             // Validate Bates prefixes and starts lengths if lists are provided
-            if (parsed.BatesPrefixes is not null && parsed.BatesPrefixes.Count > 1 && parsed.BatesPrefixes.Count != parsed.RollingCount)
+            if (parsed.BatesPrefixes is not null)
             {
-                Console.Error.WriteLine("Error: Number of bates prefixes must match rolling count.");
-                return false;
+                if (parsed.BatesPrefixes.Count > 1 && parsed.BatesPrefixes.Count != parsed.RollingCount)
+                {
+                    Console.Error.WriteLine("Error: Number of bates prefixes must match rolling count.");
+                    return false;
+                }
+                if (parsed.BatesPrefixes.Any(string.IsNullOrWhiteSpace))
+                {
+                    Console.Error.WriteLine("Error: Bates prefix cannot be empty or whitespace.");
+                    return false;
+                }
             }
 
             if (parsed.BatesStarts is not null && parsed.BatesStarts.Count > 1 && parsed.BatesStarts.Count != parsed.RollingCount)
@@ -122,7 +130,6 @@ internal static class ProductionSetValidator
                     if (parsed.BatesStarts is not null && parsed.BatesStarts.Count > i)
                     {
                         start = parsed.BatesStarts[i];
-                        currentStart = start; // sync
                     }
                     else
                     {

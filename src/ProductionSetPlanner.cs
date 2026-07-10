@@ -26,7 +26,7 @@ internal sealed record ProductionNativeFilePlan
 /// </summary>
 internal static class ProductionSetPlanner
 {
-    public static IReadOnlyList<ProductionNativeFilePlan> Plan(FileGenerationRequest request, int rollingIndex = 0)
+    public static IReadOnlyList<ProductionNativeFilePlan> Plan(FileGenerationRequest request, int rollingIndex = 0, long? overrideBatesStart = null)
     {
         var batesConfig = request.Bates
             ?? throw new InvalidOperationException("Production set requires Bates configuration.");
@@ -51,7 +51,11 @@ internal static class ProductionSetPlanner
 
         // Resolve bates start for this rolling set
         long start;
-        if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
+        if (overrideBatesStart.HasValue)
+        {
+            start = overrideBatesStart.Value;
+        }
+        else if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
         {
             start = batesConfig.Starts is not null && batesConfig.Starts.Count > rollingIndex
                 ? batesConfig.Starts[rollingIndex]
