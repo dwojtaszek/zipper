@@ -108,6 +108,17 @@ internal static class ProductionSetGenerator
     private static async Task<ProductionSetResult> GenerateCoreAsync(
         FileGenerationRequest request, string productionPath, string productionName, Stopwatch stopwatch, CancellationToken cancellationToken)
     {
+        // Plan document layout (no I/O)
+        var plans = ProductionSetPlanner.Plan(request);
+
+        // Run supplemental validation before any output is created
+        Validation.SupplementalValidationReport? supplementalReport = null;
+        if (request.Production.SupplementalProduction)
+        {
+            supplementalReport = await Validation.SupplementalValidator.ValidateAsync(
+                request, plans[0].BatesNumber, plans[^1].BatesNumber).ConfigureAwait(false);
+        }
+
         // Create directory structure
         var dataDir = Path.Combine(productionPath, "DATA");
         var nativesDir = Path.Combine(productionPath, "NATIVES");
@@ -122,9 +133,6 @@ internal static class ProductionSetGenerator
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
 #pragma warning restore S2245
-
-        // Plan document layout (no I/O)
-        var plans = ProductionSetPlanner.Plan(request);
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
@@ -273,7 +281,8 @@ internal static class ProductionSetGenerator
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
         var manifestPath = await ProductionManifestWriter.WriteAsync(
-            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList).ConfigureAwait(false);
+            productionPath, request, batesStart, batesEnd, volumeCount, stopwatch.Elapsed, fileDataList,
+            request.Production.PriorManifests, supplementalReport).ConfigureAwait(false);
 
         // Run validation
         var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);

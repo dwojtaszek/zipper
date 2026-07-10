@@ -42,6 +42,43 @@ internal static class ProductionSetValidator
             return false;
         }
 
+        if (parsed.SupplementalProduction)
+        {
+            if (!parsed.ProductionSet)
+            {
+                Console.Error.WriteLine("Error: --supplemental-production requires --production-set.");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(parsed.PriorManifests))
+            {
+                Console.Error.WriteLine("Error: --supplemental-production requires --prior-manifest.");
+                return false;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.PriorManifests) && !parsed.SupplementalProduction)
+        {
+            Console.Error.WriteLine("Error: --prior-manifest requires --supplemental-production.");
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(parsed.SupplementalGapPolicy))
+        {
+            if (!parsed.SupplementalProduction)
+            {
+                Console.Error.WriteLine("Error: --supplemental-gap-policy requires --supplemental-production.");
+                return false;
+            }
+
+            if (!string.Equals(parsed.SupplementalGapPolicy, "reject", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(parsed.SupplementalGapPolicy, "allow", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("Error: --supplemental-gap-policy must be 'reject' or 'allow'.");
+                return false;
+            }
+        }
+
         return true;
     }
 

@@ -31,7 +31,9 @@ internal static class ProductionManifestWriter
         string batesEnd,
         int volumeCount,
         TimeSpan generationTime,
-        System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null)
+        System.Collections.Generic.IReadOnlyList<FileData>? fileDataList = null,
+        System.Collections.Generic.IReadOnlyList<string>? priorManifests = null,
+        Validation.SupplementalValidationReport? supplementalValidation = null)
     {
         var manifestPath = Path.Combine(productionPath, "_manifest.json");
 
@@ -82,6 +84,8 @@ internal static class ProductionManifestWriter
             },
             GenerationTime = $"{generationTime.TotalSeconds:F1}s",
             ValidationReport = "_validation_report.json",
+            PriorManifests = priorManifests,
+            SupplementalValidation = supplementalValidation,
         };
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
@@ -146,6 +150,12 @@ internal class ProductionManifest
 
     [JsonPropertyName("generationTime")]
     public string GenerationTime { get; set; } = string.Empty;
+
+    [JsonPropertyName("priorManifests")]
+    public System.Collections.Generic.IReadOnlyList<string>? PriorManifests { get; set; }
+
+    [JsonPropertyName("supplementalValidation")]
+    public Validation.SupplementalValidationReport? SupplementalValidation { get; set; }
 }
 
 internal class BatesRange

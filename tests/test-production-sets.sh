@@ -150,6 +150,89 @@ PY
 
 print_success "Test Case 3: Production Set LF line endings and Attachment counts passed"
 
+# --- Test Case 4: Successful supplemental Production Set after a prior manifest ---
+
+print_info "Test Case 4: Successful supplemental Production Set after a prior manifest"
+
+# 1. Generate prior
+zipper \
+  --production-set \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test4_prior" \
+  --bates-prefix "SUPP" \
+  --bates-start 1
+
+prior_dir=$(find "$TEST_OUTPUT_DIR/test4_prior" -type d -name "PRODUCTION_*" -print -quit)
+if [[ -z "$prior_dir" ]]; then
+  print_error "Test 4: Prior production directory not found."
+fi
+prior_manifest="$prior_dir/_manifest.json"
+
+# 2. Generate supplemental
+zipper \
+  --production-set \
+  --supplemental-production \
+  --prior-manifest "$prior_manifest" \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test4_supp" \
+  --bates-prefix "SUPP" \
+  --bates-start 6
+
+supp_dir=$(find "$TEST_OUTPUT_DIR/test4_supp" -type d -name "PRODUCTION_*" -print -quit)
+if [[ -z "$supp_dir" ]]; then
+  print_error "Test 4: Supplemental production directory not found."
+fi
+supp_manifest="$supp_dir/_manifest.json"
+
+# Validate manifest content using python
+python3 - "$supp_manifest" "$prior_manifest" <<'PY'
+import json
+import sys
+
+supp_path = sys.argv[1]
+prior_path = sys.argv[2]
+
+with open(supp_path, 'r') as f:
+    supp = json.load(f)
+
+# check priorManifests is recorded
+if "priorManifests" not in supp:
+    raise SystemExit("priorManifests missing from manifest")
+if prior_path not in supp["priorManifests"]:
+    raise SystemExit(f"prior path {prior_path} not found in priorManifests: {supp['priorManifests']}")
+
+# check supplementalValidation is recorded
+if "supplementalValidation" not in supp:
+    raise SystemExit("supplementalValidation missing from manifest")
+val = supp["supplementalValidation"]
+if val.get("expectedNextBates") != "SUPP00000006":
+    raise SystemExit(f"expectedNextBates was {val.get('expectedNextBates')}, expected SUPP00000006")
+if val.get("actualStartingBates") != "SUPP00000006":
+    raise SystemExit(f"actualStartingBates was {val.get('actualStartingBates')}, expected SUPP00000006")
+PY
+
+print_success "Test Case 4: Successful supplemental Production Set passed"
+
+
+# --- Test Case 5: Failing duplicate supplemental Bates range ---
+
+print_info "Test Case 5: Failing duplicate supplemental Bates range"
+
+# Generate overlapping/duplicate range which must fail
+if zipper \
+  --production-set \
+  --supplemental-production \
+  --prior-manifest "$prior_manifest" \
+  --count 5 \
+  --output-path "$TEST_OUTPUT_DIR/test5_supp" \
+  --bates-prefix "SUPP" \
+  --bates-start 4 2>/dev/null; then
+  print_error "Test 5: Supplemental generation succeeded but should have failed due to duplicate Bates numbers."
+else
+  print_success "Test Case 5: Failing duplicate supplemental Bates range passed"
+fi
+
+
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"

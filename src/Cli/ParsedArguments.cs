@@ -95,4 +95,10 @@ public class ParsedArguments
     public string? HashMode { get; set; }
 
     public string? HashAlgorithms { get; set; }
+
+    public bool SupplementalProduction { get; set; }
+
+    public string? PriorManifests { get; set; }
+
+    public string? SupplementalGapPolicy { get; set; }
 }
