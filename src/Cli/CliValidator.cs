@@ -8,6 +8,32 @@ public static class CliValidator
     {
         ArgumentNullException.ThrowIfNull(parsed);
 
+        bool isComparisonMode = !string.IsNullOrEmpty(parsed.CompareProductionManifests);
+        if (isComparisonMode)
+        {
+            if (string.IsNullOrEmpty(parsed.ComparisonMode))
+            {
+                Console.Error.WriteLine("Error: --comparison-mode is required when using --compare-production-manifests.");
+                return false;
+            }
+
+            if (!string.Equals(parsed.ComparisonMode, "replacement", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(parsed.ComparisonMode, "supplemental", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(parsed.ComparisonMode, "reproduction", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("Error: --comparison-mode must be 'replacement', 'supplemental', or 'reproduction'.");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(parsed.ComparisonOutput))
+            {
+                Console.Error.WriteLine("Error: --comparison-output is required when using --compare-production-manifests.");
+                return false;
+            }
+
+            return true;
+        }
+
         if (string.IsNullOrEmpty(parsed.FileType) && !parsed.LoadfileOnly && !parsed.ProductionSet)
         {
             Console.Error.WriteLine("Error: --type is required.");

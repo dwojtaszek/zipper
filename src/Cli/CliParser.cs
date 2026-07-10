@@ -696,6 +696,45 @@ public static class CliParser
                     }
 
                     break;
+                case "--compare-production-manifests":
+                    if (TryGetValue(args, i, out var compareManifestsVal))
+                    {
+                        parsed.CompareProductionManifests = compareManifestsVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --compare-production-manifests requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--comparison-mode":
+                    if (TryGetValue(args, i, out var compModeVal))
+                    {
+                        parsed.ComparisonMode = compModeVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --comparison-mode requires a value.");
+                        return null;
+                    }
+
+                    break;
+                case "--comparison-output":
+                    if (TryGetValue(args, i, out var compOutVal))
+                    {
+                        parsed.ComparisonOutput = compOutVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --comparison-output requires a value.");
+                        return null;
+                    }
+
+                    break;
                 default:
                     Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
                     return null;

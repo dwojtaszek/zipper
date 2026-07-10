@@ -44,7 +44,7 @@ After building the project, you can run the executable directly. The examples be
 ### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
 ```
 
 ### Arguments
@@ -108,6 +108,11 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`
 - `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
 - `--chaos-list`: List all available chaos scenarios with descriptions and exit
+
+**Production Set Comparison Options:**
+- `--compare-production-manifests <paths>`: Comma-separated paths to two or more Production Manifests (`_manifest.json` files or directories containing them) to compare
+- `--comparison-mode <replacement|supplemental|reproduction>`: The comparison logic/ruleset to apply
+- `--comparison-output <path>`: Output file path for the comparison JSON report. A human-readable Markdown summary is also written to `<path>.summary.md` and printed to standard output
 
 **Utility Options:**
 - `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
@@ -235,6 +240,9 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
 | `--prior-manifest` | none | paths | Comma-separated list of paths to prior production manifest files |
 | `--supplemental-gap-policy` | reject | reject, allow | Gap policy for supplemental mode: reject or allow |
+| `--compare-production-manifests` | none | paths | Compare two or more production manifests |
+| `--comparison-mode` | none | replacement, supplemental, reproduction | Comparison ruleset mode |
+| `--comparison-output` | none | path | Output path for comparison JSON report |
 | `--benchmark` | false | flag | Run benchmark suite and exit |
 | `--version` | false | flag | Print version string and exit |
 
@@ -270,6 +278,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
 | `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
 | `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
+| `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation. |
+| `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
 ### Delimiter Argument Modes
@@ -467,6 +477,23 @@ zipper --loadfile-only --count 100000 --output-path ./full_chaos \
 # OPT boundary corruption scenario
 zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_test \
     --chaos-mode --chaos-scenario broken-boundaries
+
+# ── Production Set Comparison ──────────────────
+
+# Compare prior and new production manifests in replacement mode
+zipper --compare-production-manifests "/path/to/prior/_manifest.json,/path/to/new/_manifest.json" \
+    --comparison-mode replacement \
+    --comparison-output "/path/to/report.json"
+
+# Compare multiple prior manifests with a new supplemental manifest
+zipper --compare-production-manifests "/path/to/prior1/_manifest.json,/path/to/prior2/_manifest.json,/path/to/new_supplemental/_manifest.json" \
+    --comparison-mode supplemental \
+    --comparison-output "/path/to/supplemental_report.json"
+
+# Compare prior and new in reproduction mode to audit corrected native content/metadata changes
+zipper --compare-production-manifests "/path/to/original/_manifest.json,/path/to/reproduced/_manifest.json" \
+    --comparison-mode reproduction \
+    --comparison-output "/path/to/reproduction_report.json"
 ```
 
 ## Performance
