@@ -57,7 +57,15 @@ internal class ProductionSetMode : IGenerationMode
         if (!string.IsNullOrEmpty(result.DatFilePath) && File.Exists(result.DatFilePath))
         {
             var runner = new ValidatorRunner();
-            var vr = runner.ValidateLoadFile(result.DatFilePath, "concordance", null, eol);
+            var vr = runner.ValidateLoadFile(
+                result.DatFilePath,
+                "concordance",
+                null,
+                eol,
+                bates: request.Bates,
+                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding),
+                columnDelimiter: request.Delimiters.GetColumnChar(),
+                quoteDelimiter: request.Delimiters.GetQuoteChar());
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());
@@ -69,7 +77,12 @@ internal class ProductionSetMode : IGenerationMode
         if (!string.IsNullOrEmpty(result.OptFilePath) && File.Exists(result.OptFilePath))
         {
             var runner = new ValidatorRunner();
-            var vr = runner.ValidateLoadFile(result.OptFilePath, "opt", null, eol);
+            var vr = runner.ValidateLoadFile(
+                result.OptFilePath,
+                "opt",
+                null,
+                eol,
+                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding));
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());

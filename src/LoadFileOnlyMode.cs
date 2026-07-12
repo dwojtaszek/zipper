@@ -90,7 +90,15 @@ internal class LoadFileOnlyMode : IGenerationMode
                 _ => null
             };
             var runner = new ValidatorRunner();
-            var vr = runner.ValidateLoadFile(fileForFormat, formatName, null, eol);
+            var vr = runner.ValidateLoadFile(
+                fileForFormat,
+                formatName,
+                null,
+                eol,
+                bates: request.Bates,
+                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding),
+                columnDelimiter: request.Delimiters.GetColumnChar(),
+                quoteDelimiter: request.Delimiters.GetQuoteChar());
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());

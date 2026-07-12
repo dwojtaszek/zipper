@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Zipper.Validation;
 
 namespace Zipper;
@@ -86,30 +87,70 @@ internal class StandardMode : IGenerationMode
 
         if (!string.IsNullOrEmpty(result.LoadFilePath))
         {
-            ValidateGeneratedLoadFile(result.LoadFilePath, request);
+            ValidateGeneratedLoadFile(result, request);
         }
     }
 
-    private static void ValidateGeneratedLoadFile(string loadFilePath, FileGenerationRequest request)
+    private static void ValidateGeneratedLoadFile(FileGenerationResult result, FileGenerationRequest request)
     {
-        if (!File.Exists(loadFilePath)) return;
-        var format = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat;
-        var formatName = format switch
-        {
-            LoadFileFormat.Opt => "opt",
-            LoadFileFormat.Csv => "csv",
-            LoadFileFormat.Concordance => "concordance",
-            _ => "dat"
-        };
         // ponytail: StandardMode uses Environment.NewLine regardless of --eol config,
         // so skip EOL validation here. Only LoadFileOnlyMode/ProductionSetMode respect --eol.
         var runner = new ValidatorRunner();
-        var vr = runner.ValidateLoadFile(loadFilePath, formatName, null, null);
-        if (vr.HasErrors || vr.HasWarnings)
+        using var archive = ZipFile.OpenRead(result.ZipFilePath);
+        var entryPaths = archive.Entries.Select(entry => entry.FullName).ToArray();
+        var validation = new ValidationResult();
+        var baseName = Path.GetFileNameWithoutExtension(result.LoadFilePath);
+        var directory = Path.GetDirectoryName(result.LoadFilePath) ?? string.Empty;
+
+        foreach (var format in GetDistinctFormats(request.LoadFile.Formats))
         {
-            Console.Error.WriteLine(vr.GetSummary());
-            if (vr.HasErrors)
+            if (format == LoadFileFormat.EdrmXml)
+                continue;
+
+            var fileName = baseName + GetExtension(format);
+            ValidationResult current;
+            if (request.Output.IncludeLoadFile)
+            {
+                var entry = archive.GetEntry(fileName)
+                    ?? throw new InvalidOperationException($"Generated load file '{fileName}' is missing from the Archive.");
+                using var reader = new StreamReader(entry.Open(), EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), detectEncodingFromByteOrderMarks: true);
+                current = runner.ValidateLoadFile(reader, entry.FullName, GetFormatName(format), null, entryPaths, request.Bates, request.Delimiters.GetColumnChar(), request.Delimiters.GetQuoteChar());
+            }
+            else
+            {
+                var loadFilePath = Path.Combine(directory, fileName);
+                current = runner.ValidateLoadFile(loadFilePath, GetFormatName(format), null, null, entryPaths, request.Bates, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), request.Delimiters.GetColumnChar(), request.Delimiters.GetQuoteChar());
+            }
+
+            validation.AddRange(current.Findings);
+        }
+
+        if (validation.HasErrors || validation.HasWarnings)
+        {
+            Console.Error.WriteLine(validation.GetSummary());
+            if (validation.HasErrors)
                 throw new InvalidOperationException("Post-generation validation failed.");
         }
     }
+
+    private static IEnumerable<LoadFileFormat> GetDistinctFormats(IReadOnlyList<LoadFileFormat> formats)
+        => (formats.Count > 0 ? formats : [LoadFileFormat.Dat])
+            .GroupBy(GetExtension)
+            .Select(group => group.Last());
+
+    private static string GetFormatName(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => "opt",
+        LoadFileFormat.Csv => "csv",
+        LoadFileFormat.Concordance => "concordance",
+        _ => "dat",
+    };
+
+    private static string GetExtension(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => ".opt",
+        LoadFileFormat.Csv => ".csv",
+        LoadFileFormat.EdrmXml => ".xml",
+        _ => ".dat",
+    };
 }
