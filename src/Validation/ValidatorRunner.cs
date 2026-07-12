@@ -106,6 +106,16 @@ public sealed class ValidatorRunner
             ValidateRecord(columns, fields, ids, expectedPathSet, expectedSidecarSet, bates, ref previousBates, loadFilePath, lineNumber, result);
         }
 
+        if (normalizedFormat == "csv" && csvRecord.Length > 0)
+        {
+            result.Add(new ValidationFinding(
+                ValidationSeverity.Error,
+                "MalformedCsv",
+                "Unclosed quote at the end of the CSV file.",
+                loadFilePath,
+                lineNumber));
+        }
+
         return result;
     }
 
@@ -206,9 +216,9 @@ public sealed class ValidatorRunner
             !long.TryParse(value[bates.Prefix.Length..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var current))
             return;
 
-        if (previousBates.HasValue && current != previousBates.Value + 1)
+        if (previousBates.HasValue && current != previousBates.Value + bates.Increment)
         {
-            var expected = bates.Prefix + (previousBates.Value + 1).ToString($"D{bates.Digits}", System.Globalization.CultureInfo.InvariantCulture);
+            var expected = bates.Prefix + (previousBates.Value + bates.Increment).ToString($"D{bates.Digits}", System.Globalization.CultureInfo.InvariantCulture);
             result.Add(new ValidationFinding(ValidationSeverity.Error, "BatesContinuity", $"Expected Bates number {expected}, got '{value}'", loadFilePath, lineNumber));
         }
 
