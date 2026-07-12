@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.Config;
 using Zipper.Validation;
 
 namespace Zipper.Tests;
@@ -219,6 +220,50 @@ public class PostGenerationValidatorTests
             var result = runner.ValidateLoadFile(loadFilePath, "csv", new[] { "col1", "col2", "col3" }, null);
 
             Assert.NotNull(result);
+        }
+        finally
+        {
+            File.Delete(loadFilePath);
+        }
+    }
+
+    [Fact]
+    public void ValidateLoadFile_WithDuplicateIdentifierAndMissingPath_ReportsBothFindings()
+    {
+        var loadFilePath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(loadFilePath, "Control Number,File Path,Bates Number\nDOC001,folder/one.pdf,ABC0001\nDOC001,folder/missing.pdf,ABC0003\n");
+
+            var result = new ValidatorRunner().ValidateLoadFile(
+                loadFilePath,
+                "csv",
+                null,
+                null,
+                new[] { "folder/one.pdf" },
+                new BatesNumberConfig { Prefix = "ABC", Start = 1, Digits = 4 });
+
+            Assert.Contains(result.Findings, finding => finding.Category == "UniqueId");
+            Assert.Contains(result.Findings, finding => finding.Category == "PathReconciliation");
+            Assert.Contains(result.Findings, finding => finding.Category == "BatesContinuity");
+        }
+        finally
+        {
+            File.Delete(loadFilePath);
+        }
+    }
+
+    [Fact]
+    public void ValidateLoadFile_WithQuotedCsvNewline_DoesNotReportColumnCountError()
+    {
+        var loadFilePath = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(loadFilePath, "Control Number,Note\nDOC001,\"first line\nsecond line\"\n");
+
+            var result = new ValidatorRunner().ValidateLoadFile(loadFilePath, "csv", null, null);
+
+            Assert.DoesNotContain(result.Findings, finding => finding.Category == "ColumnCount");
         }
         finally
         {
