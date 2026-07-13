@@ -584,6 +584,11 @@ public class ParallelFileGeneratorTests
                 FileType = "docx",
                 FileCount = 1,
             },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 },
+            },
             Metadata = new MetadataConfig
             {
                 Seed = 42
@@ -618,6 +623,11 @@ public class ParallelFileGeneratorTests
                 OutputPath = "dummy",
                 FileType = "docx",
                 FileCount = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 },
             },
             Metadata = new MetadataConfig
             {
@@ -728,7 +738,7 @@ public class ParallelFileGeneratorTests
         try
         {
             Assert.Null(fileData.Hashes);
-            Assert.NotEmpty(fileData.Hash); // MD5 is still computed internally
+            Assert.Empty(fileData.Hash); // ponytail: hash skipped when not requested
         }
         finally
         {

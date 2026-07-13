@@ -317,11 +317,10 @@ public class ParallelFileGenerator
                 }
             }
 
-#pragma warning disable S4790 // Cryptographic algorithms should be robust
-            var hashBytes = MD5.HashData(data);
-#pragma warning restore S4790
-            var hash = Convert.ToHexString(hashBytes).ToLowerInvariant();
             var hashes = ComputeHashes(data, workItem, request);
+            var hash = hashes is not null && hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5Hash)
+                ? md5Hash
+                : string.Empty;
 
             return new FileData
             {
@@ -356,11 +355,10 @@ public class ParallelFileGenerator
             }
 
             var finalMemory = memoryOwner.Memory[..(int)totalSize];
-#pragma warning disable S4790 // Cryptographic algorithms should be robust
-            var finalHashBytes = MD5.HashData(finalMemory.Span);
-#pragma warning restore S4790
-            var finalHash = Convert.ToHexString(finalHashBytes).ToLowerInvariant();
             var hashes = ComputeHashes(finalMemory.Span, workItem, request);
+            var finalHash = hashes is not null && hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5Hash)
+                ? md5Hash
+                : string.Empty;
 
             return new FileData
             {
