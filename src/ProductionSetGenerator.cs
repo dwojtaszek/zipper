@@ -212,6 +212,17 @@ internal static class ProductionSetGenerator
         Directory.CreateDirectory(textDir);
         Directory.CreateDirectory(imagesDir);
 
+        bool isRedacted = request.Production.RedactedProduction;
+        string? redactedImagesDir = null;
+        string? redactedTextDir = null;
+        if (isRedacted)
+        {
+            redactedImagesDir = Path.Combine(productionPath, "REDACTED", "IMAGES");
+            redactedTextDir = Path.Combine(productionPath, "REDACTED", "TEXT");
+            Directory.CreateDirectory(redactedImagesDir);
+            Directory.CreateDirectory(redactedTextDir);
+        }
+
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
 #pragma warning restore S2245
@@ -224,6 +235,11 @@ internal static class ProductionSetGenerator
             Directory.CreateDirectory(Path.Combine(nativesDir, volName));
             Directory.CreateDirectory(Path.Combine(textDir, volName));
             Directory.CreateDirectory(Path.Combine(imagesDir, volName));
+            if (isRedacted && redactedImagesDir is not null && redactedTextDir is not null)
+            {
+                Directory.CreateDirectory(Path.Combine(redactedImagesDir, volName));
+                Directory.CreateDirectory(Path.Combine(redactedTextDir, volName));
+            }
         }
 
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
@@ -234,6 +250,12 @@ internal static class ProductionSetGenerator
         // Generate files using the plan
         var fileDataList = new List<FileData>();
         var hashConfig = request.Hash;
+
+        // Redaction reasons cycle for deterministic redacted-mode generation
+        string[] redactionReasons = ["Privileged", "Attorney Work Product", "Settlement Communication", "Trade Secret", "Personal Privacy"];
+        string withheldPolicy = request.Production.WithheldNativePolicy;
+        int redactedCount = 0;
+        int withheldCount = 0;
 
         foreach (var plan in plans)
         {
@@ -273,6 +295,38 @@ internal static class ProductionSetGenerator
                 await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
             }
 
+            // Write redacted image/text files when redacted mode is on
+            string? nativePathOverride = null;
+            string? redactionReason = null;
+            if (isRedacted)
+            {
+                redactionReason = redactionReasons[plan.Index % redactionReasons.Length];
+                Interlocked.Increment(ref redactedCount);
+
+                if (plan.RedactedImageRelPath is not null)
+                {
+                    await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.RedactedImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
+                }
+
+                if (plan.RedactedTextRelPath is not null && request.Output.WithText)
+                {
+                    var redactedText = $"Redacted text for document {plan.BatesNumber}. {LoremIpsum.GetParagraph(random)}";
+                    await File.WriteAllTextAsync(Path.Combine(productionPath, plan.RedactedTextRelPath), redactedText, encoding).ConfigureAwait(false);
+                }
+
+                // Apply withheld native policy
+                nativePathOverride = withheldPolicy switch
+                {
+                    "omit-native-path" => string.Empty,
+                    "replace-with-placeholder" => $"PLACEHOLDER/{plan.VolumeName}/{plan.BatesNumber}.{request.Output.FileTypeLower}",
+                    _ => null,
+                };
+                if (nativePathOverride is not null)
+                {
+                    Interlocked.Increment(ref withheldCount);
+                }
+            }
+
             var fileDataHash = string.Empty;
             IReadOnlyDictionary<Config.HashAlgorithm, string>? fileDataHashes = null;
             if (hashConfig.IsEnabled)
@@ -304,6 +358,10 @@ internal static class ProductionSetGenerator
                 Email = generated.Email,
                 Hash = fileDataHash,
                 Hashes = fileDataHashes,
+                RedactedImageRelPath = plan.RedactedImageRelPath,
+                RedactedTextRelPath = plan.RedactedTextRelPath,
+                NativePathOverride = nativePathOverride,
+                RedactionReason = redactionReason,
             });
 
             if (request.Metadata.WithFamilies && request.Output.IsEml && generated.Attachment.HasValue)
@@ -322,6 +380,20 @@ internal static class ProductionSetGenerator
                 await File.WriteAllTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding).ConfigureAwait(false);
 
                 await File.WriteAllBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
+
+                // Write redacted child files when redacted mode is on
+                if (isRedacted)
+                {
+                    var childRedactedImageRelPath = Path.Combine("REDACTED", "IMAGES", plan.VolumeName, $"{childBates}.tif");
+                    await File.WriteAllBytesAsync(Path.Combine(productionPath, childRedactedImageRelPath), PlaceholderFiles.GetContent("tiff")).ConfigureAwait(false);
+
+                    if (request.Output.WithText)
+                    {
+                        var childRedactedTextRelPath = Path.Combine("REDACTED", "TEXT", plan.VolumeName, $"{childBates}.txt");
+                        var childRedactedText = $"Redacted text for attachment {childBates}.";
+                        await File.WriteAllTextAsync(Path.Combine(productionPath, childRedactedTextRelPath), childRedactedText, encoding).ConfigureAwait(false);
+                    }
+                }
             }
 
             // Progress reporting

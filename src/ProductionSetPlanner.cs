@@ -19,6 +19,10 @@ internal sealed record ProductionNativeFilePlan
     public required string TextRelPath { get; init; }
 
     public required string ImageRelPath { get; init; }
+
+    public string? RedactedImageRelPath { get; init; }
+
+    public string? RedactedTextRelPath { get; init; }
 }
 
 /// <summary>
@@ -84,6 +88,8 @@ internal static class ProductionSetPlanner
 
         var batesSequence = BatesSequence.FromConfig(setBatesConfig);
 
+        bool isRedacted = request.Production.RedactedProduction;
+
         for (long i = 0; i < request.Output.FileCount; i++)
         {
             int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
@@ -99,6 +105,8 @@ internal static class ProductionSetPlanner
                 NativeRelPath = Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}"),
                 TextRelPath = Path.Combine("TEXT", volName, $"{batesNumber}.txt"),
                 ImageRelPath = Path.Combine("IMAGES", volName, $"{batesNumber}.tif"),
+                RedactedImageRelPath = isRedacted ? Path.Combine("REDACTED", "IMAGES", volName, $"{batesNumber}.tif") : null,
+                RedactedTextRelPath = isRedacted ? Path.Combine("REDACTED", "TEXT", volName, $"{batesNumber}.txt") : null,
             });
         }
 

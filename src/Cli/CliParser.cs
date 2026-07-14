@@ -735,6 +735,22 @@ public static class CliParser
                     }
 
                     break;
+                case "--redacted-production":
+                    parsed.RedactedProduction = true;
+                    break;
+                case "--withheld-native-policy":
+                    if (TryGetValue(args, i, out var withheldVal))
+                    {
+                        parsed.WithheldNativePolicy = withheldVal;
+                        i++;
+                    }
+                    else
+                    {
+                        Console.Error.WriteLine("Error: --withheld-native-policy requires a value.");
+                        return null;
+                    }
+
+                    break;
                 default:
                     Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
                     return null;

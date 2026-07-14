@@ -30,6 +30,12 @@ internal static class ProductionSetValidator
             }
         }
 
+        if (parsed.RedactedProduction && parsed.LoadfileOnly)
+        {
+            Console.Error.WriteLine("Error: --redacted-production conflicts with --loadfile-only.");
+            return false;
+        }
+
         if (parsed.ProductionZip && !parsed.ProductionSet)
         {
             Console.Error.WriteLine("Error: --production-zip requires --production-set.");
@@ -75,6 +81,28 @@ internal static class ProductionSetValidator
                 !string.Equals(parsed.SupplementalGapPolicy, "allow", StringComparison.OrdinalIgnoreCase))
             {
                 Console.Error.WriteLine("Error: --supplemental-gap-policy must be 'reject' or 'allow'.");
+                return false;
+            }
+        }
+
+        if (parsed.RedactedProduction && !parsed.ProductionSet)
+        {
+            Console.Error.WriteLine("Error: --redacted-production requires --production-set.");
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(parsed.WithheldNativePolicy))
+        {
+            if (!parsed.RedactedProduction)
+            {
+                Console.Error.WriteLine("Error: --withheld-native-policy requires --redacted-production.");
+                return false;
+            }
+
+            var policy = parsed.WithheldNativePolicy.ToLowerInvariant();
+            if (policy != "keep-native" && policy != "omit-native-path" && policy != "replace-with-placeholder")
+            {
+                Console.Error.WriteLine("Error: --withheld-native-policy must be 'keep-native', 'omit-native-path', or 'replace-with-placeholder'.");
                 return false;
             }
         }

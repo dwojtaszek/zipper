@@ -627,6 +627,8 @@ This section clarifies behavior when multiple arguments interact:
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
 | `--benchmark` | **Early exit**: bypasses all file generation and argument validation; runs benchmarks and exits |
 | `--chaos-list` | **Early exit**: bypasses all file generation and argument validation; prints scenarios and exits |
+| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only` |
+| `--withheld-native-policy` | Requires `--redacted-production`; values: `keep-native`, `omit-native-path`, `replace-with-placeholder` |
 
 ---
 
@@ -748,6 +750,13 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-139**: Supplemental Production Manifests shall record references to all prior Production Manifests used for validation.
 - **REQ-140**: Supplemental validation shall report duplicate ranges, skipped ranges, expected next Bates Number, and actual starting Bates Number.
 - **REQ-141**: Supplemental validation shall fail before writing output when prior Production Manifest input is missing, malformed, or incompatible with current Bates Prefix and Bates Digits.
+- **REQ-142**: Zipper shall support redacted Production mode for Production Set generation via `--redacted-production`.
+- **REQ-143**: Redacted Production mode shall generate redacted image paths in the Load File under `REDACTED/IMAGES/`.
+- **REQ-144**: Redacted Production mode shall generate redacted Text Paths in the Load File under `REDACTED/TEXT/` when Extracted Text is enabled.
+- **REQ-145**: Redacted Production mode shall support withheld Native File handling via `--withheld-native-policy` with values `keep-native`, `omit-native-path`, or `replace-with-placeholder`.
+- **REQ-146**: Redacted Production mode shall add redaction reason Metadata to the Load File via `REDACTION_REASON` column.
+- **REQ-147**: Redacted Production mode shall record redaction counts, withheld Native File counts, and reason distributions in the Production Manifest.
+- **REQ-148**: Post-generation validation shall verify that redacted image and text references point to existing files on disk, and that `NATIVE_WITHHELD` values are `YES` or `NO`.
 - **REQ-157**: Zipper shall support comparing two or more Production Manifests.
 - **REQ-158**: Comparison reports shall support replacement workflows.
 - **REQ-159**: Comparison reports shall support supplemental workflows.
