@@ -46,27 +46,48 @@ internal class ProductionSetMode : IGenerationMode
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  ZIP: {0}", result.ZipFilePath));
         }
 
-        var loadFiles = new Dictionary<string, string>();
-        if (!string.IsNullOrEmpty(result.DatFilePath) && File.Exists(result.DatFilePath))
-            loadFiles["dat"] = result.DatFilePath;
-        if (!string.IsNullOrEmpty(result.OptFilePath) && File.Exists(result.OptFilePath))
-            loadFiles["opt"] = result.OptFilePath;
-
-        if (loadFiles.Count > 0)
+        var eol = request.Delimiters.EndOfLine?.ToUpperInvariant() switch
         {
-            var context = new ValidationContext
-            {
-                ProductionSetPath = result.ProductionPath,
-                LoadFiles = loadFiles,
-                Request = request,
-            };
-            var validator = new PostGenerationValidator();
-            var vr = validator.Validate(context);
+            "CRLF" => "\r\n",
+            "LF" => "\n",
+            "CR" => "\r",
+            _ => null
+        };
+
+        if (!string.IsNullOrEmpty(result.DatFilePath) && File.Exists(result.DatFilePath))
+        {
+            var runner = new ValidatorRunner();
+            var vr = runner.ValidateLoadFile(
+                result.DatFilePath,
+                "concordance",
+                null,
+                eol,
+                bates: request.Bates,
+                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding),
+                columnDelimiter: request.Delimiters.GetColumnChar(),
+                quoteDelimiter: request.Delimiters.GetQuoteChar());
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());
                 if (vr.HasErrors)
-                    throw new InvalidOperationException("Post-generation validation failed.");
+                    throw new InvalidOperationException("Post-generation validation failed (DAT).");
+            }
+        }
+
+        if (!string.IsNullOrEmpty(result.OptFilePath) && File.Exists(result.OptFilePath))
+        {
+            var runner = new ValidatorRunner();
+            var vr = runner.ValidateLoadFile(
+                result.OptFilePath,
+                "opt",
+                null,
+                eol,
+                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding));
+            if (vr.HasErrors || vr.HasWarnings)
+            {
+                Console.Error.WriteLine(vr.GetSummary());
+                if (vr.HasErrors)
+                    throw new InvalidOperationException("Post-generation validation failed (OPT).");
             }
         }
     }
