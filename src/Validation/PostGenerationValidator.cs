@@ -18,19 +18,24 @@ public sealed class PostGenerationValidator
             return result;
         }
 
-        if (context.ArchiveFilePath is not null)
+        // Always extract entry paths from archive for path reconciliation,
+        // even when load files are on disk (IncludeLoadFile=false).
+        IReadOnlyList<string>? entryPaths = context.ArchiveEntryPaths;
+        if (entryPaths is null && context.ArchiveFilePath is not null && File.Exists(context.ArchiveFilePath))
         {
-            ValidateArchive(context, result);
+            using var archive = ZipFile.OpenRead(context.ArchiveFilePath);
+            entryPaths = archive.Entries.Select(e => e.FullName).ToArray();
         }
-        else
+
+        if (entryPaths is not null)
         {
-            ValidateDiskFiles(context, result);
+            ValidateDiskFiles(context, result, entryPaths);
         }
 
         return result;
     }
 
-    private static void ValidateDiskFiles(ValidationContext context, ValidationResult result)
+    private static void ValidateDiskFiles(ValidationContext context, ValidationResult result, IReadOnlyList<string>? entryPaths = null)
     {
         var runner = new ValidatorRunner();
         foreach (var (formatName, filePath) in context.LoadFiles)
@@ -44,53 +49,11 @@ public sealed class PostGenerationValidator
                 formatName,
                 null,
                 eol,
+                entryPaths,
                 bates: context.Request.Bates,
                 encoding: EncodingHelper.GetEncodingOrDefault(context.Request.LoadFile.Encoding),
                 columnDelimiter: context.Request.Delimiters.GetColumnChar(),
                 quoteDelimiter: context.Request.Delimiters.GetQuoteChar());
-            result.AddRange(vr.Findings);
-        }
-    }
-
-    private static void ValidateArchive(ValidationContext context, ValidationResult result)
-    {
-        using var archive = ZipFile.OpenRead(context.ArchiveFilePath!);
-        var entryPaths = context.ArchiveEntryPaths
-            ?? archive.Entries.Select(e => e.FullName).ToArray();
-        var runner = new ValidatorRunner();
-
-        foreach (var (formatName, _) in context.LoadFiles)
-        {
-            if (formatName == "edrmxml")
-                continue;
-
-            var extension = GetExtensionForFormat(formatName);
-            var baseName = Path.GetFileNameWithoutExtension(context.LoadFiles[formatName]);
-            var fileName = baseName + extension;
-            var entry = archive.GetEntry(fileName);
-            if (entry is null)
-            {
-                result.Add(new ValidationFinding(
-                    ValidationSeverity.Error,
-                    "MissingLoadFile",
-                    $"Generated load file '{fileName}' is missing from the Archive.",
-                    context.ArchiveFilePath));
-                continue;
-            }
-
-            using var reader = new StreamReader(
-                entry.Open(),
-                EncodingHelper.GetEncodingOrDefault(context.Request.LoadFile.Encoding),
-                detectEncodingFromByteOrderMarks: true);
-            var vr = runner.ValidateLoadFile(
-                reader,
-                entry.FullName,
-                formatName,
-                null,
-                entryPaths,
-                context.Request.Bates,
-                context.Request.Delimiters.GetColumnChar(),
-                context.Request.Delimiters.GetQuoteChar());
             result.AddRange(vr.Findings);
         }
     }
@@ -109,6 +72,27 @@ public sealed class PostGenerationValidator
                 finding.Path,
                 finding.Line));
         }
+
+        // EOL validation for production set load files (ProductionSetPostValidator doesn't check this)
+        var eol = GetExpectedEol(context.Request);
+        if (eol is not null)
+        {
+            var runner = new ValidatorRunner();
+            foreach (var (formatName, filePath) in context.LoadFiles)
+            {
+                if (!File.Exists(filePath))
+                    continue;
+                var vr = runner.ValidateLoadFile(
+                    filePath,
+                    formatName,
+                    null,
+                    eol,
+                    encoding: EncodingHelper.GetEncodingOrDefault(context.Request.LoadFile.Encoding),
+                    columnDelimiter: context.Request.Delimiters.GetColumnChar(),
+                    quoteDelimiter: context.Request.Delimiters.GetQuoteChar());
+                result.AddRange(vr.Findings);
+            }
+        }
     }
 
     private static string? GetExpectedEol(FileGenerationRequest request)
@@ -122,11 +106,4 @@ public sealed class PostGenerationValidator
         };
     }
 
-    private static string GetExtensionForFormat(string formatName) => formatName switch
-    {
-        "opt" => ".opt",
-        "csv" => ".csv",
-        "concordance" => ".dat",
-        _ => ".dat",
-    };
 }
