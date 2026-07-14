@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using Zipper.Validation;
 
 namespace Zipper;
@@ -87,70 +86,52 @@ internal class StandardMode : IGenerationMode
 
         if (!string.IsNullOrEmpty(result.LoadFilePath))
         {
-            ValidateGeneratedLoadFile(result, request);
+            var context = new ValidationContext
+            {
+                ArchiveFilePath = result.ZipFilePath,
+                LoadFiles = result.LoadFilePaths.Count > 0
+                    ? result.LoadFilePaths
+                    : BuildDefaultLoadFiles(result, request),
+                Request = request,
+                SkipEolValidation = true, // ponytail: StandardMode uses Environment.NewLine regardless of --eol config
+            };
+            var validator = new PostGenerationValidator();
+            var vr = validator.Validate(context);
+            if (vr.HasErrors || vr.HasWarnings)
+            {
+                Console.Error.WriteLine(vr.GetSummary());
+                if (vr.HasErrors)
+                    throw new InvalidOperationException("Post-generation validation failed.");
+            }
         }
     }
 
-    private static void ValidateGeneratedLoadFile(FileGenerationResult result, FileGenerationRequest request)
+    private static IReadOnlyDictionary<string, string> BuildDefaultLoadFiles(FileGenerationResult result, FileGenerationRequest request)
     {
-        // ponytail: StandardMode uses Environment.NewLine regardless of --eol config,
-        // so skip EOL validation here. Only LoadFileOnlyMode/ProductionSetMode respect --eol.
-        var runner = new ValidatorRunner();
-        using var archive = ZipFile.OpenRead(result.ZipFilePath);
-        var entryPaths = archive.Entries.Select(entry => entry.FullName).ToArray();
-        var validation = new ValidationResult();
         var baseName = Path.GetFileNameWithoutExtension(result.LoadFilePath);
         var directory = Path.GetDirectoryName(result.LoadFilePath) ?? string.Empty;
-
-        foreach (var format in GetDistinctFormats(request.LoadFile.Formats))
+        var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
+        var paths = new Dictionary<string, string>();
+        foreach (var format in formats)
         {
+            var name = format switch
+            {
+                LoadFileFormat.Opt => "opt",
+                LoadFileFormat.Csv => "csv",
+                LoadFileFormat.Concordance => "concordance",
+                _ => "dat",
+            };
+            var ext = format switch
+            {
+                LoadFileFormat.Opt => ".opt",
+                LoadFileFormat.Csv => ".csv",
+                LoadFileFormat.EdrmXml => ".xml",
+                _ => ".dat",
+            };
             if (format == LoadFileFormat.EdrmXml)
                 continue;
-
-            var fileName = baseName + GetExtension(format);
-            ValidationResult current;
-            if (request.Output.IncludeLoadFile)
-            {
-                var entry = archive.GetEntry(fileName)
-                    ?? throw new InvalidOperationException($"Generated load file '{fileName}' is missing from the Archive.");
-                using var reader = new StreamReader(entry.Open(), EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), detectEncodingFromByteOrderMarks: true);
-                current = runner.ValidateLoadFile(reader, entry.FullName, GetFormatName(format), null, entryPaths, request.Bates, request.Delimiters.GetColumnChar(), request.Delimiters.GetQuoteChar());
-            }
-            else
-            {
-                var loadFilePath = Path.Combine(directory, fileName);
-                current = runner.ValidateLoadFile(loadFilePath, GetFormatName(format), null, null, entryPaths, request.Bates, EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding), request.Delimiters.GetColumnChar(), request.Delimiters.GetQuoteChar());
-            }
-
-            validation.AddRange(current.Findings);
+            paths[name] = Path.Combine(directory, baseName + ext);
         }
-
-        if (validation.HasErrors || validation.HasWarnings)
-        {
-            Console.Error.WriteLine(validation.GetSummary());
-            if (validation.HasErrors)
-                throw new InvalidOperationException("Post-generation validation failed.");
-        }
+        return paths;
     }
-
-    private static IEnumerable<LoadFileFormat> GetDistinctFormats(IReadOnlyList<LoadFileFormat> formats)
-        => (formats.Count > 0 ? formats : [LoadFileFormat.Dat])
-            .GroupBy(GetExtension)
-            .Select(group => group.Last());
-
-    private static string GetFormatName(LoadFileFormat format) => format switch
-    {
-        LoadFileFormat.Opt => "opt",
-        LoadFileFormat.Csv => "csv",
-        LoadFileFormat.Concordance => "concordance",
-        _ => "dat",
-    };
-
-    private static string GetExtension(LoadFileFormat format) => format switch
-    {
-        LoadFileFormat.Opt => ".opt",
-        LoadFileFormat.Csv => ".csv",
-        LoadFileFormat.EdrmXml => ".xml",
-        _ => ".dat",
-    };
 }

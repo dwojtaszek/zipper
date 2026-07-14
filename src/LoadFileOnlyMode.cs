@@ -62,43 +62,31 @@ internal class LoadFileOnlyMode : IGenerationMode
 
         if (!string.IsNullOrEmpty(result.LoadFilePath) && !request.Chaos.ChaosMode)
         {
-            ValidateGeneratedLoadFile(result.LoadFilePath, request);
-        }
-    }
+            var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
+            var loadFiles = new Dictionary<string, string>();
+            foreach (var format in formats)
+            {
+                var name = format switch
+                {
+                    LoadFileFormat.Opt => "opt",
+                    LoadFileFormat.Csv => "csv",
+                    LoadFileFormat.Concordance => "concordance",
+                    _ => "dat",
+                };
+                var filePath = format == LoadFileFormat.Opt
+                    ? Path.ChangeExtension(result.LoadFilePath, ".opt")
+                    : result.LoadFilePath;
+                if (File.Exists(filePath))
+                    loadFiles[name] = filePath;
+            }
 
-    private static void ValidateGeneratedLoadFile(string loadFilePath, FileGenerationRequest request)
-    {
-        if (!File.Exists(loadFilePath)) return;
-        foreach (var format in request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat })
-        {
-            var formatName = format switch
+            var context = new ValidationContext
             {
-                LoadFileFormat.Opt => "opt",
-                LoadFileFormat.Csv => "csv",
-                LoadFileFormat.Concordance => "concordance",
-                _ => "dat"
+                LoadFiles = loadFiles,
+                Request = request,
             };
-            var fileForFormat = format == LoadFileFormat.Opt
-                ? Path.ChangeExtension(loadFilePath, ".opt")
-                : loadFilePath;
-            if (!File.Exists(fileForFormat)) continue;
-            var eol = request.Delimiters.EndOfLine?.ToUpperInvariant() switch
-            {
-                "CRLF" => "\r\n",
-                "LF" => "\n",
-                "CR" => "\r",
-                _ => null
-            };
-            var runner = new ValidatorRunner();
-            var vr = runner.ValidateLoadFile(
-                fileForFormat,
-                formatName,
-                null,
-                eol,
-                bates: request.Bates,
-                encoding: EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding),
-                columnDelimiter: request.Delimiters.GetColumnChar(),
-                quoteDelimiter: request.Delimiters.GetQuoteChar());
+            var validator = new PostGenerationValidator();
+            var vr = validator.Validate(context);
             if (vr.HasErrors || vr.HasWarnings)
             {
                 Console.Error.WriteLine(vr.GetSummary());
