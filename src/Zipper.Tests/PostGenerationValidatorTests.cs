@@ -358,8 +358,13 @@ public class PostGenerationValidatorTests
             {
                 LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
                 Request = new FileGenerationRequest(),
-                SkipEolValidation = true,
             };
+
+            var validator = new PostGenerationValidator();
+            var result = validator.Validate(ctx);
+
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, f => f.Category == "ColumnCount");
         }
         finally
         {
@@ -378,7 +383,7 @@ public class PostGenerationValidatorTests
             {
                 LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
                 Request = new FileGenerationRequest(),
-                SkipEolValidation = true,
+                IsChaosMode = true,
             };
 
             var validator = new PostGenerationValidator();
@@ -425,7 +430,6 @@ public class PostGenerationValidatorTests
                 LoadFiles = loadFiles,
                 ArchiveEntryPaths = entryPaths,
                 Request = new FileGenerationRequest(),
-                SkipEolValidation = true,
             };
 
             var validator = new PostGenerationValidator();
