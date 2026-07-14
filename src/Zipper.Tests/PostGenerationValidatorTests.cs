@@ -206,32 +206,6 @@ public class PostGenerationValidatorTests
         Assert.False(result.HasErrors);
     }
 
-    // ---- FileGenerationResult.LoadFilePaths tests ----
-
-    [Fact]
-    public void FileGenerationResult_LoadFilePaths_DefaultsEmpty()
-    {
-        var result = new FileGenerationResult();
-
-        Assert.NotNull(result.LoadFilePaths);
-        Assert.Empty(result.LoadFilePaths);
-    }
-
-    [Fact]
-    public void FileGenerationResult_LoadFilePaths_PopulatesCorrectly()
-    {
-        var paths = new Dictionary<string, string>
-        {
-            ["dat"] = "/tmp/output.dat",
-            ["opt"] = "/tmp/output.opt",
-        };
-        var result = new FileGenerationResult { LoadFilePaths = paths };
-
-        Assert.Equal(2, result.LoadFilePaths.Count);
-        Assert.Equal("/tmp/output.dat", result.LoadFilePaths["dat"]);
-        Assert.Equal("/tmp/output.opt", result.LoadFilePaths["opt"]);
-    }
-
     // ---- ValidationContext tests ----
 
     [Fact]

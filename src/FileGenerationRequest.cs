@@ -51,9 +51,6 @@ public class FileGenerationResult
 
     public string LoadFilePath { get; set; } = string.Empty;
 
-    public IReadOnlyDictionary<string, string> LoadFilePaths { get; set; }
-        = new Dictionary<string, string>();
-
     public long FilesGenerated { get; set; }
 
     public TimeSpan GenerationTime { get; set; }
