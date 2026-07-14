@@ -273,6 +273,13 @@ public sealed class ValidatorRunner
     private static string NormalizeColumn(string column)
         => new string(column.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
 
+    public ValidationResult ValidateLineEndings(string loadFilePath, string expectedEol, Encoding? encoding = null)
+    {
+        var result = new ValidationResult();
+        ValidateLineEndings(loadFilePath, expectedEol, encoding ?? Encoding.UTF8, result);
+        return result;
+    }
+
     private static void ValidateLineEndings(string loadFilePath, string expectedEol, Encoding encoding, ValidationResult result)
     {
         using var reader = new StreamReader(loadFilePath, encoding, detectEncodingFromByteOrderMarks: true);

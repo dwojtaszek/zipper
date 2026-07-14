@@ -360,6 +360,12 @@ public class PostGenerationValidatorTests
                 Request = new FileGenerationRequest(),
                 SkipEolValidation = true,
             };
+
+            var validator = new PostGenerationValidator();
+            var result = validator.Validate(ctx);
+
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, f => f.Category == "ColumnCount");
         }
         finally
         {

@@ -27,10 +27,7 @@ public sealed class PostGenerationValidator
             entryPaths = archive.Entries.Select(e => e.FullName).ToArray();
         }
 
-        if (entryPaths is not null)
-        {
-            ValidateDiskFiles(context, result, entryPaths);
-        }
+        ValidateDiskFiles(context, result, entryPaths);
 
         return result;
     }
@@ -78,18 +75,12 @@ public sealed class PostGenerationValidator
         if (eol is not null)
         {
             var runner = new ValidatorRunner();
-            foreach (var (formatName, filePath) in context.LoadFiles)
+            var encoding = EncodingHelper.GetEncodingOrDefault(context.Request.LoadFile.Encoding);
+            foreach (var (_, filePath) in context.LoadFiles)
             {
                 if (!File.Exists(filePath))
                     continue;
-                var vr = runner.ValidateLoadFile(
-                    filePath,
-                    formatName,
-                    null,
-                    eol,
-                    encoding: EncodingHelper.GetEncodingOrDefault(context.Request.LoadFile.Encoding),
-                    columnDelimiter: context.Request.Delimiters.GetColumnChar(),
-                    quoteDelimiter: context.Request.Delimiters.GetQuoteChar());
+                var vr = runner.ValidateLineEndings(filePath, eol, encoding);
                 result.AddRange(vr.Findings);
             }
         }
