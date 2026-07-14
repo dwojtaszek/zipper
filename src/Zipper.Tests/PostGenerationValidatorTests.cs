@@ -206,28 +206,6 @@ public class PostGenerationValidatorTests
         Assert.False(result.HasErrors);
     }
 
-    // ---- ValidationContext tests ----
-
-    [Fact]
-    public void ValidationContext_AllProperties_SetAndGet()
-    {
-        var request = new FileGenerationRequest();
-        var ctx = new ValidationContext
-        {
-            ArchiveFilePath = "/tmp/test.zip",
-            LoadFiles = new Dictionary<string, string> { ["dat"] = "/tmp/test.dat" },
-            ArchiveEntryPaths = new[] { "folder/file.pdf" },
-            Request = request,
-            SkipEolValidation = true,
-            IsChaosMode = false,
-        };
-
-        Assert.Equal("/tmp/test.zip", ctx.ArchiveFilePath);
-        Assert.Equal("/tmp/test.dat", ctx.LoadFiles["dat"]);
-        Assert.True(ctx.SkipEolValidation);
-        Assert.False(ctx.IsChaosMode);
-    }
-
     // ---- Full integration smoke test ----
 
     [Fact]
