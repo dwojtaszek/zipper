@@ -88,7 +88,7 @@ internal class StandardMode : IGenerationMode
         {
             var context = new ValidationContext
             {
-                ArchiveFilePath = request.Output.IncludeLoadFile ? result.ZipFilePath : null,
+                ArchiveFilePath = result.ZipFilePath,
                 LoadFiles = result.LoadFilePaths.Count > 0
                     ? result.LoadFilePaths
                     : BuildDefaultLoadFiles(result, request),
