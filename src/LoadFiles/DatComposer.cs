@@ -78,6 +78,11 @@ internal sealed class DatComposer : ILoadFileComposer
         if (this.mode == WriterMode.ProductionSet)
         {
             var headers = new List<string> { "DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "CUSTODIAN", "DATE_CREATED", "FILE_SIZE", "FILE_TYPE" };
+            if (this.request.Production.RedactedProduction)
+            {
+                headers.AddRange(new[] { "REDACTED_IMAGE_PATH", "REDACTED_TEXT_PATH", "NATIVE_WITHHELD", "REDACTION_REASON" });
+            }
+
             if (this.request.Metadata.WithFamilies)
             {
                 headers.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
@@ -359,6 +364,13 @@ internal sealed class DatComposer : ILoadFileComposer
                 var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\');
                 var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace('/', '\\');
 
+                var childRedactedImageRelPath = this.request.Production.RedactedProduction
+                    ? Path.Combine("REDACTED", "IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace('/', '\\')
+                    : null;
+                var childRedactedTextRelPath = this.request.Production.RedactedProduction && this.request.Output.WithText
+                    ? Path.Combine("REDACTED", "TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\')
+                    : null;
+
                 yield return this.MakeRecord(
                     childId,
                     this.ProductionRowValues(fileData, new RowCtx
@@ -372,6 +384,10 @@ internal sealed class DatComposer : ILoadFileComposer
                         BegAttach = parentId,
                         EndAttach = childId,
                         ParentDocId = parentId,
+                        RedactedImageRelPathOverride = childRedactedImageRelPath,
+                        RedactedTextRelPathOverride = childRedactedTextRelPath,
+                        NativeWithheldOverride = "NO",
+                        RedactionReasonOverride = fileData.RedactionReason,
                     }));
             }
         }
@@ -385,8 +401,11 @@ internal sealed class DatComposer : ILoadFileComposer
             .Replace(Path.GetExtension(wi.FilePathInZip), ".tif", StringComparison.Ordinal);
         // FilePathInZip always uses forward slashes (ZIP spec); replace '/' directly so the
         // backslash normalization also works on Windows (where DirectorySeparatorChar is '\').
-        var nativePath = ctx.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
-        var textPath = ctx.TextPathOverride ?? (nativePath.StartsWith("NATIVES\\", StringComparison.OrdinalIgnoreCase) ? "TEXT\\" + nativePath.Substring(8) : nativePath).Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
+        var nativePath = ctx.NativePathOverride ?? fileData.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
+        // Derive text path from the original FilePathInZip (not the overridden nativePath) so
+        // replace-with-placeholder policy doesn't produce wrong text paths in the DAT.
+        var originalNativePath = wi.FilePathInZip.Replace('/', '\\');
+        var textPath = ctx.TextPathOverride ?? (originalNativePath.StartsWith("NATIVES\\", StringComparison.OrdinalIgnoreCase) ? "TEXT\\" + originalNativePath.Substring(8) : originalNativePath).Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
         var imagesPath = imagePath.Replace('/', '\\');
 
 #pragma warning disable S2245
@@ -413,6 +432,20 @@ internal sealed class DatComposer : ILoadFileComposer
             fileSize,
             fileType,
         };
+
+        if (this.request.Production.RedactedProduction)
+        {
+            var redactedImagePath = (ctx.RedactedImageRelPathOverride ?? fileData.RedactedImageRelPath)?.Replace('/', '\\') ?? string.Empty;
+            // Only populate REDACTED_TEXT_PATH when text output is enabled; otherwise the file
+            // on disk is not written and post-generation validation would flag the dangling reference.
+            var redactedTextPath = (this.request.Output.WithText ? (ctx.RedactedTextRelPathOverride ?? fileData.RedactedTextRelPath) : null)?.Replace('/', '\\') ?? string.Empty;
+            var nativeWithheld = ctx.NativeWithheldOverride ?? (fileData.NativePathOverride is not null ? "YES" : "NO");
+            var redactionReason = ctx.RedactionReasonOverride ?? fileData.RedactionReason ?? string.Empty;
+            v.Add(redactedImagePath);
+            v.Add(redactedTextPath);
+            v.Add(nativeWithheld);
+            v.Add(redactionReason);
+        }
 
         if (this.request.Metadata.WithFamilies)
         {
@@ -635,5 +668,13 @@ internal sealed class DatComposer : ILoadFileComposer
         public string EndAttach { get; init; } = string.Empty;
 
         public string ParentDocId { get; init; } = string.Empty;
+
+        public string? RedactedImageRelPathOverride { get; init; }
+
+        public string? RedactedTextRelPathOverride { get; init; }
+
+        public string? NativeWithheldOverride { get; init; }
+
+        public string? RedactionReasonOverride { get; init; }
     }
 }

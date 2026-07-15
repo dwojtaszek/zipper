@@ -122,6 +122,11 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | **Production Set** | A structured directory hierarchy (`--production-set`) containing **Native Files** organized into `DATA`, `IMAGES`, `NATIVES`, `TEXT` subdirectories with accompanying **Load Files**. | Production, deliverable, structured output |
 | **Production Manifest** | The `_manifest.json` file at the root of a **Production Set**, documenting **Volume** structure, document counts, and **Bates Number** ranges. | Manifest, metadata file |
 | **Production Zip** | An **Archive** containing the entire **Production Set** directory structure, created when `--production-zip` is specified with `--production-set`. | Production archive, wrapped delivery |
+| **Redacted Production** | A Production Set mode (`--redacted-production`) that generates redacted image/text placeholders under `REDACTED/IMAGES/` and `REDACTED/TEXT/`, and optionally withholds Native Files. | Redacted mode, redaction mode |
+| **Redacted Image** | A placeholder TIFF file in `REDACTED/IMAGES/` representing a redacted version of a **Native File**'s visual content. | Redacted visual, redacted page |
+| **Withheld Native File** | A **Native File** whose path in the **Load File** is omitted, emptied, or replaced with a placeholder path according to `--withheld-native-policy`. | Withheld native, suppressed native |
+| **Withheld Native Policy** | The strategy for handling withheld **Native File** paths: `keep-native` (retain original path), `omit-native-path` (empty the path column), or `replace-with-placeholder` (synthetic path). | Native policy, withholding policy |
+| **Redaction Reason** | A Metadata value in the `REDACTION_REASON` column indicating why a **Native File** was redacted (e.g., Privileged, Attorney Work Product). Cycled deterministically by **Seed**. | Reason code, redaction justification |
 
 ---
 
@@ -161,6 +166,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 - The **Chaos Engine** injects **Anomalies** into **Load File** records in **Loadfile-Only Mode**
 - An **Audit File** (`_properties.json`) records all **Anomalies** injected by the **Chaos Engine**
 - A **Production Manifest** (`_manifest.json`) documents the **Volume** structure and **Bates Number** ranges of a **Production Set**
+- **Redacted Production** adds `REDACTED/IMAGES/` and `REDACTED/TEXT/` subdirectories alongside the standard `DATA`, `IMAGES`, `NATIVES`, `TEXT` tree
 
 ## Example Dialogue
 

@@ -202,6 +202,8 @@ public static class RequestBuilder
                     "restart" => RollingBatesMode.Restart,
                     _ => RollingBatesMode.Continuous,
                 },
+                RedactedProduction = parsed.RedactedProduction,
+                WithheldNativePolicy = parsed.WithheldNativePolicy?.ToLowerInvariant() ?? "keep-native",
             },
             LoadfileOnly = parsed.LoadfileOnly,
             Hash = hashConfig,

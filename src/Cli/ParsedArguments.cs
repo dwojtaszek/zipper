@@ -117,4 +117,8 @@ public class ParsedArguments
     public string? ComparisonMode { get; set; }
 
     public string? ComparisonOutput { get; set; }
+
+    public bool RedactedProduction { get; set; }
+
+    public string? WithheldNativePolicy { get; set; }
 }

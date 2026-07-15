@@ -512,4 +512,12 @@ internal record FileData
     public string Hash { get; init; } = string.Empty;
 
     public IReadOnlyDictionary<Config.HashAlgorithm, string>? Hashes { get; init; }
+
+    public string? RedactedImageRelPath { get; init; }
+
+    public string? RedactedTextRelPath { get; init; }
+
+    public string? NativePathOverride { get; init; }
+
+    public string? RedactionReason { get; init; }
 }

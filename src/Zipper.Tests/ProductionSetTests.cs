@@ -900,6 +900,197 @@ public class ProductionSetTests : IDisposable
         Assert.Equal("PROD00000001", doc2.RootElement.GetProperty("batesNumberStart").GetString());
         Assert.Equal("PROD00000005", doc2.RootElement.GetProperty("batesNumberEnd").GetString());
     }
+
+    // === Redacted Production Tests ===
+
+    [Fact]
+    public void RedactedProduction_RequiresProductionSet()
+    {
+        var args = new[] { "--redacted-production", "--count", "10", "--output-path", this.testOutputPath, "--bates-prefix", "TEST" };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void RedactedProduction_ConflictsWithLoadfileOnly()
+    {
+        var args = new[] { "--redacted-production", "--production-set", "--loadfile-only", "--count", "10", "--output-path", this.testOutputPath, "--bates-prefix", "TEST" };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void RedactedProduction_WithInvalidPolicy_FailsValidation()
+    {
+        var args = new[] { "--redacted-production", "--production-set", "--withheld-native-policy", "invalid", "--count", "10", "--output-path", this.testOutputPath, "--bates-prefix", "TEST" };
+        var request = Cli.Pipeline.Build(args);
+        Assert.Null(request);
+    }
+
+    [Fact]
+    public void RedactedProduction_ValidArgs_ParsesCorrectly()
+    {
+        var args = new[]
+        {
+            "--production-set", "--redacted-production", "--count", "10", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PROD", "--withheld-native-policy", "omit-native-path",
+        };
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.True(request.Production.RedactedProduction);
+        Assert.Equal("omit-native-path", request.Production.WithheldNativePolicy);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_CreatesRedactedDirectories()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        Assert.True(Directory.Exists(Path.Combine(result.ProductionPath, "REDACTED")));
+        Assert.True(Directory.Exists(Path.Combine(result.ProductionPath, "REDACTED", "IMAGES")));
+        Assert.True(Directory.Exists(Path.Combine(result.ProductionPath, "REDACTED", "TEXT")));
+    }
+
+    [Fact]
+    public async Task RedactedProduction_CreatesRedactedImageFiles()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var redactedImages = Directory.GetFiles(Path.Combine(result.ProductionPath, "REDACTED", "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.Equal(3, redactedImages.Length);
+
+        foreach (var file in redactedImages)
+        {
+            Assert.True(new FileInfo(file).Length > 0);
+        }
+    }
+
+    [Fact]
+    public async Task RedactedProduction_DatHeader_IncludesRedactedColumns()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var headerLine = datContent.Split('\n')[0];
+        Assert.Contains("REDACTED_IMAGE_PATH", headerLine, StringComparison.Ordinal);
+        Assert.Contains("REDACTED_TEXT_PATH", headerLine, StringComparison.Ordinal);
+        Assert.Contains("NATIVE_WITHHELD", headerLine, StringComparison.Ordinal);
+        Assert.Contains("REDACTION_REASON", headerLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_WithWithheldPolicy_OmitsNativePath()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "omit-native-path" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var lines = datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        // Skip header line
+        foreach (var line in lines.Skip(1))
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(line.TrimEnd('\r'), '\x14', '\xfe');
+            // NATIVE_PATH is column index 3
+            Assert.Equal(string.Empty, fields[3]);
+            // NATIVE_WITHHELD is column index 12
+            Assert.Equal("YES", fields[12]);
+        }
+    }
+
+    [Fact]
+    public async Task RedactedProduction_WithKeepNative_KeepsNativePath()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "keep-native" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var lines = datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines.Skip(1))
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(line.TrimEnd('\r'), '\x14', '\xfe');
+            // NATIVE_PATH should not be empty
+            Assert.False(string.IsNullOrEmpty(fields[3]));
+            // NATIVE_WITHHELD is column index 12
+            Assert.Equal("NO", fields[12]);
+        }
+    }
+
+    [Fact]
+    public async Task RedactedProduction_WithWithText_CreatesRedactedTextFiles()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        request.Output = request.Output with { WithText = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var redactedTexts = Directory.GetFiles(Path.Combine(result.ProductionPath, "REDACTED", "TEXT"), "*.txt", SearchOption.AllDirectories);
+        Assert.Equal(3, redactedTexts.Length);
+
+        foreach (var file in redactedTexts)
+        {
+            var content = await File.ReadAllTextAsync(file);
+            Assert.Contains("Redacted text", content, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task RedactedProduction_Manifest_IncludesRedactionStats()
+    {
+        var request = this.CreateTestRequest(count: 5);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "omit-native-path" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var manifestPath = Path.Combine(result.ProductionPath, "_manifest.json");
+        var json = await File.ReadAllTextAsync(manifestPath);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal(5, doc.RootElement.GetProperty("redactedFileCount").GetInt64());
+        Assert.Equal(5, doc.RootElement.GetProperty("withheldNativeFileCount").GetInt64());
+        Assert.Equal("REDACTED", doc.RootElement.GetProperty("directories").GetProperty("redacted").GetString());
+
+        var reasons = doc.RootElement.GetProperty("redactionReasons");
+        Assert.True(reasons.EnumerateObject().Any());
+    }
+
+    [Fact]
+    public async Task RedactedProduction_WithoutRedactedMode_NoRedactedColumns()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var headerLine = datContent.Split('\n')[0];
+        Assert.DoesNotContain("REDACTED_IMAGE_PATH", headerLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("NATIVE_WITHHELD", headerLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_WithReplacePlaceholder_ShowsPlaceholderPath()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "replace-with-placeholder" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var lines = datContent.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines.Skip(1))
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(line.TrimEnd('\r'), '\x14', '\xfe');
+            // NATIVE_PATH should contain PLACEHOLDER
+            Assert.Contains("PLACEHOLDER", fields[3], StringComparison.Ordinal);
+            // NATIVE_WITHHELD is column index 12
+            Assert.Equal("YES", fields[12]);
+        }
+    }
 }
 
 

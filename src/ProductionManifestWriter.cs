@@ -77,6 +77,7 @@ internal static class ProductionManifestWriter
                 Natives = "NATIVES",
                 Text = "TEXT",
                 Images = "IMAGES",
+                Redacted = request.Production.RedactedProduction ? "REDACTED" : null,
             },
             LoadFiles = new ProductionLoadFiles
             {
@@ -96,6 +97,32 @@ internal static class ProductionManifestWriter
             PriorManifests = priorManifests is { Count: > 0 } ? priorManifests : null,
             SupplementalValidation = supplementalValidation,
         };
+
+        // Redaction stats
+        if (request.Production.RedactedProduction && fileDataList.Count > 0)
+        {
+            long redactedCount = fileDataList.Count(f => f.RedactedImageRelPath is not null);
+            long withheldCount = fileDataList.Count(f => f.NativePathOverride is not null);
+            var reasonCounts = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in fileDataList)
+            {
+                if (f.RedactionReason is not null)
+                {
+                    // Each parent with an attachment has one redacted child (in redacted mode)
+                    long increment = f.Attachment.HasValue ? 2 : 1;
+                    reasonCounts.TryGetValue(f.RedactionReason, out var count);
+                    reasonCounts[f.RedactionReason] = count + increment;
+                }
+            }
+
+            // Children are also redacted: one child per parent with attachment
+            int childCount = fileDataList.Count(f => f.Attachment.HasValue);
+            redactedCount += childCount;
+
+            manifest.RedactedFileCount = redactedCount;
+            manifest.WithheldNativeFileCount = withheldCount > 0 ? withheldCount : null;
+            manifest.RedactionReasons = reasonCounts.Count > 0 ? reasonCounts : null;
+        }
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
         await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
@@ -180,6 +207,15 @@ internal class ProductionManifest
 
     [JsonPropertyName("supplementalValidation")]
     public Validation.SupplementalValidationReport? SupplementalValidation { get; set; }
+
+    [JsonPropertyName("redactedFileCount")]
+    public long? RedactedFileCount { get; set; }
+
+    [JsonPropertyName("withheldNativeFileCount")]
+    public long? WithheldNativeFileCount { get; set; }
+
+    [JsonPropertyName("redactionReasons")]
+    public System.Collections.Generic.IReadOnlyDictionary<string, long>? RedactionReasons { get; set; }
 }
 
 internal class BatesRange
@@ -210,6 +246,9 @@ internal class ProductionDirectories
 
     [JsonPropertyName("images")]
     public string Images { get; set; } = string.Empty;
+
+    [JsonPropertyName("redacted")]
+    public string? Redacted { get; set; }
 }
 
 internal class ProductionLoadFiles

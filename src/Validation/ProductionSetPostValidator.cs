@@ -82,6 +82,7 @@ internal sealed class ProductionSetPostValidator
         {
             var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
             var datLines = File.ReadLines(datPath, encoding);
+            var skipNativePathValidation = string.Equals(request.Production.WithheldNativePolicy, "replace-with-placeholder", StringComparison.OrdinalIgnoreCase);
 
             using (var enumerator = datLines.GetEnumerator())
             {
@@ -99,6 +100,9 @@ internal sealed class ProductionSetPostValidator
                     int textIdx = headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase));
                     int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase));
                     int parentIdIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase));
+                    int redactedImageIdx = headers.FindIndex(h => string.Equals(h, "REDACTED_IMAGE_PATH", StringComparison.OrdinalIgnoreCase));
+                    int redactedTextIdx = headers.FindIndex(h => string.Equals(h, "REDACTED_TEXT_PATH", StringComparison.OrdinalIgnoreCase));
+                    int nativeWithheldIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase));
 
                     int i = 0;
                     while (enumerator.MoveNext())
@@ -189,7 +193,7 @@ internal sealed class ProductionSetPostValidator
                         }
 
                         // Native path existence
-                        if (nativeIdx >= 0 && nativeIdx < fields.Count)
+                        if (nativeIdx >= 0 && nativeIdx < fields.Count && !skipNativePathValidation)
                         {
                             var nativePath = fields[nativeIdx];
                             if (!string.IsNullOrEmpty(nativePath))
@@ -259,6 +263,67 @@ internal sealed class ProductionSetPostValidator
                                         });
                                     }
                                 }
+                            }
+                        }
+
+                        // Redacted image path existence
+                        if (redactedImageIdx >= 0 && redactedImageIdx < fields.Count)
+                        {
+                            var redactedImagePath = fields[redactedImageIdx];
+                            if (!string.IsNullOrEmpty(redactedImagePath))
+                            {
+                                var fullRedactedImagePath = Path.Combine(productionPath, redactedImagePath.Replace('\\', '/'));
+                                if (!File.Exists(fullRedactedImagePath))
+                                {
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "PathExistence",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Referenced redacted image file '{redactedImagePath}' does not exist."
+                                    });
+                                }
+                            }
+                        }
+
+                        // Redacted text path existence
+                        if (redactedTextIdx >= 0 && redactedTextIdx < fields.Count)
+                        {
+                            var redactedTextPath = fields[redactedTextIdx];
+                            if (!string.IsNullOrEmpty(redactedTextPath))
+                            {
+                                var fullRedactedTextPath = Path.Combine(productionPath, redactedTextPath.Replace('\\', '/'));
+                                if (!File.Exists(fullRedactedTextPath))
+                                {
+                                    findings.Add(new ValidationReportFinding
+                                    {
+                                        Code = "PathExistence",
+                                        Severity = "error",
+                                        Path = datRelPath,
+                                        Line = i + 1,
+                                        Message = $"Referenced redacted text file '{redactedTextPath}' does not exist."
+                                    });
+                                }
+                            }
+                        }
+
+                        // NATIVE_WITHHELD value validation
+                        if (nativeWithheldIdx >= 0 && nativeWithheldIdx < fields.Count)
+                        {
+                            var withheldVal = fields[nativeWithheldIdx];
+                            if (string.IsNullOrEmpty(withheldVal) ||
+                                (!string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                findings.Add(new ValidationReportFinding
+                                {
+                                    Code = "InvalidValue",
+                                    Severity = "error",
+                                    Path = datRelPath,
+                                    Line = i + 1,
+                                    Message = $"NATIVE_WITHHELD must be 'YES' or 'NO', got '{withheldVal}'"
+                                });
                             }
                         }
                     }

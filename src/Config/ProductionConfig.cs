@@ -22,6 +22,10 @@ public record ProductionConfig
     public int RollingCount { get; init; } = 1;
 
     public RollingBatesMode RollingBatesMode { get; init; } = RollingBatesMode.Continuous;
+
+    public bool RedactedProduction { get; init; }
+
+    public string WithheldNativePolicy { get; init; } = "keep-native";
 }
 
 

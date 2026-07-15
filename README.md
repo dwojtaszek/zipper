@@ -19,6 +19,7 @@ Zipper is a .NET command-line tool for generating large Archives containing Nati
 - Real-time performance monitoring with progress tracking, throughput metrics, and ETA calculations
 - **Loadfile-Only mode**: Generate standalone Load Files (DAT/OPT) without Archives or Native Files
 - **Chaos Engine**: Inject deliberate structural anomalies into Load Files for ingestion resilience testing
+- **Redacted Production Mode**: Generate redacted image/text placeholders with configurable Native File withholding
 
 ## Requirements
 
@@ -44,7 +45,7 @@ After building the project, you can run the executable directly. The examples be
 ### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--redacted-production] [--withheld-native-policy <keep-native|omit-native-path|replace-with-placeholder>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
 ```
 
 ### Arguments
@@ -237,6 +238,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--rolling-bates-mode` | continuous | `continuous` or `restart` | Bates numbering mode across rolling production sets |
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
+| `--redacted-production` | false | flag | Enable redacted Production mode with REDACTED/IMAGES and REDACTED/TEXT directories. Text placeholders require `--with-text`. |
+| `--withheld-native-policy` | keep-native | `keep-native`, `omit-native-path`, `replace-with-placeholder` | How to handle withheld Native File paths in redacted mode |
 | `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
 | `--prior-manifest` | none | paths | Comma-separated list of paths to prior production manifest files |
 | `--supplemental-gap-policy` | reject | reject, allow | Gap policy for supplemental mode: reject or allow |
@@ -273,6 +276,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
+| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
+| `--withheld-native-policy` | Requires `--redacted-production` |
 | `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
 | `--production-zip`, `--volume-size` | Require `--production-set` |
 | `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
