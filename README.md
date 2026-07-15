@@ -45,7 +45,7 @@ After building the project, you can run the executable directly. The examples be
 ### Basic Usage
 
 ```bash
-zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--redacted-production] [--withheld-native-policy <keep-native|omit-native-path|replace-with-placeholder>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
+zipper --type <filetype> --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-collection-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--redacted-production] [--withheld-native-policy <keep-native|omit-native-path|replace-with-placeholder>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
 ```
 
 ### Arguments
@@ -63,6 +63,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
   - `gaussian`: Bell curve distribution with most files in middle folders
   - `exponential`: Exponential decay with most files in first folders
 - `--with-metadata`: Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`
+- `--with-collection-metadata`: Generates a Load File with collection metadata columns (Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status). Supported in Standard, Loadfile-Only, and Production Set modes
 - `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the Load File. Supported for all file types including `eml`
 - `--attachment-rate <number>`: When type is `eml`, specifies the percentage of Emails (0-100) that will receive a placeholder Native File (jpg/tiff/pdf from the internal pool) as a random Attachment. Defaults to 0
 - `--target-zip-size <size>`: Specifies a target size for the final Archive (e.g., 500MB, 10GB). This feature works by padding each of the `--count` Native Files with uncompressible data to meet the target size. This significantly reduces the overall Compression Ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
@@ -199,6 +200,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--encoding` | UTF-8 | UTF-8, UTF-16, ANSI | Load File encoding |
 | `--distribution` | proportional | proportional, gaussian, exponential | File distribution |
 | `--with-metadata` | false | flag | Include metadata columns |
+| `--with-collection-metadata` | false | flag | Include collection metadata columns (Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status) |
 | `--with-text` | false | flag | Generate text files |
 | `--attachment-rate` | 0 | 0-100 | Email Attachment % |
 | `--target-zip-size` | none | KB/MB/GB (e.g., 500MB) | Target ZIP size |
@@ -257,6 +259,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | Interaction | Behavior |
 |-------------|----------|
 | `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
+| `--column-profile` + `--with-collection-metadata` | Collection metadata columns are merged into the profile |
 | `--target-zip-size` | Requires `--count` to be specified |
 | `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) |
 | `--with-families` | Only meaningful when `--type eml` and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |

@@ -24,6 +24,7 @@ internal static class CliOptions
         "--version",
         "--with-families",
         "--with-metadata",
+        "--with-collection-metadata",
         "--with-text",
     };
 }

@@ -34,4 +34,17 @@ internal static class SyntheticRowValues
         var attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty;
         return (to, from, subject, sentDate, attachment);
     }
+
+    internal static (string DataSource, string CollectionDate, string DeNisted, string DedupeGroupId, string ProcessingStatus) CollectionMetadata(
+        FileWorkItem workItem,
+        Random random,
+        DateTime now)
+    {
+        var dataSource = CollectionMetadataValues.DataSources[random.Next(CollectionMetadataValues.DataSources.Length)];
+        var collectionDate = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var deNisted = random.Next(100) < 85 ? "YES" : "NO";
+        var dedupeGroupId = $"GRP{random.Next(1, 1000):D6}";
+        var processingStatus = CollectionMetadataValues.ProcessingStatuses[random.Next(CollectionMetadataValues.ProcessingStatuses.Length)];
+        return (dataSource, collectionDate, deNisted, dedupeGroupId, processingStatus);
+    }
 }

@@ -33,6 +33,10 @@ public static class RequestBuilder
             {
                 Console.Error.WriteLine($"Warning: Failed to load column profile '{parsed.ColumnProfile}'.");
             }
+            else if (parsed.WithCollectionMetadata)
+            {
+                profile = BuiltInProfiles.MergeWithCollectionMetadata(profile);
+            }
         }
 
         List<LoadFileFormat>? multiFormats = null;
@@ -147,6 +151,7 @@ public static class RequestBuilder
                 EmptyPercentageOverride = parsed.EmptyPercentage,
                 CustodianCountOverride = parsed.CustodianCount,
                 WithFamilies = parsed.WithFamilies,
+                WithCollectionMetadata = parsed.WithCollectionMetadata,
             },
             LoadFile = new LoadFileConfig
             {

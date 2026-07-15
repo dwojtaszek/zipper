@@ -21,6 +21,8 @@ public class ParsedArguments
 
     public bool WithMetadata { get; set; }
 
+    public bool WithCollectionMetadata { get; set; }
+
     public bool WithText { get; set; }
 
     public int AttachmentRate { get; set; }
