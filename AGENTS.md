@@ -142,6 +142,20 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
     - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
     - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
 12. Merge after all checks pass, `tests/wait-for-reviews.sh` exits 0, and reviews are addressed. Branch protection on `main` enforces this server-side: GitHub refuses the merge while any review thread is unresolved (see [CI.md](CI.md#robot-reviews)).
+13. Post-merge: `git checkout main && git pull`, delete local/remote feature branch, close issue with comment referencing PR number.
+
+**Feature implementation ladder (order matters):**
+1. `src/Cli/ParsedArguments.cs` — add property
+2. `src/Cli/CliParser.cs` — add case in switch
+3. `src/Cli/CliOptions.cs` — add to appropriate list (ParameterlessFlags, SingleValueArgs, etc.)
+4. `src/Config/MetadataConfig.cs` — add property + `ShouldInclude*Columns()` method
+5. `src/Cli/RequestBuilder.cs` — wire parsed arg to config
+6. `src/Profiles/BuiltInProfiles.cs` — add legacy profile if needed
+7. `src/LoadFiles/DatComposer.cs` — `BuildHeaderColumns()` then `StandardRowValues()`
+8. `src/LoadFiles/StandardRowComposer.cs` — `BuildOrderedKeys()` then `Resolve()` + call `SyntheticRowValues`
+9. `src/LoadFiles/SyntheticRowValues.cs` — add value-generation method
+10. `src/Zipper.Tests/DatComposingWriterTests.cs` — add tests
+11. `README.md` — usage line, Arguments Quick Reference, Argument Interactions
 
 **Test location:** `src/Zipper.Tests/`.
 
