@@ -238,7 +238,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--rolling-bates-mode` | continuous | `continuous` or `restart` | Bates numbering mode across rolling production sets |
 | `--production-zip` | false | flag | Wrap production set output in an Archive |
 | `--volume-size` | 5000 | number | Max files per volume subfolder |
-| `--redacted-production` | false | flag | Enable redacted Production mode with REDACTED/IMAGES and REDACTED/TEXT directories |
+| `--redacted-production` | false | flag | Enable redacted Production mode with REDACTED/IMAGES and REDACTED/TEXT directories. Text placeholders require `--with-text`. |
 | `--withheld-native-policy` | keep-native | `keep-native`, `omit-native-path`, `replace-with-placeholder` | How to handle withheld Native File paths in redacted mode |
 | `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
 | `--prior-manifest` | none | paths | Comma-separated list of paths to prior production manifest files |
@@ -276,7 +276,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
-| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only` |
+| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
 | `--withheld-native-policy` | Requires `--redacted-production` |
 | `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
 | `--production-zip`, `--volume-size` | Require `--production-set` |

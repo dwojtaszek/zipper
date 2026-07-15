@@ -203,7 +203,7 @@ public static class RequestBuilder
                     _ => RollingBatesMode.Continuous,
                 },
                 RedactedProduction = parsed.RedactedProduction,
-                WithheldNativePolicy = parsed.WithheldNativePolicy ?? "keep-native",
+                WithheldNativePolicy = parsed.WithheldNativePolicy?.ToLowerInvariant() ?? "keep-native",
             },
             LoadfileOnly = parsed.LoadfileOnly,
             Hash = hashConfig,

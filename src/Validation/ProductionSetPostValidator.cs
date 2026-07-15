@@ -312,9 +312,9 @@ internal sealed class ProductionSetPostValidator
                         if (nativeWithheldIdx >= 0 && nativeWithheldIdx < fields.Count)
                         {
                             var withheldVal = fields[nativeWithheldIdx];
-                            if (!string.IsNullOrEmpty(withheldVal) &&
-                                !string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
-                                !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase))
+                            if (string.IsNullOrEmpty(withheldVal) ||
+                                (!string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase)))
                             {
                                 findings.Add(new ValidationReportFinding
                                 {

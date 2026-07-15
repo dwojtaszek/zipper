@@ -384,10 +384,11 @@ internal sealed class DatComposer : ILoadFileComposer
                         BegAttach = parentId,
                         EndAttach = childId,
                         ParentDocId = parentId,
+                        RedactedImageRelPathOverride = childRedactedImageRelPath,
+                        RedactedTextRelPathOverride = childRedactedTextRelPath,
+                        NativeWithheldOverride = "NO",
+                        RedactionReasonOverride = fileData.RedactionReason,
                     }));
-
-                // Override redacted fields on the child record after ProductionRowValues
-                // ponytail: child redacted paths set via FileData fields on parent; child records inherit via RowCtx
             }
         }
     }
@@ -434,12 +435,12 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.request.Production.RedactedProduction)
         {
-            var redactedImagePath = fileData.RedactedImageRelPath?.Replace('/', '\\') ?? string.Empty;
+            var redactedImagePath = (ctx.RedactedImageRelPathOverride ?? fileData.RedactedImageRelPath)?.Replace('/', '\\') ?? string.Empty;
             // Only populate REDACTED_TEXT_PATH when text output is enabled; otherwise the file
             // on disk is not written and post-generation validation would flag the dangling reference.
-            var redactedTextPath = (this.request.Output.WithText ? fileData.RedactedTextRelPath : null)?.Replace('/', '\\') ?? string.Empty;
-            var nativeWithheld = fileData.NativePathOverride is not null ? "YES" : "NO";
-            var redactionReason = fileData.RedactionReason ?? string.Empty;
+            var redactedTextPath = (this.request.Output.WithText ? (ctx.RedactedTextRelPathOverride ?? fileData.RedactedTextRelPath) : null)?.Replace('/', '\\') ?? string.Empty;
+            var nativeWithheld = ctx.NativeWithheldOverride ?? (fileData.NativePathOverride is not null ? "YES" : "NO");
+            var redactionReason = ctx.RedactionReasonOverride ?? fileData.RedactionReason ?? string.Empty;
             v.Add(redactedImagePath);
             v.Add(redactedTextPath);
             v.Add(nativeWithheld);
@@ -667,5 +668,13 @@ internal sealed class DatComposer : ILoadFileComposer
         public string EndAttach { get; init; } = string.Empty;
 
         public string ParentDocId { get; init; } = string.Empty;
+
+        public string? RedactedImageRelPathOverride { get; init; }
+
+        public string? RedactedTextRelPathOverride { get; init; }
+
+        public string? NativeWithheldOverride { get; init; }
+
+        public string? RedactionReasonOverride { get; init; }
     }
 }

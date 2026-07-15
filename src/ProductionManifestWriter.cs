@@ -108,10 +108,16 @@ internal static class ProductionManifestWriter
             {
                 if (f.RedactionReason is not null)
                 {
+                    // Each parent with an attachment has one redacted child (in redacted mode)
+                    long increment = f.Attachment.HasValue ? 2 : 1;
                     reasonCounts.TryGetValue(f.RedactionReason, out var count);
-                    reasonCounts[f.RedactionReason] = count + 1;
+                    reasonCounts[f.RedactionReason] = count + increment;
                 }
             }
+
+            // Children are also redacted: one child per parent with attachment
+            int childCount = fileDataList.Count(f => f.Attachment.HasValue);
+            redactedCount += childCount;
 
             manifest.RedactedFileCount = redactedCount;
             manifest.WithheldNativeFileCount = withheldCount > 0 ? withheldCount : null;
