@@ -18,7 +18,11 @@ public record MetadataConfig
 
     public bool WithFamilies { get; init; }
 
+    public bool WithCollectionMetadata { get; init; }
+
     internal bool ShouldIncludeEmlColumns(OutputConfig output) => output.IsEml;
 
     internal bool ShouldIncludeMetadataColumns(OutputConfig output) => this.WithMetadata || output.IsEml;
+
+    internal bool ShouldIncludeCollectionMetadataColumns() => this.WithCollectionMetadata;
 }

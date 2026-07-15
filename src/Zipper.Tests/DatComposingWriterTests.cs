@@ -116,6 +116,31 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_WithCollectionMetadata_IncludesCollectionMetadataColumns()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true };
+        var output = await WriteAndCaptureOutput(request, []);
+        Assert.Contains("Data Source", output, StringComparison.Ordinal);
+        Assert.Contains("Collection Date", output, StringComparison.Ordinal);
+        Assert.Contains("De-Nisted", output, StringComparison.Ordinal);
+        Assert.Contains("Dedupe Group ID", output, StringComparison.Ordinal);
+        Assert.Contains("Processing Status", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true, Seed = 42 };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var output = await WriteAndCaptureOutput(request, files);
+        Assert.Contains("GRP", output, StringComparison.Ordinal);
+        Assert.Contains("2024-", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_WithEmailData_WritesEmlColumns()
     {
         var request = DefaultRequest();

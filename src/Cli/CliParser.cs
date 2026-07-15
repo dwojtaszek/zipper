@@ -111,6 +111,9 @@ public static class CliParser
                 case "--with-metadata":
                     parsed.WithMetadata = true;
                     break;
+                case "--with-collection-metadata":
+                    parsed.WithCollectionMetadata = true;
+                    break;
                 case "--with-text":
                     parsed.WithText = true;
                     break;

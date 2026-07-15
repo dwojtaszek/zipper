@@ -20,6 +20,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --encoding <string>      Encoding: UTF-8, UTF-16, ANSI (default: UTF-8)");
         Console.Error.WriteLine("  --distribution <string>  Distribution: proportional, gaussian, exponential");
         Console.Error.WriteLine("  --with-metadata          Include metadata columns in load file");
+        Console.Error.WriteLine("  --with-collection-metadata Include collection metadata columns in load file");
         Console.Error.WriteLine("  --with-text              Generate extracted text files");
         Console.Error.WriteLine("  --attachment-rate <n>    EML attachment percentage (0-100, default: 0)");
         Console.Error.WriteLine("  --target-zip-size <size> Target ZIP size (e.g., 500MB, 10GB)");

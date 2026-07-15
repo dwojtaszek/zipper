@@ -228,6 +228,40 @@ public static class BuiltInProfiles
         },
     };
 
+    /// <summary>
+    /// Gets the collection metadata profile activated by --with-collection-metadata.
+    /// Five columns: DATA_SOURCE, COLLECTION_DATE, DENISTED, DEDUPE_GROUP_ID, PROCESSING_STATUS.
+    /// </summary>
+    public static ColumnProfile LegacyWithCollectionMetadata { get; } = new()
+    {
+        Name = "legacyWithCollectionMetadata",
+        Description = "Legacy --with-collection-metadata pseudo-profile",
+        Version = "1.0",
+        FieldNamingConvention = null,
+        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+        {
+            ["datasource"] = new DataSourceConfig
+            {
+                Values = ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"],
+                Weights = [25, 20, 15, 10, 10, 8, 7, 5],
+            },
+            ["processingstatus"] = new DataSourceConfig
+            {
+                Values = ["Processed", "Pending Review", "Approved", "Privileged", "Redacted", "Produced"],
+                Weights = [40, 20, 15, 10, 10, 5],
+            },
+        },
+        Columns = new List<ColumnDefinition>
+        {
+            new() { Name = "DATA_SOURCE", Type = "coded", DataSource = "datasource", Required = true, EmptyPercentage = 0 },
+            new() { Name = "COLLECTION_DATE", Type = "date", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DENISTED", Type = "boolean", Required = true, EmptyPercentage = 0 },
+            new() { Name = "DEDUPE_GROUP_ID", Type = "identifier", Required = true, EmptyPercentage = 0 },
+            new() { Name = "PROCESSING_STATUS", Type = "coded", DataSource = "processingstatus", Required = true, EmptyPercentage = 0 },
+        },
+    };
+
     private static List<ColumnDefinition> CreateLitigationColumns()
     {
         var columns = new List<ColumnDefinition>
@@ -400,5 +434,42 @@ public static class BuiltInProfiles
 
         columns.AddRange(extraColumns);
         return columns;
+    }
+
+    /// <summary>
+    /// Creates a merged profile combining the base profile's columns with additional columns.
+    /// Data sources from the additional profile are merged into the base.
+    /// </summary>
+    public static ColumnProfile MergeWithCollectionMetadata(ColumnProfile baseProfile)
+    {
+        ArgumentNullException.ThrowIfNull(baseProfile);
+        var merged = new ColumnProfile
+        {
+            Name = baseProfile.Name,
+            Description = baseProfile.Description,
+            Version = baseProfile.Version,
+            FieldNamingConvention = baseProfile.FieldNamingConvention,
+            Settings = baseProfile.Settings,
+            DataSources = new Dictionary<string, DataSourceConfig>(baseProfile.DataSources, StringComparer.Ordinal),
+            Columns = new List<ColumnDefinition>(baseProfile.Columns),
+        };
+
+        foreach (var ds in LegacyWithCollectionMetadata.DataSources)
+        {
+            if (!merged.DataSources.ContainsKey(ds.Key))
+            {
+                merged.DataSources[ds.Key] = ds.Value;
+            }
+        }
+
+        foreach (var col in LegacyWithCollectionMetadata.Columns)
+        {
+            if (!merged.Columns.Any(c => string.Equals(c.Name, col.Name, StringComparison.Ordinal)))
+            {
+                merged.Columns.Add(col);
+            }
+        }
+
+        return merged;
     }
 }

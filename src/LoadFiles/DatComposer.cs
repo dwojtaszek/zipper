@@ -117,6 +117,11 @@ internal sealed class DatComposer : ILoadFileComposer
             cols.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
         }
 
+        if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
+        {
+            cols.AddRange(new[] { "Data Source", "Collection Date", "De-Nisted", "Dedupe Group ID", "Processing Status" });
+        }
+
         if (this.request.Bates != null)
         {
             cols.Add("Bates Number");
@@ -290,6 +295,17 @@ internal sealed class DatComposer : ILoadFileComposer
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {wi.Index}"));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty));
+        }
+
+        if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
+        {
+            var colRandom = this.request.Metadata.Seed.HasValue ? new Random(unchecked((int)(this.request.Metadata.Seed.Value + wi.Index))) : Random.Shared;
+            var now = this.EffectiveNow();
+            v.Add(profileValues?.GetValueOrDefault("DATA_SOURCE") ?? CollectionMetadataValues.DataSources[colRandom.Next(CollectionMetadataValues.DataSources.Length)]);
+            v.Add(profileValues?.GetValueOrDefault("COLLECTION_DATE") ?? now.AddDays(-colRandom.Next(1, 30)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+            v.Add(profileValues?.GetValueOrDefault("DENISTED") ?? (colRandom.Next(100) < 85 ? "YES" : "NO"));
+            v.Add(profileValues?.GetValueOrDefault("DEDUPE_GROUP_ID") ?? $"GRP{colRandom.Next(1, 1000):D6}");
+            v.Add(profileValues?.GetValueOrDefault("PROCESSING_STATUS") ?? CollectionMetadataValues.ProcessingStatuses[colRandom.Next(CollectionMetadataValues.ProcessingStatuses.Length)]);
         }
 
         if (this.request.Bates != null)
@@ -677,4 +693,10 @@ internal sealed class DatComposer : ILoadFileComposer
 
         public string? RedactionReasonOverride { get; init; }
     }
+}
+
+internal static class CollectionMetadataValues
+{
+    public static readonly string[] DataSources = ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"];
+    public static readonly string[] ProcessingStatuses = ["Processed", "Pending Review", "Approved", "Privileged", "Redacted", "Produced"];
 }

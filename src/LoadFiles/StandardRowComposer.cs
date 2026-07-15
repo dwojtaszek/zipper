@@ -56,6 +56,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
 
         bool includeMeta = this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output);
         bool includeEml = this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output);
+        bool includeCollectionMeta = this.request.Metadata.ShouldIncludeCollectionMetadataColumns();
 
         foreach (var fileData in processedFiles)
         {
@@ -64,6 +65,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             // Draw order must stay metadata-then-email to match historical output.
             var meta = includeMeta ? SyntheticRowValues.Metadata(wi, fileData, random, now) : default;
             var eml = includeEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
+            var colMeta = includeCollectionMeta ? SyntheticRowValues.CollectionMetadata(wi, random, now) : default;
 
             bool hasAttachment = this.request.Metadata.WithFamilies && this.request.Output.IsEml && fileData.Attachment.HasValue;
             string parentId = this.batesSequence is not null
@@ -79,7 +81,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                 ParentDocId = string.Empty
             };
 
-            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, parentCtx)).ToList();
+            var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, parentCtx)).ToList();
             yield return LoadFileRecordBuilder.Build(this.headerColumns, values, parentId);
 
             if (hasAttachment)
@@ -98,7 +100,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                     EndAttach = childId,
                     ParentDocId = parentId,
                 };
-                var childValues = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, childCtx)).ToList();
+                var childValues = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, childCtx)).ToList();
                 yield return LoadFileRecordBuilder.Build(this.headerColumns, childValues, childId);
             }
         }
@@ -122,6 +124,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
             keys.AddRange(new[] { "TO", "FROM", "SUBJECT", "SENTDATE", "ATTACHMENT" });
+        }
+
+        if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
+        {
+            keys.AddRange(new[] { "DATA_SOURCE", "COLLECTION_DATE", "DENISTED", "DEDUPE_GROUP_ID", "PROCESSING_STATUS" });
         }
 
         if (this.batesSequence is not null)
@@ -158,6 +165,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         FileData fileData,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
         (string To, string From, string Subject, string SentDate, string Attachment) eml,
+        (string DataSource, string CollectionDate, string DeNisted, string DedupeGroupId, string ProcessingStatus) colMeta,
         RowCtx ctx)
         => key switch
         {
@@ -174,6 +182,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "SUBJECT" => ctx.IsChild ? string.Empty : eml.Subject,
             "SENTDATE" => ctx.IsChild ? string.Empty : eml.SentDate,
             "ATTACHMENT" => ctx.IsChild ? string.Empty : eml.Attachment,
+            "DATA_SOURCE" => colMeta.DataSource,
+            "COLLECTION_DATE" => colMeta.CollectionDate,
+            "DENISTED" => colMeta.DeNisted,
+            "DEDUPE_GROUP_ID" => colMeta.DedupeGroupId,
+            "PROCESSING_STATUS" => colMeta.ProcessingStatus,
             "BATES" => ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString(),
             "PAGECOUNT" => (ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture),
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
