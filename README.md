@@ -215,7 +215,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--bates-start` | 1 | ≥0 | Bates start number |
 | `--bates-digits` | 8 | 1-20 | Bates digit count |
 | `--tiff-pages` | 1-1 (standard mode); random 1–10 per doc in loadfile-only OPT mode | min-max | TIFF page range |
-| `--column-profile` | none | minimal, standard, litigation, full, or path | Column profile |
+| `--column-profile` | none | minimal, standard, litigation, full, or path (within working dir) | Column profile |
 | `--seed` | none | integer | Random seed |
 | `--date-format` | yyyy-MM-dd | format string | Date format override |
 | `--empty-percentage` | 15 | 0-100 | Empty value % override |

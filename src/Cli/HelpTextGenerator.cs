@@ -69,7 +69,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine();
         Console.Error.WriteLine("Column Profile Options:");
         Console.Error.WriteLine("  --column-profile <name>  Built-in profile: minimal, standard, litigation, full");
-        Console.Error.WriteLine("                           Or path to custom JSON profile file");
+        Console.Error.WriteLine("                           Or path to custom JSON profile file (within working directory)");
         Console.Error.WriteLine("  --seed <number>          Random seed for reproducible output");
         Console.Error.WriteLine("  --date-format <fmt>      Override date format (e.g., yyyy-MM-dd)");
         Console.Error.WriteLine("  --empty-percentage <n>   Override empty value percentage (0-100)");

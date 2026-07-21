@@ -593,6 +593,33 @@ public class ColumnProfileLoaderTests : IDisposable
         Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LoadFromFile_WithFileSymlinkOutsideBase_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var subDir = Path.Combine(this.tempDir, "subdir");
+        Directory.CreateDirectory(subDir);
+        var outsideFile = Path.Combine(this.tempDir, "outside-profile.json");
+        File.WriteAllText(outsideFile, "{}");
+
+        var symlinkPath = Path.Combine(subDir, "in-tree-link.json");
+        try
+        {
+            File.CreateSymbolicLink(symlinkPath, outsideFile);
+        }
+        catch
+        {
+            // Skip test on platforms/permissions where creating symlink is unsupported
+            return;
+        }
+
+        // Act & Assert: In-tree symlink pointing to an outside target must be blocked
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.LoadFromFile(symlinkPath, subDir));
+
+        Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
+    }
+
     private static ColumnProfile CreateMinimalProfile()
     {
         return new ColumnProfile
