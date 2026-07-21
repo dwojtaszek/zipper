@@ -63,7 +63,7 @@ echo Test 3: Absolute path traversal attempt should be blocked
 dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "C:\Windows\System32\security_test" > "%TEMP%\system_output.txt" 2>&1
 set SYSTEM_EXIT_CODE=%errorlevel%
 findstr /C:"Path traversal detected" "%TEMP%\system_output.txt" > nul
-if !errorlevel! equ 0 (
+if !errorlevel! equ 0 if !SYSTEM_EXIT_CODE! neq 0 (
     echo [OK] Absolute path traversal was properly blocked
     for /f "tokens=*" %%a in ('findstr /C:"Path traversal detected" "%TEMP%\system_output.txt"') do echo    Error message: %%a
 ) else (
@@ -74,6 +74,7 @@ if !errorlevel! equ 0 (
     ) else (
         echo [FAIL] Absolute path traversal was not properly blocked
         echo    Exit code: !SYSTEM_EXIT_CODE!
+        set TOTAL_FAILURES=1
     )
 )
 
@@ -123,6 +124,7 @@ if !errorlevel! equ 0 if !PROF_EXIT_CODE! neq 0 (
 ) else (
     echo [FAIL] Custom column profile path traversal with ..\ was not properly blocked
     echo    Exit code: !PROF_EXIT_CODE!
+    set TOTAL_FAILURES=1
 )
 
 REM Cleanup temp files
@@ -142,5 +144,11 @@ echo - Invalid characters are detected and rejected
 echo - Normal valid paths continue to work correctly
 echo - Security fixes do not break legitimate functionality
 echo.
+
+if defined TOTAL_FAILURES (
+    echo [FAIL] Security test failures detected.
+    endlocal
+    exit /b 1
+)
 
 endlocal

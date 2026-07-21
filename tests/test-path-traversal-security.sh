@@ -119,6 +119,7 @@ else
     echo "❌ Custom column profile path traversal with ../ was not properly blocked"
     echo "   Exit code: $PROF_EXIT_CODE"
     echo "   Output: $PROF_OUTPUT"
+    TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
 fi
 
 # Cleanup
@@ -134,3 +135,8 @@ echo "- Path traversal attempts are properly blocked"
 echo "- Invalid characters are detected and rejected"
 echo "- Normal valid paths continue to work correctly"
 echo "- Security fixes do not break legitimate functionality"
+
+if [[ ${TOTAL_FAILURES:-0} -gt 0 ]]; then
+    echo "❌ Security test failures detected ($TOTAL_FAILURES failure(s))"
+    exit 1
+fi
