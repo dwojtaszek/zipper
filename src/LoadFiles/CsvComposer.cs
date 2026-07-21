@@ -32,6 +32,7 @@ internal sealed class CsvComposer : StandardRowComposer
         "FILESIZE" => "File Size",
         "TO" => "To",
         "FROM" => "From",
+        "CC" => "CC",
         "SUBJECT" => "Subject",
         "SENTDATE" => "Sent Date",
         "ATTACHMENT" => "Attachment",

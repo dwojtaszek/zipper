@@ -27,6 +27,7 @@ internal sealed class ConcordanceComposer : StandardRowComposer
         "FILESIZE" => "FILESIZE",
         "TO" => "TO",
         "FROM" => "FROM",
+        "CC" => "CC",
         "SUBJECT" => "SUBJECT",
         "SENTDATE" => "SENTDATE",
         "ATTACHMENT" => "ATTACHMENT",

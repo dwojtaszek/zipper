@@ -58,6 +58,15 @@ internal sealed class LegacyEmailFromGenerator : IColumnValueGenerator
         context.FileData?.Email?.From ?? $"sender{context.NativeFileIndex}@example.com";
 }
 
+/// <summary>EmailCc column: reads fileData.Email.Cc; falls back to synthetic or empty.</summary>
+internal sealed class LegacyEmailCcGenerator : IColumnValueGenerator
+{
+    public string Generate(ColumnGenerationContext context) =>
+        context.FileData?.Email is not null
+            ? (context.FileData.Email.Cc ?? string.Empty)
+            : $"cc{context.NativeFileIndex}@example.com";
+}
+
 /// <summary>EmailSubject column: reads fileData.Email.Subject; falls back to synthetic.</summary>
 internal sealed class LegacyEmailSubjectGenerator : IColumnValueGenerator
 {
@@ -90,6 +99,12 @@ internal sealed class LegacySyntheticEmailToGenerator : IColumnValueGenerator
 internal sealed class LegacySyntheticEmailFromGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) => $"sender{context.NativeFileIndex}@example.com";
+}
+
+/// <summary>Synthetic EmailCc: index-based for loadfile-only mode.</summary>
+internal sealed class LegacySyntheticEmailCcGenerator : IColumnValueGenerator
+{
+    public string Generate(ColumnGenerationContext context) => $"cc{context.NativeFileIndex}@example.com";
 }
 
 /// <summary>Synthetic EmailSubject: index-based for loadfile-only mode.</summary>

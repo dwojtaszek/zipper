@@ -142,4 +142,39 @@ public class LegacyMetadataGeneratorTests
         var ctx = MakeContext();
         Assert.Equal(string.Empty, gen.Generate(ctx));
     }
+
+    [Fact]
+    public void EmailCcGenerator_ReadsFromEmail_WhenPresent()
+    {
+        var gen = new LegacyEmailCcGenerator();
+        var email = new Email { To = "t@x.com", From = "f@x.com", Cc = "cc1@x.com, cc2@x.com", Subject = "S", SentDate = DateTime.UtcNow };
+        var ctx = MakeContext(email: email);
+        Assert.Equal("cc1@x.com, cc2@x.com", gen.Generate(ctx));
+    }
+
+    [Fact]
+    public void EmailCcGenerator_ReturnsEmpty_WhenEmailPresentButCcNull()
+    {
+        var gen = new LegacyEmailCcGenerator();
+        var email = new Email { To = "t@x.com", From = "f@x.com", Cc = null, Subject = "S", SentDate = DateTime.UtcNow };
+        var ctx = MakeContext(email: email);
+        Assert.Equal(string.Empty, gen.Generate(ctx));
+    }
+
+    [Fact]
+    public void EmailCcGenerator_FallsBackToSynthetic_WhenEmailNull()
+    {
+        var gen = new LegacyEmailCcGenerator();
+        var ctx = MakeContext(index: 5);
+        Assert.Equal("cc5@example.com", gen.Generate(ctx));
+    }
+
+    [Fact]
+    public void SyntheticEmailCcGenerator_ReturnsExpectedValue()
+    {
+        var gen = new LegacySyntheticEmailCcGenerator();
+        var ctx = MakeContext(index: 7);
+        Assert.Equal("cc7@example.com", gen.Generate(ctx));
+    }
 }
+
