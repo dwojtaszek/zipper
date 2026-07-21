@@ -695,7 +695,7 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-021: Path Traversal Prevention
 
 - **REQ-106**: The application shall validate the `--output-path` argument to prevent directory traversal attacks. Paths containing `..` components that resolve outside the intended base directory shall be rejected with a clear error message.
-- **TODO-001**: The --column-profile argument accepts user-supplied file paths. A future enhancement should validate that custom profile paths do not escape the intended base directory. Currently unaddressed.
+- **REQ-164**: The application shall validate custom file paths passed to `--column-profile` to prevent directory traversal attacks. Profile paths resolving outside the working directory (or allowed base directory) shall be rejected with a clear error message.
 
 ---
 

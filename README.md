@@ -85,7 +85,7 @@ zipper --type <filetype> --count <number> --output-path <directory> [--folders <
 - `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1". **Important:** Default differs by mode. Standard mode defaults to 1-1 (single page). Loadfile-Only OPT mode defaults to random 1-10 pages when omitted.
 
 **Column Profile Options:**
-- `--column-profile <name|path>`: Column profile for configurable metadata generation. Use built-in profiles (`minimal`, `standard`, `litigation`, `full`) or path to custom JSON file
+- `--column-profile <name|path>`: Column profile for configurable metadata generation. Use built-in profiles (`minimal`, `standard`, `litigation`, `full`) or path to custom JSON file (must reside within the working directory)
 - `--seed <number>`: Random seed for reproducible output. Use the same seed to generate identical data
 - `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
 - `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
