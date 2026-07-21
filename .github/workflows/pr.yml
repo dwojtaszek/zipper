@@ -73,7 +73,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
           cache: true
@@ -119,7 +119,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
           cache: true
@@ -224,7 +224,7 @@ jobs:
           persist-credentials: false
 
       # Runtime only — the binary is framework-dependent; no restore/build here.
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
