@@ -83,6 +83,11 @@ internal sealed class DatComposer : ILoadFileComposer
                 headers.AddRange(new[] { "REDACTED_IMAGE_PATH", "REDACTED_TEXT_PATH", "NATIVE_WITHHELD", "REDACTION_REASON" });
             }
 
+            if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
+            {
+                headers.AddRange(new[] { "Attachment", "EmailSubject", "EmailFrom", "EmailTo", "EmailCC", "EmailSentDate" });
+            }
+
             if (this.request.Metadata.WithFamilies)
             {
                 headers.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
@@ -96,7 +101,7 @@ internal sealed class DatComposer : ILoadFileComposer
             var lfCols = new List<string>
             {
                 "Control Number", "File Path", "Custodian", "Date Sent", "Author", "File Size",
-                "EmailSubject", "EmailFrom", "EmailTo", "EmailSentDate", "ExtractedText",
+                "EmailSubject", "EmailFrom", "EmailTo", "EmailCC", "EmailSentDate", "ExtractedText",
             };
             if (this.request.Metadata.WithFamilies)
             {
@@ -114,7 +119,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
-            cols.AddRange(new[] { "To", "From", "Subject", "Sent Date", "Attachment" });
+            cols.AddRange(new[] { "To", "From", "CC", "Subject", "Sent Date", "Attachment" });
         }
 
         if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
@@ -244,6 +249,9 @@ internal sealed class DatComposer : ILoadFileComposer
                     case "EMAILFROM":
                     case "EMAIL_FROM":
                     case "EMAIL FROM":
+                    case "EMAILCC":
+                    case "EMAIL_CC":
+                    case "EMAIL CC":
                     case "EMAILSUBJECT":
                     case "EMAIL_SUBJECT":
                     case "EMAIL SUBJECT":
@@ -292,6 +300,7 @@ internal sealed class DatComposer : ILoadFileComposer
         {
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{wi.Index}@example.com"));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{wi.Index}@example.com"));
+            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILCC") ?? (fileData.Email?.Cc ?? (fileData.Email != null ? string.Empty : $"cc{wi.Index}@example.com"))));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {wi.Index}"));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty));
@@ -463,6 +472,22 @@ internal sealed class DatComposer : ILoadFileComposer
             v.Add(redactionReason);
         }
 
+        if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
+        {
+            var attachmentVal = ctx.IsChild ? string.Empty : (fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty);
+            var subjectVal = ctx.IsChild ? string.Empty : (fileData.Email?.Subject ?? $"Email Subject {wi.Index}");
+            var fromVal = ctx.IsChild ? string.Empty : (fileData.Email?.From ?? $"sender{wi.Index}@example.com");
+            var toVal = ctx.IsChild ? string.Empty : (fileData.Email?.To ?? $"recipient{wi.Index}@example.com");
+            var ccVal = ctx.IsChild ? string.Empty : (fileData.Email is not null ? (fileData.Email.Cc ?? string.Empty) : $"cc{wi.Index}@example.com");
+            var sentDateVal = ctx.IsChild ? string.Empty : (fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+            v.Add(attachmentVal);
+            v.Add(subjectVal);
+            v.Add(fromVal);
+            v.Add(toVal);
+            v.Add(ccVal);
+            v.Add(sentDateVal);
+        }
+
         if (this.request.Metadata.WithFamilies)
         {
             v.Add(ctx.BegAttach);
@@ -496,6 +521,7 @@ internal sealed class DatComposer : ILoadFileComposer
             var subjLine = $"Email Subject {i}";
             var senderAddr = $"sender{i}@example.com";
             var recipientAddr = $"recipient{i}@example.com";
+            var ccAddr = $"cc{i}@example.com";
             var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
             var filePath = $"NATIVES\\{(i % 50) + 1:D3}\\{parentId}.pdf";
             var extractedText = $"Sample extracted text content for document {parentId}.";
@@ -503,7 +529,7 @@ internal sealed class DatComposer : ILoadFileComposer
             var parentRecordValues = new List<string>
             {
                 parentId, filePath, custodian, dateSent, author, fileSize,
-                subjLine, senderAddr, recipientAddr, sentTime, extractedText,
+                subjLine, senderAddr, recipientAddr, ccAddr, sentTime, extractedText,
             };
 
             if (this.request.Metadata.WithFamilies)
@@ -522,7 +548,7 @@ internal sealed class DatComposer : ILoadFileComposer
                 var childRecordValues = new List<string>
                 {
                     childId, childPath, custodian, string.Empty, string.Empty, childFileSize,
-                    string.Empty, string.Empty, string.Empty, string.Empty, childExtractedText,
+                    string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, childExtractedText,
                 };
 
                 if (this.request.Metadata.WithFamilies)

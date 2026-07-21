@@ -153,7 +153,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         string parentDocId,
         (string filename, byte[] content)? actualAttachment,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
-        (string To, string From, string Subject, string SentDate, string Attachment) eml)
+        (string To, string From, string Cc, string Subject, string SentDate, string Attachment) eml)
     {
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var docElement = new XElement("Document", new XAttribute("DocID", isChild ? childId : parentId));
@@ -320,6 +320,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         {
             AddTag(tagsElement, "To", isChild ? string.Empty : eml.To, namingConvention);
             AddTag(tagsElement, "From", isChild ? string.Empty : eml.From, namingConvention);
+            AddTag(tagsElement, "CC", isChild ? string.Empty : eml.Cc, namingConvention);
             AddTag(tagsElement, "Subject", isChild ? string.Empty : eml.Subject, namingConvention);
             AddTag(tagsElement, "SentDate", isChild ? string.Empty : eml.SentDate, namingConvention);
             AddTag(tagsElement, "Attachment", isChild ? string.Empty : eml.Attachment, namingConvention);

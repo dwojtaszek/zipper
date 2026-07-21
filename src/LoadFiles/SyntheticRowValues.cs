@@ -20,7 +20,7 @@ internal static class SyntheticRowValues
         return (custodian, dateSent, author, fileSize);
     }
 
-    internal static (string To, string From, string Subject, string SentDate, string Attachment) Eml(
+    internal static (string To, string From, string Cc, string Subject, string SentDate, string Attachment) Eml(
         FileWorkItem workItem,
         FileData fileData,
         Random random,
@@ -28,11 +28,12 @@ internal static class SyntheticRowValues
     {
         var to = fileData.Email?.To ?? $"recipient{workItem.Index}@example.com";
         var from = fileData.Email?.From ?? $"sender{workItem.Index}@example.com";
+        var cc = fileData.Email is not null ? (fileData.Email.Cc ?? string.Empty) : $"cc{workItem.Index}@example.com";
         var subject = fileData.Email?.Subject ?? $"Email Subject {workItem.Index}";
         var sentDate = fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
             ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
         var attachment = fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty;
-        return (to, from, subject, sentDate, attachment);
+        return (to, from, cc, subject, sentDate, attachment);
     }
 
     internal static (string DataSource, string CollectionDate, string DeNisted, string DedupeGroupId, string ProcessingStatus) CollectionMetadata(

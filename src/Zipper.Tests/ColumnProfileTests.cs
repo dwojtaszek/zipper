@@ -211,4 +211,14 @@ public class ColumnProfileTests
             Assert.Equal(profile.Columns[i].Name, columnNames[i]);
         }
     }
+
+    [Fact]
+    public void LegacyEmlProfile_ContainsEmailCcColumn()
+    {
+        var profile = BuiltInProfiles.LegacyEml;
+        Assert.NotNull(profile);
+        var ccCol = Assert.Single(profile.Columns, c => string.Equals(c.Name, "EMAILCC", StringComparison.Ordinal));
+        Assert.Equal("emailcc", ccCol.Type);
+    }
 }
+

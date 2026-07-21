@@ -222,6 +222,7 @@ public static class BuiltInProfiles
             new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
             new() { Name = "EMAILTO", Type = "emailto", Required = true, EmptyPercentage = 0 },
             new() { Name = "EMAILFROM", Type = "emailfrom", Required = true, EmptyPercentage = 0 },
+            new() { Name = "EMAILCC", Type = "emailcc", Required = true, EmptyPercentage = 0 },
             new() { Name = "EMAILSUBJECT", Type = "emailsubject", Required = true, EmptyPercentage = 0 },
             new() { Name = "EMAILSENTDATE", Type = "emailsentdate", Required = true, EmptyPercentage = 0 },
             new() { Name = "EMAILATTACHMENT", Type = "emailattachment", Required = true, EmptyPercentage = 0 },

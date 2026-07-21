@@ -1,7 +1,9 @@
 using System.Text;
 using Xunit;
 using Zipper.Config;
+using Zipper.Emails;
 using Zipper.LoadFiles;
+
 
 namespace Zipper.Tests;
 
@@ -144,11 +146,93 @@ public class DatComposingWriterLoadFileTests : TempDirectoryTestBase
         Assert.Contains("\r\n", content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task LoadfileOnlyDatWriter_IncludesEmailCcInHeaderAndRows()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 2, FileType = "pdf" },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
 
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
+        Assert.Contains("EmailCC", lines[0], StringComparison.Ordinal);
+        Assert.Contains("cc1@example.com", lines[1], StringComparison.Ordinal);
+    }
 
+    [Fact]
+    public async Task StandardEmlDatWriter_IncludesCcInHeaderAndRows()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 1, FileType = "eml" },
+            Metadata = new MetadataConfig { Seed = 42, WithMetadata = true },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+        var fileData = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FolderNumber = 1, FolderName = "001", FileName = "test1.eml", FilePathInZip = "001/test1.eml" },
+                DataLength = 100,
+                PageCount = 1,
+                Email = new Email { To = "to@ex.com", From = "from@ex.com", Cc = "cc@ex.com", Subject = "Subj", SentDate = new DateTime(2026, 1, 1) },
+            }
+        };
 
+        var writer = new DatComposingWriter(WriterMode.Standard);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, fileData);
 
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
+        Assert.Contains("\u00feCC\u00fe", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\u00fecc@ex.com\u00fe", lines[1], StringComparison.Ordinal);
+    }
 
+    [Fact]
+    public async Task ProductionSetEmlDatWriter_IncludesEmailCcInHeaderAndRows()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 1, FileType = "eml", OutputPath = this.TempDir },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Production = new ProductionConfig { VolumeSize = 5000 },
+            Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+        };
+        var fileData = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FolderNumber = 1, FolderName = "VOL001", FileName = "TEST00000001.eml", FilePathInZip = "NATIVES\\VOL001\\TEST00000001.eml" },
+                DataLength = 100,
+                PageCount = 1,
+                Email = new Email { To = "to@ex.com", From = "from@ex.com", Cc = "cc@ex.com", Subject = "Subj", SentDate = new DateTime(2026, 1, 1) },
+            }
+        };
+
+        var writer = new DatComposingWriter(WriterMode.ProductionSet);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, fileData);
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("\u00feEmailCC\u00fe", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\u00fecc@ex.com\u00fe", lines[1], StringComparison.Ordinal);
+    }
 }
+

@@ -123,7 +123,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
-            keys.AddRange(new[] { "TO", "FROM", "SUBJECT", "SENTDATE", "ATTACHMENT" });
+            keys.AddRange(new[] { "TO", "FROM", "CC", "SUBJECT", "SENTDATE", "ATTACHMENT" });
         }
 
         if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
@@ -164,7 +164,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         FileWorkItem wi,
         FileData fileData,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
-        (string To, string From, string Subject, string SentDate, string Attachment) eml,
+        (string To, string From, string Cc, string Subject, string SentDate, string Attachment) eml,
         (string DataSource, string CollectionDate, string DeNisted, string DedupeGroupId, string ProcessingStatus) colMeta,
         RowCtx ctx)
         => key switch
@@ -179,6 +179,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "FILESIZE" => ctx.FileSizeOverride ?? meta.FileSize,
             "TO" => ctx.IsChild ? string.Empty : eml.To,
             "FROM" => ctx.IsChild ? string.Empty : eml.From,
+            "CC" => ctx.IsChild ? string.Empty : eml.Cc,
             "SUBJECT" => ctx.IsChild ? string.Empty : eml.Subject,
             "SENTDATE" => ctx.IsChild ? string.Empty : eml.SentDate,
             "ATTACHMENT" => ctx.IsChild ? string.Empty : eml.Attachment,

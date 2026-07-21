@@ -249,9 +249,9 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 - **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, ExtractedText
 
 **EML Output (`--type eml`):**
-- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, To, From, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Attachment, EmailSubject, EmailFrom, EmailTo, EmailSentDate
+- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, To, From, CC, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate
 
 ### 8.3 Opticon (OPT) Format Specification
 

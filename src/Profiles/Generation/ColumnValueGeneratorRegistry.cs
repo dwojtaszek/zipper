@@ -19,10 +19,10 @@ internal static class ColumnValueGeneratorRegistry
         "filedatasize", "randomfilesize",
 
         // EML column kinds
-        "emailto", "emailfrom", "emailsubject", "emailsentdate", "emailattachment",
+        "emailto", "emailfrom", "emailcc", "emailsubject", "emailsentdate", "emailattachment",
 
         // Synthetic email column kinds (loadfile-only / no FileData)
-        "syntheticemailto", "syntheticemailfrom", "syntheticemailsubject", "syntheticemailsentdate",
+        "syntheticemailto", "syntheticemailfrom", "syntheticemailcc", "syntheticemailsubject", "syntheticemailsentdate",
     };
 
     public static bool IsKnownType(string type) => KnownTypes.Contains(type);
