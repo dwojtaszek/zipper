@@ -136,7 +136,7 @@ public static class PathValidator
 
     private static (string resolvedRootPath, System.Collections.Generic.IEnumerable<string> suffixParts)? ResolveLinkTargetWithSuffix(string fullPath)
     {
-        DirectoryInfo? current = new DirectoryInfo(fullPath);
+        FileSystemInfo? current = File.Exists(fullPath) ? new FileInfo(fullPath) : new DirectoryInfo(fullPath);
         var parts = new System.Collections.Generic.List<string>();
 
         while (current is not null)
@@ -151,7 +151,12 @@ public static class PathValidator
                 }
             }
             parts.Add(current.Name);
-            current = current.Parent;
+            current = current switch
+            {
+                DirectoryInfo dir => dir.Parent,
+                FileInfo file => file.Directory,
+                _ => null
+            };
         }
 
         return null;

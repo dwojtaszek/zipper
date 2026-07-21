@@ -106,6 +106,22 @@ else
     echo "   Output: $MIXED_OUTPUT"
 fi
 
+# Test 7: Custom column profile path traversal with ../ should be blocked
+echo ""
+echo "Test 7: Custom column profile path traversal with ../ should be blocked"
+
+PROF_OUTPUT=$(zipper --type pdf --count 5 --output-path "$TEST_DIR/profile_test" --column-profile "../outside-profile.json" 2>&1) && PROF_EXIT_CODE=0 || PROF_EXIT_CODE=$?
+
+if [[ $PROF_EXIT_CODE -ne 0 ]] && echo "$PROF_OUTPUT" | grep -q "Path traversal detected"; then
+    echo "✅ Custom column profile path traversal with ../ was properly blocked"
+    echo "   Error message: $(echo "$PROF_OUTPUT" | grep "Path traversal detected" | head -1)"
+else
+    echo "❌ Custom column profile path traversal with ../ was not properly blocked"
+    echo "   Exit code: $PROF_EXIT_CODE"
+    echo "   Output: $PROF_OUTPUT"
+    TOTAL_FAILURES=$((TOTAL_FAILURES + 1))
+fi
+
 # Cleanup
 echo ""
 echo "Cleaning up test directory..."
@@ -119,3 +135,8 @@ echo "- Path traversal attempts are properly blocked"
 echo "- Invalid characters are detected and rejected"
 echo "- Normal valid paths continue to work correctly"
 echo "- Security fixes do not break legitimate functionality"
+
+if [[ ${TOTAL_FAILURES:-0} -gt 0 ]]; then
+    echo "❌ Security test failures detected ($TOTAL_FAILURES failure(s))"
+    exit 1
+fi

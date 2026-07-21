@@ -541,6 +541,85 @@ public class ColumnProfileLoaderTests : IDisposable
         Assert.Contains("more weights than values", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LoadFromFile_WithRelativePathTraversal_ThrowsInvalidOperationException()
+    {
+        // Arrange: Create a subfolder and a file outside of it
+        var subDir = Path.Combine(this.tempDir, "subdir");
+        Directory.CreateDirectory(subDir);
+        var outsideFile = Path.Combine(this.tempDir, "outside-profile.json");
+        File.WriteAllText(outsideFile, "{}");
+
+        var traversalPath = Path.Combine(subDir, "..", "outside-profile.json");
+
+        // Act & Assert: When base directory is subDir, referencing file in parent dir must throw
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.LoadFromFile(traversalPath, subDir));
+
+        Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadFromFile_WithAbsolutePathOutsideBase_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var subDir = Path.Combine(this.tempDir, "subdir");
+        Directory.CreateDirectory(subDir);
+        var outsideFile = Path.Combine(this.tempDir, "outside-profile.json");
+        File.WriteAllText(outsideFile, "{}");
+
+        // Act & Assert: Absolute path outside subDir base must throw
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.LoadFromFile(outsideFile, subDir));
+
+        Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Load_WithRelativePathTraversalExistingFile_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var subDir = Path.Combine(this.tempDir, "subdir");
+        Directory.CreateDirectory(subDir);
+        var outsideFile = Path.Combine(this.tempDir, "outside-profile.json");
+        File.WriteAllText(outsideFile, "{}");
+
+        var traversalPath = Path.Combine(subDir, "..", "outside-profile.json");
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.Load(traversalPath, subDir));
+
+        Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadFromFile_WithFileSymlinkOutsideBase_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var subDir = Path.Combine(this.tempDir, "subdir");
+        Directory.CreateDirectory(subDir);
+        var outsideFile = Path.Combine(this.tempDir, "outside-profile.json");
+        File.WriteAllText(outsideFile, "{}");
+
+        var symlinkPath = Path.Combine(subDir, "in-tree-link.json");
+        try
+        {
+            File.CreateSymbolicLink(symlinkPath, outsideFile);
+        }
+        catch
+        {
+            // Skip test on platforms/permissions where creating symlink is unsupported
+            return;
+        }
+
+        // Act & Assert: In-tree symlink pointing to an outside target must be blocked
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.LoadFromFile(symlinkPath, subDir));
+
+        Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
+    }
+
     private static ColumnProfile CreateMinimalProfile()
     {
         return new ColumnProfile
@@ -554,3 +633,4 @@ public class ColumnProfileLoaderTests : IDisposable
         };
     }
 }
+

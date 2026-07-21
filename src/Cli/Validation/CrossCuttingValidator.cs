@@ -75,10 +75,19 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateColumnProfile(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile) && !ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile) && !File.Exists(parsed.ColumnProfile))
+        if (!string.IsNullOrEmpty(parsed.ColumnProfile) && !ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile))
         {
-            Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
-            return false;
+            if (!PathValidator.IsPathSafe(parsed.ColumnProfile, Directory.GetCurrentDirectory()))
+            {
+                Console.Error.WriteLine($"Error: Path traversal detected in column profile path '{parsed.ColumnProfile}'. Profile file must reside within working directory.");
+                return false;
+            }
+
+            if (!File.Exists(parsed.ColumnProfile))
+            {
+                Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
+                return false;
+            }
         }
 
         if (parsed.WithMetadata && !string.IsNullOrEmpty(parsed.ColumnProfile))

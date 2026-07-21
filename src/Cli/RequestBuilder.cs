@@ -28,7 +28,16 @@ public static class RequestBuilder
         ColumnProfile? profile = null;
         if (!string.IsNullOrEmpty(parsed.ColumnProfile))
         {
-            profile = ColumnProfileLoader.Load(parsed.ColumnProfile);
+            try
+            {
+                profile = ColumnProfileLoader.Load(parsed.ColumnProfile);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.Error.WriteLine($"Error: {ex.Message}");
+                return null;
+            }
+
             if (profile is null)
             {
                 Console.Error.WriteLine($"Warning: Failed to load column profile '{parsed.ColumnProfile}'.");

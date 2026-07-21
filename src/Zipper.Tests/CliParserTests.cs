@@ -303,4 +303,48 @@ public class CliParserTests
             }
         }
     }
+
+    /// <summary>
+    /// REQ-164: A custom profile path containing ".." that resolves outside CWD must be rejected by CliValidator.
+    /// </summary>
+    [Fact]
+    public void Parse_ColumnProfileWithParentTraversal_RejectsPathOutsideCwd()
+    {
+        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "../outside-profile.json" });
+        Assert.NotNull(result);
+
+        var isValid = CliValidator.Validate(result!);
+        Assert.False(isValid);
+    }
+
+    /// <summary>
+    /// REQ-164: A built-in profile name or safe profile path within CWD must be accepted by CliValidator.
+    /// </summary>
+    [Fact]
+    public void Parse_ColumnProfileWithinCwd_IsAccepted()
+    {
+        var tempProfilePath = Path.Combine(Directory.GetCurrentDirectory(), "temp_profile_" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var validProfileJson = @"{
+                ""name"": ""TempProfile"",
+                ""columns"": [{ ""name"": ""DocID"", ""type"": ""identifier"" }],
+                ""dataSources"": {}
+            }";
+            File.WriteAllText(tempProfilePath, validProfileJson);
+
+            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", tempProfilePath });
+            Assert.NotNull(result);
+
+            var isValid = CliValidator.Validate(result!);
+            Assert.True(isValid);
+        }
+        finally
+        {
+            if (File.Exists(tempProfilePath))
+            {
+                File.Delete(tempProfilePath);
+            }
+        }
+    }
 }

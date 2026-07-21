@@ -19,8 +19,9 @@ public static class ColumnProfileLoader
     /// Loads a column profile by name or file path.
     /// </summary>
     /// <param name="nameOrPath">Built-in profile name or path to custom JSON file.</param>
+    /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
     /// <returns>The loaded profile, or null if not found.</returns>
-    public static ColumnProfile? Load(string nameOrPath)
+    public static ColumnProfile? Load(string nameOrPath, string? baseDirectory = null)
     {
         // Check if it's a built-in profile name
         var builtIn = BuiltInProfiles.GetProfile(nameOrPath);
@@ -32,7 +33,7 @@ public static class ColumnProfileLoader
         // Check if it's a file path
         if (File.Exists(nameOrPath))
         {
-            return LoadFromFile(nameOrPath);
+            return LoadFromFile(nameOrPath, baseDirectory);
         }
 
         return null;
@@ -42,10 +43,17 @@ public static class ColumnProfileLoader
     /// Loads a column profile from a JSON file.
     /// </summary>
     /// <param name="filePath">Path to the JSON profile file.</param>
+    /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
     /// <returns>The loaded profile.</returns>
-    /// <exception cref="InvalidOperationException">If the file cannot be parsed or validated.</exception>
-    public static ColumnProfile LoadFromFile(string filePath)
+    /// <exception cref="InvalidOperationException">If the file cannot be parsed or validated, or if path traversal is detected.</exception>
+    public static ColumnProfile LoadFromFile(string filePath, string? baseDirectory = null)
     {
+        var effectiveBase = baseDirectory ?? Directory.GetCurrentDirectory();
+        if (!PathValidator.IsPathSafe(filePath, effectiveBase))
+        {
+            throw new InvalidOperationException($"Path traversal detected in column profile path '{filePath}'. Profile file must reside within allowed base directory.");
+        }
+
         try
         {
             var json = File.ReadAllText(filePath);
@@ -62,6 +70,10 @@ public static class ColumnProfileLoader
         catch (JsonException ex)
         {
             throw new InvalidOperationException($"Invalid JSON in column profile '{filePath}': {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new InvalidOperationException($"Unable to read column profile file '{filePath}': {ex.Message}", ex);
         }
     }
 
