@@ -312,7 +312,7 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateHashes(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.HashMode))
+        if (parsed.HashMode is not null)
         {
             var mode = parsed.HashMode.ToLowerInvariant();
             if (mode != "actual" && mode != "simulated" && mode != "none")
@@ -322,11 +322,10 @@ internal static class CrossCuttingValidator
             }
         }
 
-        bool isHashEnabled = !string.IsNullOrEmpty(parsed.HashMode) &&
-            (string.Equals(parsed.HashMode, "actual", StringComparison.OrdinalIgnoreCase) ||
+        bool isHashEnabled = parsed.HashMode is not null && (string.Equals(parsed.HashMode, "actual", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(parsed.HashMode, "simulated", StringComparison.OrdinalIgnoreCase));
 
-        if (!string.IsNullOrEmpty(parsed.HashAlgorithms))
+        if (parsed.HashAlgorithms is not null)
         {
             if (!isHashEnabled)
             {

@@ -598,6 +598,14 @@ public class CliValidatorTests
         Assert.False(CliValidator.Validate(args));
     }
 
+    [Fact]
+    public void Validate_EmptyHashMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "";
+        Assert.False(CliValidator.Validate(args));
+    }
+
     [Theory]
     [InlineData("md5")]
     [InlineData("sha1,sha256")]
@@ -616,6 +624,15 @@ public class CliValidatorTests
         var args = CreateValidArgs();
         args.HashMode = "actual";
         args.HashAlgorithms = "md5,sha512";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_EmptyHashAlgorithms_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = "";
         Assert.False(CliValidator.Validate(args));
     }
 
