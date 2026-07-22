@@ -80,7 +80,7 @@ dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # 
 dotnet format --verify-no-changes src/   # Format check (run after every code change)
 
 # Build + lint + test combo (run after every change)
-dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj
+dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj
 
 # E2E (must pass before push)
 # The pre-push hook runs the basic E2E smoke against src/bin/Release — build Release first.
@@ -128,7 +128,7 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
    - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 5. Write a failing test first (TDD), then implement the fix
-6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` after every change
+6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` after every change
 7. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
 8. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below
 9. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
