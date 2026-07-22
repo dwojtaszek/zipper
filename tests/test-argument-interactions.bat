@@ -17,7 +17,13 @@ call :assert_rejected "--chaos-mode without --loadfile-only" --type pdf --count 
 call :assert_rejected "--chaos-amount without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-amount "5%%"
 call :assert_rejected "--chaos-types without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-types quotes
 call :assert_rejected "--chaos-scenario without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-scenario full-chaos
-call :assert_rejected "--col-delim without --loadfile-only" --type pdf --count 5 --output-path ".\results\zi_test" --col-delim "char:|"
+call :assert_accepted "--col-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --col-delim "char:|"
+call :assert_accepted "--quote-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --quote-delim "char:~"
+call :assert_accepted "--newline-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --newline-delim "char:^"
+call :assert_accepted "--multi-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --multi-delim "char:;"
+call :assert_accepted "--nested-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --nested-delim "char:\"
+call :assert_accepted "--col-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --col-delim "char:|"
+call :assert_accepted "--quote-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --quote-delim "char:~"
 call :assert_rejected "--production-set without --bates-prefix" --production-set --count 5 --output-path ".\results\zi_test"
 call :assert_rejected "--production-zip without --production-set" --type pdf --count 5 --output-path ".\results\zi_test" --production-zip
 call :assert_rejected "--volume-size without --production-set" --type pdf --count 5 --output-path ".\results\zi_test" --volume-size 100

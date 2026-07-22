@@ -225,8 +225,8 @@ REM Test 6: Rejection tests (dependency validation)
 REM ================================================================
 echo [ INFO ] START: Rejection tests
 
-%BINARY% --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_1" --col-delim "ascii:20" 2>nul
-if not errorlevel 1 ( echo [ ERROR ] Should have rejected --col-delim without --loadfile-only & goto :cleanup )
+%BINARY% --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\accept_col_delim" --col-delim "char:|" 2>nul
+if errorlevel 1 ( echo [ ERROR ] Should have accepted --col-delim in standard mode & goto :cleanup )
 
 %BINARY% --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_2" --chaos-mode 2>nul
 if not errorlevel 1 ( echo [ ERROR ] Should have rejected --chaos-mode without --loadfile-only & goto :cleanup )
