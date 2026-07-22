@@ -123,7 +123,7 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 |---------|------------------|
 | lint (format) | `dotnet format --verify-no-changes src/` |
 | build | `dotnet build zipper.sln -c Release` |
-| unit tests + coverage gate | `dotnet test src/Zipper.Tests/Zipper.Tests.csproj` |
+| unit tests + coverage gate | `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` |
 | full E2E | `dotnet build -c Release && ./tests/run-tests.sh` (Unix) / `dotnet build -c Release && tests\run-tests.bat` (Windows) |
 | basic E2E smoke (pre-push) | `./tests/run-e2e-basic.sh` (Unix) / `tests\run-e2e-basic.bat` (Windows) |
 | goldens | `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin && ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh` |

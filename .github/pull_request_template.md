@@ -19,7 +19,7 @@ What does this PR change and why?
 
 ## Testing Done
 
-- [ ] Unit tests pass (`dotnet test src/Zipper.Tests/Zipper.Tests.csproj`)
+- [ ] Unit tests pass (`dotnet test src/Zipper.Tests/Zipper.Tests.csproj` & `dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj`)
 - [ ] E2E tests pass (`bash tests/run-tests.sh`)
 - [ ] Lint clean (`dotnet format --verify-no-changes src/`)
 

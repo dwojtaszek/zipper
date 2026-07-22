@@ -122,6 +122,17 @@ if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosit
     exit 1
 fi
 
+ANALYZER_TRIGGER=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(src/Zipper\.Analyzers/|src/Zipper\.Analyzers\.Tests/|Directory\.Build\.props$|Directory\.Packages\.props$|\.editorconfig$|zipper\.sln$|global\.json$)' || true)
+if [[ "$ANALYZER_TRIGGER" -gt 0 ]]; then
+    echo "▶ Running analyzer tests..."
+    if ! dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --logger "console;verbosity=quiet"; then
+        echo "❌ Analyzer unit tests failed. Commit aborted." >&2
+        echo "   Run 'dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj' for full output." >&2
+        echo "   To bypass: git commit --no-verify" >&2
+        exit 1
+    fi
+fi
+
 echo "✓ Pre-commit: format + unit tests passed"
 
 # Success handshake with post-commit:

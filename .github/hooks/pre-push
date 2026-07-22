@@ -50,6 +50,14 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
         echo "   To bypass: git push --no-verify"
         exit 1
     fi
+    if ! dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj \
+            --logger "console;verbosity=quiet" --nologo; then
+        echo ""
+        echo "❌ Analyzer unit tests failed. Push aborted."
+        echo "   Run 'dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj' for details."
+        echo "   To bypass: git push --no-verify"
+        exit 1
+    fi
     echo "✓ Unit tests passed"
 fi
 
