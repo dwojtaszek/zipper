@@ -637,6 +637,15 @@ public class CliValidatorTests
     }
 
     [Fact]
+    public void Validate_MalformedHashAlgorithms_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = "md5,,sha256";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
     public void Validate_HashAlgorithmsWithoutHashMode_ReturnsFalse()
     {
         var args = CreateValidArgs();
