@@ -32,4 +32,27 @@ if [[ "$NO_CI_BUILD" == "true" ]]; then
     exit 1
 fi
 
-echo "PASS: Build properties are correct."
+echo "Testing docs-only regex classification..."
+DOCS_REGEX='(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)'
+
+is_docs() {
+    echo "$1" | grep -q -E "$DOCS_REGEX"
+}
+
+# Documentation files MUST match:
+for file in "README.md" "AGENTS.md" "Requirements.md" "UBIQUITOUS_LANGUAGE.md" "docs/cicd.md" "docs/architecture.md" "docs/notes.txt" "src/folder/README.md" "CHANGELOG.md"; do
+    if ! is_docs "$file"; then
+        echo "FAIL: '$file' should be classified as documentation"
+        exit 1
+    fi
+done
+
+# Non-documentation files MUST NOT match:
+for file in "BannedSymbols.txt" "tests/fixtures/chaos-anomaly-types.txt" "tests/fixtures/profiles/expected-headers/full.txt" "src/Program.cs" "zipper.sln"; do
+    if is_docs "$file"; then
+        echo "FAIL: '$file' should NOT be classified as documentation"
+        exit 1
+    fi
+done
+
+echo "PASS: Build properties and docs-only classification are correct."

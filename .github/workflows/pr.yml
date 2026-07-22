@@ -49,7 +49,7 @@ jobs:
           # as docs-only. Count matches explicitly (no `|| true` masking).
           total=$(printf '%s\n' "$files" | grep -c . || true)
           docs=$(printf '%s\n' "$files" \
-              | grep -c -E '(^|/)(docs/|CHANGELOG\.md$|.*\.(md|txt)$)' || true)
+              | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
 
           if [[ "$total" -gt 0 && "$docs" -eq "$total" ]]; then
             echo "Docs-only PR detected ($total files, all docs); skipping build and tests."
