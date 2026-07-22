@@ -360,13 +360,14 @@ public class RequestBuilderTests
     }
 
     [Fact]
-    public void ParseHashConfig_SimulatedMode_ReturnsSimulatedMode()
+    public void ParseHashConfig_SimulatedMode_ReturnsSimulatedModeWithDefaultMD5()
     {
         var parsed = new ParsedArguments { HashMode = "simulated" };
 
         var config = RequestBuilder.ParseHashConfig(parsed);
         Assert.Equal(Config.HashMode.Simulated, config.Mode);
-        Assert.Empty(config.Algorithms);
+        Assert.Contains(Config.HashAlgorithm.MD5, config.Algorithms);
+        Assert.True(config.IsEnabled);
     }
 
     [Fact]

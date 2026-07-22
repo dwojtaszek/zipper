@@ -577,4 +577,89 @@ public class CliValidatorTests
         args.LoadFileFormat = "opt";
         Assert.True(CliValidator.Validate(args));
     }
+
+    [Theory]
+    [InlineData("actual")]
+    [InlineData("simulated")]
+    [InlineData("none")]
+    [InlineData("ACTUAL")]
+    public void Validate_ValidHashMode_ReturnsTrue(string hashMode)
+    {
+        var args = CreateValidArgs();
+        args.HashMode = hashMode;
+        Assert.True(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_InvalidHashMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "invalid";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_EmptyHashMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Theory]
+    [InlineData("md5")]
+    [InlineData("sha1,sha256")]
+    [InlineData("MD5,SHA256")]
+    public void Validate_ValidHashAlgorithms_ReturnsTrue(string algorithms)
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = algorithms;
+        Assert.True(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_InvalidHashAlgorithm_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = "md5,sha512";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_EmptyHashAlgorithms_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = "";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_MalformedHashAlgorithms_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashMode = "actual";
+        args.HashAlgorithms = "md5,,sha256";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_HashAlgorithmsWithoutHashMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.HashAlgorithms = "md5";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_HashModeActualWithLoadfileOnly_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.FileType = null;
+        args.LoadfileOnly = true;
+        args.HashMode = "actual";
+        Assert.False(CliValidator.Validate(args));
+    }
 }

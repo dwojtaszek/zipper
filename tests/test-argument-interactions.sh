@@ -108,6 +108,24 @@ assert_rejected "--volume-size without --production-set" \
 
 # --- Other dependencies ---
 
+assert_rejected "invalid --hash-mode" \
+    --type pdf --count 5 --hash-mode invalid
+
+assert_rejected "--hash-algorithms without --hash-mode" \
+    --type pdf --count 5 --hash-algorithms md5
+
+assert_rejected "invalid --hash-algorithms" \
+    --type pdf --count 5 --hash-mode actual --hash-algorithms md5,sha512
+
+assert_rejected "--hash-mode actual + --loadfile-only" \
+    --loadfile-only --count 5 --hash-mode actual
+
+assert_accepted "valid --hash-mode actual" \
+    --type pdf --count 5 --hash-mode actual --hash-algorithms md5,sha256
+
+assert_accepted "valid --hash-mode simulated" \
+    --loadfile-only --count 5 --hash-mode simulated
+
 assert_rejected "--target-zip-size without --count" \
     --type pdf --target-zip-size 10MB
 

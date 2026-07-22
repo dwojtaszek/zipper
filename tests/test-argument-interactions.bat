@@ -30,6 +30,12 @@ call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfi
 call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\"" --output-path ".\results\zi_test"
 
+call :assert_rejected "invalid --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode invalid
+call :assert_rejected "--hash-algorithms without --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-algorithms md5
+call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha512
+call :assert_rejected "--hash-mode actual + --loadfile-only" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode actual
+call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha256
+call :assert_accepted "valid --hash-mode simulated" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode simulated
 call :assert_rejected "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format csv
 call :assert_rejected "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format xml
 call :assert_rejected "--loadfile-only + --load-file-format concordance" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format concordance

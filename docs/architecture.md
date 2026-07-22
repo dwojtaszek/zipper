@@ -82,6 +82,7 @@ graph LR
         FGR --> Tiff["Tiff"]
         FGR --> Chaos["Chaos"]
         FGR --> Production["Production"]
+        FGR --> Hash["Hash"]
     end
 
     subgraph File Generators
