@@ -23,7 +23,7 @@ fi
 # Docs-only = every staged file matches one of the doc patterns.
 # Use a positive filter (count matches) to avoid || true masking genuine failures.
 TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
-DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG\.md$|.*\.(md|txt)$)' || true)
+DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
 if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
     echo "✓ Pre-commit: docs-only change, skipping build/test."
     exit 0

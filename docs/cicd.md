@@ -64,7 +64,7 @@ Version-controlled in [`.github/hooks/`](../.github/hooks/), installed with `./s
 
 | Hook | Trigger | Does |
 |------|---------|------|
-| `pre-commit` | `git commit` | Short-circuits if every staged file is docs (`*.md`, `*.txt`, `docs/`). Else stashes unstaged changes, runs `dotnet format` on staged `*.cs`, runs all unit tests. |
+| `pre-commit` | `git commit` | Short-circuits if every staged file is docs (`*.md`, `docs/`). Else stashes unstaged changes, runs `dotnet format` on staged `*.cs`, runs all unit tests. |
 | `post-commit` | after commit object exists | Writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
 | `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`). |
 

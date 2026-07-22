@@ -641,6 +641,10 @@ print_info "Running CLI coverage gap tests..."
 bash ./tests/test-cli-coverage-gaps.sh || print_error "test-cli-coverage-gaps.sh failed."
 print_success "CLI coverage gap tests passed."
 
+print_info "Running CI build properties and docs-only classification tests..."
+bash ./tests/test-ci-build-props.sh || print_error "test-ci-build-props.sh failed."
+print_success "CI build properties and docs-only classification tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then

@@ -573,6 +573,15 @@ if errorlevel 1 (
 )
 call :print_success "CLI coverage gap tests passed."
 
+REM Test 14b: CI build props tests
+call :print_info "Running CI build props tests..."
+call .\tests\test-ci-build-props.bat
+if errorlevel 1 (
+    echo [ ERROR ] CI build props tests failed.
+    exit /b 1
+)
+call :print_success "CI build props tests passed."
+
 REM Test 15: Target-zip-size smoke tests
 call :print_info "Running target-zip-size smoke tests..."
 call .\tests\test-target-zip-size.bat
