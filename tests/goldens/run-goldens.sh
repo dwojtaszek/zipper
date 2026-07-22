@@ -114,14 +114,8 @@ snapshot_fixture() {
   # tree.txt — deterministic listing of all output files (path-sorted).
   ( cd "$src" && find . -type f | LC_ALL=C sort ) > "$dst/tree.txt"
 
-  # SHA manifest, excluding .zip files (ZIP metadata has timestamps).
-  ( cd "$src" && find . -type f ! -name '*.zip' -print0 | LC_ALL=C sort -z \
-    | while IFS= read -r -d '' f; do
-        rel="${f#./}"
-        h=$(sha256sum "$f" | awk '{print $1}')
-        printf '%s  %s\n' "$h" "$rel"
-      done
-  ) > "$dst/sha-manifest.txt"
+  # SHA manifest, including uncompressed ZIP entry contents.
+  bash "$LIB_DIR/sha-manifest.sh" "$src" > "$dst/sha-manifest.txt"
 
   # Copy load files and metadata verbatim (small files safe to commit).
   ( cd "$src" && find . -type f -print0 ) | while IFS= read -r -d '' f; do
@@ -134,13 +128,6 @@ snapshot_fixture() {
         ;;
     esac
   done
-}
-
-# Check if a scenario name is for an EML type.  EML content is inherently
-# non-deterministic (EmailTemplateSystem uses DateTime.Now + Random.Shared),
-# so we compare structure only — not byte-exact load file content.
-is_eml_scenario() {
-  [[ "$1" == eml-* ]]
 }
 
 # ── Main loop ────────────────────────────────────────────────────────────
@@ -219,56 +206,34 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
 
     scenario_failed=0
 
-    if is_eml_scenario "$scenario_name"; then
-      # EML: structural comparison only (tree listing + row count).
-      if ! diff -u "$fixture_dir/tree.txt" "$actual_fixture/tree.txt" >&2; then
-        echo "    tree.txt mismatch (EML structural check)"
-        scenario_failed=1
-      fi
-      # Verify row counts match (header + data lines in the DAT).
-      expected_lines=$(wc -l < "$fixture_dir/archive.dat" 2>/dev/null || echo 0)
-      actual_lines=$(wc -l < "$actual_fixture/archive.dat" 2>/dev/null || echo 0)
-      if [[ "$expected_lines" != "$actual_lines" ]]; then
-        echo "    DAT row count mismatch: expected=$expected_lines actual=$actual_lines" >&2
-        scenario_failed=1
-      fi
-      # Verify headers match (first line of DAT).
-      expected_header=$(head -1 "$fixture_dir/archive.dat" 2>/dev/null || echo "")
-      actual_header=$(head -1 "$actual_fixture/archive.dat" 2>/dev/null || echo "")
-      if [[ "$expected_header" != "$actual_header" ]]; then
-        echo "    DAT header mismatch" >&2
-        scenario_failed=1
-      fi
-    else
-      # Non-EML: byte-exact comparison via SHA manifest.
-      if ! diff -u "$fixture_dir/sha-manifest.txt" "$actual_fixture/sha-manifest.txt" >&2; then
-        echo "    SHA manifest mismatch"
-        scenario_failed=1
-      fi
+    # Byte-exact comparison via SHA manifest.
+    if ! diff -u "$fixture_dir/sha-manifest.txt" "$actual_fixture/sha-manifest.txt" >&2; then
+      echo "    SHA manifest mismatch"
+      scenario_failed=1
+    fi
 
-      # Compare tree listings.
-      if ! diff -u "$fixture_dir/tree.txt" "$actual_fixture/tree.txt" >&2; then
-        echo "    tree.txt mismatch"
-        scenario_failed=1
-      fi
+    # Compare tree listings.
+    if ! diff -u "$fixture_dir/tree.txt" "$actual_fixture/tree.txt" >&2; then
+      echo "    tree.txt mismatch"
+      scenario_failed=1
+    fi
 
-      # Per-file diff on load files for actionable first-divergence output.
-      if [[ $scenario_failed -eq 1 ]]; then
-        ( cd "$fixture_dir" && find . -type f \( -name '*.dat' -o -name '*.opt' -o -name '*.json' \) -print0 \
-          | LC_ALL=C sort -z ) \
-          | while IFS= read -r -d '' relpath; do
-              local_rel="${relpath#./}"
-              e="$fixture_dir/$local_rel"
-              a="$actual_fixture/$local_rel"
-              if [[ -f "$e" && -f "$a" ]]; then
-                if ! bash "$LIB_DIR/diff-loadfile.sh" "$e" "$a"; then
-                  break
-                fi
-              elif [[ -f "$e" && ! -f "$a" ]]; then
-                echo "    MISSING in actual: $local_rel" >&2
+    # Per-file diff on load files for actionable first-divergence output.
+    if [[ $scenario_failed -eq 1 ]]; then
+      ( cd "$fixture_dir" && find . -type f \( -name '*.dat' -o -name '*.opt' -o -name '*.json' \) -print0 \
+        | LC_ALL=C sort -z ) \
+        | while IFS= read -r -d '' relpath; do
+            local_rel="${relpath#./}"
+            e="$fixture_dir/$local_rel"
+            a="$actual_fixture/$local_rel"
+            if [[ -f "$e" && -f "$a" ]]; then
+              if ! bash "$LIB_DIR/diff-loadfile.sh" "$e" "$a"; then
+                break
               fi
-            done
-      fi
+            elif [[ -f "$e" && ! -f "$a" ]]; then
+              echo "    MISSING in actual: $local_rel" >&2
+            fi
+          done
     fi
 
     if [[ $scenario_failed -eq 1 ]]; then
