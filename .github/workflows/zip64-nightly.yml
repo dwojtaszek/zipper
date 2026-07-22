@@ -30,11 +30,11 @@ jobs:
         run: ./tests/test-zip64-boundary.sh
 
       - name: Check free disk space for 4GB test
-        if: ${{ github.event.inputs.run_4gb == 'true' }}
+        if: ${{ github.event.inputs.run_4gb == 'true' || github.event_name == 'schedule' }}
         run: df -h
 
       - name: Run Zip64 Boundary (4GB Size)
-        if: ${{ github.event.inputs.run_4gb == 'true' }}
+        if: ${{ github.event.inputs.run_4gb == 'true' || github.event_name == 'schedule' }}
         run: RUN_4GB_CASE=true ./tests/test-zip64-boundary.sh
 
       - name: Report Failure
