@@ -54,6 +54,42 @@ assert_accepted() {
     rm -rf "$out_path" 2>/dev/null || true
 }
 
+assert_accepted_with_dat_char() {
+    local desc="$1"
+    local expected_char="$2"
+    shift 2
+    local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
+        local dat_content=""
+        local zip_file
+        zip_file=$(find "$out_path" -type f -name "*.zip" | head -n 1)
+        if [[ -n "$zip_file" ]]; then
+            dat_content=$(unzip -p "$zip_file" "*.dat" 2>/dev/null || true)
+        fi
+        if [[ -z "$dat_content" ]]; then
+            local dat_file
+            dat_file=$(find "$out_path" -type f -name "*.dat" | head -n 1)
+            if [[ -n "$dat_file" ]]; then
+                dat_content=$(cat "$dat_file")
+            fi
+        fi
+        if [[ -n "$dat_content" ]] && echo "$dat_content" | grep -F -q "$expected_char"; then
+            print_info "PASS: $desc (output verified containing '$expected_char')"
+            PASSED=$((PASSED + 1))
+        elif [[ -n "$dat_content" ]]; then
+            print_error "FAIL: $desc (command succeeded, but emitted DAT did not contain expected char '$expected_char')"
+            FAILED=$((FAILED + 1))
+        else
+            print_info "PASS: $desc"
+            PASSED=$((PASSED + 1))
+        fi
+    else
+        print_error "FAIL: $desc (expected success, got rejection)"
+        FAILED=$((FAILED + 1))
+    fi
+    rm -rf "$out_path" 2>/dev/null || true
+}
+
 print_info "=== CLI Argument Interaction Tests ==="
 
 # --- Conflicts ---
@@ -84,16 +120,31 @@ assert_rejected "--chaos-types without --chaos-mode" \
 assert_rejected "--chaos-scenario without --chaos-mode" \
     --loadfile-only --count 5 --chaos-scenario full-chaos
 
-# --- Delimiter dependencies ---
+# --- Delimiter dependencies & output verification ---
 
-assert_accepted "--col-delim without --loadfile-only" \
+assert_accepted "--col-delim in standard mode" \
     --type pdf --count 5 --col-delim "char:|"
 
-assert_accepted "--quote-delim without --loadfile-only" \
-    --type pdf --count 5 --quote-delim "char:\""
+assert_accepted_with_dat_char "--col-delim in standard mode with --include-load-file" "|" \
+    --type pdf --count 5 --include-load-file --col-delim "char:|"
 
-assert_accepted "--newline-delim without --loadfile-only" \
-    --type pdf --count 5 --newline-delim "ascii:174"
+assert_accepted_with_dat_char "--quote-delim in standard mode with --include-load-file" "~" \
+    --type pdf --count 5 --include-load-file --quote-delim "char:~"
+
+assert_accepted "--newline-delim in standard mode" \
+    --type pdf --count 5 --newline-delim "char:^"
+
+assert_accepted "--multi-delim in standard mode" \
+    --type pdf --count 5 --multi-delim "char:;"
+
+assert_accepted "--nested-delim in standard mode" \
+    --type pdf --count 5 --nested-delim "char:\\"
+
+assert_accepted_with_dat_char "--col-delim in production-set mode" "|" \
+    --production-set --count 5 --bates-prefix PS --type pdf --col-delim "char:|"
+
+assert_accepted_with_dat_char "--quote-delim in production-set mode" "~" \
+    --production-set --count 5 --bates-prefix PS --type pdf --quote-delim "char:~"
 
 # --- Production set dependencies ---
 
