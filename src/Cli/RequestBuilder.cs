@@ -258,6 +258,11 @@ public static class RequestBuilder
             }
         }
 
+        if (mode != HashMode.None && algorithms.Count == 0)
+        {
+            algorithms.Add(HashAlgorithm.MD5);
+        }
+
         return new HashConfig
         {
             Mode = mode,

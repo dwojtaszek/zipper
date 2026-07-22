@@ -211,6 +211,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--delimiter-column` | ASCII 20 | char or ASCII code | Custom column delimiter |
 | `--delimiter-quote` | ASCII 254 | char or ASCII code | Custom quote delimiter |
 | `--delimiter-newline` | ASCII 174 | char or ASCII code | Custom newline replacement |
+| `--hash-mode` | none | actual, simulated, none | Hash generation mode |
+| `--hash-algorithms` | md5 | md5, sha1, sha256 | Comma-separated hash algorithms |
 | `--bates-prefix` | none | string | Bates prefix |
 | `--bates-start` | 1 | ≥0 | Bates start number |
 | `--bates-digits` | 8 | 1-20 | Bates digit count |
@@ -270,6 +272,8 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
 | `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
+| `--hash-algorithms` | Requires `--hash-mode` to be `actual` or `simulated` |
+| `--hash-mode actual` + `--loadfile-only` | **Conflict**: cannot compute actual hashes without generated Native Files |
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |

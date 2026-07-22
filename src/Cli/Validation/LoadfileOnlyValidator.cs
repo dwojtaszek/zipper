@@ -24,6 +24,12 @@ internal static class LoadfileOnlyValidator
                 return false;
             }
 
+            if (!string.IsNullOrEmpty(parsed.HashMode) && string.Equals(parsed.HashMode, "actual", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine("Error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash).");
+                return false;
+            }
+
             // #357: This validation confirms Loadfile-Only is restricted to DAT/OPT formats.
             // Encoding reachability re-validation is intentionally removed because CrossCuttingValidator handles encoding.
             if (!string.IsNullOrEmpty(parsed.LoadFileFormat))

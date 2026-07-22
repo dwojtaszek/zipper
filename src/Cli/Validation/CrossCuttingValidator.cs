@@ -10,7 +10,8 @@ internal static class CrossCuttingValidator
         return ValidateFormattingAndProfiles(parsed) &&
                ValidateChaos(parsed) &&
                ValidateDelimiters(parsed) &&
-               ValidateBates(parsed);
+               ValidateBates(parsed) &&
+               ValidateHashes(parsed);
     }
 
     private static bool ValidateFormattingAndProfiles(ParsedArguments parsed)
@@ -306,6 +307,51 @@ internal static class CrossCuttingValidator
                 return false;
             }
         }
+        return true;
+    }
+
+    private static bool ValidateHashes(ParsedArguments parsed)
+    {
+        if (!string.IsNullOrEmpty(parsed.HashMode))
+        {
+            var mode = parsed.HashMode.ToLowerInvariant();
+            if (mode != "actual" && mode != "simulated" && mode != "none")
+            {
+                Console.Error.WriteLine($"Error: Invalid --hash-mode '{parsed.HashMode}'. Supported values: actual, simulated, none.");
+                return false;
+            }
+        }
+
+        bool isHashEnabled = !string.IsNullOrEmpty(parsed.HashMode) &&
+            (string.Equals(parsed.HashMode, "actual", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(parsed.HashMode, "simulated", StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(parsed.HashAlgorithms))
+        {
+            if (!isHashEnabled)
+            {
+                Console.Error.WriteLine("Error: --hash-algorithms requires --hash-mode to be 'actual' or 'simulated'.");
+                return false;
+            }
+
+            var algs = parsed.HashAlgorithms.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (algs.Length == 0)
+            {
+                Console.Error.WriteLine("Error: --hash-algorithms requires at least one valid algorithm (md5, sha1, sha256).");
+                return false;
+            }
+
+            foreach (var alg in algs)
+            {
+                var lowerAlg = alg.ToLowerInvariant();
+                if (lowerAlg != "md5" && lowerAlg != "sha1" && lowerAlg != "sha256")
+                {
+                    Console.Error.WriteLine($"Error: Invalid hash algorithm '{alg}'. Supported values: md5, sha1, sha256.");
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 }

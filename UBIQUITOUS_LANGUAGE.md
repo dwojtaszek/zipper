@@ -53,6 +53,16 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 ---
 
+## Cryptographic Hash Concepts
+
+| Term | Definition | Aliases to avoid |
+|------|-----------|-----------------|
+| **Hash Mode** | Mode controlling cryptographic hash generation for **Native Files** (`actual`, `simulated`, `none`). | Checksum mode, hash strategy |
+| **Hash Algorithm** | Supported cryptographic hash algorithm (`md5`, `sha1`, `sha256`) emitted into **Load File** hash columns. | Hash type, checksum algorithm |
+| **Hash Column** | Intrinsic column emitted in **Load Files** when **Hash Mode** is enabled (`MD5HASH`, `SHA1HASH`, `SHA256HASH`). | Checksum column, hash field |
+
+---
+
 ## Bates Numbering Concepts
 
 | Term | Definition | Aliases to avoid |

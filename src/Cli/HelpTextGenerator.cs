@@ -33,6 +33,8 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --delimiter-column <c>   Custom column delimiter (char or ASCII code)");
         Console.Error.WriteLine("  --delimiter-quote <c>    Custom quote delimiter (char or ASCII code)");
         Console.Error.WriteLine("  --delimiter-newline <c>  Custom newline replacement (char or ASCII code)");
+        Console.Error.WriteLine("  --hash-mode <mode>       Cryptographic hash mode: actual, simulated, none (default: none)");
+        Console.Error.WriteLine("  --hash-algorithms <list> Hash algorithms: md5, sha1, sha256 (default: md5)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Loadfile-Only Options:");
         Console.Error.WriteLine("  --loadfile-only          Skip ZIP/native generation, stream directly to load file");
