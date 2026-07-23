@@ -55,7 +55,7 @@ else
 fi
 
 # 2. Structural validity by a second tool
-if unzip -t "$ZIP_FILE" ; then
+if unzip -t -q "$ZIP_FILE" ; then
     print_info "Assertion OK: unzip -t exited 0 (structurally valid)"
     PASSED=$((PASSED + 1))
 else
@@ -97,7 +97,7 @@ if [[ "${RUN_4GB_CASE:-false}" == "true" ]]; then
     OUT_4GB="$TEST_OUTPUT_DIR/4gb"
     mkdir -p "$OUT_4GB"
     
-    zipper --type pdf --count 10 --target-zip-size 4500MB --output-path "$OUT_4GB" --seed 42 
+    zipper --type pdf --count 50 --target-zip-size 4500MB --output-path "$OUT_4GB" --seed 42 
     
     ZIP_4GB=$(find "$OUT_4GB" -name "*.zip" -print | head -n 1 || true)
     if [[ -z "$ZIP_4GB" ]]; then
@@ -109,7 +109,7 @@ if [[ "${RUN_4GB_CASE:-false}" == "true" ]]; then
             print_info "Assertion OK: 4GB archive generated successfully ($SIZE bytes)"
             PASSED=$((PASSED + 1))
             
-            if unzip -t "$ZIP_4GB" ; then
+            if unzip -t -q "$ZIP_4GB" ; then
                 print_info "Assertion OK: unzip -t exited 0 on 4GB archive"
                 PASSED=$((PASSED + 1))
             else
