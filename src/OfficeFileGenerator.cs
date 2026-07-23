@@ -160,34 +160,80 @@ internal sealed class OfficeFileGenerator : IFileGenerator
         worksheet.Cell("B2").Value = "Sample Date";
         worksheet.Cell("C2").Value = "Sample document for eDiscovery testing";
 
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        stream.Position = 0;
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
+        using var rawStream = new MemoryStream();
+        workbook.SaveAs(rawStream);
+        rawStream.Position = 0;
+
+        using var inArchive = new ZipArchive(rawStream, ZipArchiveMode.Read);
+        using var outStream = new MemoryStream();
+        using (var outArchive = new ZipArchive(outStream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            foreach (var entry in archive.Entries)
+            var staticCoreXml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" " +
+                "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" " +
+                "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                "<dc:creator>Zipper</dc:creator><cp:lastModifiedBy>Zipper</cp:lastModifiedBy>" +
+                "<dcterms:created xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:created>" +
+                "<dcterms:modified xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:modified>" +
+                "</cp:coreProperties>";
+
+            var staticRelsXml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"/xl/workbook.xml\" Id=\"rId1\" />" +
+                "<Relationship Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"/docProps/app.xml\" Id=\"rId2\" />" +
+                "<Relationship Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"/docProps/core.xml\" Id=\"rId3\" />" +
+                "</Relationships>";
+
+            var staticContentTypes = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+                "<Default Extension=\"xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\" />" +
+                "<Default Extension=\"psmdcp\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\" />" +
+                "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\" />" +
+                "<Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\" />" +
+                "<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\" />" +
+                "<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\" />" +
+                "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\" />" +
+                "<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\" />" +
+                "<Override PartName=\"/xl/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\" />" +
+                "</Types>";
+
+            foreach (var entry in inArchive.Entries)
             {
-                entry.LastWriteTime = FixedTimestamp;
+                if (entry.FullName.StartsWith("package/services/metadata/core-properties/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var newEntry = outArchive.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                newEntry.LastWriteTime = FixedTimestamp;
+
+                using var destStream = newEntry.Open();
+                if (entry.FullName == "_rels/.rels")
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(staticRelsXml);
+                    destStream.Write(bytes, 0, bytes.Length);
+                }
+                else if (entry.FullName == "[Content_Types].xml")
+                {
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(staticContentTypes);
+                    destStream.Write(bytes, 0, bytes.Length);
+                }
+                else
+                {
+                    using var srcStream = entry.Open();
+                    srcStream.CopyTo(destStream);
+                }
             }
 
-            var corePropsEntry = archive.GetEntry("docProps/core.xml");
-            if (corePropsEntry is not null)
+            var coreEntry = outArchive.CreateEntry("docProps/core.xml", CompressionLevel.Optimal);
+            coreEntry.LastWriteTime = FixedTimestamp;
+            using (var destStream = coreEntry.Open())
             {
-                var staticCoreXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                    "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" " +
-                    "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" " +
-                    "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
-                    "<dc:creator>Zipper</dc:creator><cp:lastModifiedBy>Zipper</cp:lastModifiedBy>" +
-                    "<dcterms:created xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:created>" +
-                    "<dcterms:modified xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:modified>" +
-                    "</cp:coreProperties>";
-                using var entryStream = corePropsEntry.Open();
-                entryStream.SetLength(0);
                 var bytes = System.Text.Encoding.UTF8.GetBytes(staticCoreXml);
-                entryStream.Write(bytes, 0, bytes.Length);
+                destStream.Write(bytes, 0, bytes.Length);
             }
         }
 
-        return stream.ToArray();
+        return outStream.ToArray();
     }
 }
