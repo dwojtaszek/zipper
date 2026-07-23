@@ -9,6 +9,8 @@ namespace Zipper;
 /// </summary>
 internal sealed class OfficeFileGenerator : IFileGenerator
 {
+    private static readonly DateTimeOffset FixedTimestamp = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     /// <summary>
     /// Pre-computed minimal valid DOCX Native File.
     /// </summary>
@@ -103,6 +105,7 @@ internal sealed class OfficeFileGenerator : IFileGenerator
                 "</Types>";
 
             var contentTypesEntry = archive.CreateEntry("[Content_Types].xml");
+            contentTypesEntry.LastWriteTime = FixedTimestamp;
             using (var contentTypesStream = contentTypesEntry.Open())
             {
                 var contentTypesBytes = System.Text.Encoding.UTF8.GetBytes(contentTypes);
@@ -115,6 +118,7 @@ internal sealed class OfficeFileGenerator : IFileGenerator
                 "</Relationships>";
 
             var relsEntry = archive.CreateEntry("_rels/.rels");
+            relsEntry.LastWriteTime = FixedTimestamp;
             using (var relsStream = relsEntry.Open())
             {
                 var relsBytes = System.Text.Encoding.UTF8.GetBytes(rels);
@@ -129,6 +133,7 @@ internal sealed class OfficeFileGenerator : IFileGenerator
                 "</w:document>";
 
             var documentEntry = archive.CreateEntry("word/document.xml");
+            documentEntry.LastWriteTime = FixedTimestamp;
             using (var documentStream = documentEntry.Open())
             {
                 var documentBytes = System.Text.Encoding.UTF8.GetBytes(documentXml);
@@ -157,6 +162,15 @@ internal sealed class OfficeFileGenerator : IFileGenerator
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
+        stream.Position = 0;
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Update, leaveOpen: true))
+        {
+            foreach (var entry in archive.Entries)
+            {
+                entry.LastWriteTime = FixedTimestamp;
+            }
+        }
+
         return stream.ToArray();
     }
 }

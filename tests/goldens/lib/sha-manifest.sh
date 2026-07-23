@@ -52,39 +52,57 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 2
 fi
 
-# Walk the tree, hash each regular file, normalise the path to a relative
-# form (with a leading "./" stripped), and sort.
-(
-  cd "$root"
-  find . -type f -print0 \
-    | LC_ALL=C sort -z \
-    | while IFS= read -r -d '' f; do
-        rel="${f#./}"
-        if [[ "$rel" == *.zip || "$rel" == *.docx || "$rel" == *.xlsx ]]; then
-          python3 -c '
-import sys, zipfile, hashlib
+python3 - "$root" << 'PYEOF'
+import sys, os, zipfile, hashlib
 
-zip_path = sys.argv[1]
-rel_zip = sys.argv[2]
-try:
-    with zipfile.ZipFile(zip_path, "r") as z:
-        for name in sorted(z.namelist()):
-            if name.endswith("/"):
-                continue
-            h = hashlib.sha256()
-            with z.open(name) as ef:
-                while True:
-                    chunk = ef.read(65536)
-                    if not chunk:
-                        break
-                    h.update(chunk)
-            print(f"{h.hexdigest()}  {rel_zip}::{name}")
-except Exception as e:
-    sys.stderr.write(f"Error reading zip {zip_path}: {e}\n")
-' "$f" "$rel"
-        else
-          h=$($hasher "$f" | awk '{print $1}')
-          printf '%s  %s\n' "$h" "$rel"
-        fi
-      done
-)
+if len(sys.argv) < 2:
+    sys.exit(1)
+
+root = sys.argv[1]
+
+def get_file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+entries = []
+
+for dirpath, _, filenames in os.walk(root, followlinks=True):
+    for filename in filenames:
+        full_path = os.path.join(dirpath, filename)
+        if not os.path.isfile(full_path):
+            continue
+        rel_path = os.path.relpath(full_path, root).replace("\\", "/")
+        if rel_path.startswith("./"):
+            rel_path = rel_path[2:]
+
+        if rel_path.endswith((".zip", ".docx", ".xlsx")):
+            try:
+                with zipfile.ZipFile(full_path, "r") as z:
+                    for name in sorted(z.namelist()):
+                        if name.endswith("/"):
+                            continue
+                        zh = hashlib.sha256()
+                        with z.open(name) as ef:
+                            while True:
+                                chunk = ef.read(65536)
+                                if not chunk:
+                                    break
+                                zh.update(chunk)
+                        entry_key = f"{rel_path}::{name}"
+                        entries.append((entry_key, f"{zh.hexdigest()}  {entry_key}"))
+            except Exception as e:
+                sys.stderr.write(f"Error reading zip {full_path}: {e}\n")
+        else:
+            h = get_file_sha256(full_path)
+            entries.append((rel_path, f"{h}  {rel_path}"))
+
+entries.sort(key=lambda x: x[0])
+for _, line in entries:
+    print(line)
+PYEOF
