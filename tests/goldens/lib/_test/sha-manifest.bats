@@ -78,3 +78,16 @@ teardown() {
   expected=$'a/b/c/file.txt\ntop.txt'
   [[ "$paths" == "$expected" ]]
 }
+
+@test "hashes uncompressed entries inside zip archive" {
+  sub="$(mktemp -d)"
+  printf 'hello inside zip\n' >"$sub/inner.txt"
+  python3 -c "import zipfile; z=zipfile.ZipFile('$TMPDIR_LOCAL/archive.zip', 'w'); z.write('$sub/inner.txt', 'inner.txt')"
+  rm -rf "$sub"
+
+  run bash "$SCRIPT" "$TMPDIR_LOCAL"
+  [ "$status" -eq 0 ]
+  # sha256("hello inside zip\n") = 4710dd9ca3dd66d1f0535e69bf8be3bc8c3fa0ebbf519fa76170dcaaa225ecab
+  [[ "$output" == "4710dd9ca3dd66d1f0535e69bf8be3bc8c3fa0ebbf519fa76170dcaaa225ecab  archive.zip::inner.txt" ]]
+}
+

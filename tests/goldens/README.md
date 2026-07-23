@@ -59,19 +59,13 @@ Lines starting with `#` and blank lines are ignored.
 | 4 | pdf-full | Standard |
 | 5 | jpg-folders-gaussian | Standard |
 | 6 | tiff-multipage | Standard |
-| 7 | eml-attachments | Standard (structural) |
-| 8 | eml-full | Standard (structural) |
+| 7 | eml-attachments | Standard |
+| 8 | eml-full | Standard |
 | 9 | docx-basic | Standard |
 | 10 | xlsx-basic | Standard |
 | 11 | loadfile-only-dat | Loadfile-Only |
 | 12 | loadfile-only-opt | Loadfile-Only |
 | 13 | production-set | Production Set |
-
-> **EML scenarios** use structural comparison (tree listing + DAT row count
-> and header), not byte-exact diffing.  This is because the `.eml` file
-> content includes timestamps generated relative to `DateTime.Now` in code
-> paths that run outside the seeded `Random` passed to `EmailFactory`, making
-> the raw bytes differ across runs even when `--seed` is supplied.
 
 ## Running scenarios
 
@@ -104,12 +98,11 @@ ZIPPER_CLI=/path/to/zipper ./tests/goldens/run-goldens.sh --capture
 Each fixture directory contains:
 
 - `tree.txt` — deterministic listing of all files the CLI produced.
-- `sha-manifest.txt` — SHA-256 hashes of all non-ZIP output files.
+- `sha-manifest.txt` — SHA-256 hashes of all non-ZIP output files and uncompressed entry contents of `.zip` archives (formatted as `<hash>  <rel_zip>::<entry_name>`).
 - Load files (`*.dat`, `*.opt`) — committed verbatim.
 - Metadata (`*.json`) — committed verbatim, with timestamps normalised.
 
-ZIP archives are **not committed** (their internal metadata has timestamps).
-Load file content captures the same information deterministically.
+ZIP archives are **not committed** as raw binaries (container headers include timestamps), but uncompressed ZIP entries are content-hashed inside `sha-manifest.txt` to guarantee byte-exact native file parity.
 
 ## When a golden fails
 
