@@ -35,18 +35,6 @@ if [[ ! -d "$root" ]]; then
   exit 1
 fi
 
-# Pick the available sha256 hasher. macOS ships `shasum`, most Linux distros
-# ship `sha256sum`; we accept either.
-hasher=""
-if command -v sha256sum >/dev/null 2>&1; then
-  hasher="sha256sum"
-elif command -v shasum >/dev/null 2>&1; then
-  hasher="shasum -a 256"
-else
-  echo "sha-manifest.sh: need sha256sum or shasum on PATH" >&2
-  exit 2
-fi
-
 if ! command -v python3 >/dev/null 2>&1; then
   echo "sha-manifest.sh: need python3 on PATH" >&2
   exit 2
@@ -98,6 +86,7 @@ for dirpath, _, filenames in os.walk(root, followlinks=True):
                         entries.append((entry_key, f"{zh.hexdigest()}  {entry_key}"))
             except Exception as e:
                 sys.stderr.write(f"Error reading zip {full_path}: {e}\n")
+                sys.exit(1)
         else:
             h = get_file_sha256(full_path)
             entries.append((rel_path, f"{h}  {rel_path}"))
