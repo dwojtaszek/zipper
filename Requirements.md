@@ -321,16 +321,16 @@ The EDRM (Electronic Discovery Reference Model) XML format is a vendor-neutral s
 
 #### Example EDRM XML
 ```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<Root>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<Root DataInterchangeType="Export" MajorVersion="1" MinorVersion="2">
   <Batch>
-    <Document DocID="ABC001_00001">
+    <Document DocID="DOC00000001">
       <Files>
         <File FileType="Native">
-          <ExternalFile FilePath="NATIVES\DOC001.pdf" FileSize="125678" Hash="abc123..."/>
+          <ExternalFile FilePath="NATIVES/DOC001.pdf" FileName="DOC001.pdf" FileSize="125678" Hash="abc123..."/>
         </File>
         <File FileType="Text">
-          <ExternalFile FilePath="TEXT\DOC001.txt"/>
+          <ExternalFile FilePath="TEXT/DOC001.txt" FileName="DOC001.txt" FileSize="123" Hash="def456..."/>
         </File>
       </Files>
       <Tags>
