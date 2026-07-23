@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Zipper.LoadFiles;
@@ -139,7 +140,21 @@ internal static class LoadFileEmitter
             ? chaosEngine.Intercept(lineNumber, originalLine, recordId)
             : originalLine;
 
-        await stream.WriteAsync(encoding.GetBytes(text + eol), cancellationToken).ConfigureAwait(false);
+        int textByteCount = encoding.GetByteCount(text);
+        int eolByteCount = encoding.GetByteCount(eol);
+        int totalByteCount = textByteCount + eolByteCount;
+
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(totalByteCount);
+        try
+        {
+            int textWritten = encoding.GetBytes(text.AsSpan(), buffer.AsSpan());
+            int eolWritten = encoding.GetBytes(eol.AsSpan(), buffer.AsSpan(textWritten));
+            await stream.WriteAsync(buffer.AsMemory(0, textWritten + eolWritten), cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
 
         var anomaly = chaosEngine.GetEncodingAnomaly(lineNumber, lineNumber + 1, encoding);
         if (anomaly is not null)
