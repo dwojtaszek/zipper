@@ -169,6 +169,23 @@ internal sealed class OfficeFileGenerator : IFileGenerator
             {
                 entry.LastWriteTime = FixedTimestamp;
             }
+
+            var corePropsEntry = archive.GetEntry("docProps/core.xml");
+            if (corePropsEntry is not null)
+            {
+                var staticCoreXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" " +
+                    "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" " +
+                    "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                    "<dc:creator>Zipper</dc:creator><cp:lastModifiedBy>Zipper</cp:lastModifiedBy>" +
+                    "<dcterms:created xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:created>" +
+                    "<dcterms:modified xsi:type=\"dcterms:W3CDTF\">2024-01-01T00:00:00Z</dcterms:modified>" +
+                    "</cp:coreProperties>";
+                using var entryStream = corePropsEntry.Open();
+                entryStream.SetLength(0);
+                var bytes = System.Text.Encoding.UTF8.GetBytes(staticCoreXml);
+                entryStream.Write(bytes, 0, bytes.Length);
+            }
         }
 
         return stream.ToArray();
