@@ -50,6 +50,7 @@ coverage*
 # ...but keep the CI composite action whose dir name collides with coverage*
 !.github/actions/coverage-gate/
 !.github/actions/coverage-gate/**
+!.github/coverage-file-allowlist.txt
 publish-bin/
 
 # OS files

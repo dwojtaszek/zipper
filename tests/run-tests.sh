@@ -645,6 +645,10 @@ print_info "Running CI build properties and docs-only classification tests..."
 bash ./tests/test-ci-build-props.sh || print_error "test-ci-build-props.sh failed."
 print_success "CI build properties and docs-only classification tests passed."
 
+print_info "Running CI per-file coverage gate action tests..."
+bash ./.github/actions/coverage-gate/test-coverage-gate.sh || print_error "test-coverage-gate.sh failed."
+print_success "CI per-file coverage gate action tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then

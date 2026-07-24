@@ -76,7 +76,7 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 
 1. **docs-only** — diffs base..head; if **every** changed file matches a docs pattern, sets `only_docs=true` and the rest of the pipeline is skipped. A failed diff or zero changed files is treated as non-docs (fail-safe).
 2. **lint** — `actionlint`, `dotnet restore --locked-mode`, `dotnet format --verify-no-changes`, and an oversized-file guard (>500 KB under `src/`, excluding `*.json`/`*.dat`/`*.opt`).
-3. **build-and-test** — matrix over `ubuntu` / `windows` / `macOS`. Builds Release (includes tests), runs unit tests, full E2E suite. **Linux leg only** also: code coverage + **80% line-coverage gate** ([coverage-gate action](../.github/actions/coverage-gate/action.yml)), vulnerable-package scan (hard gate), test-timing report, and publishes the CLI as an artifact for goldens.
+3. **build-and-test** — matrix over `ubuntu` / `windows` / `macOS`. Builds Release (includes tests), runs unit tests, full E2E suite. **Linux leg only** also: code coverage + **80% total line-coverage gate** and **50% per-file coverage floor** ([coverage-gate action](../.github/actions/coverage-gate/action.yml)), vulnerable-package scan (hard gate), test-timing report, and publishes the CLI as an artifact for goldens.
 4. **goldens** — downloads the Linux CLI artifact and runs golden scenarios (content-hash parity). See [CI.md](../CI.md#goldens) to regenerate.
 
 ### 3. Side checks (parallel on PR)
