@@ -301,6 +301,150 @@ public class ProductionManifestComparerTests
     }
 
     [Fact]
+    public async Task CompareAndReportAsync_WithMarkdownSummary_ShouldContainAllRequiredSectionsAndMetrics()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_md_sections_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001", "ABC00000002" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002", "ABC00000005" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath);
+
+            Assert.True(success);
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+            Assert.True(File.Exists(summaryPath));
+
+            var reportMd = await File.ReadAllTextAsync(summaryPath);
+            var reportJson = await File.ReadAllTextAsync(outputPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var summaryJson = doc.RootElement.GetProperty("summary");
+
+            // Verify Headers & Mode
+            Assert.Contains("# Production Set Comparison Report", reportMd, StringComparison.Ordinal);
+            Assert.Contains("**Mode:** REPLACEMENT", reportMd, StringComparison.Ordinal);
+            Assert.Contains("## Summary", reportMd, StringComparison.Ordinal);
+            Assert.Contains("## Bates Number Analysis", reportMd, StringComparison.Ordinal);
+            Assert.Contains("## Volume Analysis", reportMd, StringComparison.Ordinal);
+
+            // Verify Metrics match JSON report totals
+            Assert.Contains($"| Total Prior Records | {summaryJson.GetProperty("totalPriorRecords").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Total New Records | {summaryJson.GetProperty("totalNewRecords").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Added Records | {summaryJson.GetProperty("addedCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Removed Records | {summaryJson.GetProperty("removedCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Unchanged Records | {summaryJson.GetProperty("unchangedCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Changed Records (Metadata/Hash) | {summaryJson.GetProperty("changedCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Replaced Records (Different Bates) | {summaryJson.GetProperty("replacedCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+            Assert.Contains($"| Duplicates/Overlaps | {summaryJson.GetProperty("duplicateCount").GetInt32()} |", reportMd, StringComparison.Ordinal);
+
+            // Verify Bates & Volume tables
+            Assert.Contains("ABC00000001 - ABC00000002", reportMd, StringComparison.Ordinal);
+            Assert.Contains("| PROD001 | VOL001 |", reportMd, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_WithGapsOverlapsAndMultipleSets_ShouldRenderSpecialMarkdownSections()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_md_special_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001", "ABC00000002" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002", "ABC00000005" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "supplemental", outputPath);
+
+            Assert.True(success);
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+            var reportMd = await File.ReadAllTextAsync(summaryPath);
+
+            Assert.Contains("### Prior Bates Ranges by Production Set", reportMd, StringComparison.Ordinal);
+            Assert.Contains("* **PROD001:** ABC00000001 - ABC00000002", reportMd, StringComparison.Ordinal);
+            Assert.Contains("### Skipped Bates Ranges (Gaps)", reportMd, StringComparison.Ordinal);
+            Assert.Contains("- `ABC00000003` to `ABC00000004`", reportMd, StringComparison.Ordinal);
+            Assert.Contains("### Overlapping Bates Ranges", reportMd, StringComparison.Ordinal);
+            Assert.Contains("- `ABC00000002` to `ABC00000002`", reportMd, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_WithConsoleSummary_ShouldOutputFormattedSummaryToConsole()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_console_summary_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        var originalConsoleOut = Console.Out;
+        using var sw = new StringWriter();
+        try
+        {
+            Console.SetOut(sw);
+
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001", "ABC00000002" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000005" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "supplemental", outputPath);
+
+            Assert.True(success);
+
+            var consoleOutput = sw.ToString();
+            Assert.Contains("PRODUCTION MANIFEST COMPARISON SUMMARY", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("Mode: SUPPLEMENTAL", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("Total Prior Records: 2", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("Total New Records:   1", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("Prior Bates Range:   ABC00000001 - ABC00000002", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("New Bates Range:     ABC00000005 - ABC00000005", consoleOutput, StringComparison.Ordinal);
+            Assert.Contains("Gaps Detected:       1 range(s) skipped.", consoleOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetOut(originalConsoleOut);
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_AcrossAllModes_ShouldMaintainSummaryParity()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_modes_parity_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+
+            string[] modes = { "replacement", "supplemental", "reproduction" };
+            foreach (var mode in modes)
+            {
+                var outputPath = Path.Combine(tempDir, $"report_{mode}.json");
+                var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", mode, outputPath);
+
+                Assert.True(success);
+                var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+                Assert.True(File.Exists(summaryPath), $"Markdown summary missing for mode {mode}");
+
+                var markdownContent = await File.ReadAllTextAsync(summaryPath);
+                Assert.Contains($"**Mode:** {mode.ToUpperInvariant()}", markdownContent, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
     public async Task CompareAndReportAsync_WithDuplicateRecordsInSets_ShouldIdentifyDuplicates()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"test_dups_{Guid.NewGuid()}");
@@ -328,7 +472,7 @@ public class ProductionManifestComparerTests
 
     private static string CreateTestProductionSet(string baseDir, string prodId, string volume, string[] batesNumbers)
     {
-        return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þBEGBATCHþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
+        return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
     }
 
     private static string CreateTestProductionSetWithCustomDatHeader(string baseDir, string prodId, string volume, string[] batesNumbers, string datHeader)
