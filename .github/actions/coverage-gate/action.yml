@@ -30,6 +30,12 @@ runs:
         COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
         echo "Coverage: ${COVERAGE}%"
         awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
-          echo "ERROR: coverage ${COVERAGE}% < 80%"
+          echo "ERROR: total coverage ${COVERAGE}% < 80%"
           exit 1
         }
+        echo "==> Enforcing per-file coverage floor (50%)..."
+        python3 .github/actions/coverage-gate/check-per-file-coverage.py \
+          --reports "TestResults/*/coverage.cobertura.xml" \
+          --min-coverage 50 \
+          --min-lines 20
+
