@@ -470,10 +470,72 @@ public class ProductionManifestComparerTests
         }
     }
 
+    [Fact]
+    public async Task CompareAndReportAsync_WithUnknownEncoding_ShouldWarnAndFallBackToUtf8()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_unknown_encoding_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        var originalConsoleError = Console.Error;
+        using var sw = new StringWriter();
+        try
+        {
+            var p1 = CreateTestProductionSetWithEncoding(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" }, "GARBAGE-ENCODING-XYZ");
+            var p2 = CreateTestProductionSetWithEncoding(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" }, "GARBAGE-ENCODING-XYZ");
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            Console.SetError(sw);
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath);
+
+            Assert.True(success, "Comparison should succeed even with unrecognized encoding");
+            Assert.True(File.Exists(outputPath), "Output JSON should still be written");
+
+            var stderr = sw.ToString();
+            Assert.Contains("GARBAGE-ENCODING-XYZ", stderr, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("UTF-8", stderr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Console.SetError(originalConsoleError);
+            CleanupDirectory(tempDir);
+        }
+    }
+
     private static string CreateTestProductionSet(string baseDir, string prodId, string volume, string[] batesNumbers)
     {
         return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
     }
+
+    private static string CreateTestProductionSetWithEncoding(string baseDir, string prodId, string volume, string[] batesNumbers, string encoding)
+    {
+        var prodDir = Path.Combine(baseDir, prodId);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var sb = new StringBuilder();
+        sb.AppendLine("þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
+        foreach (var bates in batesNumbers)
+        {
+            sb.AppendLine($"þ{bates}þ\u0014þ{volume}þ\u0014þIMAGES/001.tifþ\u0014þd41d8cd98f00b204e9800998ecf8427eþ");
+        }
+        File.WriteAllText(datPath, sb.ToString(), Encoding.UTF8);
+
+        var manifestData = new
+        {
+            ProductionId = prodId,
+            BatesNumberStart = batesNumbers.Length > 0 ? batesNumbers[0] : string.Empty,
+            BatesNumberEnd = batesNumbers.Length > 0 ? batesNumbers[^1] : string.Empty,
+            BatesRange = new { Start = batesNumbers.Length > 0 ? batesNumbers[0] : string.Empty, End = batesNumbers.Length > 0 ? batesNumbers[^1] : string.Empty, Prefix = "ABC", Digits = 8 },
+            LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+            Settings = new { Encoding = encoding, ColumnDelimiter = "\u0014", QuoteDelimiter = "þ" }
+        };
+
+        var manifestPath = Path.Combine(prodDir, "_manifest.json");
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+        return manifestPath;
+    }
+
 
     private static string CreateTestProductionSetWithCustomDatHeader(string baseDir, string prodId, string volume, string[] batesNumbers, string datHeader)
     {
