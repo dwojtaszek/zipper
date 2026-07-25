@@ -342,6 +342,77 @@ if zipper \
 else
   print_success "Test Case 8: Failing duplicate supplemental Bates range passed"
 fi
+
+# --- Test Case 9: Production Manifest Comparison happy path ---
+
+print_info "Test Case 9: Production Manifest Comparison (replacement mode)"
+
+comp_report="$TEST_OUTPUT_DIR/test9_report.json"
+rm -f "$comp_report"
+
+# Compare the prior manifest (test7_prior) against the supplemental manifest (test7_supp).
+# Both were generated above under the SUPP Bates prefix with disjoint Bates ranges
+# (prior SUPP00000001-005, supplemental SUPP00000006-010) and disjoint DOCIDs (DOCID
+# equals the Bates number in Production Sets). In replacement mode, all 5 new records
+# are Added and all 5 prior records are Removed (replacement mode computes removals
+# unlike supplemental mode).
+zipper \
+  --compare-production-manifests "$prior_manifest,$supp_manifest" \
+  --comparison-mode replacement \
+  --comparison-output "$comp_report"
+
+if [[ ! -f "$comp_report" ]]; then
+  print_error "Test 9: Comparison report was not written to $comp_report"
+fi
+
+# Validate report content using python
+python3 - "$comp_report" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], 'r') as f:
+    report = json.load(f)
+
+if report.get("comparisonMode") != "replacement":
+    raise SystemExit(f"comparisonMode was {report.get('comparisonMode')!r}, expected 'replacement'")
+summary = report.get("summary")
+if not isinstance(summary, dict):
+    raise SystemExit("summary missing or not an object")
+# Prior had 5 records (SUPP00000001..SUPP00000005); supplemental has 5 records (SUPP00000006..SUPP00000010).
+# Disjoint Bates/DOCID keys: replacement mode marks all 5 new as Added and all 5 prior as Removed.
+if summary.get("totalPriorRecords") != 5:
+    raise SystemExit(f"totalPriorRecords was {summary.get('totalPriorRecords')}, expected 5")
+if summary.get("totalNewRecords") != 5:
+    raise SystemExit(f"totalNewRecords was {summary.get('totalNewRecords')}, expected 5")
+if summary.get("addedCount") != 5:
+    raise SystemExit(f"addedCount was {summary.get('addedCount')}, expected 5")
+if summary.get("removedCount") != 5:
+    raise SystemExit(f"removedCount was {summary.get('removedCount')}, expected 5 (replacement mode computes removals)")
+if summary.get("unchangedCount") != 0:
+    raise SystemExit(f"unchangedCount was {summary.get('unchangedCount')}, expected 0")
+PY
+
+print_success "Test Case 9: Production Manifest Comparison passed"
+
+# --- Test Case 10: Production Manifest Comparison invalid mode fails early ---
+
+print_info "Test Case 10: Production Manifest Comparison invalid mode fails before output"
+
+bad_report="$TEST_OUTPUT_DIR/test10_report.json"
+rm -f "$bad_report"
+
+if zipper \
+  --compare-production-manifests "$prior_manifest,$supp_manifest" \
+  --comparison-mode swap \
+  --comparison-output "$bad_report" 2>/dev/null; then
+  print_error "Test 10: Comparison with invalid --comparison-mode succeeded but should have failed."
+else
+  if [[ -f "$bad_report" ]]; then
+    print_error "Test 10: Report was written despite invalid --comparison-mode; should fail before output."
+  fi
+  print_success "Test Case 10: Production Manifest Comparison invalid mode fails early passed"
+fi
+
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"
