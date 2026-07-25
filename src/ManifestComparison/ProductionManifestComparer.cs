@@ -159,7 +159,7 @@ public static class ProductionManifestComparer
         var resolvedEncoding = EncodingHelper.GetEncoding(encodingStr);
         if (resolvedEncoding is null)
         {
-            Console.Error.WriteLine($"Warning: Encoding '{encodingStr}' not recognized, falling back to UTF-8.");
+            Console.Error.WriteLine($"Warning: Encoding {JsonSerializer.Serialize(encodingStr)} not recognized, falling back to UTF-8.");
             encoding = System.Text.Encoding.UTF8;
         }
         else
