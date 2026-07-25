@@ -21,8 +21,8 @@ public static class Program
         {
             try
             {
-                await PerformanceBenchmarkRunner.RunBenchmarksAsync().ConfigureAwait(false);
-                return 0;
+                var report = await PerformanceBenchmarkRunner.RunBenchmarksAsync().ConfigureAwait(false);
+                return report.OverallPassed ? 0 : 1;
             }
             catch (Exception ex)
             {

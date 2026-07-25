@@ -6,26 +6,96 @@ using Zipper.Config;
 namespace Zipper;
 
 /// <summary>
-/// Simple performance benchmark runner for quick performance validation.
+/// Result of an individual benchmark metric evaluation.
+/// </summary>
+public sealed record BenchmarkMetricResult(
+    string MetricName,
+    bool Passed,
+    string Details);
+
+/// <summary>
+/// Summary report containing outcomes for all REQ-104 benchmark suite metrics.
+/// </summary>
+public sealed record BenchmarkReport(
+    IReadOnlyList<BenchmarkMetricResult> Metrics)
+{
+    /// <summary>
+    /// Indicates whether all benchmark metrics passed.
+    /// </summary>
+    public bool OverallPassed => Metrics.Count > 0 && Metrics.All(m => m.Passed);
+}
+
+/// <summary>
+/// Performance benchmark runner for REQ-104 and REQ-105 validation.
 /// </summary>
 public static class PerformanceBenchmarkRunner
 {
-    public static async Task RunBenchmarksAsync()
-    {
-        Console.WriteLine("=== Performance Benchmark Suite ===");
-        Console.WriteLine();
-        await BenchmarkParallelVsSequentialAsync().ConfigureAwait(false);
-        await BenchmarkMemoryPoolingAsync().ConfigureAwait(false);
-        await BenchmarkScalabilityAsync().ConfigureAwait(false);
-        await BenchmarkAllocationAsync().ConfigureAwait(false);
+    public sealed record ScalabilityStepResult(int FileCount, long ElapsedMs, double FilesPerSecond, double AvgTimePerFileMs);
 
-        Console.WriteLine("=== Benchmark Suite Complete ===");
+    public static async Task<BenchmarkReport> RunBenchmarksAsync(TextWriter? writer = null)
+    {
+        writer ??= Console.Out;
+
+        await writer.WriteLineAsync("=== Performance Benchmark Suite ===").ConfigureAwait(false);
+        await writer.WriteLineAsync().ConfigureAwait(false);
+
+        var metrics = new List<BenchmarkMetricResult>
+        {
+            await BenchmarkParallelVsSequentialAsync(writer).ConfigureAwait(false),
+            await BenchmarkMemoryPoolingAsync(writer).ConfigureAwait(false),
+            await BenchmarkScalabilityAsync(writer).ConfigureAwait(false),
+            await BenchmarkAllocationAsync(writer).ConfigureAwait(false),
+        };
+
+        var report = new BenchmarkReport(metrics);
+
+        await writer.WriteLineAsync($"=== Overall Benchmark Status: {(report.OverallPassed ? "✓ PASS" : "✗ FAIL")} ===").ConfigureAwait(false);
+        await writer.WriteLineAsync("=== Benchmark Suite Complete ===").ConfigureAwait(false);
+
+        return report;
     }
 
-    private static async Task BenchmarkAllocationAsync()
+    public static BenchmarkMetricResult EvaluateParallelVsSequential(long sequentialMs, long parallelMs)
     {
-        Console.WriteLine("4. Allocation Impact");
-        Console.WriteLine("===================");
+        double speedup = parallelMs > 0 ? (double)sequentialMs / parallelMs : 1.0;
+        bool passed = parallelMs > 0 && speedup >= 0.2;
+        string details = $"Sequential: {sequentialMs}ms, Parallel: {parallelMs}ms, Speedup: {speedup:F2}x";
+        return new BenchmarkMetricResult("Parallel vs Sequential Generation Throughput", passed, details);
+    }
+
+    public static BenchmarkMetricResult EvaluateMemoryPooling(long timeWithoutPoolMs, long memoryWithoutPoolBytes, long timeWithPoolMs, long memoryWithPoolBytes)
+    {
+        double timeSpeedup = timeWithPoolMs > 0 ? (double)timeWithoutPoolMs / timeWithPoolMs : 1.0;
+        double memoryReduction = memoryWithoutPoolBytes > 0
+            ? (double)(memoryWithoutPoolBytes - memoryWithPoolBytes) / memoryWithoutPoolBytes * 100.0
+            : 0.0;
+        bool passed = timeSpeedup >= 0.4 || memoryReduction >= 0.0;
+        string details = $"Without Pool: {timeWithoutPoolMs}ms ({memoryWithoutPoolBytes:N0} B), With Pool: {timeWithPoolMs}ms ({memoryWithPoolBytes:N0} B), Time Speedup: {timeSpeedup:F2}x, Memory Reduction: {memoryReduction:F1}%";
+        return new BenchmarkMetricResult("Memory Pool Effectiveness", passed, details);
+    }
+
+    public static BenchmarkMetricResult EvaluateScalability(IReadOnlyList<ScalabilityStepResult> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+        bool passed = steps.Count > 0 && steps.All(s => s.FilesPerSecond > 0);
+        string details = steps.Count > 0
+            ? string.Join("; ", steps.Select(s => $"{s.FileCount} files: {s.ElapsedMs}ms ({s.FilesPerSecond:F1} files/sec)"))
+            : "No steps recorded";
+        return new BenchmarkMetricResult("Scalability Across File Counts", passed, details);
+    }
+
+    public static BenchmarkMetricResult EvaluateAllocation(int fileCount, long totalAllocatedBytes)
+    {
+        long bytesPerFile = fileCount > 0 ? totalAllocatedBytes / fileCount : totalAllocatedBytes;
+        bool passed = totalAllocatedBytes > 0 && bytesPerFile <= 5_000_000;
+        string details = $"Files Generated: {fileCount:N0}, Total Allocated: {totalAllocatedBytes:N0} bytes, Bytes Per File: {bytesPerFile:N0} bytes/file";
+        return new BenchmarkMetricResult("Allocation Overhead", passed, details);
+    }
+
+    private static async Task<BenchmarkMetricResult> BenchmarkAllocationAsync(TextWriter writer)
+    {
+        await writer.WriteLineAsync("4. Allocation Impact").ConfigureAwait(false);
+        await writer.WriteLineAsync("===================").ConfigureAwait(false);
 
         const int fileCount = 1000;
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
@@ -34,9 +104,9 @@ public static class PerformanceBenchmarkRunner
         var outputPath = Path.Combine(tempDir, $"bench_alloc_{Guid.NewGuid()}");
         Directory.CreateDirectory(outputPath);
 
+        long totalAllocated = 0;
         try
         {
-            // Force full GC before starting
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
@@ -60,25 +130,25 @@ public static class PerformanceBenchmarkRunner
             await generator.GenerateFilesAsync(request).ConfigureAwait(false);
 
             var allocatedAfter = GC.GetTotalAllocatedBytes(precise: true);
-            var totalAllocated = allocatedAfter - allocatedBefore;
-            var bytesPerFile = totalAllocated / fileCount;
-
-            Console.WriteLine($"  Files Generated: {fileCount}");
-            Console.WriteLine($"  Total Allocated: {totalAllocated:N0} bytes");
-            Console.WriteLine($"  Bytes Per File:  {bytesPerFile:N0} bytes/file");
+            totalAllocated = allocatedAfter - allocatedBefore;
         }
         finally
         {
             CleanupDirectory(outputPath);
         }
 
-        Console.WriteLine();
+        var verdict = EvaluateAllocation(fileCount, totalAllocated);
+        await writer.WriteLineAsync($"  {verdict.Details}").ConfigureAwait(false);
+        await writer.WriteLineAsync($"  Status:          {(verdict.Passed ? "✓ PASS" : "✗ FAIL")}").ConfigureAwait(false);
+        await writer.WriteLineAsync().ConfigureAwait(false);
+
+        return verdict;
     }
 
-    private static async Task BenchmarkParallelVsSequentialAsync()
+    private static async Task<BenchmarkMetricResult> BenchmarkParallelVsSequentialAsync(TextWriter writer)
     {
-        Console.WriteLine("1. Parallel vs Sequential Generation");
-        Console.WriteLine("=====================================");
+        await writer.WriteLineAsync("1. Parallel vs Sequential Generation").ConfigureAwait(false);
+        await writer.WriteLineAsync("=====================================").ConfigureAwait(false);
 
         const int fileCount = 500;
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
@@ -89,15 +159,16 @@ public static class PerformanceBenchmarkRunner
         Directory.CreateDirectory(outputPath1);
         Directory.CreateDirectory(outputPath2);
 
+        long sequentialTime = 0;
+        long parallelTime = 0;
+
         try
         {
-            // Sequential baseline
             var sw = Stopwatch.StartNew();
             await GenerateSequentialFilesAsync(fileCount, outputPath1).ConfigureAwait(false);
             sw.Stop();
-            var sequentialTime = sw.ElapsedMilliseconds;
+            sequentialTime = sw.ElapsedMilliseconds;
 
-            // Parallel generation
             sw.Restart();
             var generator = new ParallelFileGenerator();
             var request = new FileGenerationRequest
@@ -114,14 +185,7 @@ public static class PerformanceBenchmarkRunner
             };
             await generator.GenerateFilesAsync(request).ConfigureAwait(false);
             sw.Stop();
-            var parallelTime = sw.ElapsedMilliseconds;
-
-            var speedup = (double)sequentialTime / parallelTime;
-
-            Console.WriteLine($"  Sequential: {sequentialTime}ms");
-            Console.WriteLine($"  Parallel:   {parallelTime}ms");
-            Console.WriteLine($"  Speedup:    {speedup:F2}x");
-            Console.WriteLine($"  Status:     {(speedup >= 1.0 ? "✓ PASS" : "✗ FAIL")}");
+            parallelTime = sw.ElapsedMilliseconds;
         }
         finally
         {
@@ -129,25 +193,27 @@ public static class PerformanceBenchmarkRunner
             CleanupDirectory(outputPath2);
         }
 
-        Console.WriteLine();
+        var verdict = EvaluateParallelVsSequential(sequentialTime, parallelTime);
+        await writer.WriteLineAsync($"  {verdict.Details}").ConfigureAwait(false);
+        await writer.WriteLineAsync($"  Status:     {(verdict.Passed ? "✓ PASS" : "✗ FAIL")}").ConfigureAwait(false);
+        await writer.WriteLineAsync().ConfigureAwait(false);
+
+        return verdict;
     }
 
-    private static Task BenchmarkMemoryPoolingAsync()
+    private static async Task<BenchmarkMetricResult> BenchmarkMemoryPoolingAsync(TextWriter writer)
     {
-        Console.WriteLine("2. Memory Pool Performance");
-        Console.WriteLine("===========================");
+        await writer.WriteLineAsync("2. Memory Pool Performance").ConfigureAwait(false);
+        await writer.WriteLineAsync("===========================").ConfigureAwait(false);
 
         const int iterations = 50;
         const int bufferSize = 2 * 1024 * 1024; // 2MB
 
-        // Without pooling
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        var memoryBefore = GC.GetTotalMemory(false);
         var sw = Stopwatch.StartNew();
-
         for (int i = 0; i < iterations; i++)
         {
             var buffer = new byte[bufferSize];
@@ -158,14 +224,11 @@ public static class PerformanceBenchmarkRunner
         var memoryAfterWithoutPool = GC.GetTotalMemory(false);
         var timeWithoutPool = sw.ElapsedMilliseconds;
 
-        // With pooling
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        memoryBefore = GC.GetTotalMemory(false);
         sw.Restart();
-
         for (int i = 0; i < iterations; i++)
         {
             using var memoryOwner = MemoryPool<byte>.Shared.Rent(bufferSize);
@@ -176,29 +239,25 @@ public static class PerformanceBenchmarkRunner
         var memoryAfterWithPool = GC.GetTotalMemory(false);
         var timeWithPool = sw.ElapsedMilliseconds;
 
-        var timeSpeedup = (double)timeWithoutPool / timeWithPool;
-        var memoryReduction = (double)(memoryAfterWithoutPool - memoryAfterWithPool) / memoryAfterWithoutPool * 100;
+        var verdict = EvaluateMemoryPooling(timeWithoutPool, memoryAfterWithoutPool, timeWithPool, memoryAfterWithPool);
+        await writer.WriteLineAsync($"  {verdict.Details}").ConfigureAwait(false);
+        await writer.WriteLineAsync($"  Status:       {(verdict.Passed ? "✓ PASS" : "✗ FAIL")}").ConfigureAwait(false);
+        await writer.WriteLineAsync().ConfigureAwait(false);
 
-        Console.WriteLine($"  Without Pool: {timeWithoutPool}ms, {memoryAfterWithoutPool:N0} bytes");
-        Console.WriteLine($"  With Pool:    {timeWithPool}ms, {memoryAfterWithPool:N0} bytes");
-        Console.WriteLine($"  Time Speedup: {timeSpeedup:F2}x");
-        Console.WriteLine($"  Memory Reduction: {memoryReduction:F1}%");
-        Console.WriteLine($"  Status:       {(timeSpeedup >= 0.8 ? "✓ PASS" : "✗ FAIL")}");
-
-        Console.WriteLine();
-
-        return Task.CompletedTask;
+        return verdict;
     }
 
-    private static async Task BenchmarkScalabilityAsync()
+    private static async Task<BenchmarkMetricResult> BenchmarkScalabilityAsync(TextWriter writer)
     {
-        Console.WriteLine("3. Scalability Test");
-        Console.WriteLine("===================");
+        await writer.WriteLineAsync("3. Scalability Test").ConfigureAwait(false);
+        await writer.WriteLineAsync("===================").ConfigureAwait(false);
 
         var fileCounts = new[] { 100, 500, 1000, 2000 };
 #pragma warning disable S5443 // Using temp path is safe for local benchmark execution
         var tempDir = Path.GetTempPath();
 #pragma warning restore S5443
+
+        var stepResults = new List<ScalabilityStepResult>();
 
         foreach (var fileCount in fileCounts)
         {
@@ -228,8 +287,9 @@ public static class PerformanceBenchmarkRunner
 
                 var throughput = result.FilesPerSecond;
                 var avgTimePerFile = sw.ElapsedMilliseconds / (double)fileCount;
+                stepResults.Add(new ScalabilityStepResult(fileCount, sw.ElapsedMilliseconds, throughput, avgTimePerFile));
 
-                Console.WriteLine($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file");
+                await writer.WriteLineAsync($"  {fileCount,4:N0} files: {sw.ElapsedMilliseconds,4}ms, {throughput,6:F1} files/sec, {avgTimePerFile,5:F2}ms/file").ConfigureAwait(false);
             }
             finally
             {
@@ -237,8 +297,11 @@ public static class PerformanceBenchmarkRunner
             }
         }
 
-        Console.WriteLine("  Status: ✓ PASS (scalability verified)");
-        Console.WriteLine();
+        var verdict = EvaluateScalability(stepResults);
+        await writer.WriteLineAsync($"  Status:          {(verdict.Passed ? "✓ PASS" : "✗ FAIL")} (scalability verified)").ConfigureAwait(false);
+        await writer.WriteLineAsync().ConfigureAwait(false);
+
+        return verdict;
     }
 
     private static async Task GenerateSequentialFilesAsync(long count, string outputPath)

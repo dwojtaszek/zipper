@@ -156,13 +156,15 @@ public static class ProductionManifestComparer
 
         var encodingStr = manifest.Settings?.Encoding ?? "UTF-8";
         System.Text.Encoding encoding;
-        try
+        var resolvedEncoding = EncodingHelper.GetEncoding(encodingStr);
+        if (resolvedEncoding is null)
         {
-            encoding = System.Text.Encoding.GetEncoding(encodingStr);
-        }
-        catch
-        {
+            Console.Error.WriteLine($"Warning: Encoding {JsonSerializer.Serialize(encodingStr)} not recognized, falling back to UTF-8.");
             encoding = System.Text.Encoding.UTF8;
+        }
+        else
+        {
+            encoding = resolvedEncoding;
         }
 
         var colDelim = ParseDelimiter(manifest.Settings?.ColumnDelimiter, '\x14');

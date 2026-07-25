@@ -1,0 +1,5 @@
+# Known coverage debt allowlist for per-file coverage gate (#604)
+# Remove files from this list as dedicated tests are added.
+Cli/CliArgument.cs
+Cli/CliOptions.cs
+CommandLineValidator.cs
