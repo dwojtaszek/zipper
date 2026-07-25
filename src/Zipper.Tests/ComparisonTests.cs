@@ -476,4 +476,46 @@ public class ComparisonTests
             }
         }
     }
+
+    [Fact]
+    public async Task Compare_CommandLineE2E_SingleManifestPath_FailsBeforeOutput()
+    {
+        // REQ-176: fewer than two resolvable Production Manifest paths shall fail before output generation.
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var outputA = Path.Combine(tempDir, "SetA");
+            Directory.CreateDirectory(outputA);
+            var requestA = new FileGenerationRequest
+            {
+                Output = new OutputConfig { OutputPath = outputA, FileCount = 2, FileType = "pdf" },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODA" },
+                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
+            };
+            var resultA = await ProductionSetGenerator.GenerateAsync(requestA);
+
+            var reportPath = Path.Combine(tempDir, "report_single.json");
+
+            var args = new[]
+            {
+                "--compare-production-manifests", resultA.ManifestPath,
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.False(File.Exists(reportPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

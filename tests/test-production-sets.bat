@@ -332,6 +332,76 @@ if not errorlevel 1 (
 echo [ SUCCESS ] Test Case 8: Failing duplicate supplemental Bates range passed
 
 
+:: --- Test Case 9: Production Manifest Comparison happy path ---
+
+echo [ INFO ] Test Case 9: Production Manifest Comparison (replacement mode)
+
+set COMP_REPORT=%TEST_OUTPUT_DIR%\test9_report.json
+if exist "%COMP_REPORT%" del /q "%COMP_REPORT%"
+
+:: Compare the prior manifest (test7_prior) against the supplemental manifest (test7_supp).
+:: Both were generated above under the SUPP Bates prefix with disjoint Bates ranges
+:: (prior SUPP00000001-005, supplemental SUPP00000006-010) and disjoint DOCIDs (DOCID
+:: equals the Bates number in Production Sets). In replacement mode, all 5 new records
+:: are Added and all 5 prior records are Removed (replacement mode computes removals
+:: unlike supplemental mode).
+%ZIPPER_CMD% ^
+  --compare-production-manifests "%PRIOR_MANIFEST%,%SUPP_MANIFEST%" ^
+  --comparison-mode replacement ^
+  --comparison-output "%COMP_REPORT%"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 9: Comparison failed during execution
+  exit /b 1
+)
+
+if not exist "%COMP_REPORT%" (
+  echo [ ERROR ] Test 9: Comparison report was not written to %COMP_REPORT%
+  exit /b 1
+)
+
+powershell -NoProfile -Command ^
+  "$report = Get-Content '%COMP_REPORT%' -Raw | ConvertFrom-Json;" ^
+  "if ($report.comparisonMode -ne 'replacement') { throw \"comparisonMode was $($report.comparisonMode), expected replacement\" };" ^
+  "$s = $report.summary;" ^
+  "if ($s.totalPriorRecords -ne 5) { throw \"totalPriorRecords was $($s.totalPriorRecords), expected 5\" };" ^
+  "if ($s.totalNewRecords -ne 5) { throw \"totalNewRecords was $($s.totalNewRecords), expected 5\" };" ^
+  "if ($s.addedCount -ne 5) { throw \"addedCount was $($s.addedCount), expected 5\" };" ^
+  "if ($s.removedCount -ne 5) { throw \"removedCount was $($s.removedCount), expected 5 (replacement mode computes removals)\" };" ^
+  "if ($s.unchangedCount -ne 0) { throw \"unchangedCount was $($s.unchangedCount), expected 0\" };"
+if errorlevel 1 (
+  echo [ ERROR ] Test 9 validation failed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 9: Production Manifest Comparison passed
+
+
+:: --- Test Case 10: Production Manifest Comparison invalid mode fails early ---
+
+echo [ INFO ] Test Case 10: Production Manifest Comparison invalid mode fails before output
+
+set BAD_REPORT=%TEST_OUTPUT_DIR%\test10_report.json
+if exist "%BAD_REPORT%" del /q "%BAD_REPORT%"
+
+%ZIPPER_CMD% ^
+  --compare-production-manifests "%PRIOR_MANIFEST%,%SUPP_MANIFEST%" ^
+  --comparison-mode swap ^
+  --comparison-output "%BAD_REPORT%" >nul 2>&1
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 10: Comparison with invalid --comparison-mode succeeded but should have failed.
+  exit /b 1
+)
+
+if exist "%BAD_REPORT%" (
+  echo [ ERROR ] Test 10: Report was written despite invalid --comparison-mode; should fail before output.
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 10: Production Manifest Comparison invalid mode fails early passed
+
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

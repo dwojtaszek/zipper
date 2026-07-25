@@ -662,4 +662,145 @@ public class CliValidatorTests
         args.HashMode = "actual";
         Assert.False(CliValidator.Validate(args));
     }
+
+    // --- Supplemental CLI contracts (REQ-173, REQ-174, REQ-175) ---
+
+    [Fact]
+    public void Validate_SupplementalProduction_WithoutProductionSet_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.SupplementalProduction = true;
+        args.PriorManifests = "/tmp/prior_manifest.json";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_SupplementalProduction_WithoutPriorManifest_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "SUPP";
+        args.SupplementalProduction = true;
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_PriorManifest_WithoutSupplementalProduction_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "SUPP";
+        args.PriorManifests = "/tmp/prior_manifest.json";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_SupplementalGapPolicy_WithoutSupplementalProduction_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "SUPP";
+        args.SupplementalGapPolicy = "reject";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Theory]
+    [InlineData("allow")]
+    [InlineData("reject")]
+    [InlineData("ALLOW")]
+    public void Validate_SupplementalGapPolicy_ValidValue_ReturnsTrue(string policy)
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "SUPP";
+        args.SupplementalProduction = true;
+        args.PriorManifests = "/tmp/prior_manifest.json";
+        args.SupplementalGapPolicy = policy;
+        Assert.True(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_SupplementalGapPolicy_InvalidValue_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.BatesPrefix = "SUPP";
+        args.SupplementalProduction = true;
+        args.PriorManifests = "/tmp/prior_manifest.json";
+        args.SupplementalGapPolicy = "skip";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    // --- Production Manifest Comparison CLI contracts (REQ-176, REQ-177, REQ-178) ---
+
+    [Fact]
+    public void Validate_ComparisonMode_WithoutCompareManifests_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ComparisonMode = "replacement";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_ComparisonOutput_WithoutCompareManifests_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ComparisonOutput = "/tmp/report.json";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_CompareManifests_WithoutComparisonMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
+        args.ComparisonOutput = "/tmp/report.json";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_CompareManifests_WithoutComparisonOutput_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
+        args.ComparisonMode = "replacement";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Theory]
+    [InlineData("replacement")]
+    [InlineData("supplemental")]
+    [InlineData("reproduction")]
+    [InlineData("REPRODUCTION")]
+    public void Validate_CompareManifests_ValidMode_ReturnsTrue(string mode)
+    {
+        var args = CreateValidArgs();
+        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
+        args.ComparisonMode = mode;
+        args.ComparisonOutput = "/tmp/report.json";
+        Assert.True(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_CompareManifests_InvalidMode_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
+        args.ComparisonMode = "swap";
+        args.ComparisonOutput = "/tmp/report.json";
+        Assert.False(CliValidator.Validate(args));
+    }
+
+    [Fact]
+    public void Validate_CompareManifests_BypassesTypeCountOutputPathValidation()
+    {
+        // REQ-179: comparison workflow short-circuits --type/--count/--output-path validation.
+        var args = new ParsedArguments
+        {
+            CompareProductionManifests = "/tmp/a.json,/tmp/b.json",
+            ComparisonMode = "replacement",
+            ComparisonOutput = "/tmp/report.json",
+        };
+        Assert.True(CliValidator.Validate(args));
+    }
 }

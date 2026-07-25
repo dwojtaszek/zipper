@@ -140,6 +140,32 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 ---
 
+## Rolling & Supplemental Production Concepts
+
+| Term | Definition | Aliases to avoid |
+|------|-----------|-----------------|
+| **Rolling Production Set** | One of N **Production Sets** generated from a single **Generation Request** via `--rolling-count`. Each **Rolling Production Set** carries a `rollingSequenceNumber` in its **Production Manifest**. | Rolling set, rolling production |
+| **Production ID** | The configurable identifier for a **Production Set**, used in output directory names, **Production Manifest** Metadata, and report identifiers. Controlled by `--production-id` (single value or comma-separated list); defaults to a `PRODUCTION_<timestamp>` scheme. | Production name, production label |
+| **Rolling Bates Mode** | The Bates Number range behavior across **Rolling Production Sets**, controlled by `--rolling-bates-mode`. `continuous` produces one contiguous range across all sets; `restart` resets the range per set. Defaults to `continuous`. | Bates mode, rolling mode |
+| **Supplemental Production** | A **Production Set** generation mode (`--supplemental-production`) that validates the new Bates Number range against one or more prior **Production Manifests** (`--prior-manifest`) before writing output. | Supplemental generation, supplemental mode |
+| **Prior Production Manifest** | A **Production Manifest** supplied via `--prior-manifest` whose Bates Number range is used to validate a **Supplemental Production**. | Prior manifest, previous manifest |
+| **Supplemental Gap Policy** | The strategy for handling skipped Bates Numbers between prior and new **Production Manifests**, controlled by `--supplemental-gap-policy`: `reject` (fail validation on gaps) or `allow` (report gaps and proceed). Defaults to `reject`. | Gap policy |
+
+---
+
+## Production Manifest Comparison Concepts
+
+| Term | Definition | Aliases to avoid |
+|------|-----------|-----------------|
+| **Production Manifest Comparison** | A workflow (`--compare-production-manifests`) that compares two or more **Production Manifests** and writes a machine-readable JSON report with a human-readable summary. Bypasses normal **Native File** generation. | Manifest comparison, comparison |
+| **Comparison Mode** | The ruleset applied by **Production Manifest Comparison**, controlled by `--comparison-mode`: `replacement`, `supplemental`, or `reproduction`. | Comparison ruleset |
+| **Replacement Workflow** | A **Comparison Mode** (`replacement`) comparing a prior **Production Set** against a new one that replaces it. | Replacement mode |
+| **Supplemental Workflow** | A **Comparison Mode** (`supplemental`) comparing prior **Production Manifests** against a new **Supplemental Production**. | Supplemental comparison mode |
+| **Reproduction Workflow** | A **Comparison Mode** (`reproduction`) auditing corrected **Native File** content/Metadata between an original and a reproduced **Production Set**. Use `reproduction` (not "re-production") consistently across CLI, requirements, and docs. | Re-production, reproducted, re-production workflow |
+| **Comparison Report** | The JSON file written to `--comparison-output` containing the **Comparison Mode**, summary counts (added, removed, unchanged, replaced, duplicated, skipped, changed), and Bates Number range analysis. | Comparison output, comparison JSON |
+
+---
+
 ## Generation & Processing Concepts
 
 | Term | Definition | Aliases to avoid |
