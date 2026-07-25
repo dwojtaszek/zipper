@@ -229,12 +229,12 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 |------|---------|
 | `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
 | `src/Cli/` | CLI parsing, validation, help text, request assembly |
-| `src/FileGenerationRequest.cs` | Configuration root (8 sub-configs + `LoadfileOnly` flag) |
+| `src/FileGenerationRequest.cs` | Configuration root (9 sub-configs + `LoadfileOnly` flag) |
 | `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher |
 | `src/StandardMode.cs` / `LoadFileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
 | `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
 | `src/ParallelFileGenerator.cs` | Standard mode file generation pipeline |
-| `src/ZipArchiveService.cs` | Archive creation + Load File writing |
+| `src/IArchiveSink.cs` / `src/ZipArchiveSink.cs` | Archive creation + Load File writing (Standard mode consumer) |
 | `src/LoadFileOnlyGenerator.cs` | Standalone Load File generation |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
@@ -248,12 +248,16 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/Emails/` | Email domain model |
 | `src/LoadFiles/` | Load File seam: composers, serializers, emitter, thin composing writers + `XmlLoadFileWriter` carve-out |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
-| `src/LoadfileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
+| `src/Config/` | Nested request config records (`OutputConfig`, `MetadataConfig`, `LoadFileConfig`, `DelimiterConfig`, `BatesNumberConfig`, `TiffConfig`, `ChaosConfig`, `ProductionConfig`, `HashConfig`) + `HashUtility` |
+| `src/Validation/` | Post-generation / Production Set / supplemental validators (`PostGenerationValidator`, `ValidatorRunner`, `ProductionSetPostValidator`, `SupplementalValidator`) |
+| `src/ManifestComparison/` | Production Manifest comparison reports (`ProductionManifestComparer`, `--compare-production-manifests`) |
+| `src/Utils/` | `NamingConventionHelper` |
+| `src/LoadFileAuditWriter.cs` / `ProductionManifestWriter.cs` | Audit + manifest writers |
 | `src/Zipper.Tests/` | Unit tests |
 | `src/Zipper.Analyzers/` | Roslyn analyzers |
 | `tests/` | E2E test scripts |
 
-Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `OfficeFileGenerator.cs`, `PlaceholderFileGenerator.cs`, `BatesNumberGenerator.cs`) live in `src/` — grep by type.
+Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `OfficeFileGenerator.cs`, `PlaceholderFileGenerator.cs`) and `BatesSequence.cs` live in `src/` — grep by type.
 
 ---
 
@@ -277,7 +281,7 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 ### Test Naming Convention
 
 Test classes and methods follow the pattern:
-- **Class:** `{Subject}Tests` (e.g., `BatesNumberGeneratorTests`, `ChaosEngineTests`)
+- **Class:** `{Subject}Tests` (e.g., `BatesSequenceTests`, `ChaosEngineTests`)
 - **Method:** `{Method}_{Scenario}_{Expected}` (e.g., `Generate_WithCustomPrefix_ShouldIncludePrefix`)
 
 This convention is enforced by code review and the existing test corpus. All new tests must follow it.
