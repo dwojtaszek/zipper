@@ -117,23 +117,126 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
 
 ## Workflow for github issues
 
-**Issue priority:** Blockers → Critical → High → Test Coverage → Design/Refactor/KISS (only after relevant test coverage exists). 
+### Issue selection (mandatory for autonomous / "next issue" work)
+
+Agents must **not** pick issues by gut feel, recency, or title interest. Follow this algorithm every time before branching.
+
+#### 1. Load the living roadmap (if any)
+
+```bash
+gh issue list --state open --limit 200 --json number,title,labels \
+  --jq '.[] | select(.title | test("^Roadmap:"; "i")) | "#\(.number) \(.title)"'
+```
+
+- If a **Roadmap:** issue is open (e.g. [#627](https://github.com/dwojtraszek/zipper/issues/627)):
+  - Read it **and all comments** (`gh issue view NNN --comments`).
+  - Treat its **phase order and exit criteria** as the sequencing contract for leaf issues it lists.
+  - **Never implement the roadmap issue itself** (it is a tracker only).
+- If none is open, continue with label ranking only (below).
+
+#### 2. Rank by priority labels (primary key)
+
+Every work issue should carry exactly one of: **`P0`**, **`P1`**, **`P2`**, **`P3`**.
+
+| Label | Meaning | When to take |
+|-------|---------|--------------|
+| `P0` | Blocker / production broken / data loss | Immediately; only open work until cleared |
+| `P1` | High — must fix soon (security, correctness, coverage holes on new critical code) | After all open `P0` |
+| `P2` | Medium — this iteration (refactors, product features, docs that unblock agents) | After all open `P0`/`P1` |
+| `P3` | Low — nice to have | Only when no open `P0`–`P2`, or user names the issue |
+
+```bash
+# List open issues sorted by Pn, then type-label rank, then number
+gh issue list --state open --limit 200 --json number,title,labels \
+  --jq 'def p: (if any(.labels[].name; .=="P0") then 0 elif any(.labels[].name; .=="P1") then 1 elif any(.labels[].name; .=="P2") then 2 elif any(.labels[].name; .=="P3") then 3 else 9 end);
+    def t: (if any(.labels[].name; .=="security") then 1 elif any(.labels[].name; .=="bug") then 2 elif any(.labels[].name; .=="ci-cd") then 3 elif any(.labels[].name; .=="testing" or .=="e2e") then 4 elif any(.labels[].name; .=="performance" or .=="perf") then 5 elif any(.labels[].name; .=="refactor" or .=="architecture" or .=="quality") then 6 elif any(.labels[].name; .=="enhancement" or .=="design") then 7 elif any(.labels[].name; .=="documentation" or .=="docs" or .=="requirements") then 8 else 9 end);
+    sort_by(p, t, .number)[] | "P\(p) T\(t) #\(.number) \(.title)"'
+```
+
+Issues **without** a `P0`–`P3` label rank last (priority 9). Prefer labeling them before implementing. If an issue carries multiple Pn labels, the highest priority (lowest number) wins. Increase `--limit` if the backlog exceeds 200 open issues.
+
+**Legacy mapping (only if an issue has no Pn label):** treat as secondary signals — `security` / critical `bug` ≈ P0–P1; other `bug` ≈ P1; `testing`/`e2e` ≈ P1–P2 when fixing coverage holes; `refactor`/`architecture`/`design` ≈ P2; `documentation`/`docs` ≈ P3. Prefer adding a Pn label over relying on this fallback.
+
+#### 3. Within the same Pn, apply type-label tie-break
+
+Lower rank number wins:
+
+| Rank | Labels (any of) | Intent |
+|------|-----------------|--------|
+| 1 | `security` | Path traversal, injection, unsafe paths |
+| 2 | `bug` | Incorrect behavior / silent failures |
+| 3 | `ci-cd` | Gates that prevent bad merges (coverage, hooks) |
+| 4 | `testing`, `e2e` | Missing tests that unlock safe refactors |
+| 5 | `performance`, `perf` | Hot-path / allocation |
+| 6 | `refactor`, `architecture`, `quality` | Structure without behavior change |
+| 7 | `enhancement`, `design` | Product features (large) |
+| 8 | `documentation`, `docs`, `requirements` | Docs-only |
+| 9 | (none of the above) | Default |
+
+Then sort by **issue number ascending** as the final stable tie-break.
+
+#### 4. Honor blockers and roadmap phase order
+
+Before selecting an issue, load body + comments:
+
+```bash
+gh issue view NNN --json title,body,labels,comments
+```
+
+Check for blocking relationships via the GitHub API:
+
+```bash
+gh api graphql -f query='query { repository(owner: "OWNER", name: "REPO") { issue(number: NNN) { trackedIssues(first: 10) { nodes { number state title } } } } }'
+```
+
+Or search body/comments for `blocked by #N`, `depends on #N`, `prerequisite: #N`. Verify each referenced `#N` is **closed** before proceeding.
+
+For roadmap phase ordering: read the Roadmap issue's current phase section, identify which phase lists the candidate issue, and confirm all earlier phases have no open leaf issues (or their exit criteria are met).
+
+**Skip** (try next candidate) if any of:
+
+- Body or comments contain `blocked by #N`, `depends on #N`, `prerequisite: #N` (or GitHub "blocked by" relationship) and that `#N` is still **open**.
+- The open **Roadmap:** issue's current phase says this issue is **later** (e.g. Phase 4 product while Phase 0/1 leaves are still open).
+- Title is a **Roadmap:** tracker.
+- Issue is clearly **stale** (see step 5 in per-issue workflow) — comment and stop; do not implement.
+
+**Special sequencing (when roadmap lists them):** prefer explicit phase lists on the Roadmap issue over pure number order. Example pattern from #627:
+
+1. Security / silent-correctness (`security`, `bug` under P1)
+2. Tests for the risky module (`testing`)
+3. Decompose that module (`refactor`)
+4. CI gate so the hole cannot return (`ci-cd`)
+5. Broader refactors / goldens (`P2`)
+6. Large enhancements (`enhancement` + `design`) only after earlier phases' exit criteria
+
+#### 5. Select exactly one leaf issue
+
+- Announce: issue number, Pn label, type labels, and one-line why it ranked first.
+- One issue per branch/PR (except when the issue itself defines PR slices — e.g. "PR1 DTOs only").
+- Read **implementation plan comments** on the issue; newest substantive comment supersedes the body.
+
+#### 6. User override
+
+If the user names an issue number or says "skip roadmap," follow the user. Still read that issue's comments and skip if blocked unless the user overrides the blocker too.
+
+---
 
 **Per-issue workflow:**
-1. `git checkout main && git pull`
-2. `git checkout -b fix/ISSUE-NNN-short-desc` (prefix: `fix/` for bugs, `feat/` for features, `refactor/`, `test/`, `docs/` per issue type)
-3. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
-4. Read the issue body **and all comments** (`gh issue view NNN --comments`); refresh labels and linked blockers before coding:
+1. **Select issue** via [Issue selection](#issue-selection-mandatory-for-autonomous--next-issue-work) (or user-named issue).
+2. `git checkout main && git pull`
+3. `git checkout -b fix/ISSUE-NNN-short-desc` (prefix: `fix/` for bugs, `feat/` for features, `refactor/`, `test/`, `docs/` per issue type)
+4. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
+5. Read the issue body **and all comments** (`gh issue view NNN --comments`); refresh labels and linked blockers before coding:
    - Comments are part of the spec: design decisions, implementation guides, and staleness notes posted after the body supersede it.
    - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
-5. Write a failing test first (TDD), then implement the fix
-6. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` after every change
-7. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
-8. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below
-9. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
-10. Check SonarCloud on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) with **zero** BLOCKER/MAJOR issues — query the gate conditions, not just the issue list. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
-11. **Run `bash tests/wait-for-reviews.sh <PR-number>` after creating the PR and again after every push.** The script blocks until every robot reviewer (Gemini Code Assist, CodeRabbit, Codex) has reviewed or declared a rate-limit skip, then exits non-zero while any review thread is unresolved. A "pass" or "skipped" check status from a review bot is **not** an approval — only the script's exit 0 is.
+6. Write a failing test first (TDD), then implement the fix
+7. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` after every change
+8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.*
+9. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
+10. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
+11. Check SonarCloud on the PR after CI completes (see [CI.md](CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) with **zero** BLOCKER/MAJOR issues — query the gate conditions, not just the issue list. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
+12. **Run `bash tests/wait-for-reviews.sh <PR-number>` after creating the PR and again after every push.** The script blocks until every robot reviewer (Gemini Code Assist, CodeRabbit, Codex) has reviewed or declared a rate-limit skip, then exits non-zero while any review thread is unresolved. A "pass" or "skipped" check status from a review bot is **not** an approval — only the script's exit 0 is. If a bot stays silent past the script's timeout, it produces a **warning** (not a failure) — proceed but watch for late threads, which branch protection will still block.
 
     For each finding it reports: verify it against current code, fix if still valid, or reply on the thread with a brief skip reason (e.g. conflicts with an explicit design decision), then resolve the thread via GraphQL (`gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "PRRT_..."}) { thread { isResolved } } }'`) and re-run the script. Before re-running, check `manage_task` (`list`) and kill any prior `wait-for-reviews` background tasks to prevent task clutter. Blocking/major issues must be fixed; nitpicks may be skipped-with-reason but never silently ignored. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
 
@@ -141,8 +244,8 @@ Verify behavior changes against Requirements.md before committing. Run `grep -n 
     - **Inline review comments** (code-anchored): `gh api repos/<owner>/<repo>/pulls/<N>/comments --paginate`
     - **Review summary bodies** (verdict + overview): `gh api repos/<owner>/<repo>/pulls/<N>/reviews --paginate`
     - **Issue-level PR comments** (CodeRabbit walkthrough, SonarCloud gate, perf guard): `gh api repos/<owner>/<repo>/issues/<N>/comments --paginate`
-12. Merge after all checks pass, `tests/wait-for-reviews.sh` exits 0, and reviews are addressed. Branch protection on `main` enforces this server-side: GitHub refuses the merge while any review thread is unresolved (see [CI.md](CI.md#robot-reviews)).
-13. Post-merge: Run `gh pr merge <PR-number> --squash --delete-branch && git checkout main && git pull && git worktree remove .worktrees/<branch-name> --force && gh issue close <issue-number> -c "Resolved in PR #<PR-number>"` to execute clean post-merge closeout in a single sequence.
+13. Merge after all checks pass, `tests/wait-for-reviews.sh` exits 0, and reviews are addressed. Branch protection on `main` enforces this server-side: GitHub refuses the merge while any review thread is unresolved (see [CI.md](CI.md#robot-reviews)).
+14. Post-merge: Run `gh pr merge <PR-number> --squash --delete-branch && git checkout main && git pull && git worktree remove .worktrees/<branch-name> --force && gh issue close <issue-number> -c "Resolved in PR #<PR-number>"` to execute clean post-merge closeout in a single sequence. If a **Roadmap:** issue tracks the work, comment there that the leaf issue closed (phase progress) — do not close the roadmap until its exit criteria say so.
 
 **Feature implementation ladder (order matters):**
 1. `src/Cli/ParsedArguments.cs` — add property
