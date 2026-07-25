@@ -67,6 +67,7 @@ graph TD
 ```mermaid
 graph LR
     subgraph CLI Layer
+        Program["Program.cs<br/>(SelectMode dispatch)"]
         CliParser["CliParser"]
         CliValidator["CliValidator"]
         RequestBuilder["RequestBuilder"]
@@ -84,6 +85,14 @@ graph LR
         FGR --> Production["ProductionConfig"]
         FGR --> Hash["HashConfig"]
         FGR --> LoadfileOnly["LoadfileOnly flag"]
+    end
+
+    subgraph Mode Adapters
+        StdMode["StandardMode"]
+        LFMode["LoadFileOnlyMode"]
+        PSMode["ProductionSetMode"]
+        PSG["ProductionSetGenerator"]
+        PSMode --> PSG
     end
 
     subgraph File Generators
@@ -122,7 +131,15 @@ graph LR
         PMC["ProductionManifestComparer<br/>(--compare-production-manifests)"]
     end
 
-    CliParser --> CliValidator --> RequestBuilder --> FGR
+    Program --> CliParser --> CliValidator --> RequestBuilder --> FGR
+    Program -->|"--compare-production-manifests"| PMC
+    Program -->|"SelectMode(request)"| StdMode
+    Program -->|"SelectMode(request)"| LFMode
+    Program -->|"SelectMode(request)"| PSMode
+    StdMode --> PGV
+    LFMode --> PGV
+    PSMode --> PGV
+    PSG --> SuppV
     FGR --> File Generators
     FGR --> Load File Seam
     Profiles --> DataGen
