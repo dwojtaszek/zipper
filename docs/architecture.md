@@ -28,7 +28,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. Bounded channel provides backpressure.
 2. **Generation**: N concurrent producers generate file data and write to result channel. All file types run in parallel.
-3. **Archive writing**: Single consumer (`ZipArchiveService`) writes ZIP entries, then writes Load Files through the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
+3. **Archive writing**: Single consumer (`ZipArchiveSink`, implementing `IArchiveSink`) writes ZIP entries, then writes Load Files through the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
 4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.
 
 ## Chaos Engine (Loadfile-Only Mode only)
@@ -47,7 +47,7 @@ graph TD
 
     StandardMode --> PFG["ParallelFileGenerator"]
     PFG -->|"Work Channel"| Producers["N Concurrent Producers"]
-    Producers -->|"Result Channel"| ZAS["ZipArchiveService (Consumer)"]
+    Producers -->|"Result Channel"| ZAS["ZipArchiveSink (Consumer)"]
     ZAS --> ZIP["ZIP Archive"]
     ZAS --> LF1["Load Files (all formats)"]
 
@@ -67,6 +67,7 @@ graph TD
 ```mermaid
 graph LR
     subgraph CLI Layer
+        Program["Program.cs<br/>(SelectMode dispatch)"]
         CliParser["CliParser"]
         CliValidator["CliValidator"]
         RequestBuilder["RequestBuilder"]
@@ -74,15 +75,24 @@ graph LR
 
     subgraph Config
         FGR["FileGenerationRequest"]
-        FGR --> Output["Output"]
-        FGR --> Metadata["Metadata"]
-        FGR --> LoadFile["LoadFile"]
-        FGR --> Delimiters["Delimiters"]
-        FGR --> Bates["Bates"]
-        FGR --> Tiff["Tiff"]
-        FGR --> Chaos["Chaos"]
-        FGR --> Production["Production"]
-        FGR --> Hash["Hash"]
+        FGR --> Output["OutputConfig"]
+        FGR --> Metadata["MetadataConfig"]
+        FGR --> LoadFile["LoadFileConfig"]
+        FGR --> Delimiters["DelimiterConfig"]
+        FGR --> Bates["BatesNumberConfig"]
+        FGR --> Tiff["TiffConfig"]
+        FGR --> Chaos["ChaosConfig"]
+        FGR --> Production["ProductionConfig"]
+        FGR --> Hash["HashConfig"]
+        FGR --> LoadfileOnly["LoadfileOnly flag"]
+    end
+
+    subgraph Mode Adapters
+        StdMode["StandardMode"]
+        LFMode["LoadFileOnlyMode"]
+        PSMode["ProductionSetMode"]
+        PSG["ProductionSetGenerator"]
+        PSMode --> PSG
     end
 
     subgraph File Generators
@@ -108,11 +118,40 @@ graph LR
         BuiltIns["BuiltInProfiles"]
     end
 
-    CliParser --> CliValidator --> RequestBuilder --> FGR
+    subgraph Validation
+        PGV["PostGenerationValidator<br/>(Standard / Loadfile-Only / Production Set)"]
+        Runner["ValidatorRunner"]
+        PSPV["ProductionSetPostValidator"]
+        SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
+        PGV --> Runner
+        PGV --> PSPV
+    end
+
+    subgraph Manifest Comparison
+        PMC["ProductionManifestComparer<br/>(--compare-production-manifests)"]
+    end
+
+    Program --> CliParser --> CliValidator --> RequestBuilder --> FGR
+    Program -->|"--compare-production-manifests"| PMC
+    Program -->|"SelectMode(request)"| StdMode
+    Program -->|"SelectMode(request)"| LFMode
+    Program -->|"SelectMode(request)"| PSMode
+    StdMode --> PGV
+    LFMode --> PGV
+    PSMode --> PGV
+    PSG --> SuppV
     FGR --> File Generators
     FGR --> Load File Seam
     Profiles --> DataGen
 ```
+
+## Post-Generation Validation
+
+Each mode adapter runs `PostGenerationValidator.Validate(ValidationContext)` after its generator completes:
+
+- **Standard / Loadfile-Only / Production Set**: `StandardMode`, `LoadFileOnlyMode`, and `ProductionSetMode` each construct `PostGenerationValidator`, which drives `ValidatorRunner` over the emitted Load File(s). For Production Set mode it additionally calls `ProductionSetPostValidator.Validate`.
+- **Supplemental**: `SupplementalValidator.ValidateAsync` runs during supplemental Production Set generation (before output is written) to validate Bates Number ranges against prior Production Manifests.
+- **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `PostGenerationValidator` entirely.
 
 ## Load File Composition Seam
 
