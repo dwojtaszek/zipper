@@ -429,31 +429,13 @@ public class ComparisonTests
 
         try
         {
-            var outputA = Path.Combine(tempDir, "SetA");
-            Directory.CreateDirectory(outputA);
-            var requestA = new FileGenerationRequest
-            {
-                Output = new OutputConfig { OutputPath = outputA, FileCount = 2, FileType = "pdf" },
-                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODA" },
-                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
-            };
-            var resultA = await ProductionSetGenerator.GenerateAsync(requestA);
-
-            var outputB = Path.Combine(tempDir, "SetB");
-            Directory.CreateDirectory(outputB);
-            var requestB = new FileGenerationRequest
-            {
-                Output = new OutputConfig { OutputPath = outputB, FileCount = 2, FileType = "pdf" },
-                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODB" },
-                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
-            };
-            var resultB = await ProductionSetGenerator.GenerateAsync(requestB);
-
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
             var reportPath = Path.Combine(tempDir, "report_cli.json");
 
             var args = new[]
             {
-                "--compare-production-manifests", $"{resultA.ManifestPath},{resultB.ManifestPath}",
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
                 "--comparison-mode", "replacement",
                 "--comparison-output", reportPath
             };
@@ -477,6 +459,20 @@ public class ComparisonTests
         }
     }
 
+    private static async Task<string> GenerateProductionSetAsync(string tempDir, string name, int fileCount, string productionId)
+    {
+        var output = Path.Combine(tempDir, name);
+        Directory.CreateDirectory(output);
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = output, FileCount = fileCount, FileType = "pdf" },
+            Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = productionId },
+            Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
+        };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        return result.ManifestPath;
+    }
+
     [Fact]
     public async Task Compare_CommandLineE2E_SingleManifestPath_FailsBeforeOutput()
     {
@@ -486,21 +482,12 @@ public class ComparisonTests
 
         try
         {
-            var outputA = Path.Combine(tempDir, "SetA");
-            Directory.CreateDirectory(outputA);
-            var requestA = new FileGenerationRequest
-            {
-                Output = new OutputConfig { OutputPath = outputA, FileCount = 2, FileType = "pdf" },
-                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 100, ProductionId = "PRODA" },
-                Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 6 }
-            };
-            var resultA = await ProductionSetGenerator.GenerateAsync(requestA);
-
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
             var reportPath = Path.Combine(tempDir, "report_single.json");
 
             var args = new[]
             {
-                "--compare-production-manifests", resultA.ManifestPath,
+                "--compare-production-manifests", manifestA,
                 "--comparison-mode", "replacement",
                 "--comparison-output", reportPath
             };
