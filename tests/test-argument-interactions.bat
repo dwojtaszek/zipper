@@ -36,6 +36,12 @@ call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfi
 call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\"" --output-path ".\results\zi_test"
 
+REM --- Collection metadata interaction tests (REQ-181 through REQ-189) ---
+call :assert_accepted "--with-collection-metadata in Standard mode" --type pdf --count 5 --with-collection-metadata --output-path ".\results\zi_test"
+call :assert_accepted "--with-collection-metadata + --with-metadata" --type pdf --count 5 --with-metadata --with-collection-metadata --output-path ".\results\zi_test"
+call :assert_accepted "--with-collection-metadata in Production Set (silently ignored)" --production-set --count 5 --bates-prefix TEST --type pdf --with-collection-metadata --output-path ".\results\zi_test"
+call :assert_accepted "--with-collection-metadata in loadfile-only (silently ignored)" --loadfile-only --count 5 --with-collection-metadata --output-path ".\results\zi_test"
+
 call :assert_rejected "invalid --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode invalid
 call :assert_rejected "--hash-algorithms without --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-algorithms md5
 call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha512

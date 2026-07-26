@@ -274,5 +274,23 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
         Assert.Contains("DOC00000001_A001", childLine, StringComparison.Ordinal);
         Assert.Contains("DOC00000001", childLine, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task CsvWriter_WithCollectionMetadata_IncludesFiveCollectionMetadataColumns()
+    {
+        // REQ-184: Standard mode CSV includes the five collection metadata columns.
+        var request = this.CreateTestRequest();
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Csv } };
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true, Seed = 42 };
+        var files = this.CreateTestFileData(2);
+
+        var content = await this.CaptureCsvOutput(request, files);
+
+        Assert.Contains("DATA_SOURCE", content, StringComparison.Ordinal);
+        Assert.Contains("COLLECTION_DATE", content, StringComparison.Ordinal);
+        Assert.Contains("DENISTED", content, StringComparison.Ordinal);
+        Assert.Contains("DEDUPE_GROUP_ID", content, StringComparison.Ordinal);
+        Assert.Contains("PROCESSING_STATUS", content, StringComparison.Ordinal);
+    }
 }
 

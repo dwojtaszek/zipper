@@ -141,6 +141,133 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_LoadfileOnlyWithoutProfile_WithCollectionMetadata_SilentlyIgnored()
+    {
+        // REQ-185: in Loadfile-Only mode without --column-profile, the flag is silently
+        // ignored — no collection metadata columns appear in the output.
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true, Seed = 42 };
+
+        using var stream = new MemoryStream();
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
+        await writer.WriteAsync(stream, request, []);
+
+        stream.Position = 0;
+        var output = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.DoesNotContain("Data Source", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Collection Date", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("De-Nisted", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Dedupe Group ID", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Processing Status", output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_LoadfileOnlyWithProfile_WithCollectionMetadata_IncludesColumns()
+    {
+        // REQ-185/REQ-187: in Loadfile-Only mode with --column-profile, the five collection
+        // metadata columns are merged into the profile and appear in the output.
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with
+        {
+            WithCollectionMetadata = true,
+            Seed = 42,
+            ColumnProfile = Zipper.Profiles.BuiltInProfiles.MergeWithCollectionMetadata(
+                Zipper.Profiles.BuiltInProfiles.Minimal),
+        };
+
+        using var stream = new MemoryStream();
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
+        await writer.WriteAsync(stream, request, []);
+
+        stream.Position = 0;
+        var output = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.Contains("DATA_SOURCE", output, StringComparison.Ordinal);
+        Assert.Contains("COLLECTION_DATE", output, StringComparison.Ordinal);
+        Assert.Contains("DENISTED", output, StringComparison.Ordinal);
+        Assert.Contains("DEDUPE_GROUP_ID", output, StringComparison.Ordinal);
+        Assert.Contains("PROCESSING_STATUS", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ProductionSet_WithCollectionMetadata_SilentlyIgnored()
+    {
+        // REQ-186: in Production Set mode, --with-collection-metadata is silently ignored.
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 1,
+                FileType = "pdf",
+                OutputPath = this.TempDir,
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithCollectionMetadata = true },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Production = new ProductionConfig { VolumeSize = 5000 },
+            Bates = new BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+        };
+
+        var files = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FolderName = "VOL001",
+                    FileName = "TEST00000001.pdf",
+                    FilePathInZip = "NATIVES/VOL001/TEST00000001.pdf",
+                },
+                DataLength = 1024,
+            },
+        };
+
+        using var stream = new MemoryStream();
+        var writer = new DatComposingWriter(WriterMode.ProductionSet);
+        await writer.WriteAsync(stream, request, files);
+
+        stream.Position = 0;
+        var output = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.DoesNotContain("Data Source", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Collection Date", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("De-Nisted", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Dedupe Group ID", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Processing Status", output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithCollectionMetadataAndWithMetadata_BothColumnSetsPresent()
+    {
+        // REQ-189: --with-collection-metadata and --with-metadata are independent;
+        // both add their own disjoint column sets.
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with
+        {
+            WithCollectionMetadata = true,
+            WithMetadata = true,
+            Seed = 42,
+        };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var output = await WriteAndCaptureOutput(request, files);
+
+        // --with-metadata columns
+        Assert.Contains("Custodian", output, StringComparison.Ordinal);
+        Assert.Contains("Date Sent", output, StringComparison.Ordinal);
+        Assert.Contains("Author", output, StringComparison.Ordinal);
+        Assert.Contains("File Size", output, StringComparison.Ordinal);
+        // --with-collection-metadata columns
+        Assert.Contains("Data Source", output, StringComparison.Ordinal);
+        Assert.Contains("Collection Date", output, StringComparison.Ordinal);
+        Assert.Contains("De-Nisted", output, StringComparison.Ordinal);
+        Assert.Contains("Dedupe Group ID", output, StringComparison.Ordinal);
+        Assert.Contains("Processing Status", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_WithEmailData_WritesEmlColumns()
     {
         var request = DefaultRequest();
