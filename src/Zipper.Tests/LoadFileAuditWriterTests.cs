@@ -165,6 +165,32 @@ public class LoadFileAuditWriterTests
         Assert.Equal("Mixed delimiters injected", anomaly.GetProperty("description").GetString());
     }
 
+    [Theory]
+    [InlineData(LoadFileFormat.Csv, "CSV (Metadata)")]
+    [InlineData(LoadFileFormat.EdrmXml, "EDRM-XML (Metadata)")]
+    [InlineData(LoadFileFormat.Concordance, "Concordance (Metadata)")]
+    public void GenerateAuditJson_NonDatNonOptFormat_ReportsFormatSpecificLabel(LoadFileFormat format, string expectedLabel)
+    {
+        // Arrange — regression guard for #686: the format field must reflect the
+        // actual Load File Format, not fall back to "DAT (Metadata)" for every
+        // non-OPT format.
+        var request = new FileGenerationRequest();
+        request.LoadFile = request.LoadFile with
+        {
+            Formats = new List<LoadFileFormat> { format },
+            Encoding = "UTF-8",
+            IsEncodingExplicit = true
+        };
+        request.Output = request.Output with { FileCount = 10 };
+
+        // Act
+        var json = LoadFileAuditWriter.GenerateAuditJson("test.out", request, Array.Empty<FileData>(), null, format);
+
+        // Assert
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expectedLabel, doc.RootElement.GetProperty("format").GetString());
+    }
+
     [Fact]
     public void GenerateAuditJson_NonPrintableDelimiter_FormatsAsAsciiCode()
     {

@@ -1,6 +1,6 @@
 {
   "fileName": "archive.xml",
-  "format": "DAT (Metadata)",
+  "format": "EDRM-XML (Metadata)",
   "totalRecords": 30,
   "properties": {
     "encoding": "UTF-8",

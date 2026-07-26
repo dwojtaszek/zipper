@@ -153,9 +153,14 @@ internal static class LoadFileAuditWriter
     {
         var activeFormat = format ?? (request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat);
         var (totalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
-        var formatName = activeFormat == LoadFileFormat.Opt
-            ? "OPT (Image)"
-            : "DAT (Metadata)";
+        var formatName = activeFormat switch
+        {
+            LoadFileFormat.Opt => "OPT (Image)",
+            LoadFileFormat.Csv => "CSV (Metadata)",
+            LoadFileFormat.EdrmXml => "EDRM-XML (Metadata)",
+            LoadFileFormat.Concordance => "Concordance (Metadata)",
+            _ => "DAT (Metadata)",
+        };
 
         AuditDelimiters delimiters;
         if (activeFormat == LoadFileFormat.Opt)
