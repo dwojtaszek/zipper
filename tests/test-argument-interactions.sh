@@ -90,6 +90,74 @@ assert_accepted_with_dat_char() {
     rm -rf "$out_path" 2>/dev/null || true
 }
 
+# Assert command exits zero and the emitted DAT content contains a string.
+assert_dat_contains() {
+    local desc="$1"
+    local expected="$2"
+    shift 2
+    local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
+        local dat_content=""
+        local zip_file
+        zip_file=$(find "$out_path" -type f -name "*.zip" | head -n 1)
+        if [[ -n "$zip_file" ]]; then
+            dat_content=$(unzip -p "$zip_file" "*.dat" 2>/dev/null || true)
+        fi
+        if [[ -z "$dat_content" ]]; then
+            local dat_file
+            dat_file=$(find "$out_path" -type f -name "*.dat" | head -n 1)
+            if [[ -n "$dat_file" ]]; then
+                dat_content=$(cat "$dat_file")
+            fi
+        fi
+        if [[ -n "$dat_content" ]] && echo "$dat_content" | grep -F -q -- "$expected"; then
+            print_info "PASS: $desc (DAT contains '$expected')"
+            PASSED=$((PASSED + 1))
+        else
+            print_error "FAIL: $desc (DAT did not contain '$expected')"
+            FAILED=$((FAILED + 1))
+        fi
+    else
+        print_error "FAIL: $desc (expected success, got rejection)"
+        FAILED=$((FAILED + 1))
+    fi
+    rm -rf "$out_path" 2>/dev/null || true
+}
+
+# Assert command exits zero and the emitted DAT content does NOT contain a string.
+assert_dat_not_contains() {
+    local desc="$1"
+    local unexpected="$2"
+    shift 2
+    local out_path="$TEMP_DIR/out_${PASSED}_${FAILED}"
+    if zipper "$@" --output-path "$out_path" > /dev/null 2>&1; then
+        local dat_content=""
+        local zip_file
+        zip_file=$(find "$out_path" -type f -name "*.zip" | head -n 1)
+        if [[ -n "$zip_file" ]]; then
+            dat_content=$(unzip -p "$zip_file" "*.dat" 2>/dev/null || true)
+        fi
+        if [[ -z "$dat_content" ]]; then
+            local dat_file
+            dat_file=$(find "$out_path" -type f -name "*.dat" | head -n 1)
+            if [[ -n "$dat_file" ]]; then
+                dat_content=$(cat "$dat_file")
+            fi
+        fi
+        if [[ -n "$dat_content" ]] && echo "$dat_content" | grep -F -q -- "$unexpected"; then
+            print_error "FAIL: $desc (DAT should NOT contain '$unexpected')"
+            FAILED=$((FAILED + 1))
+        else
+            print_info "PASS: $desc (DAT does not contain '$unexpected')"
+            PASSED=$((PASSED + 1))
+        fi
+    else
+        print_error "FAIL: $desc (expected success, got rejection)"
+        FAILED=$((FAILED + 1))
+    fi
+    rm -rf "$out_path" 2>/dev/null || true
+}
+
 print_info "=== CLI Argument Interaction Tests ==="
 
 # --- Conflicts ---
@@ -199,6 +267,23 @@ assert_accepted "--production-set + --bates-prefix + --volume-size" \
 
 assert_accepted "--loadfile-only + --col-delim + --quote-delim" \
     --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\""
+
+# --- Collection metadata interaction tests (REQ-181 through REQ-189) ---
+
+assert_dat_contains "--with-collection-metadata in Standard mode includes columns" "Data Source" \
+    --type pdf --count 5 --with-collection-metadata
+
+assert_dat_contains "--with-collection-metadata + --with-metadata both column sets present" "Custodian" \
+    --type pdf --count 5 --with-metadata --with-collection-metadata
+
+assert_dat_contains "--with-collection-metadata + --with-metadata both column sets present" "De-Nisted" \
+    --type pdf --count 5 --with-metadata --with-collection-metadata
+
+assert_dat_not_contains "--with-collection-metadata in Production Set silently ignored" "Data Source" \
+    --production-set --count 5 --bates-prefix TEST --type pdf --with-collection-metadata
+
+assert_dat_not_contains "--with-collection-metadata in loadfile-only (no profile) silently ignored" "Data Source" \
+    --loadfile-only --count 5 --with-collection-metadata
 
 # --- Negative E2E tests for --loadfile-only formats ---
 
