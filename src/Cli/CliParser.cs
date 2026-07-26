@@ -1,7 +1,24 @@
+using System.Globalization;
+
 namespace Zipper.Cli;
 
 public static class CliParser
 {
+    private static readonly Dictionary<string, Action<ParsedArguments>> ParameterlessFlags = new()
+    {
+        ["--with-metadata"] = p => p.WithMetadata = true,
+        ["--with-collection-metadata"] = p => p.WithCollectionMetadata = true,
+        ["--with-text"] = p => p.WithText = true,
+        ["--include-load-file"] = p => p.IncludeLoadFile = true,
+        ["--with-families"] = p => p.WithFamilies = true,
+        ["--loadfile-only"] = p => p.LoadfileOnly = true,
+        ["--chaos-mode"] = p => p.ChaosMode = true,
+        ["--production-set"] = p => p.ProductionSet = true,
+        ["--production-zip"] = p => p.ProductionZip = true,
+        ["--supplemental-production"] = p => p.SupplementalProduction = true,
+        ["--redacted-production"] = p => p.RedactedProduction = true,
+    };
+
     public static ParsedArguments? Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -10,214 +27,106 @@ public static class CliParser
 
         for (int i = 0; i < args.Length; i++)
         {
-            switch (args[i].ToLowerInvariant())
-            {
-                case "--type":
-                    if (TryGetValue(args, i, out var fileType))
-                    {
-                        parsed.FileType = fileType;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --type requires a value.");
-                        return null;
-                    }
+            var arg = args[i].ToLowerInvariant();
 
+            if (ParameterlessFlags.TryGetValue(arg, out var flagAction))
+            {
+                flagAction(parsed);
+                continue;
+            }
+
+            switch (arg)
+            {
+                // --- Output args ---
+                case "--type":
+                    if (!ReadStringArg(args, ref i, "--type", out var fileType)) return null;
+                    parsed.FileType = fileType;
                     break;
                 case "--count":
-                    if (TryGetValue(args, i, out var countStr))
-                    {
-                        if (long.TryParse(countStr, System.Globalization.CultureInfo.InvariantCulture, out var count))
-                        {
-                            parsed.Count = count;
-                            i++;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --count: '{countStr}'");
-                            return null;
-                        }
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --count requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadLongArg(args, ref i, "--count", out var count)) return null;
+                    parsed.Count = count;
                     break;
                 case "--output-path":
-                    if (TryGetValue(args, i, out var pathArg))
-                    {
-                        parsed.OutputPathStr = pathArg;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --output-path requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--output-path", out var pathArg)) return null;
+                    parsed.OutputPathStr = pathArg;
                     break;
                 case "--folders":
-                    if (TryGetValue(args, i, out var foldersStr))
-                    {
-                        if (int.TryParse(foldersStr, System.Globalization.CultureInfo.InvariantCulture, out var folders))
-                        {
-                            parsed.Folders = folders;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --folders: '{foldersStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --folders requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadIntArg(args, ref i, "--folders", out var folders)) return null;
+                    parsed.Folders = folders;
                     break;
                 case "--encoding":
-                    if (TryGetValue(args, i, out var encoding))
-                    {
-                        parsed.Encoding = encoding;
-                        parsed.IsEncodingExplicit = true;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --encoding requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--encoding", out var encoding)) return null;
+                    parsed.Encoding = encoding;
+                    parsed.IsEncodingExplicit = true;
                     break;
                 case "--distribution":
-                    if (TryGetValue(args, i, out var dist))
-                    {
-                        parsed.Distribution = dist;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --distribution requires a value.");
-                        return null;
-                    }
+                    if (!ReadStringArg(args, ref i, "--distribution", out var dist)) return null;
+                    parsed.Distribution = dist;
+                    break;
 
-                    break;
-                case "--with-metadata":
-                    parsed.WithMetadata = true;
-                    break;
-                case "--with-collection-metadata":
-                    parsed.WithCollectionMetadata = true;
-                    break;
-                case "--with-text":
-                    parsed.WithText = true;
-                    break;
+                // --- Metadata args ---
                 case "--attachment-rate":
-                    if (TryGetValue(args, i, out var attRateStr))
-                    {
-                        if (int.TryParse(attRateStr, System.Globalization.CultureInfo.InvariantCulture, out var attachmentRate))
-                        {
-                            parsed.AttachmentRate = attachmentRate;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --attachment-rate: '{attRateStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --attachment-rate requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadIntArg(args, ref i, "--attachment-rate", out var attachmentRate)) return null;
+                    parsed.AttachmentRate = attachmentRate;
                     break;
                 case "--target-zip-size":
-                    if (TryGetValue(args, i, out var zipSize))
-                    {
-                        parsed.TargetZipSize = zipSize;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --target-zip-size requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--include-load-file":
-                    parsed.IncludeLoadFile = true;
+                    if (!ReadStringArg(args, ref i, "--target-zip-size", out var zipSize)) return null;
+                    parsed.TargetZipSize = zipSize;
                     break;
                 case "--load-file-format":
-                    if (TryGetValue(args, i, out var loadFmt))
-                    {
-                        parsed.LoadFileFormat = loadFmt;
-                        parsed.IsLoadFileFormatExplicit = true;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --load-file-format requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--load-file-format", out var loadFmt)) return null;
+                    parsed.LoadFileFormat = loadFmt;
+                    parsed.IsLoadFileFormatExplicit = true;
                     break;
-                case "--bates-prefix":
-                    if (TryGetValue(args, i, out var batesPfx))
-                    {
-                        parsed.BatesPrefix = batesPfx;
-                        if (batesPfx.Contains(',', StringComparison.Ordinal))
-                        {
-                            parsed.BatesPrefixes = batesPfx.Split(',').Select(p => p.Trim()).ToList();
-                        }
-                        else
-                        {
-                            parsed.BatesPrefixes = new List<string> { batesPfx };
-                        }
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --bates-prefix requires a value.");
-                        return null;
-                    }
+                case "--load-file-formats":
+                    if (!ReadStringArg(args, ref i, "--load-file-formats", out var loadFmts)) return null;
+                    parsed.LoadFileFormats = loadFmts;
+                    parsed.IsLoadFileFormatExplicit = true;
+                    break;
+                case "--loadfile-format":
+                    if (!ReadStringArg(args, ref i, "--loadfile-format", out var lfFmt)) return null;
+                    parsed.LoadFileFormat = lfFmt;
+                    parsed.IsLoadFileFormatExplicit = true;
+                    break;
+                case "--column-profile":
+                    if (!ReadStringArg(args, ref i, "--column-profile", out var colProf)) return null;
+                    parsed.ColumnProfile = colProf;
+                    break;
+                case "--seed":
+                    if (!ReadIntArg(args, ref i, "--seed", out var seed)) return null;
+                    parsed.Seed = seed;
+                    break;
+                case "--date-format":
+                    if (!ReadStringArg(args, ref i, "--date-format", out var dateFmt)) return null;
+                    parsed.DateFormat = dateFmt;
+                    break;
+                case "--empty-percentage":
+                    if (!ReadIntArg(args, ref i, "--empty-percentage", out var emptyPct)) return null;
+                    parsed.EmptyPercentage = emptyPct;
+                    break;
+                case "--custodian-count":
+                    if (!ReadIntArg(args, ref i, "--custodian-count", out var custCount)) return null;
+                    parsed.CustodianCount = custCount;
+                    break;
 
+                // --- Bates args ---
+                case "--bates-prefix":
+                    if (!ReadStringArg(args, ref i, "--bates-prefix", out var batesPfx)) return null;
+                    parsed.BatesPrefix = batesPfx;
+                    parsed.BatesPrefixes = batesPfx.Contains(',', StringComparison.Ordinal)
+                        ? batesPfx.Split(',').Select(p => p.Trim()).ToList()
+                        : new List<string> { batesPfx };
                     break;
                 case "--bates-start":
-                    if (TryGetValue(args, i, out var batesStartStr))
+                    if (!ReadStringArg(args, ref i, "--bates-start", out var batesStartStr)) return null;
+                    if (batesStartStr.Contains(',', StringComparison.Ordinal))
                     {
-                        if (batesStartStr.Contains(',', StringComparison.Ordinal))
+                        var starts = new List<long>();
+                        foreach (var part in batesStartStr.Split(','))
                         {
-                            var parts = batesStartStr.Split(',');
-                            var starts = new List<long>();
-                            foreach (var part in parts)
+                            if (long.TryParse(part.Trim(), CultureInfo.InvariantCulture, out var sVal))
                             {
-                                if (long.TryParse(part.Trim(), System.Globalization.CultureInfo.InvariantCulture, out var sVal))
-                                {
-                                    starts.Add(sVal);
-                                }
-                                else
-                                {
-                                    Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
-                                    return null;
-                                }
-                            }
-                            parsed.BatesStarts = starts;
-                            parsed.BatesStart = starts[0];
-                        }
-                        else
-                        {
-                            if (long.TryParse(batesStartStr, System.Globalization.CultureInfo.InvariantCulture, out var batesStart))
-                            {
-                                parsed.BatesStart = batesStart;
-                                parsed.BatesStarts = new List<long> { batesStart };
+                                starts.Add(sVal);
                             }
                             else
                             {
@@ -225,535 +134,146 @@ public static class CliParser
                                 return null;
                             }
                         }
-
-                        i++;
+                        parsed.BatesStarts = starts;
+                        parsed.BatesStart = starts[0];
                     }
                     else
                     {
-                        Console.Error.WriteLine("Error: --bates-start requires a value.");
-                        return null;
+                        if (long.TryParse(batesStartStr, CultureInfo.InvariantCulture, out var batesStart))
+                        {
+                            parsed.BatesStart = batesStart;
+                            parsed.BatesStarts = new List<long> { batesStart };
+                        }
+                        else
+                        {
+                            Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
+                            return null;
+                        }
                     }
-
                     break;
                 case "--bates-digits":
-                    if (TryGetValue(args, i, out var batesDigitsStr))
-                    {
-                        if (int.TryParse(batesDigitsStr, System.Globalization.CultureInfo.InvariantCulture, out var batesDigits))
-                        {
-                            parsed.BatesDigits = batesDigits;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --bates-digits: '{batesDigitsStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --bates-digits requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadIntArg(args, ref i, "--bates-digits", out var batesDigits)) return null;
+                    parsed.BatesDigits = batesDigits;
                     break;
+
+                // --- TIFF args ---
                 case "--tiff-pages":
-                    if (TryGetValue(args, i, out var tiffPages))
-                    {
-                        parsed.TiffPagesRange = tiffPages;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --tiff-pages requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--tiff-pages", out var tiffPages)) return null;
+                    parsed.TiffPagesRange = tiffPages;
                     break;
-                case "--column-profile":
-                    if (TryGetValue(args, i, out var colProf))
-                    {
-                        parsed.ColumnProfile = colProf;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --column-profile requires a value.");
-                        return null;
-                    }
 
-                    break;
-                case "--seed":
-                    if (TryGetValue(args, i, out var seedStr))
-                    {
-                        if (int.TryParse(seedStr, System.Globalization.CultureInfo.InvariantCulture, out var seed))
-                        {
-                            parsed.Seed = seed;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --seed: '{seedStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --seed requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--date-format":
-                    if (TryGetValue(args, i, out var dateFmt))
-                    {
-                        parsed.DateFormat = dateFmt;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --date-format requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--empty-percentage":
-                    if (TryGetValue(args, i, out var emptyPctStr))
-                    {
-                        if (int.TryParse(emptyPctStr, System.Globalization.CultureInfo.InvariantCulture, out var emptyPct))
-                        {
-                            parsed.EmptyPercentage = emptyPct;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --empty-percentage: '{emptyPctStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --empty-percentage requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--custodian-count":
-                    if (TryGetValue(args, i, out var custCountStr))
-                    {
-                        if (int.TryParse(custCountStr, System.Globalization.CultureInfo.InvariantCulture, out var custCount))
-                        {
-                            parsed.CustodianCount = custCount;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --custodian-count: '{custCountStr}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --custodian-count requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--with-families":
-                    parsed.WithFamilies = true;
-                    break;
-                case "--load-file-formats":
-                    if (TryGetValue(args, i, out var loadFmts))
-                    {
-                        parsed.LoadFileFormats = loadFmts;
-                        parsed.IsLoadFileFormatExplicit = true;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --load-file-formats requires a value.");
-                        return null;
-                    }
-
-                    break;
+                // --- Load file format args ---
                 case "--dat-delimiters":
-                    if (TryGetValue(args, i, out var datDelims))
-                    {
-                        parsed.DatDelimiters = datDelims;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --dat-delimiters requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--dat-delimiters", out var datDelims)) return null;
+                    parsed.DatDelimiters = datDelims;
                     break;
-                case "--delimiter-column":
-                    if (TryGetValue(args, i, out var delCol))
-                    {
-                        parsed.DelimiterColumn = delCol;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --delimiter-column requires a value.");
-                        return null;
-                    }
 
+                // --- Delimiter args ---
+                case "--delimiter-column":
+                    if (!ReadStringArg(args, ref i, "--delimiter-column", out var delCol)) return null;
+                    parsed.DelimiterColumn = delCol;
                     break;
                 case "--delimiter-quote":
-                    if (TryGetValue(args, i, out var delQuote))
-                    {
-                        parsed.DelimiterQuote = delQuote;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --delimiter-quote requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--delimiter-quote", out var delQuote)) return null;
+                    parsed.DelimiterQuote = delQuote;
                     break;
                 case "--delimiter-newline":
-                    if (TryGetValue(args, i, out var delNew))
-                    {
-                        parsed.DelimiterNewline = delNew;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --delimiter-newline requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--loadfile-only":
-                    parsed.LoadfileOnly = true;
-                    break;
-                case "--loadfile-format":
-                    if (TryGetValue(args, i, out var lfFmt))
-                    {
-                        parsed.LoadFileFormat = lfFmt;
-                        parsed.IsLoadFileFormatExplicit = true;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --loadfile-format requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--delimiter-newline", out var delNew)) return null;
+                    parsed.DelimiterNewline = delNew;
                     break;
                 case "--eol":
-                    if (TryGetValue(args, i, out var eolVal))
-                    {
-                        parsed.Eol = eolVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --eol requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--eol", out var eolVal)) return null;
+                    parsed.Eol = eolVal;
                     break;
                 case "--col-delim":
-                    if (TryGetValue(args, i, out var colDelimVal))
-                    {
-                        parsed.ColDelim = colDelimVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --col-delim requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--col-delim", out var colDelimVal)) return null;
+                    parsed.ColDelim = colDelimVal;
                     break;
                 case "--quote-delim":
-                    if (TryGetValue(args, i, out var quoteDelimVal))
-                    {
-                        parsed.QuoteDelim = quoteDelimVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --quote-delim requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--quote-delim", out var quoteDelimVal)) return null;
+                    parsed.QuoteDelim = quoteDelimVal;
                     break;
                 case "--newline-delim":
-                    if (TryGetValue(args, i, out var newlineDelimVal))
-                    {
-                        parsed.NewlineDelim = newlineDelimVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --newline-delim requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--newline-delim", out var newlineDelimVal)) return null;
+                    parsed.NewlineDelim = newlineDelimVal;
                     break;
                 case "--multi-delim":
-                    if (TryGetValue(args, i, out var multiDelimVal))
-                    {
-                        parsed.MultiDelim = multiDelimVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --multi-delim requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--multi-delim", out var multiDelimVal)) return null;
+                    parsed.MultiDelim = multiDelimVal;
                     break;
                 case "--nested-delim":
-                    if (TryGetValue(args, i, out var nestedDelimVal))
-                    {
-                        parsed.NestedDelim = nestedDelimVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --nested-delim requires a value.");
-                        return null;
-                    }
+                    if (!ReadStringArg(args, ref i, "--nested-delim", out var nestedDelimVal)) return null;
+                    parsed.NestedDelim = nestedDelimVal;
+                    break;
 
-                    break;
-                case "--chaos-mode":
-                    parsed.ChaosMode = true;
-                    break;
+                // --- Chaos args ---
                 case "--chaos-amount":
-                    if (TryGetValue(args, i, out var chaosAmtVal))
-                    {
-                        parsed.ChaosAmount = chaosAmtVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --chaos-amount requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--chaos-amount", out var chaosAmtVal)) return null;
+                    parsed.ChaosAmount = chaosAmtVal;
                     break;
                 case "--chaos-types":
-                    if (TryGetValue(args, i, out var chaosTypesVal))
-                    {
-                        parsed.ChaosTypes = chaosTypesVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --chaos-types requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--chaos-types", out var chaosTypesVal)) return null;
+                    parsed.ChaosTypes = chaosTypesVal;
                     break;
                 case "--chaos-scenario":
-                    if (TryGetValue(args, i, out var chaosScenarioVal))
-                    {
-                        parsed.ChaosScenario = chaosScenarioVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --chaos-scenario requires a value.");
-                        return null;
-                    }
+                    if (!ReadStringArg(args, ref i, "--chaos-scenario", out var chaosScenarioVal)) return null;
+                    parsed.ChaosScenario = chaosScenarioVal;
+                    break;
 
-                    break;
-                case "--production-set":
-                    parsed.ProductionSet = true;
-                    break;
-                case "--production-zip":
-                    parsed.ProductionZip = true;
-                    break;
+                // --- Production args ---
                 case "--volume-size":
-                    if (TryGetValue(args, i, out var volumeSizeVal))
-                    {
-                        if (int.TryParse(volumeSizeVal, System.Globalization.CultureInfo.InvariantCulture, out var volumeSize))
-                        {
-                            parsed.VolumeSize = volumeSize;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --volume-size: '{volumeSizeVal}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --volume-size requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--supplemental-production":
-                    parsed.SupplementalProduction = true;
+                    if (!ReadIntArg(args, ref i, "--volume-size", out var volumeSize)) return null;
+                    parsed.VolumeSize = volumeSize;
                     break;
                 case "--prior-manifest":
-                    if (TryGetValue(args, i, out var priorManifestVal))
-                    {
-                        parsed.PriorManifests = priorManifestVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --prior-manifest requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--prior-manifest", out var priorManifestVal)) return null;
+                    parsed.PriorManifests = priorManifestVal;
                     break;
                 case "--supplemental-gap-policy":
-                    if (TryGetValue(args, i, out var gapPolicyVal))
-                    {
-                        parsed.SupplementalGapPolicy = gapPolicyVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --supplemental-gap-policy requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--hash-mode":
-                    if (TryGetValue(args, i, out var hashModeVal))
-                    {
-                        parsed.HashMode = hashModeVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --hash-mode requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--hash-algorithms":
-                    if (TryGetValue(args, i, out var hashAlgsVal))
-                    {
-                        parsed.HashAlgorithms = hashAlgsVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --hash-algorithms requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--supplemental-gap-policy", out var gapPolicyVal)) return null;
+                    parsed.SupplementalGapPolicy = gapPolicyVal;
                     break;
                 case "--production-id":
-                    if (TryGetValue(args, i, out var prodIdVal))
-                    {
-                        parsed.ProductionId = prodIdVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --production-id requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--production-id", out var prodIdVal)) return null;
+                    parsed.ProductionId = prodIdVal;
                     break;
                 case "--rolling-count":
-                    if (TryGetValue(args, i, out var rollingCountVal))
-                    {
-                        if (int.TryParse(rollingCountVal, System.Globalization.CultureInfo.InvariantCulture, out var rollingCount))
-                        {
-                            parsed.RollingCount = rollingCount;
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --rolling-count: '{rollingCountVal}'");
-                            return null;
-                        }
-
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --rolling-count requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadIntArg(args, ref i, "--rolling-count", out var rollingCount)) return null;
+                    parsed.RollingCount = rollingCount;
                     break;
                 case "--rolling-bates-mode":
-                    if (TryGetValue(args, i, out var batesModeVal))
-                    {
-                        parsed.RollingBatesMode = batesModeVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --rolling-bates-mode requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--compare-production-manifests":
-                    if (TryGetValue(args, i, out var compareManifestsVal))
-                    {
-                        parsed.CompareProductionManifests = compareManifestsVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --compare-production-manifests requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--comparison-mode":
-                    if (TryGetValue(args, i, out var compModeVal))
-                    {
-                        parsed.ComparisonMode = compModeVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --comparison-mode requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--comparison-output":
-                    if (TryGetValue(args, i, out var compOutVal))
-                    {
-                        parsed.ComparisonOutput = compOutVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --comparison-output requires a value.");
-                        return null;
-                    }
-
-                    break;
-                case "--redacted-production":
-                    parsed.RedactedProduction = true;
+                    if (!ReadStringArg(args, ref i, "--rolling-bates-mode", out var batesModeVal)) return null;
+                    parsed.RollingBatesMode = batesModeVal;
                     break;
                 case "--withheld-native-policy":
-                    if (TryGetValue(args, i, out var withheldVal))
-                    {
-                        parsed.WithheldNativePolicy = withheldVal;
-                        i++;
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Error: --withheld-native-policy requires a value.");
-                        return null;
-                    }
-
+                    if (!ReadStringArg(args, ref i, "--withheld-native-policy", out var withheldVal)) return null;
+                    parsed.WithheldNativePolicy = withheldVal;
                     break;
+
+                // --- Comparison args ---
+                case "--compare-production-manifests":
+                    if (!ReadStringArg(args, ref i, "--compare-production-manifests", out var compareManifestsVal)) return null;
+                    parsed.CompareProductionManifests = compareManifestsVal;
+                    break;
+                case "--comparison-mode":
+                    if (!ReadStringArg(args, ref i, "--comparison-mode", out var compModeVal)) return null;
+                    parsed.ComparisonMode = compModeVal;
+                    break;
+                case "--comparison-output":
+                    if (!ReadStringArg(args, ref i, "--comparison-output", out var compOutVal)) return null;
+                    parsed.ComparisonOutput = compOutVal;
+                    break;
+
+                // --- Hash args ---
+                case "--hash-mode":
+                    if (!ReadStringArg(args, ref i, "--hash-mode", out var hashModeVal)) return null;
+                    parsed.HashMode = hashModeVal;
+                    break;
+                case "--hash-algorithms":
+                    if (!ReadStringArg(args, ref i, "--hash-algorithms", out var hashAlgsVal)) return null;
+                    parsed.HashAlgorithms = hashAlgsVal;
+                    break;
+
                 default:
                     Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
                     return null;
@@ -761,6 +281,58 @@ public static class CliParser
         }
 
         return parsed;
+    }
+
+    private static bool ReadStringArg(string[] args, ref int i, string flagName, out string value)
+    {
+        if (TryGetValue(args, i, out value))
+        {
+            i++;
+            return true;
+        }
+
+        Console.Error.WriteLine($"Error: {flagName} requires a value.");
+        return false;
+    }
+
+    private static bool ReadIntArg(string[] args, ref int i, string flagName, out int value)
+    {
+        if (TryGetValue(args, i, out var str))
+        {
+            if (int.TryParse(str, CultureInfo.InvariantCulture, out value))
+            {
+                i++;
+                return true;
+            }
+
+            Console.Error.WriteLine($"Error: Invalid value for {flagName}: '{str}'");
+            value = 0;
+            return false;
+        }
+
+        Console.Error.WriteLine($"Error: {flagName} requires a value.");
+        value = 0;
+        return false;
+    }
+
+    private static bool ReadLongArg(string[] args, ref int i, string flagName, out long value)
+    {
+        if (TryGetValue(args, i, out var str))
+        {
+            if (long.TryParse(str, CultureInfo.InvariantCulture, out value))
+            {
+                i++;
+                return true;
+            }
+
+            Console.Error.WriteLine($"Error: Invalid value for {flagName}: '{str}'");
+            value = 0;
+            return false;
+        }
+
+        Console.Error.WriteLine($"Error: {flagName} requires a value.");
+        value = 0;
+        return false;
     }
 
     private static bool TryGetValue(string[] args, int currentIndex, out string value)
@@ -774,5 +346,4 @@ public static class CliParser
         value = string.Empty;
         return false;
     }
-
 }
