@@ -1,0 +1,175 @@
+req_id	coverage	reference	notes
+REQ-000	unit	CliParserTests.Parse_AllBooleanFlags_SetCorrectly	--with-metadata boolean flag parsing
+REQ-001	unit	DatComposingWriterTests.WriteAsync_WithMetadata_IncludesMetadataColumns	Custodian/Date Sent/Author/File Size columns
+REQ-002	unit	LegacyMetadataGeneratorTests.FolderCustodianGenerator_ProducesExpectedFormat	Folder-linked custodian in standard mode
+REQ-003	unit	LegacyMetadataGeneratorTests.AuthorGenerator_ProducesExpectedFormat	Auto-generated Author/Date Sent/File Size
+REQ-004	unit	CliParserTests.Parse_AllBooleanFlags_SetCorrectly	--with-text boolean flag parsing
+REQ-005	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles	.txt files generated in Archive
+REQ-006	unit	PlaceholderFilesTests.ExtractedText_IsNonEmpty	Fixed placeholder extracted text content
+REQ-007	unit	DatComposingWriterTests.WriteAsync_WithText_IncludesExtractedTextColumn	Extracted Text column in .dat
+REQ-008	unit	FileGeneratorFactoryTests.Create_KnownType_ReturnsCorrectGenerator	eml accepted as file type
+REQ-009	unit	Emails.EmailSerializerTests.ToEml_ProducesRfc2822ValidHeaders	Email Native Files with valid headers
+REQ-010	unit	DatComposingWriterTests.WriteAsync_WithEmailType_IncludesEmlColumns	Email header columns in .dat
+REQ-011	unit	Emails.EmailAttachmentPickerTests.Pick_RespectsRate	--attachment-rate percentage control
+REQ-012	exemption	-	Undefined dangling reference in REQ-011; tracked by #644
+REQ-021	unit	CliValidatorTests.Validate_InvalidTargetZipSize_ReturnsFalse	--target-zip-size argument
+REQ-022	unit	CliValidatorTests.Validate_TargetZipSizeWithoutCount_ReturnsFalse	Validation error without --count
+REQ-023	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithTargetZipSize_PadsFilesToReachTargetSize	Padding calculation
+REQ-024	unit	ParallelFileGeneratorTests.CalculatePaddingPerFile_AtKnownInputs_ProducesPinnedValue	Random padding appended to content
+REQ-025	unit	GenerationModeTests.Main_StandardModeWithTargetZipSizeFarFromActual_WarnsButSucceeds	+/- 10% tolerance, warns on miss
+REQ-026	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithImpossibleTargetSize_ThrowsInvalidOperationException	Pre-check minimum compressed size
+REQ-027	unit	CliParserTests.Parse_AllBooleanFlags_SetCorrectly	--include-load-file boolean flag
+REQ-028	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive	Load File included in Archive root
+REQ-029	unit	GenerationModeTests.Main_StandardModeWithIncludeLoadFile_EmbedsLoadFileInArchive	No separate Load File on disk
+REQ-030	e2e	test-compute-version.sh	Semver MAJOR.MINOR.PATCH format via version computation
+REQ-031	exemption	-	CI auto-increment patch on PR merge (release process)
+REQ-032	exemption	-	Manual git tag version control (release process)
+REQ-033	exemption	-	CI embeds dev/tag InformationalVersion (CI build process)
+REQ-034	unit	ProgramTests.Main_WithVersionFlag_PrintsVersionAndReturnsZero	--version displays full version string
+REQ-035	exemption	-	CI auto GitHub Release creation (release process)
+REQ-036	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly	--load-file-format argument
+REQ-037	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly	dat/opt/csv/edrm-xml/concordance support
+REQ-038	e2e	test-load-file-formats.sh	Format conformance to industry specifications
+REQ-039	unit	CliParserTests.Parse_InvalidBatesStart_ReturnsNull	Bates numbering arguments
+REQ-040	unit	DatComposingWriterTests.WriteAsync_WithBatesConfig_IncludesBatesNumberColumn	Bates Number column when enabled
+REQ-041	unit	BatesSequenceTests.Generate_WithCustomPrefix_ShouldIncludePrefix	PREFIX + zero-padded number format
+REQ-042	unit	BatesSequenceTests.Generate_WithMultipleIndices_ShouldIncrementCorrectly	Sequential Bates increment
+REQ-043	unit	CliPipelineTests.ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly	--tiff-pages argument
+REQ-044	unit	TiffMultiPageGeneratorTests.ParsePageRange_WithValidRange_ShouldReturnParsedRange	Range specification parsing
+REQ-045	unit	TiffMultiPageGeneratorTests.GetPageCount_WithRange_ShouldReturnCountWithinRange	Random page count within range
+REQ-046	unit	DatComposingWriterTests.WriteAsync_WithTiffPageRange_IncludesPageCountColumn	Page Count column with --tiff-pages
+REQ-047	unit	TiffMultiPageGeneratorTests.GetPageCount_WithNullRange_ShouldReturnOne	Default 1-1 page range
+REQ-048	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly	Format list dat/opt/csv/edrm-xml/concordance
+REQ-049	unit	DatComposingWriterTests.WriteAsync_DefaultDelimiters_UseNonPrintingChars	DAT default ASCII 20/254/174
+REQ-050	unit	RequestBuilderTests.Build_DelimiterPreset_Csv_SetsCommaDelimiters	--dat-delimiters standard|csv preset
+REQ-051	unit	OptComposingWriterLoadFileTests.OptWriter_ShouldWriteCommaDelimitedNoHeaderFormat	OPT comma + ANSI default
+REQ-052	unit	LoadFiles.XmlLoadFileWriterTests.XmlLoadFileWriter_Output_ValidatesAgainstEdrm12XsdSchema	EDRM-XML v1.2 well-formed
+REQ-053	exemption	-	DEPRECATED, superseded by REQ-124
+REQ-054	exemption	-	DEPRECATED, superseded by REQ-059
+REQ-055	unit	RequestBuilderTests.Build_MultiFormat_CreatesFormatList	--load-file-formats plural argument
+REQ-056	unit	ZipArchiveServiceTests.CreateArchiveAsync_MultipleFormats_ProducesLoadFilesWithExpectedRows	All formats generated to output
+REQ-057	unit	SmokeTests.Main_WithAutoOptGeneration_ForTiffAndJpg_CreatesBothDatAndOpt	Auto DAT+OPT for tiff/jpg
+REQ-058	unit	OptComposingWriterLoadFileTests.OptWriter_WithMultiPageTiff_ProducesCorrectPageLevelSuffixesAndDocumentBreaks	Doc breaks + page-level Bates suffixes
+REQ-059	unit	OptComposingWriterLoadFileTests.OptWriter_WithoutEncodingSpecified_ShouldDefaultToWindows1252	OPT ANSI default, --encoding override
+REQ-060	unit	CliParserTests.Parse_AllBooleanFlags_SetCorrectly	--with-families boolean flag
+REQ-061	unit	CsvComposingWriterTests.CsvWriter_WithFamilies_IncludesFamilyColumnsAndRows	BEGATTACH/ENDATTACH/PARENTDOCID columns
+REQ-062	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithEmlFilesAndAttachments_HandlesAttachmentsCorrectly	Email attachments linked as children
+REQ-063	unit	CliParserTests.Parse_ColumnProfileArgs_ParsesCorrectly	--column-profile argument
+REQ-064	unit	ColumnProfileLoaderTests.Load_WithBuiltInProfileName_ReturnsProfile	Built-in name or file path
+REQ-065	unit	ColumnProfileTests.BuiltInProfiles_CanBeLoadedByName	Profiles embedded as resources
+REQ-066	unit	DatComposingWriterTests.WriteAsync_BasicHeader_WritesCorrectColumns	Base columns only without profile
+REQ-067	exemption	-	DEPRECATED, superseded by REQ-121
+REQ-068	unit	DataGeneratorTests.CustomProfile_WithEveryColumnKind_AllColumnsWithinSpec	uniform/gaussian/exponential/pareto/weighted distributions
+REQ-069	unit	DataGeneratorTests.GenerateRow_WithCustodianCountOverride_LimitsDistinctCustodians	Data sources pre-generated and reused
+REQ-070	unit	DataGeneratorTests.GenerateRow_WithSeed_ProducesReproducibleOutput	--seed reproducible generation
+REQ-071	unit	DataGeneratorTests.EmptyPercentage_Observed_MatchesConfigured_WithinTolerance	Per-column empty value percentages
+REQ-072	unit	DataGeneratorTests.GenerateRow_MultiValueColumns_UseCorrectDelimiter	Multi-value fields with multiValueCount
+REQ-073	unit	DataGeneratorTests.CustomProfile_WithEveryColumnKind_AllColumnsWithinSpec	Column types (identifier/text/date/number/boolean/coded/email)
+REQ-074	unit	Profiles.Generation.BooleanGeneratorTests.Generate_10Format_Returns1Or0	Boolean formats YN/TrueFalse/10
+REQ-075	unit	Profiles.Generation.DateGeneratorTests.Generate_GivenCustomDateFormat_ReturnsFormattedDate	Configurable date format strings
+REQ-076	unit	DatComposingWriterTests.WriteAsync_StandardMode_WithColumnProfile_UsesProfileColumns	Profile precedence over --with-metadata
+REQ-077	unit	DatComposingWriterTests.WriteAsync_WithEmailType_IncludesEmlColumns	Email columns always included with eml
+REQ-078	unit	ColumnProfileLoaderTests.Validate_WithTooManyColumns_ThrowsInvalidOperationException	Max 200 columns validation
+REQ-079	unit	ColumnProfileLoaderTests.LoadFromFile_WithInvalidJson_ThrowsInvalidOperationException	Custom profile JSON validation
+REQ-080	unit	ColumnProfileTests.MinimalProfile_HasExpectedColumns	Built-in profiles minimal/standard/litigation/full
+REQ-081	unit	CliParserTests.Parse_DelimiterArgs_ParsesCorrectly	Custom DAT delimiter arguments
+REQ-082	unit	RequestBuilderTests.ParseDelimiterArgument_ValidInputs_ReturnsCorrectValue	Char/ASCII code/escaped delimiter inputs
+REQ-083	unit	CliPipelineTests.ValidateAndParseArguments_WithDelimiterOverride_ShouldOverridePreset	Custom delimiters apply to DAT format
+REQ-084	unit	RequestBuilderTests.Build_DelimiterOverride_OverridesPreset	Custom flags override --dat-delimiters preset
+REQ-085	unit	DatComposingWriterTests.WriteAsync_DefaultDelimiters_UseNonPrintingChars	Default delimiter values ASCII 20/254/174
+REQ-086	unit	DatComposingWriterTests.WriteAsync_SanitizeField_ReplacesWindowsNewline	Newline replacement in field values
+REQ-087	unit	CliParserTests.Parse_LoadfileOnlyArgs_ParsesCorrectly	--loadfile-only argument
+REQ-088	unit	CliValidatorTests.Validate_LoadfileOnly_WithCsvFormat_ReturnsFalse	Loadfile-only rejects non-dat/opt formats
+REQ-089	unit	CliValidatorTests.Validate_LoadfileOnly_WithoutType_ReturnsTrue	--type optional, defaults pdf
+REQ-090	unit	LoadFileOnlyGeneratorTests.GenerateAsync_CreatesPropertiesJson	_properties.json audit file
+REQ-091	unit	CliValidatorTests.Validate_LoadfileOnlyWithTargetZipSize_ReturnsFalse	Conflicts with target-zip-size/include-load-file
+REQ-092	unit	CliValidatorTests.Validate_ValidEol_ReturnsTrue	--eol CRLF|LF|CR, default CRLF
+REQ-093	unit	CliPipelineTests.ValidateAndParseArguments_LoadfileOnly_WithStrictDelimiters_ShouldParseCorrectly	Strict-prefix delimiter arguments
+REQ-094	unit	CliValidatorTests.Validate_ChaosMode_WithoutLoadfileOnly_ReturnsFalse	--chaos-mode requires loadfile-only, dat/opt
+REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_Percentage_ReturnsCorrectCount	--chaos-amount N|N%
+REQ-096	unit	ChaosEngineTests.ChaosTypes_Filtering_OnlyUsesSpecifiedTypes	--chaos-types filter
+REQ-097	unit	ChaosAnomalyTypesTests.Dat_ContainsExpectedTypes	DAT chaos anomaly types
+REQ-098	unit	ChaosAnomalyTypesTests.Opt_ContainsExpectedTypes	OPT chaos anomaly types
+REQ-099	unit	LoadFileOnlyGeneratorTests.GenerateAsync_WithChaos_PropertiesJsonContainsAnomalies	Anomalies tracked in _properties.json
+REQ-100	unit	LoadFileOnlyGeneratorTests.GenerateAsync_WithSeed_ProducesDeterministicOutput	Chaos deterministic with --seed
+REQ-101	unit	RequestBuilderTests.GetLoadFileFormat_ValidNames_ReturnsCorrectFormat	edrm-xml/xml aliases; concordance distinct
+REQ-102	unit	ProgramTests.Main_WithBenchmarkFlag_RunsAndReturnsValidExitCode	--benchmark argument
+REQ-103	unit	ProgramTests.Main_WithBenchmarkFlag_RunsAndReturnsValidExitCode	Benchmark runs and exits, bypassing generation
+REQ-104	unit	PerformanceBenchmarkRunnerTests.RunBenchmarks_EmitsPassFailVerdictsForEveryReq104Metric	Throughput/memory/scalability/allocation metrics
+REQ-105	unit	PerformanceBenchmarkRunnerTests.RunBenchmarks_EmitsPassFailVerdictsForEveryReq104Metric	Benchmark results with pass/fail indicators
+REQ-106	unit	PathValidatorTests.ResolveSecurePath_PathWithTraversal_ReturnsNull	--output-path traversal prevention
+REQ-107	unit	CliParserTests.Parse_ChaosArgs_ParsesCorrectly	--chaos-scenario argument
+REQ-108	unit	ChaosScenarioTests.GetByName_ValidName_ReturnsScenario	Scenario resolves to ChaosTypes + default amount
+REQ-109	unit	ChaosScenarioTests.ChaosScenario_WithChaosTypes_ReturnsConflictError	--chaos-scenario conflicts with --chaos-types
+REQ-110	unit	ChaosScenarioTests.ChaosScenario_AmountOverride_UsesCustomAmount	--chaos-amount overrides scenario default
+REQ-111	unit	ChaosScenarioTests.ChaosScenario_FormatMismatch_ReturnsError	Scenario required format mismatch
+REQ-112	unit	ChaosScenarioTests.ChaosList_PrintsScenariosAndExitsZero	--chaos-list prints scenarios and exits
+REQ-113	unit	ChaosScenarioTests.GetByName_AllScenarios_MatchesRequirements	Built-in chaos scenarios catalog
+REQ-114	unit	ProductionSetTests.ProductionSet_ValidArgs_ParsesCorrectly	--production-set argument
+REQ-115	unit	ProductionSetTests.ProductionSet_GeneratesDirectoryStructure	DATA/IMAGES/NATIVES/TEXT subdirectories
+REQ-116	unit	ProductionSetTests.ProductionSet_DefaultVolumeSize_Is5000	--volume-size default 5000
+REQ-117	unit	ProductionSetTests.ProductionSet_DatLoadFileIsValid	Always DAT + OPT in DATA directory
+REQ-118	unit	ProductionSetTests.ProductionSet_ManifestJsonIsValid	_manifest.json at production root
+REQ-119	unit	ProductionSetTests.ProductionSet_WithZip_CreatesArchive	--production-zip compresses production set
+REQ-120	unit	ProductionSetTests.ProductionSet_RequiresBatesPrefix	Requires --bates-prefix, conflicts loadfile-only
+REQ-121	unit	FieldNamingTests.ProfileDrivenDatWriter_ShouldRespectFieldNamingConvention	fieldNamingConvention property
+REQ-122	unit	CliValidatorTests.Validate_WithFamiliesWithoutEml_EmitsWarning	--with-families soft warning without eml
+REQ-123	unit	CliParserTests.Parse_LoadfileOnlyArgs_ParsesCorrectly	--loadfile-format alias for loadfile-only
+REQ-124	unit	CsvComposingWriterTests.CsvWriter_WithUtf16Encoding_ProducesUtf16Output	csv respects --encoding, default UTF-8
+REQ-125	unit	ProgramTests.Main_WithUnknownFlag_ReturnsErrorCode	Unknown CLI arg fails parsing
+REQ-126	unit	ProductionSetTests.ProductionSet_WithEolLF_GeneratesLfDatAndOpt	--eol in loadfile-only and production-set
+REQ-127	unit	LoadFileOnlyGeneratorTests.GenerateAsync_OptWithPageRangeAndSeed_TotalRecordsEqualsActualLines	OPT audit totalRecords = page-level count
+REQ-128	unit	ProductionSetTests.ProductionSet_WithAttachments_ManifestCountsMatchFilesOnDisk	Manifest doc counts match disk
+REQ-129	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	Multiple rolling Production Sets
+REQ-130	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	Configurable production ID
+REQ-131	unit	ProductionSetTests.ProductionSet_ContinuousBates_GeneratesSequentialRanges	Continuous Bates across rolling sets
+REQ-132	unit	ProductionSetTests.ProductionSet_RestartBates_GeneratesRestartedRanges	Restarted Bates per rolling set
+REQ-133	unit	ProductionManifestWriterTests.WriteAsync_GeneratesManifestWithExpectedStructure	Manifest fields: prod ID, seq, bates range, counts
+REQ-134	unit	ProductionSetTests.ProductionSet_DuplicateProductionIds_FailsValidation	Invalid rolling configs fail before output
+REQ-135	unit	SupplementalValidationTests.ValidateAsync_WithSinglePriorManifest_ShouldParseCorrectly	Supplemental generation via prior manifests
+REQ-136	unit	SupplementalValidationTests.ValidateAsync_WithMultiplePriorManifests_ShouldUnionRanges	Parse prior manifests, determine Bates ranges
+REQ-137	unit	SupplementalValidationTests.ValidateAsync_WithDuplicateBatesRange_ShouldFailAndReportDuplicates	Reject duplicate overlapping Bates
+REQ-138	unit	SupplementalValidationTests.ValidateAsync_WithSkippedBatesRange_InContinuousMode_ShouldFailAndReportSkipped	Detect skipped Bates in continuous mode
+REQ-139	unit	SupplementalValidationTests.ValidateAsync_WithMalformedPriorManifest_ShouldReportResolvedPathInException	Supplemental manifests record prior references
+REQ-140	unit	SupplementalValidationTests.ValidateAsync_WithSkippedBatesRange_InContinuousMode_ShouldFailAndReportSkipped	Report duplicate/skipped/expected/actual Bates
+REQ-141	unit	SupplementalValidationTests.ValidateAsync_WithMalformedPriorManifest_ShouldFail	Fail on missing/malformed/incompatible prior manifest
+REQ-142	unit	ProductionSetTests.RedactedProduction_RequiresProductionSet	--redacted-production mode
+REQ-143	unit	ProductionSetTests.RedactedProduction_CreatesRedactedImageFiles	Redacted image paths under REDACTED/IMAGES/
+REQ-144	unit	ProductionSetTests.RedactedProduction_WithWithText_CreatesRedactedTextFiles	Redacted text paths under REDACTED/TEXT/
+REQ-145	unit	ProductionSetTests.RedactedProduction_WithWithheldPolicy_OmitsNativePath	--withheld-native-policy values
+REQ-146	unit	ProductionSetTests.RedactedProduction_DatHeader_IncludesRedactedColumns	REDACTION_REASON column
+REQ-147	unit	ProductionSetTests.RedactedProduction_Manifest_IncludesRedactionStats	Redaction counts in Production Manifest
+REQ-148	e2e	test-production-sets.sh	Post-gen validation of redacted refs + NATIVE_WITHHELD YES/NO
+REQ-157	unit	ComparisonTests.Compare_E2EGeneratedManifests_VerifiesSuccessfully	Compare two or more Production Manifests
+REQ-158	unit	ComparisonTests.Compare_ReplacementMode_IdentifiesChangesCorrectly	Replacement workflow comparison
+REQ-159	unit	ComparisonTests.Compare_SupplementalMode_IdentifiesDuplicateBatesNumbers	Supplemental workflow comparison
+REQ-160	unit	ComparisonTests.Compare_ReproductionMode_IdentifiesChangesAndBatesMatches	Reproduction workflow comparison
+REQ-161	unit	ManifestComparison.ProductionManifestComparerTests.CompareAndReportAsync_WithDuplicateRecordsInSets_ShouldIdentifyDuplicates	Added/removed/unchanged/replaced/duplicated/skipped/changed records
+REQ-162	unit	BatesRangeAnalyzerTests.FindGapsInSequence_WithGap_ShouldReportSkippedRange	Bates range analysis by Production Set/Volume
+REQ-163	unit	ManifestComparison.ProductionManifestComparerTests.CompareAndReportAsync_WithMarkdownOutput_ShouldWriteMarkdownReport	Machine-readable report + human-readable summary
+REQ-164	unit	CliParserTests.Parse_ColumnProfileWithParentTraversal_RejectsPathOutsideCwd	--column-profile path traversal prevention
+REQ-165	unit	CliValidatorTests.Validate_ValidHashMode_ReturnsTrue	--hash-mode actual|simulated|none
+REQ-166	unit	RequestBuilderTests.ParseHashConfig_SimulatedMode_ReturnsSimulatedModeWithDefaultMD5	--hash-algorithms, default md5
+REQ-167	unit	ParallelFileGeneratorTests.GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes	Hash columns MD5HASH/SHA1HASH/SHA256HASH
+REQ-168	unit	CliValidatorTests.Validate_InvalidHashMode_ReturnsFalse	Invalid hash-mode/algorithms fail validation
+REQ-169	unit	CliValidatorTests.Validate_HashAlgorithmsWithoutHashMode_ReturnsFalse	Algorithms without hash-mode fail
+REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults
+REQ-171	unit	ProductionSetTests.ProductionSet_RollingCountNonPositive_FailsValidation	--rolling-count positive integer
+REQ-172	unit	ProductionSetTests.ProductionSet_RollingBatesModeInvalid_FailsValidation	--rolling-bates-mode continuous|restart
+REQ-173	unit	CliValidatorTests.Validate_SupplementalProduction_WithoutProductionSet_ReturnsFalse	--supplemental-production requires production-set + prior-manifest
+REQ-174	unit	CliValidatorTests.Validate_PriorManifest_WithoutSupplementalProduction_ReturnsFalse	--prior-manifest requires supplemental-production
+REQ-175	unit	CliValidatorTests.Validate_SupplementalGapPolicy_ValidValue_ReturnsTrue	--supplemental-gap-policy reject|allow
+REQ-176	unit	ComparisonTests.Compare_CommandLineE2E_VerifiesSuccessfully	--compare-production-manifests list
+REQ-177	unit	CliValidatorTests.Validate_CompareManifests_ValidMode_ReturnsTrue	--comparison-mode replacement|supplemental|reproduction
+REQ-178	unit	CliValidatorTests.Validate_CompareManifests_WithoutComparisonOutput_ReturnsFalse	--comparison-output path
+REQ-179	unit	CliValidatorTests.Validate_CompareManifests_BypassesTypeCountOutputPathValidation	Comparison short-circuits type/count/output-path validation
+REQ-180	e2e	test-production-sets.sh	Comma list splitting/trimming cardinality
+REQ-181	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_IncludesCollectionMetadataColumns	--with-collection-metadata five columns
+REQ-182	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues	Synthetic Collection Metadata values
+REQ-183	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues	Deterministic with --seed
+REQ-184	unit	CsvComposingWriterTests.CsvWriter_WithCollectionMetadata_IncludesFiveCollectionMetadataColumns	DAT/CSV/Concordance incl; OPT/EDRM-XML excl
+REQ-185	unit	DatComposingWriterTests.WriteAsync_LoadfileOnlyWithProfile_WithCollectionMetadata_IncludesColumns	Loadfile-only requires --column-profile
+REQ-186	unit	DatComposingWriterTests.WriteAsync_ProductionSet_WithCollectionMetadata_SilentlyIgnored	Production Set silently ignored
+REQ-187	unit	DatComposingWriterTests.WriteAsync_LoadfileOnlyWithProfile_WithCollectionMetadata_IncludesColumns	Columns merged into profile, fallback synthetic
+REQ-188	unit	CsvComposingWriterTests.CsvWriter_WithCollectionMetadata_IncludesFiveCollectionMetadataColumns	CSV/Concordance field names DATA_SOURCE etc.
+REQ-189	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadataAndWithMetadata_BothColumnSetsPresent	Disjoint from --with-metadata columns

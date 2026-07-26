@@ -82,6 +82,9 @@ jobs:
         run: dotnet restore zipper.sln --locked-mode
       - name: Lint code style
         run: dotnet format --verify-no-changes --no-restore
+      - name: Validate requirement traceability
+        shell: bash
+        run: bash tests/validate-req-traceability.sh --strict
       - name: Check for oversized files
         shell: bash
         run: |
