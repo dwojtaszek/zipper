@@ -392,5 +392,10 @@ public class EmailSerializerTests
 
         Assert.NotNull(result);
         Assert.True(result.Length > 0);
+        var content = Encoding.UTF8.GetString(result);
+        Assert.Contains("Subject: Null FileName", content, StringComparison.Ordinal);
+        Assert.Contains("From: sender@example.com", content, StringComparison.Ordinal);
+        Assert.Contains("To: test@example.com", content, StringComparison.Ordinal);
+        Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
     }
 }

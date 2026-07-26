@@ -96,6 +96,7 @@ public class EmailAttachmentPickerTests
         {
             var result = picker.Pick(-999L, 100.0, pool, new Random(i));
             Assert.NotNull(result);
+            Assert.Contains(result.FileName, new[] { "file0.pdf", "file1.pdf", "file2.pdf" });
         }
     }
 
