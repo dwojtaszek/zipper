@@ -161,7 +161,7 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 - **REQ-030**: The application's version will follow Semantic Versioning in the format `MAJOR.MINOR.PATCH`.
 - **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically increments the patch version.
 - **REQ-032**: Manual version control is supported by pushing specific tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`).
-- **REQ-033**: On every push to the `main` branch, the CI/CD pipeline will build the application, embedding the version from the tag into the assembly as the `InformationalVersion`.
+- **REQ-033**: On every push to the `main` branch, the CI/CD pipeline will build the application, embedding a development version (next patch from the latest tag with a `-dev` suffix) into the assembly as the `InformationalVersion`. On tag pushes (`v*`), the pipeline embeds the exact tag version.
 - **REQ-034**: The application must display its full version string when invoked with `--version` (or equivalent version flag), and must embed it as the assembly `InformationalVersion` so it appears in diagnostic output. It need not print a startup banner on normal invocations.
 - **REQ-035**: The CI/CD pipeline will automatically create a new GitHub Release for each successful `main` branch build. The release tag and title will be named according to the version (e.g., `v1.2.3`).
 

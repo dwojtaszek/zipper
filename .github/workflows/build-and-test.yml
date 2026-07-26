@@ -31,22 +31,7 @@ jobs:
       - name: Set Version
         id: version
         shell: bash
-        run: |
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            echo "Version from tag: $VERSION"
-          else
-            LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -1)
-            if [[ -z "$LATEST_TAG" ]]; then
-              LATEST_TAG="v0.0.0"
-            fi
-            BASE=${LATEST_TAG#v}
-            IFS='.' read -r major minor patch <<< "$BASE"
-            NEW_PATCH=$((patch + 1))
-            VERSION="$major.$minor.$NEW_PATCH-dev"
-            echo "Version from bump: $VERSION (latest tag: $LATEST_TAG)"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/compute-version.sh
 
   lint:
     needs: prepare
