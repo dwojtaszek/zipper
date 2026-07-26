@@ -1,6 +1,6 @@
 {
   "fileName": "archive.csv",
-  "format": "DAT (Metadata)",
+  "format": "CSV (Metadata)",
   "totalRecords": 50,
   "properties": {
     "encoding": "UTF-8",
