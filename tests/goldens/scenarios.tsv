@@ -17,5 +17,5 @@ concordance-basic | --type pdf --count 50 --loadfile-format concordance --output
 edrm-xml-basic | --type pdf --count 30 --loadfile-format edrm-xml --output-path . | 42 | EDRM XML hierarchical load file
 chaos-dat | --loadfile-only --count 200 --loadfile-format dat --chaos-mode --chaos-amount 10% --output-path . | 42 | Chaos-injected DAT (loadfile-only)
 redacted-prod | --production-set --count 50 --type pdf --volume-size 100 --bates-prefix CLIENT --bates-digits 8 --redacted-production --with-text --output-path . | 42 | Redacted Production Set with REDACTED/IMAGES and TEXT
-custom-delim | --loadfile-only --count 100 --loadfile-format dat --col-delim char:; --eol LF --output-path . | 42 | DAT with custom semicolon column delimiter and LF EOL
+custom-delim | --loadfile-only --count 100 --loadfile-format dat --col-delim char:; --multi-delim char:~ --eol LF --output-path . | 42 | DAT with custom semicolon column delimiter, tilde multi-value delimiter, and LF EOL
 families-eml | --type eml --count 100 --attachment-rate 50 --with-families --output-path . | 42 | EML with family groupings and 50% attachment rate

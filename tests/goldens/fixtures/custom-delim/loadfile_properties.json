@@ -9,7 +9,7 @@
       "column": "char:;",
       "quote": "ascii:254",
       "newline": "ascii:174",
-      "multiValue": "char:;",
+      "multiValue": "char:~",
       "nestedValue": "char:\\"
     }
   },
