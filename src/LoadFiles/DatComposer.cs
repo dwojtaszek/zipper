@@ -26,6 +26,7 @@ internal sealed class DatComposer : ILoadFileComposer
     private readonly List<string>? profileColumnNames;
     private readonly BatesSequence? batesSequence;
     private readonly DatProductionComposer? productionComposer;
+    private readonly DatLoadfileOnlyComposer? loadfileOnlyComposer;
 
     public DatComposer(FileGenerationRequest request, WriterMode mode)
     {
@@ -52,6 +53,12 @@ internal sealed class DatComposer : ILoadFileComposer
             this.profileColumnNames = this.profileGenerator.GetColumnNames().ToList();
             this.headerColumns = this.profileColumnNames.Select(this.Apply).ToList();
         }
+        else if (mode == WriterMode.LoadfileOnly)
+        {
+            this.headerColumns = DatLoadfileOnlyComposer.BuildHeaders(request, this.namingConvention);
+            this.loadfileOnlyComposer = new DatLoadfileOnlyComposer(
+                request, this.batesSequence, this.headerColumns);
+        }
         else
         {
             this.headerColumns = this.BuildHeaderColumns();
@@ -65,7 +72,7 @@ internal sealed class DatComposer : ILoadFileComposer
         {
             WriterMode.LoadfileOnly => this.profileGenerator is not null
                 ? this.ComposeProfile()
-                : this.ComposeLoadfileOnly(),
+                : this.loadfileOnlyComposer!.Compose(),
             WriterMode.ProductionSet => this.productionComposer!.Compose(processedFiles),
             _ => this.ComposeStandard(processedFiles),
         };
@@ -79,20 +86,6 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private List<string> BuildHeaderColumns()
     {
-        if (this.mode == WriterMode.LoadfileOnly)
-        {
-            var lfCols = new List<string>
-            {
-                "Control Number", "File Path", "Custodian", "Date Sent", "Author", "File Size",
-                "EmailSubject", "EmailFrom", "EmailTo", "EmailCC", "EmailSentDate", "ExtractedText",
-            };
-            if (this.request.Metadata.WithFamilies)
-            {
-                lfCols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
-            }
-            return lfCols.Select(this.Apply).ToList();
-        }
-
         // Standard mode: columns depend on request flags.
         var cols = new List<string> { "Control Number", "File Path" };
         if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
@@ -351,69 +344,6 @@ internal sealed class DatComposer : ILoadFileComposer
         return wi.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
             ? wi.FilePathInZip[..^sourceSuffix.Length] + ".txt"
             : wi.FilePathInZip;
-    }
-
-    private IEnumerable<LoadFileRecord> ComposeLoadfileOnly()
-    {
-        var now = this.EffectiveNow();
-#pragma warning disable S2245
-        var random = this.request.Metadata.Seed.HasValue ? new Random(this.request.Metadata.Seed.Value + 1) : new Random();
-#pragma warning restore S2245
-
-        for (long i = 1; i <= this.request.Output.FileCount; i++)
-        {
-            var parentId = this.batesSequence is not null
-                ? this.batesSequence.Next().ToString()
-                : $"DOC{i:D8}";
-
-            bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
-            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
-
-            var custodian = $"Custodian {(i % 10) + 1}";
-            var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-            var author = $"Author {random.Next(1, 100):D3}";
-            var fileSize = random.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            var subjLine = $"Email Subject {i}";
-            var senderAddr = $"sender{i}@example.com";
-            var recipientAddr = $"recipient{i}@example.com";
-            var ccAddr = $"cc{i}@example.com";
-            var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            var filePath = $"NATIVES\\{(i % 50) + 1:D3}\\{parentId}.pdf";
-            var extractedText = $"Sample extracted text content for document {parentId}.";
-
-            var parentRecordValues = new List<string>
-            {
-                parentId, filePath, custodian, dateSent, author, fileSize,
-                subjLine, senderAddr, recipientAddr, ccAddr, sentTime, extractedText,
-            };
-
-            if (this.request.Metadata.WithFamilies)
-            {
-                parentRecordValues.AddRange(new[] { parentId, childId, string.Empty });
-            }
-
-            yield return this.MakeRecord(parentId, parentRecordValues);
-
-            if (hasAttachment)
-            {
-                var childFileSize = random.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                var childPath = $"NATIVES\\{(i % 50) + 1:D3}\\{childId}.pdf";
-                var childExtractedText = $"Sample extracted text content for document {childId}.";
-
-                var childRecordValues = new List<string>
-                {
-                    childId, childPath, custodian, string.Empty, string.Empty, childFileSize,
-                    string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, childExtractedText,
-                };
-
-                if (this.request.Metadata.WithFamilies)
-                {
-                    childRecordValues.AddRange(new[] { parentId, childId, parentId });
-                }
-
-                yield return this.MakeRecord(childId, childRecordValues);
-            }
-        }
     }
 
     private IEnumerable<LoadFileRecord> ComposeProfile()
