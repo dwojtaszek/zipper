@@ -12,3 +12,10 @@ xlsx-basic | --count 300 --type xlsx --output-path . | 42 | Basic XLSX generatio
 loadfile-only-dat | --loadfile-only --count 2000 --loadfile-format dat --output-path . | 42 | Loadfile-only DAT
 loadfile-only-opt | --loadfile-only --count 2000 --loadfile-format opt --output-path . | 42 | Loadfile-only OPT
 production-set | --production-set --count 1500 --type pdf --volume-size 500 --bates-prefix CLIENT --bates-digits 8 --output-path . | 42 | Production set with volumes
+csv-basic | --type pdf --count 50 --loadfile-format csv --output-path . | 42 | CSV load file in Standard mode (RFC 4180)
+concordance-basic | --type pdf --count 50 --loadfile-format concordance --output-path . | 42 | Concordance load file (distinct from DAT)
+edrm-xml-basic | --type pdf --count 30 --loadfile-format edrm-xml --output-path . | 42 | EDRM XML hierarchical load file
+chaos-dat | --loadfile-only --count 200 --loadfile-format dat --chaos-mode --chaos-amount 10% --output-path . | 42 | Chaos-injected DAT (loadfile-only)
+redacted-prod | --production-set --count 50 --type pdf --volume-size 100 --bates-prefix CLIENT --bates-digits 8 --redacted-production --with-text --output-path . | 42 | Redacted Production Set with REDACTED/IMAGES and TEXT
+custom-delim | --loadfile-only --count 100 --loadfile-format dat --col-delim char:; --multi-delim char:~ --eol LF --output-path . | 42 | DAT with custom semicolon column delimiter, tilde multi-value delimiter, and LF EOL
+families-eml | --type eml --count 100 --attachment-rate 50 --with-families --output-path . | 42 | EML with family groupings and 50% attachment rate

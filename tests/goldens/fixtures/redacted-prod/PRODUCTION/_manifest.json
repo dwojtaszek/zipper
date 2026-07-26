@@ -1,0 +1,45 @@
+{
+  "productionDate": "NORMALIZED",
+  "productionId": "PRODUCTION",
+  "rollingSequenceNumber": 1,
+  "batesNumberStart": "CLIENT00000001",
+  "batesNumberEnd": "CLIENT00000050",
+  "batesRangeMode": "continuous",
+  "batesRange": {
+    "start": "CLIENT00000001",
+    "end": "CLIENT00000050",
+    "prefix": "CLIENT",
+    "digits": 8
+  },
+  "nativeFileCount": 50,
+  "fileType": "pdf",
+  "volumeCount": 1,
+  "volumeSize": 100,
+  "directories": {
+    "data": "DATA",
+    "natives": "NATIVES",
+    "text": "TEXT",
+    "images": "IMAGES",
+    "redacted": "REDACTED"
+  },
+  "loadFiles": {
+    "dat": "DATA/loadfile.dat",
+    "opt": "DATA/loadfile.opt"
+  },
+  "settings": {
+    "encoding": "UTF-8",
+    "columnDelimiter": "ascii:20",
+    "quoteDelimiter": "char:\u00FE",
+    "seed": 42
+  },
+  "validationReport": "_validation_report.json",
+  "generationTime": "NORMALIZED",
+  "redactedFileCount": 50,
+  "redactionReasons": {
+    "Privileged": 10,
+    "Attorney Work Product": 10,
+    "Settlement Communication": 10,
+    "Trade Secret": 10,
+    "Personal Privacy": 10
+  }
+}
