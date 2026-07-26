@@ -1091,6 +1091,150 @@ public class ProductionSetTests : IDisposable
             Assert.Equal("YES", fields[12]);
         }
     }
+
+    // --- REQ-148 negative outcome tests: corrupt artifacts and assert validator failure ---
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_ValidSet_PassesWithNoErrors()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        request.Output = request.Output with { WithText = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("passed", report.Status);
+        Assert.Equal(0, report.ErrorCount);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_MissingRedactedImage_ReportsPathExistenceError()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        request.Output = request.Output with { WithText = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Delete one redacted image file
+        var redactedImages = Directory.GetFiles(Path.Combine(result.ProductionPath, "REDACTED", "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.NotEmpty(redactedImages);
+        File.Delete(redactedImages[0]);
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        var finding = report.Findings.First(f => f.Code == "PathExistence" && f.Message.Contains("redacted image", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("error", finding.Severity);
+        Assert.NotNull(finding.Path);
+        Assert.True(finding.Line > 0);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_MissingRedactedText_ReportsPathExistenceError()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true };
+        request.Output = request.Output with { WithText = true };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Delete one redacted text file
+        var redactedTexts = Directory.GetFiles(Path.Combine(result.ProductionPath, "REDACTED", "TEXT"), "*.txt", SearchOption.AllDirectories);
+        Assert.NotEmpty(redactedTexts);
+        File.Delete(redactedTexts[0]);
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        var finding = report.Findings.First(f => f.Code == "PathExistence" && f.Message.Contains("redacted text", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("error", finding.Severity);
+        Assert.True(finding.Line > 0);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_InvalidNativeWithheld_ReportsInvalidValueError()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "keep-native" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Corrupt the DAT: replace NATIVE_WITHHELD values with "MAYBE"
+        var datContent = await File.ReadAllTextAsync(result.DatFilePath);
+        var lines = datContent.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        var headerFields = Validation.ProductionSetPostValidator.ParseDatLine(lines[0], '\x14', '\xfe');
+        int nativeWithheldIdx = headerFields.IndexOf("NATIVE_WITHHELD");
+        Assert.True(nativeWithheldIdx >= 0, "DAT header should contain NATIVE_WITHHELD column");
+
+        var colDelim = '\x14';
+        var quoteDelim = '\xfe';
+        var rebuiltLines = new List<string> { lines[0] };
+        foreach (var line in lines.Skip(1))
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(line, colDelim, quoteDelim);
+            fields[nativeWithheldIdx] = "MAYBE";
+            // Rejoin with quote-wrapping to match Concordance DAT format
+            rebuiltLines.Add(string.Join(colDelim, fields.Select(f => quoteDelim + f + quoteDelim)));
+        }
+        await File.WriteAllTextAsync(result.DatFilePath, string.Join("\r\n", rebuiltLines) + "\r\n");
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        var finding = report.Findings.First(f => f.Code == "InvalidValue" && f.Message.Contains("NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("error", finding.Severity);
+        Assert.Contains("MAYBE", finding.Message, StringComparison.Ordinal);
+        Assert.True(finding.Line > 0);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_ValidYesNo_NativeWithheld_Passes()
+    {
+        // keep-native → NATIVE_WITHHELD = NO for all records
+        var keepPath = Path.Combine(this.testOutputPath, "keep");
+        Directory.CreateDirectory(keepPath);
+        var requestKeep = this.CreateTestRequest(count: 3);
+        requestKeep.Output = requestKeep.Output with { OutputPath = keepPath };
+        requestKeep.Production = requestKeep.Production with { RedactedProduction = true, WithheldNativePolicy = "keep-native" };
+        var resultKeep = await ProductionSetGenerator.GenerateAsync(requestKeep);
+        var reportKeep = Validation.ProductionSetPostValidator.Validate(resultKeep.ProductionPath, requestKeep);
+        Assert.Equal("passed", reportKeep.Status);
+        Assert.Equal(0, reportKeep.ErrorCount);
+
+        // omit-native-path → NATIVE_WITHHELD = YES for all records
+        var omitPath = Path.Combine(this.testOutputPath, "omit");
+        Directory.CreateDirectory(omitPath);
+        var requestOmit = this.CreateTestRequest(count: 3);
+        requestOmit.Output = requestOmit.Output with { OutputPath = omitPath };
+        requestOmit.Production = requestOmit.Production with { RedactedProduction = true, WithheldNativePolicy = "omit-native-path" };
+        var resultOmit = await ProductionSetGenerator.GenerateAsync(requestOmit);
+        var reportOmit = Validation.ProductionSetPostValidator.Validate(resultOmit.ProductionPath, requestOmit);
+        Assert.Equal("passed", reportOmit.Status);
+        Assert.Equal(0, reportOmit.ErrorCount);
+    }
+
+    [Fact]
+    public async Task RedactedProduction_PostValidator_MissingNativeFile_ReportsPathExistenceError()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Production = request.Production with { RedactedProduction = true, WithheldNativePolicy = "keep-native" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Delete one native file (keep-native policy means NATIVE_PATH is populated)
+        var nativeFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "NATIVES"), "*.*", SearchOption.AllDirectories);
+        Assert.NotEmpty(nativeFiles);
+        File.Delete(nativeFiles[0]);
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        var finding = report.Findings.First(f => f.Code == "PathExistence" && f.Message.Contains("native file", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("error", finding.Severity);
+        Assert.True(finding.Line > 0);
+    }
 }
 
 
