@@ -75,6 +75,8 @@ jobs:
               rw = mw / bw if bw > 0 else 0
               rr = mr / br if br > 0 else 0
               sw = "ℹ️" if rw <= wall_threshold else "⚠️"  # informational, never fails
+              if rw > 1.5:
+                  print(f"::warning title=Perf Guard (wall_s)::{sc} wall_s is {rw:.2f}× baseline ({mw:.2f}s vs {bw:.2f}s). Likely performance regression — review recommended.")
               sr = "✅" if rr <= rss_threshold else "❌"
               if rr > rss_threshold:
                   failed = True
