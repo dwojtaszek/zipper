@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "errorCount": 0,
+  "warningCount": 0,
+  "checkedFileCounts": {
+    "dat": 1,
+    "opt": 1,
+    "native": 50,
+    "text": 50,
+    "image": 50
+  },
+  "checkedLoadFileRowCounts": {
+    "dat": 51,
+    "opt": 50
+  },
+  "findings": []
+}

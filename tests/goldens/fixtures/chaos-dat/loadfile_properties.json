@@ -1,0 +1,163 @@
+{
+  "fileName": "loadfile.dat",
+  "format": "DAT (Metadata)",
+  "totalRecords": 200,
+  "properties": {
+    "encoding": "UTF-8",
+    "lineEnding": "CRLF",
+    "delimiters": {
+      "column": "ascii:20",
+      "quote": "ascii:254",
+      "newline": "ascii:174",
+      "multiValue": "char:;",
+      "nestedValue": "char:\\"
+    }
+  },
+  "chaosMode": {
+    "enabled": true,
+    "targetAmount": "10%",
+    "totalAnomalies": 20,
+    "injectedAnomalies": [
+      {
+        "lineNumber": "10",
+        "recordID": "DOC00000009",
+        "column": "Delimiter 3",
+        "errorType": "mixed-delimiters",
+        "description": "Replaced delimiter 3 with an alternative delimiter character."
+      },
+      {
+        "lineNumber": "12",
+        "recordID": "DOC00000011",
+        "column": "Column 12",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 12."
+      },
+      {
+        "lineNumber": "14",
+        "recordID": "DOC00000013",
+        "column": "N/A",
+        "errorType": "columns",
+        "description": "Removed a column delimiter to break expected column count."
+      },
+      {
+        "lineNumber": "30",
+        "recordID": "DOC00000029",
+        "column": "Field 1",
+        "errorType": "eol",
+        "description": "Injected raw unescaped newline into field Field 1."
+      },
+      {
+        "lineNumber": "Boundary 33-34",
+        "recordID": "N/A",
+        "column": "N/A",
+        "errorType": "encoding",
+        "description": "Injected invalid Unicode (UTF-8) byte sequence between lines."
+      },
+      {
+        "lineNumber": "45",
+        "recordID": "DOC00000044",
+        "column": "Delimiter 1",
+        "errorType": "mixed-delimiters",
+        "description": "Replaced delimiter 1 with an alternative delimiter character."
+      },
+      {
+        "lineNumber": "48",
+        "recordID": "DOC00000047",
+        "column": "Column 12",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 12."
+      },
+      {
+        "lineNumber": "66",
+        "recordID": "DOC00000065",
+        "column": "N/A",
+        "errorType": "columns",
+        "description": "Added an extra column delimiter to break expected column count."
+      },
+      {
+        "lineNumber": "68",
+        "recordID": "DOC00000067",
+        "column": "Field 1",
+        "errorType": "eol",
+        "description": "Injected raw unescaped newline into field Field 1."
+      },
+      {
+        "lineNumber": "Boundary 75-76",
+        "recordID": "N/A",
+        "column": "N/A",
+        "errorType": "encoding",
+        "description": "Injected invalid Unicode (UTF-8) byte sequence between lines."
+      },
+      {
+        "lineNumber": "94",
+        "recordID": "DOC00000093",
+        "column": "Delimiter 9",
+        "errorType": "mixed-delimiters",
+        "description": "Replaced delimiter 9 with an alternative delimiter character."
+      },
+      {
+        "lineNumber": "98",
+        "recordID": "DOC00000097",
+        "column": "Column 12",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 12."
+      },
+      {
+        "lineNumber": "99",
+        "recordID": "DOC00000098",
+        "column": "N/A",
+        "errorType": "columns",
+        "description": "Removed a column delimiter to break expected column count."
+      },
+      {
+        "lineNumber": "102",
+        "recordID": "DOC00000101",
+        "column": "Field 1",
+        "errorType": "eol",
+        "description": "Injected raw unescaped newline into field Field 1."
+      },
+      {
+        "lineNumber": "Boundary 138-139",
+        "recordID": "N/A",
+        "column": "N/A",
+        "errorType": "encoding",
+        "description": "Injected invalid Unicode (UTF-8) byte sequence between lines."
+      },
+      {
+        "lineNumber": "150",
+        "recordID": "DOC00000149",
+        "column": "Delimiter 6",
+        "errorType": "mixed-delimiters",
+        "description": "Replaced delimiter 6 with an alternative delimiter character."
+      },
+      {
+        "lineNumber": "161",
+        "recordID": "DOC00000160",
+        "column": "Column 12",
+        "errorType": "quotes",
+        "description": "Omitted the closing ascii:254 character on column Column 12."
+      },
+      {
+        "lineNumber": "181",
+        "recordID": "DOC00000180",
+        "column": "N/A",
+        "errorType": "columns",
+        "description": "Removed a column delimiter to break expected column count."
+      },
+      {
+        "lineNumber": "198",
+        "recordID": "DOC00000197",
+        "column": "Field 1",
+        "errorType": "eol",
+        "description": "Injected raw unescaped newline into field Field 1."
+      },
+      {
+        "lineNumber": "Boundary 199-200",
+        "recordID": "N/A",
+        "column": "N/A",
+        "errorType": "encoding",
+        "description": "Injected invalid Unicode (UTF-8) byte sequence between lines."
+      }
+    ]
+  }
+}

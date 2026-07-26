@@ -1,0 +1,20 @@
+{
+  "fileName": "loadfile.opt",
+  "format": "OPT (Image)",
+  "totalRecords": 50,
+  "properties": {
+    "encoding": "ANSI",
+    "lineEnding": "CRLF",
+    "delimiters": {
+      "column": "char:,",
+      "quote": "none",
+      "newline": "none",
+      "multiValue": "none",
+      "nestedValue": "none"
+    }
+  },
+  "chaosMode": {
+    "enabled": false,
+    "totalAnomalies": 0
+  }
+}

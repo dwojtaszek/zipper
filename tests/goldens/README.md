@@ -11,7 +11,7 @@ end-to-end output. The existing E2E suite under `tests/` validates structure
 tests/goldens/
 ├── README.md              # this file
 ├── run-goldens.sh         # the runner — drives scenarios.tsv
-├── scenarios.tsv          # pipe-delimited table (13 scenarios)
+├── scenarios.tsv          # pipe-delimited table (20 scenarios)
 ├── fixtures/              # checked-in golden output, one dir per scenario
 │   ├── pdf-basic/
 │   ├── pdf-metadata/
@@ -49,7 +49,7 @@ scenario_name | cli_args | seed | description
 
 Lines starting with `#` and blank lines are ignored.
 
-### Current scenarios (13)
+### Current scenarios (20)
 
 | # | Name | Mode |
 |---|------|------|
@@ -66,6 +66,13 @@ Lines starting with `#` and blank lines are ignored.
 | 11 | loadfile-only-dat | Loadfile-Only |
 | 12 | loadfile-only-opt | Loadfile-Only |
 | 13 | production-set | Production Set |
+| 14 | csv-basic | Standard (CSV) |
+| 15 | concordance-basic | Standard (Concordance) |
+| 16 | edrm-xml-basic | Standard (EDRM XML) |
+| 17 | chaos-dat | Loadfile-Only + Chaos |
+| 18 | redacted-prod | Production Set (Redacted) |
+| 19 | custom-delim | Loadfile-Only (custom delimiters) |
+| 20 | families-eml | Standard (families) |
 
 ## Running scenarios
 
