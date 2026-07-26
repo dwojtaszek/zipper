@@ -1,4 +1,5 @@
 using Zipper.Profiles;
+using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
 
@@ -7,6 +8,43 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal static class DatComposerShared
 {
+    /// <summary>
+    /// Applies the naming convention (if any) to a column name.
+    /// </summary>
+    internal static string ApplyConvention(string name, string? namingConvention)
+        => NamingConventionHelper.ApplyConvention(name, namingConvention);
+
+    /// <summary>
+    /// Returns the effective timestamp: fixed epoch when a seed is set (for reproducibility),
+    /// otherwise the current UTC time.
+    /// </summary>
+    internal static DateTime EffectiveNow(FileGenerationRequest request)
+        => request.Metadata.Seed.HasValue
+            ? new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            : DateTime.UtcNow;
+
+    /// <summary>
+    /// Builds a <see cref="LoadFileRecord"/> from the header columns and ordered values.
+    /// </summary>
+    internal static LoadFileRecord MakeRecord(
+        IReadOnlyList<string> headerColumns, string recordId, List<string> orderedValues)
+        => LoadFileRecordBuilder.Build(headerColumns, orderedValues, recordId);
+
+    /// <summary>
+    /// Resolves parent/child identifiers and attachment status for a file, using the Bates
+    /// sequence when configured or a DOC-index fallback otherwise.
+    /// </summary>
+    internal static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(
+        FileData fileData, FileGenerationRequest request, BatesSequence? batesSequence)
+    {
+        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+        string parentId = batesSequence is not null
+            ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
+            : $"DOC{fileData.WorkItem.Index:D8}";
+        string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+        return (parentId, childId, hasAttachment);
+    }
+
     /// <summary>
     /// Resolves a hash-column name (e.g. "MD5HASH") to its value from the file's pre-computed hashes.
     /// Returns null when the column is not a hash column or the hash is not present.
