@@ -66,6 +66,26 @@ while IFS=$'\t' read -r req_id coverage reference notes || [[ -n "$req_id" ]]; d
         continue
     fi
 
+    # Validate coverage type and reference consistency
+    case "$coverage" in
+        unit|e2e)
+            if [[ -z "$reference" || "$reference" == "-" ]]; then
+                echo "Error: $req_id requires a test reference (coverage=$coverage)" >&2
+                exit 2
+            fi
+            ;;
+        exemption)
+            if [[ "$reference" != "-" ]]; then
+                echo "Error: $req_id exemptions must use '-' as the reference" >&2
+                exit 2
+            fi
+            ;;
+        *)
+            echo "Error: $req_id has invalid coverage type '$coverage'" >&2
+            exit 2
+            ;;
+    esac
+
     MANIFEST_COUNT=$((MANIFEST_COUNT + 1))
 
     if [[ "$coverage" == "exemption" ]]; then
