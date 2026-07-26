@@ -152,7 +152,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ComposeStandard(IReadOnlyList<FileData> processedFiles)
     {
-        var generator = this.profileGenerator ?? GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
+        var generator = this.profileGenerator ?? DatComposerShared.GetEffectiveProfileGenerator(this.request, this.EffectiveNow());
 
         foreach (var fileData in processedFiles)
         {
@@ -161,7 +161,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
             yield return this.MakeRecord(
                 parentId,
-                this.StandardRowValues(fileData, profileValues, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.StandardRowValues(fileData, profileValues, new DatRowContext { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
@@ -170,7 +170,7 @@ internal sealed class DatComposer : ILoadFileComposer
                 var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{sanitizedFilename}";
                 yield return this.MakeRecord(
                     childId,
-                    this.StandardRowValues(fileData, profileValues, new RowCtx
+                    this.StandardRowValues(fileData, profileValues, new DatRowContext
                     {
                         IdOverride = childId,
                         ControlOverride = $"DOC{fileData.WorkItem.Index:D8}_A001",
@@ -185,7 +185,7 @@ internal sealed class DatComposer : ILoadFileComposer
         }
     }
 
-    private List<string> StandardRowValues(FileData fileData, Dictionary<string, string>? profileValues, RowCtx ctx)
+    private List<string> StandardRowValues(FileData fileData, Dictionary<string, string>? profileValues, DatRowContext ctx)
     {
         var wi = fileData.WorkItem;
 
@@ -274,7 +274,7 @@ internal sealed class DatComposer : ILoadFileComposer
                         val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : (profileValues.TryGetValue(n, out var tp) ? tp : string.Empty);
                         break;
                     default:
-                        val = ResolveHashColumn(upper, fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty);
+                        val = DatComposerShared.ResolveHashColumn(upper, fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty);
                         break;
                 }
                 result.Add(val);
@@ -342,7 +342,7 @@ internal sealed class DatComposer : ILoadFileComposer
         return v;
     }
 
-    private string StandardTextPath(FileData fileData, RowCtx ctx)
+    private string StandardTextPath(FileData fileData, DatRowContext ctx)
     {
         var wi = fileData.WorkItem;
         if (ctx.IsChild)
@@ -378,7 +378,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
             yield return this.MakeRecord(
                 parentId,
-                this.ProductionRowValues(fileData, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.ProductionRowValues(fileData, new DatRowContext { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
@@ -398,7 +398,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
                 yield return this.MakeRecord(
                     childId,
-                    this.ProductionRowValues(fileData, new RowCtx
+                    this.ProductionRowValues(fileData, new DatRowContext
                     {
                         IdOverride = childBates,
                         NativePathOverride = childNativePath,
@@ -418,7 +418,7 @@ internal sealed class DatComposer : ILoadFileComposer
         }
     }
 
-    private List<string> ProductionRowValues(FileData fileData, RowCtx ctx)
+    private List<string> ProductionRowValues(FileData fileData, DatRowContext ctx)
     {
         var wi = fileData.WorkItem;
         var batesNumber = ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString();
@@ -602,7 +602,7 @@ internal sealed class DatComposer : ILoadFileComposer
             var parentValues = generator.GenerateRow(workItem, fileData);
             yield return this.MakeRecord(
                 parentId,
-                this.StandardRowValues(fileData, parentValues, new RowCtx { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.StandardRowValues(fileData, parentValues, new DatRowContext { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
@@ -610,7 +610,7 @@ internal sealed class DatComposer : ILoadFileComposer
                 var childPath = $"NATIVES/{folderNum:D3}/{childId}{childExt}";
                 yield return this.MakeRecord(
                     childId,
-                    this.StandardRowValues(fileData, parentValues, new RowCtx
+                    this.StandardRowValues(fileData, parentValues, new DatRowContext
                     {
                         IdOverride = childId,
                         ControlOverride = $"DOC{i:D8}_A001",
@@ -650,79 +650,4 @@ internal sealed class DatComposer : ILoadFileComposer
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
         return (parentId, childId, hasAttachment);
     }
-
-    private static string? ResolveHashColumn(string upperColumnName, FileData fileData)
-    {
-        if (fileData.Hashes is null)
-        {
-            return null;
-        }
-
-        var algo = upperColumnName switch
-        {
-            "MD5HASH" or "MD5_HASH" or "MD5 HASH" => Config.HashAlgorithm.MD5,
-            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" => Config.HashAlgorithm.SHA1,
-            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH" => Config.HashAlgorithm.SHA256,
-            _ => (Config.HashAlgorithm?)null,
-        };
-
-        if (algo.HasValue && fileData.Hashes.TryGetValue(algo.Value, out var hashValue))
-        {
-            return hashValue;
-        }
-
-        return null;
-    }
-
-    private static DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
-    {
-        var profile = request.Metadata.ColumnProfile;
-        if (profile is null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
-        {
-            profile = request.Output.IsEml
-                ? BuiltInProfiles.LegacyEml
-                : BuiltInProfiles.LegacyWithMetadata;
-        }
-
-        return profile is not null ? new DataGenerator(profile, request.Metadata.Seed, now) : null;
-    }
-
-    private sealed record RowCtx
-    {
-        public string? IdOverride { get; init; }
-
-        public string? ControlOverride { get; init; }
-
-        public string? FilePathOverride { get; init; }
-
-        public string? FileSizeOverride { get; init; }
-
-        public string? NativePathOverride { get; init; }
-
-        public string? TextPathOverride { get; init; }
-
-        public string? ImagePathOverride { get; init; }
-
-        public bool IsChild { get; init; }
-
-        public string BegAttach { get; init; } = string.Empty;
-
-        public string EndAttach { get; init; } = string.Empty;
-
-        public string ParentDocId { get; init; } = string.Empty;
-
-        public string? RedactedImageRelPathOverride { get; init; }
-
-        public string? RedactedTextRelPathOverride { get; init; }
-
-        public string? NativeWithheldOverride { get; init; }
-
-        public string? RedactionReasonOverride { get; init; }
-    }
-}
-
-internal static class CollectionMetadataValues
-{
-    public static readonly string[] DataSources = ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"];
-    public static readonly string[] ProcessingStatuses = ["Processed", "Pending Review", "Approved", "Privileged", "Redacted", "Produced"];
 }
