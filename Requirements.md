@@ -3,6 +3,9 @@
 > [!CAUTION]
 > **Requirement numbers (REQ-XXX, FR-XXX) are IMMUTABLE.** Once a requirement is assigned a number, that number must NEVER be changed, reassigned, or renumbered. New requirements must use the next available number. If a requirement is deprecated, it should be marked as deprecated but its number must remain reserved.
 
+> [!NOTE]
+> **Identifier conventions:** This document uses two numbering sequences. The original prototype used the `_E` suffix (e.g., `REQ_E-008`, `FR_E-002`) for requirements defined in the initial "E-Discovery" spec. When the requirements were reorganized into the modern `REQ-NNN` / `FR-NNN` sequence, numbers already occupied by `_E` counterparts were intentionally skipped to avoid collisions — these reserved gaps are marked with HTML comments at their skip points. New requirements always use the next available number in the modern sequence. The `_E` IDs are immutable and will not be renumbered.
+
 > [!IMPORTANT]
 > **Documentation Sync Required**: When adding or modifying CLI arguments in this document, you MUST also update `README.md` to reflect the changes. The README contains an "Arguments Quick Reference" table and "Argument Interactions" section that must stay in sync with this specification.
 
@@ -56,7 +59,8 @@ The application operates in three distinct generation modes:
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
 - **REQ-009**: When `--type eml` is specified, the tool will generate Email Native Files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
 - **REQ-010**: The associated `.dat` Load File will contain columns corresponding to the email headers, populated with auto-generated data. For Emails, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to Emails.
-- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have a placeholder Native File (one of `jpg`, `tiff`, or `pdf` drawn from the internal attachment pool) included as a random Attachment. The Attachment uses internal placeholder content (consistent with REQ-012) rather than a reference to one of the `--count` generated Native Files, to preserve the streaming, no-intermediate-storage generation design. Defaults to 0.
+- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have a placeholder Native File (one of `jpg`, `tiff`, or `pdf` drawn from the internal attachment pool) included as a random Attachment. The Attachment uses internal placeholder content (consistent with REQ_E-012) rather than a reference to one of the `--count` generated Native Files, to preserve the streaming, no-intermediate-storage generation design. Defaults to 0.
+<!-- REQ-012 through REQ-020: Reserved — functional areas covered by legacy REQ_E-008 through REQ_E-028. Skipped to avoid collisions when the modern sequence was introduced. -->
 
 ### FR_E-005: File Distribution Patterns
 - **REQ_E-022**: A new optional command-line argument `--distribution` shall be introduced.
@@ -66,6 +70,7 @@ The application operates in three distinct generation modes:
 - **REQ_E-026**: `gaussian` distribution shall assign Native Files in a bell-curve pattern, with most Native Files concentrated in the middle Folders.
 - **REQ_E-027**: `exponential` distribution shall assign Native Files in an exponential decay pattern, with most Native Files concentrated in the first few Folders.
 - **REQ_E-028**: The application must support distributing Native Files into a user-specified number of Folders (from 1 to 100), defaulting to 1.
+<!-- FR-003, FR-004: Reserved — functional areas covered by legacy FR_E-003 (Archive Creation) and FR_E-004 (Load File Generation). Skipped to avoid collisions when the modern sequence was introduced. -->
 
 ### FR-005: Target Zip Size via In-File Padding
 - **REQ-021**: A new optional command-line argument `--target-zip-size <size>` shall be introduced.
@@ -757,6 +762,7 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-146**: Redacted Production mode shall add redaction reason Metadata to the Load File via `REDACTION_REASON` column.
 - **REQ-147**: Redacted Production mode shall record redaction counts, withheld Native File counts, and reason distributions in the Production Manifest.
 - **REQ-148**: Post-generation validation shall verify that redacted image and text references point to existing files on disk, and that `NATIVE_WITHHELD` values are `YES` or `NO`.
+<!-- REQ-149 through REQ-156: Reserved for future Production Set requirements. -->
 - **REQ-157**: Zipper shall support comparing two or more Production Manifests.
 - **REQ-158**: Comparison reports shall support replacement workflows.
 - **REQ-159**: Comparison reports shall support supplemental workflows.
