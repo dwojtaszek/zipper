@@ -262,7 +262,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 
 **Test location:** `src/Zipper.Tests/`.
 
-**Pre-commit hook:** Runs lint + auto-format + unit tests on every `git commit`. Bypass: `git commit --no-verify`.
+**Pre-commit hook:** Runs format + unit tests on every `git commit` (short-circuits for docs-only changes — `*.md` and `docs/`). Bypass: `git commit --no-verify`.
 
 ---
 

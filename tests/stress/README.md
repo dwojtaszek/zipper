@@ -20,8 +20,8 @@ The stress test suite is designed to test failure modes and edge cases that are 
 
 The Zipper project includes multiple layers of performance testing:
 
-- **Performance Regression Tests** (`../test-performance-regression.sh/.bat`): Automated testing for detecting performance regressions in CI/CD
-- **Unit Benchmarks**: Micro-benchmarks for individual components using BenchmarkDotNet
+- **Performance Regression Guard** (`../perf/measure.sh` + `.github/workflows/perf-guard.yml`): Automated RSS and wall-time measurement on PRs touching `src/**`; median of 5 runs compared against `baselines.json`
+- **In-Process Benchmarks** (`src/PerformanceBenchmarkRunner.cs`): Custom benchmark runner for REQ-104/REQ-105 scalability validation (no external benchmark framework)
 - **Stress Tests** (this suite): Manual testing of system limits under extreme conditions
 
 Stress tests complement the automated performance testing by:
