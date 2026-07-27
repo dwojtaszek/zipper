@@ -29,7 +29,7 @@ Each entry: `### YYYY-MM-DD host:mode:target` (host = claude-code or cursor)
 
 > `Author` / `AUTHOR` is a metadata **column name**, not authentication. Do not let it trigger the security specialist (the dispatch signal uses word boundaries for exactly this reason). Same for other domain nouns that embed security-ish substrings.
 >
-> `src/LoadFiles/DatWriter.cs` (`BuildStandardRow` and its `Append*` helpers) is on the **per-row hot path** — per-row allocations and repeated recomputation matter here. By contrast `DataGenerator.PrecomputeIndices` and `ColumnProfileLoader.Validate` run **once at construction** (single-threaded init); allocations/loops there are not hot-path concerns and there is no race.
+> `src/LoadFiles/DatSerializer.cs` (`RenderRecord` and its `EscapeField`/`AppendField` helpers) and `src/LoadFiles/LoadFileEmitter.cs` (`EmitWithChaosAsync`) are on the **per-row hot path** — per-row allocations and repeated recomputation matter here. By contrast `DataGenerator.PrecomputeIndices` and `ColumnProfileLoader.Validate` run **once at construction** (single-threaded init); allocations/loops there are not hot-path concerns and there is no race.
 >
 > Delimiter sentinels: empty `QuoteDelimiter` ⇒ `hasQuote=false` and the resolver returns the fallback quote `þ` (`þ`); empty `ColumnDelimiter` ⇒ fallback ``. `EscapeDatField` doubles the quote char. Known sharp edge: in unquoted mode fields are still escaped against the `þ` sentinel and the **column delimiter is never escaped**, so a field value containing the column delimiter corrupts row structure — flag this, it is a real ACTION-class trigger.
 >

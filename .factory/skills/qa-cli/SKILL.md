@@ -36,7 +36,7 @@ mkdir -p ./qa-work/standard
 
 **Verify:**
 - Exit code is 0
-- A subdirectory is created under `./qa-work/standard/` containing the .zip and .dat files
+- ZIP and DAT files are created directly in the output directory (named `archive_{timestamp}.zip` and `archive_{timestamp}.dat`)
 - ZIP file is non-empty
 - DAT file has a header row and 50 data rows
 - DAT file uses ASCII 20 (DC4) as column delimiter
@@ -70,13 +70,13 @@ mkdir -p ./qa-work/chaos
 
 **Verify:**
 - Exit code is 0
-- _properties.json contains chaos anomaly records
-- Number of anomalies matches the --chaos-amount value (10)
-- Load file is still parseable despite anomalies
+- _properties.json contains a `chaosMode` object with `totalAnomalies` matching the --chaos-amount value (10)
+- `chaosMode.injectedAnomalies` lists the 10 anomaly records (mixed-delimiters, quotes, columns, eol, encoding)
+- Load file contains deliberate anomalies (broken delimiters, missing quotes, removed columns, invalid encoding bytes) — it is NOT expected to be fully parseable
 
 ### Flow 4: Production Set mode
 
-**What it tests:** Production set creates directory tree with NATIVES/IMAGES/DATA/TEXT subdirectories and per-volume load files.
+**What it tests:** Production set creates directory tree with NATIVES/IMAGES/DATA/TEXT subdirectories and a single load file in DATA/.
 
 **Command:**
 ```bash

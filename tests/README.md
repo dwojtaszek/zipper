@@ -8,7 +8,7 @@
 | `run-e2e-basic.sh` / `.bat` | Pre-push hook (fast) | Smoke subset — Standard mode only, no load-file variants |
 | `run-e2e-loadfile.sh` / `.bat` | Included by `run-tests` | Loadfile-only + Chaos Engine scenarios |
 
-Each `.sh` script has a `.bat` counterpart with identical coverage for Windows CI.
+Core E2E scripts (those called by `run-tests.sh`) have `.bat` counterparts for Windows CI. Utility scripts (`test-autoreview-validator.sh`, `test-compute-version.sh`, `test-zip64-boundary.sh`, `validate-req-traceability.sh`, `wait-for-reviews.sh`) are Linux-only. See [#624](https://github.com/dwojtraszek/zipper/issues/624) for planned CI drift detection.
 
 ## Subdirectories
 
