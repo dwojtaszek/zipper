@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # validate-req-traceability.sh — verify every active REQ-NNN in Requirements.md
-# is mapped to a test or explicit exemption in req-traceability.tsv.
+# is mapped to a test or explicit exemption in req-traceability.tsv, and that
+# no requirement cross-reference points to an undefined ID.
 #
 # Usage:
 #   validate-req-traceability.sh [--strict]
 #
-#   --strict   Fail on any unmapped active requirement (CI mode).
-#              Without --strict, report only (local development).
+#   --strict   Fail on any unmapped active requirement or orphaned reference
+#              (CI mode). Without --strict, report only (local development).
 #
 # Exit codes:
-#   0  all active requirements mapped or exempted (or report-only mode)
-#   1  unmapped active requirements remain (--strict mode)
+#   0  all active requirements mapped or exempted, no orphan references
+#   1  unmapped active requirements or orphaned references remain (--strict)
 #   2  missing files / parse errors
 #
 # Manifest format (tab-separated, header row required):
@@ -39,8 +40,10 @@ if [[ ! -f "$MANIFEST" ]]; then
     exit 2
 fi
 
-# --- Extract active REQ IDs from Requirements.md ---
-mapfile -t ACTIVE_REQS < <(grep -oE 'REQ-[0-9]+' "$REQUIREMENTS" | sort -u -t- -k2 -n)
+# --- Extract defined REQ-NNN IDs from Requirements.md ---
+# Only count bullet-point definitions (e.g., "- **REQ-NNN**:"), not in-text
+# references or HTML comment reservation markers.
+mapfile -t ACTIVE_REQS < <(grep -oE '^\- \*\*REQ-[0-9]+\*\*' "$REQUIREMENTS" | grep -oE 'REQ-[0-9]+' | sort -u -t- -k2 -n)
 
 if [[ ${#ACTIVE_REQS[@]} -eq 0 ]]; then
     echo "Error: no REQ-NNN IDs found in Requirements.md" >&2
@@ -155,9 +158,43 @@ fi
 COVERAGE_PCT=$(( (MAPPED + EXEMPTED) * 100 / TOTAL ))
 echo "Coverage: ${COVERAGE_PCT}% (${MAPPED} mapped + ${EXEMPTED} exempted = $((MAPPED + EXEMPTED))/$TOTAL)"
 
+# --- Orphan reference check (#644) ---
+# Verify that every REQ-NNN / REQ_E-NNN mentioned in the text resolves to a
+# defined requirement (bullet-point definition) and is not just a dangling
+# reference. HTML comment lines (reservation markers) are excluded.
+mapfile -t DEFINED_IDS < <(grep -oE '^\- \*\*REQ_E?-[0-9]+\*\*' "$REQUIREMENTS" | grep -oE 'REQ_E?-[0-9]+' | sort -u)
+mapfile -t ALL_MENTIONS < <(grep -v '^<!--' "$REQUIREMENTS" | grep -oE 'REQ_E?-[0-9]+' | sort -u)
+
+declare -A DEFINED_SET
+for id in "${DEFINED_IDS[@]}"; do
+    DEFINED_SET["$id"]=1
+done
+
+ORPHAN_REFS=()
+for id in "${ALL_MENTIONS[@]}"; do
+    if [[ -z "${DEFINED_SET[$id]:-}" ]]; then
+        ORPHAN_REFS+=("$id")
+    fi
+done
+
+ORPHAN_COUNT=${#ORPHAN_REFS[@]}
+echo "Orphan references:    $ORPHAN_COUNT"
+echo ""
+
+if [[ $ORPHAN_COUNT -gt 0 ]]; then
+    echo "--- Orphan references (mentioned but never defined) ---"
+    printf '  %s\n' "${ORPHAN_REFS[@]}" | sort -u
+    echo ""
+fi
+
 if [[ $UNMAPPED_COUNT -gt 0 && $STRICT -eq 1 ]]; then
     echo ""
     echo "FAIL: $UNMAPPED_COUNT unmapped active requirements remain." >&2
+    exit 1
+fi
+
+if [[ $ORPHAN_COUNT -gt 0 && $STRICT -eq 1 ]]; then
+    echo "FAIL: $ORPHAN_COUNT orphaned requirement references found." >&2
     exit 1
 fi
 

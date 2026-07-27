@@ -11,7 +11,6 @@ REQ-008	unit	FileGeneratorFactoryTests.Create_KnownType_ReturnsCorrectGenerator	
 REQ-009	unit	Emails.EmailSerializerTests.ToEml_ProducesRfc2822ValidHeaders	Email Native Files with valid headers
 REQ-010	unit	DatComposingWriterTests.WriteAsync_WithEmailType_IncludesEmlColumns	Email header columns in .dat
 REQ-011	unit	Emails.EmailAttachmentPickerTests.Pick_RespectsRate	--attachment-rate percentage control
-REQ-012	exemption	-	Undefined dangling reference in REQ-011; tracked by #644
 REQ-021	unit	CliValidatorTests.Validate_InvalidTargetZipSize_ReturnsFalse	--target-zip-size argument
 REQ-022	unit	CliValidatorTests.Validate_TargetZipSizeWithoutCount_ReturnsFalse	Validation error without --count
 REQ-023	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithTargetZipSize_PadsFilesToReachTargetSize	Padding calculation
