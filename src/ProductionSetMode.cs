@@ -18,7 +18,7 @@ internal class ProductionSetMode : IGenerationMode
     public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
         Console.WriteLine("Starting production set generation...");
-        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  File Type: {0}", request.Output.FileType));
+        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  File Type: {0}", request.Output.FileTypeDisplay));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Count: {0:N0}", request.Output.FileCount));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Output Path: {0}", request.Output.OutputPath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Volume Size: {0:N0} files/volume", request.Production.VolumeSize));

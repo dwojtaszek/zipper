@@ -48,6 +48,29 @@ public static class RequestBuilder
             }
         }
 
+        var fileType = (parsed.FileType ?? "pdf").ToLowerInvariant();
+        IReadOnlyList<FileTypeRatio>? fileTypeRatios = null;
+        FileTypePlan? fileTypePlan = null;
+        if (parsed.FileTypes is not null)
+        {
+            if (!FileTypeRatioParser.TryParse(parsed.FileTypes, out var parsedRatios, out var ratioError))
+            {
+                Console.Error.WriteLine($"Error: {ratioError}");
+                return null;
+            }
+
+            if (parsedRatios.Count == 1)
+            {
+                fileType = parsedRatios[0].Type;
+            }
+            else
+            {
+                fileTypeRatios = parsedRatios;
+                fileTypePlan = new FileTypePlan(parsedRatios, parsed.Count!.Value);
+                fileType = parsedRatios[0].Type;
+            }
+        }
+
         List<LoadFileFormat>? multiFormats = null;
         if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
         {
@@ -60,8 +83,9 @@ public static class RequestBuilder
         }
         else if (!parsed.IsLoadFileFormatExplicit)
         {
-            var fileType = (parsed.FileType ?? "pdf").ToLowerInvariant();
-            if (string.Equals(fileType, "tiff", StringComparison.Ordinal) || string.Equals(fileType, "jpg", StringComparison.Ordinal))
+            var hasImageType = fileType is "tiff" or "jpg"
+                || (fileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false);
+            if (hasImageType)
             {
                 multiFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
             }
@@ -144,7 +168,9 @@ public static class RequestBuilder
             {
                 OutputPath = resolved.FullName,
                 FileCount = parsed.Count!.Value,
-                FileType = (parsed.FileType ?? "pdf").ToLowerInvariant(),
+                FileType = fileType,
+                FileTypeRatios = fileTypeRatios,
+                FileTypePlan = fileTypePlan,
                 Folders = parsed.Folders,
                 Concurrency = PerformanceConstants.DefaultConcurrency,
                 WithText = parsed.WithText,

@@ -4,5 +4,5 @@ public record TiffConfig
 {
     public (int Min, int Max)? PageRange { get; init; }
 
-    internal bool ShouldIncludePageCount(OutputConfig output) => output.IsTiff && this.PageRange.HasValue;
+    internal bool ShouldIncludePageCount(OutputConfig output) => output.HasFileType("tiff") && this.PageRange.HasValue;
 }

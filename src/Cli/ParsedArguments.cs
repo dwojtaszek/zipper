@@ -4,6 +4,8 @@ public class ParsedArguments
 {
     public string? FileType { get; set; }
 
+    public string? FileTypes { get; set; }
+
     public long? Count { get; set; }
 
     public DirectoryInfo? OutputDirectory { get; set; }

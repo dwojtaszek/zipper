@@ -43,7 +43,7 @@ public static class CliValidator
             return true;
         }
 
-        if (string.IsNullOrEmpty(parsed.FileType) && !parsed.LoadfileOnly && !parsed.ProductionSet)
+        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !parsed.LoadfileOnly && !parsed.ProductionSet)
         {
             Console.Error.WriteLine("Error: --type is required.");
             return false;

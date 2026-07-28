@@ -21,6 +21,7 @@ internal sealed class ConcordanceComposer : StandardRowComposer
         "ENDATTY" => "ENDATTY",
         "CONTROL" => "CONTROLNUMBER",
         "PATH" => "PATH",
+        "FILETYPE" => "FILE_TYPE",
         "CUSTODIAN" => "CUSTODIAN",
         "DATESENT" => "DATESENT",
         "AUTHOR" => "AUTHOR",

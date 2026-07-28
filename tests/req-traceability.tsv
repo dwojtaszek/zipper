@@ -172,3 +172,10 @@ REQ-186	unit	DatComposingWriterTests.WriteAsync_ProductionSet_WithCollectionMeta
 REQ-187	unit	DatComposingWriterTests.WriteAsync_LoadfileOnlyWithProfile_WithCollectionMetadata_IncludesColumns	Columns merged into profile, fallback synthetic
 REQ-188	unit	CsvComposingWriterTests.CsvWriter_WithCollectionMetadata_IncludesFiveCollectionMetadataColumns	CSV/Concordance field names DATA_SOURCE etc.
 REQ-189	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadataAndWithMetadata_BothColumnSetsPresent	Disjoint from --with-metadata columns
+REQ-190	unit	FileTypeRatioParserTests.TryParse_ValidInput_ReturnsRatiosInDeclaredOrder	--types parsing/validation rules
+REQ-191	unit	FileTypePlanTests.GetTypeCount_AnyInput_NeverOverOrUnderproduces	Exact largest-remainder allocation, deterministic contiguous ranges
+REQ-192	e2e	test-mixed-file-types.sh	Mixed-type archive: per-record generator routing and extensions
+REQ-193	unit	MixedFileTypeGenerationTests.DatWriter_MixedTypes_EmailColumnsBlankForNonEmailRecords	Email Metadata only on Email records
+REQ-194	unit	MixedFileTypeGenerationTests.DatWriter_MixedTypes_PageCountBlankForNonTiffRecords	Page Count only on TIFF records
+REQ-195	unit	MixedFileTypeGenerationTests.ProductionSet_MixedTypes_NativesAndDatReflectPerRecordType	Per-record FILE_TYPE in Production DAT; Standard mix File Type column
+REQ-196	unit	MixedFileTypeCliTests.Build_MixWithTiffOrJpg_DefaultsToDatAndOpt	Default DAT+OPT when jpg/tiff in mix; single-entry degenerates

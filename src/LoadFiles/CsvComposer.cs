@@ -26,6 +26,7 @@ internal sealed class CsvComposer : StandardRowComposer
     {
         "CONTROL" => "Control Number",
         "PATH" => "File Path",
+        "FILETYPE" => "File Type",
         "CUSTODIAN" => "Custodian",
         "DATESENT" => "Date Sent",
         "AUTHOR" => "Author",

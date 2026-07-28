@@ -244,8 +244,7 @@ internal static class ProductionSetGenerator
 
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
-        var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
-            ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
+        var fileGenerators = FileGeneratorFactory.CreateMap(request);
 
         // Generate files using the plan
         var fileDataList = new List<FileData>();
@@ -266,10 +265,11 @@ internal static class ProductionSetGenerator
                 Index = plan.Index + 1,
                 FolderNumber = plan.VolumeIndex,
                 FolderName = plan.VolumeName,
-                FileName = $"{plan.BatesNumber}.{request.Output.FileTypeLower}",
+                FileName = $"{plan.BatesNumber}.{plan.FileType}",
                 FilePathInZip = plan.NativeRelPath,
+                FileType = plan.FileType,
             };
-            var generated = fileGenerator.Generate(workItem, request);
+            var generated = fileGenerators[plan.FileType].Generate(workItem, request);
             var nativeContent = generated.Content;
 
             await File.WriteAllBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent).ConfigureAwait(false);
@@ -318,7 +318,7 @@ internal static class ProductionSetGenerator
                 nativePathOverride = withheldPolicy switch
                 {
                     "omit-native-path" => string.Empty,
-                    "replace-with-placeholder" => $"PLACEHOLDER/{plan.VolumeName}/{plan.BatesNumber}.{request.Output.FileTypeLower}",
+                    "replace-with-placeholder" => $"PLACEHOLDER/{plan.VolumeName}/{plan.BatesNumber}.{plan.FileType}",
                     _ => null,
                 };
                 if (nativePathOverride is not null)
@@ -364,7 +364,7 @@ internal static class ProductionSetGenerator
                 RedactionReason = redactionReason,
             });
 
-            if (request.Metadata.WithFamilies && request.Output.IsEml && generated.Attachment.HasValue)
+            if (request.Metadata.WithFamilies && string.Equals(plan.FileType, "eml", StringComparison.Ordinal) && generated.Attachment.HasValue)
             {
                 var attach = generated.Attachment.Value;
                 var childBates = $"{plan.BatesNumber}_A001";

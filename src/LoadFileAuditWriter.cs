@@ -74,6 +74,8 @@ internal static class LoadFileAuditWriter
         return (totalRecords, totalLines);
     }
 
+    // Simulate* runs only for Loadfile-Only (no composed records); --types is rejected there,
+    // so the request-level IsEml gate below is correct for the single-type runs that reach it.
     private static long SimulateOptRecordCount(FileGenerationRequest request)
     {
         long total = 0;
@@ -108,12 +110,14 @@ internal static class LoadFileAuditWriter
     private static long ComputeOptRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
     {
         long total = 0;
-        bool includePageCount = request.Tiff.ShouldIncludePageCount(request.Output);
-        bool withFamilies = request.Metadata.WithFamilies && request.Output.IsEml;
+        bool pageCountEnabled = request.Tiff.ShouldIncludePageCount(request.Output);
+        bool withFamilies = request.Metadata.WithFamilies && request.Output.HasFileType("eml");
 
         foreach (var f in composedRecords)
         {
-            total += (includePageCount ? Math.Max(1, f.PageCount) : 1) +
+            // Page expansion applies only to TIFF records in a File Type mix.
+            var recordIsTiff = string.Equals(f.WorkItem.EffectiveFileType(request), "tiff", StringComparison.Ordinal);
+            total += (pageCountEnabled && recordIsTiff ? Math.Max(1, f.PageCount) : 1) +
                      (withFamilies && f.Attachment.HasValue ? 1 : 0);
         }
         return total;
@@ -122,7 +126,7 @@ internal static class LoadFileAuditWriter
     private static long ComputeDatRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
     {
         long total = composedRecords.Count;
-        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        if (request.Metadata.WithFamilies && request.Output.HasFileType("eml"))
         {
             foreach (var f in composedRecords)
             {

@@ -59,7 +59,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+                    bool hasAttachment = request.Metadata.WithFamilies
+                        && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
+                        && fileData.Attachment.HasValue;
                     string parentId = batesSequence is not null
                         ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
                         : $"DOC{fileData.WorkItem.Index:D8}";
@@ -281,13 +283,14 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
             if (request.Output.WithText)
             {
+                var recordIsEml = string.Equals(workItem.EffectiveFileType(request), "eml", StringComparison.Ordinal);
 #pragma warning disable S4790
-                var textHash = string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
+                var textHash = recordIsEml
                     ? Convert.ToHexString(System.Security.Cryptography.MD5.HashData(PlaceholderFiles.EmlExtractedText)).ToLowerInvariant()
                     : Convert.ToHexString(System.Security.Cryptography.MD5.HashData(PlaceholderFiles.ExtractedText)).ToLowerInvariant();
 #pragma warning restore S4790
 
-                var textFileSize = string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
+                var textFileSize = recordIsEml
                     ? PlaceholderFiles.EmlExtractedText.Length
                     : PlaceholderFiles.ExtractedText.Length;
 
@@ -318,12 +321,14 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
-            AddTag(tagsElement, "To", isChild ? string.Empty : eml.To, namingConvention);
-            AddTag(tagsElement, "From", isChild ? string.Empty : eml.From, namingConvention);
-            AddTag(tagsElement, "CC", isChild ? string.Empty : eml.Cc, namingConvention);
-            AddTag(tagsElement, "Subject", isChild ? string.Empty : eml.Subject, namingConvention);
-            AddTag(tagsElement, "SentDate", isChild ? string.Empty : eml.SentDate, namingConvention);
-            AddTag(tagsElement, "Attachment", isChild ? string.Empty : eml.Attachment, namingConvention);
+            // In a File Type mix, Email Metadata appears only on Email records.
+            var emlValues = !isChild && string.Equals(workItem.EffectiveFileType(request), "eml", StringComparison.Ordinal);
+            AddTag(tagsElement, "To", emlValues ? eml.To : string.Empty, namingConvention);
+            AddTag(tagsElement, "From", emlValues ? eml.From : string.Empty, namingConvention);
+            AddTag(tagsElement, "CC", emlValues ? eml.Cc : string.Empty, namingConvention);
+            AddTag(tagsElement, "Subject", emlValues ? eml.Subject : string.Empty, namingConvention);
+            AddTag(tagsElement, "SentDate", emlValues ? eml.SentDate : string.Empty, namingConvention);
+            AddTag(tagsElement, "Attachment", emlValues ? eml.Attachment : string.Empty, namingConvention);
         }
 
         if (request.Bates != null)
@@ -333,7 +338,19 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
         if (request.Tiff.ShouldIncludePageCount(request.Output))
         {
-            AddTag(tagsElement, "PageCount", isChild ? 1 : fileData.PageCount, namingConvention);
+            // In a File Type mix, Page Count appears only on TIFF records.
+            var recordIsTiff = string.Equals(workItem.EffectiveFileType(request), "tiff", StringComparison.Ordinal);
+            var pageCount = string.Empty;
+            if (isChild)
+            {
+                pageCount = "1";
+            }
+            else if (recordIsTiff)
+            {
+                pageCount = fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            AddTag(tagsElement, "PageCount", pageCount, namingConvention);
         }
 
         if (request.Output.WithText)
@@ -360,7 +377,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
     }
 
     private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
-        => workItem.FilePathInZip.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
+        => workItem.FilePathInZip.Replace($".{workItem.EffectiveFileType(request)}", ".txt", StringComparison.Ordinal);
 
     private static string GenerateBatesNumber(BatesSequence batesSequence, FileWorkItem workItem)
         => batesSequence.Format(workItem.Index - 1).ToString();

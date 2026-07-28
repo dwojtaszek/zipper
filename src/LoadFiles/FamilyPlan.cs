@@ -8,6 +8,8 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal static class FamilyPlan
 {
+    // ponytail: IsEml (first declared type) is deliberate here — the simulated family paths are
+    // Loadfile-Only-only, and --types is rejected with --loadfile-only, so mixes never reach this.
     public static bool HasAttachment(FileGenerationRequest request, long index)
     {
         if (!request.Metadata.WithFamilies || !request.Output.IsEml || request.LoadFile.AttachmentRate <= 0)

@@ -7,11 +7,48 @@ internal static class CrossCuttingValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        return ValidateFormattingAndProfiles(parsed) &&
+        return ValidateFileTypeMix(parsed) &&
+               ValidateFormattingAndProfiles(parsed) &&
                ValidateChaos(parsed) &&
                ValidateDelimiters(parsed) &&
                ValidateBates(parsed) &&
                ValidateHashes(parsed);
+    }
+
+    private static bool ValidateFileTypeMix(ParsedArguments parsed)
+    {
+        if (parsed.FileTypes is null)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(parsed.FileType))
+        {
+            Console.Error.WriteLine("Error: --type and --types cannot be used together. Use --types for a File Type mix.");
+            return false;
+        }
+
+        if (parsed.LoadfileOnly)
+        {
+            Console.Error.WriteLine("Error: --types is not supported with --loadfile-only.");
+            return false;
+        }
+
+        // Rejected because column profiles bypass per-record File Type gating and would
+        // silently mislabel mixed rows. Use --type for profile-driven generation instead.
+        if (!string.IsNullOrEmpty(parsed.ColumnProfile))
+        {
+            Console.Error.WriteLine("Error: --types is not supported with --column-profile. Use --type for profile-driven generation.");
+            return false;
+        }
+
+        if (!Config.FileTypeRatioParser.TryParse(parsed.FileTypes, out _, out var error))
+        {
+            Console.Error.WriteLine($"Error: {error}");
+            return false;
+        }
+
+        return true;
     }
 
     private static bool ValidateFormattingAndProfiles(ParsedArguments parsed)

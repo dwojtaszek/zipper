@@ -61,13 +61,17 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         foreach (var fileData in processedFiles)
         {
             var wi = fileData.WorkItem;
+            var recordType = wi.EffectiveFileType(this.request);
+            var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
+            var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
 
             // Draw order must stay metadata-then-email to match historical output.
+            // In a File Type mix, Email values are drawn only for Email records (blank elsewhere).
             var meta = includeMeta ? SyntheticRowValues.Metadata(wi, fileData, random, now) : default;
-            var eml = includeEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
+            var eml = includeEml && recordIsEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
             var colMeta = includeCollectionMeta ? SyntheticRowValues.CollectionMetadata(wi, random, now) : default;
 
-            bool hasAttachment = this.request.Metadata.WithFamilies && this.request.Output.IsEml && fileData.Attachment.HasValue;
+            bool hasAttachment = this.request.Metadata.WithFamilies && recordIsEml && fileData.Attachment.HasValue;
             string parentId = this.batesSequence is not null
                 ? this.batesSequence.Format(wi.Index - 1).ToString()
                 : $"DOC{wi.Index:D8}";
@@ -78,7 +82,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                 IdOverride = parentId,
                 BegAttach = parentId,
                 EndAttach = childId,
-                ParentDocId = string.Empty
+                ParentDocId = string.Empty,
+                RecordIsEml = recordIsEml,
+                RecordIsTiff = recordIsTiff,
             };
 
             var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, parentCtx)).ToList();
@@ -99,6 +105,8 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                     BegAttach = parentId,
                     EndAttach = childId,
                     ParentDocId = parentId,
+                    RecordIsEml = recordIsEml,
+                    RecordIsTiff = recordIsTiff,
                 };
                 var childValues = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, childCtx)).ToList();
                 yield return LoadFileRecordBuilder.Build(this.headerColumns, childValues, childId);
@@ -115,6 +123,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         }
 
         keys.AddRange(new[] { "CONTROL", "PATH" });
+
+        if (this.request.Output.IsMixedFileTypes)
+        {
+            keys.Add("FILETYPE");
+        }
 
         if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
         {
@@ -173,28 +186,31 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "ENDATTY" => this.request.Metadata.WithFamilies ? ctx.EndAttach : string.Empty,
             "CONTROL" => ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
             "PATH" => ctx.FilePathOverride ?? wi.FilePathInZip,
+            "FILETYPE" => ctx.IsChild && fileData.Attachment.HasValue
+                ? System.IO.Path.GetExtension(fileData.Attachment.Value.filename).TrimStart('.').ToUpperInvariant()
+                : wi.EffectiveFileType(this.request).ToUpperInvariant(),
             "CUSTODIAN" => meta.Custodian,
             "DATESENT" => ctx.IsChild ? string.Empty : meta.DateSent,
             "AUTHOR" => ctx.IsChild ? string.Empty : meta.Author,
             "FILESIZE" => ctx.FileSizeOverride ?? meta.FileSize,
-            "TO" => ctx.IsChild ? string.Empty : eml.To,
-            "FROM" => ctx.IsChild ? string.Empty : eml.From,
-            "CC" => ctx.IsChild ? string.Empty : eml.Cc,
-            "SUBJECT" => ctx.IsChild ? string.Empty : eml.Subject,
-            "SENTDATE" => ctx.IsChild ? string.Empty : eml.SentDate,
-            "ATTACHMENT" => ctx.IsChild ? string.Empty : eml.Attachment,
+            "TO" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.To,
+            "FROM" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.From,
+            "CC" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.Cc,
+            "SUBJECT" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.Subject,
+            "SENTDATE" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.SentDate,
+            "ATTACHMENT" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.Attachment,
             "DATA_SOURCE" => colMeta.DataSource,
             "COLLECTION_DATE" => colMeta.CollectionDate,
             "DENISTED" => colMeta.DeNisted,
             "DEDUPE_GROUP_ID" => colMeta.DedupeGroupId,
             "PROCESSING_STATUS" => colMeta.ProcessingStatus,
             "BATES" => ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString(),
-            "PAGECOUNT" => (ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "PAGECOUNT" => ResolvePageCount(ctx, fileData),
             // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
             // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.
             "TEXT" => ctx.IsChild
                 ? $"{wi.FolderName}/{wi.Index}_{System.IO.Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(fileData.Attachment!.Value.filename))}.txt"
-                : wi.FilePathInZip.Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal),
+                : wi.FilePathInZip.Replace($".{wi.EffectiveFileType(this.request)}", ".txt", StringComparison.Ordinal),
             "BEGATTACH" => ctx.BegAttach,
             "ENDATTACH" => ctx.EndAttach,
             "PARENTDOCID" => ctx.ParentDocId,
@@ -203,6 +219,17 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "SHA256HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA256),
             _ => string.Empty,
         };
+
+    // In a File Type mix, Page Count appears only on TIFF records.
+    private static string ResolvePageCount(RowCtx ctx, FileData fileData)
+    {
+        if (ctx.IsChild)
+        {
+            return "1";
+        }
+
+        return ctx.RecordIsTiff ? fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+    }
 
     private static string ResolveHashFromFileData(FileData fileData, Config.HashAlgorithm algorithm)
         => fileData.Hashes is not null && fileData.Hashes.TryGetValue(algorithm, out var hash)
@@ -226,6 +253,12 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         public string EndAttach { get; init; } = string.Empty;
 
         public string ParentDocId { get; init; } = string.Empty;
+
+        /// <summary>Whether the parent record's File Type is eml (Email Metadata values; defaults true for legacy single-type constructions).</summary>
+        public bool RecordIsEml { get; init; } = true;
+
+        /// <summary>Whether the parent record's File Type is tiff (Page Count values; defaults true for legacy single-type constructions).</summary>
+        public bool RecordIsTiff { get; init; } = true;
     }
 }
 
