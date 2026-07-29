@@ -71,6 +71,34 @@ public static class RequestBuilder
             }
         }
 
+        // Source-Driven Generation: read rows now so bad input fails before any generation.
+        IReadOnlyList<SourceInput.SourceRecord>? sourceRecords = null;
+        if (!string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate))
+        {
+            var readOk = !string.IsNullOrEmpty(parsed.InputCsv)
+                ? SourceInput.SourceCsvReader.TryRead(parsed.InputCsv!, out var rows, out var readError)
+                : SourceInput.DirectoryTemplateReader.TryRead(parsed.DirectoryTemplate!, out rows, out readError);
+            if (!readOk)
+            {
+                Console.Error.WriteLine($"Error: {readError}");
+                return null;
+            }
+
+            if (parsed.Count.HasValue && parsed.Count.Value != rows.Count)
+            {
+                Console.Error.WriteLine($"Error: --count ({parsed.Count.Value}) does not match the Source Record count ({rows.Count}). Align --count with the source input or omit it.");
+                return null;
+            }
+
+            if (rows.Any(r => r.BatesNumber is not null) && string.IsNullOrEmpty(parsed.BatesPrefix))
+            {
+                Console.Error.WriteLine("Error: the source 'BatesNumber' column requires --bates-prefix so the Bates column is emitted.");
+                return null;
+            }
+
+            sourceRecords = rows;
+        }
+
         List<LoadFileFormat>? multiFormats = null;
         if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
         {
@@ -84,7 +112,8 @@ public static class RequestBuilder
         else if (!parsed.IsLoadFileFormatExplicit)
         {
             var hasImageType = fileType is "tiff" or "jpg"
-                || (fileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false);
+                || (fileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false)
+                || (sourceRecords?.Any(r => r.FileType is "tiff" or "jpg") ?? false);
             if (hasImageType)
             {
                 multiFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
@@ -167,10 +196,13 @@ public static class RequestBuilder
             Output = new OutputConfig
             {
                 OutputPath = resolved.FullName,
-                FileCount = parsed.Count!.Value,
-                FileType = fileType,
+                FileCount = sourceRecords is not null ? sourceRecords.Count : parsed.Count!.Value,
+                FileType = sourceRecords is not null ? sourceRecords[0].FileType : fileType,
                 FileTypeRatios = fileTypeRatios,
                 FileTypePlan = fileTypePlan,
+                SourceFileTypes = sourceRecords is not null
+                    ? sourceRecords.Select(r => r.FileType).Distinct(StringComparer.Ordinal).OrderBy(t => t, StringComparer.Ordinal).ToList()
+                    : null,
                 Folders = parsed.Folders,
                 Concurrency = PerformanceConstants.DefaultConcurrency,
                 WithText = parsed.WithText,
@@ -247,6 +279,7 @@ public static class RequestBuilder
             },
             LoadfileOnly = parsed.LoadfileOnly,
             Hash = hashConfig,
+            SourceRecords = sourceRecords,
         };
     }
 

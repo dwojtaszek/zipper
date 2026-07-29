@@ -90,6 +90,12 @@ internal sealed class DatStandardComposer
         foreach (var fileData in processedFiles)
         {
             var profileValues = generator?.GenerateRow(fileData.WorkItem, fileData);
+            if (this.request.Metadata.ColumnProfile is not null)
+            {
+                // Source Metadata surfaces only through an explicit Column Profile (REQ-203);
+                // built-in fallback profiles (LegacyEml/LegacyWithMetadata) never merge.
+                DatComposerShared.MergeSourceMetadata(profileValues, fileData.WorkItem.SourceMetadata);
+            }
             var (parentId, childId, hasAttachment) = DatComposerShared.GetFamilyIdentifiers(
                 fileData, this.request, this.batesSequence);
 
@@ -102,14 +108,14 @@ internal sealed class DatStandardComposer
             {
                 var attach = fileData.Attachment!.Value;
                 var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-                var attachmentPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{sanitizedFilename}";
+                var attachmentPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
                 yield return DatComposerShared.MakeRecord(
                     this.headerColumns,
                     childId,
                     this.StandardRowValues(fileData, profileValues, new DatRowContext
                     {
                         IdOverride = childId,
-                        ControlOverride = $"DOC{fileData.WorkItem.Index:D8}_A001",
+                        ControlOverride = this.batesSequence is null ? childId : $"DOC{fileData.WorkItem.Index:D8}_A001",
                         FilePathOverride = attachmentPath,
                         FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
@@ -197,7 +203,8 @@ internal sealed class DatStandardComposer
 
         if (this.profileColumnNames is not null && profileValues is not null)
         {
-            string id = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
+            string batesIdentity = ctx.IdOverride ?? (this.batesSequence is not null ? this.batesSequence.Format(wi.Index - 1).ToString() : $"DOC{wi.Index:D8}");
+            string controlIdentity = (!ctx.IsChild && wi.ControlNumberOverride is not null) ? wi.ControlNumberOverride : batesIdentity;
             var fileSize = ctx.FileSizeOverride ?? (ctx.IsChild ? null : fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             var result = new List<string>(this.profileColumnNames.Count);
@@ -211,11 +218,13 @@ internal sealed class DatStandardComposer
                 {
                     case "DOCID":
                     case "CONTROLNUMBER":
-                    case "BEGBATES":
-                    case "ENDBATES":
                     case "CONTROL_NUMBER":
                     case "CONTROL NUMBER":
-                        val = id;
+                        val = controlIdentity;
+                        break;
+                    case "BEGBATES":
+                    case "ENDBATES":
+                        val = batesIdentity;
                         break;
                     case "FILEPATH":
                     case "FILE_PATH":
@@ -294,7 +303,7 @@ internal sealed class DatStandardComposer
 
         var v = new List<string>(this.headerColumns.Count)
         {
-            ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
+            ctx.ControlOverride ?? wi.ControlNumberOverride ?? $"DOC{wi.Index:D8}",
             ctx.FilePathOverride ?? wi.FilePathInZip,
         };
 
@@ -399,13 +408,10 @@ internal sealed class DatStandardComposer
                 filename = $"{ctx.IdOverride ?? $"{wi.Index}_A001"}.pdf";
             }
             var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(filename))}.txt";
-            return $"{wi.FolderName}/{wi.Index}_{attachmentTextFileName}";
+            return $"{wi.FolderPrefix}{wi.Index}_{attachmentTextFileName}";
         }
 
-        var sourceSuffix = $".{wi.EffectiveFileType(this.request)}";
-        return wi.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
-            ? wi.FilePathInZip[..^sourceSuffix.Length] + ".txt"
-            : wi.FilePathInZip;
+        return TextPathHelper.GetTextPath(wi.FilePathInZip);
     }
 
     private IReadOnlyDictionary<Config.HashAlgorithm, string>? GenerateSimulatedHashes(FileWorkItem workItem)

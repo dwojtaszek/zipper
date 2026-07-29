@@ -24,6 +24,13 @@ public class FileGenerationRequest
 
     public bool LoadfileOnly { get; set; }
 
+    /// <summary>
+    /// Source-Driven Generation rows (from --input-csv or --directory-template), or null for
+    /// synthetic generation. When set, Output.FileCount equals the row count and row values
+    /// drive record identity, paths, and File Types.
+    /// </summary>
+    internal IReadOnlyList<SourceInput.SourceRecord>? SourceRecords { get; set; }
+
     public FileGenerationRequest Clone()
     {
         return new FileGenerationRequest
@@ -41,6 +48,7 @@ public class FileGenerationRequest
             Production = this.Production,
             Hash = this.Hash,
             LoadfileOnly = this.LoadfileOnly,
+            SourceRecords = this.SourceRecords,
         };
     }
 }

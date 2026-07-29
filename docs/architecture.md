@@ -26,7 +26,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 `ParallelFileGenerator` uses `System.Threading.Channels` for a producer-consumer pipeline:
 
-1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. Bounded channel provides backpressure.
+1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. In Source-Driven Generation (`--input-csv` / `--directory-template`), the work items instead come one-to-one from the Source Records, carrying the source-relative path, File Type, and identity overrides. Bounded channel provides backpressure.
 2. **Generation**: N concurrent producers generate file data and write to result channel. All file types run in parallel. In a File Type Mix run (`--types`), each `FileWorkItem` carries its own File Type from the `FileTypePlan` and producers route to the matching per-type generator; single-type runs resolve to one generator as before.
 3. **Archive writing**: Single consumer (`ZipArchiveSink`, implementing `IArchiveSink`) writes ZIP entries, then writes Load Files through the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
 4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.

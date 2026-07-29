@@ -43,25 +43,29 @@ public static class CliValidator
             return true;
         }
 
-        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !parsed.LoadfileOnly && !parsed.ProductionSet)
+        // Source-Driven Generation (--input-csv/--directory-template) supplies File Types and
+        // the File Count from Source Records, so --type and --count are not required with it.
+        bool hasSourceInput = !string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate);
+
+        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !parsed.LoadfileOnly && !parsed.ProductionSet && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --type is required.");
             return false;
         }
 
-        if (!parsed.Count.HasValue)
+        if (!parsed.Count.HasValue && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --count is required.");
             return false;
         }
 
-        if (parsed.Count.Value <= 0)
+        if (parsed.Count.HasValue && parsed.Count.Value <= 0)
         {
             Console.Error.WriteLine("Error: --count must be a positive number.");
             return false;
         }
 
-        if (parsed.Count.Value > int.MaxValue - 1)
+        if (parsed.Count.HasValue && parsed.Count.Value > int.MaxValue - 1)
         {
             Console.Error.WriteLine($"Error: --count must not exceed {int.MaxValue - 1}.");
             return false;

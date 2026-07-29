@@ -645,6 +645,10 @@ print_info "Running mixed file types tests..."
 bash ./tests/test-mixed-file-types.sh || print_error "test-mixed-file-types.sh failed."
 print_success "Mixed file types tests passed."
 
+print_info "Running source-driven generation tests..."
+bash ./tests/test-source-driven.sh || print_error "test-source-driven.sh failed."
+print_success "Source-driven generation tests passed."
+
 print_info "Running CI build properties and docs-only classification tests..."
 bash ./tests/test-ci-build-props.sh || print_error "test-ci-build-props.sh failed."
 print_success "CI build properties and docs-only classification tests passed."

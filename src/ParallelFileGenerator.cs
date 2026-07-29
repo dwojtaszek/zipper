@@ -69,11 +69,22 @@ public class ParallelFileGenerator
                 // Baseline is the allocation-weighted average per-file content size across
                 // participating types (placeholder content size, 1024 fallback for the rest).
                 var plan = request.Output.FileTypePlan;
+                Dictionary<string, long>? sourceTypeCounts = null;
+                if (request.SourceRecords is not null)
+                {
+                    sourceTypeCounts = new Dictionary<string, long>(StringComparer.Ordinal);
+                    foreach (var row in request.SourceRecords)
+                    {
+                        sourceTypeCounts[row.FileType] = sourceTypeCounts.TryGetValue(row.FileType, out var c) ? c + 1 : 1;
+                    }
+                }
+
                 long weightedSize = 0;
                 long weightedCount = 0;
                 foreach (var (type, generator) in generators)
                 {
-                    long typeCount = plan?.GetTypeCount(type) ?? request.Output.FileCount;
+                    long typeCount = plan?.GetTypeCount(type)
+                        ?? (sourceTypeCounts is not null && sourceTypeCounts.TryGetValue(type, out var sc) ? sc : request.Output.FileCount);
                     long perFileSize = generator.IsPlaceholderBased ? PlaceholderFiles.GetContent(type).Length : 1024;
                     weightedSize += perFileSize * typeCount;
                     weightedCount += typeCount;
@@ -87,7 +98,7 @@ public class ParallelFileGenerator
             }
 
             // Create channels for work distribution
-            var workChannelReader = CreateWorkChannel(request.Output, request.LoadFile.Distribution, cancellationToken);
+            var workChannelReader = CreateWorkChannel(request, cancellationToken);
             var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -204,10 +215,13 @@ public class ParallelFileGenerator
     private static IReadOnlyDictionary<string, IFileGenerator> BuildGenerators(FileGenerationRequest request)
         => FileGeneratorFactory.CreateMap(request);
 
-    private static ChannelReader<FileWorkItem> CreateWorkChannel(Config.OutputConfig output, DistributionType distribution, CancellationToken cancellationToken)
+    private static ChannelReader<FileWorkItem> CreateWorkChannel(FileGenerationRequest request, CancellationToken cancellationToken)
     {
+        var output = request.Output;
         var fileCount = output.FileCount;
         var folders = output.Folders;
+        var distribution = request.LoadFile.Distribution;
+        var sourceRecords = request.SourceRecords;
         var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(output.Concurrency * 2)
         {
             FullMode = BoundedChannelFullMode.Wait,
@@ -218,23 +232,37 @@ public class ParallelFileGenerator
         {
             try
             {
-                for (long i = 1; i <= fileCount; i++)
+                if (sourceRecords is not null)
                 {
-                    var fileType = output.ResolveFileType(i);
-                    var folderNumber = Distributions.GetFolderNumber(i, fileCount, folders, distribution);
-                    var folderName = $"folder_{folderNumber:D3}";
-                    var fileName = $"{i:D8}.{fileType}";
-                    var filePathInZip = $"{folderName}/{fileName}";
-
-                    await writer.WriteAsync(new FileWorkItem
+                    // Source-Driven Generation: paths, File Types, and record identity come from
+                    // Source Records; the distribution algorithm and folder numbering do not apply.
+                    long sourceIndex = 0;
+                    foreach (var row in sourceRecords)
                     {
-                        Index = i,
-                        FolderNumber = folderNumber,
-                        FolderName = folderName,
-                        FileName = fileName,
-                        FilePathInZip = filePathInZip,
-                        FileType = fileType,
-                    }, cancellationToken).ConfigureAwait(false);
+                        sourceIndex++;
+                        await writer.WriteAsync(row.ToWorkItem(sourceIndex), cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                else
+                {
+                    for (long i = 1; i <= fileCount; i++)
+                    {
+                        var fileType = output.ResolveFileType(i);
+                        var folderNumber = Distributions.GetFolderNumber(i, fileCount, folders, distribution);
+                        var folderName = $"folder_{folderNumber:D3}";
+                        var fileName = $"{i:D8}.{fileType}";
+                        var filePathInZip = $"{folderName}/{fileName}";
+
+                        await writer.WriteAsync(new FileWorkItem
+                        {
+                            Index = i,
+                            FolderNumber = folderNumber,
+                            FolderName = folderName,
+                            FileName = fileName,
+                            FilePathInZip = filePathInZip,
+                            FileType = fileType,
+                        }, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 writer.Complete();
@@ -511,6 +539,20 @@ internal record FileWorkItem
     /// request-level File Type applies (single-type runs and legacy constructions).
     /// </summary>
     public string FileType { get; init; } = string.Empty;
+
+    /// <summary>Control Number override from a Source Record, or null for the default DOC{index} identity.</summary>
+    public string? ControlNumberOverride { get; init; }
+
+    /// <summary>Bates Number override from a Source Record, or null for the configured Bates sequence value.</summary>
+    public string? BatesNumberOverride { get; init; }
+
+    /// <summary>Extra source columns from a Source Record, mapped into Load File Metadata through a Column Profile.</summary>
+    public IReadOnlyDictionary<string, string>? SourceMetadata { get; init; }
+
+    /// <summary>Folder portion of the in-archive path with a trailing separator, or empty for root-level entries.</summary>
+    public string FolderPrefix => this.folderPrefix ??= this.FolderName.Length > 0 ? this.FolderName + "/" : string.Empty;
+
+    private string? folderPrefix;
 
     /// <summary>Returns the per-record File Type, falling back to the request-level type.</summary>
     public string EffectiveFileType(FileGenerationRequest request)

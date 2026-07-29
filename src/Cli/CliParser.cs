@@ -46,6 +46,14 @@ public static class CliParser
                     if (!ReadStringArg(args, ref i, "--types", out var fileTypes)) return null;
                     parsed.FileTypes = fileTypes;
                     break;
+                case "--input-csv":
+                    if (!ReadStringArg(args, ref i, "--input-csv", out var inputCsv)) return null;
+                    parsed.InputCsv = inputCsv;
+                    break;
+                case "--directory-template":
+                    if (!ReadStringArg(args, ref i, "--directory-template", out var dirTemplate)) return null;
+                    parsed.DirectoryTemplate = dirTemplate;
+                    break;
                 case "--count":
                     if (!ReadLongArg(args, ref i, "--count", out var count)) return null;
                     parsed.Count = count;

@@ -16,7 +16,9 @@ internal static class StandardModeValidator
             return false;
         }
 
-        if (!string.IsNullOrEmpty(parsed.TargetZipSize) && !parsed.Count.HasValue)
+        var hasSourceInput = !string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate);
+
+        if (!string.IsNullOrEmpty(parsed.TargetZipSize) && !parsed.Count.HasValue && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --target-zip-size requires --count to be specified.");
             return false;
@@ -61,7 +63,9 @@ internal static class StandardModeValidator
             return false;
         }
 
-        if (parsed.WithFamilies && (!IncludesEml(parsed) || parsed.AttachmentRate <= 0))
+        // Source-driven rows are not read yet at validation time, so the eml-participation
+        // warning is skipped for source input and applied per record during generation.
+        if (parsed.WithFamilies && !hasSourceInput && (!IncludesEml(parsed) || parsed.AttachmentRate <= 0))
         {
             Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.");
         }

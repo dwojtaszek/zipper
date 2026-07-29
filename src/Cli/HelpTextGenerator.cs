@@ -9,6 +9,7 @@ internal static class HelpTextGenerator
         var exeName = Process.GetCurrentProcess().ProcessName;
         Console.Error.WriteLine("Error: Missing required arguments.");
         Console.Error.WriteLine($"Usage: {exeName} --type <pdf|jpg|tiff|eml|docx|xlsx> --count <number> --output-path <directory> [options]");
+        Console.Error.WriteLine($"       {exeName} (--types <type:weight,...> | --input-csv <path> | --directory-template <path>) --output-path <directory> [options]");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Required Arguments:");
         Console.Error.WriteLine("  --type <string>          File type: pdf, jpg, tiff, eml, docx, xlsx");
@@ -26,6 +27,14 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --attachment-rate <n>    EML attachment percentage (0-100, default: 0)");
         Console.Error.WriteLine("  --target-zip-size <size> Target ZIP size (e.g., 500MB, 10GB)");
         Console.Error.WriteLine("  --include-load-file      Include load file in ZIP archive");
+        Console.Error.WriteLine();
+        Console.Error.WriteLine("Source-Driven Generation Options:");
+        Console.Error.WriteLine("  --input-csv <path>       Drive records from a Source CSV (FilePath and FileType columns required;");
+        Console.Error.WriteLine("                           ControlNumber, BatesNumber (requires --bates-prefix), and extra");
+        Console.Error.WriteLine("                           Source Metadata columns optional)");
+        Console.Error.WriteLine("  --directory-template <path>");
+        Console.Error.WriteLine("                           Mirror a directory structure; File Types inferred from extensions");
+        Console.Error.WriteLine("                           (source bytes are never copied; placeholder content is generated)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Load File Options:");
         Console.Error.WriteLine("  --load-file-format <fmt> Load file format: dat, opt, csv, edrm-xml, xml, concordance (default: dat)");

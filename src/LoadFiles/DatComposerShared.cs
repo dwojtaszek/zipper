@@ -40,11 +40,53 @@ internal static class DatComposerShared
         bool hasAttachment = request.Metadata.WithFamilies
             && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
             && fileData.Attachment.HasValue;
-        string parentId = batesSequence is not null
-            ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
-            : $"DOC{fileData.WorkItem.Index:D8}";
+        string parentId = fileData.WorkItem.BatesNumberOverride
+            ?? (batesSequence is not null
+                ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
+                : fileData.WorkItem.ControlNumberOverride ?? $"DOC{fileData.WorkItem.Index:D8}");
         string childId = hasAttachment ? $"{parentId}_A001" : parentId;
         return (parentId, childId, hasAttachment);
+    }
+
+    /// <summary>
+    /// Merges Source Record metadata into generated profile values: a source value wins when
+    /// its column name matches a profile column (case-insensitive, ignoring non-alphanumeric
+    /// characters); unmatched source columns are ignored (no Load File column exists for them).
+    /// </summary>
+    internal static void MergeSourceMetadata(Dictionary<string, string>? profileValues, IReadOnlyDictionary<string, string>? sourceMetadata)
+    {
+        if (profileValues is null || sourceMetadata is null || sourceMetadata.Count == 0)
+        {
+            return;
+        }
+
+        var normalizedProfileKeys = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var profileKey in profileValues.Keys)
+        {
+            normalizedProfileKeys.TryAdd(NormalizeMetadataKey(profileKey), profileKey);
+        }
+
+        foreach (var (key, value) in sourceMetadata)
+        {
+            if (normalizedProfileKeys.TryGetValue(NormalizeMetadataKey(key), out var profileKey))
+            {
+                profileValues[profileKey] = value;
+            }
+        }
+    }
+
+    private static string NormalizeMetadataKey(string key)
+    {
+        var builder = new System.Text.StringBuilder(key.Length);
+        foreach (var c in key)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                builder.Append(char.ToUpperInvariant(c));
+            }
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>

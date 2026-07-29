@@ -62,9 +62,10 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                     bool hasAttachment = request.Metadata.WithFamilies
                         && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
                         && fileData.Attachment.HasValue;
-                    string parentId = batesSequence is not null
-                        ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
-                        : $"DOC{fileData.WorkItem.Index:D8}";
+                    string parentId = fileData.WorkItem.BatesNumberOverride
+                        ?? (batesSequence is not null
+                            ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
+                            : fileData.WorkItem.ControlNumberOverride ?? $"DOC{fileData.WorkItem.Index:D8}");
                     string childId = hasAttachment ? $"{parentId}_A001" : parentId;
 
                     var meta = request.Metadata.ShouldIncludeMetadataColumns(request.Output) ? SyntheticRowValues.Metadata(fileData.WorkItem, fileData, random, now) : default;
@@ -166,8 +167,8 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         {
             var attach = actualAttachment!.Value;
             var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-            var childNativePath = $"{workItem.FolderName}/{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
-            var childTextPath = $"{workItem.FolderName}/{workItem.Index}_{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt".Replace('\\', '/');
+            var childNativePath = $"{workItem.FolderPrefix}{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
+            var childTextPath = $"{workItem.FolderPrefix}{workItem.Index}_{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt".Replace('\\', '/');
 
             // Resolve child hashes
             string childHash = string.Empty;
@@ -356,7 +357,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         if (request.Output.WithText)
         {
             var textPath = isChild
-                ? $"{workItem.FolderName}/{workItem.Index}_{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(actualAttachment!.Value.filename))}.txt"
+                ? $"{workItem.FolderPrefix}{workItem.Index}_{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(actualAttachment!.Value.filename))}.txt"
                 : GenerateTextPath(request, workItem);
             AddTag(tagsElement, "ExtractedTextPath", textPath, namingConvention);
         }
@@ -377,9 +378,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
     }
 
     private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)
-        => workItem.FilePathInZip.Replace($".{workItem.EffectiveFileType(request)}", ".txt", StringComparison.Ordinal);
+        => TextPathHelper.GetTextPath(workItem.FilePathInZip);
 
     private static string GenerateBatesNumber(BatesSequence batesSequence, FileWorkItem workItem)
-        => batesSequence.Format(workItem.Index - 1).ToString();
+        => workItem.BatesNumberOverride ?? batesSequence.Format(workItem.Index - 1).ToString();
 
 }
