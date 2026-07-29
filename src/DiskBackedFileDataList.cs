@@ -91,6 +91,7 @@ internal static class FileDataSerializer
         writer.Write(data.WorkItem.FolderName ?? string.Empty);
         writer.Write(data.WorkItem.FileName ?? string.Empty);
         writer.Write(data.WorkItem.FilePathInZip ?? string.Empty);
+        writer.Write(data.WorkItem.FileType ?? string.Empty);
         writer.Write(data.DataLength);
         writer.Write(data.PageCount);
         writer.Write(data.Hash ?? string.Empty);
@@ -133,6 +134,7 @@ internal static class FileDataSerializer
         var folderName = reader.ReadString();
         var fileName = reader.ReadString();
         var filePathInZip = reader.ReadString();
+        var fileType = reader.ReadString();
         var dataLength = reader.ReadInt32();
         var pageCount = reader.ReadInt32();
         var hash = reader.ReadString();
@@ -183,7 +185,8 @@ internal static class FileDataSerializer
                 FolderNumber = folderNumber,
                 FolderName = folderName,
                 FileName = fileName,
-                FilePathInZip = filePathInZip
+                FilePathInZip = filePathInZip,
+                FileType = fileType
             },
             DataLength = dataLength,
             PageCount = pageCount,

@@ -65,6 +65,8 @@ Thumbs.db
 
 # Path-traversal E2E test artifacts
 *mixed*
+!tests/test-mixed-file-types.sh
+!tests/test-mixed-file-types.bat
 /..\\*
 **/..\\*
 

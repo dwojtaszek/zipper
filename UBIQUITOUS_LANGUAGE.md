@@ -11,6 +11,7 @@
 | **Folder** | A logical directory within the **Archive** (used only during regular **Archive** generation via `--folders`) to distribute **Native Files** across a directory structure. The number of **Folders** is configurable; defaults to 1. | Directory, bucket, container |
 | **Distribution** | The pattern by which **Native Files** are assigned to **Folders**. Supported patterns: `proportional`, `gaussian`, `exponential`. | Assignment strategy, allocation |
 | **File Type** | The format of generated **Native Files**: `pdf`, `jpg`, `tiff`, `eml`, `docx`, `xlsx`. | Format, extension, kind |
+| **File Type Mix** | A weighted set of **File Types** generated together in one **Archive** or **Production Set** via `--types type:weight,...`. Counts are allocated exactly (largest-remainder) in contiguous ranges in declared order. **Load Files** identify each record's own type (File Type column / `FILE_TYPE`); the **Production Manifest** `fileType` is a top-level list of participating File Types, not a per-record value. | Mixed types, multi-type, type blend |
 | **Control Number** | A unique identifier for each **Native File** in the **Load File**. Required field. | DOCID, document ID |
 | **File Path** | The relative path to a **Native File** within the **Archive** or production structure. | Item path, location, reference |
 

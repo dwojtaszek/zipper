@@ -14,6 +14,9 @@ internal sealed record ProductionNativeFilePlan
 
     public required string BatesNumber { get; init; }
 
+    /// <summary>The per-record File Type (lowercased) assigned by the File Type mix or request-level type.</summary>
+    public required string FileType { get; init; }
+
     public required string NativeRelPath { get; init; }
 
     public required string TextRelPath { get; init; }
@@ -46,7 +49,6 @@ internal static class ProductionSetPlanner
         }
 
         var plans = new List<ProductionNativeFilePlan>((int)request.Output.FileCount);
-        var nativeExt = request.Output.FileTypeLower;
 
         // Resolve bates prefix for this rolling set
         string prefix = batesConfig.Prefixes is not null && batesConfig.Prefixes.Count > rollingIndex
@@ -95,6 +97,7 @@ internal static class ProductionSetPlanner
             int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
             var volName = $"VOL{volumeIndex:D3}";
             var batesNumber = batesSequence.Next().ToString();
+            var nativeExt = request.Output.ResolveFileType(i + 1);
 
             plans.Add(new ProductionNativeFilePlan
             {
@@ -102,6 +105,7 @@ internal static class ProductionSetPlanner
                 VolumeIndex = volumeIndex,
                 VolumeName = volName,
                 BatesNumber = batesNumber,
+                FileType = nativeExt,
                 NativeRelPath = Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}"),
                 TextRelPath = Path.Combine("TEXT", volName, $"{batesNumber}.txt"),
                 ImageRelPath = Path.Combine("IMAGES", volName, $"{batesNumber}.tif"),

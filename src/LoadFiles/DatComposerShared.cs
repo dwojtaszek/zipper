@@ -37,7 +37,9 @@ internal static class DatComposerShared
     internal static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(
         FileData fileData, FileGenerationRequest request, BatesSequence? batesSequence)
     {
-        bool hasAttachment = request.Metadata.WithFamilies && request.Output.IsEml && fileData.Attachment.HasValue;
+        bool hasAttachment = request.Metadata.WithFamilies
+            && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
+            && fileData.Attachment.HasValue;
         string parentId = batesSequence is not null
             ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
             : $"DOC{fileData.WorkItem.Index:D8}";
@@ -81,7 +83,7 @@ internal static class DatComposerShared
         var profile = request.Metadata.ColumnProfile;
         if (profile is null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
-            profile = request.Output.IsEml
+            profile = request.Output.HasFileType("eml")
                 ? BuiltInProfiles.LegacyEml
                 : BuiltInProfiles.LegacyWithMetadata;
         }

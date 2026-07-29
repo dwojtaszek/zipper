@@ -573,6 +573,14 @@ if errorlevel 1 (
 )
 call :print_success "CLI coverage gap tests passed."
 
+call :print_info "Running mixed file types tests..."
+call .\tests\test-mixed-file-types.bat
+if errorlevel 1 (
+    echo [ ERROR ] Mixed file types tests failed.
+    exit /b 1
+)
+call :print_success "Mixed file types tests passed."
+
 REM Test 14b: CI build props tests
 call :print_info "Running CI build props tests..."
 call .\tests\test-ci-build-props.bat

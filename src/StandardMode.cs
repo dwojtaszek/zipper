@@ -23,7 +23,7 @@ internal class StandardMode : IGenerationMode
         }
 
         Console.WriteLine("Starting parallel file generation...");
-        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  File Type: {0}", request.Output.FileType));
+        Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  File Type: {0}", request.Output.FileTypeDisplay));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Count: {0:N0}", request.Output.FileCount));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Output Path: {0}", request.Output.OutputPath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Folders: {0}", request.Output.Folders));

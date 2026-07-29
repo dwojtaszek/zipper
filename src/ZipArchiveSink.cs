@@ -33,17 +33,15 @@ internal class ZipArchiveSink : IArchiveSink
         using var processedFiles = new DiskBackedFileDataList();
         var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var extractedTextContent = request.Output.WithText
-            ? (string.Equals(request.Output.FileType, "eml", StringComparison.OrdinalIgnoreCase)
-                ? PlaceholderFiles.EmlExtractedText
-                : PlaceholderFiles.ExtractedText)
-            : null;
+        // Cached per-type text payloads; the per-record File Type selects which one is written.
+        var standardTextContent = request.Output.WithText ? PlaceholderFiles.ExtractedText : null;
+        var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : null;
 
         var outOfOrderBuffer = new Dictionary<long, FileData>();
 
         try
         {
-            await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, extractedTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
+            await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -71,7 +69,8 @@ internal class ZipArchiveSink : IArchiveSink
         ZipArchive archive,
         ChannelReader<FileData> fileDataReader,
         FileGenerationRequest request,
-        byte[]? extractedTextContent,
+        byte[]? standardTextContent,
+        byte[]? emlTextContent,
         HashSet<string> usedEntryPaths,
         DiskBackedFileDataList processedFiles,
         Dictionary<long, FileData> outOfOrderBuffer,
@@ -83,12 +82,12 @@ internal class ZipArchiveSink : IArchiveSink
         {
             if (incomingFileData.WorkItem.Index == nextExpectedIndex)
             {
-                ProcessFileData(archive, incomingFileData, request, extractedTextContent, usedEntryPaths, processedFiles);
+                ProcessFileData(archive, incomingFileData, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles);
                 nextExpectedIndex++;
 
                 while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
                 {
-                    ProcessFileData(archive, buffered, request, extractedTextContent, usedEntryPaths, processedFiles);
+                    ProcessFileData(archive, buffered, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles);
                     nextExpectedIndex++;
                 }
             }
@@ -189,7 +188,7 @@ internal class ZipArchiveSink : IArchiveSink
         await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson).ConfigureAwait(false);
     }
 
-    private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? extractedTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)
+    private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? standardTextContent, byte[]? emlTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)
     {
         try
         {
@@ -199,7 +198,10 @@ internal class ZipArchiveSink : IArchiveSink
 
             if (request.Output.WithText)
             {
-                WriteExtractedTextToArchive(archive, fileData, request, extractedTextContent!, usedEntryPaths);
+                var textContent = string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
+                    ? emlTextContent!
+                    : standardTextContent!;
+                WriteExtractedTextToArchive(archive, fileData, request, textContent, usedEntryPaths);
             }
 
             if (fileData.Attachment.HasValue)
@@ -283,7 +285,7 @@ internal class ZipArchiveSink : IArchiveSink
     {
         System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
-        var textFileName = fileData.WorkItem.FileName.Replace($".{request.Output.FileType}", ".txt", StringComparison.Ordinal);
+        var textFileName = fileData.WorkItem.FileName.Replace($".{fileData.WorkItem.EffectiveFileType(request)}", ".txt", StringComparison.Ordinal);
         var entryPath = $"{fileData.WorkItem.FolderName}/{textFileName}".Replace('\\', '/');
 
         if (!usedEntryPaths.Add(entryPath))

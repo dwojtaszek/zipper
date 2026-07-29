@@ -109,7 +109,7 @@ internal sealed class DatProductionComposer
         // Derive text path from the original FilePathInZip (not the overridden nativePath) so
         // replace-with-placeholder policy doesn't produce wrong text paths in the DAT.
         var originalNativePath = wi.FilePathInZip.Replace('/', '\\');
-        var textPath = ctx.TextPathOverride ?? (originalNativePath.StartsWith("NATIVES\\", StringComparison.OrdinalIgnoreCase) ? "TEXT\\" + originalNativePath.Substring(8) : originalNativePath).Replace($".{this.request.Output.FileType}", ".txt", StringComparison.Ordinal);
+        var textPath = ctx.TextPathOverride ?? (originalNativePath.StartsWith("NATIVES\\", StringComparison.OrdinalIgnoreCase) ? "TEXT\\" + originalNativePath.Substring(8) : originalNativePath).Replace($".{wi.EffectiveFileType(this.request)}", ".txt", StringComparison.Ordinal);
         var imagesPath = imagePath.Replace('/', '\\');
 
 #pragma warning disable S2245
@@ -121,7 +121,7 @@ internal sealed class DatProductionComposer
         var dateCreated = now.AddDays(-random.Next(1, 730)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
 
         var fileSize = ctx.FileSizeOverride ?? fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var fileType = ctx.IsChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : this.request.Output.FileType.ToUpperInvariant();
+        var fileType = ctx.IsChild ? Path.GetExtension(fileData.Attachment!.Value.filename).TrimStart('.').ToUpperInvariant() : wi.EffectiveFileType(this.request).ToUpperInvariant();
 
         var v = new List<string>(this.headerColumns.Count)
         {
@@ -153,12 +153,18 @@ internal sealed class DatProductionComposer
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
-            var attachmentVal = ctx.IsChild ? string.Empty : (fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty);
-            var subjectVal = ctx.IsChild ? string.Empty : (fileData.Email?.Subject ?? $"Email Subject {wi.Index}");
-            var fromVal = ctx.IsChild ? string.Empty : (fileData.Email?.From ?? $"sender{wi.Index}@example.com");
-            var toVal = ctx.IsChild ? string.Empty : (fileData.Email?.To ?? $"recipient{wi.Index}@example.com");
-            var ccVal = ctx.IsChild ? string.Empty : (fileData.Email is not null ? (fileData.Email.Cc ?? string.Empty) : $"cc{wi.Index}@example.com");
-            var sentDateVal = ctx.IsChild ? string.Empty : (fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+            // In a File Type mix, Email Metadata appears only on Email records.
+            var emlValues = !ctx.IsChild && string.Equals(wi.EffectiveFileType(this.request), "eml", StringComparison.Ordinal);
+            var attachmentVal = emlValues && fileData.Attachment.HasValue ? fileData.Attachment.Value.filename : string.Empty;
+            var subjectVal = !emlValues ? string.Empty : (fileData.Email?.Subject ?? $"Email Subject {wi.Index}");
+            var fromVal = !emlValues ? string.Empty : (fileData.Email?.From ?? $"sender{wi.Index}@example.com");
+            var toVal = !emlValues ? string.Empty : (fileData.Email?.To ?? $"recipient{wi.Index}@example.com");
+            var ccVal = string.Empty;
+            if (emlValues)
+            {
+                ccVal = fileData.Email is not null ? (fileData.Email.Cc ?? string.Empty) : $"cc{wi.Index}@example.com";
+            }
+            var sentDateVal = !emlValues ? string.Empty : (fileData.Email?.SentDate.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
             v.Add(attachmentVal);
             v.Add(subjectVal);
             v.Add(fromVal);

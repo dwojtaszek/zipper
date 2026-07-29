@@ -44,7 +44,7 @@ internal static class ProductionManifestWriter
         fileDataList ??= Array.Empty<FileData>();
         long parentCount = fileDataList.Count > 0 ? fileDataList.Count : request.Output.FileCount;
         long attachmentCount = 0;
-        if (request.Metadata.WithFamilies && request.Output.IsEml)
+        if (request.Metadata.WithFamilies && request.Output.HasFileType("eml"))
         {
             attachmentCount = fileDataList.Count(f => f.Attachment.HasValue);
         }
@@ -68,7 +68,9 @@ internal static class ProductionManifestWriter
             NativeFileCount = totalNativeCount,
             ParentNativeFileCount = attachmentCount > 0 ? parentCount : null,
             AttachmentNativeFileCount = attachmentCount > 0 ? attachmentCount : null,
-            FileType = request.Output.FileType,
+            FileType = request.Output.FileTypeRatios is { Count: > 0 }
+                ? string.Join(",", request.Output.FileTypeRatios.Select(r => r.Type))
+                : request.Output.FileType,
             VolumeCount = volumeCount,
             VolumeSize = request.Production.VolumeSize,
             Directories = new ProductionDirectories

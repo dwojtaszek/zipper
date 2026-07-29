@@ -42,6 +42,10 @@ public static class CliParser
                     if (!ReadStringArg(args, ref i, "--type", out var fileType)) return null;
                     parsed.FileType = fileType;
                     break;
+                case "--types":
+                    if (!ReadStringArg(args, ref i, "--types", out var fileTypes)) return null;
+                    parsed.FileTypes = fileTypes;
+                    break;
                 case "--count":
                     if (!ReadLongArg(args, ref i, "--count", out var count)) return null;
                     parsed.Count = count;

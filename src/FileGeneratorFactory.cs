@@ -27,6 +27,24 @@ internal static class FileGeneratorFactory
     }
 
     /// <summary>
+    /// Creates one generator per File Type participating in the request
+    /// (the File Type Mix plan when present, otherwise the single request File Type).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, IFileGenerator> CreateMap(FileGenerationRequest request)
+    {
+        var output = request.Output;
+        var types = output.FileTypePlan?.Types ?? (IReadOnlyList<string>)new[] { output.FileTypeLower };
+        var generators = new Dictionary<string, IFileGenerator>(StringComparer.Ordinal);
+        foreach (var type in types)
+        {
+            generators[type] = Create(type, request)
+                ?? throw new InvalidOperationException($"Unknown file type: {type}");
+        }
+
+        return generators;
+    }
+
+    /// <summary>
     /// Determines if the specified file type is a known and supported format.
     /// </summary>
     internal static bool IsKnownType(string fileType)

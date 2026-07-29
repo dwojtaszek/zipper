@@ -108,8 +108,14 @@ internal sealed class OptComposer : ILoadFileComposer
                     .Replace('/', '\\') // FilePathInZip uses '/' (ZIP spec); normalize on all platforms incl. Windows
                 : $"IMAGES\\{baseBatesNumber}.tif";
 
-            int actualPages = this.request.Tiff.ShouldIncludePageCount(this.request.Output) ? Math.Max(1, fileData.PageCount) : 1;
-            bool hasAttachment = this.request.Metadata.WithFamilies && this.request.Output.IsEml && fileData.Attachment.HasValue;
+            var recordType = workItem.EffectiveFileType(this.request);
+            int actualPages = this.request.Tiff.ShouldIncludePageCount(this.request.Output)
+                && string.Equals(recordType, "tiff", StringComparison.Ordinal)
+                ? Math.Max(1, fileData.PageCount)
+                : 1;
+            bool hasAttachment = this.request.Metadata.WithFamilies
+                && string.Equals(recordType, "eml", StringComparison.Ordinal)
+                && fileData.Attachment.HasValue;
 
             foreach (var entry in GeneratePageEntries(baseBatesNumber, baseImagePath, actualPages))
             {

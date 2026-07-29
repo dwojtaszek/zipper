@@ -36,6 +36,11 @@ internal sealed class DatStandardComposer
     public static List<string> BuildHeaders(FileGenerationRequest request, string? namingConvention)
     {
         var cols = new List<string> { "Control Number", "File Path" };
+        if (request.Output.IsMixedFileTypes)
+        {
+            cols.Add("File Type");
+        }
+
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {
             cols.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
@@ -283,11 +288,22 @@ internal sealed class DatStandardComposer
             return result;
         }
 
+        var recordType = wi.EffectiveFileType(this.request);
+        var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
+        var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
+
         var v = new List<string>(this.headerColumns.Count)
         {
             ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
             ctx.FilePathOverride ?? wi.FilePathInZip,
         };
+
+        if (this.request.Output.IsMixedFileTypes)
+        {
+            v.Add(ctx.IsChild && fileData.Attachment.HasValue
+                ? System.IO.Path.GetExtension(fileData.Attachment.Value.filename).TrimStart('.').ToUpperInvariant()
+                : recordType.ToUpperInvariant());
+        }
 
         if (this.request.Metadata.ShouldIncludeMetadataColumns(this.request.Output))
         {
@@ -299,12 +315,20 @@ internal sealed class DatStandardComposer
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{wi.Index}@example.com"));
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{wi.Index}@example.com"));
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILCC") ?? (fileData.Email?.Cc ?? (fileData.Email != null ? string.Empty : $"cc{wi.Index}@example.com"))));
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {wi.Index}"));
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty));
-            v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty));
+            // In a File Type mix, Email Metadata appears only on Email records.
+            var emlValues = !ctx.IsChild && recordIsEml;
+            var emailCc = string.Empty;
+            if (emlValues)
+            {
+                emailCc = profileValues?.GetValueOrDefault("EMAILCC") ?? (fileData.Email?.Cc ?? (fileData.Email != null ? string.Empty : $"cc{wi.Index}@example.com"));
+            }
+
+            v.Add(emlValues ? (profileValues?.GetValueOrDefault("EMAILTO") ?? $"recipient{wi.Index}@example.com") : string.Empty);
+            v.Add(emlValues ? (profileValues?.GetValueOrDefault("EMAILFROM") ?? $"sender{wi.Index}@example.com") : string.Empty);
+            v.Add(emailCc);
+            v.Add(emlValues ? (profileValues?.GetValueOrDefault("EMAILSUBJECT") ?? $"Email Subject {wi.Index}") : string.Empty);
+            v.Add(emlValues ? (profileValues?.GetValueOrDefault("EMAILSENTDATE") ?? string.Empty) : string.Empty);
+            v.Add(emlValues ? (profileValues?.GetValueOrDefault("EMAILATTACHMENT") ?? string.Empty) : string.Empty);
         }
 
         if (this.request.Metadata.ShouldIncludeCollectionMetadataColumns())
@@ -327,7 +351,18 @@ internal sealed class DatStandardComposer
 
         if (this.request.Tiff.ShouldIncludePageCount(this.request.Output))
         {
-            v.Add((ctx.IsChild ? 1 : fileData.PageCount).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            // In a File Type mix, Page Count appears only on TIFF records.
+            var pageCount = string.Empty;
+            if (ctx.IsChild)
+            {
+                pageCount = "1";
+            }
+            else if (recordIsTiff)
+            {
+                pageCount = fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            v.Add(pageCount);
         }
 
         if (this.request.Output.WithText)
@@ -367,7 +402,7 @@ internal sealed class DatStandardComposer
             return $"{wi.FolderName}/{wi.Index}_{attachmentTextFileName}";
         }
 
-        var sourceSuffix = $".{this.request.Output.FileType}";
+        var sourceSuffix = $".{wi.EffectiveFileType(this.request)}";
         return wi.FilePathInZip.EndsWith(sourceSuffix, StringComparison.OrdinalIgnoreCase)
             ? wi.FilePathInZip[..^sourceSuffix.Length] + ".txt"
             : wi.FilePathInZip;

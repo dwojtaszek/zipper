@@ -54,8 +54,7 @@ public class ParallelFileGenerator
                 request.Output = request.Output with { Concurrency = PerformanceConstants.DefaultConcurrency };
             }
 
-            var fileGenerator = FileGeneratorFactory.Create(request.Output.FileType, request)
-                ?? throw new InvalidOperationException($"Unknown file type: {request.Output.FileType}");
+            var generators = BuildGenerators(request);
 
             Directory.CreateDirectory(request.Output.OutputPath);
 
@@ -64,19 +63,31 @@ public class ParallelFileGenerator
             var loadFileName = $"{baseFileName}.dat";
             loadFilePath = Path.Combine(request.Output.OutputPath, loadFileName);
 
-            var placeholderContent = fileGenerator.IsPlaceholderBased
-                ? PlaceholderFiles.GetContent(request.Output.FileTypeLower)
-                : Array.Empty<byte>();
-
             long paddingPerFile = 0;
             if (request.Output.TargetZipSize.HasValue)
             {
-                var baseSize = placeholderContent.Length > 0 ? placeholderContent.Length : 1024;
+                // Baseline is the allocation-weighted average per-file content size across
+                // participating types (placeholder content size, 1024 fallback for the rest).
+                var plan = request.Output.FileTypePlan;
+                long weightedSize = 0;
+                long weightedCount = 0;
+                foreach (var (type, generator) in generators)
+                {
+                    long typeCount = plan?.GetTypeCount(type) ?? request.Output.FileCount;
+                    long perFileSize = generator.IsPlaceholderBased ? PlaceholderFiles.GetContent(type).Length : 1024;
+                    weightedSize += perFileSize * typeCount;
+                    weightedCount += typeCount;
+                }
+
+                var baseSize = weightedCount > 0
+                    ? (int)Math.Min(int.MaxValue, weightedSize / weightedCount)
+                    : 1024;
+
                 paddingPerFile = this.CalculatePaddingPerFile(request.Output.TargetZipSize.Value, baseSize, request.Output.FileCount, request.Output.WithText);
             }
 
             // Create channels for work distribution
-            var workChannelReader = CreateWorkChannel(request.Output.FileCount, request.Output.Folders, request.LoadFile.Distribution, request.Output.FileType, request.Output.Concurrency, cancellationToken);
+            var workChannelReader = CreateWorkChannel(request.Output, request.LoadFile.Distribution, cancellationToken);
             var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -89,7 +100,7 @@ public class ParallelFileGenerator
             try
             {
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, fileGenerator, cancellationToken))
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, generators, cancellationToken))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -190,9 +201,14 @@ public class ParallelFileGenerator
         }
     }
 
-    private static ChannelReader<FileWorkItem> CreateWorkChannel(long fileCount, int folders, DistributionType distribution, string fileType, int concurrency, CancellationToken cancellationToken)
+    private static IReadOnlyDictionary<string, IFileGenerator> BuildGenerators(FileGenerationRequest request)
+        => FileGeneratorFactory.CreateMap(request);
+
+    private static ChannelReader<FileWorkItem> CreateWorkChannel(Config.OutputConfig output, DistributionType distribution, CancellationToken cancellationToken)
     {
-        var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(concurrency * 2)
+        var fileCount = output.FileCount;
+        var folders = output.Folders;
+        var channel = Channel.CreateBounded<FileWorkItem>(new BoundedChannelOptions(output.Concurrency * 2)
         {
             FullMode = BoundedChannelFullMode.Wait,
         });
@@ -204,6 +220,7 @@ public class ParallelFileGenerator
             {
                 for (long i = 1; i <= fileCount; i++)
                 {
+                    var fileType = output.ResolveFileType(i);
                     var folderNumber = Distributions.GetFolderNumber(i, fileCount, folders, distribution);
                     var folderName = $"folder_{folderNumber:D3}";
                     var fileName = $"{i:D8}.{fileType}";
@@ -216,6 +233,7 @@ public class ParallelFileGenerator
                         FolderName = folderName,
                         FileName = fileName,
                         FilePathInZip = filePathInZip,
+                        FileType = fileType,
                     }, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -230,12 +248,13 @@ public class ParallelFileGenerator
         return channel.Reader;
     }
 
-    private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IFileGenerator fileGenerator, CancellationToken cancellationToken)
+    private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IReadOnlyDictionary<string, IFileGenerator> generators, CancellationToken cancellationToken)
     {
         long filesProcessed = 0;
 
         await foreach (var workItem in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
+            var fileGenerator = generators[workItem.EffectiveFileType(request)];
             var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
             try
             {
@@ -486,6 +505,16 @@ internal record FileWorkItem
     public string FileName { get; init; } = string.Empty;
 
     public string FilePathInZip { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Per-record File Type (lowercased) for mixed-type runs. Empty means the
+    /// request-level File Type applies (single-type runs and legacy constructions).
+    /// </summary>
+    public string FileType { get; init; } = string.Empty;
+
+    /// <summary>Returns the per-record File Type, falling back to the request-level type.</summary>
+    public string EffectiveFileType(FileGenerationRequest request)
+        => string.IsNullOrEmpty(this.FileType) ? request.Output.FileTypeLower : this.FileType;
 }
 
 internal record FileData

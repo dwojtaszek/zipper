@@ -415,7 +415,7 @@ public class CliValidatorTests
                 var result = CliValidator.Validate(args);
                 Assert.True(result);
                 var output = errWriter.ToString();
-                Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
+                Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -442,7 +442,7 @@ public class CliValidatorTests
                 var result = CliValidator.Validate(args);
                 Assert.True(result);
                 var output = errWriter.ToString();
-                Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
+                Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -469,7 +469,7 @@ public class CliValidatorTests
                 var result = CliValidator.Validate(args);
                 Assert.True(result);
                 var output = errWriter.ToString();
-                Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
+                Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
             finally
             {
@@ -495,7 +495,7 @@ public class CliValidatorTests
                 var result = CliValidator.Validate(args);
                 Assert.True(result);
                 var output = errWriter.ToString();
-                Assert.Contains("Warning: --with-families is only meaningful when --type eml and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
+                Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
             finally
             {

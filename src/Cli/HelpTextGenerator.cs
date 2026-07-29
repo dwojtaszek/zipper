@@ -16,6 +16,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --output-path <path>     Output directory path");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Optional Arguments:");
+        Console.Error.WriteLine("  --types <list>           File Type Mix alternative to --type (e.g., \"pdf:50,eml:30,tiff:20\")");
         Console.Error.WriteLine("  --folders <number>       Number of folders (1-100, default: 1)");
         Console.Error.WriteLine("  --encoding <string>      Encoding: UTF-8, UTF-16, ANSI (default: UTF-8)");
         Console.Error.WriteLine("  --distribution <string>  Distribution: proportional, gaussian, exponential");
