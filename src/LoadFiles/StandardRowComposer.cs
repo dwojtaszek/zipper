@@ -72,9 +72,10 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var colMeta = includeCollectionMeta ? SyntheticRowValues.CollectionMetadata(wi, random, now) : default;
 
             bool hasAttachment = this.request.Metadata.WithFamilies && recordIsEml && fileData.Attachment.HasValue;
-            string parentId = this.batesSequence is not null
-                ? this.batesSequence.Format(wi.Index - 1).ToString()
-                : $"DOC{wi.Index:D8}";
+            string parentId = wi.BatesNumberOverride
+                ?? (this.batesSequence is not null
+                    ? this.batesSequence.Format(wi.Index - 1).ToString()
+                    : wi.ControlNumberOverride ?? $"DOC{wi.Index:D8}");
             string childId = hasAttachment ? $"{parentId}_A001" : parentId;
 
             var parentCtx = new RowCtx
@@ -94,11 +95,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             {
                 var attach = fileData.Attachment!.Value;
                 var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-                var attachmentPath = $"{wi.FolderName}/{wi.Index}_{sanitizedFilename}";
+                var attachmentPath = $"{wi.FolderPrefix}{wi.Index}_{sanitizedFilename}";
                 var childCtx = new RowCtx
                 {
                     IdOverride = childId,
-                    ControlOverride = $"DOC{wi.Index:D8}_A001",
+                    ControlOverride = this.batesSequence is null ? childId : $"DOC{wi.Index:D8}_A001",
                     FilePathOverride = attachmentPath,
                     FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     IsChild = true,
@@ -184,7 +185,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         {
             "BEGATTY" => this.request.Metadata.WithFamilies ? ctx.BegAttach : string.Empty,
             "ENDATTY" => this.request.Metadata.WithFamilies ? ctx.EndAttach : string.Empty,
-            "CONTROL" => ctx.ControlOverride ?? $"DOC{wi.Index:D8}",
+            "CONTROL" => ctx.ControlOverride ?? wi.ControlNumberOverride ?? $"DOC{wi.Index:D8}",
             "PATH" => ctx.FilePathOverride ?? wi.FilePathInZip,
             "FILETYPE" => ctx.IsChild && fileData.Attachment.HasValue
                 ? System.IO.Path.GetExtension(fileData.Attachment.Value.filename).TrimStart('.').ToUpperInvariant()
@@ -206,11 +207,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "PROCESSING_STATUS" => colMeta.ProcessingStatus,
             "BATES" => ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString(),
             "PAGECOUNT" => ResolvePageCount(ctx, fileData),
-            // Whole-string Replace (not extension-only) preserves byte-for-byte parity with the
-            // legacy writers; FilePathInZip folder segments never contain ".{FileType}" in practice.
             "TEXT" => ctx.IsChild
-                ? $"{wi.FolderName}/{wi.Index}_{System.IO.Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(fileData.Attachment!.Value.filename))}.txt"
-                : wi.FilePathInZip.Replace($".{wi.EffectiveFileType(this.request)}", ".txt", StringComparison.Ordinal),
+                ? $"{wi.FolderPrefix}{wi.Index}_{System.IO.Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(fileData.Attachment!.Value.filename))}.txt"
+                : TextPathHelper.GetTextPath(wi.FilePathInZip),
             "BEGATTACH" => ctx.BegAttach,
             "ENDATTACH" => ctx.EndAttach,
             "PARENTDOCID" => ctx.ParentDocId,

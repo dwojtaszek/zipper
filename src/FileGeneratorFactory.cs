@@ -27,13 +27,16 @@ internal static class FileGeneratorFactory
     }
 
     /// <summary>
-    /// Creates one generator per File Type participating in the request
-    /// (the File Type Mix plan when present, otherwise the single request File Type).
+    /// Creates one generator per File Type participating in the request (the File Type Mix
+    /// plan when present, else the Source-Driven Generation row types, else the single
+    /// request File Type).
     /// </summary>
     internal static IReadOnlyDictionary<string, IFileGenerator> CreateMap(FileGenerationRequest request)
     {
         var output = request.Output;
-        var types = output.FileTypePlan?.Types ?? (IReadOnlyList<string>)new[] { output.FileTypeLower };
+        var types = output.FileTypePlan?.Types
+            ?? output.SourceFileTypes
+            ?? (IReadOnlyList<string>)new[] { output.FileTypeLower };
         var generators = new Dictionary<string, IFileGenerator>(StringComparer.Ordinal);
         foreach (var type in types)
         {

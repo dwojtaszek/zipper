@@ -179,3 +179,11 @@ REQ-193	unit	MixedFileTypeGenerationTests.DatWriter_MixedTypes_EmailColumnsBlank
 REQ-194	unit	MixedFileTypeGenerationTests.DatWriter_MixedTypes_PageCountBlankForNonTiffRecords	Page Count only on TIFF records
 REQ-195	unit	MixedFileTypeGenerationTests.ProductionSet_MixedTypes_NativesAndDatReflectPerRecordType	Per-record FILE_TYPE in Production DAT; Standard mix File Type column
 REQ-196	unit	MixedFileTypeCliTests.Build_MixWithTiffOrJpg_DefaultsToDatAndOpt	Default DAT+OPT when jpg/tiff in mix; single-entry degenerates
+REQ-197	unit	SourceCsvReaderTests.TryRead_FullCsv_MapsControlBatesAndExtraColumns	Source CSV columns, aliases, quoting, row-numbered errors
+REQ-198	unit	DirectoryTemplateReaderTests.TryRead_ExtensionInference_MapsToFileType	Directory Template walk; extension inference; placeholder bytes only
+REQ-199	unit	SourcePathSanitizerTests.TryNormalize_ParentTraversal_Rejected	Path safety: traversal, rooted, UNC, drive-qualified rejected
+REQ-200	e2e	test-source-driven.sh	Source input validation: count match, --type/--types/--production-set rejection
+REQ-201	unit	SourceDrivenGenerationTests.StandardArchive_SourceRows_ZipEntriesAndDatPathsMatchRelativePaths	Archive entries and Load File rows mirror source records in order
+REQ-202	unit	SourceDrivenGenerationTests.StandardArchive_SourceBates_BatesColumnUsesRowOverride	ControlNumber/BatesNumber overrides; sequence fallback
+REQ-203	unit	SourceDrivenGenerationTests.StandardArchive_ProfileMapsSourceMetadataIntoDatColumns	Source Metadata via Column Profile (DAT), unmatched ignored
+REQ-204	e2e	test-source-driven.sh	Multiple source File Types: File Type column, per-record gating, DAT+OPT default

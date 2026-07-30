@@ -244,7 +244,7 @@ internal class ZipArchiveSink : IArchiveSink
         }
 
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
-        var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{sanitizedFilename}".Replace('\\', '/');
+        var entryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}".Replace('\\', '/');
         if (!usedEntryPaths.Add(entryPath))
         {
             return;
@@ -267,7 +267,7 @@ internal class ZipArchiveSink : IArchiveSink
 
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
         var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt";
-        var entryPath = $"{fileData.WorkItem.FolderName}/{fileData.WorkItem.Index}_{attachmentTextFileName}".Replace('\\', '/');
+        var entryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{attachmentTextFileName}".Replace('\\', '/');
         if (!usedEntryPaths.Add(entryPath))
         {
             return;
@@ -285,8 +285,8 @@ internal class ZipArchiveSink : IArchiveSink
     {
         System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
-        var textFileName = fileData.WorkItem.FileName.Replace($".{fileData.WorkItem.EffectiveFileType(request)}", ".txt", StringComparison.Ordinal);
-        var entryPath = $"{fileData.WorkItem.FolderName}/{textFileName}".Replace('\\', '/');
+        var textFileName = LoadFiles.TextPathHelper.GetTextPath(fileData.WorkItem.FileName);
+        var entryPath = $"{fileData.WorkItem.FolderPrefix}{textFileName}".Replace('\\', '/');
 
         if (!usedEntryPaths.Add(entryPath))
         {

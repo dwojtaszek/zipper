@@ -581,6 +581,14 @@ if errorlevel 1 (
 )
 call :print_success "Mixed file types tests passed."
 
+call :print_info "Running source-driven generation tests..."
+call .\tests\test-source-driven.bat
+if errorlevel 1 (
+    echo [ ERROR ] Source-driven generation tests failed.
+    exit /b 1
+)
+call :print_success "Source-driven generation tests passed."
+
 REM Test 14b: CI build props tests
 call :print_info "Running CI build props tests..."
 call .\tests\test-ci-build-props.bat

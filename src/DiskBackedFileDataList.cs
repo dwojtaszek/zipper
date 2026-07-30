@@ -125,6 +125,24 @@ internal static class FileDataSerializer
             writer.Write(data.Email.Subject ?? string.Empty);
             writer.Write(data.Email.SentDate.Ticks);
         }
+
+        writer.Write(data.WorkItem.ControlNumberOverride ?? string.Empty);
+        writer.Write(data.WorkItem.BatesNumberOverride ?? string.Empty);
+
+        if (data.WorkItem.SourceMetadata is not null)
+        {
+            writer.Write(true);
+            writer.Write(data.WorkItem.SourceMetadata.Count);
+            foreach (var kvp in data.WorkItem.SourceMetadata)
+            {
+                writer.Write(kvp.Key);
+                writer.Write(kvp.Value);
+            }
+        }
+        else
+        {
+            writer.Write(false);
+        }
     }
 
     public static FileData Deserialize(BinaryReader reader)
@@ -177,6 +195,22 @@ internal static class FileDataSerializer
             };
         }
 
+        var controlNumberOverride = reader.ReadString();
+        var batesNumberOverride = reader.ReadString();
+
+        IReadOnlyDictionary<string, string>? sourceMetadata = null;
+        if (reader.ReadBoolean())
+        {
+            var metadataCount = reader.ReadInt32();
+            var metadata = new Dictionary<string, string>(metadataCount, StringComparer.Ordinal);
+            for (int i = 0; i < metadataCount; i++)
+            {
+                metadata[reader.ReadString()] = reader.ReadString();
+            }
+
+            sourceMetadata = metadata;
+        }
+
         return new FileData
         {
             WorkItem = new FileWorkItem
@@ -186,7 +220,10 @@ internal static class FileDataSerializer
                 FolderName = folderName,
                 FileName = fileName,
                 FilePathInZip = filePathInZip,
-                FileType = fileType
+                FileType = fileType,
+                ControlNumberOverride = controlNumberOverride.Length > 0 ? controlNumberOverride : null,
+                BatesNumberOverride = batesNumberOverride.Length > 0 ? batesNumberOverride : null,
+                SourceMetadata = sourceMetadata
             },
             DataLength = dataLength,
             PageCount = pageCount,

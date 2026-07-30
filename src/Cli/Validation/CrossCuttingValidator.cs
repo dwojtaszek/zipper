@@ -8,11 +8,64 @@ internal static class CrossCuttingValidator
     public static bool Validate(ParsedArguments parsed)
     {
         return ValidateFileTypeMix(parsed) &&
+               ValidateSourceInput(parsed) &&
                ValidateFormattingAndProfiles(parsed) &&
                ValidateChaos(parsed) &&
                ValidateDelimiters(parsed) &&
                ValidateBates(parsed) &&
                ValidateHashes(parsed);
+    }
+
+    private static bool ValidateSourceInput(ParsedArguments parsed)
+    {
+        var hasCsv = !string.IsNullOrEmpty(parsed.InputCsv);
+        var hasDirectory = !string.IsNullOrEmpty(parsed.DirectoryTemplate);
+        if (!hasCsv && !hasDirectory)
+        {
+            return true;
+        }
+
+        if (hasCsv && hasDirectory)
+        {
+            Console.Error.WriteLine("Error: --input-csv and --directory-template cannot be used together.");
+            return false;
+        }
+
+        if (parsed.ProductionSet)
+        {
+            Console.Error.WriteLine("Error: --input-csv/--directory-template are not supported with --production-set.");
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(parsed.FileType))
+        {
+            Console.Error.WriteLine("Error: --type cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
+            return false;
+        }
+
+        if (parsed.FileTypes is not null)
+        {
+            Console.Error.WriteLine("Error: --types cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
+            return false;
+        }
+
+        var sourcePath = hasCsv ? parsed.InputCsv! : parsed.DirectoryTemplate!;
+        if (!PathValidator.IsPathSafe(sourcePath, Directory.GetCurrentDirectory()))
+        {
+            Console.Error.WriteLine($"Error: Path traversal detected in source input path '{sourcePath}'. Source input must reside within working directory.");
+            return false;
+        }
+
+        var exists = hasCsv ? File.Exists(sourcePath) : Directory.Exists(sourcePath);
+        if (!exists)
+        {
+            Console.Error.WriteLine(hasCsv
+                ? $"Error: Source CSV '{sourcePath}' does not exist."
+                : $"Error: Directory template '{sourcePath}' does not exist.");
+            return false;
+        }
+
+        return true;
     }
 
     private static bool ValidateFileTypeMix(ParsedArguments parsed)

@@ -92,6 +92,10 @@ internal sealed class OptComposer : ILoadFileComposer
             {
                 baseBatesNumber = this.batesSequence!.Format(workItem.Index - 1).ToString();
             }
+            else if (workItem.BatesNumberOverride is not null)
+            {
+                baseBatesNumber = workItem.BatesNumberOverride;
+            }
             else if (this.batesSequence is not null)
             {
                 baseBatesNumber = this.batesSequence.Format(workItem.Index - 1).ToString();
@@ -109,10 +113,14 @@ internal sealed class OptComposer : ILoadFileComposer
                 : $"IMAGES\\{baseBatesNumber}.tif";
 
             var recordType = workItem.EffectiveFileType(this.request);
-            int actualPages = this.request.Tiff.ShouldIncludePageCount(this.request.Output)
-                && string.Equals(recordType, "tiff", StringComparison.Ordinal)
-                ? Math.Max(1, fileData.PageCount)
-                : 1;
+            var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
+
+            // Source-driven Loadfile-Only shells carry synthetic page counts; expand them like
+            // the legacy loadfile-only path (random 1-10 pages), even without --tiff-pages.
+            var expandPages = recordIsTiff
+                && (this.request.Tiff.ShouldIncludePageCount(this.request.Output)
+                    || (this.request.LoadfileOnly && this.request.SourceRecords is not null));
+            int actualPages = expandPages ? Math.Max(1, fileData.PageCount) : 1;
             bool hasAttachment = this.request.Metadata.WithFamilies
                 && string.Equals(recordType, "eml", StringComparison.Ordinal)
                 && fileData.Attachment.HasValue;

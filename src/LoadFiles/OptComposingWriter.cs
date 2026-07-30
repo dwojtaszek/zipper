@@ -31,7 +31,11 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         ChaosEngine? chaosEngine = null,
         CancellationToken cancellationToken = default)
     {
-        if (this.mode == WriterMode.Standard)
+        // Source-Driven Loadfile-Only reuses the Standard composer shape for Source Record
+        // shells, but writes on-disk Load Files: the in-archive quirks (no chaos, column
+        // warnings) apply only to true in-archive runs.
+        var inArchive = this.mode == WriterMode.Standard && !request.LoadfileOnly;
+        if (inArchive)
         {
             WarnUnsupportedStandardColumns(request);
         }
@@ -40,7 +44,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         var serializer = new OptSerializer();
 
         // Standard (in-archive) OPT ignored chaos entirely; loadfile-only and production applied chaos.
-        var effectiveChaos = this.mode == WriterMode.Standard ? null : chaosEngine;
+        var effectiveChaos = inArchive ? null : chaosEngine;
         var policy = new TextOutputPolicy(request, LoadFileFormat.Opt, this.mode, effectiveChaos is not null);
 
         var records = composer.Compose(processedFiles);

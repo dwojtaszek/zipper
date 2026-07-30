@@ -41,7 +41,10 @@ internal sealed class TextOutputPolicy
 
         // EOL quirk preserved: standard (in-archive) generation used the platform newline,
         // every other path (loadfile-only, production, and all chaos) uses the configured EOL.
-        return (mode == WriterMode.Standard && !hasChaos)
+        // Source-Driven Loadfile-Only reuses the Standard composers but writes on-disk Load
+        // Files, so it follows the loadfile-only rule (configured EOL).
+        var inArchive = mode == WriterMode.Standard && !request.LoadfileOnly;
+        return (inArchive && !hasChaos)
             ? Environment.NewLine
             : LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
     }

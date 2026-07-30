@@ -6,6 +6,10 @@ public class ParsedArguments
 
     public string? FileTypes { get; set; }
 
+    public string? InputCsv { get; set; }
+
+    public string? DirectoryTemplate { get; set; }
+
     public long? Count { get; set; }
 
     public DirectoryInfo? OutputDirectory { get; set; }

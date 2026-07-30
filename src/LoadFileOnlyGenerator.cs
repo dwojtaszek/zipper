@@ -44,26 +44,31 @@ internal static class LoadFileOnlyGenerator
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
                 generatedFiles.Add(loadFilePath);
 
-                var emptyRecords = Array.Empty<FileData>();
+                // Source-Driven Generation: rows become FileData shells (no Native File bytes)
+                // and flow through the Standard composers so every Load File Format reflects
+                // source paths, File Types, and record identity.
+                var sourceDriven = formatRequest.SourceRecords is not null;
+                IReadOnlyList<FileData> records = sourceDriven
+                    ? BuildSourceShells(formatRequest)
+                    : Array.Empty<FileData>();
+                var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
 
-
-
-                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, emptyRecords, format);
+                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
 
                 ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
-                    WriterMode.LoadfileOnly);
+                    writerMode);
 
                 var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
                 await using (fileStream.ConfigureAwait(false))
                 {
-                    await writer.WriteAsync(fileStream, formatRequest, emptyRecords, chaosEngine, cancellationToken).ConfigureAwait(false);
+                    await writer.WriteAsync(fileStream, formatRequest, records, chaosEngine, cancellationToken).ConfigureAwait(false);
                 }
 
                 string propertiesPath = await LoadFileAuditWriter.WriteAsync(
                     loadFilePath,
                     formatRequest,
-                    emptyRecords,
+                    records,
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
                 generatedFiles.Add(propertiesPath);
@@ -72,7 +77,7 @@ internal static class LoadFileOnlyGenerator
                 {
                     primaryLoadFilePath = loadFilePath;
                     primaryPropertiesPath = propertiesPath;
-                    var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(formatRequest, emptyRecords, format);
+                    var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(formatRequest, records, format);
                     totalRecords = total;
                 }
             }
@@ -106,6 +111,60 @@ internal static class LoadFileOnlyGenerator
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// Builds in-memory <see cref="FileData"/> shells from Source Records for Loadfile-Only
+    /// mode: real paths, File Types, and record identity; synthetic sizes, page counts, and
+    /// (when enabled) simulated hashes. No Native File bytes are produced.
+    /// </summary>
+    private static IReadOnlyList<FileData> BuildSourceShells(FileGenerationRequest request)
+    {
+        var sourceRecords = request.SourceRecords!;
+        var random = request.Metadata.Seed.HasValue
+#pragma warning disable S2245
+            ? new Random(request.Metadata.Seed.Value + 1)
+            : new Random();
+#pragma warning restore S2245
+
+        var shells = new List<FileData>(sourceRecords.Count);
+        long index = 0;
+        foreach (var row in sourceRecords)
+        {
+            index++;
+            var workItem = row.ToWorkItem(index);
+            var pageCount = request.Tiff.PageRange.HasValue
+                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, index)
+                : random.Next(1, 11);
+
+            shells.Add(new FileData
+            {
+                WorkItem = workItem,
+                DataLength = random.Next(1024, 10_485_760),
+                PageCount = pageCount,
+                Hashes = request.Hash.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(request, workItem) : null,
+            });
+        }
+
+        return shells;
+    }
+
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string>? GenerateSimulatedHashes(FileGenerationRequest request, FileWorkItem workItem)
+    {
+        var hashConfig = request.Hash;
+        if (!hashConfig.IsEnabled)
+        {
+            return null;
+        }
+
+        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
+        var rng = Config.HashUtility.CreateSeededRandom(request, workItem.Index);
+        foreach (var algo in hashConfig.Algorithms)
+        {
+            dict[algo] = Config.HashUtility.GenerateSimulatedHash(algo, rng);
+        }
+
+        return dict;
     }
 
     private static FileGenerationRequest EnsureStableOptPageCounts(FileGenerationRequest request, LoadFileFormat format)
