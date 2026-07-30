@@ -1,0 +1,1410 @@
+{
+  "name": "full",
+  "description": "Maximum field coverage for comprehensive data generation",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 20,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "custodians": {
+      "count": 100,
+      "distribution": "pareto",
+      "prefix": "Custodian_"
+    },
+    "authors": {
+      "count": 200,
+      "distribution": "pareto",
+      "prefix": "Author_"
+    },
+    "departments": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Legal",
+        "Finance",
+        "HR",
+        "Engineering",
+        "Sales",
+        "Marketing",
+        "Operations",
+        "Executive",
+        "IT",
+        "Compliance",
+        "Research",
+        "Support"
+      ]
+    },
+    "docTypes": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Email",
+        "Document",
+        "Spreadsheet",
+        "Presentation",
+        "Image",
+        "PDF",
+        "Contract",
+        "Invoice",
+        "Memo",
+        "Report",
+        "Letter",
+        "Fax",
+        "Note"
+      ]
+    },
+    "privilegeTypes": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Attorney-Client",
+        "Work Product",
+        "Not Privileged",
+        "Needs Review"
+      ],
+      "weights": [
+        5,
+        5,
+        80,
+        10
+      ]
+    },
+    "responsiveness": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Responsive",
+        "Not Responsive",
+        "Needs Review",
+        "Privileged"
+      ],
+      "weights": [
+        40,
+        35,
+        15,
+        10
+      ]
+    },
+    "confidentiality": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Public",
+        "Internal",
+        "Confidential",
+        "Highly Confidential"
+      ],
+      "weights": [
+        20,
+        50,
+        25,
+        5
+      ]
+    },
+    "tags": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Key Document",
+        "Hot Document",
+        "Duplicate",
+        "Near-Duplicate",
+        "Foreign Language",
+        "Privileged Review",
+        "Redaction Required"
+      ]
+    },
+    "issues": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Issue 1",
+        "Issue 2",
+        "Issue 3",
+        "Issue 4",
+        "Issue 5",
+        "Issue 6",
+        "Issue 7",
+        "Issue 8"
+      ]
+    },
+    "languages": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "English",
+        "Spanish",
+        "French",
+        "German",
+        "Chinese",
+        "Japanese",
+        "Korean",
+        "Portuguese",
+        "Italian",
+        "Russian"
+      ],
+      "weights": [
+        80,
+        5,
+        3,
+        2,
+        2,
+        2,
+        1,
+        2,
+        2,
+        1
+      ]
+    }
+  },
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "BEGBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "ENDBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "CONTROLNUMBER",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "BEGATTACH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "ENDATTACH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "PARENTDOCID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "FAMILYID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "FILEPATH",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "TEXTPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false
+    },
+    {
+      "name": "NATIVEPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "FILENAME",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILEEXT",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILESIZE",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1024,
+        "max": 104857600
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "PAGECOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1,
+        "max": 500
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "WORDCOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 50000
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "CHARCOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 250000
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "DATECREATED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATEMODIFIED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATESENT",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATERECEIVED",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATEPRODUCED",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2024-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTODIAN",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "custodians"
+    },
+    {
+      "name": "AUTHOR",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false,
+      "dataSource": "authors"
+    },
+    {
+      "name": "EMAILFROM",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false
+    },
+    {
+      "name": "EMAILTO",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 1,
+        "max": 10
+      }
+    },
+    {
+      "name": "EMAILCC",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 15
+      }
+    },
+    {
+      "name": "EMAILBCC",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      }
+    },
+    {
+      "name": "EMAILSUBJECT",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "generator": "emailsubject"
+    },
+    {
+      "name": "CONVERSATIONID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "MESSAGEID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "DOCTYPE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "docTypes"
+    },
+    {
+      "name": "DEPARTMENT",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 20,
+      "multiValue": false,
+      "dataSource": "departments"
+    },
+    {
+      "name": "PRIVILEGE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "privilegeTypes"
+    },
+    {
+      "name": "RESPONSIVE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "responsiveness"
+    },
+    {
+      "name": "CONFIDENTIALITY",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "confidentiality"
+    },
+    {
+      "name": "LANGUAGE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "languages"
+    },
+    {
+      "name": "ISRESPONSIVE",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 60
+    },
+    {
+      "name": "ISPRIVILEGED",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 10
+    },
+    {
+      "name": "ISCONFIDENTIAL",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 25
+    },
+    {
+      "name": "HASATTACHMENTS",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 30
+    },
+    {
+      "name": "ISNATIVE",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 70
+    },
+    {
+      "name": "NEEDSREDACTION",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 15
+    },
+    {
+      "name": "MD5HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "md5Hash"
+    },
+    {
+      "name": "SHA1HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "sha1Hash"
+    },
+    {
+      "name": "SHA256HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "sha256Hash"
+    },
+    {
+      "name": "REVIEWNOTES",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 80,
+      "multiValue": false,
+      "generator": "reviewNote"
+    },
+    {
+      "name": "REDACTIONREASON",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT01",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 52,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT02",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 54,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT03",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 56,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT04",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 58,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT05",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT06",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 62,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT07",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 64,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT08",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 66,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT09",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 68,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT10",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT11",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 72,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT12",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 74,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT13",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 76,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT14",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 78,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT15",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 80,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT16",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 82,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT17",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 84,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT18",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 86,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT19",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 88,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMTEXT20",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTOMDATE01",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 43,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE02",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 46,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE03",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 49,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE04",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 52,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE05",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 55,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE06",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 58,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE07",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 61,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE08",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 64,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE09",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 67,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE10",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE11",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 73,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE12",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 76,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE13",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 79,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE14",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 82,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMDATE15",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 85,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2015-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER01",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 33,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER02",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 36,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER03",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 39,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER04",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 42,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER05",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 45,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER06",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 48,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER07",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 51,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER08",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 54,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER09",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 57,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER10",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER11",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 63,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER12",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 66,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER13",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 69,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER14",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 72,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMNUMBER15",
+      "type": "number",
+      "required": false,
+      "emptyPercentage": 75,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 10000
+      }
+    },
+    {
+      "name": "CUSTOMBOOL01",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 34
+    },
+    {
+      "name": "CUSTOMBOOL02",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 38
+    },
+    {
+      "name": "CUSTOMBOOL03",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 42
+    },
+    {
+      "name": "CUSTOMBOOL04",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 46
+    },
+    {
+      "name": "CUSTOMBOOL05",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 50
+    },
+    {
+      "name": "CUSTOMBOOL06",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 54
+    },
+    {
+      "name": "CUSTOMBOOL07",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 58
+    },
+    {
+      "name": "CUSTOMBOOL08",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 62
+    },
+    {
+      "name": "CUSTOMBOOL09",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 66
+    },
+    {
+      "name": "CUSTOMBOOL10",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 70
+    },
+    {
+      "name": "ISSUETAG01",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      },
+      "dataSource": "issues"
+    },
+    {
+      "name": "ISSUETAG02",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      },
+      "dataSource": "issues"
+    },
+    {
+      "name": "ISSUETAG03",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      },
+      "dataSource": "issues"
+    },
+    {
+      "name": "ISSUETAG04",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      },
+      "dataSource": "issues"
+    },
+    {
+      "name": "ISSUETAG05",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      },
+      "dataSource": "issues"
+    },
+    {
+      "name": "NOTES01",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 72,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES02",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 74,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES03",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 76,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES04",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 78,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES05",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 80,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES06",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 82,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES07",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 84,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES08",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 86,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES09",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 88,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "NOTES10",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": false,
+      "generator": "loremParagraphs",
+      "generatorParams": {
+        "min": 1,
+        "max": 3
+      }
+    },
+    {
+      "name": "PRODUCTIONSTATUS",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dataSource": "responsiveness"
+    },
+    {
+      "name": "REVIEWSTATUS",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 20,
+      "multiValue": false,
+      "dataSource": "responsiveness"
+    },
+    {
+      "name": "QCSTATUS",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 60,
+      "multiValue": false,
+      "dataSource": "responsiveness"
+    },
+    {
+      "name": "ENCODING",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 10,
+      "multiValue": false,
+      "generator": "encoding"
+    },
+    {
+      "name": "TIMEZONE",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 20,
+      "multiValue": false,
+      "generator": "timezone"
+    },
+    {
+      "name": "TAG01",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG02",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG03",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG04",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG05",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG06",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG07",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG08",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG09",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    },
+    {
+      "name": "TAG10",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false,
+      "dataSource": "tags"
+    }
+  ]
+}

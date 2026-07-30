@@ -1,0 +1,42 @@
+{
+  "name": "legacyWithMetadata",
+  "description": "Legacy --with-metadata pseudo-profile (non-EML)",
+  "version": "1.0",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {},
+  "columns": [
+    {
+      "name": "CUSTODIAN",
+      "type": "foldercustodian",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "DATESENT",
+      "type": "legacydatesent",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "AUTHOR",
+      "type": "legacyauthor",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "FILESIZE",
+      "type": "filedatasize",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    }
+  ]
+}

@@ -1,7 +1,11 @@
+using System.Text.Json;
+
 namespace Zipper.Profiles;
 
 /// <summary>
 /// Provides built-in column profiles for common e-discovery workflows.
+/// Profile data lives in embedded JSON resources under Profiles/BuiltIns/ and is
+/// deserialized with the same JSON format and serializer options as custom JSON profiles.
 /// </summary>
 public static class BuiltInProfiles
 {
@@ -10,157 +14,50 @@ public static class BuiltInProfiles
     /// </summary>
     public static readonly string[] ProfileNames = { "minimal", "standard", "litigation", "full" };
 
+    private static readonly string[] ResourceNames =
+    {
+        "minimal", "standard", "litigation", "full", "legacywithmetadata", "legacyeml", "legacywithcollectionmetadata",
+    };
+
+    private static readonly Lazy<IReadOnlyDictionary<string, ColumnProfile>> Profiles = new(LoadProfiles);
+
     /// <summary>
     /// Gets the minimal profile (5 columns).
     /// </summary>
-    public static ColumnProfile Minimal { get; } = new()
-    {
-        Name = "minimal",
-        Description = "Basic fields for minimal load file generation",
-        Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
-        Settings = new ProfileSettings
-        {
-            EmptyValuePercentage = 0,
-            DateFormat = "yyyy-MM-dd",
-        },
-        DataSources = new Dictionary<string, DataSourceConfig>
-(StringComparer.Ordinal)
-        {
-            ["custodians"] = new DataSourceConfig { Count = 10, Distribution = "pareto", Prefix = "Custodian_" },
-        },
-        Columns = new List<ColumnDefinition>
-        {
-            new() { Name = "DOCID", Type = "identifier", Required = true },
-            new() { Name = "FILEPATH", Type = "text", Required = true },
-            new() { Name = "CUSTODIAN", Type = "text", DataSource = "custodians", EmptyPercentage = 0 },
-            new() { Name = "DATECREATED", Type = "date", DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" } },
-            new() { Name = "FILESIZE", Type = "number", Range = new RangeConfig { Min = 1024, Max = 10485760 }, Distribution = "exponential" },
-        },
-    };
+    public static ColumnProfile Minimal => GetShared("minimal");
 
     /// <summary>
     /// Gets the standard profile (24 columns).
     /// </summary>
-    public static ColumnProfile Standard { get; } = new()
-    {
-        Name = "standard",
-        Description = "Common e-discovery fields for standard workflows",
-        Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
-        Settings = new ProfileSettings
-        {
-            EmptyValuePercentage = 10,
-            MultiValueDelimiter = ";",
-            DateFormat = "yyyy-MM-dd",
-        },
-        DataSources = new Dictionary<string, DataSourceConfig>
-(StringComparer.Ordinal)
-        {
-            ["custodians"] = new DataSourceConfig { Count = 25, Distribution = "pareto", Prefix = "Custodian_" },
-            ["authors"] = new DataSourceConfig { Count = 50, Distribution = "pareto", Prefix = "Author_" },
-            ["departments"] = new DataSourceConfig { Values = new List<string> { "Legal", "Finance", "HR", "Engineering", "Sales", "Marketing", "Operations", "Executive" } },
-            ["docTypes"] = new DataSourceConfig { Values = new List<string> { "Email", "Document", "Spreadsheet", "Presentation", "Image", "PDF", "Other" } },
-        },
-        Columns = new List<ColumnDefinition>
-        {
-            // Identifiers
-            new() { Name = "DOCID", Type = "identifier", Required = true },
-            new() { Name = "BEGBATES", Type = "text", Required = true },
-            new() { Name = "ENDBATES", Type = "text", Required = true },
-            new() { Name = "CONTROLNUMBER", Type = "text", Required = true },
-
-            // File info
-            new() { Name = "FILEPATH", Type = "text", Required = true },
-            new() { Name = "TEXTPATH", Type = "text", EmptyPercentage = 5 },
-            new() { Name = "NATIVEPATH", Type = "text", EmptyPercentage = 0 },
-            new() { Name = "FILENAME", Type = "text", Required = true },
-            new() { Name = "FILEEXT", Type = "text", Required = true },
-            new() { Name = "FILESIZE", Type = "number", Range = new RangeConfig { Min = 1024, Max = 104857600 }, Distribution = "exponential" },
-
-            // Dates
-            new() { Name = "DATECREATED", Type = "date", DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" } },
-            new() { Name = "DATEMODIFIED", Type = "date", DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" } },
-            new() { Name = "DATESENT", Type = "datetime", DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" }, EmptyPercentage = 30 },
-            new() { Name = "DATERECEIVED", Type = "datetime", DateRange = new DateRangeConfig { Min = "2020-01-01", Max = "2024-12-31" }, EmptyPercentage = 30 },
-
-            // People
-            new() { Name = "CUSTODIAN", Type = "text", DataSource = "custodians", EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "text", DataSource = "authors", EmptyPercentage = 5 },
-            new() { Name = "EMAILFROM", Type = "email", EmptyPercentage = 30 },
-            new() { Name = "EMAILTO", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 1, Max = 5 }, EmptyPercentage = 30 },
-            new() { Name = "EMAILCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 10 }, EmptyPercentage = 50 },
-
-            // Classification
-            new() { Name = "DOCTYPE", Type = "coded", DataSource = "docTypes" },
-            new() { Name = "DEPARTMENT", Type = "coded", DataSource = "departments", EmptyPercentage = 20 },
-            new() { Name = "RESPONSIVE", Type = "boolean", TruePercentage = 60, Format = "YN" },
-            new() { Name = "PRIVILEGED", Type = "boolean", TruePercentage = 10, Format = "YN" },
-            new() { Name = "CONFIDENTIAL", Type = "boolean", TruePercentage = 25, Format = "YN" },
-        },
-    };
+    public static ColumnProfile Standard => GetShared("standard");
 
     /// <summary>
     /// Gets the litigation profile (48 columns).
     /// </summary>
-    public static ColumnProfile Litigation { get; } = new()
-    {
-        Name = "litigation",
-        Description = "Full litigation support with comprehensive metadata",
-        Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
-        Settings = new ProfileSettings
-        {
-            EmptyValuePercentage = 15,
-            MultiValueDelimiter = ";",
-            DateFormat = "yyyy-MM-dd",
-        },
-        DataSources = new Dictionary<string, DataSourceConfig>
-(StringComparer.Ordinal)
-        {
-            ["custodians"] = new DataSourceConfig { Count = 50, Distribution = "pareto", Prefix = "Custodian_" },
-            ["authors"] = new DataSourceConfig { Count = 100, Distribution = "pareto", Prefix = "Author_" },
-            ["departments"] = new DataSourceConfig { Values = new List<string> { "Legal", "Finance", "HR", "Engineering", "Sales", "Marketing", "Operations", "Executive", "IT", "Compliance" } },
-            ["docTypes"] = new DataSourceConfig { Values = new List<string> { "Email", "Document", "Spreadsheet", "Presentation", "Image", "PDF", "Contract", "Invoice", "Memo", "Report" } },
-            ["privilegeTypes"] = new DataSourceConfig { Values = new List<string> { "Attorney-Client", "Work Product", "Not Privileged", "Needs Review" }, Weights = new List<int> { 5, 5, 80, 10 } },
-            ["responsiveness"] = new DataSourceConfig { Values = new List<string> { "Responsive", "Not Responsive", "Needs Review", "Privileged" }, Weights = new List<int> { 40, 35, 15, 10 } },
-            ["confidentiality"] = new DataSourceConfig { Values = new List<string> { "Public", "Internal", "Confidential", "Highly Confidential" }, Weights = new List<int> { 20, 50, 25, 5 } },
-            ["languages"] = new DataSourceConfig { Values = new List<string> { "English", "Spanish", "French", "German", "Chinese", "Japanese" }, Weights = new List<int> { 85, 5, 3, 2, 3, 2 } },
-        },
-        Columns = CreateLitigationColumns(),
-    };
+    public static ColumnProfile Litigation => GetShared("litigation");
 
     /// <summary>
     /// Gets the full profile (138 columns).
     /// </summary>
-    public static ColumnProfile Full { get; } = new()
-    {
-        Name = "full",
-        Description = "Maximum field coverage for comprehensive data generation",
-        Version = "1.0",
-        FieldNamingConvention = "UPPERCASE",
-        Settings = new ProfileSettings
-        {
-            EmptyValuePercentage = 20,
-            MultiValueDelimiter = ";",
-            DateFormat = "yyyy-MM-dd",
-        },
-        DataSources = new Dictionary<string, DataSourceConfig>
-(StringComparer.Ordinal)
-        {
-            ["custodians"] = new DataSourceConfig { Count = 100, Distribution = "pareto", Prefix = "Custodian_" },
-            ["authors"] = new DataSourceConfig { Count = 200, Distribution = "pareto", Prefix = "Author_" },
-            ["departments"] = new DataSourceConfig { Values = new List<string> { "Legal", "Finance", "HR", "Engineering", "Sales", "Marketing", "Operations", "Executive", "IT", "Compliance", "Research", "Support" } },
-            ["docTypes"] = new DataSourceConfig { Values = new List<string> { "Email", "Document", "Spreadsheet", "Presentation", "Image", "PDF", "Contract", "Invoice", "Memo", "Report", "Letter", "Fax", "Note" } },
-            ["privilegeTypes"] = new DataSourceConfig { Values = new List<string> { "Attorney-Client", "Work Product", "Not Privileged", "Needs Review" }, Weights = new List<int> { 5, 5, 80, 10 } },
-            ["responsiveness"] = new DataSourceConfig { Values = new List<string> { "Responsive", "Not Responsive", "Needs Review", "Privileged" }, Weights = new List<int> { 40, 35, 15, 10 } },
-            ["confidentiality"] = new DataSourceConfig { Values = new List<string> { "Public", "Internal", "Confidential", "Highly Confidential" }, Weights = new List<int> { 20, 50, 25, 5 } },
-            ["tags"] = new DataSourceConfig { Values = new List<string> { "Key Document", "Hot Document", "Duplicate", "Near-Duplicate", "Foreign Language", "Privileged Review", "Redaction Required" } },
-            ["issues"] = new DataSourceConfig { Values = new List<string> { "Issue 1", "Issue 2", "Issue 3", "Issue 4", "Issue 5", "Issue 6", "Issue 7", "Issue 8" } },
-            ["languages"] = new DataSourceConfig { Values = new List<string> { "English", "Spanish", "French", "German", "Chinese", "Japanese", "Korean", "Portuguese", "Italian", "Russian" }, Weights = new List<int> { 80, 5, 3, 2, 2, 2, 1, 2, 2, 1 } },
-        },
-        Columns = CreateFullColumns(),
-    };
+    public static ColumnProfile Full => GetShared("full");
+
+    /// <summary>
+    /// Gets the legacy metadata pseudo-profile activated by --with-metadata on non-EML files.
+    /// Four fixed columns: CUSTODIAN (folder-based), DATESENT, AUTHOR, FILESIZE.
+    /// </summary>
+    public static ColumnProfile LegacyWithMetadata => GetShared("legacywithmetadata");
+
+    /// <summary>
+    /// Gets the legacy EML pseudo-profile for EML files.
+    /// Includes metadata columns plus five email columns read from fileData.Email.
+    /// </summary>
+    public static ColumnProfile LegacyEml => GetShared("legacyeml");
+
+    /// <summary>
+    /// Gets the collection metadata profile activated by --with-collection-metadata.
+    /// Five columns: DATA_SOURCE, COLLECTION_DATE, DENISTED, DEDUPE_GROUP_ID, PROCESSING_STATUS.
+    /// </summary>
+    public static ColumnProfile LegacyWithCollectionMetadata => GetShared("legacywithcollectionmetadata");
 
     /// <summary>
     /// Gets a built-in profile by name.
@@ -168,273 +65,10 @@ public static class BuiltInProfiles
     public static ColumnProfile? GetProfile(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        var profile = name.ToLowerInvariant() switch
-        {
-            "minimal" => Minimal,
-            "standard" => Standard,
-            "litigation" => Litigation,
-            "full" => Full,
-            "legacywithmetadata" => LegacyWithMetadata,
-            "legacyeml" => LegacyEml,
-            _ => null,
-        };
-        return profile?.Clone();
-    }
-
-    /// <summary>
-    /// Gets the legacy metadata pseudo-profile activated by --with-metadata on non-EML files.
-    /// Four fixed columns: CUSTODIAN (folder-based), DATESENT, AUTHOR, FILESIZE.
-    /// </summary>
-    public static ColumnProfile LegacyWithMetadata { get; } = new()
-    {
-        Name = "legacyWithMetadata",
-        Description = "Legacy --with-metadata pseudo-profile (non-EML)",
-        Version = "1.0",
-        FieldNamingConvention = null,
-        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
-        Columns = new List<ColumnDefinition>
-        {
-            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
-            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
-        },
-    };
-
-    /// <summary>
-    /// Gets the legacy EML pseudo-profile for EML files.
-    /// Includes metadata columns plus five email columns read from fileData.Email.
-    /// </summary>
-    public static ColumnProfile LegacyEml { get; } = new()
-    {
-        Name = "legacyEml",
-        Description = "Legacy EML pseudo-profile with metadata + email columns",
-        Version = "1.0",
-        FieldNamingConvention = null,
-        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal),
-        Columns = new List<ColumnDefinition>
-        {
-            new() { Name = "CUSTODIAN", Type = "foldercustodian", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DATESENT", Type = "legacydatesent", Required = true, EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "legacyauthor", Required = true, EmptyPercentage = 0 },
-            new() { Name = "FILESIZE", Type = "filedatasize", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILTO", Type = "emailto", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILFROM", Type = "emailfrom", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILCC", Type = "emailcc", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILSUBJECT", Type = "emailsubject", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILSENTDATE", Type = "emailsentdate", Required = true, EmptyPercentage = 0 },
-            new() { Name = "EMAILATTACHMENT", Type = "emailattachment", Required = true, EmptyPercentage = 0 },
-        },
-    };
-
-    /// <summary>
-    /// Gets the collection metadata profile activated by --with-collection-metadata.
-    /// Five columns: DATA_SOURCE, COLLECTION_DATE, DENISTED, DEDUPE_GROUP_ID, PROCESSING_STATUS.
-    /// </summary>
-    public static ColumnProfile LegacyWithCollectionMetadata { get; } = new()
-    {
-        Name = "legacyWithCollectionMetadata",
-        Description = "Legacy --with-collection-metadata pseudo-profile",
-        Version = "1.0",
-        FieldNamingConvention = null,
-        Settings = new ProfileSettings { EmptyValuePercentage = 0 },
-        DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
-        {
-            ["datasource"] = new DataSourceConfig
-            {
-                Values = ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"],
-                Weights = [25, 20, 15, 10, 10, 8, 7, 5],
-            },
-            ["processingstatus"] = new DataSourceConfig
-            {
-                Values = ["Processed", "Pending Review", "Approved", "Privileged", "Redacted", "Produced"],
-                Weights = [40, 20, 15, 10, 10, 5],
-            },
-        },
-        Columns = new List<ColumnDefinition>
-        {
-            new() { Name = "DATA_SOURCE", Type = "coded", DataSource = "datasource", Required = true, EmptyPercentage = 0 },
-            new() { Name = "COLLECTION_DATE", Type = "date", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DENISTED", Type = "boolean", Required = true, EmptyPercentage = 0 },
-            new() { Name = "DEDUPE_GROUP_ID", Type = "identifier", Required = true, EmptyPercentage = 0 },
-            new() { Name = "PROCESSING_STATUS", Type = "coded", DataSource = "processingstatus", Required = true, EmptyPercentage = 0 },
-        },
-    };
-
-    private static List<ColumnDefinition> CreateLitigationColumns()
-    {
-        var columns = new List<ColumnDefinition>
-        {
-            // Core identifiers
-            new() { Name = "DOCID", Type = "identifier", Required = true },
-            new() { Name = "BEGBATES", Type = "text", Required = true },
-            new() { Name = "ENDBATES", Type = "text", Required = true },
-            new() { Name = "CONTROLNUMBER", Type = "text", Required = true },
-            new() { Name = "BEGATTACH", Type = "text", EmptyPercentage = 70 },
-            new() { Name = "ENDATTACH", Type = "text", EmptyPercentage = 70 },
-            new() { Name = "PARENTDOCID", Type = "text", EmptyPercentage = 70 },
-            new() { Name = "FAMILYID", Type = "text", EmptyPercentage = 50 },
-
-            // File info
-            new() { Name = "FILEPATH", Type = "text", Required = true },
-            new() { Name = "TEXTPATH", Type = "text", EmptyPercentage = 5 },
-            new() { Name = "NATIVEPATH", Type = "text", EmptyPercentage = 0 },
-            new() { Name = "FILENAME", Type = "text", Required = true },
-            new() { Name = "FILEEXT", Type = "text", Required = true },
-            new() { Name = "FILESIZE", Type = "number", Range = new RangeConfig { Min = 1024, Max = 104857600 }, Distribution = "exponential" },
-            new() { Name = "PAGECOUNT", Type = "number", Range = new RangeConfig { Min = 1, Max = 500 }, Distribution = "exponential" },
-            new() { Name = "WORDCOUNT", Type = "number", Range = new RangeConfig { Min = 0, Max = 50000 }, Distribution = "exponential" },
-            new() { Name = "CHARCOUNT", Type = "number", Range = new RangeConfig { Min = 0, Max = 250000 }, Distribution = "exponential" },
-
-            // Dates
-            new() { Name = "DATECREATED", Type = "date", DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" } },
-            new() { Name = "DATEMODIFIED", Type = "date", DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" } },
-            new() { Name = "DATESENT", Type = "datetime", DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" }, EmptyPercentage = 30 },
-            new() { Name = "DATERECEIVED", Type = "datetime", DateRange = new DateRangeConfig { Min = "2018-01-01", Max = "2024-12-31" }, EmptyPercentage = 30 },
-            new() { Name = "DATEPRODUCED", Type = "date", DateRange = new DateRangeConfig { Min = "2024-01-01", Max = "2024-12-31" }, EmptyPercentage = 50 },
-
-            // People
-            new() { Name = "CUSTODIAN", Type = "text", DataSource = "custodians", EmptyPercentage = 0 },
-            new() { Name = "AUTHOR", Type = "text", DataSource = "authors", EmptyPercentage = 5 },
-            new() { Name = "EMAILFROM", Type = "email", EmptyPercentage = 30 },
-            new() { Name = "EMAILTO", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 1, Max = 10 }, EmptyPercentage = 30 },
-            new() { Name = "EMAILCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 15 }, EmptyPercentage = 50 },
-            new() { Name = "EMAILBCC", Type = "email", MultiValue = true, MultiValueCount = new RangeConfig { Min = 0, Max = 3 }, EmptyPercentage = 90 },
-            new() { Name = "EMAILSUBJECT", Type = "text", Generator = "emailsubject", EmptyPercentage = 30 },
-            new() { Name = "CONVERSATIONID", Type = "text", EmptyPercentage = 50 },
-            new() { Name = "MESSAGEID", Type = "text", EmptyPercentage = 50 },
-
-            // Classification
-            new() { Name = "DOCTYPE", Type = "coded", DataSource = "docTypes" },
-            new() { Name = "DEPARTMENT", Type = "coded", DataSource = "departments", EmptyPercentage = 20 },
-            new() { Name = "PRIVILEGE", Type = "coded", DataSource = "privilegeTypes" },
-            new() { Name = "RESPONSIVE", Type = "coded", DataSource = "responsiveness" },
-            new() { Name = "CONFIDENTIALITY", Type = "coded", DataSource = "confidentiality" },
-            new() { Name = "LANGUAGE", Type = "coded", DataSource = "languages" },
-
-            // Boolean flags
-            new() { Name = "ISRESPONSIVE", Type = "boolean", TruePercentage = 60, Format = "YN" },
-            new() { Name = "ISPRIVILEGED", Type = "boolean", TruePercentage = 10, Format = "YN" },
-            new() { Name = "ISCONFIDENTIAL", Type = "boolean", TruePercentage = 25, Format = "YN" },
-            new() { Name = "HASATTACHMENTS", Type = "boolean", TruePercentage = 30, Format = "YN" },
-            new() { Name = "ISNATIVE", Type = "boolean", TruePercentage = 70, Format = "YN" },
-            new() { Name = "NEEDSREDACTION", Type = "boolean", TruePercentage = 15, Format = "YN" },
-
-            // Hashes
-            new() { Name = "MD5HASH", Type = "text", Generator = "md5Hash" },
-            new() { Name = "SHA1HASH", Type = "text", Generator = "sha1Hash" },
-            new() { Name = "SHA256HASH", Type = "text", Generator = "sha256Hash" },
-
-            // Notes and text
-            new() { Name = "REVIEWNOTES", Type = "longtext", Generator = "reviewNote", EmptyPercentage = 80 },
-            new() { Name = "REDACTIONREASON", Type = "text", EmptyPercentage = 90 },
-        };
-
-        return columns;
-    }
-
-    private static List<ColumnDefinition> CreateFullColumns()
-    {
-        // Start with litigation columns
-        var columns = CreateLitigationColumns();
-
-        // Add many more columns for the full profile
-        var extraColumns = new List<ColumnDefinition>();
-
-        // Additional metadata fields
-        for (int i = 1; i <= 20; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"CUSTOMTEXT{i:D2}",
-                Type = "text",
-                EmptyPercentage = 50 + (i * 2),
-            });
-        }
-
-        for (int i = 1; i <= 15; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"CUSTOMDATE{i:D2}",
-                Type = "date",
-                DateRange = new DateRangeConfig { Min = "2015-01-01", Max = "2024-12-31" },
-                EmptyPercentage = 40 + (i * 3),
-            });
-        }
-
-        for (int i = 1; i <= 15; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"CUSTOMNUMBER{i:D2}",
-                Type = "number",
-                Range = new RangeConfig { Min = 0, Max = 10000 },
-                EmptyPercentage = 30 + (i * 3),
-            });
-        }
-
-        for (int i = 1; i <= 10; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"CUSTOMBOOL{i:D2}",
-                Type = "boolean",
-                TruePercentage = 30 + (i * 4),
-                Format = "YN",
-            });
-        }
-
-        // Issue tags (multi-value)
-        for (int i = 1; i <= 5; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"ISSUETAG{i:D2}",
-                Type = "coded",
-                DataSource = "issues",
-                MultiValue = true,
-                MultiValueCount = new RangeConfig { Min = 0, Max = 3 },
-                EmptyPercentage = 60,
-            });
-        }
-
-        // Long text fields
-        for (int i = 1; i <= 10; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"NOTES{i:D2}",
-                Type = "longtext",
-                Generator = "loremParagraphs",
-                GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { ["min"] = 1, ["max"] = 3 },
-                EmptyPercentage = 70 + (i * 2),
-            });
-        }
-
-        // Additional identifiers
-        extraColumns.Add(new ColumnDefinition { Name = "PRODUCTIONSTATUS", Type = "coded", DataSource = "responsiveness", EmptyPercentage = 30 });
-        extraColumns.Add(new ColumnDefinition { Name = "REVIEWSTATUS", Type = "coded", DataSource = "responsiveness", EmptyPercentage = 20 });
-        extraColumns.Add(new ColumnDefinition { Name = "QCSTATUS", Type = "coded", DataSource = "responsiveness", EmptyPercentage = 60 });
-        extraColumns.Add(new ColumnDefinition { Name = "ENCODING", Type = "text", Generator = "encoding", EmptyPercentage = 10 });
-        extraColumns.Add(new ColumnDefinition { Name = "TIMEZONE", Type = "text", Generator = "timezone", EmptyPercentage = 20 });
-
-        // More classification
-        for (int i = 1; i <= 10; i++)
-        {
-            extraColumns.Add(new ColumnDefinition
-            {
-                Name = $"TAG{i:D2}",
-                Type = "coded",
-                DataSource = "tags",
-                EmptyPercentage = 70,
-            });
-        }
-
-        columns.AddRange(extraColumns);
-        return columns;
+        var key = name.ToLowerInvariant();
+        return key is "minimal" or "standard" or "litigation" or "full" or "legacywithmetadata" or "legacyeml"
+            ? Profiles.Value[key].Clone()
+            : null;
     }
 
     /// <summary>
@@ -472,5 +106,70 @@ public static class BuiltInProfiles
         }
 
         return merged;
+    }
+
+    private static ColumnProfile GetShared(string name) => Profiles.Value[name];
+
+    private static IReadOnlyDictionary<string, ColumnProfile> LoadProfiles()
+    {
+        var assembly = typeof(BuiltInProfiles).Assembly;
+        var profiles = new Dictionary<string, ColumnProfile>(StringComparer.Ordinal);
+        foreach (var name in ResourceNames)
+        {
+            var resourceName = $"Zipper.Profiles.BuiltIns.{name}.json";
+            using var stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded column profile resource '{resourceName}' is missing.");
+            ColumnProfile? profile;
+            try
+            {
+                profile = JsonSerializer.Deserialize<ColumnProfile>(stream, ColumnProfileLoader.ProfileSerializerOptions);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidOperationException($"Embedded column profile resource '{resourceName}' failed to parse: {ex.Message}", ex);
+            }
+
+            if (profile is null)
+            {
+                throw new InvalidOperationException($"Embedded column profile resource '{resourceName}' failed to parse.");
+            }
+
+            NormalizeGeneratorParams(profile);
+            profiles[name] = profile;
+        }
+
+        return profiles;
+    }
+
+    /// <summary>
+    /// Converts JsonElement generator parameter values produced by deserialization back to the
+    /// primitives a C# object literal would hold (int/double/bool/string), so generator consumers
+    /// see identical types for built-in and in-code profiles.
+    /// </summary>
+    private static void NormalizeGeneratorParams(ColumnProfile profile)
+    {
+        foreach (var column in profile.Columns)
+        {
+            if (column.GeneratorParams is null)
+            {
+                continue;
+            }
+
+            foreach (var key in column.GeneratorParams.Keys.ToList())
+            {
+                if (column.GeneratorParams[key] is JsonElement element)
+                {
+                    column.GeneratorParams[key] = element.ValueKind switch
+                    {
+                        JsonValueKind.Number when element.TryGetInt32(out var intValue) => intValue,
+                        JsonValueKind.Number => element.GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.String => element.GetString()!,
+                        _ => element,
+                    };
+                }
+            }
+        }
     }
 }

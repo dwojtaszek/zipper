@@ -1,0 +1,98 @@
+{
+  "name": "legacyWithCollectionMetadata",
+  "description": "Legacy --with-collection-metadata pseudo-profile",
+  "version": "1.0",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "datasource": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Email Server",
+        "Network Share",
+        "Cloud Storage",
+        "Mobile Device",
+        "Laptop",
+        "Desktop",
+        "Server",
+        "External Media"
+      ],
+      "weights": [
+        25,
+        20,
+        15,
+        10,
+        10,
+        8,
+        7,
+        5
+      ]
+    },
+    "processingstatus": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Processed",
+        "Pending Review",
+        "Approved",
+        "Privileged",
+        "Redacted",
+        "Produced"
+      ],
+      "weights": [
+        40,
+        20,
+        15,
+        10,
+        10,
+        5
+      ]
+    }
+  },
+  "columns": [
+    {
+      "name": "DATA_SOURCE",
+      "type": "coded",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "datasource"
+    },
+    {
+      "name": "COLLECTION_DATE",
+      "type": "date",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "DENISTED",
+      "type": "boolean",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "DEDUPE_GROUP_ID",
+      "type": "identifier",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "PROCESSING_STATUS",
+      "type": "coded",
+      "required": true,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "processingstatus"
+    }
+  ]
+}

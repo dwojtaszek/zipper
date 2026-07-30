@@ -1,0 +1,248 @@
+{
+  "name": "standard",
+  "description": "Common e-discovery fields for standard workflows",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 10,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "custodians": {
+      "count": 25,
+      "distribution": "pareto",
+      "prefix": "Custodian_"
+    },
+    "authors": {
+      "count": 50,
+      "distribution": "pareto",
+      "prefix": "Author_"
+    },
+    "departments": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Legal",
+        "Finance",
+        "HR",
+        "Engineering",
+        "Sales",
+        "Marketing",
+        "Operations",
+        "Executive"
+      ]
+    },
+    "docTypes": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Email",
+        "Document",
+        "Spreadsheet",
+        "Presentation",
+        "Image",
+        "PDF",
+        "Other"
+      ]
+    }
+  },
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "BEGBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "ENDBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "CONTROLNUMBER",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILEPATH",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "TEXTPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false
+    },
+    {
+      "name": "NATIVEPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "FILENAME",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILEEXT",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILESIZE",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1024,
+        "max": 104857600
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "DATECREATED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATEMODIFIED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATESENT",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATERECEIVED",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTODIAN",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "custodians"
+    },
+    {
+      "name": "AUTHOR",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false,
+      "dataSource": "authors"
+    },
+    {
+      "name": "EMAILFROM",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false
+    },
+    {
+      "name": "EMAILTO",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 1,
+        "max": 5
+      }
+    },
+    {
+      "name": "EMAILCC",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 10
+      }
+    },
+    {
+      "name": "DOCTYPE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "docTypes"
+    },
+    {
+      "name": "DEPARTMENT",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 20,
+      "multiValue": false,
+      "dataSource": "departments"
+    },
+    {
+      "name": "RESPONSIVE",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 60
+    },
+    {
+      "name": "PRIVILEGED",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 10
+    },
+    {
+      "name": "CONFIDENTIAL",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 25
+    }
+  ]
+}
