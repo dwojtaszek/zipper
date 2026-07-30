@@ -22,6 +22,7 @@ set -euo pipefail
 EXPECTED_BOTS=(
     "coderabbitai[bot]"
     "chatgpt-codex-connector[bot]"
+    "copilot-pull-request-reviewer[bot]"
 )
 # Matches both explicit skip declarations (rate limits) and CodeRabbit's
 # walkthrough-only responses, which carry no formal review object.
