@@ -10,7 +10,7 @@ public static class ColumnProfileLoader
 {
     private const int MaxColumns = 200;
 
-    private static readonly JsonSerializerOptions ProfileSerializerOptions = new()
+    internal static readonly JsonSerializerOptions ProfileSerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };

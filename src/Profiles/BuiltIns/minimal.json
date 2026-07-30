@@ -1,0 +1,62 @@
+{
+  "name": "minimal",
+  "description": "Basic fields for minimal load file generation",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "custodians": {
+      "count": 10,
+      "distribution": "pareto",
+      "prefix": "Custodian_"
+    }
+  },
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILEPATH",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "CUSTODIAN",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "custodians"
+    },
+    {
+      "name": "DATECREATED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "FILESIZE",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1024,
+        "max": 10485760
+      },
+      "distribution": "exponential"
+    }
+  ]
+}

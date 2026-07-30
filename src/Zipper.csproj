@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Emails\email-templates.json" />
+    <EmbeddedResource Include="Profiles\BuiltIns\*.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,518 @@
+{
+  "name": "litigation",
+  "description": "Full litigation support with comprehensive metadata",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 15,
+    "multiValueDelimiter": ";",
+    "dateFormat": "yyyy-MM-dd",
+    "dateTimeFormat": "yyyy-MM-ddTHH:mm:ssZ"
+  },
+  "dataSources": {
+    "custodians": {
+      "count": 50,
+      "distribution": "pareto",
+      "prefix": "Custodian_"
+    },
+    "authors": {
+      "count": 100,
+      "distribution": "pareto",
+      "prefix": "Author_"
+    },
+    "departments": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Legal",
+        "Finance",
+        "HR",
+        "Engineering",
+        "Sales",
+        "Marketing",
+        "Operations",
+        "Executive",
+        "IT",
+        "Compliance"
+      ]
+    },
+    "docTypes": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Email",
+        "Document",
+        "Spreadsheet",
+        "Presentation",
+        "Image",
+        "PDF",
+        "Contract",
+        "Invoice",
+        "Memo",
+        "Report"
+      ]
+    },
+    "privilegeTypes": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Attorney-Client",
+        "Work Product",
+        "Not Privileged",
+        "Needs Review"
+      ],
+      "weights": [
+        5,
+        5,
+        80,
+        10
+      ]
+    },
+    "responsiveness": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Responsive",
+        "Not Responsive",
+        "Needs Review",
+        "Privileged"
+      ],
+      "weights": [
+        40,
+        35,
+        15,
+        10
+      ]
+    },
+    "confidentiality": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "Public",
+        "Internal",
+        "Confidential",
+        "Highly Confidential"
+      ],
+      "weights": [
+        20,
+        50,
+        25,
+        5
+      ]
+    },
+    "languages": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "",
+      "values": [
+        "English",
+        "Spanish",
+        "French",
+        "German",
+        "Chinese",
+        "Japanese"
+      ],
+      "weights": [
+        85,
+        5,
+        3,
+        2,
+        3,
+        2
+      ]
+    }
+  },
+  "columns": [
+    {
+      "name": "DOCID",
+      "type": "identifier",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "BEGBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "ENDBATES",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "CONTROLNUMBER",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "BEGATTACH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "ENDATTACH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "PARENTDOCID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 70,
+      "multiValue": false
+    },
+    {
+      "name": "FAMILYID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "FILEPATH",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "TEXTPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false
+    },
+    {
+      "name": "NATIVEPATH",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false
+    },
+    {
+      "name": "FILENAME",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILEEXT",
+      "type": "text",
+      "required": true,
+      "multiValue": false
+    },
+    {
+      "name": "FILESIZE",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1024,
+        "max": 104857600
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "PAGECOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 1,
+        "max": 500
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "WORDCOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 50000
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "CHARCOUNT",
+      "type": "number",
+      "required": false,
+      "multiValue": false,
+      "range": {
+        "min": 0,
+        "max": 250000
+      },
+      "distribution": "exponential"
+    },
+    {
+      "name": "DATECREATED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATEMODIFIED",
+      "type": "date",
+      "required": false,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATESENT",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATERECEIVED",
+      "type": "datetime",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2018-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "DATEPRODUCED",
+      "type": "date",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false,
+      "dateRange": {
+        "min": "2024-01-01",
+        "max": "2024-12-31"
+      }
+    },
+    {
+      "name": "CUSTODIAN",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 0,
+      "multiValue": false,
+      "dataSource": "custodians"
+    },
+    {
+      "name": "AUTHOR",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 5,
+      "multiValue": false,
+      "dataSource": "authors"
+    },
+    {
+      "name": "EMAILFROM",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false
+    },
+    {
+      "name": "EMAILTO",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 1,
+        "max": 10
+      }
+    },
+    {
+      "name": "EMAILCC",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 15
+      }
+    },
+    {
+      "name": "EMAILBCC",
+      "type": "email",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": true,
+      "multiValueCount": {
+        "min": 0,
+        "max": 3
+      }
+    },
+    {
+      "name": "EMAILSUBJECT",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 30,
+      "multiValue": false,
+      "generator": "emailsubject"
+    },
+    {
+      "name": "CONVERSATIONID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "MESSAGEID",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 50,
+      "multiValue": false
+    },
+    {
+      "name": "DOCTYPE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "docTypes"
+    },
+    {
+      "name": "DEPARTMENT",
+      "type": "coded",
+      "required": false,
+      "emptyPercentage": 20,
+      "multiValue": false,
+      "dataSource": "departments"
+    },
+    {
+      "name": "PRIVILEGE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "privilegeTypes"
+    },
+    {
+      "name": "RESPONSIVE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "responsiveness"
+    },
+    {
+      "name": "CONFIDENTIALITY",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "confidentiality"
+    },
+    {
+      "name": "LANGUAGE",
+      "type": "coded",
+      "required": false,
+      "multiValue": false,
+      "dataSource": "languages"
+    },
+    {
+      "name": "ISRESPONSIVE",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 60
+    },
+    {
+      "name": "ISPRIVILEGED",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 10
+    },
+    {
+      "name": "ISCONFIDENTIAL",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 25
+    },
+    {
+      "name": "HASATTACHMENTS",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 30
+    },
+    {
+      "name": "ISNATIVE",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 70
+    },
+    {
+      "name": "NEEDSREDACTION",
+      "type": "boolean",
+      "required": false,
+      "multiValue": false,
+      "format": "YN",
+      "truePercentage": 15
+    },
+    {
+      "name": "MD5HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "md5Hash"
+    },
+    {
+      "name": "SHA1HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "sha1Hash"
+    },
+    {
+      "name": "SHA256HASH",
+      "type": "text",
+      "required": false,
+      "multiValue": false,
+      "generator": "sha256Hash"
+    },
+    {
+      "name": "REVIEWNOTES",
+      "type": "longtext",
+      "required": false,
+      "emptyPercentage": 80,
+      "multiValue": false,
+      "generator": "reviewNote"
+    },
+    {
+      "name": "REDACTIONREASON",
+      "type": "text",
+      "required": false,
+      "emptyPercentage": 90,
+      "multiValue": false
+    }
+  ]
+}
