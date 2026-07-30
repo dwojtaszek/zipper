@@ -20,7 +20,6 @@ set -euo pipefail
 # --- Configuration ---
 
 EXPECTED_BOTS=(
-    "gemini-code-assist[bot]"
     "coderabbitai[bot]"
     "chatgpt-codex-connector[bot]"
 )
