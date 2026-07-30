@@ -16,7 +16,10 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Test configuration
-TEST_OUTPUT_DIR="./cross-platform-results"
+# Scratch output goes to the gitignored results/ tree: cross-platform-results/
+# contains tracked golden files, this script rm -rf's its output dir, and
+# Zipper rejects output paths outside the working directory (#707).
+TEST_OUTPUT_DIR="./results/cross-platform"
 PROJECT="src/Zipper.csproj"
 PLATFORM=$(uname -s)
 
