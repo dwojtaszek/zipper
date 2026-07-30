@@ -55,6 +55,7 @@ declare -A STRESS_TESTS=(
     ["1"]="10GB Maximum File Count Challenge|stress-10gb-filecount.sh|~12GB|5-10 minutes|Up to 2GB|Tests file count limits and Zip64"
     ["3"]="30GB Attachment-Heavy EML Focus|stress-30gb-attachments.sh|~36GB|15-30 minutes|Up to 6GB|Tests attachment processing"
     ["4"]="Large Load File Performance|stress-large-loadfile.sh|~2GB|5-10 minutes|Under 1GB|Tests load file bottlenecks"
+    ["5"]="100M Record Load File Contract|stress-100m-loadfile.sh|~34GB|15-45 minutes|Under 1GB|Verifies REQ_E-009 100M upper contract"
 )
 
 # --- System Check ---
