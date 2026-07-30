@@ -6,7 +6,7 @@
 |------|-----------|-----------------|
 | **Archive** | A compressed `.zip` file containing zero or more generated **Native Files** organized into **Folders**. Each **Archive** corresponds to one **Load File dataset** (which may be exported in multiple formats: DAT, OPT, CSV, XML). | ZIP file, package |
 | **Native File** | A single placeholder document (PDF, JPG, TIFF, DOCX, XLSX, or EML) added to the **Archive**. Each **Native File** has a unique identity tracked in the **Load File**. | File, document, item |
-| **Load File** | A delimited text record (DAT, OPT, CSV, or XML) that maps **Native Files** to metadata. One record per **Native File**. | Manifest, index, metadata file |
+| **Load File** | A delimited text record (DAT, OPT, CSV, or XML) that maps **Native Files** to metadata. One record per **Native File**, with two exceptions: OPT emits one record per page (a multipage TIFF expands to `_NNN`-suffixed page records), and with `--with-families` each **Attachment** adds one family child record (keyed `{parent}_A001`). | Manifest, index, metadata file |
 | **Metadata** | Column values in the **Load File** describing a **Native File** (e.g., Custodian, Date Sent, Author, File Size). | Attributes, properties, fields |
 | **Folder** | A logical directory within the **Archive** (used only during regular **Archive** generation via `--folders`) to distribute **Native Files** across a directory structure. The number of **Folders** is configurable; defaults to 1. | Directory, bucket, container |
 | **Distribution** | The pattern by which **Native Files** are assigned to **Folders**. Supported patterns: `proportional`, `gaussian`, `exponential`. | Assignment strategy, allocation |
@@ -28,7 +28,7 @@
 |------|-----------|-----------------|
 | **Email** | A **Native File** with File Type `eml`. Contains email metadata (To, From, Subject, Sent Date) and may have **Attachments**. Represented by `Zipper.Emails.Email`. | EML file, message |
 | **Email Metadata** | Intrinsic columns in the **Load File** for **Emails** (To, From, CC, Subject, Sent Date). Always included regardless of `--with-metadata` flag. | Email headers, email-specific columns |
-| **Attachment** | A **Native File** (any type) selected randomly from the generated set and embedded within an **Email** as binary content. The **Attachment Rate** determines what percentage of **Emails** have **Attachments**. Represented by `Zipper.Emails.EmailAttachment`. | Enclosed file, embedded document |
+| **Attachment** | Placeholder binary content (one of `attachment.jpg`, `attachment.tiff`, or `attachment.pdf` drawn at random from the internal attachment pool) embedded within an **Email** — never one of the `--count` generated **Native Files** (REQ-011), preserving the streaming, no-intermediate-storage generation design. The **Attachment Rate** determines what percentage of **Emails** embed an **Attachment**. Distinct from the generated-set **Native Files**: with `--with-families`, the **Attachment** is additionally surfaced as a family child — a **Load File** record keyed `{parent}_A001` — and in **Production Sets** it materializes as separate child files under `NATIVES`/`IMAGES`/`TEXT`, counted separately in the **Production Manifest** (`attachmentNativeFileCount`). Represented by `Zipper.Emails.EmailAttachment`. | Enclosed file, embedded document |
 | **Attachment Rate** | The percentage (0–100) of **Emails** that receive a random **Attachment**. Controlled by `--attachment-rate`. | Attachment probability, attachment percentage |
 
 ---
@@ -39,7 +39,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Load File Record** | A format-independent row: ordered **Columns** plus raw (unescaped) values, keyed by column name, with a **Record Id** for chaos auditing. `LoadFileRecord`. | Row object, line model |
+| **Load File Record** | A format-independent row: ordered **Columns** plus raw (unescaped) values, keyed by column name, with a **Record Id** for chaos auditing. Cardinality follows the **Load File** definition: one record per **Native File**, except OPT page-level records and `--with-families` family child records. `LoadFileRecord`. | Row object, line model |
 | **Composer** | The **column authority** for a format: decides the header **Columns** and yields **Load File Records** with raw values (handling modes and **Column Profiles** internally). `ILoadFileComposer`, `DatComposer`, `OptComposer`, `CsvComposer`, `ConcordanceComposer`. | Builder, row generator |
 | **Serializer** | The **render authority**: turns one **Load File Record** (or header) into a single escaped text line. Pure — no stream, no EOL, no chaos. `ILoadFileSerializer`, `DatSerializer`, `OptSerializer`, `CsvSerializer`, `ConcordanceSerializer`. | Formatter, writer |
 | **Emitter** | The **I/O and chaos authority**: writes rendered lines to the stream, owning the encoding preamble (BOM), end-of-line sequence, output batching, and the single **Chaos Engine** pipeline. Streams both paths lazily (O(1) auxiliary memory) — the chaos path additionally intercepts each line and injects inter-line encoding-anomaly bytes. `LoadFileEmitter`. | Stream writer, output writer |
@@ -84,7 +84,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Page Count** | The number of pages in a **Native File**. Only relevant for File Type `tiff`. Included in the **Load File** when TIFF files are generated. | Number of pages, page range |
+| **Page Count** | The number of pages in a **Native File**. Only relevant for File Type `tiff`. Inclusion is mode- and format-specific: row-based formats (DAT, CSV, Concordance, EDRM-XML) emit the column only when `--tiff-pages` is specified (REQ-046), while OPT carries `PageCount` as a fixed positional column (total on the first page record, `1` for single-page documents) and Loadfile-Only OPT assigns random 1–10 pages per document when `--tiff-pages` is omitted (REQ-047). In a **File Type Mix**, values appear only on TIFF records. | Number of pages, page range |
 | **TIFF Page Range** | A range specification (min-max) defining the variability of **Page Count** across **TIFF** **Native Files**. E.g., "1-20" generates TIFFs with 1–20 pages. Defaults to "1-1". | Page count range, page bounds |
 | **Volume** | A logical partition within a **Production Set** (used only when `--production-set` is specified). Each **Volume** can contain up to **Volume Size** **Native Files**. Named `VOL001`, `VOL002`, etc. | Partition, subset, group |
 | **Volume Size** | The maximum number of **Native Files** per **Volume**. Defaults to 5,000. | Volume limit, max files per volume |
@@ -200,7 +200,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 ## Relationships
 
 - An **Archive** contains one or more **Native Files** organized into **Folders**
-- A **Load File** maps to one **Archive**, one **Production Set**, or stands alone in **Loadfile-Only Mode**. Contains one record per **Native File**
+- A **Load File** maps to one **Archive**, one **Production Set**, or stands alone in **Loadfile-Only Mode**. Contains one record per **Native File** (except OPT page records and `--with-families` family child records — see the **Load File** definition)
 - A **Column Profile** defines zero or more **Columns** for a **Load File**
 - An **Email** may have zero or one **Attachment** (controlled by **Attachment Rate**)
 - A **Production Set** contains **Volumes**, each Volume contains up to **Volume Size** **Native Files**
