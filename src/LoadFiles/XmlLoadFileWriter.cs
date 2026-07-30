@@ -34,9 +34,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         };
 
         var writer = System.Xml.XmlWriter.Create(stream, settings);
-        await using (writer.ConfigureAwait(false))
+        try
         {
-            try
+            await using (writer.ConfigureAwait(false))
             {
                 // Match the original XDeclaration("1.0", "UTF-8", "yes")
                 await writer.WriteStartDocumentAsync(standalone: true);
@@ -125,16 +125,15 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
                 await writer.FlushAsync().ConfigureAwait(false);
             }
-            catch (Exception ex)
-            {
-                if (ex is OperationCanceledException)
-                {
-                    throw;
-                }
-
-                throw new InvalidOperationException(
-                    $"Failed to write XML load file: {ex.Message}", ex);
-            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            // Expected failures (I/O and XmlWriter state errors, including
+            // ObjectDisposedException, from writes or final disposal) get load-file
+            // context. Anything else — including OperationCanceledException —
+            // propagates unwrapped.
+            throw new InvalidOperationException(
+                $"Failed to write XML load file: {ex.Message}", ex);
         }
     }
 
