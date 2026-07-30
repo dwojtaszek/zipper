@@ -53,6 +53,15 @@ public class BuiltInProfilesResourceTests
     }
 
     [Fact]
+    public void Properties_RepeatedAccess_ReturnSameSharedInstance()
+    {
+        // Pre-existing contract: the static accessors always returned one shared instance
+        // ({ get; } initialized once); DatComposerShared relies on the shared statics directly.
+        Assert.Same(BuiltInProfiles.Standard, BuiltInProfiles.Standard);
+        Assert.Same(BuiltInProfiles.LegacyEml, BuiltInProfiles.LegacyEml);
+    }
+
+    [Fact]
     public void BuiltInProfiles_AllSevenProfiles_LoadWithExpectedNameAndColumnCount()
     {
         var expected = new Dictionary<string, int>(StringComparer.Ordinal)
