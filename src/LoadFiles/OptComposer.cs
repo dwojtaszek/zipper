@@ -36,16 +36,7 @@ internal sealed class OptComposer : ILoadFileComposer
         => new()
         {
             Columns = OptColumns,
-            Values = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["Bates"] = bates,
-                ["Volume"] = volume,
-                ["ImagePath"] = imagePath,
-                ["DocBreak"] = docBreak,
-                ["Reserved1"] = string.Empty,
-                ["Reserved2"] = string.Empty,
-                ["PageCount"] = pageCountStr,
-            },
+            Values = new[] { bates, volume, imagePath, docBreak, string.Empty, string.Empty, pageCountStr },
             RecordId = bates,
         };
 

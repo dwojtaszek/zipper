@@ -20,7 +20,7 @@ public class LoadFileEmitterTests
         public string RenderHeader(IReadOnlyList<string> columns) => string.Join("|", columns);
 
         public string RenderRecord(LoadFileRecord record) =>
-            string.Join("|", record.Columns.Select(c => record.Values.TryGetValue(c, out var v) ? v : string.Empty));
+            string.Join("|", record.Values);
     }
 
     private static readonly UTF8Encoding NoBom = new(encoderShouldEmitUTF8Identifier: false);
@@ -28,7 +28,7 @@ public class LoadFileEmitterTests
     private static LoadFileRecord Rec(string id, params (string Col, string Val)[] cells) => new()
     {
         Columns = cells.Select(c => c.Col).ToList(),
-        Values = cells.ToDictionary(c => c.Col, c => c.Val, StringComparer.Ordinal),
+        Values = cells.Select(c => c.Val).ToArray(),
         RecordId = id,
     };
 

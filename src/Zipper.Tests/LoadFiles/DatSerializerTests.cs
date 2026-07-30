@@ -28,12 +28,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = columns,
-            Values = new Dictionary<string, string>
-(StringComparer.Ordinal)
-            {
-                ["DOCID"] = "DOC001",
-                ["FILEPATH"] = "folder/file.pdf",
-            },
+            Values = new[] { "DOC001", "folder/file.pdf" },
         };
 
         var content = serializer.RenderRecord(record);
@@ -50,11 +45,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "VALUE" },
-            Values = new Dictionary<string, string>
-(StringComparer.Ordinal)
-            {
-                ["VALUE"] = "has\xfequote",
-            },
+            Values = new[] { "has\xfequote" },
         };
 
         var content = serializer.RenderRecord(record);
@@ -70,11 +61,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "TEXT" },
-            Values = new Dictionary<string, string>
-(StringComparer.Ordinal)
-            {
-                ["TEXT"] = "line1\nline2",
-            },
+            Values = new[] { "line1\nline2" },
         };
 
         var content = serializer.RenderRecord(record);
@@ -90,7 +77,7 @@ public class DatSerializerTests
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "A", "B" },
-            Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["A"] = "x", ["B"] = "y" },
+            Values = new[] { "x", "y" },
         };
 
         var content = serializer.RenderRecord(record);
@@ -99,17 +86,17 @@ public class DatSerializerTests
     }
 
     [Fact]
-    public void RenderRecord_MissingValue_RendersEmptyField()
+    public void RenderRecord_ShortValues_RendersTrailingEmptyFields()
     {
         var serializer = new DatSerializer(columnDelimiter: '|', quoteDelimiter: '\0');
         var record = new LoadFileRecord
         {
-            Columns = new List<string> { "A", "MISSING", "B" },
-            Values = new Dictionary<string, string>(StringComparer.Ordinal) { ["A"] = "x", ["B"] = "y" },
+            Columns = new List<string> { "A", "B", "C" },
+            Values = new[] { "x", "y" },
         };
 
         var content = serializer.RenderRecord(record);
 
-        Assert.Equal("x||y", content);
+        Assert.Equal("x|y|", content);
     }
 }

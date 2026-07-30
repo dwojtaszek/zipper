@@ -13,7 +13,7 @@ internal sealed class CsvSerializer : ILoadFileSerializer
     public string RenderHeader(IReadOnlyList<string> columns) => string.Join(",", columns);
 
     public string RenderRecord(LoadFileRecord record) =>
-        string.Join(",", record.Columns.Select(c => EscapeCsvField(record.Values.TryGetValue(c, out var v) ? v : string.Empty)));
+        string.Join(",", record.Columns.Select((_, i) => EscapeCsvField(i < record.Values.Count ? record.Values[i] : string.Empty)));
 
     private static string EscapeCsvField(string field)
     {

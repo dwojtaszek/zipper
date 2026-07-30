@@ -343,7 +343,7 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
 | `src/ChaosAnomalyTypes.cs` | Canonical anomaly type catalog |
 | `src/ProductionSetPlanner.cs` | Production Set path/volume/bates planning |
-| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model (raw values) |
+| `src/LoadFiles/LoadFileRecord.cs` | Format-independent load file row model (raw values as parallel arrays aligned with columns) |
 | `src/LoadFiles/ILoadFileComposer.cs` | Column authority: header columns + lazy records (`Dat`/`Opt`/`Csv`/`Concordance` composers) |
 | `src/LoadFiles/ILoadFileSerializer.cs` | Render authority: record/header → one escaped line (`Dat`/`Opt`/`Csv`/`Concordance` serializers) |
 | `src/LoadFiles/LoadFileEmitter.cs` | I/O + chaos authority: preamble, EOL, batching, chaos pipeline |
