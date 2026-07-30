@@ -264,6 +264,98 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_WhenStreamThrowsIOException_WrapsWithContext()
+    {
+        var request = this.CreateTestRequest();
+        var fileData = this.CreateTestFileData();
+        var writer = new XmlLoadFileWriter();
+        using var stream = new ThrowingStream(new IOException("simulated disk failure"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            writer.WriteAsync(stream, request, fileData));
+
+        Assert.Contains("Failed to write XML load file", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<IOException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WhenUnexpectedException_PropagatesUnwrapped()
+    {
+        var request = this.CreateTestRequest();
+        var fileData = this.CreateTestFileData();
+        var writer = new XmlLoadFileWriter();
+        using var stream = new ThrowingStream(new FormatException("simulated unexpected failure"));
+
+        var ex = await Assert.ThrowsAsync<FormatException>(() =>
+            writer.WriteAsync(stream, request, fileData));
+
+        Assert.Equal("simulated unexpected failure", ex.Message);
+    }
+
+    private sealed class ThrowingStream : Stream
+    {
+        private readonly Exception exception;
+
+        public ThrowingStream(Exception exception)
+        {
+            this.exception = exception;
+        }
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => 0;
+
+        public override long Position
+        {
+            get => 0;
+            set { }
+        }
+
+        public override void Flush()
+        {
+            throw this.exception;
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            throw this.exception;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            return 0;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            return 0;
+        }
+
+        public override void SetLength(long value)
+        {
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw this.exception;
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            throw this.exception;
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            throw this.exception;
+        }
+    }
+
+    [Fact]
     public async Task XmlLoadFileWriter_WithFamilies_ProducesParentChildDocumentsAndRelationships()
     {
         var request = new FileGenerationRequest
