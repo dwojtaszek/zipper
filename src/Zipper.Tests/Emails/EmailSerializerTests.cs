@@ -2,7 +2,7 @@ using System.Text;
 using Xunit;
 using Zipper.Emails;
 
-namespace Zipper.Tests.Emails;
+namespace Zipper.Tests;
 
 public class EmailSerializerTests
 {

@@ -2,7 +2,7 @@ using Xunit;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
 
-namespace Zipper.Tests.Profiles.Generation;
+namespace Zipper.Tests;
 
 /// <summary>
 /// Test class for public class BooleanGeneratorTests
