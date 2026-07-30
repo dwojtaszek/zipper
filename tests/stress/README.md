@@ -90,6 +90,25 @@ Stress tests complement the automated performance testing by:
 - Memory: Under 1GB
 - CPU: Moderate usage
 
+### 4. 100M Record Load File Contract
+**Script:** `stress-100m-loadfile.sh`
+
+**Focus:** Verifies the REQ_E-009 upper contract — 100 million records — via the cheap Loadfile-Only path (no Native Files or Archive)
+
+**Configuration:**
+- Record Count: 100 million (override with `STRESS_FILE_COUNT` for smoke runs)
+- Mode: Loadfile-Only, DAT format, fixed seed (`STRESS_SEED`, default 42)
+
+**Unique Aspect:** Exercises the 100-million count path, which streams records lazily (bounded memory). Validates record cardinality (line count), boundary IDs (`DOC00000001` … `DOC100000000` — the D8 width overflow), and the header row. Reports elapsed time, throughput, and peak RSS (when GNU time is installed). Exit code 1 means runner/environment exhaustion; exit code 2 means a product contract violation.
+
+**Requirements:**
+- Disk Space: ~34GB+ (100M records ≈ 29GB DAT + overhead)
+- Runtime: 15-45 minutes (~10-20 seconds per 1M records for smoke runs)
+- Memory: Under 1GB (streaming; measured ~250MB peak RSS)
+- CPU: Moderate (single-threaded compose/serialize/write)
+
+**CI cadence:** not scheduled in CI (runner disk/time limits) — manual-only like the rest of this suite; recommended run once per release cycle or after changes to the load file pipeline. `STRESS_ASSUME_YES=1` skips the confirmation prompt for unattended local runs.
+
 ## 🚀 Running Stress Tests
 
 ### Prerequisites
