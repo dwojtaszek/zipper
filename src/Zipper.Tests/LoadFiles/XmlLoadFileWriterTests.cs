@@ -4,7 +4,7 @@ using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
 
-namespace Zipper.Tests.LoadFiles;
+namespace Zipper.Tests;
 
 public class XmlLoadFileWriterTests : TempDirectoryTestBase
 {

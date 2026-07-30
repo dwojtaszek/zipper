@@ -2,7 +2,7 @@ using Xunit;
 
 using Zipper.Config;
 
-namespace Zipper.Tests.Emails;
+namespace Zipper.Tests;
 
 public class EmlFileGeneratorDeterminismTests
 {

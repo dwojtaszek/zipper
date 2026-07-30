@@ -1,7 +1,7 @@
 using Xunit;
 using Zipper.Profiles.Generation;
 
-namespace Zipper.Tests.Profiles.Generation;
+namespace Zipper.Tests;
 
 public class ColumnValueGeneratorRegistryTests
 {

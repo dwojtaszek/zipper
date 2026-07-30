@@ -3,7 +3,7 @@ using System.Text;
 using Xunit;
 using Zipper.LoadFiles;
 
-namespace Zipper.Tests.LoadFiles;
+namespace Zipper.Tests;
 
 public class LoadFileEmitterTests
 {
