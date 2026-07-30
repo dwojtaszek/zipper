@@ -85,6 +85,9 @@ jobs:
       - name: Validate requirement traceability
         shell: bash
         run: bash tests/validate-req-traceability.sh --strict
+      - name: Validate E2E .sh/.bat parity
+        shell: bash
+        run: bash tests/validate-e2e-parity.sh --strict
       - name: Check for oversized files
         shell: bash
         run: |
