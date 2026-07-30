@@ -8,9 +8,9 @@ REM This script tests core functionality across different platforms
 setlocal enabledelayedexpansion
 
 REM Test configuration
-REM Scratch output goes to the gitignored results\ tree: cross-platform-results\
-REM contains tracked golden files, this script rmdir's its output dir, and
-REM Zipper rejects output paths outside the working directory (#707).
+REM Scratch output goes to the gitignored results\ tree: this script rmdir's
+REM its output dir, and Zipper rejects output paths outside the working
+REM directory (#707).
 set TEST_OUTPUT_DIR=.\results\cross-platform
 set PROJECT=src\Zipper.csproj
 
