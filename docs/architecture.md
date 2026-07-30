@@ -157,7 +157,7 @@ Each mode adapter runs `PostGenerationValidator.Validate(ValidationContext)` aft
 
 The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — this shape must not be collapsed back into fat writers without human approval.
 
-- **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values (handles modes + column profiles internally).
+- **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
 - **Emitter** (`LoadFileEmitter`) — I/O + chaos authority: encoding preamble (BOM), end-of-line, batching, and the single Chaos Engine pipeline. Both paths stream lazily (O(1) auxiliary memory); the chaos path additionally intercepts each line and writes inter-line encoding-anomaly bytes straight after it.
 
@@ -169,7 +169,7 @@ graph TD
     Factory -->|"EDRM-XML"| XML["XmlLoadFileWriter<br/>(carve-out: hierarchical tree)"]
 
     CW --> Comp["Composer — column authority<br/>header columns + lazy raw records"]
-    Comp --> Rec["LoadFileRecord<br/>(raw, unescaped values)"]
+    Comp --> Rec["LoadFileRecord<br/>(columns + raw values,<br/>parallel arrays aligned by index)"]
     Rec --> Ser["Serializer — render authority<br/>record/header → one escaped line (pure)"]
     Ser --> Emit["LoadFileEmitter — I/O + chaos authority<br/>preamble (BOM), EOL, batching"]
 

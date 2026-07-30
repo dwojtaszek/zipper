@@ -6,6 +6,9 @@ namespace Zipper.Tests;
 
 public class PathSeparatorCorrectnessTests
 {
+    private static string ValueOf(LoadFileRecord record, string column) =>
+        record.Columns.Zip(record.Values).First(p => p.First == column).Second;
+
     [Fact]
     public void DatComposer_ComposeProduction_ShouldNormalizePathsToBackslashes()
     {
@@ -38,9 +41,9 @@ public class PathSeparatorCorrectnessTests
 
         // Parent record assertions
         var parentRecord = records[0];
-        Assert.True(parentRecord.Values.TryGetValue("NATIVE_PATH", out var parentNativePath));
-        Assert.True(parentRecord.Values.TryGetValue("TEXT_PATH", out var parentTextPath));
-        Assert.True(parentRecord.Values.TryGetValue("IMAGE_PATH", out var parentImagePath));
+        var parentNativePath = ValueOf(parentRecord, "NATIVE_PATH");
+        var parentTextPath = ValueOf(parentRecord, "TEXT_PATH");
+        var parentImagePath = ValueOf(parentRecord, "IMAGE_PATH");
 
         Assert.Contains("\\", parentNativePath, StringComparison.Ordinal);
         Assert.DoesNotContain("/", parentNativePath, StringComparison.Ordinal);
@@ -51,9 +54,9 @@ public class PathSeparatorCorrectnessTests
 
         // Child record assertions
         var childRecord = records[1];
-        Assert.True(childRecord.Values.TryGetValue("NATIVE_PATH", out var childNativePath));
-        Assert.True(childRecord.Values.TryGetValue("TEXT_PATH", out var childTextPath));
-        Assert.True(childRecord.Values.TryGetValue("IMAGE_PATH", out var childImagePath));
+        var childNativePath = ValueOf(childRecord, "NATIVE_PATH");
+        var childTextPath = ValueOf(childRecord, "TEXT_PATH");
+        var childImagePath = ValueOf(childRecord, "IMAGE_PATH");
 
         Assert.Contains("\\", childNativePath, StringComparison.Ordinal);
         Assert.DoesNotContain("/", childNativePath, StringComparison.Ordinal);
@@ -96,13 +99,13 @@ public class PathSeparatorCorrectnessTests
 
         // Parent record assertions
         var parentRecord = records[0];
-        Assert.True(parentRecord.Values.TryGetValue("ImagePath", out var parentImagePath));
+        var parentImagePath = ValueOf(parentRecord, "ImagePath");
         Assert.Contains("\\", parentImagePath, StringComparison.Ordinal);
         Assert.DoesNotContain("/", parentImagePath, StringComparison.Ordinal);
 
         // Child record assertions
         var childRecord = records[1];
-        Assert.True(childRecord.Values.TryGetValue("ImagePath", out var childImagePath));
+        var childImagePath = ValueOf(childRecord, "ImagePath");
         Assert.Contains("\\", childImagePath, StringComparison.Ordinal);
         Assert.DoesNotContain("/", childImagePath, StringComparison.Ordinal);
     }

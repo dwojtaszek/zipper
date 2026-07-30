@@ -65,7 +65,7 @@ internal sealed class DatSerializer : ILoadFileSerializer
                 sb.Append(this.columnDelimiter);
             }
 
-            var value = record.Values.TryGetValue(record.Columns[i], out var v) ? v : string.Empty;
+            var value = i < record.Values.Count ? record.Values[i] : string.Empty;
             this.AppendField(sb, this.EscapeField(value));
         }
 

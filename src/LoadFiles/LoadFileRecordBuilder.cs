@@ -1,8 +1,10 @@
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Builds a <see cref="LoadFileRecord"/> by zipping an ordered value list onto the header
-/// columns. Shared by composers so header/value alignment is enforced in exactly one place.
+/// Builds a <see cref="LoadFileRecord"/> by binding an ordered value list to the header
+/// columns as parallel arrays. Shared by composers so header/value alignment is enforced
+/// in exactly one place. The value list is aliased, not copied — callers must not mutate
+/// or reuse it after this call.
 /// </summary>
 internal static class LoadFileRecordBuilder
 {
@@ -14,12 +16,6 @@ internal static class LoadFileRecordBuilder
                 $"Load file value count {orderedValues.Count} does not match header column count {headerColumns.Count}.");
         }
 
-        var values = new Dictionary<string, string>(headerColumns.Count, StringComparer.Ordinal);
-        for (int i = 0; i < headerColumns.Count; i++)
-        {
-            values[headerColumns[i]] = orderedValues[i];
-        }
-
-        return new LoadFileRecord { Columns = headerColumns, Values = values, RecordId = recordId };
+        return new LoadFileRecord { Columns = headerColumns, Values = orderedValues, RecordId = recordId };
     }
 }

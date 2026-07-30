@@ -29,7 +29,7 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
     public string RenderRecord(LoadFileRecord record) =>
         string.Join(
             this.fieldDelim,
-            record.Columns.Select(c => $"{QuoteDelim}{Escape(record.Values.TryGetValue(c, out var v) ? v : string.Empty)}{QuoteDelim}"));
+            record.Columns.Select((_, i) => $"{QuoteDelim}{Escape(i < record.Values.Count ? record.Values[i] : string.Empty)}{QuoteDelim}"));
 
     private static string Escape(string field)
     {
