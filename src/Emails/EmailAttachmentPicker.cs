@@ -1,9 +1,10 @@
 namespace Zipper.Emails;
 
 /// <summary>
-/// A reference to a generated native file that can be used as an email attachment.
+/// A reference to native file content usable as an email attachment. Pool items are internal
+/// placeholders (negative indices), not files from the generated set (indices &gt;= 0).
 /// </summary>
-/// <param name="Index">Index of the native file within the production set.</param>
+/// <param name="Index">Index of the native file within the production set, or a negative value for internal placeholder pool items.</param>
 /// <param name="FileName">File name to use as the attachment name.</param>
 /// <param name="Content">Raw byte content of the file.</param>
 /// <param name="ContentType">Optional MIME content type override.</param>
