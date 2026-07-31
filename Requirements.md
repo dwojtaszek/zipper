@@ -371,7 +371,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 - **REQ-048**: The `--load-file-format` argument shall support the following formats: `dat`, `opt`, `csv`, `edrm-xml`, `concordance`.
 - **REQ-049**: DAT format shall use standard Concordance delimiters (ASCII 20, 254, 174) by default.
-- **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format. Delimiter precedence, lowest to highest: Concordance defaults (ASCII 20/254/174) → `--dat-delimiters` preset (column/quote/newline only) → old-style `--delimiter-*` flags (per delimiter) → strict-prefix arguments (REQ-093). Per REQ-083, all of these apply only when the Load File Format is DAT.
+- **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format. Delimiter precedence, lowest to highest: Concordance defaults (ASCII 20/254/174) → `--dat-delimiters` preset (column/quote/newline only) → old-style `--delimiter-*` flags (per delimiter) → strict-prefix arguments (REQ-093). Per REQ-083, the preset and old-style flags apply only when the Load File Format is DAT; strict-prefix arguments are supported in all generation modes (REQ-093) but likewise only affect DAT-family output (OPT and CSV writers use fixed formats).
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
 - **REQ-053**: **DEPRECATED** — Original requirement for CSV delimiter customization. Superseded by REQ-124.
