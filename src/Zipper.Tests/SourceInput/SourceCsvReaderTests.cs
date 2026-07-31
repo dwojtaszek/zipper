@@ -109,6 +109,17 @@ public class SourceCsvReaderTests : IDisposable
     }
 
     [Fact]
+    public void TryRead_DuplicateBatesNumberDifferentCase_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC_0001\nb.eml,eml,abc_0001\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("Row 3: Duplicate BatesNumber", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryRead_DuplicateBatesNumber_ReturnsFalse()
     {
         var path = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC_0001\nb.eml,eml,ABC_0001\n");

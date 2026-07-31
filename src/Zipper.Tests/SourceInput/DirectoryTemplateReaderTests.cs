@@ -57,6 +57,19 @@ public class DirectoryTemplateReaderTests : IDisposable
     }
 
     [Fact]
+    public void TryRead_FileCapExact_Allowed()
+    {
+        this.CreateFile("a.pdf");
+        this.CreateFile("b.eml");
+
+        var ok = DirectoryTemplateReader.TryRead(this.tempDir, out var records, out var error, maxRecords: 2);
+
+        Assert.True(ok);
+        Assert.Null(error);
+        Assert.Equal(2, records.Count);
+    }
+
+    [Fact]
     public void TryRead_NestedStructure_RecreatesRelativePathsSorted()
     {
         this.CreateFile("root.pdf");

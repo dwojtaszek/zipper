@@ -21,29 +21,33 @@ internal static class DirectoryTemplateReader
         var result = new List<SourceRecord>();
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Materialize eagerly (EnumerateFiles is lazy, so enumeration-time I/O errors would
-        // otherwise escape the catch) and include hidden/system entries: silently skipping
-        // files would produce fewer Source Records than the template contains. Reparse points
-        // (symbolic links) are skipped to prevent infinite recursion through link cycles.
-        List<string> files;
+        // Include hidden/system entries: silently skipping files would produce fewer Source
+        // Records than the template contains. Reparse points (symbolic links) are skipped to
+        // prevent infinite recursion through link cycles. The cap is enforced during the lazy
+        // enumeration (inside the try, so I/O errors stay captured) to bound memory before
+        // the full Source Record list is built.
+        var files = new List<string>();
         try
         {
-            files = Directory.EnumerateFiles(directoryPath, "*", new EnumerationOptions
+            foreach (var file in Directory.EnumerateFiles(directoryPath, "*", new EnumerationOptions
             {
                 RecurseSubdirectories = true,
                 AttributesToSkip = FileAttributes.ReparsePoint,
                 IgnoreInaccessible = false,
-            }).ToList();
+            }))
+            {
+                if (files.Count >= maxRecords)
+                {
+                    error = $"Directory template '{directoryPath}' contains more than {maxRecords} files, exceeding the maximum of {maxRecords} Source Records; split the template into smaller directories.";
+                    return false;
+                }
+
+                files.Add(file);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             error = $"Cannot read directory template '{directoryPath}': {ex.Message}";
-            return false;
-        }
-
-        if (files.Count > maxRecords)
-        {
-            error = $"Directory template '{directoryPath}' contains {files.Count} files, exceeding the maximum of {maxRecords} Source Records; split the template into smaller directories.";
             return false;
         }
 

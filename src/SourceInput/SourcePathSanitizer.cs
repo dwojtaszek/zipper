@@ -76,8 +76,10 @@ internal static class SourcePathSanitizer
                 return false;
             }
 
+            // Windows trims trailing spaces/dots from the stem before the device-name
+            // comparison, so the check must do the same ("CON .pdf" is still CON).
             var stemEnd = segment.IndexOf('.');
-            var stem = stemEnd >= 0 ? segment[..stemEnd] : segment;
+            var stem = (stemEnd >= 0 ? segment[..stemEnd] : segment).TrimEnd(' ', '.');
             if (ReservedDeviceNames.Contains(stem))
             {
                 error = $"Path segment '{segment}' is a reserved Windows device name.";

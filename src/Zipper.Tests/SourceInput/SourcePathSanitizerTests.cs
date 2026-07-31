@@ -130,6 +130,18 @@ public class SourcePathSanitizerTests
     }
 
     [Theory]
+    [InlineData("CON .pdf")]
+    [InlineData("NUL .txt")]
+    [InlineData("folder/COM1 .xlsx")]
+    public void TryNormalize_ReservedDeviceNameWithPaddedStem_Rejected(string raw)
+    {
+        var ok = SourcePathSanitizer.TryNormalize(raw, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("reserved Windows device name", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("console.pdf")]
     [InlineData("COM10.pdf")]
     [InlineData("LPT0.pdf")]
