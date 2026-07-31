@@ -454,7 +454,7 @@ if errorlevel 1 ( echo [ ERROR ] Test 11c: generation failed & exit /b 1 )
 if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\ORIGINALS\clients\acme\scan.pdf" ( echo [ ERROR ] Test 11c: originals native missing & exit /b 1 )
 if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\ORIGINALS\root.docx" ( echo [ ERROR ] Test 11c: root-level originals native missing & exit /b 1 )
 if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\TEXT\VOL001\SPROD00000001.txt" ( echo [ ERROR ] Test 11c: volume-rooted text file missing & exit /b 1 )
-findstr /C:"originals" "%TEST_OUTPUT_DIR%\test11c\SPRODC\_manifest.json" >nul
+findstr /C:"\"originals\": \"ORIGINALS\"" "%TEST_OUTPUT_DIR%\test11c\SPRODC\_manifest.json" >nul
 if errorlevel 1 ( echo [ ERROR ] Test 11c: manifest missing originals directory entry & exit /b 1 )
 findstr /C:"ORIGINALS\clients\acme\scan.pdf" "%TEST_OUTPUT_DIR%\test11c\SPRODC\DATA\loadfile.dat" >nul
 if errorlevel 1 ( echo [ ERROR ] Test 11c: originals path missing from DAT & exit /b 1 )
