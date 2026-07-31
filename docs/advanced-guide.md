@@ -136,12 +136,50 @@ Written at the root of Production Sets. Records Bates ranges, volume layout, loa
 
 ## 3. Argument Interactions Reference
 
+> [!IMPORTANT]
+> Some arguments have dependencies or conflicts. Review these rules when combining options.
+
 | Interaction | Behavior |
 |-------------|----------|
 | `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
 | `--column-profile` + `--production-set` | **Conflict**: `--column-profile` is not supported with `--production-set` |
-| `--types` | Mutually exclusive with `--type`, `--loadfile-only`, and `--column-profile` |
-| `--input-csv` / `--directory-template` | Mutually exclusive with each other and with `--type`/`--types`. Requires no `--count` (or `--count` matching source record count) |
-| `--chaos-mode` | Requires `--loadfile-only` and `dat`/`opt` format |
+| `--column-profile` + `--with-collection-metadata` | Collection metadata columns are merged into the profile; profile values take precedence with synthetic fallback |
+| `--with-collection-metadata` + `--with-metadata` | Both add their own disjoint column sets; no conflict |
+| `--with-collection-metadata` + Production Set | Silently ignored (no columns added) |
+| `--with-collection-metadata` + `--loadfile-only` (no `--column-profile`) | Silently ignored (no columns added) |
+| `--with-collection-metadata` + OPT or EDRM-XML | Silently ignored (not applicable to these formats) |
+| `--target-zip-size` | Requires `--count` or source input (`--input-csv` / `--directory-template`) |
+| `--types` | Mutually exclusive with `--type`, `--loadfile-only`, and `--column-profile`. Weights must be positive integers (max 1,000,000 each). When `jpg` or `tiff` participate, DAT+OPT are the default formats. Standard-mode Load Files gain a File Type column; Production Set DAT writes FILE_TYPE per record. Email Metadata columns apply only to Email records; Page Count applies only to TIFF records |
+| `--input-csv` / `--directory-template` | Mutually exclusive with each other and with `--type` and `--types`. Satisfies the `--type` requirement; `--count` becomes optional but must match the Source Record count when given. Multiple source File Types behave like a File Type Mix (File Type column, per-record Email Metadata and Page Count gating, DAT+OPT default when `jpg`/`tiff` participate). `ControlNumber`/`BatesNumber` columns override per-record identity (BatesNumber requires `--bates-prefix`); extra columns map through `--column-profile` (DAT, Standard and Loadfile-Only modes). With `--production-set`, the `BatesNumber` column is rejected, identity stays Bates-based, and `--source-path-mode` controls Native File placement. In Standard mode `--folders` and `--distribution` are ignored (source paths define the structure) |
+| `--source-path-mode` | Requires `--production-set` and source input (`--input-csv` / `--directory-template`) |
+| `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) or when `eml` participates in `--types` |
+| `--with-families` | Only meaningful when `--type eml` (or `eml` participates in `--types`) and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
+| `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types` |
+| `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
+| `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
+| `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
+| `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
+| `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| Strict-prefix `--col-delim`/`--quote-delim`/etc. + old-style flags or preset | Strict-prefix arguments win per delimiter; full chain: defaults → `--dat-delimiters` preset → `--delimiter-*` → strict-prefix. Preset and old-style flags are DAT-only; strict-prefix work in all generation modes but affect only DAT output |
+| `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
+| `--hash-algorithms` | Requires `--hash-mode` to be `actual` or `simulated` |
+| `--hash-mode actual` + `--loadfile-only` | **Conflict**: cannot compute actual hashes without generated Native Files |
+| `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
+| `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
+| `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
+| `--chaos-mode` | Requires `--loadfile-only` |
+| `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
+| `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
+| `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
-| `--redacted-production` | Requires `--production-set`; text placeholders require `--with-text` |
+| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
+| `--withheld-native-policy` | Requires `--redacted-production` |
+| `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
+| `--production-zip`, `--volume-size` | Require `--production-set` |
+| `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
+| `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
+| `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
+| `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation. |
+| `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
+| `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
