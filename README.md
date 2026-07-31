@@ -273,6 +273,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | Interaction | Behavior |
 |-------------|----------|
 | `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
+| `--column-profile` + `--production-set` | **Conflict**: `--column-profile` is not supported with `--production-set` |
 | `--column-profile` + `--with-collection-metadata` | Collection metadata columns are merged into the profile; profile values take precedence with synthetic fallback |
 | `--with-collection-metadata` + `--with-metadata` | Both add their own disjoint column sets; no conflict |
 | `--with-collection-metadata` + Production Set | Silently ignored (no columns added) |

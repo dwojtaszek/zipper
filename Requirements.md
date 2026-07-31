@@ -620,6 +620,7 @@ This section clarifies behavior when multiple arguments interact:
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--production-set` | **Conflict**: cannot use both |
+| `--production-set` + `--column-profile` | **Conflict**: `--column-profile` is not supported with `--production-set` |
 | `--load-file-format` + `--production-set` | **Ignored**: See REQ-117. |
 | `--production-set` + `--bates-prefix` | **Required**: `--bates-prefix` is mandatory when `--production-set` is used |
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |

@@ -176,6 +176,12 @@ internal static class CrossCuttingValidator
 
     private static bool ValidateColumnProfile(ParsedArguments parsed)
     {
+        if (!string.IsNullOrEmpty(parsed.ColumnProfile) && parsed.ProductionSet)
+        {
+            Console.Error.WriteLine("Error: --column-profile is not supported with --production-set.");
+            return false;
+        }
+
         if (!string.IsNullOrEmpty(parsed.ColumnProfile) && !ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile))
         {
             if (!PathValidator.IsPathSafe(parsed.ColumnProfile, Directory.GetCurrentDirectory()))

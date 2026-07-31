@@ -803,4 +803,13 @@ public class CliValidatorTests
         };
         Assert.True(CliValidator.Validate(args));
     }
+
+    [Fact]
+    public void Validate_ColumnProfile_WithProductionSet_ReturnsFalse()
+    {
+        var args = CreateValidArgs();
+        args.ProductionSet = true;
+        args.ColumnProfile = "edrm-standard";
+        Assert.False(CliValidator.Validate(args));
+    }
 }
