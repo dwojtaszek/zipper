@@ -1,10 +1,163 @@
 # Zipper Advanced CLI & Reference Guide
 
-This reference guide covers advanced flags, column profiles, delimiter configurations, Chaos Engine usage, Production Set comparisons, and audit schema details.
+This reference guide covers output directory structure visualizers, format comparison matrices, common use case recipes, custom column profile authoring, advanced flags, delimiter configurations, Chaos Engine usage, Production Set comparisons, and audit schema details.
 
 ---
 
-## 1. Advanced CLI Options
+## 1. Output Directory Structure Visualizers
+
+Zipper operates in three distinct generation modes, each producing a specific output layout on disk.
+
+### Standard Mode (`Archive + Load File`)
+Generates a `.zip` file containing native files distributed across subfolders, accompanied by a root Load File (`.dat`, `.opt`, `.csv`, `.xml`, or `concordance`).
+
+```text
+<output-path>/
+├── archive_20260731_120000.zip
+│   ├── folder_001/
+│   │   ├── 00000001.pdf
+│   │   └── 00000003.pdf
+│   └── folder_002/
+│       ├── 00000002.pdf
+│       └── 00000004.pdf
+└── archive_20260731_120000.dat  (Load File)
+```
+
+### Production Set Mode (`Volume Layout`)
+Generates a structured e-discovery Production Set with volume folders, single-page image renders (`.tif`), extracted text (`.txt`), native files, DAT/OPT load files, and a JSON manifest.
+
+```text
+<output-path>/
+└── PRODUCTION_20260731_120000/
+    ├── DATA/
+    │   ├── loadfile.dat                 (Standard Production DAT)
+    │   ├── loadfile.opt                 (Opticon Page-Level Image Load File)
+    │   ├── loadfile_properties.json     (DAT Audit File)
+    │   └── loadfile.opt_properties.json (OPT Audit File)
+    ├── IMAGES/
+    │   └── VOL001/
+    │       ├── CLIENT00100000001.tif
+    │       └── CLIENT00100000002.tif
+    ├── NATIVES/
+    │   └── VOL001/
+    │       ├── CLIENT00100000001.pdf
+    │       └── CLIENT00100000002.pdf
+    ├── TEXT/                           (Present when --with-text is enabled)
+    │   └── VOL001/
+    │       ├── CLIENT00100000001.txt
+    │       └── CLIENT00100000002.txt
+    ├── _manifest.json                  (Production Set Manifest)
+    └── _validation_report.json          (Self-Validation Summary)
+```
+
+### Loadfile-Only Mode (`Standalone Metadata`)
+Generates metadata or image-referencing load files directly to disk without creating native files or zip archives.
+
+```text
+<output-path>/
+├── loadfile_20260731_120000.dat
+└── loadfile_20260731_120000_properties.json  (Audit Metadata File)
+```
+
+---
+
+## 2. Load File Format Comparison Matrix
+
+| Format | File Extension | Column Delimiter | Quote Delimiter | Multi-Value Separator | Image Referencing | E-Discovery Standards |
+|--------|---------------|------------------|-----------------|----------------------|-------------------|----------------------|
+| `dat` | `.dat` | ASCII 20 (`\x14`) | ASCII 254 (`þ`) | `;` | Document-level | Standard Metadata Export |
+| `opt` | `.opt` | Comma (`,`) | None | N/A | Single/Multi-page TIFF/JPG | Page-Level Image Import |
+| `csv` | `.csv` | Comma (`,`) | Double-quote (`"`) | `;` | Document-level | RFC 4180 Escaped CSV |
+| `edrm-xml` | `.xml` | XML Tags | N/A | `<Value>` Elements | Full Tag & File Map | EDRM Schema v1.2 XML |
+| `concordance` | `.dat` | ASCII 20 (`\x14`) | ASCII 254 (`þ`) | `;` | Document-level | Quote-wrapped Database Import |
+
+---
+
+## 3. Common Use Case Recipes
+
+### Recipe A: Synthetic Production Export for Review Ingestion Testing
+Generate a 50,000-document legal production with Bates prefixes `CASE2026`, extracted text, and volume directories:
+
+```bash
+zipper --production-set --bates-prefix "CASE2026" --count 50000 --output-path ./prod_export --with-text --volume-size 5000
+```
+
+### Recipe B: Ingestion Anomaly & Error Resiliency Testing
+Inject 5% deliberate structural anomalies into a 100,000-record DAT Load File to test ingestion parser error handling:
+
+```bash
+zipper --loadfile-only --count 100000 --output-path ./chaos_ingest --chaos-mode --chaos-amount "5%" --seed 42
+```
+
+### Recipe C: E-Mail & Attachment Family Simulation
+Generate 10,000 E-Mails with a 30% attachment rate and parent-child attachment relationship columns (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`):
+
+```bash
+zipper --type eml --count 10000 --output-path ./email_families --attachment-rate 30 --with-families --with-metadata
+```
+
+### Recipe D: Realistic Document Mix Export
+Generate a multi-file-type archive (60% PDF, 20% E-Mail, 10% TIFF, 10% XLSX) with custom litigation metadata profile:
+
+```bash
+zipper --types "pdf:60,eml:20,tiff:10,xlsx:10" --count 20000 --output-path ./mixed_archive --column-profile litigation
+```
+
+---
+
+## 4. Custom Column Profile Authoring Guide
+
+You can define custom JSON column profiles to generate domain-specific metadata schemas with up to 200 columns. Custom profiles must be saved within your working directory.
+
+### Example Custom Profile (`custom-profile.json`)
+
+```json
+{
+  "profileName": "custom-ediscovery",
+  "description": "Custom review metadata profile with tailored date ranges and custodians",
+  "columns": [
+    {
+      "name": "CONTROL_NUMBER",
+      "generatorType": "identifier",
+      "generatorParams": { "prefix": "DOC", "digits": 8 }
+    },
+    {
+      "name": "CUSTODIAN",
+      "generatorType": "text",
+      "generatorParams": { "source": "custodians" }
+    },
+    {
+      "name": "DOCUMENT_DATE",
+      "generatorType": "date",
+      "generatorParams": { "startDate": "2020-01-01", "endDate": "2026-12-31" }
+    },
+    {
+      "name": "CONFIDENTIALITY",
+      "generatorType": "coded",
+      "generatorParams": { "values": ["Public", "Confidential", "Highly Confidential", "Restricted"] }
+    },
+    {
+      "name": "FILE_SIZE_BYTES",
+      "generatorType": "number",
+      "generatorParams": { "min": 1024, "max": 10485760 }
+    },
+    {
+      "name": "REVIEW_NOTES",
+      "generatorType": "longtext",
+      "generatorParams": { "loremParagraphs": 2 }
+    }
+  ]
+}
+```
+
+### Usage:
+```bash
+zipper --type pdf --count 1000 --output-path ./custom_output --column-profile ./custom-profile.json
+```
+
+---
+
+## 5. Advanced CLI Options
 
 ### Loadfile-Only Mode
 
@@ -89,7 +242,7 @@ zipper --compare-production-manifests "/path/to/prior/_manifest.json,/path/to/ne
 
 ---
 
-## 2. Audit & Manifest File Schemas
+## 6. Audit & Manifest File Schemas
 
 ### `_properties.json` (Loadfile-Only Audit File)
 
@@ -134,7 +287,7 @@ Written at the root of Production Sets. Records Bates ranges, volume layout, loa
 
 ---
 
-## 3. Argument Interactions Reference
+## 7. Argument Interactions Reference
 
 > [!IMPORTANT]
 > Some arguments have dependencies or conflicts. Review these rules when combining options.
@@ -183,3 +336,4 @@ Written at the root of Production Sets. Records Bates ranges, volume layout, loa
 | `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation. |
 | `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
+
