@@ -284,11 +284,11 @@ if ! grep -q "does not match" "$val_err_dir/val2.err"; then
   print_error "Test 6: count mismatch message not found"
 fi
 
-if zipper --input-csv "$TEST_OUTPUT_DIR/source.csv" --production-set --bates-prefix "ABC" --output-path "$TEST_OUTPUT_DIR/val3" > /dev/null 2> "$val_err_dir/val3.err"; then
-  print_error "Test 6: --production-set with source input should fail"
+if ! zipper --input-csv "$TEST_OUTPUT_DIR/source.csv" --production-set --bates-prefix "ABC" --output-path "$TEST_OUTPUT_DIR/val3" > /dev/null 2> "$val_err_dir/val3.err"; then
+  print_error "Test 6: --production-set with source input should succeed"
 fi
-if ! grep -q "not supported" "$val_err_dir/val3.err"; then
-  print_error "Test 6: production-set conflict message not found"
+if ! find "$TEST_OUTPUT_DIR/val3" -path "*/DATA/loadfile.dat" -print -quit | grep -q .; then
+  print_error "Test 6: source-driven production set did not produce a DAT load file"
 fi
 
 mkdir -p "$TEST_OUTPUT_DIR/bad-template"

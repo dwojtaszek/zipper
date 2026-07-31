@@ -281,13 +281,14 @@ if errorlevel 1 (
 )
 
 %ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\source.csv" --production-set --bates-prefix "ABC" --output-path "%TEST_OUTPUT_DIR%\val3" >nul 2>"%temp%\source_val3.err"
-if not errorlevel 1 (
-  echo [ ERROR ] Test 6: --production-set with source input should fail
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: --production-set with source input should succeed
   exit /b 1
 )
-findstr /C:"not supported" "%temp%\source_val3.err" >nul
-if errorlevel 1 (
-  echo [ ERROR ] Test 6: production-set conflict message not found
+set "FOUND_DAT="
+for /d %%d in ("%TEST_OUTPUT_DIR%\val3\*") do if exist "%%d\DATA\loadfile.dat" set "FOUND_DAT=1"
+if not defined FOUND_DAT (
+  echo [ ERROR ] Test 6: source-driven production set did not produce a DAT load file
   exit /b 1
 )
 

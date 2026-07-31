@@ -70,7 +70,9 @@ internal static class ProductionManifestWriter
             AttachmentNativeFileCount = attachmentCount > 0 ? attachmentCount : null,
             FileType = request.Output.FileTypeRatios is { Count: > 0 }
                 ? string.Join(",", request.Output.FileTypeRatios.Select(r => r.Type))
-                : request.Output.FileType,
+                : request.Output.SourceFileTypes is { Count: > 0 }
+                    ? string.Join(",", request.Output.SourceFileTypes)
+                    : request.Output.FileType,
             VolumeCount = volumeCount,
             VolumeSize = request.Production.VolumeSize,
             Directories = new ProductionDirectories
@@ -80,6 +82,7 @@ internal static class ProductionManifestWriter
                 Text = "TEXT",
                 Images = "IMAGES",
                 Redacted = request.Production.RedactedProduction ? "REDACTED" : null,
+                Originals = request.Production.SourcePathMode == Config.SourcePathMode.Originals ? "ORIGINALS" : null,
             },
             LoadFiles = new ProductionLoadFiles
             {
@@ -251,6 +254,9 @@ internal class ProductionDirectories
 
     [JsonPropertyName("redacted")]
     public string? Redacted { get; set; }
+
+    [JsonPropertyName("originals")]
+    public string? Originals { get; set; }
 }
 
 internal class ProductionLoadFiles

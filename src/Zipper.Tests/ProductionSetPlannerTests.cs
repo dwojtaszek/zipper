@@ -167,4 +167,83 @@ public class ProductionSetPlannerTests
         Assert.Equal(expectedText, plan.TextRelPath);
         Assert.Equal(expectedImage, plan.ImageRelPath);
     }
+
+    private static FileGenerationRequest CreateSourceDrivenRequest(SourcePathMode mode)
+    {
+        var request = new FileGenerationRequest();
+        request.Bates = new BatesNumberConfig { Prefix = "PROD", Digits = 4, Start = 1 };
+        request.Output = request.Output with { FileCount = 3, FileType = "pdf" };
+        request.Production = request.Production with { VolumeSize = 10, SourcePathMode = mode };
+        request.SourceRecords = new List<SourceInput.SourceRecord>
+        {
+            new() { RelativePath = "clients/acme/contracts/scan.pdf", FileType = "pdf" },
+            new() { RelativePath = "root.docx", FileType = "docx" },
+            new() { RelativePath = "clients/beta/mail.eml", FileType = "eml" },
+        };
+        return request;
+    }
+
+    [Fact]
+    public void Plan_SourceDrivenBatesMode_BatesNamesNativesUnderVolumes()
+    {
+        var plans = ProductionSetPlanner.Plan(CreateSourceDrivenRequest(SourcePathMode.Bates));
+
+        Assert.Equal(3, plans.Count);
+        Assert.Equal(Path.Combine("NATIVES", "VOL001", "PROD0001.pdf"), plans[0].NativeRelPath);
+        Assert.Equal(Path.Combine("NATIVES", "VOL001", "PROD0002.docx"), plans[1].NativeRelPath);
+
+        // File Type comes from the Source Record, not the request-level type
+        Assert.Equal("docx", plans[1].FileType);
+        Assert.Equal("eml", plans[2].FileType);
+    }
+
+    [Fact]
+    public void Plan_SourceDrivenPreserveMode_KeepsSourceSubdirsWithBatesFileName()
+    {
+        var plans = ProductionSetPlanner.Plan(CreateSourceDrivenRequest(SourcePathMode.PreserveSubdirs));
+
+        Assert.Equal(Path.Combine("NATIVES", "VOL001", "clients", "acme", "contracts", "PROD0001.pdf"), plans[0].NativeRelPath);
+
+        // Root-level source entries fall back to the volume root
+        Assert.Equal(Path.Combine("NATIVES", "VOL001", "PROD0002.docx"), plans[1].NativeRelPath);
+        Assert.Equal(Path.Combine("NATIVES", "VOL001", "clients", "beta", "PROD0003.eml"), plans[2].NativeRelPath);
+    }
+
+    [Fact]
+    public void Plan_SourceDrivenPreserveMode_SpansVolumeBoundariesInRecordOrder()
+    {
+        var request = CreateSourceDrivenRequest(SourcePathMode.PreserveSubdirs);
+        request.Production = request.Production with { VolumeSize = 2 };
+
+        var plans = ProductionSetPlanner.Plan(request);
+
+        Assert.Equal("VOL001", plans[0].VolumeName);
+        Assert.Equal("VOL001", plans[1].VolumeName);
+        Assert.Equal("VOL002", plans[2].VolumeName);
+        Assert.Equal(Path.Combine("NATIVES", "VOL002", "clients", "beta", "PROD0003.eml"), plans[2].NativeRelPath);
+    }
+
+    [Fact]
+    public void Plan_SourceRecordCountMismatch_ThrowsInvalidOperationException()
+    {
+        var request = CreateSourceDrivenRequest(SourcePathMode.Bates);
+        request.Output = request.Output with { FileCount = 5 };
+
+        var exception = Assert.Throws<InvalidOperationException>(() => ProductionSetPlanner.Plan(request));
+        Assert.Contains("Source Record count", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Plan_SourceDrivenOriginalsMode_MirrorsFullSourcePathUnderOriginals()
+    {
+        var plans = ProductionSetPlanner.Plan(CreateSourceDrivenRequest(SourcePathMode.Originals));
+
+        Assert.Equal(Path.Combine("ORIGINALS", "clients", "acme", "contracts", "scan.pdf"), plans[0].NativeRelPath);
+        Assert.Equal(Path.Combine("ORIGINALS", "root.docx"), plans[1].NativeRelPath);
+        Assert.Equal(Path.Combine("ORIGINALS", "clients", "beta", "mail.eml"), plans[2].NativeRelPath);
+
+        // Derived artifacts stay volume-rooted and Bates-named in every mode
+        Assert.Equal(Path.Combine("TEXT", "VOL001", "PROD0001.txt"), plans[0].TextRelPath);
+        Assert.Equal(Path.Combine("IMAGES", "VOL001", "PROD0001.tif"), plans[0].ImageRelPath);
+    }
 }

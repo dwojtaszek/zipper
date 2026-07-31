@@ -244,6 +244,16 @@ internal static class ProductionSetGenerator
             }
         }
 
+        // Source-Driven Generation with preserve/originals path modes nests Native Files in
+        // source-derived directories not covered by the pre-created Volume folders.
+        if (request.Production.SourcePathMode != Config.SourcePathMode.Bates && request.SourceRecords is not null)
+        {
+            foreach (var dir in plans.Select(p => Path.GetDirectoryName(p.NativeRelPath)).Where(d => !string.IsNullOrEmpty(d)).Distinct(StringComparer.Ordinal))
+            {
+                Directory.CreateDirectory(Path.Combine(productionPath, dir!));
+            }
+        }
+
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
 
         var fileGenerators = FileGeneratorFactory.CreateMap(request);
@@ -267,7 +277,7 @@ internal static class ProductionSetGenerator
                 Index = plan.Index + 1,
                 FolderNumber = plan.VolumeIndex,
                 FolderName = plan.VolumeName,
-                FileName = $"{plan.BatesNumber}.{plan.FileType}",
+                FileName = Path.GetFileName(plan.NativeRelPath),
                 FilePathInZip = plan.NativeRelPath,
                 FileType = plan.FileType,
             };
@@ -362,6 +372,11 @@ internal static class ProductionSetGenerator
                 Hashes = fileDataHashes,
                 RedactedImageRelPath = plan.RedactedImageRelPath,
                 RedactedTextRelPath = plan.RedactedTextRelPath,
+
+                // Only source-driven runs override composer path derivation; legacy runs keep
+                // the historical NATIVES-rooted derivation byte-for-byte (Rule 6 quirk preservation).
+                TextRelPath = request.SourceRecords is not null ? plan.TextRelPath : null,
+                ImageRelPath = request.SourceRecords is not null ? plan.ImageRelPath : null,
                 NativePathOverride = nativePathOverride,
                 RedactionReason = redactionReason,
             });

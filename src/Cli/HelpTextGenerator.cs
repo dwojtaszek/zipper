@@ -68,6 +68,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --production-id <string> Configurable production ID (supports lists, defaults to auto-incrementing/timestamp)");
         Console.Error.WriteLine("  --rolling-count <number> Generate multiple rolling production sets (default: 1)");
         Console.Error.WriteLine("  --rolling-bates-mode <continuous|restart> Bates numbering mode across rolling sets (default: continuous)");
+        Console.Error.WriteLine("  --source-path-mode <bates|preserve|originals> Source Path Mode for Source-Driven Production Sets (default: bates)");
         Console.Error.WriteLine("  --production-zip         Wrap production set output in a ZIP archive");
         Console.Error.WriteLine("  --volume-size <number>   Max files per volume subfolder (default: 5000)");
         Console.Error.WriteLine("  --supplemental-production Enable supplemental production set generation mode");

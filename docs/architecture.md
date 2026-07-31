@@ -58,7 +58,7 @@ graph TD
 
     ProductionSetMode --> PSG["ProductionSetGenerator"]
     PSG --> PSP["ProductionSetPlanner (no I/O)"]
-    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT)"]
+    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
     PSG --> LF3["Load Files + Manifest"]
 ```
 

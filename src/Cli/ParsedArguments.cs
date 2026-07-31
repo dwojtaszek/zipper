@@ -10,6 +10,8 @@ public class ParsedArguments
 
     public string? DirectoryTemplate { get; set; }
 
+    public string? SourcePathMode { get; set; }
+
     public long? Count { get; set; }
 
     public DirectoryInfo? OutputDirectory { get; set; }
