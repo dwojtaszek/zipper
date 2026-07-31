@@ -353,6 +353,22 @@ if errorlevel 1 (
   exit /b 1
 )
 
+(
+echo FilePath,FileType,BatesNumber
+echo a.pdf,pdf,ABC00000002
+echo b.eml,eml,
+) > "%TEST_OUTPUT_DIR%\bates-collision.csv"
+%ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\bates-collision.csv" --bates-prefix "ABC" --output-path "%TEST_OUTPUT_DIR%\val9" >nul 2>"%temp%\source_val9.err"
+if not errorlevel 1 (
+  echo [ ERROR ] Test 6: Bates override colliding with the generated sequence should fail
+  exit /b 1
+)
+findstr /C:"collides with the generated Bates sequence value" "%temp%\source_val9.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Bates collision message not found
+  exit /b 1
+)
+
 echo [ SUCCESS ] Test Case 6: Validation failures passed
 
 :: --- All Tests Passed ---

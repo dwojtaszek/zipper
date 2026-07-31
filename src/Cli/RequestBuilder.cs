@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Zipper.Config;
 using Zipper.Profiles;
@@ -99,6 +100,16 @@ public static class RequestBuilder
             if (parsed.ProductionSet && rows.Any(r => r.BatesNumber is not null))
             {
                 Console.Error.WriteLine("Error: the source 'BatesNumber' column cannot be used with --production-set. Production Set Bates Numbers come from the configured Bates sequence so Volume ranges in the Production Manifest stay exact.");
+                return null;
+            }
+
+            // Explicit identity overrides must stay clear of sequence-generated values: an
+            // override equal to a generated fallback produces duplicate Load File identities
+            // and OPT image paths.
+            var identityCollision = FindGeneratedIdentityCollision(rows, parsed);
+            if (identityCollision is not null)
+            {
+                Console.Error.WriteLine($"Error: {identityCollision}");
                 return null;
             }
 
@@ -293,6 +304,63 @@ public static class RequestBuilder
             Hash = hashConfig,
             SourceRecords = sourceRecords,
         };
+    }
+
+    // An explicit override collides with a generated identity only when it equals a value the
+    // run would actually generate, compared case-insensitively (consistent with duplicate
+    // detection and Windows path semantics): DOC{index:D8} for Control Numbers and the
+    // configured Bates sequence values for Bates Numbers.
+    private static string? FindGeneratedIdentityCollision(IReadOnlyList<SourceInput.SourceRecord> rows, ParsedArguments parsed)
+    {
+        foreach (var row in rows)
+        {
+            var control = row.ControlNumber;
+            if (control is not null
+                && control.Length == 11
+                && control.StartsWith("DOC", StringComparison.OrdinalIgnoreCase)
+                && int.TryParse(control.AsSpan(3), NumberStyles.None, CultureInfo.InvariantCulture, out var controlIndex)
+                && controlIndex >= 1
+                && controlIndex <= rows.Count
+                && string.Equals(control, "DOC" + controlIndex.ToString("D8", CultureInfo.InvariantCulture), StringComparison.OrdinalIgnoreCase))
+            {
+                return $"source ControlNumber '{control}' collides with the generated Control Number for row {controlIndex}. Choose an override outside the generated identity space.";
+            }
+        }
+
+        if (!string.IsNullOrEmpty(parsed.BatesPrefix))
+        {
+            var prefix = parsed.BatesPrefix!;
+            var start = parsed.BatesStart ?? 1;
+            var digits = parsed.BatesDigits ?? 8;
+            foreach (var row in rows)
+            {
+                var bates = row.BatesNumber;
+                if (bates is null || !bates.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var numericPart = bates.AsSpan(prefix.Length);
+                if (!long.TryParse(numericPart, NumberStyles.None, CultureInfo.InvariantCulture, out var number))
+                {
+                    continue;
+                }
+
+                var sequenceIndex = number - start;
+                if (sequenceIndex < 0 || sequenceIndex >= rows.Count)
+                {
+                    continue;
+                }
+
+                var generated = prefix + number.ToString($"D{digits}", CultureInfo.InvariantCulture);
+                if (string.Equals(bates, generated, StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"source BatesNumber '{bates}' collides with the generated Bates sequence value for row {sequenceIndex + 1}. Choose an override outside the generated identity space.";
+                }
+            }
+        }
+
+        return null;
     }
 
     internal static HashConfig ParseHashConfig(ParsedArguments parsed)

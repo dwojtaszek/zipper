@@ -288,6 +288,57 @@ public class SourceDrivenCliTests : IDisposable
     }
 
     [Fact]
+    public void Build_InputCsvControlNumberCollidingWithGenerated_ReturnsNull()
+    {
+        var csv = this.WriteCsv("FilePath,FileType,ControlNumber\na.pdf,pdf,ABC-1\nb.eml,eml,DOC00000002\nc.tiff,tiff,ABC-3\n");
+
+        var error = CaptureError(() =>
+        {
+            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--output-path", this.OutputDir() });
+            Assert.Null(request);
+        });
+
+        Assert.Contains("collides with the generated Control Number", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_InputCsvControlNumberOutsideGeneratedRange_Succeeds()
+    {
+        var csv = this.WriteCsv("FilePath,FileType,ControlNumber\na.pdf,pdf,DOC00000005\nb.eml,eml,ABC-2\n");
+
+        var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--output-path", this.OutputDir() });
+
+        Assert.NotNull(request);
+    }
+
+    [Fact]
+    public void Build_InputCsvBatesNumberCollidingWithGenerated_ReturnsNull()
+    {
+        var csv = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC00000002\nb.eml,eml,\nc.tiff,tiff,\n");
+
+        var error = CaptureError(() =>
+        {
+            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--bates-prefix", "ABC", "--output-path", this.OutputDir() });
+            Assert.Null(request);
+        });
+
+        Assert.Contains("collides with the generated Bates sequence value", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ABC00000009")] // outside the 3-row generated range
+    [InlineData("ABC2")] // numerically in range but different string (padding), no byte collision
+    [InlineData("XYZ00000001")] // different prefix
+    public void Build_InputCsvBatesNumberOutsideGeneratedSpace_Succeeds(string bates)
+    {
+        var csv = this.WriteCsv($"FilePath,FileType,BatesNumber\na.pdf,pdf,{bates}\nb.eml,eml,\nc.tiff,tiff,\n");
+
+        var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--bates-prefix", "ABC", "--output-path", this.OutputDir() });
+
+        Assert.NotNull(request);
+    }
+
+    [Fact]
     public void Build_InputCsvMissingFile_ReturnsNull()
     {
         var missing = Path.Combine(this.tempDir, "nope.csv");
