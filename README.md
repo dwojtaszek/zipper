@@ -290,6 +290,7 @@ When family relationships create child Attachment Native Files, `nativeFileCount
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
 | `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| Strict-prefix `--col-delim`/`--quote-delim`/etc. + old-style flags or preset | Strict-prefix arguments win per delimiter; full chain: defaults → `--dat-delimiters` preset → `--delimiter-*` → strict-prefix (all DAT-only) |
 | `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
 | `--hash-algorithms` | Requires `--hash-mode` to be `actual` or `simulated` |
 | `--hash-mode actual` + `--loadfile-only` | **Conflict**: cannot compute actual hashes without generated Native Files |

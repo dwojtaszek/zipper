@@ -371,7 +371,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 - **REQ-048**: The `--load-file-format` argument shall support the following formats: `dat`, `opt`, `csv`, `edrm-xml`, `concordance`.
 - **REQ-049**: DAT format shall use standard Concordance delimiters (ASCII 20, 254, 174) by default.
-- **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format.
+- **REQ-050**: A new argument `--dat-delimiters <standard|csv>` shall allow switching between standard Concordance delimiters and standard CSV format. Delimiter precedence, lowest to highest: Concordance defaults (ASCII 20/254/174) → `--dat-delimiters` preset (column/quote/newline only) → old-style `--delimiter-*` flags (per delimiter) → strict-prefix arguments (REQ-093). Per REQ-083, all of these apply only when the Load File Format is DAT.
 - **REQ-051**: OPT format shall use comma delimiters and ANSI encoding by default.
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
 - **REQ-053**: **DEPRECATED** — Original requirement for CSV delimiter customization. Superseded by REQ-124.
@@ -656,7 +656,7 @@ This section clarifies behavior when multiple arguments interact:
   - `--nested-delim <ascii:N|char:C>`: Nested value separator
 
 > [!NOTE]
-> The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values.
+> The strict `ascii:`/`char:` prefix format is distinct from the existing `--delimiter-column`/`--delimiter-quote`/`--delimiter-newline` arguments which accept bare values. When several styles are given, strict-prefix arguments take precedence over both the `--dat-delimiters` preset (REQ-050) and the old-style flags, per delimiter.
 
 ---
 
