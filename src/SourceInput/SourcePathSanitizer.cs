@@ -10,6 +10,15 @@ internal static class SourcePathSanitizer
 {
     private static readonly char[] InvalidChars = { '<', '>', '|', '"', '?', '*', ':' };
 
+    // Windows rejects these device names (with any extension) outright; a ZIP entry or output
+    // directory containing one is valid but unextractable on Windows.
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
     internal static bool TryNormalize(string? rawPath, out string normalized, out string? error)
     {
         normalized = string.Empty;
@@ -58,6 +67,20 @@ internal static class SourcePathSanitizer
             if (segment == ".")
             {
                 error = "Path contains a current-directory segment ('.').";
+                return false;
+            }
+
+            if (segment.EndsWith('.') || segment.EndsWith(' '))
+            {
+                error = $"Path segment '{segment}' ends with a dot or space, which Windows cannot store.";
+                return false;
+            }
+
+            var stemEnd = segment.IndexOf('.');
+            var stem = stemEnd >= 0 ? segment[..stemEnd] : segment;
+            if (ReservedDeviceNames.Contains(stem))
+            {
+                error = $"Path segment '{segment}' is a reserved Windows device name.";
                 return false;
             }
         }

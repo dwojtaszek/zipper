@@ -7,7 +7,7 @@ namespace Zipper.SourceInput;
 /// </summary>
 internal static class DirectoryTemplateReader
 {
-    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error)
+    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceCsvReader.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         error = null;
@@ -38,6 +38,12 @@ internal static class DirectoryTemplateReader
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             error = $"Cannot read directory template '{directoryPath}': {ex.Message}";
+            return false;
+        }
+
+        if (files.Count > maxRecords)
+        {
+            error = $"Directory template '{directoryPath}' contains {files.Count} files, exceeding the maximum of {maxRecords} Source Records; split the template into smaller directories.";
             return false;
         }
 

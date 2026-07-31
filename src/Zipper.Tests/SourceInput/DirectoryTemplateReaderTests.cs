@@ -44,6 +44,19 @@ public class DirectoryTemplateReaderTests : IDisposable
     }
 
     [Fact]
+    public void TryRead_FileCapExceeded_ReturnsFalse()
+    {
+        this.CreateFile("a.pdf");
+        this.CreateFile("b.eml");
+        this.CreateFile("c.tiff");
+
+        var ok = DirectoryTemplateReader.TryRead(this.tempDir, out _, out var error, maxRecords: 2);
+
+        Assert.False(ok);
+        Assert.Contains("exceeding the maximum of 2 Source Records", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryRead_NestedStructure_RecreatesRelativePathsSorted()
     {
         this.CreateFile("root.pdf");

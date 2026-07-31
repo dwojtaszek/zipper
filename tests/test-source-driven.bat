@@ -322,6 +322,37 @@ if not errorlevel 1 (
   exit /b 1
 )
 
+(
+echo FilePath,FileType,ControlNumber
+echo a.pdf,pdf,ABC-001
+echo b.eml,eml,ABC-001
+) > "%TEST_OUTPUT_DIR%\dup-control.csv"
+%ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\dup-control.csv" --output-path "%TEST_OUTPUT_DIR%\val7" >nul 2>"%temp%\source_val7.err"
+if not errorlevel 1 (
+  echo [ ERROR ] Test 6: duplicate ControlNumber should fail
+  exit /b 1
+)
+findstr /C:"Duplicate ControlNumber" "%temp%\source_val7.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: duplicate ControlNumber message not found
+  exit /b 1
+)
+
+(
+echo FilePath,FileType
+echo folder/CON.pdf,pdf
+) > "%TEST_OUTPUT_DIR%\reserved.csv"
+%ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\reserved.csv" --output-path "%TEST_OUTPUT_DIR%\val8" >nul 2>"%temp%\source_val8.err"
+if not errorlevel 1 (
+  echo [ ERROR ] Test 6: reserved device name path should fail
+  exit /b 1
+)
+findstr /C:"reserved Windows device name" "%temp%\source_val8.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: reserved device name message not found
+  exit /b 1
+)
+
 echo [ SUCCESS ] Test Case 6: Validation failures passed
 
 :: --- All Tests Passed ---
