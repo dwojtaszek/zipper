@@ -88,6 +88,8 @@ internal static class ProductionSetGenerator
             }
             catch (Exception ex)
             {
+                await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture, "Error: Rolling Production Set '{0}' ({1} of {2}) failed: {3}", productionName, i + 1, rollingCount, ex.Message)).ConfigureAwait(false);
+
                 if (ex is not Validation.ValidationFailedException)
                 {
                     for (int j = 0; j <= i; j++)

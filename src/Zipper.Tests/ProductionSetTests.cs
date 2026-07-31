@@ -607,6 +607,44 @@ public class ProductionSetTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_OnRollingProductionFailure_LogsProductionIdContext()
+    {
+        // Output path is an existing file, so the first Rolling Production Set's
+        // directory creation throws IOException inside the rolling loop.
+        var outputFile = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_ctx_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(outputFile, "not a directory");
+        var originalError = Console.Error;
+        using var errWriter = new StringWriter();
+        try
+        {
+            Console.SetError(errWriter);
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputFile,
+                    FileCount = 10,
+                    FileType = "pdf",
+                },
+                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 10, ProductionId = "PROD_A,PROD_B", RollingCount = 2 },
+                Bates = new BatesNumberConfig { Prefix = "CTX", Start = 1, Digits = 8 },
+            };
+
+            await Assert.ThrowsAnyAsync<IOException>(() => ProductionSetGenerator.GenerateAsync(request));
+
+            var errorOutput = errWriter.ToString();
+            Assert.Contains("PROD_A", errorOutput, StringComparison.Ordinal);
+            Assert.Contains("(1 of 2)", errorOutput, StringComparison.Ordinal);
+            Assert.Contains("failed:", errorOutput, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            File.Delete(outputFile);
+        }
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithMultiPageTiff_ShouldWritePageLevelImageFilesToDisk()
     {
         // Arrange
