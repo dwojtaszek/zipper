@@ -1,650 +1,126 @@
-# Zipper: A Test Data Generation Tool
+# Zipper: Test Data Generation Tool
 
-Zipper is a .NET command-line tool for generating large Archives containing Native Files (`.pdf`, `.jpg`, `.tiff`, `.eml`, `.docx`, `.xlsx`) and a corresponding Load File. It's designed for performance testing and can generate Archives with up to 100 million Native Files.
+Zipper is a high-performance .NET tool for generating synthetic e-discovery Archives (`.zip`), Production Sets, and Load Files (`.dat`, `.opt`, `.csv`, `.xml`). Designed for e-discovery platform testing, benchmark suites, and ingestion validation, Zipper can scale to 100+ million records.
 
-## Features
+---
 
-- Generates a single Archive with a specified number of Native Files
-- Supports multiple file types: PDF, JPG, TIFF, EML, DOCX, XLSX
-- Supports multiple Load File formats: DAT, OPT, CSV, EDRM-XML
-- Supports multiple file distribution patterns: proportional, gaussian, and exponential
-- Supports Bates numbering for legal document identification
-- Supports multipage TIFF files with configurable page count ranges
-- Creates a corresponding Load File compatible with standard import tools
-- Uses minimal, valid placeholder Native Files for maximum compression
-- Streams data directly to the archive to handle very large datasets efficiently
-- Provides progress indication during generation with real-time performance metrics
-- Can target a specific Archive size by padding Native Files with non-compressible data
-- Optimized for high-performance parallel processing with memory pooling and buffered I/O
-- Real-time performance monitoring with progress tracking, throughput metrics, and ETA calculations
-- **Loadfile-Only mode**: Generate standalone Load Files (DAT/OPT) without Archives or Native Files
-- **Chaos Engine**: Inject deliberate structural anomalies into Load Files for ingestion resilience testing
-- **Redacted Production Mode**: Generate redacted image/text placeholders with configurable Native File withholding
+## Quick Start
 
-## Requirements
+### Installation & Prerequisites
 
-- .NET 10.0 SDK (or newer)
-- The following NuGet packages are also required and are included in the project file:
-  - `SixLabors.ImageSharp` - For TIFF image generation
-  - `ClosedXML` - For XLSX spreadsheet generation
+- **Prerequisites**: [.NET 10.0 SDK](https://dotnet.microsoft.com/) (or newer)
+- **Build from Source**:
+  ```bash
+  git clone https://github.com/dwojtaszek/zipper.git
+  cd zipper
+  dotnet publish -c Release
+  ```
+  The binary is built to `src/bin/Release/net10.0/<platform>/publish/zipper`.
 
-## Building
+### Core Use Cases
 
-To build a release version of the executable, run the following command from the root of the project:
-
+#### 1. Generate an Archive with Native Files & DAT Load File
+Generate 10,000 PDF files distributed across 5 folders with standard metadata:
 ```bash
-dotnet publish -c Release
+zipper --type pdf --count 10000 --output-path ./output --folders 5 --with-metadata
 ```
 
-This will place the executable (`zipper.exe` on Windows, `zipper` on Linux/macOS) in the `src/bin/Release/net10.0/<platform-specific-folder>/publish/` directory.
-
-## Usage
-
-After building the project, you can run the executable directly. The examples below assume the executable is in your system's PATH. Alternatively, you can still use `dotnet run` from the project directory.
-
-### Basic Usage
-
+#### 2. Generate a File Type Mix
+Generate 10,000 documents with mixed file types (70% PDF, 20% EML, 10% TIFF):
 ```bash
-zipper (--type <filetype> | --types <type:weight,...>) --count <number> --output-path <directory> [--folders <number>] [--encoding <UTF-8|UTF-16|ANSI>] [--distribution <proportional|gaussian|exponential>] [--with-metadata] [--with-collection-metadata] [--with-text] [--attachment-rate <number>] [--target-zip-size <size>] [--include-load-file] [--load-file-format <format>] [--bates-prefix <prefix>] [--bates-start <number>] [--bates-digits <number>] [--tiff-pages <min-max>] [--loadfile-only] [--eol <CRLF|LF|CR>] [--col-delim <ascii:N|char:C>] [--quote-delim <ascii:N|char:C|none>] [--newline-delim <ascii:N|char:C>] [--multi-delim <ascii:N|char:C>] [--nested-delim <ascii:N|char:C>] [--chaos-mode] [--chaos-amount <N|N%>] [--chaos-types <type1,type2,...>] [--chaos-scenario <name>] [--production-set] [--production-zip] [--volume-size <number>] [--redacted-production] [--withheld-native-policy <keep-native|omit-native-path|replace-with-placeholder>] [--supplemental-production] [--prior-manifest <paths>] [--supplemental-gap-policy <reject|allow>] [--benchmark] [--chaos-list] [--compare-production-manifests <paths>] [--comparison-mode <mode>] [--comparison-output <path>]
-
-# Source-Driven Generation: --count is optional (defaults to the Source Record count)
-zipper (--input-csv <path> | --directory-template <path>) --output-path <directory> [options]
+zipper --types "pdf:70,eml:20,tiff:10" --count 10000 --output-path ./mixed_output
 ```
 
-### Arguments
-
-**Required Arguments:**
-- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: **(Required unless `--loadfile-only`, `--production-set`, or source input)** The type of Native File to generate. Defaults to `pdf` when optional
-- `--types <type:weight,...>`: Alternative to `--type` that generates a **File Type Mix** — multiple File Types in one Archive or Production Set. Weights are positive integers giving the relative proportion of each type (e.g., `pdf:50,eml:30,tiff:20`); counts are allocated exactly (largest-remainder rounding) in contiguous ranges in declared order. Cannot be combined with `--type` or `--loadfile-only`. When `jpg` or `tiff` participate, DAT+OPT formats are generated by default. A single entry (e.g., `pdf:1`) behaves like `--type pdf`
-- `--input-csv <path>`: Alternative mode selector for **Source-Driven Generation**. Reads a Source CSV whose rows each define one record: required columns `FilePath` and `FileType`; optional `ControlNumber`/`DocId` and `BatesNumber`/`Bates`/`BegBates`; any other column becomes Source Metadata (surfaced via `--column-profile`). Cannot be combined with `--type` or `--types`. With `--production-set`, source rows drive the Production Set (see `--source-path-mode`) and the `BatesNumber` column is rejected. Non-empty `ControlNumber`/`BatesNumber` values must be unique across rows (case-insensitive) and must not equal a generated identity (`DOC{index}` Control Numbers or the configured Bates sequence range for the run). Source file bytes are never copied — output content is always generated placeholders
-  Source input is capped at 10,000,000 records (Source Records are held in memory); split larger sources into multiple runs. Paths must be relative and Windows-safe: no traversal, rooted/UNC/drive-qualified paths, reserved device names (`CON`, `NUL`, `COM1`-`COM9`, `LPT1`-`LPT9`, …), or segments ending in a dot or space (the whole path is trimmed of leading/trailing whitespace first).
-- `--directory-template <path>`: Alternative mode selector for **Source-Driven Generation**. Recursively walks a directory and mirrors its structure: each file's relative path and extension-derived File Type define one record. Files with unsupported extensions fail validation. Same combination rules and placeholder guarantee as `--input-csv`
-
-- `--count <number>`: **(Required)** The total number of files/records to generate. Optional with source input, where it must equal the Source Record count when specified
-- `--output-path <directory>`: **(Required)** The directory where the output files will be saved. The directory will be created if it doesn't exist
-
-**Optional Arguments:**
-- `--folders <number>`: The number of folders to distribute files into. Defaults to 1. Must be between 1 and 100
-- `--encoding <UTF-8|UTF-16|ANSI>`: The text encoding for the Load File. Defaults to `UTF-8`. `ANSI` uses the Windows-1252 code page
-- `--distribution <proportional|gaussian|exponential>`: The distribution pattern for files across folders. Defaults to `proportional`
-  - `proportional`: Even distribution across all folders (round-robin)
-  - `gaussian`: Bell curve distribution with most files in middle folders
-  - `exponential`: Exponential decay with most files in first folders
-- `--with-metadata`: Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size). Supported for all file types including `eml`
-- `--with-collection-metadata`: Generates a Load File with collection metadata columns (Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status). Supported in Standard mode (DAT, CSV, Concordance) and Loadfile-Only mode (DAT with `--column-profile` only). Silently ignored in Production Set mode and in OPT/EDRM-XML formats
-- `--with-text`: Generates a corresponding extracted text file for each document and adds the path to the Load File. Supported for all file types including `eml`
-- `--attachment-rate <number>`: When type is `eml`, specifies the percentage of Emails (0-100) that will receive a placeholder Native File (jpg/tiff/pdf from the internal pool) as a random Attachment. Defaults to 0
-- `--target-zip-size <size>`: Specifies a target size for the final Archive (e.g., 500MB, 10GB). This feature works by padding each of the `--count` Native Files with uncompressible data to meet the target size. This significantly reduces the overall Compression Ratio and is intended for specific network or storage performance testing scenarios. Requires `--count`
-- `--include-load-file`: Includes the generated Load File in the root of the output Archive instead of as a separate file
-- `--load-file-format <dat|opt|csv|edrm-xml|concordance>`: The format of the Load File. Defaults to `dat`. Also accepts `xml` (alias for `edrm-xml`). Note: `concordance` is a **distinct** format, NOT an alias of `dat`. Available formats:
-  - `dat`: Standard Concordance DAT format with ASCII 20/254/174 delimiters
-  - `opt`: Opticon format - comma-separated, page-level image references (automatically generated alongside DAT for `tiff` and `jpg` types when **no** `--load-file-format` or `--load-file-formats` is specified; any explicit format selection suppresses auto-OPT generation)
-  - `csv`: Comma-separated values format with RFC 4180 escaping
-  - `edrm-xml`: EDRM XML format - Electronic Discovery Reference Model schema v1.2
-  - `concordance`: Concordance database-import format - every field quote-wrapped (ASCII 254), ASCII 20-delimited, with leading `BEGATTY`/`ENDATTY`/`CONTROLNUMBER`/`PATH` columns. Distinct from `dat`
-- `--load-file-formats <format1,format2,...>`: Generate multiple Load File formats simultaneously (e.g., `dat,opt,csv`)
-- `--delimiter-column <char|code>`: Custom column delimiter for DAT format. Accepts ASCII decimal code, escape sequence, or single character. Overrides `--dat-delimiters` preset. Default: ASCII 20
-- `--delimiter-quote <char|code>`: Custom quote delimiter for DAT format. Overrides `--dat-delimiters` preset. Default: ASCII 254
-- `--delimiter-newline <char|code>`: Custom newline replacement for DAT format. Overrides `--dat-delimiters` preset. Default: ASCII 174
-- `--dat-delimiters <standard|csv>`: DAT delimiter style. `standard` uses ASCII 20/254/174, `csv` uses comma/quote. Defaults to `standard`
-- `--bates-prefix <prefix>`: Prefix for Bates numbering (e.g., "CLIENT001")
-- `--bates-start <number>`: Starting number for Bates numbering. Defaults to 1
-- `--bates-digits <number>`: Number of digits for Bates numbering. Defaults to 8
-- `--tiff-pages <min-max>`: Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1". **Important:** Default differs by mode. Standard mode defaults to 1-1 (single page). Loadfile-Only OPT mode defaults to random 1-10 pages when omitted.
-
-**Column Profile Options:**
-- `--column-profile <name|path>`: Column profile for configurable metadata generation. Use built-in profiles (`minimal`, `standard`, `litigation`, `full`) or path to custom JSON file (must reside within the working directory)
-- `--seed <number>`: Random seed for reproducible output. Use the same seed to generate identical data
-- `--date-format <format>`: Override the default date format (e.g., "yyyy-MM-dd", "MM/dd/yyyy")
-- `--empty-percentage <0-100>`: Override the default empty value percentage for optional fields
-- `--custodian-count <1-1000>`: Override the number of custodians in the data pool. Maximum 1000
-- `--with-families`: Generate parent-child document relationships (BEGATTACH, ENDATTACH, PARENTDOCID columns/relationships). Only meaningful with `--type eml` and `--attachment-rate` > 0 (emits a soft warning to stderr otherwise). **Supported in:** Standard mode across DAT, CSV, Concordance, and EDRM-XML formats. Production Set and Loadfile-Only modes remain limited to DAT/OPT formats.
-
-**Loadfile-Only Options:**
-- `--loadfile-only`: Generate standalone Load Files directly to disk without creating Archives or Native Files. Produces a companion `_properties.json` audit file. `--type` becomes optional (defaults to `pdf` for schema). Conflicts with `--target-zip-size` and `--include-load-file`
-- `--loadfile-format <dat|opt>`: Alias for `--load-file-format` in loadfile-only mode. Accepts `dat` or `opt`. Defaults to `dat`
-- `--eol <CRLF|LF|CR>`: Line ending format for the generated Load File. Defaults to `CRLF`. Note: standard (Archive) mode uses the platform default line ending regardless of this flag. This flag only affects Loadfile-Only and Production Set modes.
-
-**Strict-Prefix Delimiter Options (Works in all modes):**
-- `--col-delim <ascii:N|char:C>`: Column delimiter using strict prefix format. Example: `ascii:20` or `char:|`
-- `--quote-delim <ascii:N|char:C|none>`: Quote delimiter using strict prefix format, or `none` to omit quotes. Example: `ascii:254` or `none`
-- `--newline-delim <ascii:N|char:C>`: In-field newline replacement using strict prefix format. Example: `ascii:174`
-- `--multi-delim <ascii:N|char:C>`: Multi-value separator for fields with multiple values. Example: `char:;`
-- `--nested-delim <ascii:N|char:C>`: Nested value separator for hierarchical fields. Example: `char:\`
-
-**Chaos Engine Options:**
-- `--chaos-mode`: Enable the Chaos Engine to inject deliberate structural anomalies into Load Files. Requires `--loadfile-only`. Only supported for dat and opt Load File formats. Not available in Production Set mode.
-- `--chaos-amount <N|N%>`: Number or percentage of records to corrupt. Requires `--chaos-mode`. Example: `5` (exact count) or `10%` (percentage)
-- `--chaos-types <type1,type2,...>`: Comma-separated filter for specific anomaly types. Requires `--chaos-mode`. DAT types: `mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`. OPT types: `opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`
-- `--chaos-scenario <name>`: Use a predefined chaos scenario instead of manual `--chaos-types`. Requires `--chaos-mode`. Conflicts with `--chaos-types`. Use `--chaos-list` to see available scenarios
-- `--chaos-list`: List all available chaos scenarios with descriptions and exit
-
-**Production Set Comparison Options:**
-- `--compare-production-manifests <paths>`: Comma-separated paths to two or more Production Manifests (`_manifest.json` files or directories containing them) to compare
-- `--comparison-mode <replacement|supplemental|reproduction>`: The comparison logic/ruleset to apply
-- `--comparison-output <path>`: Output file path for the comparison JSON report. A human-readable Markdown summary is also written to the same basename with a `.summary.md` extension and printed to standard output
-
-**Utility Options:**
-- `--benchmark`: Run the built-in performance benchmark suite and exit. Measures parallel vs sequential throughput, memory pooling, scalability, and allocation overhead
-- `--version`: Print the version string and exit. No startup banner is printed on normal invocations
-
-### `_properties.json` Audit File
-
-Loadfile-Only Mode writes a companion `_properties.json` audit file next to the generated Load File. The audit file records:
-
-- Load File identity (`fileName`, `format`, `totalRecords`)
-- Output properties (`properties.encoding`, `properties.lineEnding`)
-- Delimiter configuration (`properties.delimiters.column`, `quote`, `newline`, `multiValue`, `nestedValue`)
-- Chaos Engine output (`chaosMode.enabled`, `targetAmount`, `totalAnomalies`, `injectedAnomalies`)
-
-> [!IMPORTANT]
-> The audit file uses `camelCase` JSON property names. External tooling that previously consumed PascalCase names such as `FileName`, `TotalRecords`, `ChaosMode.Enabled`, or `InjectedAnomalies[*].RecordID` must use the new names below.
-
-Common schema changes:
-
-- `FileName` -> `fileName`
-- `Format` -> `format`
-- `TotalRecords` -> `totalRecords`
-- `Properties` -> `properties`
-- `ChaosMode.Enabled` -> `chaosMode.enabled`
-- `ChaosMode.TargetAmount` -> `chaosMode.targetAmount`
-- `ChaosMode.TotalAnomalies` -> `chaosMode.totalAnomalies`
-- `ChaosMode.InjectedAnomalies[*].RecordID` -> `chaosMode.injectedAnomalies[*].recordID`
-
-Example:
-
-```json
-{
-  "fileName": "load.dat",
-  "format": "DAT (Metadata)",
-  "totalRecords": 200,
-  "properties": {
-    "encoding": "UTF-8",
-    "lineEnding": "LF",
-    "delimiters": {
-      "column": "ascii:20",
-      "quote": "ascii:254",
-      "newline": "ascii:174",
-      "multiValue": "none",
-      "nestedValue": "none"
-    }
-  },
-  "chaosMode": {
-    "enabled": true,
-    "targetAmount": "5%",
-    "totalAnomalies": 10,
-    "injectedAnomalies": [
-      {
-        "lineNumber": "14",
-        "recordID": "DOC00000014",
-        "column": "Column 3",
-        "errorType": "quotes",
-        "description": "Omitted the closing ascii:254 character on column Column 3."
-      }
-    ]
-  }
-}
-```
-
-Compatibility checklist:
-
-- Repository unit tests and Loadfile-Only Mode E2E tests use the camelCase audit schema.
-- Any external dashboards, import validation scripts, or downstream parsers that read `_properties.json` and were written against PascalCase field names must be updated.
-
-### `_manifest.json` Production Manifest
-
-Production Set Mode writes a `_manifest.json` file at the Production Set root. The manifest records the Bates Number range, Volume layout, output directories, Load File paths, generation settings, and generated Native File counts.
-
-When family relationships create child Attachment Native Files, `nativeFileCount` reports the total Native Files written to `NATIVES` (parents plus Attachments). The manifest also includes `parentNativeFileCount` and `attachmentNativeFileCount` when Attachment Native Files are present.
-
-### Arguments Quick Reference
-
-| Argument | Default | Range/Values | Description |
-|----------|---------|--------------|-------------|
-| `--type` | **required** | pdf, jpg, tiff, eml, docx, xlsx | File type to generate (optional with `--loadfile-only`, `--production-set`, or source input) |
-| `--types` | none | comma-separated `type:weight` pairs | File Type Mix (mutually exclusive with `--type` and `--loadfile-only`) |
-| `--input-csv` | none | file path within the working directory | Source-Driven Generation from a Source CSV (mutually exclusive with `--type`, `--types`, `--directory-template`) |
-| `--directory-template` | none | directory path within the working directory | Source-Driven Generation mirroring a directory structure (same exclusions as `--input-csv`) |
-| `--count` | **required** | positive integer (max 2,147,483,646) | Number of files (optional with source input; must equal the Source Record count) |
-| `--output-path` | **required** | directory path | Output directory |
-| `--folders` | 1 | 1-100 | Number of folders |
-| `--encoding` | UTF-8 | UTF-8, UTF-16, ANSI | Load File encoding |
-| `--distribution` | proportional | proportional, gaussian, exponential | File distribution |
-| `--with-metadata` | false | flag | Include metadata columns |
-| `--with-collection-metadata` | false | flag | Include collection metadata columns (Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status) |
-| `--with-text` | false | flag | Generate text files |
-| `--attachment-rate` | 0 | 0-100 | Email Attachment % |
-| `--target-zip-size` | none | KB/MB/GB (e.g., 500MB) | Target ZIP size |
-| `--include-load-file` | false | flag | Load File in Archive |
-| `--load-file-format` | dat | dat, opt, csv, edrm-xml, xml, concordance | Load File format |
-| `--load-file-formats` | none | comma-separated | Multiple formats |
-| `--dat-delimiters` | standard | standard, csv | DAT delimiter style |
-| `--delimiter-column` | ASCII 20 | char or ASCII code | Custom column delimiter |
-| `--delimiter-quote` | ASCII 254 | char or ASCII code | Custom quote delimiter |
-| `--delimiter-newline` | ASCII 174 | char or ASCII code | Custom newline replacement |
-| `--hash-mode` | none | actual, simulated, none | Hash generation mode |
-| `--hash-algorithms` | md5 | md5, sha1, sha256 | Comma-separated hash algorithms |
-| `--bates-prefix` | none | string | Bates prefix |
-| `--bates-start` | 1 | ≥0 | Bates start number |
-| `--bates-digits` | 8 | 1-20 | Bates digit count |
-| `--tiff-pages` | 1-1 (standard mode); random 1–10 per doc in loadfile-only OPT mode | min-max | TIFF page range |
-| `--column-profile` | none | minimal, standard, litigation, full, or path (within working dir) | Column profile |
-| `--seed` | none | integer | Random seed |
-| `--date-format` | yyyy-MM-dd | format string | Date format override |
-| `--empty-percentage` | 15 | 0-100 | Empty value % override |
-| `--custodian-count` | 10 | 1-1000 | Custodian count override |
-| `--with-families` | false | flag | Family relationships |
-| `--loadfile-only` | false | flag | Standalone Load File (no Archive) |
-| `--loadfile-format` | dat | dat, opt | Alias for `--load-file-format` in loadfile-only mode |
-| `--eol` | CRLF (loadfile-only/production-set) | CRLF, LF, CR | Load File line endings |
-| `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict) |
-| `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict) |
-| `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict) |
-| `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
-| `--nested-delim` | `\\` | `ascii:N` or `char:C` | Nested value separator |
-| `--chaos-mode` | false | flag | Enable Chaos Engine (dat/opt only) |
-| `--chaos-amount` | 1% | N or N% | Anomaly count/percentage |
-| `--chaos-types` | all | comma-separated types | Anomaly type filter |
-| `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
-| `--chaos-list` | false | flag | List scenarios and exit |
-| `--production-set` | false | flag | Generate structured production with DATA/IMAGES/NATIVES/TEXT |
-| `--production-id` | none | string | Configurable production ID (supports lists, defaults to auto-incrementing/timestamp) |
-| `--rolling-count` | 1 | number | Generate multiple rolling production sets |
-| `--rolling-bates-mode` | continuous | `continuous` or `restart` | Bates numbering mode across rolling production sets |
-| `--source-path-mode` | bates | `bates`, `preserve`, or `originals` | Source path placement for source-driven production sets: `bates` = standard volume layout; `preserve` = source subdirectories under the volume, Bates-named file; `originals` = full source path under `ORIGINALS/` (requires `--production-set` + source input) |
-| `--production-zip` | false | flag | Wrap production set output in an Archive |
-| `--volume-size` | 5000 | number | Max files per volume subfolder |
-| `--redacted-production` | false | flag | Enable redacted Production mode with REDACTED/IMAGES and REDACTED/TEXT directories. Text placeholders require `--with-text`. |
-| `--withheld-native-policy` | keep-native | `keep-native`, `omit-native-path`, `replace-with-placeholder` | How to handle withheld Native File paths in redacted mode |
-| `--supplemental-production` | false | flag | Enable supplemental production set generation mode |
-| `--prior-manifest` | none | paths | Comma-separated list of paths to prior production manifest files |
-| `--supplemental-gap-policy` | reject | reject, allow | Gap policy for supplemental mode: reject or allow |
-| `--compare-production-manifests` | none | paths | Compare two or more production manifests |
-| `--comparison-mode` | none | replacement, supplemental, reproduction | Comparison ruleset mode |
-| `--comparison-output` | none | path | Output path for comparison JSON report |
-| `--benchmark` | false | flag | Run benchmark suite and exit |
-| `--version` | false | flag | Print version string and exit |
-
-### Argument Interactions
-
-> [!IMPORTANT]
-> Some arguments have dependencies or conflicts. Review these rules when combining options.
-
-| Interaction | Behavior |
-|-------------|----------|
-| `--column-profile` + `--with-metadata` | Column profile takes precedence; `--with-metadata` is ignored with a warning |
-| `--column-profile` + `--production-set` | **Conflict**: `--column-profile` is not supported with `--production-set` |
-| `--column-profile` + `--with-collection-metadata` | Collection metadata columns are merged into the profile; profile values take precedence with synthetic fallback |
-| `--with-collection-metadata` + `--with-metadata` | Both add their own disjoint column sets; no conflict |
-| `--with-collection-metadata` + Production Set | Silently ignored (no columns added) |
-| `--with-collection-metadata` + `--loadfile-only` (no `--column-profile`) | Silently ignored (no columns added) |
-| `--with-collection-metadata` + OPT or EDRM-XML | Silently ignored (not applicable to these formats) |
-| `--target-zip-size` | Requires `--count` or source input (`--input-csv` / `--directory-template`) |
-| `--types` | Mutually exclusive with `--type`, `--loadfile-only`, and `--column-profile`. Weights must be positive integers (max 1,000,000 each). When `jpg` or `tiff` participate, DAT+OPT are the default formats. Standard-mode Load Files gain a File Type column; Production Set DAT writes FILE_TYPE per record. Email Metadata columns apply only to Email records; Page Count applies only to TIFF records |
-| `--input-csv` / `--directory-template` | Mutually exclusive with each other and with `--type` and `--types`. Satisfies the `--type` requirement; `--count` becomes optional but must match the Source Record count when given. Multiple source File Types behave like a File Type Mix (File Type column, per-record Email Metadata and Page Count gating, DAT+OPT default when `jpg`/`tiff` participate). `ControlNumber`/`BatesNumber` columns override per-record identity (BatesNumber requires `--bates-prefix`); extra columns map through `--column-profile` (DAT, Standard and Loadfile-Only modes). With `--production-set`, the `BatesNumber` column is rejected, identity stays Bates-based, and `--source-path-mode` controls Native File placement. In Standard mode `--folders` and `--distribution` are ignored (source paths define the structure) |
-| `--source-path-mode` | Requires `--production-set` and source input (`--input-csv` / `--directory-template`) |
-| `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) or when `eml` participates in `--types` |
-| `--with-families` | Only meaningful when `--type eml` (or `eml` participates in `--types`) and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
-| `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types` |
-| `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
-| `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
-| `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
-| `--include-load-file` + `--load-file-formats` | All specified formats are included in the ZIP |
-| `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
-| Strict-prefix `--col-delim`/`--quote-delim`/etc. + old-style flags or preset | Strict-prefix arguments win per delimiter; full chain: defaults → `--dat-delimiters` preset → `--delimiter-*` → strict-prefix. Preset and old-style flags are DAT-only; strict-prefix work in all generation modes but affect only DAT output |
-| `--load-file-format csv` vs `--dat-delimiters csv` | Distinct: former selects a true `.csv` (RFC 4180) writer; latter only swaps a `.dat` file's delimiters to comma/quote |
-| `--hash-algorithms` | Requires `--hash-mode` to be `actual` or `simulated` |
-| `--hash-mode actual` + `--loadfile-only` | **Conflict**: cannot compute actual hashes without generated Native Files |
-| `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
-| `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
-| `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
-| `--chaos-mode` | Requires `--loadfile-only` |
-| `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
-| `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
-| `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
-| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
-| `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
-| `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
-| `--withheld-native-policy` | Requires `--redacted-production` |
-| `--production-set` + `--load-file-format / --load-file-formats` | Ignored. Production Set always generates DAT+OPT regardless. |
-| `--production-zip`, `--volume-size` | Require `--production-set` |
-| `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
-| `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
-| `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
-| `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation. |
-| `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
-| `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
-
-### Delimiter Argument Modes
-
-The application supports two distinct sets of delimiter arguments. Standard DAT generation uses implicit default values (e.g., ASCII 20 column, ASCII 254 `þ` quote, `;` multi-value, `\` nested-value). All modes support overriding delimiters using strict-prefix arguments.
-
-| Argument Type | Mode Applied To | Format Example | Overrides |
-|---------------|-----------------|----------------|-----------|
-| Old-style (`--delimiter-column`, etc.) | All modes | Bare value (`20`, `,`) | `--dat-delimiters` preset |
-| Strict-prefix (`--col-delim`, etc.) | All modes | Strict prefix (`ascii:20`, `char:,`) | Old-style arguments and `--dat-delimiters` |
-
-If both an old-style and a strict-prefix argument are specified (e.g. `--delimiter-column 20` and `--col-delim char:,`), the **strict-prefix argument wins**. Strict-prefix arguments require the `ascii:` or `char:` prefix format (see examples above).
-
-### Maintainer Notes for Issue Authors
-
-When writing or updating issue scopes, use the current CLI names and Audit File schema:
-
-- Use `--load-file-format` for general Load File format selection and `--loadfile-format` as the Loadfile-Only Mode alias. There is no `--format` flag.
-- Use `--production-set --output-path <directory>` for Production Set output. `--production-set` does not take a path value.
-- Use `--chaos-mode --chaos-types <type> --chaos-amount <N|N%>` for Chaos Engine examples. Omit `--chaos-mode` for a non-Chaos baseline.
-- Loadfile-Only Mode currently supports DAT and OPT output only.
-- `_properties.json` uses camelCase JSON. Chaos Anomalies are under `chaosMode.injectedAnomalies[*]` with `errorType`, `lineNumber`, and `recordID`.
-
-### Column Profiles
-
-Column profiles allow you to generate rich, configurable metadata with up to 200 columns. Built-in profiles:
-
-| Profile | Columns | Description |
-|---------|---------|-------------|
-| `minimal` | 5 | Basic fields: DOCID, FILEPATH, CUSTODIAN, DATECREATED, FILESIZE |
-| `standard` | 24 | Common e-discovery fields including dates, people, classification |
-| `litigation` | 48 | Full litigation support with privilege, responsiveness, hashes |
-| `full` | 138 | Maximum coverage with custom tags, issues, and notes |
-
-Column types supported:
-- `identifier`: Sequential document IDs (DOC00000001)
-- `text`: Short text values from data sources
-- `longtext`: Lorem ipsum paragraphs for notes/descriptions
-- `date`: Formatted dates within configurable ranges
-- `datetime`: Formatted date/time values
-- `number`: Numeric values with distribution patterns
-- `boolean`: Y/N or True/False values
-- `coded`: Values from predefined lists
-- `email`: Generated email addresses
-
-
-### Distribution Patterns
-
-The following chart illustrates how files are distributed across folders using different distribution patterns:
-
-![Distribution Patterns](assets/dist.png)
-
-- **Proportional**: Files are distributed evenly across all folders in a round-robin fashion
-- **Gaussian**: Files follow a bell curve distribution, with most files concentrated in the middle folders
-- **Exponential**: Files follow an exponential decay pattern, with the highest concentration in the first folders
-
-### Examples
-
-To generate an Archive containing 50,000 PDF Native Files distributed across 10 folders using a gaussian distribution pattern:
-
+#### 3. Generate a Legal Production Set
+Generate a structured e-discovery Production Set with Bates numbering and volume output:
 ```bash
-zipper --type pdf --count 50000 --output-path ./test_data --folders 10 --distribution gaussian
+zipper --production-set --bates-prefix "CLIENT001" --count 5000 --output-path ./prod_set --with-text
 ```
 
-This command will produce two files in the `test_data` directory, with filenames based on the current date and time (e.g., `archive_YYYYMMDD_HHMMSS.zip` and `archive_YYYYMMDD_HHMMSS.dat`):
-- An Archive containing 50,000 PDFs distributed across 10 folders
-- The Load File pointing to the documents within the archive
-
-#### Additional Use Cases
-
+#### 4. Standalone Load File Generation (No Native Files)
+Generate a 100,000-record DAT Load File directly to disk:
 ```bash
-# Generate 10,000 PDFs with default proportional distribution
-zipper --type pdf --count 10000 --output-path ./test --folders 5
-
-# Generate 25,000 JPGs with a Gaussian (bell curve) distribution
-zipper --type jpg --count 25000 --output-path ./test --folders 20 --distribution gaussian
-
-# Generate 5,000 TIFFs with an exponential decay distribution
-zipper --type tiff --count 5000 --output-path ./test --folders 10 --distribution exponential
-
-# Generate a Load File with additional metadata columns
-zipper --type pdf --count 1000 --output-path ./test --with-metadata
-
-# Generate a Load File with extracted text placeholders
-zipper --type tiff --count 25000 --output-path ./test_data --with-text
-
-# Combine all options: 100k TIFFs with metadata and text, distributed across 50 folders
-zipper --type tiff --count 100000 --output-path ./test_data --folders 50 --distribution gaussian --with-metadata --with-text
-
-# Generate 5,000 Emails with a 20% chance of having an Attachment
-zipper --type eml --count 5000 --output-path ./email_test --attachment-rate 20
-
-# Generate emails with metadata (Custodian, Author, Date Sent, File Size)
-zipper --type eml --count 1000 --output-path ./email_metadata --with-metadata
-
-# Generate emails with extracted text files
-zipper --type eml --count 2500 --output-path ./email_text --with-text
-
-# Generate emails with both metadata and extracted text
-zipper --type eml --count 3000 --output-path ./email_full --with-metadata --with-text
-
-# Generate Emails with Attachments, metadata, and text
-zipper --type eml --count 2000 --output-path ./email_complete --with-metadata --with-text --attachment-rate 30
-
-# Generates exactly 100,000 PDF files and pads each one with uncompressible
-# data so that the final compressed Archive is approximately 1GB in size
-zipper --type pdf --count 100000 --target-zip-size 1GB --output-path ./test_padded_files
-
-# Generate 1,000 PDFs and include the Load File inside the Archive
-zipper --type pdf --count 1000 --output-path ./test_inclusive --include-load-file
-
-# Generate DOCX files with Bates numbering
-zipper --type docx --count 500 --output-path ./test_docx --bates-prefix "CLIENT001" --bates-start 1 --bates-digits 8
-
-# Generate XLSX files with custom Load File format
-zipper --type xlsx --count 1000 --output-path ./test_xlsx --load-file-format csv
-
-# Generate TIFF files with variable page counts (1-20 pages per file)
-zipper --type tiff --count 5000 --output-path ./test_tiff --tiff-pages "1-20"
-
-# Combine new features: DOCX with Bates numbering, CSV Load File, and metadata
-zipper --type docx --count 1000 --output-path ./test_combined --bates-prefix "CASE001" --bates-start 5000 --bates-digits 10 --load-file-format csv --with-metadata
-
-# Generate TIFF files with page count tracking and Bates numbering
-zipper --type tiff --count 2500 --output-path ./test_tiff_bates --tiff-pages "5-50" --bates-prefix "IMG" --bates-digits 8 --with-metadata
-
-# Generate emails with XML Load File format
-zipper --type eml --count 5000 --output-path ./test_eml_xml --load-file-format edrm-xml --with-metadata --with-text
-
-# Generate PDFs with the standard column profile (24 metadata columns)
-zipper --type pdf --count 1000 --output-path ./test_profiles --column-profile standard
-
-# Generate with litigation profile (48 columns) for complex e-discovery workflows
-zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation
-
-# Generate reproducible output using a seed
-zipper --type pdf --count 1000 --output-path ./reproducible --column-profile standard --seed 12345
-
-# Generate multiple Load File formats simultaneously
-zipper --type pdf --count 1000 --output-path ./multi_format --load-file-formats dat,opt,csv
-
-# Generate with custom date format and empty percentage
-zipper --type pdf --count 1000 --output-path ./custom --column-profile standard --date-format "MM/dd/yyyy" --empty-percentage 25
-
-# Generate family relationships for Email Attachments
-zipper --type eml --count 2000 --output-path ./families --attachment-rate 30 --with-families
-
-# Generate a mixed File Type Mix (70% PDF, 20% Email, 10% TIFF in one Archive)
-zipper --types "pdf:70,eml:20,tiff:10" --count 10000 --output-path ./mixed --tiff-pages "1-5" --attachment-rate 25
-
-# Source-Driven Generation: mirror a Source CSV (paths, File Types, Control Numbers, Bates)
-zipper --input-csv ./source.csv --output-path ./sourced --bates-prefix ABC
-
-# Source-Driven Generation: mirror an existing directory structure (placeholder content only)
-zipper --directory-template ./client-data --output-path ./mirrored
-
-# ── Loadfile-Only Mode ──────────────────────────
-
-# Generate a standalone DAT Load File (no Archive, no Native Files)
-zipper --loadfile-only --count 100000 --output-path ./dat_only
-
-# Generate a standalone OPT Load File in Opticon 7-column format
-zipper --loadfile-only --loadfile-format opt --count 50000 --output-path ./opt_only
-
-# Custom delimiters with strict prefix format and LF line endings
-zipper --loadfile-only --count 10000 --output-path ./custom_delims \
-    --col-delim "char:|" --quote-delim "char:\"" --eol LF
-
-# Loadfile-only with no quotes (unquoted pipe-delimited)
-zipper --loadfile-only --count 5000 --output-path ./unquoted \
-    --col-delim "char:|" --quote-delim none
-
-# ── Chaos Engine ────────────────────────────────
-
-# Inject anomalies into 5% of records for ingestion testing
-zipper --loadfile-only --count 100000 --output-path ./chaos_test \
-    --chaos-mode --chaos-amount "5%" --seed 42
-
-# Target only quote and column anomalies
-zipper --loadfile-only --count 50000 --output-path ./chaos_targeted \
-    --chaos-mode --chaos-amount 100 --chaos-types "quotes,columns"
-
-# OPT chaos: corrupt document boundaries and page counts
-zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_chaos \
-    --chaos-mode --chaos-types "opt-boundary,opt-pagecount"
-
-# ── Chaos Scenarios ─────────────────────────────
-
-# List all available chaos scenarios
-zipper --chaos-list
-
-# Simulate common platform ingestion failures
-zipper --loadfile-only --count 100000 --output-path ./platform_import_test \
-    --chaos-mode --chaos-scenario structured-import-failures --seed 42
-
-# Simulate cross-platform transfer errors with custom anomaly amount
-zipper --loadfile-only --count 50000 --output-path ./transfer_test \
-    --chaos-mode --chaos-scenario transfer-encoding-failures --chaos-amount "15%"
-
-# Full chaos: all anomaly types at 10% density
-zipper --loadfile-only --count 100000 --output-path ./full_chaos \
-    --chaos-mode --chaos-scenario full-chaos
-
-# OPT boundary corruption scenario
-zipper --loadfile-only --loadfile-format opt --count 10000 --output-path ./opt_test \
-    --chaos-mode --chaos-scenario broken-boundaries
-
-# ── Production Set Comparison ──────────────────
-
-# Compare prior and new production manifests in replacement mode
-zipper --compare-production-manifests "/path/to/prior/_manifest.json,/path/to/new/_manifest.json" \
-    --comparison-mode replacement \
-    --comparison-output "/path/to/report.json"
-
-# Compare multiple prior manifests with a new supplemental manifest
-zipper --compare-production-manifests "/path/to/prior1/_manifest.json,/path/to/prior2/_manifest.json,/path/to/new_supplemental/_manifest.json" \
-    --comparison-mode supplemental \
-    --comparison-output "/path/to/supplemental_report.json"
-
-# Compare prior and new in reproduction mode to audit corrected native content/metadata changes
-zipper --compare-production-manifests "/path/to/original/_manifest.json,/path/to/reproduced/_manifest.json" \
-    --comparison-mode reproduction \
-    --comparison-output "/path/to/reproduction_report.json"
+zipper --loadfile-only --count 100000 --output-path ./loadfile_data
 ```
 
-## Performance
-
-Zipper is optimized for high-performance file generation with advanced parallel processing capabilities.
-
-### Performance Architecture
-
-- **Parallel Processing**: Multi-threaded file generation with configurable worker pools that automatically optimize based on CPU core count
-- **Memory Pooling**: Advanced object pooling reduces garbage collection pressure and memory allocations by up to 50%
-- **Buffered I/O**: Intelligent buffering minimizes disk I/O overhead and improves throughput
-- **Performance Monitoring**: Real-time progress tracking with detailed performance metrics and ETA calculations
-
-### Performance Benchmarks
-
-Typical performance on modern hardware with parallel processing enabled:
-
-| File Count | Estimated Time | Files/Second | Memory Usage |
-|------------|---------------|--------------|--------------|
-| 1,000      | 1-2 seconds   | 500-1,500    | Low          |
-| 10,000     | 5-10 seconds  | 1,000-3,000  | Moderate     |
-| 100,000    | 30-60 seconds | 1,500-4,000  | Optimized    |
-
-*Performance varies based on hardware, file type, and options selected. Parallel processing typically provides 2–3× improvement over single-threaded generation.*
-
-### Real-time Performance Monitoring
-
-During file generation, you'll see detailed progress updates:
-
-```
-Starting parallel file generation...
-  File Type: pdf
-  Count: 50,000
-  Worker Threads: 8 (auto-detected)
-  Batch Size: 1000
-
-Progress: 25,000 / 50,000 files (50.0%) - 1,250.5 files/sec - ETA: 00:00:20
-Memory Usage: 45.2 MB | GC Collections: Gen0=142, Gen1=8, Gen2=1
-
-Generation complete in 40.2 seconds.
-  Performance: 1,243.8 files/second
-  Memory Efficiency: 98.5% (low GC pressure)
+#### 5. Source-Driven Generation
+Mirror an input CSV or existing directory structure using synthetic placeholder content:
+```bash
+zipper --input-csv ./source.csv --output-path ./source_output --bates-prefix ABC
 ```
 
-### Automatic Performance Optimization
+---
 
-The system automatically:
-- Detects and optimizes for available CPU cores
-- Manages memory efficiently to handle large file counts without excessive allocations
-- Provides detailed throughput metrics and time estimates
-- Balances parallelization with memory usage for optimal performance
+## Features & Supported Formats
 
-## Versioning
+- **Native File Types**: PDF, JPG, TIFF, EML, DOCX, XLSX
+- **Load File Formats**: DAT (Concordance), OPT (Opticon), CSV (RFC 4180), EDRM-XML (v1.2), Concordance (quote-wrapped)
+- **Generation Modes**:
+  - **Standard Mode**: Zip Archive + Load File
+  - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`)
+  - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
+- **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and chaos anomaly injection (`--chaos-mode`).
 
-Versioning is managed automatically via Git Tags:
-- **Versioning Strategy**: Uses Semantic Versioning (`vMAJOR.MINOR.PATCH`).
-- **Release Automation**: When a PR is merged to `main`, the system automatically increments the patch version (e.g., `v1.0.0` -> `v1.0.1`) and creates a new release.
-- **Manual Control**: You can manually push a tag (e.g., `git tag v1.1.0 && git push`) to trigger a specific version release.
-- **Binary Version**: The executable tracks the release version exactly (e.g., `1.0.1`) without commit hashes.
+---
 
-## Testing
+## Usage & Arguments Reference
 
-The project includes a comprehensive test suite that covers all command-line options and performance characteristics. The test suite is designed to be run on Windows, macOS, and Linux.
+### Key Arguments
 
-### Running the Tests
+| Argument | Description | Default | Values / Examples |
+|----------|-------------|---------|-------------------|
+| `--count <N>` | Total records/files to generate | **Required** | Integer (e.g. `10000`) |
+| `--output-path <dir>` | Target output directory | **Required** | Directory path |
+| `--type <type>` | Single native file type | `pdf` | `pdf`, `jpg`, `tiff`, `eml`, `docx`, `xlsx` |
+| `--types <mix>` | File type mix weights | none | `pdf:70,eml:20,tiff:10` |
+| `--load-file-format <fmt>` | Load file format | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `concordance` |
+| `--load-file-formats <list>` | Generate multiple formats | none | `dat,opt,csv` |
+| `--folders <N>` | Directory folder count | `1` | `1` to `100` |
+| `--distribution <pattern>` | Folder distribution | `proportional` | `proportional`, `gaussian`, `exponential` |
+| `--with-metadata` | Standard metadata columns | `false` | Flag |
+| `--with-text` | Extracted text files | `false` | Flag |
+| `--bates-prefix <prefix>` | Bates prefix | none | e.g. `CLIENT001` |
+| `--bates-start <N>` | Starting Bates number | `1` | Integer |
+| `--bates-digits <N>` | Bates digit padding | `8` | e.g. `8` (`CLIENT00000001`) |
+| `--column-profile <name>` | Metadata column profile | none | `minimal`, `standard`, `litigation`, `full` |
+| `--production-set` | Enable Production Set output | `false` | Flag (requires `--bates-prefix`) |
+| `--loadfile-only` | Standalone Load File output | `false` | Flag |
 
-To run the tests, execute the appropriate script for your operating system:
+For complete argument interactions, delimiter options, Chaos Engine flags, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md).
 
-- **Windows**: `tests\run-tests.bat`
-- **macOS and Linux**: `./tests/run-tests.sh`
+---
 
-### Performance Testing
+## Performance & Benchmarks
 
-The project includes comprehensive performance regression testing to ensure optimal performance.
+Zipper utilizes multi-threaded parallel generation, object memory pooling, and streaming buffered I/O to achieve high throughput:
 
-#### Performance Regression Tests
+| File Count | Typical Time | Files / Second |
+|------------|--------------|----------------|
+| 1,000      | 1–2 sec      | 500 – 1,500    |
+| 10,000     | 5–10 sec     | 1,000 – 3,000  |
+| 100,000    | 30–60 sec    | 1,500 – 4,000  |
 
-Performance regression testing is done via the built-in benchmark suite:
+Run the built-in micro-benchmark suite:
 ```bash
 zipper --benchmark
 ```
 
-#### Performance Features
-- **Micro-benchmarks**: Built-in performance benchmark suite (run with `--benchmark`)
-- **Regression Testing**: Automated detection of performance degradation
-- **Memory Monitoring**: GC pressure and allocation tracking
-- **Throughput Analysis**: Files per second and data processing metrics
-- **Cross-Platform**: Performance testing on Windows, Linux, and macOS
+---
 
-#### Performance Targets
-- **Small Dataset** (100 files): < 2 seconds
-- **Medium Dataset** (1,000 files): < 10 seconds
-- **Large Dataset** (10,000 files): < 60 seconds
-- **Memory Efficiency**: < 500MB peak usage for large datasets
-- **Throughput**: 50+ files per second minimum
+## Contributing & Developer Setup
 
-### Stress Testing
+We welcome contributions! Please see our [Contributing Guide](docs/contributing.md) for instructions on:
+- Setting up the development environment
+- Running unit, analyzer, and E2E smoke tests
+- Architectural invariants and critical principles (`AGENTS.md`)
 
-For extreme performance testing and edge case validation, see the [stress test suite](tests/stress/README.md). These tests are designed for manual execution only and test system limits under extreme conditions:
+---
 
-- **10GB File Count Challenge**: Tests maximum file handling (5M files)
-- **30GB Attachment-Heavy Email**: Tests Attachment processing and large Archives
-- **Large Load File Performance**: Tests metadata and text extraction performance
+## Documentation Index
 
-**Warning**: Stress tests consume significant system resources and require manual confirmation before execution.
-
-### Pre-Commit Hook
-
-The project includes scripts to set up a pre-commit hook that will run the test suite automatically before each commit. To set up the hook, run the appropriate script for your operating system:
-
-- **Windows**: `setup-hook.bat`
-- **macOS and Linux**: `./setup-hook.sh`
+- [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow
+- [Advanced CLI & Reference Guide](docs/advanced-guide.md) — Complete flag reference, Chaos Engine, delimiter tuning, and schemas
+- [Architecture Specifications](docs/architecture.md) — Core system design, seams, and pipeline architecture
+- [Requirements & Specifications](Requirements.md) — Immutable functional requirement definitions (`REQ-XXX`)
+- [Ubiquitous Language](UBIQUITOUS_LANGUAGE.md) — Domain language definitions
+- [CI/CD & Testing Guide](docs/cicd.md) — Pipeline map, local hooks, and CI gates
