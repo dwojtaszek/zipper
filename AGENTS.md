@@ -250,15 +250,14 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 **Feature implementation ladder (order matters):**
 1. `src/Cli/ParsedArguments.cs` — add property
 2. `src/Cli/CliParser.cs` — add case in switch
-3. `src/Cli/CliOptions.cs` — add to appropriate list (ParameterlessFlags, SingleValueArgs, etc.)
-4. `src/Config/MetadataConfig.cs` — add property + `ShouldInclude*Columns()` method
-5. `src/Cli/RequestBuilder.cs` — wire parsed arg to config
-6. `src/Profiles/BuiltInProfiles.cs` — add legacy profile if needed
-7. `src/LoadFiles/DatComposer.cs` — `BuildHeaderColumns()` then `StandardRowValues()`
-8. `src/LoadFiles/StandardRowComposer.cs` — `BuildOrderedKeys()` then `Resolve()` + call `SyntheticRowValues`
-9. `src/LoadFiles/SyntheticRowValues.cs` — add value-generation method
-10. `src/Zipper.Tests/DatComposingWriterTests.cs` — add tests
-11. `README.md` — usage line, Arguments Quick Reference, Argument Interactions
+3. `src/Config/MetadataConfig.cs` — add property + `ShouldInclude*Columns()` method
+4. `src/Cli/RequestBuilder.cs` — wire parsed arg to config
+5. `src/Profiles/BuiltInProfiles.cs` — add legacy profile if needed
+6. `src/LoadFiles/DatComposer.cs` — `BuildHeaderColumns()` then `StandardRowValues()`
+7. `src/LoadFiles/StandardRowComposer.cs` — `BuildOrderedKeys()` then `Resolve()` + call `SyntheticRowValues`
+8. `src/LoadFiles/SyntheticRowValues.cs` — add value-generation method
+9. `src/Zipper.Tests/DatComposingWriterTests.cs` — add tests
+10. `README.md` — usage line, Arguments Quick Reference, Argument Interactions
 
 **Test location:** `src/Zipper.Tests/`.
 
