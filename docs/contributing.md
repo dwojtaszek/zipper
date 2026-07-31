@@ -80,6 +80,16 @@ To install pre-commit hooks that format code and run unit tests on every commit:
 - **Linux / macOS**: `./setup-hook.sh`
 - **Windows**: `setup-hook.bat`
 
+## Local Debugging & Troubleshooting
+
+| Issue / Symptom | Possible Cause | Resolution |
+|-----------------|----------------|------------|
+| `Path traversal detected` when specifying output path | Target directory is outside the repository base directory | Supply a relative path within the workspace (e.g. `./output`) or use a subfolder inside the working directory |
+| `dotnet format` fails on `--verify-no-changes` | Code formatting deviates from `.editorconfig` rules | Run `dotnet format src/` locally to auto-fix formatting before committing |
+| E2E test script fails with missing release binary | `./tests/run-tests.sh` checks the Release output path | Build the Release configuration first (`dotnet build -c Release`) |
+| Pre-commit hook blocks commit during docs-only edits | Staged non-doc files trigger full unit test run | Use `git commit --no-verify` or verify all staged files match `*.md` or `docs/` patterns |
+| Custom column profile fails with `InvalidCastException` | JSON generator parameters contain unparsed numeric types | Ensure custom profile generator params use primitive string/numeric values or pass through `ColumnProfileLoader` |
+
 ## Architecture & Code Guidelines
 
 Before contributing code changes, please review key design documents:
