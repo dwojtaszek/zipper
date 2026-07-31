@@ -91,13 +91,19 @@ internal static class ProductionSetPlanner
         var batesSequence = BatesSequence.FromConfig(setBatesConfig);
 
         bool isRedacted = request.Production.RedactedProduction;
+        var sourceRecords = request.SourceRecords;
+        if (sourceRecords is not null && sourceRecords.Count != request.Output.FileCount)
+        {
+            throw new InvalidOperationException($"Source Record count ({sourceRecords.Count}) must equal FileCount ({request.Output.FileCount}).");
+        }
 
         for (long i = 0; i < request.Output.FileCount; i++)
         {
             int volumeIndex = (int)(i / request.Production.VolumeSize) + 1;
             var volName = $"VOL{volumeIndex:D3}";
             var batesNumber = batesSequence.Next().ToString();
-            var nativeExt = request.Output.ResolveFileType(i + 1);
+            var sourceRecord = sourceRecords?[(int)i];
+            var nativeExt = sourceRecord?.FileType ?? request.Output.ResolveFileType(i + 1);
 
             plans.Add(new ProductionNativeFilePlan
             {
@@ -106,7 +112,7 @@ internal static class ProductionSetPlanner
                 VolumeName = volName,
                 BatesNumber = batesNumber,
                 FileType = nativeExt,
-                NativeRelPath = Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}"),
+                NativeRelPath = BuildNativeRelPath(request.Production.SourcePathMode, volName, batesNumber, nativeExt, sourceRecord),
                 TextRelPath = Path.Combine("TEXT", volName, $"{batesNumber}.txt"),
                 ImageRelPath = Path.Combine("IMAGES", volName, $"{batesNumber}.tif"),
                 RedactedImageRelPath = isRedacted ? Path.Combine("REDACTED", "IMAGES", volName, $"{batesNumber}.tif") : null,
@@ -115,5 +121,25 @@ internal static class ProductionSetPlanner
         }
 
         return plans;
+    }
+
+    private static string BuildNativeRelPath(Config.SourcePathMode mode, string volName, string batesNumber, string nativeExt, SourceInput.SourceRecord? sourceRecord)
+    {
+        if (sourceRecord is null || mode == Config.SourcePathMode.Bates)
+        {
+            return Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}");
+        }
+
+        // Source paths are '/'-normalized with no leading/trailing separator (SourcePathSanitizer).
+        var parts = sourceRecord.RelativePath.Split('/');
+        if (mode == Config.SourcePathMode.Originals)
+        {
+            return Path.Combine(["ORIGINALS", .. parts]);
+        }
+
+        // PreserveSubdirs: keep the source folder structure under the volume, Bates-name the file.
+        return parts.Length > 1
+            ? Path.Combine(["NATIVES", volName, .. parts[..^1], $"{batesNumber}.{nativeExt}"])
+            : Path.Combine("NATIVES", volName, $"{batesNumber}.{nativeExt}");
     }
 }

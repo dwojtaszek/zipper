@@ -402,6 +402,78 @@ if exist "%BAD_REPORT%" (
 echo [ SUCCESS ] Test Case 10: Production Manifest Comparison invalid mode fails early passed
 
 
+:: --- Test Case 11: Source-driven production set with source path modes ---
+
+echo [ INFO ] Test Case 11: Source-driven production set with source path modes
+
+> "%TEST_OUTPUT_DIR%\source-prod.csv" echo FilePath,FileType
+>> "%TEST_OUTPUT_DIR%\source-prod.csv" echo clients/acme/scan.pdf,pdf
+>> "%TEST_OUTPUT_DIR%\source-prod.csv" echo root.docx,docx
+>> "%TEST_OUTPUT_DIR%\source-prod.csv" echo clients/beta/mail.eml,eml
+
+:: 11a: default bates mode keeps standard volume-rooted layout
+%ZIPPER_CMD% ^
+  --production-set ^
+  --input-csv "%TEST_OUTPUT_DIR%\source-prod.csv" ^
+  --production-id "SPRODA" ^
+  --output-path "%TEST_OUTPUT_DIR%\test11a" ^
+  --bates-prefix "SPROD" ^
+  --volume-size 10
+if errorlevel 1 ( echo [ ERROR ] Test 11a: generation failed & exit /b 1 )
+
+if not exist "%TEST_OUTPUT_DIR%\test11a\SPRODA\NATIVES\VOL001\SPROD00000001.pdf" ( echo [ ERROR ] Test 11a: bates-named native missing & exit /b 1 )
+if exist "%TEST_OUTPUT_DIR%\test11a\SPRODA\ORIGINALS\" ( echo [ ERROR ] Test 11a: ORIGINALS dir present in bates mode & exit /b 1 )
+findstr /C:"NATIVES\VOL001\SPROD00000001.pdf" "%TEST_OUTPUT_DIR%\test11a\SPRODA\DATA\loadfile.dat" >nul
+if errorlevel 1 ( echo [ ERROR ] Test 11a: native path missing from DAT & exit /b 1 )
+
+:: 11b: preserve mode keeps source subdirectories under the volume
+%ZIPPER_CMD% ^
+  --production-set ^
+  --input-csv "%TEST_OUTPUT_DIR%\source-prod.csv" ^
+  --source-path-mode preserve ^
+  --production-id "SPRODB" ^
+  --output-path "%TEST_OUTPUT_DIR%\test11b" ^
+  --bates-prefix "SPROD" ^
+  --volume-size 10
+if errorlevel 1 ( echo [ ERROR ] Test 11b: generation failed & exit /b 1 )
+
+if not exist "%TEST_OUTPUT_DIR%\test11b\SPRODB\NATIVES\VOL001\clients\acme\SPROD00000001.pdf" ( echo [ ERROR ] Test 11b: preserved-subdir native missing & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test11b\SPRODB\NATIVES\VOL001\SPROD00000002.docx" ( echo [ ERROR ] Test 11b: root-level native missing from volume root & exit /b 1 )
+
+:: 11c: originals mode mirrors full source paths under ORIGINALS
+%ZIPPER_CMD% ^
+  --production-set ^
+  --input-csv "%TEST_OUTPUT_DIR%\source-prod.csv" ^
+  --source-path-mode originals ^
+  --production-id "SPRODC" ^
+  --output-path "%TEST_OUTPUT_DIR%\test11c" ^
+  --bates-prefix "SPROD" ^
+  --volume-size 10
+if errorlevel 1 ( echo [ ERROR ] Test 11c: generation failed & exit /b 1 )
+
+if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\ORIGINALS\clients\acme\scan.pdf" ( echo [ ERROR ] Test 11c: originals native missing & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\ORIGINALS\root.docx" ( echo [ ERROR ] Test 11c: root-level originals native missing & exit /b 1 )
+if not exist "%TEST_OUTPUT_DIR%\test11c\SPRODC\TEXT\VOL001\SPROD00000001.txt" ( echo [ ERROR ] Test 11c: volume-rooted text file missing & exit /b 1 )
+findstr /C:"\"originals\": \"ORIGINALS\"" "%TEST_OUTPUT_DIR%\test11c\SPRODC\_manifest.json" >nul
+if errorlevel 1 ( echo [ ERROR ] Test 11c: manifest missing originals directory entry & exit /b 1 )
+findstr /C:"ORIGINALS\clients\acme\scan.pdf" "%TEST_OUTPUT_DIR%\test11c\SPRODC\DATA\loadfile.dat" >nul
+if errorlevel 1 ( echo [ ERROR ] Test 11c: originals path missing from DAT & exit /b 1 )
+
+:: 11d: source BatesNumber overrides are rejected with --production-set
+> "%TEST_OUTPUT_DIR%\bates-prod.csv" echo FilePath,FileType,BatesNumber
+>> "%TEST_OUTPUT_DIR%\bates-prod.csv" echo a.pdf,pdf,ABC_00000001
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --input-csv "%TEST_OUTPUT_DIR%\bates-prod.csv" ^
+  --output-path "%TEST_OUTPUT_DIR%\test11d" ^
+  --bates-prefix "ABC" 2>"%TEST_OUTPUT_DIR%\test11d.err"
+if not errorlevel 1 ( echo [ ERROR ] Test 11d: BatesNumber override with --production-set succeeded but should have failed. & exit /b 1 )
+findstr /C:"BatesNumber" "%TEST_OUTPUT_DIR%\test11d.err" >nul
+if errorlevel 1 ( echo [ ERROR ] Test 11d: rejection message does not name the BatesNumber column & exit /b 1 )
+
+echo [ SUCCESS ] Test Case 11: Source-driven production set with source path modes passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

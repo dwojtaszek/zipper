@@ -257,6 +257,10 @@ public static class CliParser
                     if (!ReadStringArg(args, ref i, "--rolling-bates-mode", out var batesModeVal)) return null;
                     parsed.RollingBatesMode = batesModeVal;
                     break;
+                case "--source-path-mode":
+                    if (!ReadStringArg(args, ref i, "--source-path-mode", out var sourcePathModeVal)) return null;
+                    parsed.SourcePathMode = sourcePathModeVal;
+                    break;
                 case "--withheld-native-policy":
                     if (!ReadStringArg(args, ref i, "--withheld-native-policy", out var withheldVal)) return null;
                     parsed.WithheldNativePolicy = withheldVal;

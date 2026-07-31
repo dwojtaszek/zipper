@@ -413,6 +413,98 @@ else
   print_success "Test Case 10: Production Manifest Comparison invalid mode fails early passed"
 fi
 
+# --- Test Case 11: Source-driven production set with source path modes ---
+
+print_info "Test Case 11: Source-driven production set with source path modes"
+
+cat > "$TEST_OUTPUT_DIR/source-prod.csv" <<'CSV'
+FilePath,FileType
+clients/acme/scan.pdf,pdf
+root.docx,docx
+clients/beta/mail.eml,eml
+CSV
+
+# 11a: default bates mode keeps standard volume-rooted layout
+zipper \
+  --production-set \
+  --input-csv "$TEST_OUTPUT_DIR/source-prod.csv" \
+  --production-id "SPRODA" \
+  --output-path "$TEST_OUTPUT_DIR/test11a" \
+  --bates-prefix "SPROD" \
+  --volume-size 10 || print_error "Test 11a: generation failed"
+
+if [[ ! -f "$TEST_OUTPUT_DIR/test11a/SPRODA/NATIVES/VOL001/SPROD00000001.pdf" ]]; then
+  print_error "Test 11a: bates-named native missing"
+fi
+if [[ -d "$TEST_OUTPUT_DIR/test11a/SPRODA/ORIGINALS" ]]; then
+  print_error "Test 11a: ORIGINALS dir present in bates mode"
+fi
+if ! grep -q 'NATIVES\\VOL001\\SPROD00000001.pdf' "$TEST_OUTPUT_DIR/test11a/SPRODA/DATA/loadfile.dat"; then
+  print_error "Test 11a: native path missing from DAT"
+fi
+
+# 11b: preserve mode keeps source subdirectories under the volume
+zipper \
+  --production-set \
+  --input-csv "$TEST_OUTPUT_DIR/source-prod.csv" \
+  --source-path-mode preserve \
+  --production-id "SPRODB" \
+  --output-path "$TEST_OUTPUT_DIR/test11b" \
+  --bates-prefix "SPROD" \
+  --volume-size 10 || print_error "Test 11b: generation failed"
+
+if [[ ! -f "$TEST_OUTPUT_DIR/test11b/SPRODB/NATIVES/VOL001/clients/acme/SPROD00000001.pdf" ]]; then
+  print_error "Test 11b: preserved-subdir native missing"
+fi
+if [[ ! -f "$TEST_OUTPUT_DIR/test11b/SPRODB/NATIVES/VOL001/SPROD00000002.docx" ]]; then
+  print_error "Test 11b: root-level native missing from volume root"
+fi
+
+# 11c: originals mode mirrors full source paths under ORIGINALS
+zipper \
+  --production-set \
+  --input-csv "$TEST_OUTPUT_DIR/source-prod.csv" \
+  --source-path-mode originals \
+  --production-id "SPRODC" \
+  --output-path "$TEST_OUTPUT_DIR/test11c" \
+  --bates-prefix "SPROD" \
+  --volume-size 10 || print_error "Test 11c: generation failed"
+
+if [[ ! -f "$TEST_OUTPUT_DIR/test11c/SPRODC/ORIGINALS/clients/acme/scan.pdf" ]]; then
+  print_error "Test 11c: originals native missing"
+fi
+if [[ ! -f "$TEST_OUTPUT_DIR/test11c/SPRODC/ORIGINALS/root.docx" ]]; then
+  print_error "Test 11c: root-level originals native missing"
+fi
+if [[ ! -f "$TEST_OUTPUT_DIR/test11c/SPRODC/TEXT/VOL001/SPROD00000001.txt" ]]; then
+  print_error "Test 11c: volume-rooted text file missing"
+fi
+if ! grep -q '"originals": "ORIGINALS"' "$TEST_OUTPUT_DIR/test11c/SPRODC/_manifest.json"; then
+  print_error "Test 11c: manifest missing originals directory entry"
+fi
+if ! grep -q 'ORIGINALS\\clients\\acme\\scan.pdf' "$TEST_OUTPUT_DIR/test11c/SPRODC/DATA/loadfile.dat"; then
+  print_error "Test 11c: originals path missing from DAT"
+fi
+
+# 11d: source BatesNumber overrides are rejected with --production-set
+cat > "$TEST_OUTPUT_DIR/bates-prod.csv" <<'CSV'
+FilePath,FileType,BatesNumber
+a.pdf,pdf,ABC_00000001
+CSV
+
+if zipper \
+  --production-set \
+  --input-csv "$TEST_OUTPUT_DIR/bates-prod.csv" \
+  --output-path "$TEST_OUTPUT_DIR/test11d" \
+  --bates-prefix "ABC" 2> "$TEST_OUTPUT_DIR/test11d.err"; then
+  print_error "Test 11d: BatesNumber override with --production-set succeeded but should have failed."
+fi
+if ! grep -q "BatesNumber" "$TEST_OUTPUT_DIR/test11d.err"; then
+  print_error "Test 11d: rejection message does not name the BatesNumber column"
+fi
+
+print_success "Test Case 11: Source-driven production set with source path modes passed"
+
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"

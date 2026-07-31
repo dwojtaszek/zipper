@@ -130,6 +130,16 @@ internal static class ProductionSetValidator
                 }
             }
 
+            if (!string.IsNullOrEmpty(parsed.SourcePathMode))
+            {
+                var pathMode = parsed.SourcePathMode.ToLowerInvariant();
+                if (pathMode is not ("bates" or "preserve" or "originals"))
+                {
+                    Console.Error.WriteLine("Error: --source-path-mode must be 'bates', 'preserve', or 'originals'.");
+                    return false;
+                }
+            }
+
             // Parse and validate production IDs
             var prodIds = GenerateProductionIds(parsed.ProductionId, parsed.RollingCount);
             if (prodIds.Count != parsed.RollingCount)

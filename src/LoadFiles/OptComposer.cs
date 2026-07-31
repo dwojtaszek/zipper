@@ -97,10 +97,13 @@ internal sealed class OptComposer : ILoadFileComposer
             }
 
             string volume = isProductionSet ? workItem.FolderName : "VOL001";
+            // Planned image path wins when present (Source-Driven path modes break the
+            // NATIVES-rooted derivation from FilePathInZip); legacy derivation otherwise.
             string baseImagePath = isProductionSet
-                ? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
-                    .Replace(Path.GetExtension(workItem.FilePathInZip) ?? string.Empty, ".tif", StringComparison.Ordinal)
-                    .Replace('/', '\\') // FilePathInZip uses '/' (ZIP spec); normalize on all platforms incl. Windows
+                ? fileData.ImageRelPath?.Replace('/', '\\')
+                    ?? workItem.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase)
+                        .Replace(Path.GetExtension(workItem.FilePathInZip) ?? string.Empty, ".tif", StringComparison.Ordinal)
+                        .Replace('/', '\\') // FilePathInZip uses '/' (ZIP spec); normalize on all platforms incl. Windows
                 : $"IMAGES\\{baseBatesNumber}.tif";
 
             var recordType = workItem.EffectiveFileType(this.request);

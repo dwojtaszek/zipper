@@ -20,6 +20,22 @@ internal static class CrossCuttingValidator
     {
         var hasCsv = !string.IsNullOrEmpty(parsed.InputCsv);
         var hasDirectory = !string.IsNullOrEmpty(parsed.DirectoryTemplate);
+
+        if (!string.IsNullOrEmpty(parsed.SourcePathMode))
+        {
+            if (!parsed.ProductionSet)
+            {
+                Console.Error.WriteLine("Error: --source-path-mode requires --production-set.");
+                return false;
+            }
+
+            if (!hasCsv && !hasDirectory)
+            {
+                Console.Error.WriteLine("Error: --source-path-mode requires --input-csv or --directory-template.");
+                return false;
+            }
+        }
+
         if (!hasCsv && !hasDirectory)
         {
             return true;
@@ -28,12 +44,6 @@ internal static class CrossCuttingValidator
         if (hasCsv && hasDirectory)
         {
             Console.Error.WriteLine("Error: --input-csv and --directory-template cannot be used together.");
-            return false;
-        }
-
-        if (parsed.ProductionSet)
-        {
-            Console.Error.WriteLine("Error: --input-csv/--directory-template are not supported with --production-set.");
             return false;
         }
 

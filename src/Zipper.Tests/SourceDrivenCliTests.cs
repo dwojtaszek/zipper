@@ -180,17 +180,85 @@ public class SourceDrivenCliTests : IDisposable
     }
 
     [Fact]
-    public void Build_InputCsvWithProductionSet_ReturnsNull()
+    public void Build_InputCsvWithProductionSet_Succeeds()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nsub/b.docx,docx\n");
+
+        var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--production-set", "--bates-prefix", "PROD", "--output-path", this.OutputDir() });
+
+        Assert.NotNull(request);
+        Assert.True(request!.Production.ProductionSet);
+        Assert.Equal(2, request.SourceRecords!.Count);
+        Assert.Equal(2, request.Output.FileCount);
+        Assert.Equal(Zipper.Config.SourcePathMode.Bates, request.Production.SourcePathMode);
+    }
+
+    [Fact]
+    public void Build_InputCsvBatesColumnWithProductionSet_ReturnsNull()
+    {
+        var csv = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC_00000001\n");
+
+        var error = CaptureError(() =>
+        {
+            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--production-set", "--bates-prefix", "ABC", "--output-path", this.OutputDir() });
+            Assert.Null(request);
+        });
+
+        Assert.Contains("BatesNumber", error, StringComparison.Ordinal);
+        Assert.Contains("--production-set", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_SourcePathModeWithProductionSet_MapsToEnum()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.pdf,pdf\n");
+        var args = new[] { "--input-csv", csv, "--production-set", "--source-path-mode", "originals", "--bates-prefix", "PROD", "--output-path", this.OutputDir() };
+
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.Equal(Zipper.Config.SourcePathMode.Originals, request!.Production.SourcePathMode);
+    }
+
+    [Fact]
+    public void Build_SourcePathModeWithoutProductionSet_ReturnsNull()
     {
         var csv = this.WriteCsv("FilePath,FileType\na.pdf,pdf\n");
 
         var error = CaptureError(() =>
         {
-            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--production-set", "--output-path", this.OutputDir() });
+            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--source-path-mode", "preserve", "--output-path", this.OutputDir() });
             Assert.Null(request);
         });
 
+        Assert.Contains("--source-path-mode", error, StringComparison.Ordinal);
         Assert.Contains("--production-set", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_SourcePathModeWithoutSourceInput_ReturnsNull()
+    {
+        var error = CaptureError(() =>
+        {
+            var request = Cli.Pipeline.Build(new[] { "--production-set", "--source-path-mode", "preserve", "--bates-prefix", "PROD", "--count", "1", "--output-path", this.OutputDir() });
+            Assert.Null(request);
+        });
+
+        Assert.Contains("--source-path-mode", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_InvalidSourcePathMode_ReturnsNull()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.pdf,pdf\n");
+
+        var error = CaptureError(() =>
+        {
+            var request = Cli.Pipeline.Build(new[] { "--input-csv", csv, "--production-set", "--source-path-mode", "bogus", "--bates-prefix", "PROD", "--output-path", this.OutputDir() });
+            Assert.Null(request);
+        });
+
+        Assert.Contains("--source-path-mode", error, StringComparison.Ordinal);
     }
 
     [Fact]

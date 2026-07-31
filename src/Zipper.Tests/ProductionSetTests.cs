@@ -645,6 +645,114 @@ public class ProductionSetTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_SourceDrivenOriginalsMode_MirrorsSourcePathsUnderOriginals()
+    {
+        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputPath);
+        try
+        {
+            var request = CreateSourceDrivenProductionRequest(outputPath, SourcePathMode.Originals);
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+            var prodPath = result.ProductionPath;
+
+            Assert.True(File.Exists(Path.Combine(prodPath, "ORIGINALS", "clients", "acme", "scan.pdf")));
+            Assert.True(File.Exists(Path.Combine(prodPath, "ORIGINALS", "root.docx")));
+
+            // Derived artifacts stay volume-rooted and Bates-named
+            Assert.True(File.Exists(Path.Combine(prodPath, "TEXT", "VOL001", "SRC00000001.txt")));
+
+            var dat = await File.ReadAllTextAsync(Path.Combine(prodPath, "DATA", "loadfile.dat"));
+            Assert.Contains(@"ORIGINALS\clients\acme\scan.pdf", dat, StringComparison.Ordinal);
+
+            // Production Set identity is the Bates Number (DOCID column); TEXT path stays volume-rooted
+            Assert.Contains("SRC00000001", dat, StringComparison.Ordinal);
+            Assert.Contains(@"TEXT\VOL001\SRC00000001.txt", dat, StringComparison.Ordinal);
+
+            var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(prodPath, "_manifest.json")));
+            Assert.Equal("ORIGINALS", manifest.RootElement.GetProperty("directories").GetProperty("originals").GetString());
+
+            // Multi-type source sets report all participating File Types, not the first record's
+            Assert.Equal("docx,pdf", manifest.RootElement.GetProperty("fileType").GetString());
+        }
+        finally
+        {
+            Directory.Delete(outputPath, true);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SourceDrivenPreserveMode_KeepsSourceSubdirsUnderVolume()
+    {
+        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputPath);
+        try
+        {
+            var request = CreateSourceDrivenProductionRequest(outputPath, SourcePathMode.PreserveSubdirs);
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+            var prodPath = result.ProductionPath;
+
+            Assert.True(File.Exists(Path.Combine(prodPath, "NATIVES", "VOL001", "clients", "acme", "SRC00000001.pdf")));
+            Assert.True(File.Exists(Path.Combine(prodPath, "NATIVES", "VOL001", "SRC00000002.docx")));
+
+            var dat = await File.ReadAllTextAsync(Path.Combine(prodPath, "DATA", "loadfile.dat"));
+            Assert.Contains(@"NATIVES\VOL001\clients\acme\SRC00000001.pdf", dat, StringComparison.Ordinal);
+
+            var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(prodPath, "_manifest.json")));
+            Assert.False(manifest.RootElement.GetProperty("directories").TryGetProperty("originals", out _));
+        }
+        finally
+        {
+            Directory.Delete(outputPath, true);
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SourceDrivenBatesMode_UsesStandardProductionLayout()
+    {
+        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(outputPath);
+        try
+        {
+            var request = CreateSourceDrivenProductionRequest(outputPath, SourcePathMode.Bates);
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+            var prodPath = result.ProductionPath;
+
+            Assert.True(File.Exists(Path.Combine(prodPath, "NATIVES", "VOL001", "SRC00000001.pdf")));
+            Assert.True(File.Exists(Path.Combine(prodPath, "NATIVES", "VOL001", "SRC00000002.docx")));
+
+            // Production Set identity is the Bates Number (DOCID column)
+            var dat = await File.ReadAllTextAsync(Path.Combine(prodPath, "DATA", "loadfile.dat"));
+            Assert.Contains("SRC00000001", dat, StringComparison.Ordinal);
+            Assert.Contains(@"NATIVES\VOL001\SRC00000001.pdf", dat, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(outputPath, true);
+        }
+    }
+
+    private static FileGenerationRequest CreateSourceDrivenProductionRequest(string outputPath, SourcePathMode mode)
+    {
+        return new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = outputPath,
+                FileCount = 2,
+                FileType = "pdf",
+                SourceFileTypes = new List<string> { "docx", "pdf" },
+            },
+            Production = new ProductionConfig { ProductionSet = true, VolumeSize = 10, ProductionId = "CUSTPROD", SourcePathMode = mode },
+            Bates = new BatesNumberConfig { Prefix = "SRC", Start = 1, Digits = 8 },
+            SourceRecords = new List<Zipper.SourceInput.SourceRecord>
+            {
+                new() { RelativePath = "clients/acme/scan.pdf", FileType = "pdf" },
+                new() { RelativePath = "root.docx", FileType = "docx" },
+            },
+        };
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithMultiPageTiff_ShouldWritePageLevelImageFilesToDisk()
     {
         // Arrange

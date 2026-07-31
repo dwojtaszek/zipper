@@ -96,6 +96,12 @@ public static class RequestBuilder
                 return null;
             }
 
+            if (parsed.ProductionSet && rows.Any(r => r.BatesNumber is not null))
+            {
+                Console.Error.WriteLine("Error: the source 'BatesNumber' column cannot be used with --production-set. Production Set Bates Numbers come from the configured Bates sequence so Volume ranges in the Production Manifest stay exact.");
+                return null;
+            }
+
             sourceRecords = rows;
         }
 
@@ -276,6 +282,12 @@ public static class RequestBuilder
                 },
                 RedactedProduction = parsed.RedactedProduction,
                 WithheldNativePolicy = parsed.WithheldNativePolicy?.ToLowerInvariant() ?? "keep-native",
+                SourcePathMode = (parsed.SourcePathMode?.ToLowerInvariant()) switch
+                {
+                    "preserve" => SourcePathMode.PreserveSubdirs,
+                    "originals" => SourcePathMode.Originals,
+                    _ => SourcePathMode.Bates,
+                },
             },
             LoadfileOnly = parsed.LoadfileOnly,
             Hash = hashConfig,

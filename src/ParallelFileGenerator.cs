@@ -588,6 +588,12 @@ internal record FileData
 
     public string? RedactedTextRelPath { get; init; }
 
+    /// <summary>Production Set extracted-text path from the plan; null outside Production Set mode (composers derive it).</summary>
+    public string? TextRelPath { get; init; }
+
+    /// <summary>Production Set image path from the plan; null outside Production Set mode (composers derive it).</summary>
+    public string? ImageRelPath { get; init; }
+
     public string? NativePathOverride { get; init; }
 
     public string? RedactionReason { get; init; }
