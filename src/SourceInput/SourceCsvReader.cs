@@ -10,7 +10,10 @@ namespace Zipper.SourceInput;
 /// </summary>
 internal static class SourceCsvReader
 {
-    internal static bool TryRead(string filePath, out IReadOnlyList<SourceRecord> records, out string? error)
+    /// <summary>Maximum Source Records a single input may define; Source Records are held in memory, so larger inputs must be split into multiple runs.</summary>
+    internal const int MaxSourceRecords = 10_000_000;
+
+    internal static bool TryRead(string filePath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         error = null;
@@ -19,7 +22,7 @@ internal static class SourceCsvReader
         try
         {
             using var reader = new StreamReader(filePath, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            rows = ParseRows(reader);
+            rows = ParseRows(reader, maxRecords);
         }
         catch (InvalidDataException ex)
         {
@@ -92,6 +95,8 @@ internal static class SourceCsvReader
 
         var result = new List<SourceRecord>(rows.Count - 1);
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenControlNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenBatesNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int r = 1; r < rows.Count; r++)
         {
             var row = rows[r].Fields;
@@ -144,6 +149,18 @@ internal static class SourceCsvReader
             if (bates is not null && !IsValidIdentityValue(bates))
             {
                 error = $"Row {rowNumber}: BatesNumber contains invalid characters (control characters and path separators are not allowed).";
+                return false;
+            }
+
+            if (control is not null && !seenControlNumbers.Add(control))
+            {
+                error = $"Row {rowNumber}: Duplicate ControlNumber '{control}' (identities must be unique across Source Records).";
+                return false;
+            }
+
+            if (bates is not null && !seenBatesNumbers.Add(bates))
+            {
+                error = $"Row {rowNumber}: Duplicate BatesNumber '{bates}' (identities must be unique across Source Records).";
                 return false;
             }
 
@@ -222,7 +239,7 @@ internal static class SourceCsvReader
     private static string NormalizeHeader(string name)
         => name.Trim().ToLowerInvariant().Replace(" ", string.Empty, StringComparison.Ordinal).Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal);
 
-    private static List<(int RecordNumber, List<string> Fields)> ParseRows(TextReader reader)
+    private static List<(int RecordNumber, List<string> Fields)> ParseRows(TextReader reader, int maxRecords)
     {
         var rows = new List<(int, List<string>)>();
         var field = new StringBuilder();
@@ -305,6 +322,11 @@ internal static class SourceCsvReader
                     afterClosingQuote = false;
                     if (row.Exists(static f => f.Length > 0))
                     {
+                        if (rows.Count > maxRecords)
+                        {
+                            throw new InvalidDataException($"Source CSV exceeds the maximum of {maxRecords} data rows (record {recordNumber}); split the input into multiple runs.");
+                        }
+
                         rows.Add((recordNumber, row));
                     }
 
@@ -322,6 +344,11 @@ internal static class SourceCsvReader
             EndField(row, field, fieldWasQuoted);
             if (row.Exists(static f => f.Length > 0))
             {
+                if (rows.Count > maxRecords)
+                {
+                    throw new InvalidDataException($"Source CSV exceeds the maximum of {maxRecords} data rows (record {recordNumber}); split the input into multiple runs.");
+                }
+
                 rows.Add((recordNumber, row));
             }
         }

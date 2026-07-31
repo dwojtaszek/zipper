@@ -7,7 +7,7 @@ namespace Zipper.SourceInput;
 /// </summary>
 internal static class DirectoryTemplateReader
 {
-    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error)
+    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceCsvReader.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         error = null;
@@ -21,55 +21,59 @@ internal static class DirectoryTemplateReader
         var result = new List<SourceRecord>();
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Materialize eagerly (EnumerateFiles is lazy, so enumeration-time I/O errors would
-        // otherwise escape the catch) and include hidden/system entries: silently skipping
-        // files would produce fewer Source Records than the template contains. Reparse points
-        // (symbolic links) are skipped to prevent infinite recursion through link cycles.
-        List<string> files;
+        // Include hidden/system entries: silently skipping files would produce fewer Source
+        // Records than the template contains. Reparse points (symbolic links) are skipped to
+        // prevent infinite recursion through link cycles. Each file is validated and converted
+        // during the lazy enumeration (inside the try, so I/O errors stay captured) and the
+        // cap is enforced as entries arrive, so memory stays bounded by the Source Record list.
         try
         {
-            files = Directory.EnumerateFiles(directoryPath, "*", new EnumerationOptions
+            foreach (var file in Directory.EnumerateFiles(directoryPath, "*", new EnumerationOptions
             {
                 RecurseSubdirectories = true,
                 AttributesToSkip = FileAttributes.ReparsePoint,
                 IgnoreInaccessible = false,
-            }).ToList();
+            }))
+            {
+                if (result.Count >= maxRecords)
+                {
+                    error = $"Directory template '{directoryPath}' contains more than {maxRecords} files, exceeding the maximum of {maxRecords} Source Records; split the template into smaller directories.";
+                    return false;
+                }
+
+                var rawRelative = Path.GetRelativePath(directoryPath, file);
+                if (!SourcePathSanitizer.TryNormalize(rawRelative, out var relativePath, out var pathError))
+                {
+                    error = $"Directory template entry '{rawRelative}' is not a safe relative path: {pathError}";
+                    return false;
+                }
+
+                var extension = Path.GetExtension(relativePath).ToLowerInvariant();
+                if (!SourceFileTypeMap.TryFromExtension(extension, out var fileType))
+                {
+                    error = extension.Length == 0
+                        ? $"Directory template file '{relativePath}' has no extension; the File Type cannot be inferred."
+                        : $"Directory template file '{relativePath}' has unsupported extension '{extension}'. Supported: {SourceFileTypeMap.SupportedExtensionsDisplay}.";
+                    return false;
+                }
+
+                if (!seenPaths.Add(relativePath))
+                {
+                    error = $"Directory template contains duplicate relative path '{relativePath}'.";
+                    return false;
+                }
+
+                result.Add(new SourceRecord
+                {
+                    RelativePath = relativePath,
+                    FileType = fileType,
+                });
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             error = $"Cannot read directory template '{directoryPath}': {ex.Message}";
             return false;
-        }
-
-        foreach (var file in files)
-        {
-            var rawRelative = Path.GetRelativePath(directoryPath, file);
-            if (!SourcePathSanitizer.TryNormalize(rawRelative, out var relativePath, out var pathError))
-            {
-                error = $"Directory template entry '{rawRelative}' is not a safe relative path: {pathError}";
-                return false;
-            }
-
-            var extension = Path.GetExtension(relativePath).ToLowerInvariant();
-            if (!SourceFileTypeMap.TryFromExtension(extension, out var fileType))
-            {
-                error = extension.Length == 0
-                    ? $"Directory template file '{relativePath}' has no extension; the File Type cannot be inferred."
-                    : $"Directory template file '{relativePath}' has unsupported extension '{extension}'. Supported: {SourceFileTypeMap.SupportedExtensionsDisplay}.";
-                return false;
-            }
-
-            if (!seenPaths.Add(relativePath))
-            {
-                error = $"Directory template contains duplicate relative path '{relativePath}'.";
-                return false;
-            }
-
-            result.Add(new SourceRecord
-            {
-                RelativePath = relativePath,
-                FileType = fileType,
-            });
         }
 
         if (result.Count == 0)

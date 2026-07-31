@@ -181,11 +181,12 @@ REQ-195	unit	MixedFileTypeGenerationTests.ProductionSet_MixedTypes_NativesAndDat
 REQ-196	unit	MixedFileTypeCliTests.Build_MixWithTiffOrJpg_DefaultsToDatAndOpt	Default DAT+OPT when jpg/tiff in mix; single-entry degenerates
 REQ-197	unit	SourceCsvReaderTests.TryRead_FullCsv_MapsControlBatesAndExtraColumns	Source CSV columns, aliases, quoting, row-numbered errors
 REQ-198	unit	DirectoryTemplateReaderTests.TryRead_ExtensionInference_MapsToFileType	Directory Template walk; extension inference; placeholder bytes only
-REQ-199	unit	SourcePathSanitizerTests.TryNormalize_ParentTraversal_Rejected	Path safety: traversal, rooted, UNC, drive-qualified rejected
+REQ-199	unit	SourcePathSanitizerTests.TryNormalize_ParentTraversal_Rejected	Path safety: traversal, rooted, UNC, drive-qualified, reserved device names, trailing dot/space rejected
 REQ-200	e2e	test-source-driven.sh	Source input validation: count match, --type/--types rejection (production-set allowed per REQ-205)
 REQ-201	unit	SourceDrivenGenerationTests.StandardArchive_SourceRows_ZipEntriesAndDatPathsMatchRelativePaths	Archive entries and Load File rows mirror source records in order
-REQ-202	unit	SourceDrivenGenerationTests.StandardArchive_SourceBates_BatesColumnUsesRowOverride	ControlNumber/BatesNumber overrides; sequence fallback
+REQ-202	unit	SourceDrivenGenerationTests.StandardArchive_SourceBates_BatesColumnUsesRowOverride	ControlNumber/BatesNumber overrides; sequence fallback; duplicate identity values rejected (SourceCsvReaderTests)
 REQ-203	unit	SourceDrivenGenerationTests.StandardArchive_ProfileMapsSourceMetadataIntoDatColumns	Source Metadata via Column Profile (DAT), unmatched ignored
 REQ-204	e2e	test-source-driven.sh	Multiple source File Types: File Type column, per-record gating, DAT+OPT default
 REQ-205	unit	ProductionSetPlannerTests.Plan_SourceDrivenOriginalsMode_MirrorsFullSourcePathUnderOriginals	Source-driven Production Sets: source-path-mode placement (bates/preserve/originals), record order, Bates identity
 REQ-206	unit	SourceDrivenCliTests.Build_InputCsvBatesColumnWithProductionSet_ReturnsNull	BatesNumber column rejected with --production-set to keep manifest volume ranges exact
+REQ-207	unit	SourceCsvReaderTests.TryRead_RowCapExceeded_ReturnsFalse	Source Record cap (10M rows/files) enforced with a clear error

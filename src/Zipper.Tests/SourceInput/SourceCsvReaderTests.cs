@@ -98,6 +98,74 @@ public class SourceCsvReaderTests : IDisposable
     }
 
     [Fact]
+    public void TryRead_DuplicateControlNumber_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType,ControlNumber\na.pdf,pdf,ABC-001\nb.eml,eml,abc-001\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("Row 3: Duplicate ControlNumber", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_DuplicateBatesNumberDifferentCase_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC_0001\nb.eml,eml,abc_0001\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("Row 3: Duplicate BatesNumber", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_DuplicateBatesNumber_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType,BatesNumber\na.pdf,pdf,ABC_0001\nb.eml,eml,ABC_0001\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("Row 3: Duplicate BatesNumber", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_RepeatedEmptyIdentityValues_Allowed()
+    {
+        var path = this.WriteCsv("FilePath,FileType,ControlNumber,BatesNumber\na.pdf,pdf,,\nb.eml,eml,,\n");
+
+        var ok = SourceCsvReader.TryRead(path, out var records, out var error);
+
+        Assert.True(ok);
+        Assert.Null(error);
+        Assert.Equal(2, records.Count);
+    }
+
+    [Fact]
+    public void TryRead_RowCapExceeded_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nb.eml,eml\nc.tiff,tiff\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error, maxRecords: 2);
+
+        Assert.False(ok);
+        Assert.Contains("exceeds the maximum of 2 data rows", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_RowCapExact_Allowed()
+    {
+        var path = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nb.eml,eml\n");
+
+        var ok = SourceCsvReader.TryRead(path, out var records, out var error, maxRecords: 2);
+
+        Assert.True(ok);
+        Assert.Null(error);
+        Assert.Equal(2, records.Count);
+    }
+
+    [Fact]
     public void TryRead_MinimalCsv_ReturnsRecords()
     {
         var path = this.WriteCsv("FilePath,FileType\ndocs/a.pdf,pdf\nb.eml,eml\nc/x.tiff,tiff\n");

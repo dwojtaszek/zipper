@@ -112,4 +112,60 @@ public class SourcePathSanitizerTests
         Assert.False(ok);
         Assert.NotNull(error);
     }
+
+    [Theory]
+    [InlineData("CON")]
+    [InlineData("CON.pdf")]
+    [InlineData("con.eml")]
+    [InlineData("folder/NUL")]
+    [InlineData("folder/aux.tiff")]
+    [InlineData("COM1.xlsx")]
+    [InlineData("folder/lpt9.pdf")]
+    public void TryNormalize_ReservedDeviceName_Rejected(string raw)
+    {
+        var ok = SourcePathSanitizer.TryNormalize(raw, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("reserved Windows device name", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("CON .pdf")]
+    [InlineData("NUL .txt")]
+    [InlineData("folder/COM1 .xlsx")]
+    public void TryNormalize_ReservedDeviceNameWithPaddedStem_Rejected(string raw)
+    {
+        var ok = SourcePathSanitizer.TryNormalize(raw, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("reserved Windows device name", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("console.pdf")]
+    [InlineData("COM10.pdf")]
+    [InlineData("LPT0.pdf")]
+    [InlineData("content.docx")]
+    [InlineData("auxiliary/file.pdf")]
+    public void TryNormalize_ReservedNameLookalike_Accepted(string raw)
+    {
+        var ok = SourcePathSanitizer.TryNormalize(raw, out var normalized, out var error);
+
+        Assert.True(ok);
+        Assert.Equal(raw, normalized);
+        Assert.Null(error);
+    }
+
+    [Theory]
+    [InlineData("folder./file.pdf")]
+    [InlineData("folder /file.pdf")]
+    [InlineData("file.pdf.")]
+    [InlineData("a/b . /c.pdf")]
+    public void TryNormalize_TrailingDotOrSpaceSegment_Rejected(string raw)
+    {
+        var ok = SourcePathSanitizer.TryNormalize(raw, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("ends with a dot or space", error, StringComparison.Ordinal);
+    }
 }

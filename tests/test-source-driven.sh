@@ -311,6 +311,41 @@ if zipper --input-csv "$TEST_OUTPUT_DIR/source.csv" --type pdf --output-path "$T
   print_error "Test 6: --type with --input-csv should fail"
 fi
 
+cat > "$TEST_OUTPUT_DIR/dup-control.csv" <<'CSV'
+FilePath,FileType,ControlNumber
+a.pdf,pdf,ABC-001
+b.eml,eml,ABC-001
+CSV
+if zipper --input-csv "$TEST_OUTPUT_DIR/dup-control.csv" --output-path "$TEST_OUTPUT_DIR/val7" > /dev/null 2> "$val_err_dir/val7.err"; then
+  print_error "Test 6: duplicate ControlNumber should fail"
+fi
+if ! grep -q "Duplicate ControlNumber" "$val_err_dir/val7.err"; then
+  print_error "Test 6: duplicate ControlNumber message not found"
+fi
+
+cat > "$TEST_OUTPUT_DIR/reserved.csv" <<'CSV'
+FilePath,FileType
+folder/CON.pdf,pdf
+CSV
+if zipper --input-csv "$TEST_OUTPUT_DIR/reserved.csv" --output-path "$TEST_OUTPUT_DIR/val8" > /dev/null 2> "$val_err_dir/val8.err"; then
+  print_error "Test 6: reserved device name path should fail"
+fi
+if ! grep -q "reserved Windows device name" "$val_err_dir/val8.err"; then
+  print_error "Test 6: reserved device name message not found"
+fi
+
+cat > "$TEST_OUTPUT_DIR/bates-collision.csv" <<'CSV'
+FilePath,FileType,BatesNumber
+a.pdf,pdf,ABC00000002
+b.eml,eml,
+CSV
+if zipper --input-csv "$TEST_OUTPUT_DIR/bates-collision.csv" --bates-prefix "ABC" --output-path "$TEST_OUTPUT_DIR/val9" > /dev/null 2> "$val_err_dir/val9.err"; then
+  print_error "Test 6: Bates override colliding with the generated sequence should fail"
+fi
+if ! grep -q "collides with the generated Bates sequence value" "$val_err_dir/val9.err"; then
+  print_error "Test 6: Bates collision message not found"
+fi
+
 print_success "Test Case 6: Validation failures passed"
 
 # --- All Tests Passed ---
