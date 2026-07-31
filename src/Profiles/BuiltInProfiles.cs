@@ -134,42 +134,10 @@ public static class BuiltInProfiles
                 throw new InvalidOperationException($"Embedded column profile resource '{resourceName}' failed to parse.");
             }
 
-            NormalizeGeneratorParams(profile);
+            ColumnProfileLoader.NormalizeGeneratorParams(profile);
             profiles[name] = profile;
         }
 
         return profiles;
-    }
-
-    /// <summary>
-    /// Converts JsonElement generator parameter values produced by deserialization back to the
-    /// primitives a C# object literal would hold (int/double/bool/string), so generator consumers
-    /// see identical types for built-in and in-code profiles.
-    /// </summary>
-    private static void NormalizeGeneratorParams(ColumnProfile profile)
-    {
-        foreach (var column in profile.Columns)
-        {
-            if (column.GeneratorParams is null)
-            {
-                continue;
-            }
-
-            foreach (var key in column.GeneratorParams.Keys.ToList())
-            {
-                if (column.GeneratorParams[key] is JsonElement element)
-                {
-                    column.GeneratorParams[key] = element.ValueKind switch
-                    {
-                        JsonValueKind.Number when element.TryGetInt32(out var intValue) => intValue,
-                        JsonValueKind.Number => element.GetDouble(),
-                        JsonValueKind.True => true,
-                        JsonValueKind.False => false,
-                        JsonValueKind.String => element.GetString()!,
-                        _ => element,
-                    };
-                }
-            }
-        }
     }
 }
