@@ -12,7 +12,11 @@ public static class Program
 
         if (args.Length == 1 && string.Equals(args[0], "--version", StringComparison.OrdinalIgnoreCase))
         {
-            var version = System.Reflection.Assembly.GetEntryAssembly()?.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+            var asm = System.Reflection.Assembly.GetEntryAssembly() ?? typeof(Program).Assembly;
+            var infoVer = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var fileVer = asm.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>()?.Version;
+            var asmVer = asm.GetName().Version?.ToString();
+            var version = (!string.IsNullOrEmpty(infoVer) && infoVer != "1.0.0.0" && infoVer != "1.0.0") ? infoVer : (fileVer ?? asmVer ?? "2.0.0");
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             return 0;
         }
