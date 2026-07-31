@@ -620,6 +620,88 @@ public class ColumnProfileLoaderTests : IDisposable
         Assert.Contains("Path traversal detected", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LoadFromFile_WithGeneratorParams_NormalizesJsonElementValues()
+    {
+        // Arrange
+        var json = @"{
+                ""name"": ""CustomParams"",
+                ""columns"": [
+                    { ""name"": ""DOCID"", ""type"": ""identifier"" },
+                    { ""name"": ""NOTES"", ""type"": ""longtext"", ""generator"": ""loremParagraphs"", ""generatorParams"": { ""min"": 1, ""max"": 3, ""label"": ""note"", ""flag"": true, ""off"": false, ""ratio"": 1.5 } }
+                ],
+                ""dataSources"": {}
+            }";
+
+        var filePath = Path.Combine(this.tempDir, "params.json");
+        File.WriteAllText(filePath, json);
+
+        // Act
+        var profile = ColumnProfileLoader.LoadFromFile(filePath);
+
+        // Assert: values must be primitives, not JsonElement, so generator consumers can Convert them
+        var notesColumn = profile.Columns[1];
+        Assert.NotNull(notesColumn.GeneratorParams);
+        Assert.IsType<int>(notesColumn.GeneratorParams["min"]);
+        Assert.IsType<int>(notesColumn.GeneratorParams["max"]);
+        Assert.Equal(1, notesColumn.GeneratorParams["min"]);
+        Assert.Equal(3, notesColumn.GeneratorParams["max"]);
+        Assert.IsType<string>(notesColumn.GeneratorParams["label"]);
+        Assert.IsType<bool>(notesColumn.GeneratorParams["flag"]);
+        Assert.Equal(false, notesColumn.GeneratorParams["off"]);
+        Assert.IsType<double>(notesColumn.GeneratorParams["ratio"]);
+    }
+
+    [Fact]
+    public void LoadFromFile_WithNullColumns_ThrowsInvalidOperationException()
+    {
+        // Arrange: explicit null must surface the validation error, not a NullReferenceException from normalization
+        var json = @"{ ""name"": ""NullColumns"", ""columns"": null, ""dataSources"": {} }";
+
+        var filePath = Path.Combine(this.tempDir, "null-columns.json");
+        File.WriteAllText(filePath, json);
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ColumnProfileLoader.LoadFromFile(filePath));
+
+        Assert.Contains("at least one column", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadFromFile_WithLoremParagraphsProfile_GenerateDoesNotThrow()
+    {
+        // Arrange: repro from issue #720 - custom profile with generatorParams must not crash generation
+        var json = @"{
+                ""name"": ""CustomLorem"",
+                ""columns"": [
+                    { ""name"": ""DOCID"", ""type"": ""identifier"" },
+                    { ""name"": ""NOTES"", ""type"": ""longtext"", ""generator"": ""loremParagraphs"", ""generatorParams"": { ""min"": 1, ""max"": 3 } }
+                ],
+                ""dataSources"": {}
+            }";
+
+        var filePath = Path.Combine(this.tempDir, "lorem.json");
+        File.WriteAllText(filePath, json);
+        var profile = ColumnProfileLoader.LoadFromFile(filePath);
+
+        var context = new Zipper.Profiles.Generation.ColumnGenerationContext
+        {
+            NativeFileIndex = 0,
+            FolderNumber = 1,
+            DocumentIndex = 0,
+            Seeded = new Random(42),
+            Now = new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc),
+        };
+
+        // Act
+        var generator = new Zipper.Profiles.Generation.LongTextGenerator(profile.Columns[1]);
+        var text = generator.Generate(context);
+
+        // Assert
+        Assert.NotEmpty(text);
+    }
+
     private static ColumnProfile CreateMinimalProfile()
     {
         return new ColumnProfile

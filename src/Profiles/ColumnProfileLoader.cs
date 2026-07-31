@@ -65,6 +65,7 @@ public static class ColumnProfileLoader
             }
 
             Validate(profile);
+            NormalizeGeneratorParams(profile);
             return profile;
         }
         catch (JsonException ex)
@@ -74,6 +75,38 @@ public static class ColumnProfileLoader
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             throw new InvalidOperationException($"Unable to read column profile file '{filePath}': {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Converts JsonElement generator parameter values produced by deserialization back to the
+    /// primitives a C# object literal would hold (int/double/bool/string), so generator consumers
+    /// see identical types for deserialized and in-code profiles.
+    /// </summary>
+    internal static void NormalizeGeneratorParams(ColumnProfile profile)
+    {
+        foreach (var column in profile.Columns)
+        {
+            if (column.GeneratorParams is null)
+            {
+                continue;
+            }
+
+            foreach (var key in column.GeneratorParams.Keys.ToList())
+            {
+                if (column.GeneratorParams[key] is JsonElement element)
+                {
+                    column.GeneratorParams[key] = element.ValueKind switch
+                    {
+                        JsonValueKind.Number when element.TryGetInt32(out var intValue) => intValue,
+                        JsonValueKind.Number => element.GetDouble(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.String => element.GetString()!,
+                        _ => element,
+                    };
+                }
+            }
         }
     }
 
