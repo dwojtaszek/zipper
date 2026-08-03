@@ -4,3 +4,4 @@ M:System.String.Format(System.String,System.Object);Use an overload that takes a
 M:System.String.Format(System.String,System.Object[]);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object,System.Object);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object,System.Object,System.Object);Use an overload that takes an IFormatProvider instead
+P:System.Environment.CurrentDirectory;Pass explicit working directory or output path instead
