@@ -208,12 +208,22 @@ dotnet_diagnostic.CA1854.severity = warning
 # CA1861: Avoid constant arrays as arguments (performance)
 dotnet_diagnostic.CA1861.severity = suggestion
 
+# CA1512: Use ArgumentOutOfRangeException throw helpers
+dotnet_diagnostic.CA1512.severity = warning
+
+# CA1859: Use concrete types when possible for improved performance
+dotnet_diagnostic.CA1859.severity = suggestion
+
+# CA1864: Prefer Dictionary.TryAdd over ContainsKey + Add
+dotnet_diagnostic.CA1864.severity = warning
+
 # RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
 dotnet_diagnostic.RCS1139.severity = none
 
 # Test projects: determinism/perf analyzer rules add churn without value in test
 # assertions and fixtures. Scope the rules enabled above to production code only.
 [**/{Zipper.Tests,Zipper.Analyzers.Tests}/**.cs]
+dotnet_diagnostic.RS0030.severity = none
 dotnet_diagnostic.CA1304.severity = none
 dotnet_diagnostic.MA0137.severity = none
 dotnet_diagnostic.CA1305.severity = none
