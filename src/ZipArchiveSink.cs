@@ -57,6 +57,8 @@ internal class ZipArchiveSink : IArchiveSink
 
         // Load Files land inside the ZIP (IncludeLoadFile) or next to it on disk; the
         // orchestrator owns the per-format write + audit loop in either case.
+        // CancellationToken.None: prior behavior, this phase was non-cancellable, so a
+        // cancellation cannot leave partial DAT/OPT sidecars behind in the output dir.
         Func<string, Stream> openTarget = request.Output.IncludeLoadFile
             ? target => archive.CreateEntry(target, CompressionLevel.Optimal).Open()
             : target => new FileStream(Path.Combine(baseFilePath, target), FileMode.Create);
@@ -72,7 +74,7 @@ internal class ZipArchiveSink : IArchiveSink
                 return (actualLoadFileName, actualLoadFileName + "_properties.json");
             },
             openTarget,
-            cancellationToken).ConfigureAwait(false);
+            CancellationToken.None).ConfigureAwait(false);
 
         return request.Output.IncludeLoadFile
             ? actualLoadFileTarget

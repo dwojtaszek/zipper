@@ -50,7 +50,7 @@ graph TD
     Producers -->|"Result Channel"| ZAS["ZipArchiveSink (Consumer)"]
     ZAS --> ZIP["ZIP Archive"]
     ZAS --> LFO["LoadFileOrchestrator<br/>(format dispatch)"]
-    LFO --> LF1["Load Files (all formats)"]
+    LFO --> LF1["Load Files + Audit Files"]
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
     LOG --> LF2["Load Files (DAT/OPT)"]
@@ -61,7 +61,8 @@ graph TD
     PSG --> PSP["ProductionSetPlanner (no I/O)"]
     PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
     PSG --> LFO
-    LFO --> LF3["Load Files + Manifest"]
+    LFO --> LF3["Load Files + Audit Files"]
+    PSG --> Manifest["Production Manifest"]
 ```
 
 ## Component Map

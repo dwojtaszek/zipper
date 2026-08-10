@@ -44,12 +44,14 @@ internal static class LoadFileOrchestrator
                 await writer.WriteAsync(loadFileStream, request, processedFiles, cancellationToken: cancellationToken).ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             var auditJson = LoadFileAuditWriter.GenerateAuditJson(loadFileTarget, request, processedFiles, null, format);
             var auditStream = openTarget(auditTarget);
             await using (auditStream.ConfigureAwait(false))
             {
                 using var auditWriter = new System.IO.StreamWriter(auditStream);
-                await auditWriter.WriteAsync(auditJson).ConfigureAwait(false);
+                await auditWriter.WriteAsync(auditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
             lastLoadFileTarget = loadFileTarget;
