@@ -336,7 +336,7 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/StandardMode.cs` / `LoadFileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |
 | `src/IFileGenerator.cs` / `FileGeneratorFactory.cs` | File generator interface + factory |
 | `src/ParallelFileGenerator.cs` | Standard mode file generation pipeline |
-| `src/IArchiveSink.cs` / `src/ZipArchiveSink.cs` | Archive creation + Load File writing (Standard mode consumer) |
+| `src/IArchiveSink.cs` / `src/ZipArchiveSink.cs` | Archive creation (Standard mode consumer); Load File emission delegated to `LoadFileOrchestrator` |
 | `src/LoadFileOnlyGenerator.cs` | Standalone Load File generation |
 | `src/ProductionSetGenerator.cs` | Production Set directory tree + Load Files |
 | `src/ChaosEngine.cs` | Chaos anomaly injection |
@@ -348,7 +348,7 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 | `src/LoadFiles/LoadFileEmitter.cs` | I/O + chaos authority: preamble, EOL, batching, chaos pipeline |
 | `src/Profiles/Generation/` | Column value generators |
 | `src/Emails/` | Email domain model |
-| `src/LoadFiles/` | Load File seam: composers, serializers, emitter, thin composing writers + `XmlLoadFileWriter` carve-out |
+| `src/LoadFiles/` | Load File seam: composers, serializers, emitter, thin composing writers + `XmlLoadFileWriter` carve-out; `LoadFileOrchestrator` owns format dispatch for Standard + Production Set modes |
 | `src/Profiles/` | Column profile system (loader, data generator, built-ins) |
 | `src/Config/` | Nested request config records (`OutputConfig`, `MetadataConfig`, `LoadFileConfig`, `DelimiterConfig`, `BatesNumberConfig`, `TiffConfig`, `ChaosConfig`, `ProductionConfig`, `HashConfig`) + `HashUtility` |
 | `src/Validation/` | Post-generation / Production Set / supplemental validators (`PostGenerationValidator`, `ValidatorRunner`, `ProductionSetPostValidator`, `SupplementalValidator`) |

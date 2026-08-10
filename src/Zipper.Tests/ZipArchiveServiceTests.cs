@@ -237,6 +237,96 @@ public class ZipArchiveServiceTests
         Assert.NotNull(loadEntry);
     }
 
+    [Fact]
+    public async Task CreateArchiveAsync_LoadFileIncluded_ReturnsLastFormatEntryName()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 2,
+                    Concurrency = 1,
+                    IncludeLoadFile = true,
+                },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } },
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            for (int i = 1; i <= 2; i++)
+            {
+                await channel.Writer.WriteAsync(this.CreateTestFileData(i));
+            }
+
+            channel.Writer.Complete();
+
+            // Act
+            var actualLoadFilePath = await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+            // Assert — in-ZIP mode returns the last format's entry name (not a full path)
+            Assert.Equal("load.opt", actualLoadFilePath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_LoadFileToDisk_ReturnsLastFormatFullPath()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 2,
+                    Concurrency = 1,
+                    IncludeLoadFile = false,
+                },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } },
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            for (int i = 1; i <= 2; i++)
+            {
+                await channel.Writer.WriteAsync(this.CreateTestFileData(i));
+            }
+
+            channel.Writer.Complete();
+
+            // Act
+            var actualLoadFilePath = await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+            // Assert — disk mode returns the last format's full path
+            Assert.Equal(Path.Combine(tempDir, "load.opt"), actualLoadFilePath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
     private FileData CreateTestFileData(int index)
     {
         return new FileData
