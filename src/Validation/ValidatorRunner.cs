@@ -291,7 +291,7 @@ public sealed class ValidatorRunner
             {
                 if (reader.Peek() == '\n')
                 {
-                    reader.Read();
+                    _ = reader.Read();
                     if (expectedEol != "\r\n")
                         break;
                 }

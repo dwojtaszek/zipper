@@ -271,7 +271,7 @@ internal static class SourceCsvReader
                 {
                     if (reader.Peek() == '"')
                     {
-                        reader.Read();
+                        _ = reader.Read();
                         field.Append('"');
                     }
                     else
@@ -312,7 +312,7 @@ internal static class SourceCsvReader
                 case '\r':
                     if (reader.Peek() == '\n')
                     {
-                        reader.Read();
+                        _ = reader.Read();
                     }
 
                     goto case '\n';
