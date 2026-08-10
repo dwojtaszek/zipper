@@ -52,17 +52,31 @@ internal class ZipArchiveSink : IArchiveSink
             ? request.LoadFile.Formats
             : new List<LoadFileFormat> { LoadFileFormat.Dat };
 
-        string actualLoadFilePath = loadFilePath;
         var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
         var baseFilePath = Path.GetDirectoryName(loadFilePath) ?? string.Empty;
 
-        foreach (var format in formatsToGenerate)
-        {
-            actualLoadFilePath = await GenerateLoadFileAndAuditAsync(
-                archive, request, processedFiles, format, baseFileName, baseFilePath).ConfigureAwait(false);
-        }
+        // Load Files land inside the ZIP (IncludeLoadFile) or next to it on disk; the
+        // orchestrator owns the per-format write + audit loop in either case.
+        Func<string, Stream> openTarget = request.Output.IncludeLoadFile
+            ? target => archive.CreateEntry(target, CompressionLevel.Optimal).Open()
+            : target => new FileStream(Path.Combine(baseFilePath, target), FileMode.Create);
 
-        return actualLoadFilePath;
+        var actualLoadFileTarget = await LoadFileOrchestrator.EmitAllAsync(
+            request,
+            processedFiles,
+            formatsToGenerate,
+            WriterMode.Standard,
+            (format, writer) =>
+            {
+                var actualLoadFileName = baseFileName + writer.FileExtension;
+                return (actualLoadFileName, actualLoadFileName + "_properties.json");
+            },
+            openTarget,
+            cancellationToken).ConfigureAwait(false);
+
+        return request.Output.IncludeLoadFile
+            ? actualLoadFileTarget
+            : Path.Combine(baseFilePath, actualLoadFileTarget);
     }
 
     private async Task DrainReaderAndOrderFilesAsync(
@@ -110,82 +124,6 @@ internal class ZipArchiveSink : IArchiveSink
         {
             leftover.MemoryOwner?.Dispose();
         }
-    }
-
-    private async Task<string> GenerateLoadFileAndAuditAsync(
-        ZipArchive archive,
-        FileGenerationRequest request,
-        DiskBackedFileDataList processedFiles,
-        LoadFileFormat format,
-        string baseFileName,
-        string baseFilePath)
-    {
-        var loadFileWriter = LoadFileWriterFactory.CreateWriter(format);
-        var actualLoadFileName = baseFileName + loadFileWriter.FileExtension;
-
-        if (request.Output.IncludeLoadFile)
-        {
-            await GenerateLoadFileToArchiveAsync(archive, request, processedFiles, loadFileWriter, actualLoadFileName).ConfigureAwait(false);
-            await EmitAuditToArchiveAsync(archive, request, processedFiles, format, actualLoadFileName).ConfigureAwait(false);
-            return actualLoadFileName;
-        }
-        else
-        {
-            var currentFilePath = Path.Combine(baseFilePath, actualLoadFileName);
-            await GenerateLoadFileToDiskAsync(request, processedFiles, loadFileWriter, currentFilePath).ConfigureAwait(false);
-            await EmitAuditToDiskAsync(request, processedFiles, format, currentFilePath).ConfigureAwait(false);
-            return currentFilePath;
-        }
-    }
-
-    private async Task GenerateLoadFileToArchiveAsync(
-        ZipArchive archive,
-        FileGenerationRequest request,
-        DiskBackedFileDataList processedFiles,
-        ILoadFileWriter loadFileWriter,
-        string actualLoadFileName)
-    {
-        var loadFileEntry = archive.CreateEntry(actualLoadFileName, CompressionLevel.Optimal);
-        using var loadFileStream = loadFileEntry.Open();
-        await loadFileWriter.WriteAsync(loadFileStream, request, processedFiles).ConfigureAwait(false);
-    }
-
-    private async Task GenerateLoadFileToDiskAsync(
-        FileGenerationRequest request,
-        DiskBackedFileDataList processedFiles,
-        ILoadFileWriter loadFileWriter,
-        string currentFilePath)
-    {
-        var fileStream = new FileStream(currentFilePath, FileMode.Create);
-        await using (fileStream.ConfigureAwait(false))
-        {
-            await loadFileWriter.WriteAsync(fileStream, request, processedFiles).ConfigureAwait(false);
-            await fileStream.FlushAsync().ConfigureAwait(false);
-        }
-    }
-
-    private async Task EmitAuditToArchiveAsync(
-        ZipArchive archive,
-        FileGenerationRequest request,
-        DiskBackedFileDataList processedFiles,
-        LoadFileFormat format,
-        string actualLoadFileName)
-    {
-        var auditJson = LoadFileAuditWriter.GenerateAuditJson(actualLoadFileName, request, processedFiles, null, format);
-        var propertiesEntry = archive.CreateEntry(actualLoadFileName + "_properties.json", CompressionLevel.Optimal);
-        using var propertiesStream = propertiesEntry.Open();
-        using var propertiesWriter = new StreamWriter(propertiesStream);
-        await propertiesWriter.WriteAsync(auditJson).ConfigureAwait(false);
-    }
-
-    private async Task EmitAuditToDiskAsync(
-        FileGenerationRequest request,
-        DiskBackedFileDataList processedFiles,
-        LoadFileFormat format,
-        string currentFilePath)
-    {
-        var auditJson = LoadFileAuditWriter.GenerateAuditJson(currentFilePath, request, processedFiles, null, format);
-        await File.WriteAllTextAsync(currentFilePath + "_properties.json", auditJson).ConfigureAwait(false);
     }
 
     private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? standardTextContent, byte[]? emlTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)

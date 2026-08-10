@@ -28,7 +28,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 1. **Work channel**: Produces `FileWorkItem` objects using the configured distribution algorithm. In Source-Driven Generation (`--input-csv` / `--directory-template`), the work items instead come one-to-one from the Source Records, carrying the source-relative path, File Type, and identity overrides. Bounded channel provides backpressure.
 2. **Generation**: N concurrent producers generate file data and write to result channel. All file types run in parallel. In a File Type Mix run (`--types`), each `FileWorkItem` carries its own File Type from the `FileTypePlan` and producers route to the matching per-type generator; single-type runs resolve to one generator as before.
-3. **Archive writing**: Single consumer (`ZipArchiveSink`, implementing `IArchiveSink`) writes ZIP entries, then writes Load Files through the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
+3. **Archive writing**: Single consumer (`ZipArchiveSink`, implementing `IArchiveSink`) writes ZIP entries, then delegates Load File emission to `LoadFileOrchestrator`, which drives the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
 4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.
 
 ## Chaos Engine (Loadfile-Only Mode only)
@@ -49,7 +49,8 @@ graph TD
     PFG -->|"Work Channel"| Producers["N Concurrent Producers"]
     Producers -->|"Result Channel"| ZAS["ZipArchiveSink (Consumer)"]
     ZAS --> ZIP["ZIP Archive"]
-    ZAS --> LF1["Load Files (all formats)"]
+    ZAS --> LFO["LoadFileOrchestrator<br/>(format dispatch)"]
+    LFO --> LF1["Load Files (all formats)"]
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
     LOG --> LF2["Load Files (DAT/OPT)"]
@@ -59,7 +60,8 @@ graph TD
     ProductionSetMode --> PSG["ProductionSetGenerator"]
     PSG --> PSP["ProductionSetPlanner (no I/O)"]
     PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
-    PSG --> LF3["Load Files + Manifest"]
+    PSG --> LFO
+    LFO --> LF3["Load Files + Manifest"]
 ```
 
 ## Component Map
@@ -103,11 +105,13 @@ graph LR
     end
 
     subgraph Load File Seam
+        LFO["LoadFileOrchestrator<br/>(format dispatch)"]
         Factory["LoadFileWriterFactory"]
         Composer["Composer<br/>(Dat/Opt/Csv/Concordance)"]
         Serializer["Serializer<br/>(Dat/Opt/Csv/Concordance)"]
         Emitter["LoadFileEmitter<br/>(preamble/EOL/chaos)"]
         XMLW["XmlLoadFileWriter<br/>(carve-out)"]
+        LFO --> Factory
         Factory --> Composer --> Serializer --> Emitter
         Factory --> XMLW
     end
@@ -155,7 +159,7 @@ Each mode adapter runs `PostGenerationValidator.Validate(ValidationContext)` aft
 
 ## Load File Composition Seam
 
-The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — this shape must not be collapsed back into fat writers without human approval.
+The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` is the single owner of format dispatch for Standard and Production Set modes — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) both delegate to it; Loadfile-Only Mode keeps its own loop because it applies chaos per format. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
@@ -164,7 +168,8 @@ The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three de
 ```mermaid
 graph TD
     Req["FileGenerationRequest + processedFiles"]
-    Req --> Factory["LoadFileWriterFactory.CreateWriter(format, mode)"]
+    Req --> LFO["LoadFileOrchestrator<br/>(format dispatch; stream target via caller)"]
+    LFO --> Factory["LoadFileWriterFactory.CreateWriter(format, mode)"]
     Factory -->|"DAT / OPT / CSV / Concordance"| CW["Composing Writer<br/>(thin ILoadFileWriter)"]
     Factory -->|"EDRM-XML"| XML["XmlLoadFileWriter<br/>(carve-out: hierarchical tree)"]
 
