@@ -86,6 +86,18 @@ public class LoadFileEmitterTests
     }
 
     [Fact]
+    public async Task EmitAsync_CancellationRequested_ThrowsOperationCanceledException()
+    {
+        using var ms = new MemoryStream();
+        var records = new[] { Rec("1", ("A", "x")), Rec("2", ("A", "y")) };
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => LoadFileEmitter.EmitAsync(ms, new FakeSerializer(), new[] { "A" }, records, NoBom, "\n", chaosEngine: null, cts.Token));
+    }
+
+    [Fact]
     public async Task Chaos_WithNoTargets_MatchesNoChaosOutput()
     {
         var records = new[] { Rec("1", ("A", "x"), ("B", "y")), Rec("2", ("A", "p"), ("B", "q")) };

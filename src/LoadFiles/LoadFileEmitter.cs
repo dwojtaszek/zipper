@@ -70,23 +70,28 @@ internal static class LoadFileEmitter
         // underlying stream by its internal buffer, so records stream out without the whole
         // file ever being materialized in memory.
         var writer = new StreamWriter(stream, encoding, leaveOpen: true);
+        // Cancellation propagates through every write and the final flush (OCE), after which
+        // DisposeAsync best-effort flushes the partial buffer; callers must treat output as
+        // incomplete once an OCE surfaces.
         await using (writer.ConfigureAwait(false))
         {
+            var eolMemory = eol.AsMemory();
+
             if (hasHeader)
             {
-                await writer.WriteAsync(serializer.RenderHeader(headerColumns)).ConfigureAwait(false);
-                await writer.WriteAsync(eol).ConfigureAwait(false);
+                await writer.WriteAsync(serializer.RenderHeader(headerColumns).AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var record in records)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await writer.WriteAsync(serializer.RenderRecord(record)).ConfigureAwait(false);
-                await writer.WriteAsync(eol).ConfigureAwait(false);
+                await writer.WriteAsync(serializer.RenderRecord(record).AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
             }
 
-            await writer.FlushAsync().ConfigureAwait(false);
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
