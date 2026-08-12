@@ -1,4 +1,5 @@
 using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 
 namespace Zipper.LoadFiles;
 
@@ -14,6 +15,7 @@ internal sealed class DatStandardComposer
     private readonly IReadOnlyList<string> headerColumns;
     private readonly DataGenerator? profileGenerator;
     private readonly List<string>? profileColumnNames;
+    private readonly bool hasTextPathColumn;
 
     public DatStandardComposer(
         FileGenerationRequest request,
@@ -27,6 +29,8 @@ internal sealed class DatStandardComposer
         this.headerColumns = headerColumns;
         this.profileGenerator = profileGenerator;
         this.profileColumnNames = profileColumnNames;
+        this.hasTextPathColumn = profileColumnNames?.Any(
+            n => StandardRowValueGenerators.ByName.TryGetValue(n, out var gen) && gen is TextPathGenerator) ?? false;
     }
 
     /// <summary>
@@ -207,93 +211,53 @@ internal sealed class DatStandardComposer
             string controlIdentity = (!ctx.IsChild && wi.ControlNumberOverride is not null) ? wi.ControlNumberOverride : batesIdentity;
             var fileSize = ctx.FileSizeOverride ?? (ctx.IsChild ? null : fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+            var standard = new StandardRowResolution
+            {
+                ControlIdentity = controlIdentity,
+                BatesIdentity = batesIdentity,
+                NativePath = ctx.FilePathOverride ?? wi.FilePathInZip,
+                FileSize = fileSize,
+                TextPath = this.request.Output.WithText && this.hasTextPathColumn ? this.StandardTextPath(fileData, ctx) : string.Empty,
+                PageCount = fileData.PageCount,
+                IsChild = ctx.IsChild,
+                WithFamilies = this.request.Metadata.WithFamilies,
+                WithText = this.request.Output.WithText,
+                BegAttach = ctx.BegAttach,
+                EndAttach = ctx.EndAttach,
+                ParentDocId = ctx.ParentDocId,
+            };
+
+#pragma warning disable S2245
+            var baseCtx = new ColumnGenerationContext
+            {
+                NativeFileIndex = wi.Index,
+                FolderNumber = wi.FolderNumber,
+                DocumentIndex = 0,
+                Seeded = Random.Shared,
+                Now = DatComposerShared.EffectiveNow(this.request),
+                FileData = fileData,
+            };
+#pragma warning restore S2245
+
             var result = new List<string>(this.profileColumnNames.Count);
             for (int i = 0; i < this.profileColumnNames.Count; i++)
             {
                 var n = this.profileColumnNames[i];
-                var upper = n.ToUpperInvariant();
-
-                string val;
-                switch (upper)
+                if (StandardRowValueGenerators.ByName.TryGetValue(n, out var generator))
                 {
-                    case "DOCID":
-                    case "CONTROLNUMBER":
-                    case "CONTROL_NUMBER":
-                    case "CONTROL NUMBER":
-                        val = controlIdentity;
-                        break;
-                    case "BEGBATES":
-                    case "ENDBATES":
-                        val = batesIdentity;
-                        break;
-                    case "FILEPATH":
-                    case "FILE_PATH":
-                    case "FILE PATH":
-                    case "NATIVEPATH":
-                    case "NATIVE_PATH":
-                    case "NATIVE PATH":
-                        val = ctx.FilePathOverride ?? wi.FilePathInZip;
-                        break;
-                    case "FILESIZE":
-                    case "FILE_SIZE":
-                    case "FILE SIZE":
-                        val = fileSize ?? (profileValues.TryGetValue(n, out var fs) ? fs : string.Empty);
-                        break;
-                    case "BEGATTACH":
-                    case "BEG_ATTACH":
-                    case "BEG ATTACH":
-                        val = this.request.Metadata.WithFamilies ? ctx.BegAttach : (profileValues.TryGetValue(n, out var ba) ? ba : string.Empty);
-                        break;
-                    case "ENDATTACH":
-                    case "END_ATTACH":
-                    case "END ATTACH":
-                        val = this.request.Metadata.WithFamilies ? ctx.EndAttach : (profileValues.TryGetValue(n, out var ea) ? ea : string.Empty);
-                        break;
-                    case "PARENTDOCID":
-                    case "PARENT_DOC_ID":
-                    case "PARENT DOC ID":
-                        val = this.request.Metadata.WithFamilies ? ctx.ParentDocId : (profileValues.TryGetValue(n, out var pd) ? pd : string.Empty);
-                        break;
-                    case "DATESENT":
-                    case "DATE_SENT":
-                    case "DATE SENT":
-                    case "AUTHOR":
-                    case "EMAILTO":
-                    case "EMAIL_TO":
-                    case "EMAIL TO":
-                    case "EMAILFROM":
-                    case "EMAIL_FROM":
-                    case "EMAIL FROM":
-                    case "EMAILCC":
-                    case "EMAIL_CC":
-                    case "EMAIL CC":
-                    case "EMAILSUBJECT":
-                    case "EMAIL_SUBJECT":
-                    case "EMAIL SUBJECT":
-                    case "EMAILSENTDATE":
-                    case "EMAIL_SENT_DATE":
-                    case "EMAIL SENT DATE":
-                    case "EMAILATTACHMENT":
-                    case "EMAIL_ATTACHMENT":
-                    case "EMAIL ATTACHMENT":
-                        val = ctx.IsChild ? string.Empty : (profileValues.TryGetValue(n, out var ce) ? ce : string.Empty);
-                        break;
-                    case "PAGECOUNT":
-                    case "PAGE_COUNT":
-                    case "PAGE COUNT":
-                        val = ctx.IsChild ? "1" : fileData.PageCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                        break;
-                    case "TEXTPATH":
-                    case "TEXT_PATH":
-                    case "TEXT PATH":
-                        val = this.request.Output.WithText ? this.StandardTextPath(fileData, ctx) : (profileValues.TryGetValue(n, out var tp) ? tp : string.Empty);
-                        break;
-                    default:
-                        val = DatComposerShared.ResolveHashColumn(upper, fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty);
-                        break;
+                    var generationCtx = baseCtx with
+                    {
+                        StandardRow = standard,
+                        ProfileValue = profileValues.TryGetValue(n, out var profileValue) ? profileValue : null,
+                    };
+                    result.Add(generator.Generate(generationCtx));
                 }
-                result.Add(val);
+                else
+                {
+                    result.Add(DatComposerShared.ResolveHashColumn(n.ToUpperInvariant(), fileData) ?? (profileValues.TryGetValue(n, out var x) ? x : string.Empty));
+                }
             }
+
             return result;
         }
 
