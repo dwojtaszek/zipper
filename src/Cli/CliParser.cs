@@ -1,4 +1,5 @@
 using System.Globalization;
+using Zipper.Cli.Modules;
 
 namespace Zipper.Cli;
 
@@ -19,7 +20,9 @@ public static class CliParser
         ["--redacted-production"] = p => p.RedactedProduction = true,
     };
 
-    public static ParsedArguments? Parse(string[] args)
+    public static ParsedArguments? Parse(string[] args) => Parse(args, CliModules.Create().All);
+
+    public static ParsedArguments? Parse(string[] args, IReadOnlyList<CliModule> modules)
     {
         ArgumentNullException.ThrowIfNull(args);
 
@@ -28,6 +31,27 @@ public static class CliParser
         for (int i = 0; i < args.Length; i++)
         {
             var arg = args[i].ToLowerInvariant();
+
+            var module = modules.FirstOrDefault(m => m.Owns(arg));
+            if (module is not null)
+            {
+                string? value = null;
+                if (module.TakesValue(arg))
+                {
+                    if (!TryGetValue(args, i, out value))
+                    {
+                        Console.Error.WriteLine($"Error: {arg} requires a value.");
+                        return null;
+                    }
+                    i++;
+                }
+
+                if (!module.TryApply(arg, value))
+                {
+                    return null;
+                }
+                continue;
+            }
 
             if (ParameterlessFlags.TryGetValue(arg, out var flagAction))
             {
