@@ -1,5 +1,6 @@
 using Xunit;
 using Zipper.Cli;
+using Zipper.Config;
 
 namespace Zipper.Tests;
 
@@ -20,7 +21,7 @@ public class RequestBuilderTests
     public void Build_StandardMode_SetsAllDefaults()
     {
         var parsed = CreateParsedArgs();
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.NotNull(result);
         Assert.Equal(Directory.GetCurrentDirectory(), result!.Output.OutputPath);
@@ -38,7 +39,17 @@ public class RequestBuilderTests
     [Fact]
     public void Build_NullArg_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(null!));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(null!, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), new HashConfig()));
+    }
+
+    [Fact]
+    public void Build_NullConfigArg_ThrowsArgumentNullException()
+    {
+        var parsed = new ParsedArguments();
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, null!, new TiffConfig(), new ChaosConfig(), new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), null!, new ChaosConfig(), new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), null!, new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), null!));
     }
 
     [Fact]
@@ -47,7 +58,7 @@ public class RequestBuilderTests
         var parsed = CreateParsedArgs();
         parsed.OutputPathStr = Directory.GetCurrentDirectory();
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.NotNull(result);
         Assert.Equal(Directory.GetCurrentDirectory(), result!.Output.OutputPath);
@@ -59,25 +70,9 @@ public class RequestBuilderTests
         var parsed = CreateParsedArgs();
         parsed.OutputPathStr = string.Empty; // Invalid path
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.Null(result);
-    }
-
-    [Fact]
-    public void Build_ChaosMode_SetsChaosProperties()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.LoadfileOnly = true;
-        parsed.ChaosMode = true;
-        parsed.ChaosAmount = "5%";
-        parsed.ChaosTypes = "quotes,columns";
-
-        var result = RequestBuilder.Build(parsed);
-
-        Assert.True(result!.Chaos.ChaosMode);
-        Assert.Equal("5%", result!.Chaos.ChaosAmount);
-        Assert.Equal("quotes,columns", result!.Chaos.ChaosTypes);
     }
 
     [Fact]
@@ -85,13 +80,11 @@ public class RequestBuilderTests
     {
         var parsed = CreateParsedArgs();
         parsed.LoadfileOnly = true;
-        parsed.Eol = "LF";
         parsed.LoadFileFormat = "opt";
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.True(result!.LoadfileOnly);
-        Assert.Equal("LF", result!.Delimiters.EndOfLine);
         Assert.Single(result!.LoadFile.Formats);
         Assert.Equal(LoadFileFormat.Opt, result!.LoadFile.Formats[0]);
     }
@@ -103,7 +96,7 @@ public class RequestBuilderTests
         parsed.ProductionSet = true;
         parsed.VolumeSize = 1000;
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.True(result!.Production.ProductionSet);
         Assert.Equal(1000, result!.Production.VolumeSize);
@@ -117,7 +110,7 @@ public class RequestBuilderTests
         parsed.BatesStart = 100;
         parsed.BatesDigits = 6;
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.NotNull(result!.Bates);
         Assert.Equal("CL001", result!.Bates.Prefix);
@@ -131,49 +124,9 @@ public class RequestBuilderTests
         var parsed = CreateParsedArgs();
         parsed.ColumnProfile = "standard";
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.NotNull(result!.Metadata.ColumnProfile);
-    }
-
-    [Fact]
-    public void Build_DelimiterPreset_Csv_SetsCommaDelimiters()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.DatDelimiters = "csv";
-
-        var result = RequestBuilder.Build(parsed);
-
-        Assert.Equal(",", result!.Delimiters.ColumnDelimiter);
-        Assert.Equal("\"", result!.Delimiters.QuoteDelimiter);
-    }
-
-    [Fact]
-    public void Build_DelimiterOverride_OverridesPreset()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.DatDelimiters = "csv";
-        parsed.DelimiterColumn = "|";
-        Assert.True(CliValidator.Validate(parsed));
-
-        var result = RequestBuilder.Build(parsed);
-
-        Assert.Equal("|", result!.Delimiters.ColumnDelimiter);
-        Assert.Equal("\"", result!.Delimiters.QuoteDelimiter);
-    }
-
-    [Fact]
-    public void Build_StrictDelimiters_OverrideOldDelimiters()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.LoadfileOnly = true;
-        parsed.DelimiterColumn = ",";
-        parsed.ColDelim = "ascii:20";
-        Assert.True(CliValidator.Validate(parsed));
-
-        var result = RequestBuilder.Build(parsed);
-
-        Assert.Equal("\u0014", result!.Delimiters.ColumnDelimiter);
     }
 
     [Fact]
@@ -182,7 +135,7 @@ public class RequestBuilderTests
         var parsed = CreateParsedArgs();
         parsed.LoadFileFormats = "dat,opt,csv";
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.Equal(3, result!.LoadFile.Formats.Count);
         Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
@@ -197,7 +150,7 @@ public class RequestBuilderTests
         parsed.LoadfileOnly = true;
         parsed.Encoding = "WINDOWS-1252";
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.Equal("WINDOWS-1252", result!.LoadFile.Encoding);
     }
@@ -208,7 +161,7 @@ public class RequestBuilderTests
         var parsed = CreateParsedArgs();
         parsed.Encoding = "UTF-16";
 
-        var result = RequestBuilder.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(parsed);
 
         Assert.Equal("UTF-16", result!.LoadFile.Encoding);
     }
@@ -258,146 +211,5 @@ public class RequestBuilderTests
     public void GetLoadFileFormat_InvalidName_ReturnsNull()
     {
         Assert.Null(RequestBuilder.GetLoadFileFormat("invalid"));
-    }
-
-    [Theory]
-    [InlineData("\\t", "\t")]
-    [InlineData("\\n", "\n")]
-    [InlineData("\\r", "\r")]
-    [InlineData("20", "\u0014")]
-    [InlineData("254", "\u00fe")]
-    [InlineData("|", "|")]
-    public void ParseDelimiterArgument_ValidInputs_ReturnsCorrectValue(string input, string expected)
-    {
-        Assert.Equal(expected, RequestBuilder.ParseDelimiterArgument(input));
-    }
-
-    [Fact]
-    public void ParseDelimiterArgument_Empty_Throws()
-    {
-        Assert.Throws<ArgumentException>(() => RequestBuilder.ParseDelimiterArgument(string.Empty));
-    }
-
-    [Theory]
-    [InlineData("ascii:20", "\u0014")]
-    [InlineData("ascii:254", "\u00fe")]
-    [InlineData("char:;", ";")]
-    [InlineData("char:|", "|")]
-    public void ParseStrictDelimiter_ValidInputs_ReturnsCorrectValue(string input, string expected)
-    {
-        Assert.Equal(expected, RequestBuilder.ParseStrictDelimiter(input));
-    }
-
-    [Fact]
-    public void ParseStrictDelimiter_InvalidPrefix_Throws()
-    {
-        Assert.Throws<ArgumentException>(() => RequestBuilder.ParseStrictDelimiter("20"));
-    }
-
-    [Fact]
-    public void Build_HashModeActualAndAlgorithms_SetsHashConfig()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.HashMode = "actual";
-        parsed.HashAlgorithms = "md5,sha256";
-
-        var result = RequestBuilder.Build(parsed);
-        Assert.NotNull(result);
-
-        var hash = result!.Hash;
-        Assert.Equal(Config.HashMode.Actual, hash.Mode);
-        Assert.Contains(Config.HashAlgorithm.MD5, hash.Algorithms);
-        Assert.Contains(Config.HashAlgorithm.SHA256, hash.Algorithms);
-        Assert.DoesNotContain(Config.HashAlgorithm.SHA1, hash.Algorithms);
-        Assert.True(hash.IsEnabled);
-    }
-
-    [Fact]
-    public void Build_HashModeSimulated_SetsSimulatedMode()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.HashMode = "simulated";
-        parsed.HashAlgorithms = "sha1";
-
-        var result = RequestBuilder.Build(parsed);
-        Assert.NotNull(result);
-
-        var hash = result!.Hash;
-        Assert.Equal(Config.HashMode.Simulated, hash.Mode);
-        Assert.Contains(Config.HashAlgorithm.SHA1, hash.Algorithms);
-        Assert.True(hash.IsEnabled);
-    }
-
-    [Fact]
-    public void Build_HashModeNone_DefaultsToDisabled()
-    {
-        var parsed = CreateParsedArgs();
-
-        var result = RequestBuilder.Build(parsed);
-        Assert.NotNull(result);
-
-        var hash = result!.Hash;
-        Assert.Equal(Config.HashMode.None, hash.Mode);
-        Assert.Empty(hash.Algorithms);
-        Assert.False(hash.IsEnabled);
-    }
-
-    [Fact]
-    public void ParseHashConfig_ActualMode_ReturnsCorrectConfig()
-    {
-        var parsed = new ParsedArguments
-        {
-            HashMode = "actual",
-            HashAlgorithms = "md5,sha1,sha256",
-        };
-
-        var config = RequestBuilder.ParseHashConfig(parsed);
-        Assert.Equal(Config.HashMode.Actual, config.Mode);
-        Assert.Equal(3, config.Algorithms.Count);
-        Assert.Contains(Config.HashAlgorithm.MD5, config.Algorithms);
-        Assert.Contains(Config.HashAlgorithm.SHA1, config.Algorithms);
-        Assert.Contains(Config.HashAlgorithm.SHA256, config.Algorithms);
-    }
-
-    [Fact]
-    public void ParseHashConfig_SimulatedMode_ReturnsSimulatedModeWithDefaultMD5()
-    {
-        var parsed = new ParsedArguments { HashMode = "simulated" };
-
-        var config = RequestBuilder.ParseHashConfig(parsed);
-        Assert.Equal(Config.HashMode.Simulated, config.Mode);
-        Assert.Contains(Config.HashAlgorithm.MD5, config.Algorithms);
-        Assert.True(config.IsEnabled);
-    }
-
-    [Fact]
-    public void ParseHashConfig_InvalidMode_DefaultsToNone()
-    {
-        var parsed = new ParsedArguments { HashMode = "invalid" };
-
-        var config = RequestBuilder.ParseHashConfig(parsed);
-        Assert.Equal(Config.HashMode.None, config.Mode);
-    }
-
-    [Fact]
-    public void ParseHashConfig_Default_NoneModeEmptyAlgorithms()
-    {
-        var parsed = new ParsedArguments();
-
-        var config = RequestBuilder.ParseHashConfig(parsed);
-        Assert.Equal(Config.HashMode.None, config.Mode);
-        Assert.Empty(config.Algorithms);
-    }
-
-    [Fact]
-    public void Build_LoadfileOnlyWithActualHashMode_ReturnsNull()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.LoadfileOnly = true;
-        parsed.HashMode = "actual";
-        parsed.HashAlgorithms = "md5";
-
-        var result = RequestBuilder.Build(parsed);
-        Assert.Null(result);
     }
 }

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Zipper.Cli.Modules;
 
 namespace Zipper.Cli;
 
@@ -12,14 +13,15 @@ public static class CliParser
         ["--include-load-file"] = p => p.IncludeLoadFile = true,
         ["--with-families"] = p => p.WithFamilies = true,
         ["--loadfile-only"] = p => p.LoadfileOnly = true,
-        ["--chaos-mode"] = p => p.ChaosMode = true,
         ["--production-set"] = p => p.ProductionSet = true,
         ["--production-zip"] = p => p.ProductionZip = true,
         ["--supplemental-production"] = p => p.SupplementalProduction = true,
         ["--redacted-production"] = p => p.RedactedProduction = true,
     };
 
-    public static ParsedArguments? Parse(string[] args)
+    public static ParsedArguments? Parse(string[] args) => Parse(args, CliModules.Create().All);
+
+    public static ParsedArguments? Parse(string[] args, IReadOnlyList<CliModule> modules)
     {
         ArgumentNullException.ThrowIfNull(args);
 
@@ -28,6 +30,27 @@ public static class CliParser
         for (int i = 0; i < args.Length; i++)
         {
             var arg = args[i].ToLowerInvariant();
+
+            var module = modules.FirstOrDefault(m => m.Owns(arg));
+            if (module is not null)
+            {
+                string? value = null;
+                if (module.TakesValue(arg))
+                {
+                    if (!TryGetValue(args, i, out value))
+                    {
+                        Console.Error.WriteLine($"Error: {arg} requires a value.");
+                        return null;
+                    }
+                    i++;
+                }
+
+                if (!module.TryApply(arg, value))
+                {
+                    return null;
+                }
+                continue;
+            }
 
             if (ParameterlessFlags.TryGetValue(arg, out var flagAction))
             {
@@ -168,70 +191,6 @@ public static class CliParser
                     parsed.BatesDigits = batesDigits;
                     break;
 
-                // --- TIFF args ---
-                case "--tiff-pages":
-                    if (!ReadStringArg(args, ref i, "--tiff-pages", out var tiffPages)) return null;
-                    parsed.TiffPagesRange = tiffPages;
-                    break;
-
-                // --- Load file format args ---
-                case "--dat-delimiters":
-                    if (!ReadStringArg(args, ref i, "--dat-delimiters", out var datDelims)) return null;
-                    parsed.DatDelimiters = datDelims;
-                    break;
-
-                // --- Delimiter args ---
-                case "--delimiter-column":
-                    if (!ReadStringArg(args, ref i, "--delimiter-column", out var delCol)) return null;
-                    parsed.DelimiterColumn = delCol;
-                    break;
-                case "--delimiter-quote":
-                    if (!ReadStringArg(args, ref i, "--delimiter-quote", out var delQuote)) return null;
-                    parsed.DelimiterQuote = delQuote;
-                    break;
-                case "--delimiter-newline":
-                    if (!ReadStringArg(args, ref i, "--delimiter-newline", out var delNew)) return null;
-                    parsed.DelimiterNewline = delNew;
-                    break;
-                case "--eol":
-                    if (!ReadStringArg(args, ref i, "--eol", out var eolVal)) return null;
-                    parsed.Eol = eolVal;
-                    break;
-                case "--col-delim":
-                    if (!ReadStringArg(args, ref i, "--col-delim", out var colDelimVal)) return null;
-                    parsed.ColDelim = colDelimVal;
-                    break;
-                case "--quote-delim":
-                    if (!ReadStringArg(args, ref i, "--quote-delim", out var quoteDelimVal)) return null;
-                    parsed.QuoteDelim = quoteDelimVal;
-                    break;
-                case "--newline-delim":
-                    if (!ReadStringArg(args, ref i, "--newline-delim", out var newlineDelimVal)) return null;
-                    parsed.NewlineDelim = newlineDelimVal;
-                    break;
-                case "--multi-delim":
-                    if (!ReadStringArg(args, ref i, "--multi-delim", out var multiDelimVal)) return null;
-                    parsed.MultiDelim = multiDelimVal;
-                    break;
-                case "--nested-delim":
-                    if (!ReadStringArg(args, ref i, "--nested-delim", out var nestedDelimVal)) return null;
-                    parsed.NestedDelim = nestedDelimVal;
-                    break;
-
-                // --- Chaos args ---
-                case "--chaos-amount":
-                    if (!ReadStringArg(args, ref i, "--chaos-amount", out var chaosAmtVal)) return null;
-                    parsed.ChaosAmount = chaosAmtVal;
-                    break;
-                case "--chaos-types":
-                    if (!ReadStringArg(args, ref i, "--chaos-types", out var chaosTypesVal)) return null;
-                    parsed.ChaosTypes = chaosTypesVal;
-                    break;
-                case "--chaos-scenario":
-                    if (!ReadStringArg(args, ref i, "--chaos-scenario", out var chaosScenarioVal)) return null;
-                    parsed.ChaosScenario = chaosScenarioVal;
-                    break;
-
                 // --- Production args ---
                 case "--volume-size":
                     if (!ReadIntArg(args, ref i, "--volume-size", out var volumeSize)) return null;
@@ -278,16 +237,6 @@ public static class CliParser
                 case "--comparison-output":
                     if (!ReadStringArg(args, ref i, "--comparison-output", out var compOutVal)) return null;
                     parsed.ComparisonOutput = compOutVal;
-                    break;
-
-                // --- Hash args ---
-                case "--hash-mode":
-                    if (!ReadStringArg(args, ref i, "--hash-mode", out var hashModeVal)) return null;
-                    parsed.HashMode = hashModeVal;
-                    break;
-                case "--hash-algorithms":
-                    if (!ReadStringArg(args, ref i, "--hash-algorithms", out var hashAlgsVal)) return null;
-                    parsed.HashAlgorithms = hashAlgsVal;
                     break;
 
                 default:

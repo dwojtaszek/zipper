@@ -71,9 +71,17 @@ graph TD
 graph LR
     subgraph CLI Layer
         Program["Program.cs<br/>(SelectMode dispatch)"]
-        CliParser["CliParser"]
-        CliValidator["CliValidator"]
-        RequestBuilder["RequestBuilder"]
+        Pipeline["Pipeline.Build"]
+        CliParser["CliParser<br/>(token reader + module dispatch)"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos"]
+        CliValidator["CliValidator<br/>(remaining domains)"]
+        RequestBuilder["RequestBuilder<br/>(remaining configs + source/profile)"]
+        Program --> Pipeline
+        Pipeline --> CliParser
+        CliParser --> Modules
+        Pipeline --> CliValidator
+        Modules --> Pipeline
+        Pipeline --> RequestBuilder
     end
 
     subgraph Config
@@ -136,7 +144,7 @@ graph LR
         PMC["ProductionManifestComparer<br/>(--compare-production-manifests)"]
     end
 
-    Program --> CliParser --> CliValidator --> RequestBuilder --> FGR
+    Program --> Pipeline --> RequestBuilder --> FGR
     Program -->|"--compare-production-manifests"| PMC
     Program -->|"SelectMode(request)"| StdMode
     Program -->|"SelectMode(request)"| LFMode
@@ -149,6 +157,8 @@ graph LR
     FGR --> Load File Seam
     Profiles --> DataGen
 ```
+
+*Phase 1 of #750: Hash/Delimiter/Tiff/Chaos parse+validate+build moved into modules. CliValidator and RequestBuilder still own the remaining domains until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) directly.*
 
 ## Post-Generation Validation
 

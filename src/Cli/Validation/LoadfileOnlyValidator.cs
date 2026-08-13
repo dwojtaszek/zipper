@@ -4,12 +4,6 @@ internal static class LoadfileOnlyValidator
 {
     public static bool Validate(ParsedArguments parsed)
     {
-        if (!string.IsNullOrEmpty(parsed.Eol) && !parsed.LoadfileOnly && !parsed.ProductionSet)
-        {
-            Console.Error.WriteLine("Error: --eol requires --loadfile-only or --production-set.");
-            return false;
-        }
-
         if (parsed.LoadfileOnly)
         {
             if (!string.IsNullOrEmpty(parsed.TargetZipSize))
@@ -21,12 +15,6 @@ internal static class LoadfileOnlyValidator
             if (parsed.IncludeLoadFile)
             {
                 Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
-                return false;
-            }
-
-            if (!string.IsNullOrEmpty(parsed.HashMode) && string.Equals(parsed.HashMode, "actual", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.Error.WriteLine("Error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash).");
                 return false;
             }
 

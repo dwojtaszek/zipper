@@ -82,8 +82,4 @@ public static class CliValidator
 
         return true;
     }
-
-    internal static bool IsValidStrictDelimiter(string value) => CrossCuttingValidator.IsValidStrictDelimiter(value);
-
-    internal static bool IsValidChaosAmount(string value) => CrossCuttingValidator.IsValidChaosAmount(value);
 }
