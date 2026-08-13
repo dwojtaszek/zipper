@@ -1,3 +1,5 @@
+using Zipper.Cli.Modules;
+
 namespace Zipper.Cli;
 
 public static class Pipeline
@@ -10,7 +12,9 @@ public static class Pipeline
             return null;
         }
 
-        var parsedArgs = CliParser.Parse(args);
+        var modules = CliModules.Create();
+
+        var parsedArgs = CliParser.Parse(args, modules.All);
         if (parsedArgs is null)
         {
             return null;
@@ -21,6 +25,14 @@ public static class Pipeline
             return null;
         }
 
-        return RequestBuilder.Build(parsedArgs);
+        if (!modules.Delimiter.TryBuild(parsedArgs, out var delimiters) ||
+            !modules.Tiff.TryBuild(parsedArgs, out var tiff) ||
+            !modules.Chaos.TryBuild(parsedArgs, out var chaos) ||
+            !modules.Hash.TryBuild(parsedArgs, out var hash))
+        {
+            return null;
+        }
+
+        return RequestBuilder.Build(parsedArgs, delimiters, tiff, chaos, hash);
     }
 }

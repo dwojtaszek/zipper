@@ -45,21 +45,11 @@ public class ParsedArguments
 
     public bool IsLoadFileFormatExplicit { get; set; }
 
-    public string? DatDelimiters { get; set; }
-
-    public string? DelimiterColumn { get; set; }
-
-    public string? DelimiterQuote { get; set; }
-
-    public string? DelimiterNewline { get; set; }
-
     public string? BatesPrefix { get; set; }
 
     public long? BatesStart { get; set; }
 
     public int? BatesDigits { get; set; }
-
-    public string? TiffPagesRange { get; set; }
 
     public string? ColumnProfile { get; set; }
 
@@ -75,36 +65,11 @@ public class ParsedArguments
 
     public bool LoadfileOnly { get; set; }
 
-    public string? Eol { get; set; }
-
-    public string? ColDelim { get; set; }
-
-    public string? QuoteDelim { get; set; }
-
-    public string? NewlineDelim { get; set; }
-
-    public string? MultiDelim { get; set; }
-
-    public string? NestedDelim { get; set; }
-
-
-    public bool ChaosMode { get; set; }
-
-    public string? ChaosAmount { get; set; }
-
-    public string? ChaosTypes { get; set; }
-
-    public string? ChaosScenario { get; set; }
-
     public bool ProductionSet { get; set; }
 
     public bool ProductionZip { get; set; }
 
     public int? VolumeSize { get; set; }
-
-    public string? HashMode { get; set; }
-
-    public string? HashAlgorithms { get; set; }
 
     public bool SupplementalProduction { get; set; }
 

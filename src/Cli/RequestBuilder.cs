@@ -14,9 +14,18 @@ public static class RequestBuilder
         ["GB"] = 1024 * 1024 * 1024,
     };
 
-    public static FileGenerationRequest? Build(ParsedArguments parsed)
+    public static FileGenerationRequest? Build(
+        ParsedArguments parsed,
+        DelimiterConfig delimiters,
+        TiffConfig tiff,
+        ChaosConfig chaos,
+        HashConfig hash)
     {
         ArgumentNullException.ThrowIfNull(parsed);
+        ArgumentNullException.ThrowIfNull(delimiters);
+        ArgumentNullException.ThrowIfNull(tiff);
+        ArgumentNullException.ThrowIfNull(chaos);
+        ArgumentNullException.ThrowIfNull(hash);
 
         var resolved = PathValidator.ResolveSecurePath(
             parsed.OutputPathStr,
@@ -137,62 +146,6 @@ public static class RequestBuilder
             }
         }
 
-        string columnDelim = "\u0014";
-        string quoteDelim = "\u00fe";
-        string newlineDelim = "\u00ae";
-
-        if (!string.IsNullOrEmpty(parsed.DatDelimiters))
-        {
-            if (parsed.DatDelimiters.Equals("csv", StringComparison.OrdinalIgnoreCase))
-            {
-                columnDelim = ",";
-                quoteDelim = "\"";
-                newlineDelim = " ";
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parsed.DelimiterColumn))
-        {
-            columnDelim = ParseDelimiterArgument(parsed.DelimiterColumn);
-        }
-
-        if (!string.IsNullOrEmpty(parsed.DelimiterQuote))
-        {
-            quoteDelim = ParseDelimiterArgument(parsed.DelimiterQuote);
-        }
-
-        if (!string.IsNullOrEmpty(parsed.DelimiterNewline))
-        {
-            newlineDelim = ParseDelimiterArgument(parsed.DelimiterNewline);
-        }
-
-        if (!string.IsNullOrEmpty(parsed.ColDelim))
-        {
-            columnDelim = ParseStrictDelimiter(parsed.ColDelim);
-        }
-
-        if (!string.IsNullOrEmpty(parsed.QuoteDelim))
-        {
-            quoteDelim = parsed.QuoteDelim.Equals("none", StringComparison.OrdinalIgnoreCase) ? string.Empty : ParseStrictDelimiter(parsed.QuoteDelim);
-        }
-
-        if (!string.IsNullOrEmpty(parsed.NewlineDelim))
-        {
-            newlineDelim = ParseStrictDelimiter(parsed.NewlineDelim);
-        }
-
-        string multiDelim = ";";
-        if (!string.IsNullOrEmpty(parsed.MultiDelim))
-        {
-            multiDelim = ParseStrictDelimiter(parsed.MultiDelim);
-        }
-
-        string nestedDelim = "\\";
-        if (!string.IsNullOrEmpty(parsed.NestedDelim))
-        {
-            nestedDelim = ParseStrictDelimiter(parsed.NestedDelim);
-        }
-
         var encodingName = (encoding is not null && !string.IsNullOrEmpty(parsed.Encoding))
             ? parsed.Encoding.ToUpperInvariant()
             : "UTF-8";
@@ -200,13 +153,6 @@ public static class RequestBuilder
         var formats = (multiFormats is not null && multiFormats.Count > 0)
             ? multiFormats
             : new List<LoadFileFormat> { GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat };
-
-        var hashConfig = ParseHashConfig(parsed);
-        if (parsed.LoadfileOnly && hashConfig.Mode == HashMode.Actual)
-        {
-            Console.Error.WriteLine("error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash)");
-            return null;
-        }
 
         return new FileGenerationRequest
         {
@@ -245,15 +191,7 @@ public static class RequestBuilder
                 Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
                 AttachmentRate = parsed.AttachmentRate,
             },
-            Delimiters = new DelimiterConfig
-            {
-                ColumnDelimiter = columnDelim,
-                QuoteDelimiter = quoteDelim,
-                NewlineDelimiter = newlineDelim,
-                MultiValueDelimiter = multiDelim,
-                NestedValueDelimiter = nestedDelim,
-                EndOfLine = parsed.Eol ?? "CRLF",
-            },
+            Delimiters = delimiters,
             Bates = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
             {
                 Prefix = parsed.BatesPrefix,
@@ -263,17 +201,8 @@ public static class RequestBuilder
                 Starts = parsed.BatesStarts,
             }
             : null,
-            Tiff = new TiffConfig
-            {
-                PageRange = !string.IsNullOrEmpty(parsed.TiffPagesRange) ? TiffMultiPageGenerator.ParsePageRange(parsed.TiffPagesRange!) : null,
-            },
-            Chaos = new ChaosConfig
-            {
-                ChaosMode = parsed.ChaosMode,
-                ChaosAmount = parsed.ChaosAmount,
-                ChaosTypes = parsed.ChaosTypes,
-                ChaosScenario = parsed.ChaosScenario,
-            },
+            Tiff = tiff,
+            Chaos = chaos,
             Production = new ProductionConfig
             {
                 ProductionSet = parsed.ProductionSet,
@@ -301,7 +230,7 @@ public static class RequestBuilder
                 },
             },
             LoadfileOnly = parsed.LoadfileOnly,
-            Hash = hashConfig,
+            Hash = hash,
             SourceRecords = sourceRecords,
         };
     }
@@ -363,52 +292,6 @@ public static class RequestBuilder
         return null;
     }
 
-    internal static HashConfig ParseHashConfig(ParsedArguments parsed)
-    {
-        var mode = HashMode.None;
-        if (!string.IsNullOrEmpty(parsed.HashMode))
-        {
-            mode = parsed.HashMode.ToLowerInvariant() switch
-            {
-                "actual" => HashMode.Actual,
-                "simulated" => HashMode.Simulated,
-                "none" => HashMode.None,
-                _ => HashMode.None,
-            };
-        }
-
-        var algorithms = new HashSet<HashAlgorithm>();
-        if (!string.IsNullOrEmpty(parsed.HashAlgorithms))
-        {
-            foreach (var alg in parsed.HashAlgorithms.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parsedAlg = alg.ToLowerInvariant() switch
-                {
-                    "md5" => HashAlgorithm.MD5,
-                    "sha1" => HashAlgorithm.SHA1,
-                    "sha256" => HashAlgorithm.SHA256,
-                    _ => (HashAlgorithm?)null,
-                };
-
-                if (parsedAlg.HasValue)
-                {
-                    algorithms.Add(parsedAlg.Value);
-                }
-            }
-        }
-
-        if (mode != HashMode.None && algorithms.Count == 0)
-        {
-            algorithms.Add(HashAlgorithm.MD5);
-        }
-
-        return new HashConfig
-        {
-            Mode = mode,
-            Algorithms = algorithms,
-        };
-    }
-
     internal static long? ParseSize(string size)
     {
         size = size.Trim();
@@ -451,8 +334,4 @@ public static class RequestBuilder
             _ => null,
         };
     }
-
-    internal static string ParseDelimiterArgument(string arg) => Validation.CrossCuttingValidator.ParseDelimiterArgument(arg);
-
-    internal static string ParseStrictDelimiter(string arg) => Validation.CrossCuttingValidator.ParseStrictDelimiter(arg);
 }

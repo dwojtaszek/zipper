@@ -6,7 +6,11 @@ namespace Zipper.Cli.Modules;
 /// </summary>
 public sealed class CliModuleSet
 {
-    public required IReadOnlyList<CliModule> All { get; init; }
+    public required DelimiterModule Delimiter { get; init; }
+    public required TiffModule Tiff { get; init; }
+    public required ChaosModule Chaos { get; init; }
+    public required HashModule Hash { get; init; }
+    public IReadOnlyList<CliModule> All => new CliModule[] { Delimiter, Tiff, Chaos, Hash };
 }
 
 /// <summary>
@@ -17,7 +21,12 @@ public static class CliModules
 {
     public static CliModuleSet Create()
     {
-        // Phase 1 task 6 fills this set; empty All here means zero behavior change.
-        return new CliModuleSet { All = Array.Empty<CliModule>() };
+        return new CliModuleSet
+        {
+            Delimiter = new DelimiterModule(),
+            Tiff = new TiffModule(),
+            Chaos = new ChaosModule(),
+            Hash = new HashModule(),
+        };
     }
 }
