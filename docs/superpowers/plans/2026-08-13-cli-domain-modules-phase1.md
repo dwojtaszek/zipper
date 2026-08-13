@@ -1050,7 +1050,7 @@ public static class CliModules
 
 `src/Cli/ParsedArguments.cs` — remove exactly:
 
-```
+```text
 DatDelimiters, DelimiterColumn, DelimiterQuote, DelimiterNewline,
 Eol, ColDelim, QuoteDelim, NewlineDelim, MultiDelim, NestedDelim,
 TiffPagesRange, ChaosMode, ChaosAmount, ChaosTypes, ChaosScenario,
