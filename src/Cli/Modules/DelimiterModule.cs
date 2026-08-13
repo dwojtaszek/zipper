@@ -43,12 +43,12 @@ public sealed class DelimiterModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, out DelimiterConfig config)
+    public bool TryBuild(ParsedArguments parsed, bool loadfileOnly, out DelimiterConfig config)
     {
         ArgumentNullException.ThrowIfNull(parsed);
 
         // Cross-domain (moves to CrossCuttingRules in Phase 4): --eol only with loadfile-only or production-set.
-        if (!string.IsNullOrEmpty(_eol) && !parsed.LoadfileOnly && !parsed.ProductionSet)
+        if (!string.IsNullOrEmpty(_eol) && !loadfileOnly && !parsed.ProductionSet)
         {
             Console.Error.WriteLine("Error: --eol requires --loadfile-only or --production-set.");
             config = default!;

@@ -68,13 +68,13 @@ public class CliParserTests
     [Fact]
     public void Parse_AllBooleanFlags_SetCorrectly()
     {
-        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--with-metadata", "--with-text", "--include-load-file", "--with-families", "--loadfile-only", "--production-set", "--production-zip" });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--with-metadata", "--with-text", "--include-load-file", "--with-families", "--loadfile-only", "--production-set", "--production-zip" });
         Assert.NotNull(result);
-        Assert.True(result!.WithMetadata);
-        Assert.True(result.WithText);
+        Assert.True(modules.Metadata.WithMetadata);
+        Assert.True(result!.WithText);
         Assert.True(result.IncludeLoadFile);
-        Assert.True(result.WithFamilies);
-        Assert.True(result.LoadfileOnly);
+        Assert.True(modules.Metadata.WithFamilies);
+        Assert.True(modules.LoadFile.LoadfileOnly);
         Assert.True(result.ProductionSet);
         Assert.True(result.ProductionZip);
     }
@@ -82,34 +82,35 @@ public class CliParserTests
     [Fact]
     public void Parse_LoadfileOnlyArgs_ParsesCorrectly()
     {
-        var result = CliParser.Parse(new[] { "--loadfile-only", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-format", "opt" });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--loadfile-only", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-format", "opt" });
         Assert.NotNull(result);
-        Assert.True(result!.LoadfileOnly);
-        Assert.Equal("opt", result.LoadFileFormat);
+        Assert.True(modules.LoadFile.LoadfileOnly);
+        Assert.True(modules.LoadFile.IsLoadFileFormatExplicit);
+        Assert.Equal(LoadFileFormat.Opt, modules.LoadFile.CurrentFormat);
     }
 
     [Fact]
     public void Parse_ProductionSetArgs_ParsesCorrectly()
     {
-        var result = CliParser.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6", "--volume-size", "1000", "--count", "20", "--output-path", Directory.GetCurrentDirectory() });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6", "--volume-size", "1000", "--count", "20", "--output-path", Directory.GetCurrentDirectory() });
         Assert.NotNull(result);
         Assert.True(result!.ProductionSet);
-        Assert.Equal("CL001", result.BatesPrefix);
-        Assert.Equal(100, result.BatesStart);
-        Assert.Equal(6, result.BatesDigits);
+        Assert.Equal("CL001", modules.Bates.BatesPrefix);
+        Assert.Equal(100, modules.Bates.BatesStart);
+        Assert.Equal(6, modules.Bates.BatesDigits);
         Assert.Equal(1000, result.VolumeSize);
     }
 
     [Fact]
     public void Parse_ColumnProfileArgs_ParsesCorrectly()
     {
-        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" });
         Assert.NotNull(result);
-        Assert.Equal("standard", result!.ColumnProfile);
-        Assert.Equal(42, result.Seed);
-        Assert.Equal("yyyy-MM-dd", result.DateFormat);
-        Assert.Equal(15, result.EmptyPercentage);
-        Assert.Equal(50, result.CustodianCount);
+        Assert.Equal("standard", modules.Metadata.ColumnProfile);
+        Assert.Equal(42, modules.Metadata.Seed);
+        Assert.Equal("yyyy-MM-dd", modules.Metadata.DateFormat);
+        Assert.Equal(15, modules.Metadata.EmptyPercentage);
+        Assert.Equal(50, modules.Metadata.CustodianCount);
     }
 
     [Fact]
@@ -209,13 +210,13 @@ public class CliParserTests
     public void Parse_OutputPathWithParentTraversal_RejectsPathOutsideCwd()
     {
         // "../escape" resolves to the parent of CWD — outside the allowed base directory.
-        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "../escape" });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", "../escape" });
         Assert.NotNull(result);
 
         // Validation will pass because it's a structural check, but Build will reject it
-        var isValid = CliValidator.Validate(result!);
+        var isValid = CliValidator.Validate(result!, modules);
         Assert.True(isValid);
-        var buildResult = RequestBuilderTestHelper.Build(result!);
+        var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
         Assert.Null(buildResult);
     }
 
@@ -230,14 +231,14 @@ public class CliParserTests
         try
         {
             // uniqueDirName is a safe relative subdirectory of CWD and must be accepted.
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", uniqueDirName });
+            var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", uniqueDirName });
 
             Assert.NotNull(result);
 
-            var isValid = CliValidator.Validate(result!);
+            var isValid = CliValidator.Validate(result!, modules);
             Assert.True(isValid);
 
-            var buildResult = RequestBuilderTestHelper.Build(result!);
+            var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
             Assert.NotNull(buildResult);
         }
         finally
@@ -250,20 +251,25 @@ public class CliParserTests
     }
 
     /// <summary>
-    /// REQ-164: A custom profile path containing ".." that resolves outside CWD must be rejected by CliValidator.
+    /// REQ-164: A custom profile path containing ".." that resolves outside CWD must be rejected by the CLI layer.
+    /// Since Phase 2, CliValidator is a structural check (conflicts only); the path-safety rejection
+    /// moved to MetadataModule.TryBuild, so Build must return null.
     /// </summary>
     [Fact]
     public void Parse_ColumnProfileWithParentTraversal_RejectsPathOutsideCwd()
     {
-        var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "../outside-profile.json" });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "../outside-profile.json" });
         Assert.NotNull(result);
 
-        var isValid = CliValidator.Validate(result!);
-        Assert.False(isValid);
+        var isValid = CliValidator.Validate(result!, modules);
+        Assert.True(isValid);
+
+        var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+        Assert.Null(buildResult);
     }
 
     /// <summary>
-    /// REQ-164: A built-in profile name or safe profile path within CWD must be accepted by CliValidator.
+    /// REQ-164: A built-in profile name or safe profile path within CWD must be accepted by the CLI layer.
     /// </summary>
     [Fact]
     public void Parse_ColumnProfileWithinCwd_IsAccepted()
@@ -278,11 +284,14 @@ public class CliParserTests
             }";
             File.WriteAllText(tempProfilePath, validProfileJson);
 
-            var result = CliParser.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", tempProfilePath });
+            var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", tempProfilePath });
             Assert.NotNull(result);
 
-            var isValid = CliValidator.Validate(result!);
+            var isValid = CliValidator.Validate(result!, modules);
             Assert.True(isValid);
+
+            var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+            Assert.NotNull(buildResult);
         }
         finally
         {

@@ -27,43 +27,11 @@ public class ParsedArguments
 
     public string? Distribution { get; set; } = "proportional";
 
-    public bool WithMetadata { get; set; }
-
-    public bool WithCollectionMetadata { get; set; }
-
     public bool WithText { get; set; }
-
-    public int AttachmentRate { get; set; }
 
     public string? TargetZipSize { get; set; }
 
     public bool IncludeLoadFile { get; set; }
-
-    public string? LoadFileFormat { get; set; } = "dat";
-
-    public string? LoadFileFormats { get; set; }
-
-    public bool IsLoadFileFormatExplicit { get; set; }
-
-    public string? BatesPrefix { get; set; }
-
-    public long? BatesStart { get; set; }
-
-    public int? BatesDigits { get; set; }
-
-    public string? ColumnProfile { get; set; }
-
-    public int? Seed { get; set; }
-
-    public string? DateFormat { get; set; }
-
-    public int? EmptyPercentage { get; set; }
-
-    public int? CustodianCount { get; set; }
-
-    public bool WithFamilies { get; set; }
-
-    public bool LoadfileOnly { get; set; }
 
     public bool ProductionSet { get; set; }
 
@@ -82,10 +50,6 @@ public class ParsedArguments
     public int RollingCount { get; set; } = 1;
 
     public string RollingBatesMode { get; set; } = "continuous";
-
-    public List<long>? BatesStarts { get; set; }
-
-    public List<string>? BatesPrefixes { get; set; }
 
     public string? CompareProductionManifests { get; set; }
 

@@ -7,12 +7,8 @@ public static class CliParser
 {
     private static readonly Dictionary<string, Action<ParsedArguments>> ParameterlessFlags = new()
     {
-        ["--with-metadata"] = p => p.WithMetadata = true,
-        ["--with-collection-metadata"] = p => p.WithCollectionMetadata = true,
         ["--with-text"] = p => p.WithText = true,
         ["--include-load-file"] = p => p.IncludeLoadFile = true,
-        ["--with-families"] = p => p.WithFamilies = true,
-        ["--loadfile-only"] = p => p.LoadfileOnly = true,
         ["--production-set"] = p => p.ProductionSet = true,
         ["--production-zip"] = p => p.ProductionZip = true,
         ["--supplemental-production"] = p => p.SupplementalProduction = true,
@@ -99,99 +95,11 @@ public static class CliParser
                     parsed.Distribution = dist;
                     break;
 
-                // --- Metadata args ---
-                case "--attachment-rate":
-                    if (!ReadIntArg(args, ref i, "--attachment-rate", out var attachmentRate)) return null;
-                    parsed.AttachmentRate = attachmentRate;
-                    break;
+                // --- Output args ---
                 case "--target-zip-size":
                     if (!ReadStringArg(args, ref i, "--target-zip-size", out var zipSize)) return null;
                     parsed.TargetZipSize = zipSize;
                     break;
-                case "--load-file-format":
-                    if (!ReadStringArg(args, ref i, "--load-file-format", out var loadFmt)) return null;
-                    parsed.LoadFileFormat = loadFmt;
-                    parsed.IsLoadFileFormatExplicit = true;
-                    break;
-                case "--load-file-formats":
-                    if (!ReadStringArg(args, ref i, "--load-file-formats", out var loadFmts)) return null;
-                    parsed.LoadFileFormats = loadFmts;
-                    parsed.IsLoadFileFormatExplicit = true;
-                    break;
-                case "--loadfile-format":
-                    if (!ReadStringArg(args, ref i, "--loadfile-format", out var lfFmt)) return null;
-                    parsed.LoadFileFormat = lfFmt;
-                    parsed.IsLoadFileFormatExplicit = true;
-                    break;
-                case "--column-profile":
-                    if (!ReadStringArg(args, ref i, "--column-profile", out var colProf)) return null;
-                    parsed.ColumnProfile = colProf;
-                    break;
-                case "--seed":
-                    if (!ReadIntArg(args, ref i, "--seed", out var seed)) return null;
-                    parsed.Seed = seed;
-                    break;
-                case "--date-format":
-                    if (!ReadStringArg(args, ref i, "--date-format", out var dateFmt)) return null;
-                    parsed.DateFormat = dateFmt;
-                    break;
-                case "--empty-percentage":
-                    if (!ReadIntArg(args, ref i, "--empty-percentage", out var emptyPct)) return null;
-                    parsed.EmptyPercentage = emptyPct;
-                    break;
-                case "--custodian-count":
-                    if (!ReadIntArg(args, ref i, "--custodian-count", out var custCount)) return null;
-                    parsed.CustodianCount = custCount;
-                    break;
-
-                // --- Bates args ---
-                case "--bates-prefix":
-                    if (!ReadStringArg(args, ref i, "--bates-prefix", out var batesPfx)) return null;
-                    parsed.BatesPrefix = batesPfx;
-                    parsed.BatesPrefixes = batesPfx.Contains(',', StringComparison.Ordinal)
-                        ? batesPfx.Split(',').Select(p => p.Trim()).ToList()
-                        : new List<string> { batesPfx };
-                    break;
-                case "--bates-start":
-                    if (!ReadStringArg(args, ref i, "--bates-start", out var batesStartStr)) return null;
-                    if (batesStartStr.Contains(',', StringComparison.Ordinal))
-                    {
-                        var starts = new List<long>();
-                        foreach (var part in batesStartStr.Split(','))
-                        {
-                            if (long.TryParse(part.Trim(), CultureInfo.InvariantCulture, out var sVal))
-                            {
-                                starts.Add(sVal);
-                            }
-                            else
-                            {
-                                Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
-                                return null;
-                            }
-                        }
-                        parsed.BatesStarts = starts;
-                        parsed.BatesStart = starts[0];
-                    }
-                    else
-                    {
-                        if (long.TryParse(batesStartStr, CultureInfo.InvariantCulture, out var batesStart))
-                        {
-                            parsed.BatesStart = batesStart;
-                            parsed.BatesStarts = new List<long> { batesStart };
-                        }
-                        else
-                        {
-                            Console.Error.WriteLine($"Error: Invalid value for --bates-start: '{batesStartStr}'");
-                            return null;
-                        }
-                    }
-                    break;
-                case "--bates-digits":
-                    if (!ReadIntArg(args, ref i, "--bates-digits", out var batesDigits)) return null;
-                    parsed.BatesDigits = batesDigits;
-                    break;
-
-                // --- Production args ---
                 case "--volume-size":
                     if (!ReadIntArg(args, ref i, "--volume-size", out var volumeSize)) return null;
                     parsed.VolumeSize = volumeSize;
