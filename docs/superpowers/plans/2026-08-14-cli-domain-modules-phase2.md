@@ -247,7 +247,7 @@ Emission order matters (preserves today's ordering where StandardModeValidator r
    - existence: `File.Exists` else exact `Error: Column profile '{...}' is not a valid built-in profile or file path.\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}`, return false.
    - precedence: if `_withMetadata && _columnProfile` set → exact `Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.` and set `_withMetadata = false` (this replaces the current `parsed.WithMetadata = false` mutation — today the mutation leaks into `ParsedArguments`, now it is module-local, same observable output). Warning continues.
    - **load — copy `RequestBuilder.cs:38–57` bytes, do not invert Error/Warning:**
-     ```
+     ```csharp
      try { profile = ColumnProfileLoader.Load(_columnProfile); }
      catch (InvalidOperationException ex) {
          Console.Error.WriteLine($"Error: {ex.Message}");
@@ -426,7 +426,7 @@ public static FileGenerationRequest? Build(
 
 - Delete profile-load section (lines 38–57), bates section, metadata section → `Metadata = metadata`.
 - Load-file section → `LoadFile = loadFile` (the module builds the whole `LoadFileConfig`). **Image-type override stays here** and keys off the bool param, **not** a config field:
-  ```
+  ```csharp
   if (!isLoadFileFormatExplicit && hasImageType)
       loadFile = loadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
   ```

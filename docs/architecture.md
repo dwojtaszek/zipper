@@ -73,9 +73,9 @@ graph LR
         Program["Program.cs<br/>(SelectMode dispatch)"]
         Pipeline["Pipeline.Build"]
         CliParser["CliParser<br/>(token reader + module dispatch)"]
-        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile<br/>(incl. column profile)"]
         CliValidator["CliValidator<br/>(remaining domains)"]
-        RequestBuilder["RequestBuilder<br/>(remaining configs + source/profile)"]
+        RequestBuilder["RequestBuilder<br/>(remaining configs + source)"]
         Program --> Pipeline
         Pipeline --> CliParser
         CliParser --> Modules
