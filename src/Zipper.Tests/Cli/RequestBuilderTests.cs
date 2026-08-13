@@ -43,6 +43,16 @@ public class RequestBuilderTests
     }
 
     [Fact]
+    public void Build_NullConfigArg_ThrowsArgumentNullException()
+    {
+        var parsed = new ParsedArguments();
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, null!, new TiffConfig(), new ChaosConfig(), new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), null!, new ChaosConfig(), new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), null!, new HashConfig()));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), null!));
+    }
+
+    [Fact]
     public void Build_WithValidPath_ResolvesDirectory()
     {
         var parsed = CreateParsedArgs();

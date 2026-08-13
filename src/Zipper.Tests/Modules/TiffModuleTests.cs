@@ -40,4 +40,16 @@ public class TiffModuleTests
         Assert.True(module.TryApply("--tiff-pages", "not-a-range"));
         Assert.False(module.TryBuild(new ParsedArguments(), out _));
     }
+
+    [Fact]
+    public void TryBuild_NullArg_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new TiffModule().TryBuild(null!, out _));
+    }
+
+    [Fact]
+    public void TryApply_UnknownFlag_ReturnsFalse()
+    {
+        Assert.False(new TiffModule().TryApply("--unknown-flag", "x"));
+    }
 }

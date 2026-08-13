@@ -861,4 +861,54 @@ public class CliPipelineTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal(validPrefix, result!.Bates?.Prefix);
     }
+
+    [Fact]
+    public void Build_WithHashFlags_SetsHashConfig()
+    {
+        var args = new[]
+        {
+            "--type", "pdf", "--count", "10", "--output-path", this.tempDir,
+            "--hash-mode", "actual", "--hash-algorithms", "md5,sha256",
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        var hash = result!.Hash;
+        Assert.Equal(Config.HashMode.Actual, hash.Mode);
+        Assert.Contains(Config.HashAlgorithm.MD5, hash.Algorithms);
+        Assert.Contains(Config.HashAlgorithm.SHA256, hash.Algorithms);
+        Assert.True(hash.IsEnabled);
+    }
+
+    [Fact]
+    public void Build_WithChaosFlags_SetsChaosConfig()
+    {
+        var args = new[]
+        {
+            "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
+            "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("5%", result.Chaos.ChaosAmount);
+        Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
+    }
+
+    [Fact]
+    public void Build_WithEolFlag_SetsEndOfLine()
+    {
+        var args = new[]
+        {
+            "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LF",
+        };
+
+        var result = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(result);
+        Assert.Equal("LF", result!.Delimiters.EndOfLine);
+    }
 }

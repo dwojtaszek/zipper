@@ -188,4 +188,30 @@ public class DelimiterModuleTests
         Assert.Equal(";", config.MultiValueDelimiter);
         Assert.Equal("\\", config.NestedValueDelimiter);
     }
+
+    [Fact]
+    public void TryBuild_InvalidQuoteDelim_ReturnsFalse()
+    {
+        var parsed = new ParsedArguments { LoadfileOnly = true };
+        Assert.False(TryBuild(parsed, new[] { "--quote-delim", "20" }, out _));
+    }
+
+    [Fact]
+    public void TryBuild_InvalidNewlineDelim_ReturnsFalse()
+    {
+        var parsed = new ParsedArguments { LoadfileOnly = true };
+        Assert.False(TryBuild(parsed, new[] { "--newline-delim", "20" }, out _));
+    }
+
+    [Fact]
+    public void TryBuild_NullArg_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new DelimiterModule().TryBuild(null!, out _));
+    }
+
+    [Fact]
+    public void TryApply_UnknownFlag_ReturnsFalse()
+    {
+        Assert.False(new DelimiterModule().TryApply("--unknown-flag", "x"));
+    }
 }

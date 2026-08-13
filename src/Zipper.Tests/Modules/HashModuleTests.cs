@@ -165,4 +165,16 @@ public class HashModuleTests
         Assert.Equal(Config.HashMode.None, config.Mode);
         Assert.Empty(config.Algorithms);
     }
+
+    [Fact]
+    public void TryBuild_NullArg_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new HashModule().TryBuild(null!, out _));
+    }
+
+    [Fact]
+    public void TryApply_UnknownFlag_ReturnsFalse()
+    {
+        Assert.False(new HashModule().TryApply("--unknown-flag", "x"));
+    }
 }

@@ -158,4 +158,16 @@ public class ChaosModuleTests
         Assert.Equal("5%", config.ChaosAmount);
         Assert.Equal("quotes,columns", config.ChaosTypes);
     }
+
+    [Fact]
+    public void TryBuild_NullArg_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new ChaosModule().TryBuild(null!, out _));
+    }
+
+    [Fact]
+    public void TryApply_UnknownFlag_ReturnsFalse()
+    {
+        Assert.False(new ChaosModule().TryApply("--unknown-flag", "x"));
+    }
 }
