@@ -1,12 +1,14 @@
+using Zipper.Cli.Modules;
 using Zipper.Cli.Validation;
 
 namespace Zipper.Cli;
 
 public static class CliValidator
 {
-    public static bool Validate(ParsedArguments parsed)
+    public static bool Validate(ParsedArguments parsed, CliModuleSet modules)
     {
         ArgumentNullException.ThrowIfNull(parsed);
+        ArgumentNullException.ThrowIfNull(modules);
 
         bool isComparisonMode = !string.IsNullOrEmpty(parsed.CompareProductionManifests);
         if (!isComparisonMode)
@@ -47,7 +49,7 @@ public static class CliValidator
         // the File Count from Source Records, so --type and --count are not required with it.
         bool hasSourceInput = !string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate);
 
-        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !parsed.LoadfileOnly && !parsed.ProductionSet && !hasSourceInput)
+        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !modules.LoadFile.LoadfileOnly && !parsed.ProductionSet && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --type is required.");
             return false;
@@ -72,9 +74,8 @@ public static class CliValidator
         }
 
         if (!StandardModeValidator.Validate(parsed) ||
-            !LoadfileOnlyValidator.Validate(parsed) ||
-            !ProductionSetValidator.Validate(parsed) ||
-            !CrossCuttingValidator.Validate(parsed))
+            !ProductionSetValidator.Validate(parsed, modules) ||
+            !CrossCuttingValidator.Validate(parsed, modules))
         {
             return false;
         }

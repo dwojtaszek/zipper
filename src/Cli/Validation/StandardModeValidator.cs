@@ -30,12 +30,6 @@ internal static class StandardModeValidator
             return false;
         }
 
-        if (parsed.AttachmentRate < 0 || parsed.AttachmentRate > 100)
-        {
-            Console.Error.WriteLine("Error: Attachment rate must be between 0 and 100.");
-            return false;
-        }
-
         if (!string.IsNullOrEmpty(parsed.TargetZipSize))
         {
             var parsedSize = RequestBuilder.ParseSize(parsed.TargetZipSize);
@@ -51,37 +45,6 @@ internal static class StandardModeValidator
             }
         }
 
-        if (parsed.EmptyPercentage.HasValue && (parsed.EmptyPercentage.Value < 0 || parsed.EmptyPercentage.Value > 100))
-        {
-            Console.Error.WriteLine("Error: Empty percentage must be between 0 and 100.");
-            return false;
-        }
-
-        if (parsed.CustodianCount.HasValue && (parsed.CustodianCount.Value < 1 || parsed.CustodianCount.Value > 1000))
-        {
-            Console.Error.WriteLine("Error: Custodian count must be between 1 and 1000.");
-            return false;
-        }
-
-        // Source-driven rows are not read yet at validation time, so the eml-participation
-        // warning is skipped for source input and applied per record during generation.
-        if (parsed.WithFamilies && !hasSourceInput && (!IncludesEml(parsed) || parsed.AttachmentRate <= 0))
-        {
-            Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.");
-        }
-
         return true;
-    }
-
-    private static bool IncludesEml(ParsedArguments parsed)
-    {
-        if (string.Equals(parsed.FileType, "eml", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return !string.IsNullOrEmpty(parsed.FileTypes)
-            && Config.FileTypeRatioParser.TryParse(parsed.FileTypes, out var ratios, out _)
-            && ratios.Any(r => string.Equals(r.Type, "eml", StringComparison.Ordinal));
     }
 }

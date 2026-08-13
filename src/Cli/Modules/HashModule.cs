@@ -22,7 +22,7 @@ public sealed class HashModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, out HashConfig config)
+    public bool TryBuild(ParsedArguments parsed, bool loadfileOnly, out HashConfig config)
     {
         ArgumentNullException.ThrowIfNull(parsed);
 
@@ -70,11 +70,11 @@ public sealed class HashModule : CliModule
             }
         }
 
-        // Cross-domain (moves to CrossCuttingRules in Phase 4): reads LoadfileOnly from the
-        // still-present bag because LoadFileModule (Phase 2) owns that flag.
+        // Cross-domain (moves to CrossCuttingRules in Phase 4): reads loadfileOnly from the
+        // LoadFileModule (Phase 2) that owns that flag.
         // Keep the LoadfileOnlyValidator bytes (capital E + period). Do not "fix" to the
         // RequestBuilder variant ("error: ... hash)" — no E2E asserts that string).
-        if (parsed.LoadfileOnly && string.Equals(_mode, "actual", StringComparison.OrdinalIgnoreCase))
+        if (loadfileOnly && string.Equals(_mode, "actual", StringComparison.OrdinalIgnoreCase))
         {
             Console.Error.WriteLine("Error: --hash-mode actual is not supported with --loadfile-only (no file bytes to hash).");
             config = default!;

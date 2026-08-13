@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using Zipper.Config;
-using Zipper.Profiles;
 
 namespace Zipper.Cli;
 
@@ -19,44 +18,26 @@ public static class RequestBuilder
         DelimiterConfig delimiters,
         TiffConfig tiff,
         ChaosConfig chaos,
-        HashConfig hash)
+        HashConfig hash,
+        BatesNumberConfig? bates,
+        MetadataConfig metadata,
+        LoadFileConfig loadFile,
+        bool loadfileOnly,
+        bool isLoadFileFormatExplicit)
     {
         ArgumentNullException.ThrowIfNull(parsed);
         ArgumentNullException.ThrowIfNull(delimiters);
         ArgumentNullException.ThrowIfNull(tiff);
         ArgumentNullException.ThrowIfNull(chaos);
         ArgumentNullException.ThrowIfNull(hash);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(loadFile);
 
         var resolved = PathValidator.ResolveSecurePath(
             parsed.OutputPathStr,
             Directory.GetCurrentDirectory());
         if (resolved is null)
             return null;
-
-        var encoding = GetEncodingFromName(parsed.Encoding ?? "UTF-8");
-
-        ColumnProfile? profile = null;
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile))
-        {
-            try
-            {
-                profile = ColumnProfileLoader.Load(parsed.ColumnProfile);
-            }
-            catch (InvalidOperationException ex)
-            {
-                Console.Error.WriteLine($"Error: {ex.Message}");
-                return null;
-            }
-
-            if (profile is null)
-            {
-                Console.Error.WriteLine($"Warning: Failed to load column profile '{parsed.ColumnProfile}'.");
-            }
-            else if (parsed.WithCollectionMetadata)
-            {
-                profile = BuiltInProfiles.MergeWithCollectionMetadata(profile);
-            }
-        }
 
         var fileType = (parsed.FileType ?? "pdf").ToLowerInvariant();
         IReadOnlyList<FileTypeRatio>? fileTypeRatios = null;
@@ -100,7 +81,7 @@ public static class RequestBuilder
                 return null;
             }
 
-            if (rows.Any(r => r.BatesNumber is not null) && string.IsNullOrEmpty(parsed.BatesPrefix))
+            if (rows.Any(r => r.BatesNumber is not null) && bates is null)
             {
                 Console.Error.WriteLine("Error: the source 'BatesNumber' column requires --bates-prefix so the Bates column is emitted.");
                 return null;
@@ -115,7 +96,7 @@ public static class RequestBuilder
             // Explicit identity overrides must stay clear of sequence-generated values: an
             // override equal to a generated fallback produces duplicate Load File identities
             // and OPT image paths.
-            var identityCollision = FindGeneratedIdentityCollision(rows, parsed);
+            var identityCollision = FindGeneratedIdentityCollision(rows, bates);
             if (identityCollision is not null)
             {
                 Console.Error.WriteLine($"Error: {identityCollision}");
@@ -125,34 +106,19 @@ public static class RequestBuilder
             sourceRecords = rows;
         }
 
-        List<LoadFileFormat>? multiFormats = null;
-        if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
-        {
-            multiFormats = parsed.LoadFileFormats
-                .Split(',')
-                .Select(f => GetLoadFileFormat(f.Trim()))
-                .Where(f => f.HasValue)
-                .Select(f => f!.Value)
-                .ToList();
-        }
-        else if (!parsed.IsLoadFileFormatExplicit)
+        // The image-type override (image-only runs get both DAT and OPT load files) keys off
+        // whether the user explicitly chose formats. hasImageType reads fileType / fileTypeRatios
+        // / sourceRecords computed above — it cannot move to LoadFileModule.
+        if (!isLoadFileFormatExplicit)
         {
             var hasImageType = fileType is "tiff" or "jpg"
                 || (fileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false)
                 || (sourceRecords?.Any(r => r.FileType is "tiff" or "jpg") ?? false);
             if (hasImageType)
             {
-                multiFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
+                loadFile = loadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
             }
         }
-
-        var encodingName = (encoding is not null && !string.IsNullOrEmpty(parsed.Encoding))
-            ? parsed.Encoding.ToUpperInvariant()
-            : "UTF-8";
-
-        var formats = (multiFormats is not null && multiFormats.Count > 0)
-            ? multiFormats
-            : new List<LoadFileFormat> { GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat };
 
         return new FileGenerationRequest
         {
@@ -172,35 +138,10 @@ public static class RequestBuilder
                 TargetZipSize = !string.IsNullOrEmpty(parsed.TargetZipSize) ? ParseSize(parsed.TargetZipSize!) : null,
                 IncludeLoadFile = parsed.IncludeLoadFile,
             },
-            Metadata = new MetadataConfig
-            {
-                WithMetadata = parsed.WithMetadata,
-                ColumnProfile = profile,
-                Seed = parsed.Seed,
-                DateFormatOverride = parsed.DateFormat,
-                EmptyPercentageOverride = parsed.EmptyPercentage,
-                CustodianCountOverride = parsed.CustodianCount,
-                WithFamilies = parsed.WithFamilies,
-                WithCollectionMetadata = parsed.WithCollectionMetadata,
-            },
-            LoadFile = new LoadFileConfig
-            {
-                Formats = formats,
-                Encoding = encodingName,
-                IsEncodingExplicit = parsed.IsEncodingExplicit,
-                Distribution = GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
-                AttachmentRate = parsed.AttachmentRate,
-            },
+            Metadata = metadata,
+            LoadFile = loadFile,
             Delimiters = delimiters,
-            Bates = !string.IsNullOrEmpty(parsed.BatesPrefix) ? new BatesNumberConfig
-            {
-                Prefix = parsed.BatesPrefix,
-                Start = parsed.BatesStart ?? 1,
-                Digits = parsed.BatesDigits ?? 8,
-                Prefixes = parsed.BatesPrefixes,
-                Starts = parsed.BatesStarts,
-            }
-            : null,
+            Bates = bates,
             Tiff = tiff,
             Chaos = chaos,
             Production = new ProductionConfig
@@ -229,7 +170,7 @@ public static class RequestBuilder
                     _ => SourcePathMode.Bates,
                 },
             },
-            LoadfileOnly = parsed.LoadfileOnly,
+            LoadfileOnly = loadfileOnly,
             Hash = hash,
             SourceRecords = sourceRecords,
         };
@@ -239,7 +180,7 @@ public static class RequestBuilder
     // run would actually generate, compared case-insensitively (consistent with duplicate
     // detection and Windows path semantics): DOC{index:D8} for Control Numbers and the
     // configured Bates sequence values for Bates Numbers.
-    private static string? FindGeneratedIdentityCollision(IReadOnlyList<SourceInput.SourceRecord> rows, ParsedArguments parsed)
+    private static string? FindGeneratedIdentityCollision(IReadOnlyList<SourceInput.SourceRecord> rows, BatesNumberConfig? bates)
     {
         foreach (var row in rows)
         {
@@ -256,20 +197,20 @@ public static class RequestBuilder
             }
         }
 
-        if (!string.IsNullOrEmpty(parsed.BatesPrefix))
+        if (bates is not null)
         {
-            var prefix = parsed.BatesPrefix!;
-            var start = parsed.BatesStart ?? 1;
-            var digits = parsed.BatesDigits ?? 8;
+            var prefix = bates.Prefix;
+            var start = bates.Start;
+            var digits = bates.Digits;
             foreach (var row in rows)
             {
-                var bates = row.BatesNumber;
-                if (bates is null || !bates.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                var batesValue = row.BatesNumber;
+                if (batesValue is null || !batesValue.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                var numericPart = bates.AsSpan(prefix.Length);
+                var numericPart = batesValue.AsSpan(prefix.Length);
                 if (!long.TryParse(numericPart, NumberStyles.None, CultureInfo.InvariantCulture, out var number))
                 {
                     continue;
@@ -282,9 +223,9 @@ public static class RequestBuilder
                 }
 
                 var generated = prefix + number.ToString($"D{digits}", CultureInfo.InvariantCulture);
-                if (string.Equals(bates, generated, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(batesValue, generated, StringComparison.OrdinalIgnoreCase))
                 {
-                    return $"source BatesNumber '{bates}' collides with the generated Bates sequence value for row {sequenceIndex + 1}. Choose an override outside the generated identity space.";
+                    return $"source BatesNumber '{batesValue}' collides with the generated Bates sequence value for row {sequenceIndex + 1}. Choose an override outside the generated identity space.";
                 }
             }
         }

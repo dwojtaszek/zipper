@@ -1,23 +1,25 @@
+using Zipper.Cli.Modules;
+
 namespace Zipper.Cli.Validation;
 
 internal static class ProductionSetValidator
 {
-    public static bool Validate(ParsedArguments parsed)
+    public static bool Validate(ParsedArguments parsed, CliModuleSet modules)
     {
-        return ValidateDependencies(parsed) && ValidateRollingConfig(parsed);
+        return ValidateDependencies(parsed, modules) && ValidateRollingConfig(parsed);
     }
 
-    private static bool ValidateDependencies(ParsedArguments parsed)
+    private static bool ValidateDependencies(ParsedArguments parsed, CliModuleSet modules)
     {
         if (parsed.ProductionSet)
         {
-            if (parsed.LoadfileOnly)
+            if (modules.LoadFile.LoadfileOnly)
             {
                 Console.Error.WriteLine("Error: --production-set conflicts with --loadfile-only.");
                 return false;
             }
 
-            if (string.IsNullOrEmpty(parsed.BatesPrefix))
+            if (!modules.Bates.HasBatesPrefix)
             {
                 Console.Error.WriteLine("Error: --production-set requires --bates-prefix.");
                 return false;
@@ -30,7 +32,7 @@ internal static class ProductionSetValidator
             }
         }
 
-        if (parsed.RedactedProduction && parsed.LoadfileOnly)
+        if (parsed.RedactedProduction && modules.LoadFile.LoadfileOnly)
         {
             Console.Error.WriteLine("Error: --redacted-production conflicts with --loadfile-only.");
             return false;
@@ -158,88 +160,6 @@ internal static class ProductionSetValidator
             {
                 Console.Error.WriteLine("Error: Production ID cannot be empty.");
                 return false;
-            }
-
-            // Validate Bates prefixes and starts lengths if lists are provided
-            if (parsed.BatesPrefixes is not null)
-            {
-                if (parsed.BatesPrefixes.Count > 1 && parsed.BatesPrefixes.Count != parsed.RollingCount)
-                {
-                    Console.Error.WriteLine("Error: Number of bates prefixes must match rolling count.");
-                    return false;
-                }
-                if (parsed.BatesPrefixes.Any(string.IsNullOrWhiteSpace))
-                {
-                    Console.Error.WriteLine("Error: Bates prefix cannot be empty or whitespace.");
-                    return false;
-                }
-            }
-
-            if (parsed.BatesStarts is not null && parsed.BatesStarts.Count > 1 && parsed.BatesStarts.Count != parsed.RollingCount)
-            {
-                Console.Error.WriteLine("Error: Number of bates starts must match rolling count.");
-                return false;
-            }
-
-            // Calculate bates ranges and check for overlaps if prefixes match
-            var ranges = new List<(string Prefix, long Start, long End)>();
-            long currentStart = parsed.BatesStart ?? 1;
-            long fileCount = parsed.Count ?? 0;
-
-            for (int i = 0; i < parsed.RollingCount; i++)
-            {
-                string prefix = parsed.BatesPrefixes is not null && parsed.BatesPrefixes.Count > i
-                    ? parsed.BatesPrefixes[i]
-                    : parsed.BatesPrefix ?? string.Empty;
-
-                long start;
-                var mode = parsed.RollingBatesMode?.ToLowerInvariant() ?? "continuous";
-                if (mode == "restart")
-                {
-                    start = parsed.BatesStarts is not null && parsed.BatesStarts.Count > i
-                        ? parsed.BatesStarts[i]
-                        : parsed.BatesStart ?? 1;
-                }
-                else // continuous
-                {
-                    if (parsed.BatesStarts is not null && parsed.BatesStarts.Count > i)
-                    {
-                        start = parsed.BatesStarts[i];
-                    }
-                    else
-                    {
-                        start = currentStart;
-                    }
-                    currentStart = start + fileCount;
-                }
-
-                long end = start + fileCount - 1;
-                ranges.Add((prefix, start, end));
-            }
-
-            // Check for overlaps when prefixes match in continuous mode
-            var modeStr = parsed.RollingBatesMode?.ToLowerInvariant() ?? "continuous";
-            if (modeStr == "continuous")
-            {
-                for (int i = 0; i < ranges.Count; i++)
-                {
-                    for (int j = i + 1; j < ranges.Count; j++)
-                    {
-                        if (string.Equals(ranges[i].Prefix, ranges[j].Prefix, StringComparison.OrdinalIgnoreCase))
-                        {
-                            long maxStart = Math.Max(ranges[i].Start, ranges[j].Start);
-                            long minEnd = Math.Min(ranges[i].End, ranges[j].End);
-                            if (maxStart <= minEnd)
-                            {
-                                Console.Error.WriteLine(
-                                    $"Error: Bates ranges overlap for prefix '{ranges[i].Prefix}': " +
-                                    $"Set {i + 1} ({ranges[i].Start}-{ranges[i].End}) and " +
-                                    $"Set {j + 1} ({ranges[j].Start}-{ranges[j].End}).");
-                                return false;
-                            }
-                        }
-                    }
-                }
             }
         }
 

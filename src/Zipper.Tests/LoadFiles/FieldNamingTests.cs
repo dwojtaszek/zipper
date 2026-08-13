@@ -192,18 +192,19 @@ public class FieldNamingTests : IDisposable
     }
 
     [Fact]
-    public void CliValidator_ShouldRejectInvalidFormatInLoadFileOnlyMode()
+    public void LoadFileModule_ShouldRejectInvalidFormatInLoadFileOnlyMode()
     {
+        // Phase 2: the loadfile-only DAT/OPT restriction moved to LoadFileModule.TryBuild.
         var parsed = new ParsedArguments
         {
-            LoadfileOnly = true,
-            LoadFileFormat = "csv",
             Count = 100,
             OutputDirectory = new DirectoryInfo(this.tempDir),
             FileType = "pdf"
         };
 
-        var isValid = CliValidator.Validate(parsed);
-        Assert.False(isValid);
+        var module = new Zipper.Cli.Modules.LoadFileModule();
+        Assert.True(module.TryApply("--loadfile-only", null));
+        Assert.True(module.TryApply("--load-file-format", "csv"));
+        Assert.False(module.TryBuild(parsed, 0, out _));
     }
 }

@@ -73,9 +73,9 @@ graph LR
         Program["Program.cs<br/>(SelectMode dispatch)"]
         Pipeline["Pipeline.Build"]
         CliParser["CliParser<br/>(token reader + module dispatch)"]
-        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile<br/>(incl. column profile)"]
         CliValidator["CliValidator<br/>(remaining domains)"]
-        RequestBuilder["RequestBuilder<br/>(remaining configs + source/profile)"]
+        RequestBuilder["RequestBuilder<br/>(remaining configs + source)"]
         Program --> Pipeline
         Pipeline --> CliParser
         CliParser --> Modules
@@ -158,7 +158,7 @@ graph LR
     Profiles --> DataGen
 ```
 
-*Phase 1 of #750: Hash/Delimiter/Tiff/Chaos parse+validate+build moved into modules. CliValidator and RequestBuilder still own the remaining domains until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) directly.*
+*Phase 1–2 of #750: Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile parse+validate+build moved into modules. CliValidator and RequestBuilder still own the remaining domains until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) + CliValidator.Validate(parsed, CliModules.Create()) on a discarded set.*
 
 ## Post-Generation Validation
 

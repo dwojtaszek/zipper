@@ -51,7 +51,7 @@ public static class Program
 
             if (!string.IsNullOrEmpty(parsedArgs.CompareProductionManifests))
             {
-                if (!Cli.CliValidator.Validate(parsedArgs))
+                if (!Cli.CliValidator.Validate(parsedArgs, Cli.Modules.CliModules.Create()))
                 {
                     return 1;
                 }

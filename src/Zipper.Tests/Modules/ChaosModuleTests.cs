@@ -8,7 +8,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ParsedArguments parsed, ChaosConfigSpec spec, out ChaosConfig config)
+    private static bool TryBuildWithValues(ParsedArguments parsed, ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, LoadFileFormat currentFormat = LoadFileFormat.Dat)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -27,7 +27,7 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(parsed, out config);
+        return module.TryBuild(parsed, loadfileOnly, currentFormat, out config);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -38,7 +38,7 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ChaosMode_SetsChaosProperties()
     {
-        var parsed = new ParsedArguments { LoadfileOnly = true };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: "quotes,columns", Scenario: null) { Mode = true };
         Assert.True(TryBuildWithValues(parsed, spec, out var config));
 
@@ -52,13 +52,13 @@ public class ChaosModuleTests
     {
         var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(parsed, spec, out _, loadfileOnly: false));
     }
 
     [Fact]
     public void TryBuild_ChaosAmountWithoutChaosMode_ReturnsFalse()
     {
-        var parsed = new ParsedArguments { LoadfileOnly = true };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: null, Scenario: null);
         Assert.False(TryBuildWithValues(parsed, spec, out _));
     }
@@ -82,7 +82,7 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ChaosScenarioWithTypes_ReturnsFalse()
     {
-        var parsed = new ParsedArguments { LoadfileOnly = true };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: "quotes", Scenario: "basic") { Mode = true };
         Assert.False(TryBuildWithValues(parsed, spec, out _));
     }
@@ -90,7 +90,7 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_InvalidChaosAmount_ReturnsFalse()
     {
-        var parsed = new ParsedArguments { LoadfileOnly = true };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "abc", Types: null, Scenario: null) { Mode = true };
         Assert.False(TryBuildWithValues(parsed, spec, out _));
 
@@ -124,15 +124,20 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ValidScenario_BuildsConfig()
     {
-        var parsed = new ParsedArguments
-        {
-            LoadfileOnly = true,
-            LoadFileFormat = "dat",
-        };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "structured-import-failures") { Mode = true };
         Assert.True(TryBuildWithValues(parsed, spec, out var config));
 
         Assert.Equal("structured-import-failures", config.ChaosScenario);
+    }
+
+    [Fact]
+    public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
+    {
+        // currentFormat is the single-format value; a non-DAT/OPT format rejects --chaos-mode.
+        var parsed = new ParsedArguments();
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
+        Assert.False(TryBuildWithValues(parsed, spec, out _, currentFormat: LoadFileFormat.Csv));
     }
 
     [Fact]
@@ -144,14 +149,14 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-types", "quotes,columns"));
         Assert.True(module.TryApply("--chaos-scenario", "test"));
 
-        var parsed = new ParsedArguments { LoadfileOnly = true };
-        Assert.False(module.TryBuild(parsed, out _));
+        var parsed = new ParsedArguments();
+        Assert.False(module.TryBuild(parsed, true, LoadFileFormat.Dat, out _));
     }
 
     [Fact]
     public void TryApply_ChaosArgs_RoundTripsThroughConfig()
     {
-        var parsed = new ParsedArguments { LoadfileOnly = true };
+        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: "quotes,columns", Scenario: null) { Mode = true };
         Assert.True(TryBuildWithValues(parsed, spec, out var config));
 
@@ -162,7 +167,7 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_NullArg_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new ChaosModule().TryBuild(null!, out _));
+        Assert.Throws<ArgumentNullException>(() => new ChaosModule().TryBuild(null!, false, LoadFileFormat.Dat, out _));
     }
 
     [Fact]

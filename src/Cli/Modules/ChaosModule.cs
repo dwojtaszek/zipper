@@ -29,18 +29,13 @@ public sealed class ChaosModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, out ChaosConfig config)
+    public bool TryBuild(ParsedArguments parsed, bool loadfileOnly, LoadFileFormat currentFormat, out ChaosConfig config)
     {
         ArgumentNullException.ThrowIfNull(parsed);
 
-        // Transitional: currentFormat comes from RequestBuilder.GetLoadFileFormat until
-        // LoadFileModule (Phase 2) owns the format strings; the LoadfileOnly/format reads
-        // move to CrossCuttingRules (Phase 4).
-        var currentFormat = RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat ?? "dat") ?? LoadFileFormat.Dat;
-
         if (_mode)
         {
-            if (!parsed.LoadfileOnly)
+            if (!loadfileOnly)
             {
                 Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
                 config = default!;

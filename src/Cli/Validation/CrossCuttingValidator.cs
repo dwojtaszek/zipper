@@ -1,16 +1,15 @@
-using Zipper.Config;
-using Zipper.Profiles;
+using Zipper.Cli.Modules;
 
 namespace Zipper.Cli.Validation;
 
 internal static class CrossCuttingValidator
 {
-    public static bool Validate(ParsedArguments parsed)
+    public static bool Validate(ParsedArguments parsed, CliModuleSet modules)
     {
-        return ValidateFileTypeMix(parsed) &&
+        return ValidateFileTypeMix(parsed, modules) &&
                ValidateSourceInput(parsed) &&
-               ValidateFormattingAndProfiles(parsed) &&
-               ValidateBates(parsed);
+               ValidateEncodingAndDistribution(parsed) &&
+               ValidateColumnProfile(parsed, modules);
     }
 
     private static bool ValidateSourceInput(ParsedArguments parsed)
@@ -75,7 +74,7 @@ internal static class CrossCuttingValidator
         return true;
     }
 
-    private static bool ValidateFileTypeMix(ParsedArguments parsed)
+    private static bool ValidateFileTypeMix(ParsedArguments parsed, CliModuleSet modules)
     {
         if (parsed.FileTypes is null)
         {
@@ -88,7 +87,7 @@ internal static class CrossCuttingValidator
             return false;
         }
 
-        if (parsed.LoadfileOnly)
+        if (modules.LoadFile.LoadfileOnly)
         {
             Console.Error.WriteLine("Error: --types is not supported with --loadfile-only.");
             return false;
@@ -96,7 +95,7 @@ internal static class CrossCuttingValidator
 
         // Rejected because column profiles bypass per-record File Type gating and would
         // silently mislabel mixed rows. Use --type for profile-driven generation instead.
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile))
+        if (modules.Metadata.HasColumnProfile)
         {
             Console.Error.WriteLine("Error: --types is not supported with --column-profile. Use --type for profile-driven generation.");
             return false;
@@ -109,13 +108,6 @@ internal static class CrossCuttingValidator
         }
 
         return true;
-    }
-
-    private static bool ValidateFormattingAndProfiles(ParsedArguments parsed)
-    {
-        return ValidateEncodingAndDistribution(parsed) &&
-               ValidateLoadFileFormats(parsed) &&
-               ValidateColumnProfile(parsed);
     }
 
     private static bool ValidateEncodingAndDistribution(ParsedArguments parsed)
@@ -134,77 +126,12 @@ internal static class CrossCuttingValidator
         return true;
     }
 
-    private static bool ValidateLoadFileFormats(ParsedArguments parsed)
+    private static bool ValidateColumnProfile(ParsedArguments parsed, CliModuleSet modules)
     {
-        if (!string.IsNullOrEmpty(parsed.LoadFileFormat))
-        {
-            if (RequestBuilder.GetLoadFileFormat(parsed.LoadFileFormat) is null)
-            {
-                Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.");
-                return false;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parsed.LoadFileFormats))
-        {
-            foreach (var fmt in parsed.LoadFileFormats.Split(','))
-            {
-                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) is null)
-                {
-                    Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml, xml, concordance.");
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private static bool ValidateColumnProfile(ParsedArguments parsed)
-    {
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile) && parsed.ProductionSet)
+        if (modules.Metadata.HasColumnProfile && parsed.ProductionSet)
         {
             Console.Error.WriteLine("Error: --column-profile is not supported with --production-set.");
             return false;
-        }
-
-        if (!string.IsNullOrEmpty(parsed.ColumnProfile) && !ColumnProfileLoader.IsBuiltInProfile(parsed.ColumnProfile))
-        {
-            if (!PathValidator.IsPathSafe(parsed.ColumnProfile, Directory.GetCurrentDirectory()))
-            {
-                Console.Error.WriteLine($"Error: Path traversal detected in column profile path '{parsed.ColumnProfile}'. Profile file must reside within working directory.");
-                return false;
-            }
-
-            if (!File.Exists(parsed.ColumnProfile))
-            {
-                Console.Error.WriteLine($"Error: Column profile '{parsed.ColumnProfile}' is not a valid built-in profile or file path.\n       Built-in profiles: {string.Join(", ", BuiltInProfiles.ProfileNames)}");
-                return false;
-            }
-        }
-
-        if (parsed.WithMetadata && !string.IsNullOrEmpty(parsed.ColumnProfile))
-        {
-            Console.Error.WriteLine("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.");
-            parsed.WithMetadata = false;
-        }
-        return true;
-    }
-
-    private static bool ValidateBates(ParsedArguments parsed)
-    {
-        if (parsed.BatesPrefix is not null || parsed.BatesStart is not null || parsed.BatesDigits is not null)
-        {
-            var config = new BatesNumberConfig
-            {
-                Prefix = parsed.BatesPrefix ?? "DOC",
-                Start = parsed.BatesStart ?? 1,
-                Digits = parsed.BatesDigits ?? 8
-            };
-            if (!BatesSequence.TryCreate(config, out _, out var error))
-            {
-                Console.Error.WriteLine($"Error: {error}");
-                return false;
-            }
         }
         return true;
     }
