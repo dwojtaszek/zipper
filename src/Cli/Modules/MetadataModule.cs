@@ -129,10 +129,11 @@ public sealed class MetadataModule : CliModule
             }
         }
 
-        if (_withMetadata && HasColumnProfile)
+        var withMetadata = _withMetadata;
+        if (withMetadata && HasColumnProfile)
         {
             Console.Error.WriteLine("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.");
-            _withMetadata = false;
+            withMetadata = false;
         }
 
         ColumnProfile? profile = null;
@@ -161,7 +162,7 @@ public sealed class MetadataModule : CliModule
 
         config = new MetadataConfig
         {
-            WithMetadata = _withMetadata,
+            WithMetadata = withMetadata,
             ColumnProfile = profile,
             Seed = _seed,
             DateFormatOverride = _dateFormat,
