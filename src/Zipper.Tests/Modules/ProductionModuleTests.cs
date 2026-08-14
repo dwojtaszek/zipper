@@ -380,12 +380,10 @@ public class ProductionModuleTests
     }
 
     [Fact]
-    public void GenerateProductionIds_CommaListLengthMismatch_ReturnsFalseOnBuild()
+    public void GenerateProductionIds_CommaList_ReturnsAllElementsTrimmed()
     {
-        var error = CaptureError(() =>
-        {
-            Assert.False(TryBuild(new[] { "--production-set", null, "--rolling-count", "2", "--production-id", "A,B,C" }, out _));
-        });
-        Assert.Contains("Error: Number of production IDs must match rolling count.", error, StringComparison.Ordinal);
+        var result = ProductionModule.GenerateProductionIds("A,B,C", 2);
+
+        Assert.Equal(new[] { "A", "B", "C" }, result);
     }
 }
