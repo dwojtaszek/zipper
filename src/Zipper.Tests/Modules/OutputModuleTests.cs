@@ -125,6 +125,24 @@ public class OutputModuleTests
 
         error = CaptureError(() => Assert.False(new OutputModule().TryApply("--type", null)));
         Assert.Contains("Error: --type requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--types", null)));
+        Assert.Contains("Error: --types requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--output-path", null)));
+        Assert.Contains("Error: --output-path requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--folders", null)));
+        Assert.Contains("Error: --folders requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--encoding", null)));
+        Assert.Contains("Error: --encoding requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--distribution", null)));
+        Assert.Contains("Error: --distribution requires a value.", error, StringComparison.Ordinal);
+
+        error = CaptureError(() => Assert.False(new OutputModule().TryApply("--target-zip-size", null)));
+        Assert.Contains("Error: --target-zip-size requires a value.", error, StringComparison.Ordinal);
     }
 
     [Fact]

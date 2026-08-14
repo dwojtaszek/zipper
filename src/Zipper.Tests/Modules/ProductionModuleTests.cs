@@ -82,6 +82,48 @@ public class ProductionModuleTests
     }
 
     [Fact]
+    public void TryApply_MissingPriorManifestValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--prior-manifest", null)));
+        Assert.Contains("Error: --prior-manifest requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MissingSupplementalGapPolicyValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--supplemental-gap-policy", null)));
+        Assert.Contains("Error: --supplemental-gap-policy requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MissingProductionIdValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--production-id", null)));
+        Assert.Contains("Error: --production-id requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MissingRollingBatesModeValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--rolling-bates-mode", null)));
+        Assert.Contains("Error: --rolling-bates-mode requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MissingWithheldNativePolicyValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--withheld-native-policy", null)));
+        Assert.Contains("Error: --withheld-native-policy requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MissingSourcePathModeValue_ReturnsFalse()
+    {
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--source-path-mode", null)));
+        Assert.Contains("Error: --source-path-mode requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryApply_ProductionSetFlag_StoresTrue()
     {
         var module = new ProductionModule();
@@ -101,6 +143,17 @@ public class ProductionModuleTests
     public void TryApply_UnknownFlag_ReturnsFalse()
     {
         Assert.False(new ProductionModule().TryApply("--unknown-flag", "x"));
+    }
+
+    [Fact]
+    public void TakesValue_FlaglessFlags_ReturnsFalse()
+    {
+        var module = new ProductionModule();
+        Assert.False(module.TakesValue("--production-set"));
+        Assert.False(module.TakesValue("--production-zip"));
+        Assert.False(module.TakesValue("--supplemental-production"));
+        Assert.False(module.TakesValue("--redacted-production"));
+        Assert.True(module.TakesValue("--volume-size"));
     }
 
     // --- Pure-domain dependency checks ---
@@ -268,6 +321,16 @@ public class ProductionModuleTests
     }
 
     [Fact]
+    public void TryBuild_ProductionIdDuplicate_CaseInsensitive()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-set", null, "--rolling-count", "2", "--production-id", "PROD001,prod001" }, out _));
+        });
+        Assert.Contains("Error: Duplicate production IDs are not allowed.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuild_ProductionIdEmpty_ReturnsFalse()
     {
         var error = CaptureError(() =>
@@ -364,6 +427,13 @@ public class ProductionModuleTests
     public void GenerateProductionIds_UnderscoreSuffix_AppendsNumber()
     {
         Assert.Equal(new[] { "PROD", "PROD_2", "PROD_3" }, ProductionModule.GenerateProductionIds("PROD", 3));
+    }
+
+    [Fact]
+    public void GenerateProductionIds_TrailingDigitsOverflowLong_FallsBackToSuffix()
+    {
+        var baseId = "99999999999999999999";
+        Assert.Equal(new[] { baseId, $"{baseId}_2", $"{baseId}_3" }, ProductionModule.GenerateProductionIds(baseId, 3));
     }
 
     [Fact]
