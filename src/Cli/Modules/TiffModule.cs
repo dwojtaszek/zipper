@@ -20,10 +20,8 @@ public sealed class TiffModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, out TiffConfig config)
+    public bool TryBuild(out TiffConfig config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
-
         if (!string.IsNullOrEmpty(_pageRange) && TiffMultiPageGenerator.ParsePageRange(_pageRange!) is null)
         {
             Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");

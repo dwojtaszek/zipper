@@ -53,9 +53,10 @@ public sealed class LoadFileModule : CliModule
 
     public LoadFileFormat CurrentFormat => RequestBuilder.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
 
-    public bool TryBuild(ParsedArguments parsed, int attachmentRate, out LoadFileConfig config)
+    public bool TryBuild(int attachmentRate, string? encoding, bool isEncodingExplicit, string? distribution, string? targetZipSize, bool includeLoadFile, out LoadFileConfig config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
+        // encoding/isEncodingExplicit/distribution/targetZipSize/includeLoadFile were bag fields
+        // pre-Phase-3; OutputModule now owns them, so they are passed in as parameters.
 
         // Message-order invariant: today LoadfileOnlyValidator runs first but treats unknown
         // formats as Dat (GetLoadFileFormat(x) ?? Dat), so the dat/opt restriction does not
@@ -82,15 +83,14 @@ public sealed class LoadFileModule : CliModule
 
         if (_loadfileOnly)
         {
-            // Transitional: TargetZipSize/IncludeLoadFile live in OutputModule (Phase 3).
-            if (!string.IsNullOrEmpty(parsed.TargetZipSize))
+            if (!string.IsNullOrEmpty(targetZipSize))
             {
                 Console.Error.WriteLine("Error: --loadfile-only conflicts with --target-zip-size.");
                 config = default!;
                 return false;
             }
 
-            if (parsed.IncludeLoadFile)
+            if (includeLoadFile)
             {
                 Console.Error.WriteLine("Error: --loadfile-only conflicts with --include-load-file.");
                 config = default!;
@@ -134,18 +134,16 @@ public sealed class LoadFileModule : CliModule
             formats = new List<LoadFileFormat> { RequestBuilder.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat };
         }
 
-        // Transitional: Encoding/IsEncodingExplicit/Distribution live in OutputModule (Phase 3).
-        var encoding = RequestBuilder.GetEncodingFromName(parsed.Encoding ?? "UTF-8");
-        var encodingName = (encoding is not null && !string.IsNullOrEmpty(parsed.Encoding))
-            ? parsed.Encoding.ToUpperInvariant()
+        var encodingName = (RequestBuilder.GetEncodingFromName(encoding ?? "UTF-8") is not null && !string.IsNullOrEmpty(encoding))
+            ? encoding.ToUpperInvariant()
             : "UTF-8";
 
         config = new LoadFileConfig
         {
             Formats = formats,
             Encoding = encodingName,
-            IsEncodingExplicit = parsed.IsEncodingExplicit,
-            Distribution = RequestBuilder.GetDistributionFromName(parsed.Distribution ?? "proportional") ?? DistributionType.Proportional,
+            IsEncodingExplicit = isEncodingExplicit,
+            Distribution = RequestBuilder.GetDistributionFromName(distribution ?? "proportional") ?? DistributionType.Proportional,
             AttachmentRate = attachmentRate,
         };
         return true;

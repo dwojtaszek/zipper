@@ -12,25 +12,36 @@ internal static class RequestBuilderTestHelper
     }
 
     public static FileGenerationRequest? Build(
-        ParsedArguments parsed,
+        ParsedArguments? parsed,
         Action<CliModuleSet>? configureModules = null,
         CliModuleSet? modules = null)
+        => Build(modules, configureModules);
+
+    public static FileGenerationRequest? Build(
+        CliModuleSet? modules = null,
+        Action<CliModuleSet>? configureModules = null)
     {
         modules ??= CliModules.Create();
         configureModules?.Invoke(modules);
-        if (!modules.Bates.TryBuild(parsed, out var bates) ||
-            !modules.Metadata.TryBuild(parsed, out var metadata) ||
-            !modules.LoadFile.TryBuild(parsed, modules.Metadata.AttachmentRate, out var loadFile) ||
-            !modules.Delimiter.TryBuild(parsed, modules.LoadFile.LoadfileOnly, out var delimiters) ||
-            !modules.Tiff.TryBuild(parsed, out var tiff) ||
-            !modules.Chaos.TryBuild(parsed, modules.LoadFile.LoadfileOnly, modules.LoadFile.CurrentFormat, out var chaos) ||
-            !modules.Hash.TryBuild(parsed, modules.LoadFile.LoadfileOnly, out var hash))
+        if (!modules.Production.TryBuild(out var production) ||
+            !modules.Bates.TryBuild(production.ProductionSet, production.RollingCount, production.RollingBatesMode.ToString(), modules.Output.Count, out var bates) ||
+            !modules.SourceInput.TryBuild(modules.Output.Count, production.ProductionSet, bates, out var sourceRecords) ||
+            !modules.Output.TryBuild(sourceRecords, out var output) ||
+            !modules.Metadata.TryBuild(output.HasFileType("eml"), modules.SourceInput.HasSourceInput, out var metadata) ||
+            !modules.LoadFile.TryBuild(modules.Metadata.AttachmentRate, modules.Output.Encoding, modules.Output.IsEncodingExplicit, modules.Output.Distribution, modules.Output.TargetZipSize, modules.Output.IncludeLoadFile, out var loadFile) ||
+            !modules.Delimiter.TryBuild(modules.LoadFile.LoadfileOnly, production.ProductionSet, out var delimiters) ||
+            !modules.Tiff.TryBuild(out var tiff) ||
+            !modules.Chaos.TryBuild(modules.LoadFile.LoadfileOnly, modules.LoadFile.CurrentFormat, out var chaos) ||
+            !modules.Hash.TryBuild(modules.LoadFile.LoadfileOnly, out var hash))
         {
             return null;
         }
 
         return RequestBuilder.Build(
-            parsed, delimiters, tiff, chaos, hash, bates, metadata, loadFile,
+            output, metadata, loadFile, delimiters, bates, tiff, chaos, hash, production, sourceRecords,
             modules.LoadFile.LoadfileOnly, modules.LoadFile.IsLoadFileFormatExplicit);
     }
+
+    public static FileGenerationRequest? Build(string[] args)
+        => Cli.Pipeline.Build(args);
 }

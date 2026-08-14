@@ -7,14 +7,9 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class CliValidatorTests
 {
-    private static ParsedArguments CreateValidArgs()
+    private static (ParsedArguments? Parsed, CliModuleSet Modules) CreateValid()
     {
-        return new ParsedArguments
-        {
-            FileType = "pdf",
-            Count = 10,
-            OutputPathStr = Directory.GetCurrentDirectory(),
-        };
+        return RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory() });
     }
 
     private static CliModuleSet CreateModules(Action<CliModuleSet>? configure = null)
@@ -27,7 +22,8 @@ public class CliValidatorTests
     [Fact]
     public void Validate_ValidArgs_ReturnsTrue()
     {
-        Assert.True(CliValidator.Validate(CreateValidArgs(), CreateModules()));
+        var (parsed, modules) = CreateValid();
+        Assert.True(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
@@ -39,226 +35,139 @@ public class CliValidatorTests
     [Fact]
     public void Validate_MissingType_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.FileType = null;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
+        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--count", "10", "--output-path", Directory.GetCurrentDirectory() });
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithoutType_ReturnsTrue()
     {
-        var args = CreateValidArgs();
-        args.FileType = null;
-        var modules = CreateModules(m => m.LoadFile.TryApply("--loadfile-only", null));
-        Assert.True(CliValidator.Validate(args, modules));
+        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only" });
+        Assert.True(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_ProductionSet_WithoutType_ReturnsTrue()
     {
-        var args = CreateValidArgs();
-        args.FileType = null;
-        args.ProductionSet = true;
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "PREFIX"));
-        Assert.True(CliValidator.Validate(args, modules));
+        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--production-set", "--bates-prefix", "PREFIX" });
+        Assert.True(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_MissingCount_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.Count = null;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_CountZero_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Count = 0;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_CountNegative_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Count = -1;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_CountExceedsMax_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Count = int.MaxValue;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_NullOutputPathStr_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.OutputPathStr = null;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_FoldersOutOfRange_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Folders = 0;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-
-        args.Folders = 101;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
+        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--output-path", Directory.GetCurrentDirectory() });
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_AttachmentRateOutOfRange_ReturnsFalse()
     {
         // Attachment-rate bounds moved to MetadataModule.TryBuild in Phase 2.
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.Metadata.TryApply("--attachment-rate", "-1"));
-        Assert.False(modules.Metadata.TryBuild(args, out _));
+        var (_, modules) = CreateValid();
+        modules.Metadata.TryApply("--attachment-rate", "-1");
+        Assert.False(modules.Metadata.TryBuild(false, false, out _));
 
-        modules = CreateModules(m => m.Metadata.TryApply("--attachment-rate", "101"));
-        Assert.False(modules.Metadata.TryBuild(args, out _));
-    }
-
-    [Fact]
-    public void Validate_InvalidEncoding_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Encoding = "INVALID_ENCODING";
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_InvalidDistribution_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.Distribution = "invalid_dist";
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_InvalidTargetZipSize_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.TargetZipSize = "invalid";
-        Assert.False(CliValidator.Validate(args, CreateModules()));
+        modules.Metadata.TryApply("--attachment-rate", "101");
+        Assert.False(modules.Metadata.TryBuild(false, false, out _));
     }
 
     [Fact]
     public void Validate_TargetZipSizeWithoutCount_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.Count = null;
-        args.TargetZipSize = "10MB";
-        Assert.False(CliValidator.Validate(args, CreateModules()));
+        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--target-zip-size", "10MB", "--output-path", Directory.GetCurrentDirectory() });
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_InvalidLoadFileFormat_ReturnsFalse()
     {
         // Format validation moved to LoadFileModule.TryBuild in Phase 2.
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.LoadFile.TryApply("--load-file-format", "invalid"));
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--load-file-format", "invalid");
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnlyWithTargetZipSize_ReturnsFalse()
     {
         // Loadfile-only conflicts moved to LoadFileModule.TryBuild in Phase 2.
-        var args = CreateValidArgs();
-        args.TargetZipSize = "100MB";
-        var modules = CreateModules(m => m.LoadFile.TryApply("--loadfile-only", null));
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, "100MB", false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnlyWithIncludeLoadFile_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.IncludeLoadFile = true;
-        var modules = CreateModules(m => m.LoadFile.TryApply("--loadfile-only", null));
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, true, out _));
     }
 
     [Fact]
     public void Validate_ProductionSet_ConflictsWithLoadfileOnly_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        var modules = CreateModules(m => m.LoadFile.TryApply("--loadfile-only", null));
-        Assert.False(CliValidator.Validate(args, modules));
+        var (parsed, modules) = CreateValid();
+        modules.Production.TryApply("--production-set", null);
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        Assert.False(CliValidator.Validate(parsed!, modules));
+    }
+
+    [Fact]
+    public void Validate_RedactedProduction_ConflictsWithLoadfileOnly_ReturnsFalse()
+    {
+        var (parsed, modules) = CreateValid();
+        modules.Production.TryApply("--production-set", null);
+        modules.Production.TryApply("--redacted-production", null);
+        modules.Bates.TryApply("--bates-prefix", "PREFIX");
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_ProductionSet_WithoutBatesPrefix_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_ProductionZip_WithoutProductionSet_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.ProductionZip = true;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_VolumeSize_WithoutProductionSet_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.VolumeSize = 100;
-        Assert.False(CliValidator.Validate(args, CreateModules()));
+        var (parsed, modules) = CreateValid();
+        modules.Production.TryApply("--production-set", null);
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 
     [Fact]
     public void Validate_BatesPrefix_WithPathSeparator_ReturnsFalse()
     {
         // Bates prefix char validation moved to BatesModule.TryBuild (dry-run) in Phase 2.
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "foo/bar"));
-        Assert.False(modules.Bates.TryBuild(args, out _));
+        var (_, modules) = CreateValid();
+        modules.Bates.TryApply("--bates-prefix", "foo/bar");
+        Assert.False(modules.Bates.TryBuild(false, 1, "continuous", null, out _));
 
-        modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "foo\\bar"));
-        Assert.False(modules.Bates.TryBuild(args, out _));
+        modules.Bates.TryApply("--bates-prefix", "foo\\bar");
+        Assert.False(modules.Bates.TryBuild(false, 1, "continuous", null, out _));
     }
 
     [Fact]
     public void Validate_BatesPrefix_WithDotDot_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", ".."));
-        Assert.False(modules.Bates.TryBuild(args, out _));
+        var (_, modules) = CreateValid();
+        modules.Bates.TryApply("--bates-prefix", "..");
+        Assert.False(modules.Bates.TryBuild(false, 1, "continuous", null, out _));
     }
 
     [Fact]
     public void Validate_BatesPrefix_WithSpecialChars_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "hello!@#"));
-        Assert.False(modules.Bates.TryBuild(args, out _));
+        var (_, modules) = CreateValid();
+        modules.Bates.TryApply("--bates-prefix", "hello!@#");
+        Assert.False(modules.Bates.TryBuild(false, 1, "continuous", null, out _));
     }
 
     [Fact]
     public void Validate_WithFamiliesWithoutEml_EmitsWarning()
     {
         // REQ-122: Warn when --with-families is specified without --type eml (moved to MetadataModule.TryBuild in Phase 2).
-        var args = CreateValidArgs();
-        args.FileType = "pdf";
-        var modules = CreateModules(m =>
-        {
-            m.Metadata.TryApply("--with-families", null);
-            m.Metadata.TryApply("--attachment-rate", "50");
-        });
+        var (_, modules) = CreateValid();
+        modules.Metadata.TryApply("--with-families", null);
+        modules.Metadata.TryApply("--attachment-rate", "50");
 
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
@@ -266,7 +175,7 @@ public class CliValidatorTests
             Console.SetError(errWriter);
             try
             {
-                Assert.True(modules.Metadata.TryBuild(args, out _));
+                Assert.True(modules.Metadata.TryBuild(false, false, out _));
                 var output = errWriter.ToString();
                 Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
@@ -281,13 +190,9 @@ public class CliValidatorTests
     public void Validate_WithFamiliesWithEmlAndAttachmentRateZero_EmitsWarning()
     {
         // REQ-122: Warn when --with-families is specified with --attachment-rate 0
-        var args = CreateValidArgs();
-        args.FileType = "eml";
-        var modules = CreateModules(m =>
-        {
-            m.Metadata.TryApply("--with-families", null);
-            m.Metadata.TryApply("--attachment-rate", "0");
-        });
+        var (_, modules) = CreateValid();
+        modules.Metadata.TryApply("--with-families", null);
+        modules.Metadata.TryApply("--attachment-rate", "0");
 
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
@@ -295,7 +200,7 @@ public class CliValidatorTests
             Console.SetError(errWriter);
             try
             {
-                Assert.True(modules.Metadata.TryBuild(args, out _));
+                Assert.True(modules.Metadata.TryBuild(true, false, out _));
                 var output = errWriter.ToString();
                 Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
@@ -310,13 +215,9 @@ public class CliValidatorTests
     public void Validate_WithFamiliesWithEmlAndAttachmentRatePositive_DoesNotEmitWarning()
     {
         // REQ-122: Do not warn when --with-families is used correctly with --type eml and positive attachment rate
-        var args = CreateValidArgs();
-        args.FileType = "eml";
-        var modules = CreateModules(m =>
-        {
-            m.Metadata.TryApply("--with-families", null);
-            m.Metadata.TryApply("--attachment-rate", "50");
-        });
+        var (_, modules) = CreateValid();
+        modules.Metadata.TryApply("--with-families", null);
+        modules.Metadata.TryApply("--attachment-rate", "50");
 
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
@@ -324,7 +225,7 @@ public class CliValidatorTests
             Console.SetError(errWriter);
             try
             {
-                Assert.True(modules.Metadata.TryBuild(args, out _));
+                Assert.True(modules.Metadata.TryBuild(true, false, out _));
                 var output = errWriter.ToString();
                 Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
@@ -339,8 +240,8 @@ public class CliValidatorTests
     public void Validate_WithFamiliesAndLoadfileOnly_EmitsWarning()
     {
         // Warn when --with-families is specified with --loadfile-only mode but not type eml/attachment rate > 0
-        var args = CreateValidArgs();
-        var modules = CreateModules(m => m.Metadata.TryApply("--with-families", null));
+        var (_, modules) = CreateValid();
+        modules.Metadata.TryApply("--with-families", null);
 
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
@@ -348,7 +249,7 @@ public class CliValidatorTests
             Console.SetError(errWriter);
             try
             {
-                Assert.True(modules.Metadata.TryBuild(args, out _));
+                Assert.True(modules.Metadata.TryBuild(false, false, out _));
                 var output = errWriter.ToString();
                 Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", output, StringComparison.Ordinal);
             }
@@ -367,153 +268,64 @@ public class CliValidatorTests
     [Fact]
     public void Validate_LoadfileOnly_WithCsvFormat_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-format", "csv");
-        });
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-format", "csv");
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithEdrmXmlFormat_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-format", "edrm-xml");
-        });
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-format", "edrm-xml");
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithCsvFormatsPlural_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-formats", "csv");
-        });
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-formats", "csv");
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithCsvAndXmlFormatsPlural_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-formats", "csv,xml");
-        });
-        Assert.False(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-formats", "csv,xml");
+        Assert.False(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithDatFormatsPlural_ReturnsTrue()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-formats", "dat,opt");
-        });
-        Assert.True(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-formats", "dat,opt");
+        Assert.True(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithDatFormat_ReturnsTrue()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-format", "dat");
-        });
-        Assert.True(modules.LoadFile.TryBuild(args, 0, out _));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-format", "dat");
+        Assert.True(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     [Fact]
     public void Validate_LoadfileOnly_WithOptFormat_ReturnsTrue()
     {
-        var args = CreateValidArgs();
-        var modules = CreateModules(m =>
-        {
-            m.LoadFile.TryApply("--loadfile-only", null);
-            m.LoadFile.TryApply("--load-file-format", "opt");
-        });
-        Assert.True(modules.LoadFile.TryBuild(args, 0, out _));
-    }
-
-    // --- Supplemental CLI contracts (REQ-173, REQ-174, REQ-175) ---
-
-    [Fact]
-    public void Validate_SupplementalProduction_WithoutProductionSet_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.SupplementalProduction = true;
-        args.PriorManifests = "/tmp/prior_manifest.json";
-        Assert.False(CliValidator.Validate(args, CreateModules()));
-    }
-
-    [Fact]
-    public void Validate_SupplementalProduction_WithoutPriorManifest_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        args.SupplementalProduction = true;
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "SUPP"));
-        Assert.False(CliValidator.Validate(args, modules));
-    }
-
-    [Fact]
-    public void Validate_PriorManifest_WithoutSupplementalProduction_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        args.PriorManifests = "/tmp/prior_manifest.json";
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "SUPP"));
-        Assert.False(CliValidator.Validate(args, modules));
-    }
-
-    [Fact]
-    public void Validate_SupplementalGapPolicy_WithoutSupplementalProduction_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        args.SupplementalGapPolicy = "reject";
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "SUPP"));
-        Assert.False(CliValidator.Validate(args, modules));
-    }
-
-    [Theory]
-    [InlineData("allow")]
-    [InlineData("reject")]
-    [InlineData("ALLOW")]
-    public void Validate_SupplementalGapPolicy_ValidValue_ReturnsTrue(string policy)
-    {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        args.SupplementalProduction = true;
-        args.PriorManifests = "/tmp/prior_manifest.json";
-        args.SupplementalGapPolicy = policy;
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "SUPP"));
-        Assert.True(CliValidator.Validate(args, modules));
-    }
-
-    [Fact]
-    public void Validate_SupplementalGapPolicy_InvalidValue_ReturnsFalse()
-    {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        args.SupplementalProduction = true;
-        args.PriorManifests = "/tmp/prior_manifest.json";
-        args.SupplementalGapPolicy = "skip";
-        var modules = CreateModules(m => m.Bates.TryApply("--bates-prefix", "SUPP"));
-        Assert.False(CliValidator.Validate(args, modules));
+        var (_, modules) = CreateValid();
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        modules.LoadFile.TryApply("--load-file-format", "opt");
+        Assert.True(modules.LoadFile.TryBuild(0, null, false, null, null, false, out _));
     }
 
     // --- Production Manifest Comparison CLI contracts (REQ-176, REQ-177, REQ-178) ---
@@ -521,34 +333,36 @@ public class CliValidatorTests
     [Fact]
     public void Validate_ComparisonMode_WithoutCompareManifests_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.ComparisonMode = "replacement";
+        var args = new ParsedArguments { ComparisonMode = "replacement" };
         Assert.False(CliValidator.Validate(args, CreateModules()));
     }
 
     [Fact]
     public void Validate_ComparisonOutput_WithoutCompareManifests_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.ComparisonOutput = "/tmp/report.json";
+        var args = new ParsedArguments { ComparisonOutput = "/tmp/report.json" };
         Assert.False(CliValidator.Validate(args, CreateModules()));
     }
 
     [Fact]
     public void Validate_CompareManifests_WithoutComparisonMode_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
-        args.ComparisonOutput = "/tmp/report.json";
+        var args = new ParsedArguments
+        {
+            CompareProductionManifests = "/tmp/a.json,/tmp/b.json",
+            ComparisonOutput = "/tmp/report.json",
+        };
         Assert.False(CliValidator.Validate(args, CreateModules()));
     }
 
     [Fact]
     public void Validate_CompareManifests_WithoutComparisonOutput_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
-        args.ComparisonMode = "replacement";
+        var args = new ParsedArguments
+        {
+            CompareProductionManifests = "/tmp/a.json,/tmp/b.json",
+            ComparisonMode = "replacement",
+        };
         Assert.False(CliValidator.Validate(args, CreateModules()));
     }
 
@@ -559,20 +373,24 @@ public class CliValidatorTests
     [InlineData("REPRODUCTION")]
     public void Validate_CompareManifests_ValidMode_ReturnsTrue(string mode)
     {
-        var args = CreateValidArgs();
-        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
-        args.ComparisonMode = mode;
-        args.ComparisonOutput = "/tmp/report.json";
+        var args = new ParsedArguments
+        {
+            CompareProductionManifests = "/tmp/a.json,/tmp/b.json",
+            ComparisonMode = mode,
+            ComparisonOutput = "/tmp/report.json",
+        };
         Assert.True(CliValidator.Validate(args, CreateModules()));
     }
 
     [Fact]
     public void Validate_CompareManifests_InvalidMode_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.CompareProductionManifests = "/tmp/a.json,/tmp/b.json";
-        args.ComparisonMode = "swap";
-        args.ComparisonOutput = "/tmp/report.json";
+        var args = new ParsedArguments
+        {
+            CompareProductionManifests = "/tmp/a.json,/tmp/b.json",
+            ComparisonMode = "swap",
+            ComparisonOutput = "/tmp/report.json",
+        };
         Assert.False(CliValidator.Validate(args, CreateModules()));
     }
 
@@ -590,11 +408,29 @@ public class CliValidatorTests
     }
 
     [Fact]
+    public void Validate_Types_WithLoadfileOnly_ReturnsFalse()
+    {
+        var (parsed, modules) = CreateValid();
+        modules.Output.TryApply("--types", "pdf:70,xls:30");
+        modules.LoadFile.TryApply("--loadfile-only", null);
+        Assert.False(CliValidator.Validate(parsed!, modules));
+    }
+
+    [Fact]
+    public void Validate_Types_WithColumnProfile_ReturnsFalse()
+    {
+        var (parsed, modules) = CreateValid();
+        modules.Output.TryApply("--types", "pdf:70,xls:30");
+        modules.Metadata.TryApply("--column-profile", "standard");
+        Assert.False(CliValidator.Validate(parsed!, modules));
+    }
+
+    [Fact]
     public void Validate_ColumnProfile_WithProductionSet_ReturnsFalse()
     {
-        var args = CreateValidArgs();
-        args.ProductionSet = true;
-        var modules = CreateModules(m => m.Metadata.TryApply("--column-profile", "edrm-standard"));
-        Assert.False(CliValidator.Validate(args, modules));
+        var (parsed, modules) = CreateValid();
+        modules.Production.TryApply("--production-set", null);
+        modules.Metadata.TryApply("--column-profile", "edrm-standard");
+        Assert.False(CliValidator.Validate(parsed!, modules));
     }
 }

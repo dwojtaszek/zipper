@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 
@@ -8,7 +7,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ParsedArguments parsed, ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, LoadFileFormat currentFormat = LoadFileFormat.Dat)
+    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, LoadFileFormat currentFormat = LoadFileFormat.Dat)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -27,7 +26,7 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(parsed, loadfileOnly, currentFormat, out config);
+        return module.TryBuild(loadfileOnly, currentFormat, out config);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -38,9 +37,8 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ChaosMode_SetsChaosProperties()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: "quotes,columns", Scenario: null) { Mode = true };
-        Assert.True(TryBuildWithValues(parsed, spec, out var config));
+        Assert.True(TryBuildWithValues(spec, out var config));
 
         Assert.True(config.ChaosMode);
         Assert.Equal("5%", config.ChaosAmount);
@@ -50,52 +48,46 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec, out _, loadfileOnly: false));
+        Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: false));
     }
 
     [Fact]
     public void TryBuild_ChaosAmountWithoutChaosMode_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: null, Scenario: null);
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(spec, out _));
     }
 
     [Fact]
     public void TryBuild_ChaosTypesWithoutChaosMode_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: "quotes", Scenario: null);
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(spec, out _));
     }
 
     [Fact]
     public void TryBuild_ChaosScenarioWithoutChaosMode_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "basic");
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(spec, out _));
     }
 
     [Fact]
     public void TryBuild_ChaosScenarioWithTypes_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: "quotes", Scenario: "basic") { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(spec, out _));
     }
 
     [Fact]
     public void TryBuild_InvalidChaosAmount_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "abc", Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec, out _));
+        Assert.False(TryBuildWithValues(spec, out _));
 
         var spec2 = new ChaosConfigSpec(Amount: "10.5x%", Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec2, out _));
+        Assert.False(TryBuildWithValues(spec2, out _));
     }
 
     [Fact]
@@ -124,9 +116,8 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ValidScenario_BuildsConfig()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "structured-import-failures") { Mode = true };
-        Assert.True(TryBuildWithValues(parsed, spec, out var config));
+        Assert.True(TryBuildWithValues(spec, out var config));
 
         Assert.Equal("structured-import-failures", config.ChaosScenario);
     }
@@ -135,9 +126,8 @@ public class ChaosModuleTests
     public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
     {
         // currentFormat is the single-format value; a non-DAT/OPT format rejects --chaos-mode.
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(parsed, spec, out _, currentFormat: LoadFileFormat.Csv));
+        Assert.False(TryBuildWithValues(spec, out _, currentFormat: LoadFileFormat.Csv));
     }
 
     [Fact]
@@ -149,25 +139,17 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-types", "quotes,columns"));
         Assert.True(module.TryApply("--chaos-scenario", "test"));
 
-        var parsed = new ParsedArguments();
-        Assert.False(module.TryBuild(parsed, true, LoadFileFormat.Dat, out _));
+        Assert.False(module.TryBuild(true, LoadFileFormat.Dat, out _));
     }
 
     [Fact]
     public void TryApply_ChaosArgs_RoundTripsThroughConfig()
     {
-        var parsed = new ParsedArguments();
         var spec = new ChaosConfigSpec(Amount: "5%", Types: "quotes,columns", Scenario: null) { Mode = true };
-        Assert.True(TryBuildWithValues(parsed, spec, out var config));
+        Assert.True(TryBuildWithValues(spec, out var config));
 
         Assert.Equal("5%", config.ChaosAmount);
         Assert.Equal("quotes,columns", config.ChaosTypes);
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new ChaosModule().TryBuild(null!, false, LoadFileFormat.Dat, out _));
     }
 
     [Fact]

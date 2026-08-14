@@ -93,16 +93,13 @@ public sealed class BatesModule : CliModule
     public IReadOnlyList<string>? BatesPrefixes => _prefixes;
     public IReadOnlyList<long>? BatesStarts => _starts;
 
-    public bool TryBuild(ParsedArguments parsed, out BatesNumberConfig? config)
+    public bool TryBuild(bool productionSet, int rollingCount, string? rollingBatesMode, long? count, out BatesNumberConfig? config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
-
-        // Transitional: rolling-count / rolling-bates-mode / count come from the still-present
-        // bag (Production domain, Phase 3). Order mirrors today's pipeline: ProductionSetValidator
-        // ran its bates range/overlap checks before CrossCuttingValidator.ValidateBates.
-        if (parsed.ProductionSet)
+        // rolling-count / rolling-bates-mode / count were bag fields pre-Phase-3; ProductionModule
+        // and OutputModule now own them, so they are passed in as parameters.
+        if (productionSet)
         {
-            if (!ValidateRollingBates(parsed))
+            if (!ValidateRollingBates(rollingCount, rollingBatesMode, count))
             {
                 config = null;
                 return false;
@@ -135,11 +132,11 @@ public sealed class BatesModule : CliModule
         return true;
     }
 
-    private bool ValidateRollingBates(ParsedArguments parsed)
+    private bool ValidateRollingBates(int rollingCount, string? rollingBatesMode, long? count)
     {
         if (_prefixes is not null)
         {
-            if (_prefixes.Count > 1 && _prefixes.Count != parsed.RollingCount)
+            if (_prefixes.Count > 1 && _prefixes.Count != rollingCount)
             {
                 Console.Error.WriteLine("Error: Number of bates prefixes must match rolling count.");
                 return false;
@@ -151,7 +148,7 @@ public sealed class BatesModule : CliModule
             }
         }
 
-        if (_starts is not null && _starts.Count > 1 && _starts.Count != parsed.RollingCount)
+        if (_starts is not null && _starts.Count > 1 && _starts.Count != rollingCount)
         {
             Console.Error.WriteLine("Error: Number of bates starts must match rolling count.");
             return false;
@@ -159,16 +156,16 @@ public sealed class BatesModule : CliModule
 
         var ranges = new List<(string Prefix, long Start, long End)>();
         long currentStart = _start ?? 1;
-        long fileCount = parsed.Count ?? 0;
+        long fileCount = count ?? 0;
 
-        for (int i = 0; i < parsed.RollingCount; i++)
+        for (int i = 0; i < rollingCount; i++)
         {
             string prefix = _prefixes is not null && _prefixes.Count > i
                 ? _prefixes[i]
                 : _prefix ?? string.Empty;
 
             long start;
-            var mode = parsed.RollingBatesMode?.ToLowerInvariant() ?? "continuous";
+            var mode = rollingBatesMode?.ToLowerInvariant() ?? "continuous";
             if (mode == "restart")
             {
                 start = _starts is not null && _starts.Count > i
@@ -192,7 +189,7 @@ public sealed class BatesModule : CliModule
             ranges.Add((prefix, start, end));
         }
 
-        var modeStr = parsed.RollingBatesMode?.ToLowerInvariant() ?? "continuous";
+        var modeStr = rollingBatesMode?.ToLowerInvariant() ?? "continuous";
         if (modeStr == "continuous")
         {
             for (int i = 0; i < ranges.Count; i++)

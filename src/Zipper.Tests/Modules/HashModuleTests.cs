@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 
 namespace Zipper.Tests;
@@ -29,21 +28,21 @@ public class HashModuleTests
     public void TryBuild_ValidHashMode_ReturnsTrue(string hashMode)
     {
         var module = CreateModule(mode: hashMode);
-        Assert.True(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.True(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_InvalidHashMode_ReturnsFalse()
     {
         var module = CreateModule(mode: "invalid");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_EmptyHashMode_ReturnsFalse()
     {
         var module = CreateModule(mode: "");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Theory]
@@ -53,53 +52,49 @@ public class HashModuleTests
     public void TryBuild_ValidHashAlgorithms_ReturnsTrue(string algorithms)
     {
         var module = CreateModule(mode: "actual", algorithms: algorithms);
-        Assert.True(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.True(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_InvalidHashAlgorithm_ReturnsFalse()
     {
         var module = CreateModule(mode: "actual", algorithms: "md5,sha512");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_EmptyHashAlgorithms_ReturnsFalse()
     {
         var module = CreateModule(mode: "actual", algorithms: "");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_MalformedHashAlgorithms_ReturnsFalse()
     {
         var module = CreateModule(mode: "actual", algorithms: "md5,,sha256");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse()
     {
         var module = CreateModule(algorithms: "md5");
-        Assert.False(module.TryBuild(new ParsedArguments(), false, out _));
+        Assert.False(module.TryBuild(false, out _));
     }
 
     [Fact]
     public void TryBuild_ActualWithLoadfileOnly_ReturnsFalse()
     {
-        var parsed = new ParsedArguments
-        {
-            FileType = null,
-        };
         var module = CreateModule(mode: "actual");
-        Assert.False(module.TryBuild(parsed, true, out _));
+        Assert.False(module.TryBuild(true, out _));
     }
 
     [Fact]
     public void TryBuild_ActualModeWithAlgorithms_SetsHashConfig()
     {
         var module = CreateModule(mode: "actual", algorithms: "md5,sha256");
-        Assert.True(module.TryBuild(new ParsedArguments(), false, out var hash));
+        Assert.True(module.TryBuild(false, out var hash));
 
         Assert.Equal(Config.HashMode.Actual, hash.Mode);
         Assert.Contains(Config.HashAlgorithm.MD5, hash.Algorithms);
@@ -112,7 +107,7 @@ public class HashModuleTests
     public void TryBuild_SimulatedMode_SetsSimulatedMode()
     {
         var module = CreateModule(mode: "simulated", algorithms: "sha1");
-        Assert.True(module.TryBuild(new ParsedArguments(), false, out var hash));
+        Assert.True(module.TryBuild(false, out var hash));
 
         Assert.Equal(Config.HashMode.Simulated, hash.Mode);
         Assert.Contains(Config.HashAlgorithm.SHA1, hash.Algorithms);
@@ -123,7 +118,7 @@ public class HashModuleTests
     public void TryBuild_Default_NoneModeEmptyAlgorithms()
     {
         var module = CreateModule();
-        Assert.True(module.TryBuild(new ParsedArguments(), false, out var hash));
+        Assert.True(module.TryBuild(false, out var hash));
 
         Assert.Equal(Config.HashMode.None, hash.Mode);
         Assert.Empty(hash.Algorithms);
@@ -163,12 +158,6 @@ public class HashModuleTests
         var config = HashModule.Parse(null, null);
         Assert.Equal(Config.HashMode.None, config.Mode);
         Assert.Empty(config.Algorithms);
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new HashModule().TryBuild(null!, false, out _));
     }
 
     [Fact]

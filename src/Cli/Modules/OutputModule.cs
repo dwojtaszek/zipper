@@ -195,7 +195,7 @@ public sealed class OutputModule : CliModule
             }
         }
 
-        if (_fileType is not null && _fileTypes is not null)
+        if (!string.IsNullOrEmpty(_fileType) && _fileTypes is not null)
         {
             Console.Error.WriteLine("Error: --type and --types cannot be used together. Use --types for a File Type mix.");
             config = default!;
@@ -213,14 +213,14 @@ public sealed class OutputModule : CliModule
             }
         }
 
-        if (_encoding is not null && RequestBuilder.GetEncodingFromName(_encoding) is null)
+        if (!string.IsNullOrEmpty(_encoding) && RequestBuilder.GetEncodingFromName(_encoding) is null)
         {
             Console.Error.WriteLine($"Error: Invalid encoding '{_encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
             config = default!;
             return false;
         }
 
-        if (_distribution is not null && RequestBuilder.GetDistributionFromName(_distribution) is null)
+        if (!string.IsNullOrEmpty(_distribution) && RequestBuilder.GetDistributionFromName(_distribution) is null)
         {
             Console.Error.WriteLine($"Error: Invalid distribution '{_distribution}'. Supported values are proportional, gaussian, exponential.");
             config = default!;

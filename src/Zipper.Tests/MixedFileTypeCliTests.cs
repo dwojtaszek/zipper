@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 
 namespace Zipper.Tests;
 
@@ -25,10 +24,10 @@ public class MixedFileTypeCliTests : IDisposable
     [Fact]
     public void Parse_TypesArgument_StoresRawValue()
     {
-        var parsed = CliParser.Parse(new[] { "--types", "pdf:50,eml:50", "--count", "10", "--output-path", this.tempDir });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--types", "pdf:50,eml:50", "--count", "10", "--output-path", this.tempDir });
 
-        Assert.NotNull(parsed);
-        Assert.Equal("pdf:50,eml:50", parsed!.FileTypes);
+        Assert.NotNull(result);
+        Assert.Equal("pdf:50,eml:50", modules.Output.FileTypes);
     }
 
     [Fact]

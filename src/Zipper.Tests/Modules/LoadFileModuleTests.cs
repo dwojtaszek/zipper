@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 
@@ -8,7 +7,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class LoadFileModuleTests
 {
-    private static bool TryBuild(ParsedArguments parsed, int attachmentRate, string[] apply, out LoadFileConfig config)
+    private static bool TryBuild(int attachmentRate, string? encoding, bool isEncodingExplicit, string? distribution, string? targetZipSize, bool includeLoadFile, string[] apply, out LoadFileConfig config)
     {
         var module = new LoadFileModule();
         for (int i = 0; i < apply.Length;)
@@ -24,14 +23,13 @@ public class LoadFileModuleTests
                 i += 1;
             }
         }
-        return module.TryBuild(parsed, attachmentRate, out config);
+        return module.TryBuild(attachmentRate, encoding, isEncodingExplicit, distribution, targetZipSize, includeLoadFile, out config);
     }
 
     [Fact]
     public void TryBuild_NoFormatArgs_SingleDatFormat()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, Array.Empty<string>(), out var config));
+        Assert.True(TryBuild(0, null, false, null, null, false, Array.Empty<string>(), out var config));
 
         Assert.Single(config.Formats);
         Assert.Equal(LoadFileFormat.Dat, config.Formats[0]);
@@ -42,101 +40,88 @@ public class LoadFileModuleTests
     [Fact]
     public void TryBuild_DefaultDistribution_Proportional()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, Array.Empty<string>(), out var config));
+        Assert.True(TryBuild(0, null, false, null, null, false, Array.Empty<string>(), out var config));
         Assert.Equal(DistributionType.Proportional, config.Distribution);
     }
 
     [Fact]
     public void TryBuild_AttachmentRate_SetsConfig()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 42, Array.Empty<string>(), out var config));
+        Assert.True(TryBuild(42, null, false, null, null, false, Array.Empty<string>(), out var config));
         Assert.Equal(42, config.AttachmentRate);
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithTargetZipSize_ReturnsFalse()
     {
-        var parsed = new ParsedArguments { TargetZipSize = "100MB" };
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only" }, out _));
+        Assert.False(TryBuild(0, null, false, null, "100MB", false, new[] { "--loadfile-only" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithIncludeLoadFile_ReturnsFalse()
     {
-        var parsed = new ParsedArguments { IncludeLoadFile = true };
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, true, new[] { "--loadfile-only" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithCsvFormat_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-format", "csv" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "csv" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithEdrmXmlFormat_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-format", "edrm-xml" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "edrm-xml" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithCsvFormatsPlural_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-formats", "csv" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithCsvAndXmlFormatsPlural_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-formats", "csv,xml" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv,xml" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithDatFormatsPlural_ReturnsTrue()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-formats", "dat,opt" }, out var config));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "dat,opt" }, out var config));
         Assert.Equal(2, config.Formats.Count);
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithDatFormat_ReturnsTrue()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-format", "dat" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "dat" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithOptFormat_ReturnsTrue()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-format", "opt" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "opt" }, out _));
     }
 
     [Fact]
     public void TryBuild_LoadfileOnly_WithLegacyCsvFormat_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--loadfile-format", "csv" }, out _));
+        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--loadfile-format", "csv" }, out _));
     }
 
     [Fact]
     public void TryBuild_UnknownFormat_ReturnsInvalidFormatNotDatOptRestriction()
     {
-        var parsed = new ParsedArguments();
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.False(TryBuild(parsed, 0, new[] { "--loadfile-only", "--load-file-format", "invalid" }, out _));
+                Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "invalid" }, out _));
                 var output = errWriter.ToString();
                 Assert.Contains("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.", output, StringComparison.Ordinal);
                 Assert.DoesNotContain("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.", output, StringComparison.Ordinal);
@@ -151,14 +136,13 @@ public class LoadFileModuleTests
     [Fact]
     public void TryBuild_InvalidLoadFileFormatsPlural_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.False(TryBuild(parsed, 0, new[] { "--load-file-formats", "dat,bogus" }, out _));
+                Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--load-file-formats", "dat,bogus" }, out _));
                 Assert.Contains("Error: Invalid load file format 'bogus'. Supported: dat, opt, csv, edrm-xml, xml, concordance.", errWriter.ToString(), StringComparison.Ordinal);
             }
             finally
@@ -171,8 +155,7 @@ public class LoadFileModuleTests
     [Fact]
     public void TryBuild_MultiFormat_CreatesFormatList()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, 0, new[] { "--load-file-formats", "dat,opt,csv" }, out var config));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--load-file-formats", "dat,opt,csv" }, out var config));
 
         Assert.Equal(3, config.Formats.Count);
         Assert.Contains(LoadFileFormat.Dat, config.Formats);
@@ -183,16 +166,14 @@ public class LoadFileModuleTests
     [Fact]
     public void TryBuild_LoadfileOnlyEncoding_UsesExtendedSet()
     {
-        var parsed = new ParsedArguments { Encoding = "WINDOWS-1252" };
-        Assert.True(TryBuild(parsed, 0, new[] { "--loadfile-only" }, out var config));
+        Assert.True(TryBuild(0, "WINDOWS-1252", false, null, null, false, new[] { "--loadfile-only" }, out var config));
         Assert.Equal("WINDOWS-1252", config.Encoding);
     }
 
     [Fact]
     public void TryBuild_Encoding_PreservesNormalizedInputName()
     {
-        var parsed = new ParsedArguments { Encoding = "UTF-16" };
-        Assert.True(TryBuild(parsed, 0, Array.Empty<string>(), out var config));
+        Assert.True(TryBuild(0, "UTF-16", false, null, null, false, Array.Empty<string>(), out var config));
         Assert.Equal("UTF-16", config.Encoding);
     }
 
@@ -245,11 +226,5 @@ public class LoadFileModuleTests
     public void TryApply_UnknownFlag_ReturnsFalse()
     {
         Assert.False(new LoadFileModule().TryApply("--unknown-flag", "x"));
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new LoadFileModule().TryBuild(null!, 0, out _));
     }
 }

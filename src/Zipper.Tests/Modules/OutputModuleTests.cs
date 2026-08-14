@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 using Zipper.SourceInput;
@@ -267,6 +266,18 @@ public class OutputModuleTests
     }
 
     [Fact]
+    public void TryBuild_EmptyEncoding_PassesThroughWithoutError()
+    {
+        var module = new OutputModule();
+        Assert.True(module.TryApply("--encoding", ""));
+        Assert.True(module.TryApply("--type", "pdf"));
+        Assert.True(module.TryApply("--count", "10"));
+        Assert.True(module.TryApply("--output-path", Directory.GetCurrentDirectory()));
+        Assert.True(module.TryBuild(null, out _));
+        Assert.Equal("", module.Encoding);
+    }
+
+    [Fact]
     public void TryBuild_InvalidDistribution_ReturnsFalse()
     {
         var error = CaptureError(() =>
@@ -313,20 +324,20 @@ public class OutputModuleTests
 
         Assert.True(TryBuild(apply, out var config));
 
-        var parsed = new ParsedArguments
+        var parsed = RequestBuilderTestHelper.Parse(new[]
         {
-            FileType = "PDF",
-            Count = 100,
-            OutputPathStr = cwd,
-            Folders = 3,
-            WithText = true,
-            IncludeLoadFile = true,
-            TargetZipSize = "500MB",
-            Distribution = "gaussian",
-            Encoding = "UTF-16",
-            IsEncodingExplicit = true,
-        };
-        var request = RequestBuilderTestHelper.Build(parsed);
+            "--type", "PDF",
+            "--count", "100",
+            "--output-path", cwd,
+            "--folders", "3",
+            "--with-text",
+            "--include-load-file",
+            "--target-zip-size", "500MB",
+            "--distribution", "gaussian",
+            "--encoding", "UTF-16",
+        });
+        Assert.NotNull(parsed.Parsed);
+        var request = RequestBuilderTestHelper.Build(modules: parsed.Modules);
         Assert.NotNull(request);
 
         Assert.Equal(request!.Output.OutputPath, config.OutputPath);

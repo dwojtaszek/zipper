@@ -22,10 +22,8 @@ public sealed class HashModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, bool loadfileOnly, out HashConfig config)
+    public bool TryBuild(bool loadfileOnly, out HashConfig config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
-
         if (_mode is not null)
         {
             var mode = _mode.ToLowerInvariant();

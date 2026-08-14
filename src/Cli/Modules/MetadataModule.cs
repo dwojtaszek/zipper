@@ -75,13 +75,10 @@ public sealed class MetadataModule : CliModule
     public int? EmptyPercentage => _emptyPercentage;
     public int? CustodianCount => _custodianCount;
 
-    public bool TryBuild(ParsedArguments parsed, out MetadataConfig config)
+    public bool TryBuild(bool includesEml, bool hasSourceInput, out MetadataConfig config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
-
-        // Transitional: FileType/FileTypes/InputCsv/DirectoryTemplate come from the still-present
-        // bag (Output/Source domain, Phase 3). Order mirrors today's pipeline: StandardModeValidator
-        // bounds, then its with-families warning, then ValidateColumnProfile, then RequestBuilder load.
+        // includesEml (does eml participate) and hasSourceInput were bag fields pre-Phase-3;
+        // OutputModule and SourceInputModule now own them, so they are passed in as parameters.
         if (_attachmentRate < 0 || _attachmentRate > 100)
         {
             Console.Error.WriteLine("Error: Attachment rate must be between 0 and 100.");
@@ -103,11 +100,9 @@ public sealed class MetadataModule : CliModule
             return false;
         }
 
-        var hasSourceInput = !string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate);
-
         // Source-driven rows are not read yet at validation time, so the eml-participation
         // warning is skipped for source input and applied per record during generation.
-        if (_withFamilies && !hasSourceInput && (!IncludesEml(parsed) || _attachmentRate <= 0))
+        if (_withFamilies && !hasSourceInput && (!includesEml || _attachmentRate <= 0))
         {
             Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.");
         }
@@ -172,17 +167,5 @@ public sealed class MetadataModule : CliModule
             WithCollectionMetadata = _withCollectionMetadata,
         };
         return true;
-    }
-
-    private static bool IncludesEml(ParsedArguments parsed)
-    {
-        if (string.Equals(parsed.FileType, "eml", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return !string.IsNullOrEmpty(parsed.FileTypes)
-            && Config.FileTypeRatioParser.TryParse(parsed.FileTypes, out var ratios, out _)
-            && ratios.Any(r => string.Equals(r.Type, "eml", StringComparison.Ordinal));
     }
 }

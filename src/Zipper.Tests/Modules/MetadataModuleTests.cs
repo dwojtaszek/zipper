@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 
@@ -8,7 +7,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class MetadataModuleTests
 {
-    private static bool TryBuild(ParsedArguments parsed, string[] apply, out MetadataConfig config)
+    private static bool TryBuild(bool includesEml, bool hasSourceInput, string[] apply, out MetadataConfig config)
     {
         var module = new MetadataModule();
         for (int i = 0; i < apply.Length;)
@@ -24,24 +23,13 @@ public class MetadataModuleTests
                 i += 1;
             }
         }
-        return module.TryBuild(parsed, out config);
-    }
-
-    private static ParsedArguments CreateParsedArgs()
-    {
-        return new ParsedArguments
-        {
-            FileType = "pdf",
-            Count = 10,
-            OutputPathStr = Directory.GetCurrentDirectory(),
-        };
+        return module.TryBuild(includesEml, hasSourceInput, out config);
     }
 
     [Fact]
     public void TryBuild_NoMetadataArgs_SetsDefaults()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, Array.Empty<string>(), out var config));
+        Assert.True(TryBuild(false, false, Array.Empty<string>(), out var config));
 
         Assert.False(config.WithMetadata);
         Assert.Null(config.ColumnProfile);
@@ -53,16 +41,14 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_WithMetadataFlag_SetsConfig()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--with-metadata" }, out var config));
+        Assert.True(TryBuild(false, false, new[] { "--with-metadata" }, out var config));
         Assert.True(config.WithMetadata);
     }
 
     [Fact]
     public void TryBuild_ProfileSeedDateFormat_SetsConfig()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" }, out var config));
+        Assert.True(TryBuild(false, false, new[] { "--column-profile", "standard", "--seed", "42", "--date-format", "yyyy-MM-dd", "--empty-percentage", "15", "--custodian-count", "50" }, out var config));
 
         Assert.NotNull(config.ColumnProfile);
         Assert.Equal(42, config.Seed);
@@ -94,38 +80,34 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_AttachmentRateOutOfRange_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--attachment-rate", "-1" }, out _));
-        Assert.False(TryBuild(parsed, new[] { "--attachment-rate", "101" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--attachment-rate", "-1" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--attachment-rate", "101" }, out _));
     }
 
     [Fact]
     public void TryBuild_EmptyPercentageOutOfRange_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--empty-percentage", "-1" }, out _));
-        Assert.False(TryBuild(parsed, new[] { "--empty-percentage", "101" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--empty-percentage", "-1" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--empty-percentage", "101" }, out _));
     }
 
     [Fact]
     public void TryBuild_CustodianCountOutOfRange_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--custodian-count", "0" }, out _));
-        Assert.False(TryBuild(parsed, new[] { "--custodian-count", "1001" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--custodian-count", "0" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--custodian-count", "1001" }, out _));
     }
 
     [Fact]
     public void TryBuild_WithFamiliesWithoutEml_EmitsWarning()
     {
-        var parsed = CreateParsedArgs();
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.True(TryBuild(parsed, new[] { "--with-families", "--attachment-rate", "50" }, out _));
+                Assert.True(TryBuild(false, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
                 Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
             }
             finally
@@ -138,15 +120,13 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_WithFamiliesWithEmlAndAttachmentRateZero_EmitsWarning()
     {
-        var parsed = CreateParsedArgs();
-        parsed.FileType = "eml";
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.True(TryBuild(parsed, new[] { "--with-families", "--attachment-rate", "0" }, out _));
+                Assert.True(TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "0" }, out _));
                 Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
             }
             finally
@@ -159,15 +139,13 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_WithFamiliesWithEmlAndAttachmentRatePositive_DoesNotEmitWarning()
     {
-        var parsed = CreateParsedArgs();
-        parsed.FileType = "eml";
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.True(TryBuild(parsed, new[] { "--with-families", "--attachment-rate", "50" }, out _));
+                Assert.True(TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
                 Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
             }
             finally
@@ -180,16 +158,14 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_ProfileWithParentTraversal_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--column-profile", "../outside-profile.json" }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--column-profile", "../outside-profile.json" }, out _));
     }
 
     [Fact]
     public void TryBuild_ProfileNonExistentFile_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
         var missingPath = Path.Combine(Directory.GetCurrentDirectory(), "missing_profile_" + Guid.NewGuid().ToString("N") + ".json");
-        Assert.False(TryBuild(parsed, new[] { "--column-profile", missingPath }, out _));
+        Assert.False(TryBuild(false, false, new[] { "--column-profile", missingPath }, out _));
     }
 
     [Fact]
@@ -199,14 +175,13 @@ public class MetadataModuleTests
         try
         {
             File.WriteAllText(tempProfilePath, "{ not valid json");
-            var parsed = new ParsedArguments();
             var originalError = Console.Error;
             using (var errWriter = new StringWriter())
             {
                 Console.SetError(errWriter);
                 try
                 {
-                    Assert.False(TryBuild(parsed, new[] { "--column-profile", tempProfilePath }, out _));
+                    Assert.False(TryBuild(false, false, new[] { "--column-profile", tempProfilePath }, out _));
                     Assert.Contains("Error: Invalid JSON in column profile", errWriter.ToString(), StringComparison.Ordinal);
                 }
                 finally
@@ -237,8 +212,7 @@ public class MetadataModuleTests
             }";
             File.WriteAllText(tempProfilePath, validProfileJson);
 
-            var parsed = new ParsedArguments();
-            Assert.True(TryBuild(parsed, new[] { "--column-profile", tempProfilePath }, out var config));
+            Assert.True(TryBuild(false, false, new[] { "--column-profile", tempProfilePath }, out var config));
             Assert.NotNull(config.ColumnProfile);
         }
         finally
@@ -253,22 +227,20 @@ public class MetadataModuleTests
     [Fact]
     public void TryBuild_ProfileBuiltIn_LoadsProfile()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--column-profile", "standard" }, out var config));
+        Assert.True(TryBuild(false, false, new[] { "--column-profile", "standard" }, out var config));
         Assert.NotNull(config.ColumnProfile);
     }
 
     [Fact]
     public void TryBuild_ProfileWithMetadata_PrecedenceWarning()
     {
-        var parsed = new ParsedArguments();
         var originalError = Console.Error;
         using (var errWriter = new StringWriter())
         {
             Console.SetError(errWriter);
             try
             {
-                Assert.True(TryBuild(parsed, new[] { "--with-metadata", "--column-profile", "standard" }, out var config));
+                Assert.True(TryBuild(false, false, new[] { "--with-metadata", "--column-profile", "standard" }, out var config));
                 Assert.Contains("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.", errWriter.ToString(), StringComparison.Ordinal);
                 Assert.False(config.WithMetadata);
             }
@@ -313,11 +285,5 @@ public class MetadataModuleTests
     public void TryApply_UnknownFlag_ReturnsFalse()
     {
         Assert.False(new MetadataModule().TryApply("--unknown-flag", "x"));
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new MetadataModule().TryBuild(null!, out _));
     }
 }

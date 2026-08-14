@@ -10,10 +10,10 @@ public class CliParserTests
     public void Parse_RequiredArgs_ParsesCorrectly()
     {
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), "test") };
-        var result = CliParser.Parse(args);
+        var (result, modules) = RequestBuilderTestHelper.Parse(args);
         Assert.NotNull(result);
-        Assert.Equal("pdf", result!.FileType);
-        Assert.Equal(100, result.Count);
+        Assert.Equal("pdf", modules.Output.FileType);
+        Assert.Equal(100, modules.Output.Count);
     }
 
     [Fact]
@@ -71,12 +71,12 @@ public class CliParserTests
         var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--with-metadata", "--with-text", "--include-load-file", "--with-families", "--loadfile-only", "--production-set", "--production-zip" });
         Assert.NotNull(result);
         Assert.True(modules.Metadata.WithMetadata);
-        Assert.True(result!.WithText);
-        Assert.True(result.IncludeLoadFile);
+        Assert.True(modules.Output.WithText);
+        Assert.True(modules.Output.IncludeLoadFile);
         Assert.True(modules.Metadata.WithFamilies);
         Assert.True(modules.LoadFile.LoadfileOnly);
-        Assert.True(result.ProductionSet);
-        Assert.True(result.ProductionZip);
+        Assert.True(modules.Production.ProductionSet);
+        Assert.True(modules.Production.ProductionZip);
     }
 
     [Fact]
@@ -94,11 +94,11 @@ public class CliParserTests
     {
         var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6", "--volume-size", "1000", "--count", "20", "--output-path", Directory.GetCurrentDirectory() });
         Assert.NotNull(result);
-        Assert.True(result!.ProductionSet);
+        Assert.True(modules.Production.ProductionSet);
         Assert.Equal("CL001", modules.Bates.BatesPrefix);
         Assert.Equal(100, modules.Bates.BatesStart);
         Assert.Equal(6, modules.Bates.BatesDigits);
-        Assert.Equal(1000, result.VolumeSize);
+        Assert.Equal(1000, modules.Production.VolumeSize);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class CliParserTests
         // Validation will pass because it's a structural check, but Build will reject it
         var isValid = CliValidator.Validate(result!, modules);
         Assert.True(isValid);
-        var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+        var buildResult = RequestBuilderTestHelper.Build(modules: modules);
         Assert.Null(buildResult);
     }
 
@@ -238,7 +238,7 @@ public class CliParserTests
             var isValid = CliValidator.Validate(result!, modules);
             Assert.True(isValid);
 
-            var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+            var buildResult = RequestBuilderTestHelper.Build(modules: modules);
             Assert.NotNull(buildResult);
         }
         finally
@@ -264,7 +264,7 @@ public class CliParserTests
         var isValid = CliValidator.Validate(result!, modules);
         Assert.True(isValid);
 
-        var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+        var buildResult = RequestBuilderTestHelper.Build(modules: modules);
         Assert.Null(buildResult);
     }
 
@@ -290,7 +290,7 @@ public class CliParserTests
             var isValid = CliValidator.Validate(result!, modules);
             Assert.True(isValid);
 
-            var buildResult = RequestBuilderTestHelper.Build(result!, modules: modules);
+            var buildResult = RequestBuilderTestHelper.Build(modules: modules);
             Assert.NotNull(buildResult);
         }
         finally
