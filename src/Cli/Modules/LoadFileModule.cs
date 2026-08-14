@@ -51,7 +51,7 @@ public sealed class LoadFileModule : CliModule
 
     public bool IsLoadFileFormatExplicit => _isLoadFileFormatExplicit;
 
-    public LoadFileFormat CurrentFormat => RequestBuilder.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
+    public LoadFileFormat CurrentFormat => ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
 
     public bool TryBuild(int attachmentRate, string? encoding, bool isEncodingExplicit, string? distribution, string? targetZipSize, bool includeLoadFile, out LoadFileConfig config)
     {
@@ -61,7 +61,7 @@ public sealed class LoadFileModule : CliModule
         // Message-order invariant: today LoadfileOnlyValidator runs first but treats unknown
         // formats as Dat (GetLoadFileFormat(x) ?? Dat), so the dat/opt restriction does not
         // fire on garbage; ValidateLoadFileFormats then prints the invalid-format line.
-        if (!string.IsNullOrEmpty(_loadFileFormat) && RequestBuilder.GetLoadFileFormat(_loadFileFormat) is null)
+        if (!string.IsNullOrEmpty(_loadFileFormat) && ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) is null)
         {
             Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.");
             config = default!;
@@ -72,7 +72,7 @@ public sealed class LoadFileModule : CliModule
         {
             foreach (var fmt in _loadFileFormats.Split(','))
             {
-                if (RequestBuilder.GetLoadFileFormat(fmt.Trim()) is null)
+                if (ArgumentHelpers.GetLoadFileFormat(fmt.Trim()) is null)
                 {
                     Console.Error.WriteLine($"Error: Invalid load file format '{fmt}'. Supported: dat, opt, csv, edrm-xml, xml, concordance.");
                     config = default!;
@@ -97,7 +97,7 @@ public sealed class LoadFileModule : CliModule
                 return false;
             }
 
-            var currentFormat = RequestBuilder.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
+            var currentFormat = ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
             if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
             {
                 Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
@@ -109,7 +109,7 @@ public sealed class LoadFileModule : CliModule
             {
                 foreach (var fmt in _loadFileFormats.Split(','))
                 {
-                    var multiFormat = RequestBuilder.GetLoadFileFormat(fmt.Trim());
+                    var multiFormat = ArgumentHelpers.GetLoadFileFormat(fmt.Trim());
                     if (multiFormat.HasValue && multiFormat.Value != LoadFileFormat.Dat && multiFormat.Value != LoadFileFormat.Opt)
                     {
                         Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
@@ -124,17 +124,17 @@ public sealed class LoadFileModule : CliModule
         if (!string.IsNullOrEmpty(_loadFileFormats))
         {
             formats = _loadFileFormats.Split(',')
-                .Select(f => RequestBuilder.GetLoadFileFormat(f.Trim()))
+                .Select(f => ArgumentHelpers.GetLoadFileFormat(f.Trim()))
                 .Where(f => f.HasValue)
                 .Select(f => f!.Value)
                 .ToList();
         }
         else
         {
-            formats = new List<LoadFileFormat> { RequestBuilder.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat };
+            formats = new List<LoadFileFormat> { ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat };
         }
 
-        var encodingName = (RequestBuilder.GetEncodingFromName(encoding ?? "UTF-8") is not null && !string.IsNullOrEmpty(encoding))
+        var encodingName = (ArgumentHelpers.GetEncodingFromName(encoding ?? "UTF-8") is not null && !string.IsNullOrEmpty(encoding))
             ? encoding.ToUpperInvariant()
             : "UTF-8";
 
@@ -143,7 +143,7 @@ public sealed class LoadFileModule : CliModule
             Formats = formats,
             Encoding = encodingName,
             IsEncodingExplicit = isEncodingExplicit,
-            Distribution = RequestBuilder.GetDistributionFromName(distribution ?? "proportional") ?? DistributionType.Proportional,
+            Distribution = ArgumentHelpers.GetDistributionFromName(distribution ?? "proportional") ?? DistributionType.Proportional,
             AttachmentRate = attachmentRate,
         };
         return true;

@@ -180,7 +180,7 @@ public sealed class OutputModule : CliModule
         long? parsedSize = null;
         if (!string.IsNullOrEmpty(_targetZipSize))
         {
-            parsedSize = RequestBuilder.ParseSize(_targetZipSize);
+            parsedSize = ArgumentHelpers.ParseSize(_targetZipSize);
             if (parsedSize is null)
             {
                 Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
@@ -210,21 +210,21 @@ public sealed class OutputModule : CliModule
             return false;
         }
 
-        if (!string.IsNullOrEmpty(_encoding) && RequestBuilder.GetEncodingFromName(_encoding) is null)
+        if (!string.IsNullOrEmpty(_encoding) && ArgumentHelpers.GetEncodingFromName(_encoding) is null)
         {
             Console.Error.WriteLine($"Error: Invalid encoding '{_encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
             config = default!;
             return false;
         }
 
-        if (!string.IsNullOrEmpty(_distribution) && RequestBuilder.GetDistributionFromName(_distribution) is null)
+        if (!string.IsNullOrEmpty(_distribution) && ArgumentHelpers.GetDistributionFromName(_distribution) is null)
         {
             Console.Error.WriteLine($"Error: Invalid distribution '{_distribution}'. Supported values are proportional, gaussian, exponential.");
             config = default!;
             return false;
         }
 
-        // Byte-identical to RequestBuilder.Build: single-ratio mix collapses to a single File Type.
+        // Byte-identical to Pipeline.AssembleRequest: single-ratio mix collapses to a single File Type.
         var fileType = (_fileType ?? "pdf").ToLowerInvariant();
         IReadOnlyList<FileTypeRatio>? fileTypeRatios = null;
         FileTypePlan? fileTypePlan = null;
