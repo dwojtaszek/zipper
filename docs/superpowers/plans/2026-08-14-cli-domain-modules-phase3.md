@@ -157,7 +157,7 @@ Build `ProductionConfig` byte-identical to `RequestBuilder.cs:147–172`: `Produ
 
 **Do NOT absorb** the three cross-domain checks (they stay in `ProductionSetValidator`): `--production-set` × `--loadfile-only`, `--production-set` requires `--bates-prefix`, `--redacted-production` × `--loadfile-only`. Those currently run *before* the pure-domain list; keeping them in the validator preserves that precedence on mixed invalid argv.
 
-**TDD (failing first):** write `ProductionModuleTests.cs` covering each retained check + config assembly, porting the production cases from `CliValidatorTests` (which today reach them via `Validate`):
+**TDD (failing first):** write `ProductionModuleTests.cs` covering each **pure-production** check + config assembly, porting the production cases from `CliValidatorTests` (which today reach them via `Validate`). The three cross-domain checks (`--production-set` × `--loadfile-only`, `--production-set` requires `--bates-prefix`, `--redacted-production` × `--loadfile-only`) stay in `ProductionSetValidator` and remain covered by `CliValidatorTests`:
 
 - [ ] `TryApply_VolumeSize_StoresValue` / `TryApply_RollingCount_StoresValue` (numeric + invalid-value messages)
 - [ ] `TryBuild_ProductionZipWithoutSet_ReturnsFalse` (+ message byte-for-byte)
