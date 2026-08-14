@@ -73,9 +73,9 @@ graph LR
         Program["Program.cs<br/>(SelectMode dispatch)"]
         Pipeline["Pipeline.Build"]
         CliParser["CliParser<br/>(token reader + module dispatch)"]
-        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile<br/>(incl. column profile)"]
-        CliValidator["CliValidator<br/>(remaining domains)"]
-        RequestBuilder["RequestBuilder<br/>(remaining configs + source)"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output<br/>(incl. column profile)"]
+        CliValidator["CliValidator<br/>(comparison trio + cross-domain checks)"]
+        RequestBuilder["RequestBuilder<br/>(FileGenerationRequest assembly + statics)"]
         Program --> Pipeline
         Pipeline --> CliParser
         CliParser --> Modules
@@ -158,7 +158,7 @@ graph LR
     Profiles --> DataGen
 ```
 
-*Phase 1–2 of #750: Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile parse+validate+build moved into modules. CliValidator and RequestBuilder still own the remaining domains until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) + CliValidator.Validate(parsed, CliModules.Create()) on a discarded set.*
+*Phase 1–3 of #750: all ten parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output). `Pipeline.Build` runs the 10-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash, then `RequestBuilder.Build` assembles `FileGenerationRequest`. `ParsedArguments` is comparison-only; the three mode validators hold the retained cross-domain checks until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) + CliValidator.Validate(parsed, CliModules.Create()) on a discarded set.*
 
 ## Post-Generation Validation
 

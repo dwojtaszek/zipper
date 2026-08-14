@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 
@@ -8,21 +7,20 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class DelimiterModuleTests
 {
-    private static bool TryBuild(ParsedArguments parsed, string[] apply, out DelimiterConfig config, bool loadfileOnly = false)
+    private static bool TryBuild(string[] apply, out DelimiterConfig config, bool loadfileOnly = false, bool productionSet = false)
     {
         var module = new DelimiterModule();
         for (int i = 0; i < apply.Length; i += 2)
         {
             Assert.True(module.TryApply(apply[i], apply[i + 1]));
         }
-        return module.TryBuild(parsed, loadfileOnly, out config);
+        return module.TryBuild(loadfileOnly, productionSet, out config);
     }
 
     [Fact]
     public void TryBuild_DatDelimitersCsv_SetsCommaDelimiters()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--dat-delimiters", "csv" }, out var config));
+        Assert.True(TryBuild(new[] { "--dat-delimiters", "csv" }, out var config));
 
         Assert.Equal(",", config.ColumnDelimiter);
         Assert.Equal("\"", config.QuoteDelimiter);
@@ -31,8 +29,7 @@ public class DelimiterModuleTests
     [Fact]
     public void TryBuild_DelimiterOverride_OverridesPreset()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--dat-delimiters", "csv", "--delimiter-column", "|" }, out var config));
+        Assert.True(TryBuild(new[] { "--dat-delimiters", "csv", "--delimiter-column", "|" }, out var config));
 
         Assert.Equal("|", config.ColumnDelimiter);
         Assert.Equal("\"", config.QuoteDelimiter);
@@ -41,8 +38,7 @@ public class DelimiterModuleTests
     [Fact]
     public void TryBuild_StrictDelimiters_OverrideOldDelimiters()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--delimiter-column", ",", "--col-delim", "ascii:20" }, out var config, loadfileOnly: true));
+        Assert.True(TryBuild(new[] { "--delimiter-column", ",", "--col-delim", "ascii:20" }, out var config, loadfileOnly: true));
 
         Assert.Equal("\u0014", config.ColumnDelimiter);
     }
@@ -50,8 +46,7 @@ public class DelimiterModuleTests
     [Fact]
     public void TryBuild_LoadfileOnlyEol_SetsEndOfLine()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--eol", "LF" }, out var config, loadfileOnly: true));
+        Assert.True(TryBuild(new[] { "--eol", "LF" }, out var config, loadfileOnly: true));
 
         Assert.Equal("LF", config.EndOfLine);
     }
@@ -59,46 +54,40 @@ public class DelimiterModuleTests
     [Fact]
     public void TryBuild_EolWithProductionSet_ReturnsTrue()
     {
-        var parsed = new ParsedArguments { ProductionSet = true };
-        Assert.True(TryBuild(parsed, new[] { "--eol", "LF" }, out _));
+        Assert.True(TryBuild(new[] { "--eol", "LF" }, out _, productionSet: true));
     }
 
     [Fact]
     public void TryBuild_EolWithoutLoadfileOnlyOrProductionSet_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--eol", "LF" }, out _));
+        Assert.False(TryBuild(new[] { "--eol", "LF" }, out _));
     }
 
     [Fact]
     public void TryBuild_InvalidEol_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--eol", "INVALID" }, out _, loadfileOnly: true));
+        Assert.False(TryBuild(new[] { "--eol", "INVALID" }, out _, loadfileOnly: true));
     }
 
     [Fact]
     public void TryBuild_ValidEol_ReturnsTrue()
     {
-        var parsed = new ParsedArguments();
         foreach (var eol in new[] { "CRLF", "LF", "CR" })
         {
-            Assert.True(TryBuild(parsed, new[] { "--eol", eol }, out _, loadfileOnly: true));
+            Assert.True(TryBuild(new[] { "--eol", eol }, out _, loadfileOnly: true));
         }
     }
 
     [Fact]
     public void TryBuild_InvalidStrictDelimiter_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--col-delim", "20" }, out _, loadfileOnly: true));
+        Assert.False(TryBuild(new[] { "--col-delim", "20" }, out _, loadfileOnly: true));
     }
 
     [Fact]
     public void TryBuild_InvalidDatDelimiters_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--dat-delimiters", "bogus" }, out _));
+        Assert.False(TryBuild(new[] { "--dat-delimiters", "bogus" }, out _));
     }
 
     [Theory]
@@ -169,8 +158,7 @@ public class DelimiterModuleTests
     [Fact]
     public void TryApply_DelimiterArgs_ParsesCorrectly()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--dat-delimiters", "csv", "--delimiter-column", "|", "--delimiter-quote", "~", "--delimiter-newline", " " }, out var config));
+        Assert.True(TryBuild(new[] { "--dat-delimiters", "csv", "--delimiter-column", "|", "--delimiter-quote", "~", "--delimiter-newline", " " }, out var config));
 
         Assert.Equal("|", config.ColumnDelimiter);
         Assert.Equal("~", config.QuoteDelimiter);
@@ -180,8 +168,7 @@ public class DelimiterModuleTests
     [Fact]
     public void TryApply_LoadfileOnlyDelimiterArgs_ParsesCorrectly()
     {
-        var parsed = new ParsedArguments();
-        Assert.True(TryBuild(parsed, new[] { "--col-delim", "ascii:20", "--quote-delim", "none", "--multi-delim", "char:;", "--nested-delim", "char:\\" }, out var config, loadfileOnly: true));
+        Assert.True(TryBuild(new[] { "--col-delim", "ascii:20", "--quote-delim", "none", "--multi-delim", "char:;", "--nested-delim", "char:\\" }, out var config, loadfileOnly: true));
 
         Assert.Equal("\u0014", config.ColumnDelimiter);
         Assert.Equal(string.Empty, config.QuoteDelimiter);
@@ -192,21 +179,13 @@ public class DelimiterModuleTests
     [Fact]
     public void TryBuild_InvalidQuoteDelim_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--quote-delim", "20" }, out _, loadfileOnly: true));
+        Assert.False(TryBuild(new[] { "--quote-delim", "20" }, out _, loadfileOnly: true));
     }
 
     [Fact]
     public void TryBuild_InvalidNewlineDelim_ReturnsFalse()
     {
-        var parsed = new ParsedArguments();
-        Assert.False(TryBuild(parsed, new[] { "--newline-delim", "20" }, out _, loadfileOnly: true));
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new DelimiterModule().TryBuild(null!, false, out _));
+        Assert.False(TryBuild(new[] { "--newline-delim", "20" }, out _, loadfileOnly: true));
     }
 
     [Fact]

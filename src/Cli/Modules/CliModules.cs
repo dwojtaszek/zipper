@@ -6,6 +6,9 @@ namespace Zipper.Cli.Modules;
 /// </summary>
 public sealed class CliModuleSet
 {
+    public required ProductionModule Production { get; init; }
+    public required SourceInputModule SourceInput { get; init; }
+    public required OutputModule Output { get; init; }
     public required BatesModule Bates { get; init; }
     public required MetadataModule Metadata { get; init; }
     public required LoadFileModule LoadFile { get; init; }
@@ -13,7 +16,7 @@ public sealed class CliModuleSet
     public required TiffModule Tiff { get; init; }
     public required ChaosModule Chaos { get; init; }
     public required HashModule Hash { get; init; }
-    public IReadOnlyList<CliModule> All => new CliModule[] { Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash };
+    public IReadOnlyList<CliModule> All => new CliModule[] { Production, SourceInput, Output, Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash };
 }
 
 /// <summary>
@@ -26,6 +29,9 @@ public static class CliModules
     {
         return new CliModuleSet
         {
+            Production = new ProductionModule(),
+            SourceInput = new SourceInputModule(),
+            Output = new OutputModule(),
             Bates = new BatesModule(),
             Metadata = new MetadataModule(),
             LoadFile = new LoadFileModule(),

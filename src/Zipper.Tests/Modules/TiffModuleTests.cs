@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 using Zipper.Cli.Modules;
 using Zipper.Config;
 
@@ -15,7 +14,7 @@ public class TiffModuleTests
         {
             Assert.True(module.TryApply("--tiff-pages", pageRange));
         }
-        Assert.True(module.TryBuild(new ParsedArguments(), out var config));
+        Assert.True(module.TryBuild(out var config));
         return config;
     }
 
@@ -38,13 +37,7 @@ public class TiffModuleTests
     {
         var module = new TiffModule();
         Assert.True(module.TryApply("--tiff-pages", "not-a-range"));
-        Assert.False(module.TryBuild(new ParsedArguments(), out _));
-    }
-
-    [Fact]
-    public void TryBuild_NullArg_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new TiffModule().TryBuild(null!, out _));
+        Assert.False(module.TryBuild(out _));
     }
 
     [Fact]

@@ -39,7 +39,7 @@ internal static class ProductionSetGenerator
         {
             rollingCount = 1;
         }
-        var prodIds = Cli.Validation.ProductionSetValidator.GenerateProductionIds(request.Production.ProductionId, rollingCount);
+        var prodIds = Cli.Modules.ProductionModule.GenerateProductionIds(request.Production.ProductionId, rollingCount);
         ProductionSetResult? lastResult = null;
         long currentBatesStart = request.Bates?.Start ?? 1;
 

@@ -1,6 +1,5 @@
 using System.Text;
 using Xunit;
-using Zipper.Cli;
 using Zipper.Config;
 using Zipper.LoadFiles;
 using Zipper.Profiles;
@@ -195,16 +194,9 @@ public class FieldNamingTests : IDisposable
     public void LoadFileModule_ShouldRejectInvalidFormatInLoadFileOnlyMode()
     {
         // Phase 2: the loadfile-only DAT/OPT restriction moved to LoadFileModule.TryBuild.
-        var parsed = new ParsedArguments
-        {
-            Count = 100,
-            OutputDirectory = new DirectoryInfo(this.tempDir),
-            FileType = "pdf"
-        };
-
         var module = new Zipper.Cli.Modules.LoadFileModule();
         Assert.True(module.TryApply("--loadfile-only", null));
         Assert.True(module.TryApply("--load-file-format", "csv"));
-        Assert.False(module.TryBuild(parsed, 0, out _));
+        Assert.False(module.TryBuild(0, null, false, null, null, false, out _));
     }
 }

@@ -1,5 +1,6 @@
 using Xunit;
 using Zipper.Cli;
+using Zipper.Cli.Modules;
 using Zipper.Config;
 
 namespace Zipper.Tests;
@@ -7,21 +8,14 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class RequestBuilderTests
 {
-    private static ParsedArguments CreateParsedArgs()
-    {
-        return new ParsedArguments
-        {
-            FileType = "pdf",
-            Count = 100,
-            OutputPathStr = Directory.GetCurrentDirectory(),
-        };
-    }
+    private static (ParsedArguments? Parsed, CliModuleSet Modules) CreateParsedArgs()
+        => RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory() });
 
     [Fact]
     public void Build_StandardMode_SetsAllDefaults()
     {
-        var parsed = CreateParsedArgs();
-        var result = RequestBuilderTestHelper.Build(parsed);
+        var (_, modules) = CreateParsedArgs();
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.NotNull(result);
         Assert.Equal(Directory.GetCurrentDirectory(), result!.Output.OutputPath);
@@ -39,50 +33,47 @@ public class RequestBuilderTests
     [Fact]
     public void Build_NullArg_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(null!, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), new HashConfig(), null, new MetadataConfig(), new LoadFileConfig(), false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(null!, new MetadataConfig(), new LoadFileConfig(), new DelimiterConfig(), null, new TiffConfig(), new ChaosConfig(), new HashConfig(), new ProductionConfig(), null, false, false));
     }
 
     [Fact]
     public void Build_NullConfigArg_ThrowsArgumentNullException()
     {
-        var parsed = new ParsedArguments();
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, null!, new TiffConfig(), new ChaosConfig(), new HashConfig(), null, new MetadataConfig(), new LoadFileConfig(), false, false));
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), null!, new ChaosConfig(), new HashConfig(), null, new MetadataConfig(), new LoadFileConfig(), false, false));
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), null!, new HashConfig(), null, new MetadataConfig(), new LoadFileConfig(), false, false));
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), null!, null, new MetadataConfig(), new LoadFileConfig(), false, false));
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), new HashConfig(), null, null!, new LoadFileConfig(), false, false));
-        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(parsed, new DelimiterConfig(), new TiffConfig(), new ChaosConfig(), new HashConfig(), null, new MetadataConfig(), null!, false, false));
+        var output = new OutputConfig();
+        var metadata = new MetadataConfig();
+        var loadFile = new LoadFileConfig();
+        var delimiters = new DelimiterConfig();
+        var tiff = new TiffConfig();
+        var chaos = new ChaosConfig();
+        var hash = new HashConfig();
+        var production = new ProductionConfig();
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(null!, metadata, loadFile, delimiters, null, tiff, chaos, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, null!, loadFile, delimiters, null, tiff, chaos, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, null!, delimiters, null, tiff, chaos, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, loadFile, null!, null, tiff, chaos, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, loadFile, delimiters, null, null!, chaos, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, loadFile, delimiters, null, tiff, null!, hash, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, loadFile, delimiters, null, tiff, chaos, null!, production, null, false, false));
+        Assert.Throws<ArgumentNullException>(() => RequestBuilder.Build(output, metadata, loadFile, delimiters, null, tiff, chaos, hash, null!, null, false, false));
     }
 
     [Fact]
     public void Build_WithValidPath_ResolvesDirectory()
     {
-        var parsed = CreateParsedArgs();
-        parsed.OutputPathStr = Directory.GetCurrentDirectory();
+        var (_, modules) = CreateParsedArgs();
 
-        var result = RequestBuilderTestHelper.Build(parsed);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.NotNull(result);
         Assert.Equal(Directory.GetCurrentDirectory(), result!.Output.OutputPath);
     }
 
     [Fact]
-    public void Build_WithInvalidPath_ReturnsNull()
-    {
-        var parsed = CreateParsedArgs();
-        parsed.OutputPathStr = string.Empty; // Invalid path
-
-        var result = RequestBuilderTestHelper.Build(parsed);
-
-        Assert.Null(result);
-    }
-
-    [Fact]
     public void Build_LoadfileOnly_SetsProperties()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--load-file-format", "opt" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--load-file-format", "opt" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.True(result!.LoadfileOnly);
         Assert.Single(result!.LoadFile.Formats);
@@ -92,9 +83,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_ProductionSet_SetsVolumeSize()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--production-set", "--bates-prefix", "PREFIX", "--volume-size", "1000" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--production-set", "--bates-prefix", "PREFIX", "--volume-size", "1000" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.True(result!.Production.ProductionSet);
         Assert.Equal(1000, result!.Production.VolumeSize);
@@ -103,9 +94,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_BatesConfig_SetsCorrectly()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--bates-prefix", "CL001", "--bates-start", "100", "--bates-digits", "6" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.NotNull(result!.Bates);
         Assert.Equal("CL001", result!.Bates.Prefix);
@@ -116,9 +107,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_ColumnProfile_LoadsProfile()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "standard" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--column-profile", "standard" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.NotNull(result!.Metadata.ColumnProfile);
     }
@@ -126,9 +117,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_MultiFormat_CreatesFormatList()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--load-file-formats", "dat,opt,csv" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--load-file-formats", "dat,opt,csv" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.Equal(3, result!.LoadFile.Formats.Count);
         Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
@@ -139,9 +130,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_LoadfileOnlyEncoding_UsesExtendedSet()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--encoding", "WINDOWS-1252" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--encoding", "WINDOWS-1252" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.Equal("WINDOWS-1252", result!.LoadFile.Encoding);
     }
@@ -149,9 +140,9 @@ public class RequestBuilderTests
     [Fact]
     public void Build_Encoding_PreservesNormalizedInputName()
     {
-        var (parsed, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--encoding", "UTF-16" });
+        var (_, modules) = RequestBuilderTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--encoding", "UTF-16" });
 
-        var result = RequestBuilderTestHelper.Build(parsed!, modules: modules);
+        var result = RequestBuilderTestHelper.Build(modules: modules);
 
         Assert.Equal("UTF-16", result!.LoadFile.Encoding);
     }

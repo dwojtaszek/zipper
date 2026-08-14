@@ -29,10 +29,8 @@ public sealed class ChaosModule : CliModule
         }
     }
 
-    public bool TryBuild(ParsedArguments parsed, bool loadfileOnly, LoadFileFormat currentFormat, out ChaosConfig config)
+    public bool TryBuild(bool loadfileOnly, LoadFileFormat currentFormat, out ChaosConfig config)
     {
-        ArgumentNullException.ThrowIfNull(parsed);
-
         if (_mode)
         {
             if (!loadfileOnly)

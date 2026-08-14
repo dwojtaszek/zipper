@@ -47,35 +47,23 @@ public static class CliValidator
 
         // Source-Driven Generation (--input-csv/--directory-template) supplies File Types and
         // the File Count from Source Records, so --type and --count are not required with it.
-        bool hasSourceInput = !string.IsNullOrEmpty(parsed.InputCsv) || !string.IsNullOrEmpty(parsed.DirectoryTemplate);
+        bool hasSourceInput = modules.SourceInput.HasSourceInput;
 
-        if (string.IsNullOrEmpty(parsed.FileType) && parsed.FileTypes is null && !modules.LoadFile.LoadfileOnly && !parsed.ProductionSet && !hasSourceInput)
+        if (string.IsNullOrEmpty(modules.Output.FileType) && modules.Output.FileTypes is null && !modules.LoadFile.LoadfileOnly && !modules.Production.ProductionSet && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --type is required.");
             return false;
         }
 
-        if (!parsed.Count.HasValue && !hasSourceInput)
+        if (!modules.Output.Count.HasValue && !hasSourceInput)
         {
             Console.Error.WriteLine("Error: --count is required.");
             return false;
         }
 
-        if (parsed.Count.HasValue && parsed.Count.Value <= 0)
-        {
-            Console.Error.WriteLine("Error: --count must be a positive number.");
-            return false;
-        }
-
-        if (parsed.Count.HasValue && parsed.Count.Value > int.MaxValue - 1)
-        {
-            Console.Error.WriteLine($"Error: --count must not exceed {int.MaxValue - 1}.");
-            return false;
-        }
-
-        if (!StandardModeValidator.Validate(parsed) ||
-            !ProductionSetValidator.Validate(parsed, modules) ||
-            !CrossCuttingValidator.Validate(parsed, modules))
+        if (!StandardModeValidator.Validate(modules) ||
+            !ProductionSetValidator.Validate(modules) ||
+            !CrossCuttingValidator.Validate(modules))
         {
             return false;
         }

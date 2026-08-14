@@ -1,5 +1,4 @@
 using Xunit;
-using Zipper.Cli;
 
 namespace Zipper.Tests;
 
@@ -56,15 +55,15 @@ public class SourceDrivenCliTests : IDisposable
     [Fact]
     public void Parse_InputCsvAndDirectoryTemplate_StoreRawValues()
     {
-        var parsed = CliParser.Parse(new[] { "--input-csv", "rows.csv", "--output-path", this.tempDir });
+        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--input-csv", "rows.csv", "--output-path", this.tempDir });
 
-        Assert.NotNull(parsed);
-        Assert.Equal("rows.csv", parsed!.InputCsv);
+        Assert.NotNull(result);
+        Assert.Equal("rows.csv", modules.SourceInput.InputCsv);
 
-        var parsedDir = CliParser.Parse(new[] { "--directory-template", "tpl", "--output-path", this.tempDir });
+        var (resultDir, modulesDir) = RequestBuilderTestHelper.Parse(new[] { "--directory-template", "tpl", "--output-path", this.tempDir });
 
-        Assert.NotNull(parsedDir);
-        Assert.Equal("tpl", parsedDir!.DirectoryTemplate);
+        Assert.NotNull(resultDir);
+        Assert.Equal("tpl", modulesDir.SourceInput.DirectoryTemplate);
     }
 
     [Fact]
