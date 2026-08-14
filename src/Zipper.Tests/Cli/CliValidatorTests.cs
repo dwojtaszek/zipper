@@ -118,9 +118,7 @@ public class CliValidatorTests
     public void Validate_RedactedProduction_ConflictsWithLoadfileOnly_ReturnsFalse()
     {
         var (parsed, modules) = CreateValid();
-        modules.Production.TryApply("--production-set", null);
         modules.Production.TryApply("--redacted-production", null);
-        modules.Bates.TryApply("--bates-prefix", "PREFIX");
         modules.LoadFile.TryApply("--loadfile-only", null);
         Assert.False(CliValidator.Validate(parsed!, modules));
     }
