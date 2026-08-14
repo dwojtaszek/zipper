@@ -77,8 +77,8 @@ public sealed class MetadataModule : CliModule
 
     public bool TryBuild(bool includesEml, bool hasSourceInput, out MetadataConfig config)
     {
-        // includesEml (does eml participate) and hasSourceInput were bag fields pre-Phase-3;
-        // OutputModule and SourceInputModule now own them, so they are passed in as parameters.
+        // The eml-participation and source-input flags are owned by OutputModule and
+        // SourceInputModule respectively, so they are passed in as parameters.
         if (_attachmentRate < 0 || _attachmentRate > 100)
         {
             Console.Error.WriteLine("Error: Attachment rate must be between 0 and 100.");

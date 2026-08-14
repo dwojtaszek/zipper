@@ -97,13 +97,10 @@ public sealed class BatesModule : CliModule
     {
         // rolling-count / rolling-bates-mode / count were bag fields pre-Phase-3; ProductionModule
         // and OutputModule now own them, so they are passed in as parameters.
-        if (productionSet)
+        if (productionSet && !ValidateRollingBates(rollingCount, rollingBatesMode, count))
         {
-            if (!ValidateRollingBates(rollingCount, rollingBatesMode, count))
-            {
-                config = null;
-                return false;
-            }
+            config = null;
+            return false;
         }
 
         if (_prefix is not null || _start is not null || _digits is not null)

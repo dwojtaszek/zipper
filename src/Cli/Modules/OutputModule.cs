@@ -203,14 +203,11 @@ public sealed class OutputModule : CliModule
         }
 
         IReadOnlyList<FileTypeRatio>? parsedRatios = null;
-        if (_fileTypes is not null)
+        if (_fileTypes is not null && !FileTypeRatioParser.TryParse(_fileTypes, out parsedRatios, out var ratioError))
         {
-            if (!FileTypeRatioParser.TryParse(_fileTypes, out parsedRatios, out var ratioError))
-            {
-                Console.Error.WriteLine($"Error: {ratioError}");
-                config = default!;
-                return false;
-            }
+            Console.Error.WriteLine($"Error: {ratioError}");
+            config = default!;
+            return false;
         }
 
         if (!string.IsNullOrEmpty(_encoding) && RequestBuilder.GetEncodingFromName(_encoding) is null)
