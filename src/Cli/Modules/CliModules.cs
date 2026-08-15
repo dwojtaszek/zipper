@@ -16,7 +16,62 @@ public sealed class CliModuleSet
     public required TiffModule Tiff { get; init; }
     public required ChaosModule Chaos { get; init; }
     public required HashModule Hash { get; init; }
-    public IReadOnlyList<CliModule> All => new CliModule[] { Production, SourceInput, Output, Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash };
+    public required ComparisonModule Comparison { get; init; }
+    public IReadOnlyList<CliModule> All => new CliModule[] { Production, SourceInput, Output, Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash, Comparison };
+
+    /// <summary>
+    /// Token reader + module dispatcher: for each token finds the owning module, pulls a
+    /// value when the flag takes one, and delegates to the module's TryApply. Successor of
+    /// the old CliParser loop (which also handled the comparison trio — now a module too).
+    /// </summary>
+    public bool Parse(string[] args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+
+        var modules = All;
+        for (int i = 0; i < args.Length; i++)
+        {
+            var arg = args[i].ToLowerInvariant();
+
+            var module = modules.FirstOrDefault(m => m.Owns(arg));
+            if (module is not null)
+            {
+                string? value = null;
+                if (module.TakesValue(arg))
+                {
+                    if (!TryGetValue(args, i, out value))
+                    {
+                        Console.Error.WriteLine($"Error: {arg} requires a value.");
+                        return false;
+                    }
+                    i++;
+                }
+
+                if (!module.TryApply(arg, value))
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryGetValue(string[] args, int currentIndex, out string value)
+    {
+        if (currentIndex + 1 < args.Length && !args[currentIndex + 1].StartsWith("--", StringComparison.Ordinal))
+        {
+            value = args[currentIndex + 1];
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
+    }
 }
 
 /// <summary>
@@ -39,6 +94,7 @@ public static class CliModules
             Tiff = new TiffModule(),
             Chaos = new ChaosModule(),
             Hash = new HashModule(),
+            Comparison = new ComparisonModule(),
         };
     }
 }

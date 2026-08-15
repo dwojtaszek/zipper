@@ -41,38 +41,39 @@ public static class Program
             return 0;
         }
 
-        if (args is not null && args.Length > 0)
+        var modules = Cli.Modules.CliModules.Create();
+        if (args.Length == 0)
         {
-            var parsedArgs = Cli.CliParser.Parse(args);
-            if (parsedArgs is null)
+            Cli.HelpTextGenerator.Show();
+            return 1;
+        }
+
+        if (!modules.Parse(args))
+        {
+            return 1;
+        }
+
+        if (!modules.Comparison.TryBuild(out var comparison))
+        {
+            return 1;
+        }
+
+        if (comparison is not null)
+        {
+            try
             {
-                return 1;
+                var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
+                    comparison.ManifestPaths, comparison.Mode, comparison.OutputPath).ConfigureAwait(false);
+                return success ? 0 : 1;
             }
-
-            if (!string.IsNullOrEmpty(parsedArgs.CompareProductionManifests))
+            catch (Exception ex)
             {
-                if (!Cli.CliValidator.Validate(parsedArgs, Cli.Modules.CliModules.Create()))
-                {
-                    return 1;
-                }
-
-                try
-                {
-                    var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
-                        parsedArgs.CompareProductionManifests,
-                        parsedArgs.ComparisonMode ?? "replacement",
-                        parsedArgs.ComparisonOutput ?? string.Empty).ConfigureAwait(false);
-                    return success ? 0 : 1;
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Error: {ex.Message}");
-                    return 1;
-                }
+                Console.Error.WriteLine($"Error: {ex.Message}");
+                return 1;
             }
         }
 
-        var request = Cli.Pipeline.Build(args!);
+        var request = Cli.Pipeline.Build(args);
         if (request is null)
         {
             return 1;
@@ -100,7 +101,7 @@ public static class Program
 
     /// <summary>
     /// Picks the appropriate generation mode based on flags on the request.
-    /// The CLI validator ensures LoadfileOnly and ProductionSet are mutually exclusive.
+    /// CrossCuttingRules ensures LoadfileOnly and ProductionSet are mutually exclusive.
     /// </summary>
     internal static IGenerationMode SelectMode(FileGenerationRequest request)
     {
