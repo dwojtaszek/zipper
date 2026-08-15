@@ -63,8 +63,7 @@ public sealed class MetadataModule : CliModule
 
     public bool HasColumnProfile => !string.IsNullOrEmpty(_columnProfile);
 
-    // Transitional (Phase 3): test-facing raw state and sibling channels consumed by
-    // validators / LoadFileModule; ParsedArguments deletes these and the reads move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public bool WithMetadata => _withMetadata;
     public bool WithCollectionMetadata => _withCollectionMetadata;
     public bool WithFamilies => _withFamilies;

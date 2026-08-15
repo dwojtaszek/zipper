@@ -70,18 +70,15 @@ graph TD
 ```mermaid
 graph LR
     subgraph CLI Layer
-        Program["Program.cs<br/>(SelectMode dispatch)"]
-        Pipeline["Pipeline.Build"]
-        CliParser["CliParser<br/>(token reader + module dispatch)"]
-        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output<br/>(incl. column profile)"]
-        CliValidator["CliValidator<br/>(comparison trio + cross-domain checks)"]
-        RequestBuilder["RequestBuilder<br/>(FileGenerationRequest assembly + statics)"]
+        Program["Program.cs<br/>(parse + comparison short-circuit + SelectMode dispatch)"]
+        Pipeline["Pipeline.Build<br/>(CrossCuttingRules + TryBuild chain + AssembleRequest)"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output / Comparison<br/>(incl. column profile)"]
+        CrossCutting["CrossCuttingRules<br/>(required-flag gates + cross-domain checks)"]
         Program --> Pipeline
-        Pipeline --> CliParser
-        CliParser --> Modules
-        Pipeline --> CliValidator
+        Program --> Modules
+        Pipeline --> Modules
         Modules --> Pipeline
-        Pipeline --> RequestBuilder
+        Pipeline --> CrossCutting
     end
 
     subgraph Config
@@ -144,7 +141,7 @@ graph LR
         PMC["ProductionManifestComparer<br/>(--compare-production-manifests)"]
     end
 
-    Program --> Pipeline --> RequestBuilder --> FGR
+    Program --> Pipeline --> FGR
     Program -->|"--compare-production-manifests"| PMC
     Program -->|"SelectMode(request)"| StdMode
     Program -->|"SelectMode(request)"| LFMode
@@ -158,7 +155,7 @@ graph LR
     Profiles --> DataGen
 ```
 
-*Phase 1–3 of #750: all ten parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output). `Pipeline.Build` runs the 10-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash, then `RequestBuilder.Build` assembles `FileGenerationRequest`. `ParsedArguments` is comparison-only; the three mode validators hold the retained cross-domain checks until Phase 4. Comparison short-circuit in Program still calls CliParser.Parse(args) + CliValidator.Validate(parsed, CliModules.Create()) on a discarded set.*
+*Phase 1–4 of #750 complete: all eleven parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison). `CliModuleSet.Parse` is the token reader + module dispatcher; `CrossCuttingRules.Validate` runs the generation-path cross-domain checks after parse. `Pipeline.Build` still runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then `Pipeline.AssembleRequest` applies the image-type load-file override and constructs `FileGenerationRequest`. `Program` parses once, short-circuits to the Production Manifest comparer when `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), and otherwise hands the same parsed set to `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
 
 ## Post-Generation Validation
 

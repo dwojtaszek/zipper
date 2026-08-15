@@ -46,7 +46,7 @@ public sealed class DelimiterModule : CliModule
     public bool TryBuild(bool loadfileOnly, bool productionSet, out DelimiterConfig config)
     {
         // productionSet was a bag field pre-Phase-3; ProductionModule now owns it, so it is passed in.
-        // Cross-domain (moves to CrossCuttingRules in Phase 4): --eol only with loadfile-only or production-set.
+        // Sibling-parameter check: --eol is only valid with loadfile-only or production-set.
         if (!string.IsNullOrEmpty(_eol) && !loadfileOnly && !productionSet)
         {
             Console.Error.WriteLine("Error: --eol requires --loadfile-only or --production-set.");

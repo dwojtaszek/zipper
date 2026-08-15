@@ -68,8 +68,7 @@ public sealed class HashModule : CliModule
             }
         }
 
-        // Cross-domain (moves to CrossCuttingRules in Phase 4): reads loadfileOnly from the
-        // LoadFileModule (Phase 2) that owns that flag.
+        // Sibling-parameter check: loadfileOnly is owned by LoadFileModule.
         // Keep the LoadfileOnlyValidator bytes (capital E + period). Do not "fix" to the
         // RequestBuilder variant ("error: ... hash)" — no E2E asserts that string).
         if (loadfileOnly && string.Equals(_mode, "actual", StringComparison.OrdinalIgnoreCase))

@@ -85,7 +85,7 @@ public class CliPipelineTests : IDisposable
     public void ValidateAndParseArguments_WithNullArgs_ShouldReturnNull()
     {
         // Act
-        var result = Cli.Pipeline.Build(null!);
+        var result = Cli.Pipeline.Build((string[])null!);
 
         // Assert
         Assert.Null(result);

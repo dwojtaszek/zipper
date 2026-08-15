@@ -117,8 +117,7 @@ public sealed class OutputModule : CliModule
         }
     }
 
-    // Transitional (Phase 3): test-facing raw state so CliParserTests/RequestBuilderTests can
-    // assert module ownership; ParsedArguments deletes its output fields and these move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public string? FileType => _fileType;
     public string? FileTypes => _fileTypes;
     public long? Count => _count;
@@ -132,9 +131,9 @@ public sealed class OutputModule : CliModule
 
     internal bool TryBuild(IReadOnlyList<SourceInput.SourceRecord>? sourceRecords, out OutputConfig config)
     {
-        // Check order mirrors today's pipeline: CliValidator (count bounds), then
-        // StandardModeValidator (path, known type, folders, target-zip-size), then
-        // CrossCuttingValidator (--type x --types, ratio syntax, encoding, distribution).
+        // Check order: CrossCuttingRules (--type/--count gates) runs before this TryBuild,
+        // which owns count bounds, path, known type, folders, target-zip-size,
+        // --type x --types conflicts, ratio syntax, encoding, and distribution.
         if (_count is <= 0)
         {
             Console.Error.WriteLine("Error: --count must be a positive number.");
@@ -180,7 +179,7 @@ public sealed class OutputModule : CliModule
         long? parsedSize = null;
         if (!string.IsNullOrEmpty(_targetZipSize))
         {
-            parsedSize = RequestBuilder.ParseSize(_targetZipSize);
+            parsedSize = ArgumentHelpers.ParseSize(_targetZipSize);
             if (parsedSize is null)
             {
                 Console.Error.WriteLine("Error: Invalid format for --target-zip-size. Use KB, MB, GB, etc. (e.g., 500MB, 10GB).");
@@ -210,21 +209,21 @@ public sealed class OutputModule : CliModule
             return false;
         }
 
-        if (!string.IsNullOrEmpty(_encoding) && RequestBuilder.GetEncodingFromName(_encoding) is null)
+        if (!string.IsNullOrEmpty(_encoding) && ArgumentHelpers.GetEncodingFromName(_encoding) is null)
         {
             Console.Error.WriteLine($"Error: Invalid encoding '{_encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
             config = default!;
             return false;
         }
 
-        if (!string.IsNullOrEmpty(_distribution) && RequestBuilder.GetDistributionFromName(_distribution) is null)
+        if (!string.IsNullOrEmpty(_distribution) && ArgumentHelpers.GetDistributionFromName(_distribution) is null)
         {
             Console.Error.WriteLine($"Error: Invalid distribution '{_distribution}'. Supported values are proportional, gaussian, exponential.");
             config = default!;
             return false;
         }
 
-        // Byte-identical to RequestBuilder.Build: single-ratio mix collapses to a single File Type.
+        // Byte-identical to Pipeline.AssembleRequest: single-ratio mix collapses to a single File Type.
         var fileType = (_fileType ?? "pdf").ToLowerInvariant();
         IReadOnlyList<FileTypeRatio>? fileTypeRatios = null;
         FileTypePlan? fileTypePlan = null;

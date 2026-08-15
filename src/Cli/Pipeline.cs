@@ -1,4 +1,5 @@
 using Zipper.Cli.Modules;
+using Zipper.Config;
 
 namespace Zipper.Cli;
 
@@ -13,11 +14,15 @@ public static class Pipeline
         }
 
         var modules = CliModules.Create();
-        var parsedArgs = CliParser.Parse(args, modules.All);
-        if (parsedArgs is null)
+        if (!modules.Parse(args))
             return null;
 
-        if (!CliValidator.Validate(parsedArgs, modules))
+        return Build(modules);
+    }
+
+    internal static FileGenerationRequest? Build(CliModuleSet modules)
+    {
+        if (!CrossCuttingRules.Validate(modules))
             return null;
 
         if (!modules.Production.TryBuild(out var production) ||
@@ -34,8 +39,42 @@ public static class Pipeline
             return null;
         }
 
-        return RequestBuilder.Build(
-            output, metadata, loadFile, delimiters, bates, tiff, chaos, hash, production, sourceRecords,
-            modules.LoadFile.LoadfileOnly, modules.LoadFile.IsLoadFileFormatExplicit);
+        return new FileGenerationRequest
+        {
+            Output = output,
+            Metadata = metadata,
+            LoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords),
+            Delimiters = delimiters,
+            Bates = bates,
+            Tiff = tiff,
+            Chaos = chaos,
+            Production = production,
+            LoadfileOnly = modules.LoadFile.LoadfileOnly,
+            Hash = hash,
+            SourceRecords = sourceRecords,
+        };
+    }
+
+    // The image-type override (image-only runs get both DAT and OPT load files) keys off
+    // whether the user explicitly chose formats. hasImageType reads output.FileType /
+    // output.FileTypeRatios / sourceRecords — it cannot move to LoadFileModule.
+    private static LoadFileConfig ApplyImageTypeLoadFileOverride(
+        LoadFileConfig loadFile,
+        bool isLoadFileFormatExplicit,
+        OutputConfig output,
+        IReadOnlyList<SourceInput.SourceRecord>? sourceRecords)
+    {
+        if (isLoadFileFormatExplicit)
+        {
+            return loadFile;
+        }
+
+        var hasImageType = output.FileType is "tiff" or "jpg"
+            || (output.FileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false)
+            || (sourceRecords?.Any(r => r.FileType is "tiff" or "jpg") ?? false);
+
+        return hasImageType
+            ? loadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } }
+            : loadFile;
     }
 }

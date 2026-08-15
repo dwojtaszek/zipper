@@ -37,8 +37,7 @@ public sealed class SourceInputModule : CliModule
         }
     }
 
-    // Transitional (Phase 3): test-facing raw state so CliParserTests/RequestBuilderTests can
-    // assert module ownership; ParsedArguments deletes its InputCsv/DirectoryTemplate fields and these move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public bool HasSourceInput => !string.IsNullOrEmpty(_inputCsv) || !string.IsNullOrEmpty(_directoryTemplate);
     public string? InputCsv => _inputCsv;
     public string? DirectoryTemplate => _directoryTemplate;
