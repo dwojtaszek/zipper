@@ -85,3 +85,11 @@
 - **telemetry**: host=opencode mode=branch specialists=6 bundle=4824c
 - **lessons**: new Parse-boundary test arrays drift when new value-taking flags land — the review caught 4 missing; subagents reliably cross-check deleted-type grep gates.
 - **suppressions**: none
+
+### 2026-08-15 opencode:branch:dwojtaszek/deepen-source-record-intake-consolidate-path-typ-2
+
+- **findings**: 10 (0 ACTION, 10 INFO across 6 specialists; security clean). Multi-source confirmed (correctness+adversarial): 2 directory error-message drifts — 'file'→'entry' + normalized→raw path in extension/no-extension messages, and rewritten duplicate-path message (I claimed "all other messages verbatim", review proved otherwise). Others: 3 testing gaps (empty FileType, no-extension branch, char.IsControl identity), 2 additive coverage (metadata passthrough, case-insensitive dup), 2 performance (sort copy, unpre-sized list), maintainability (_seenPaths mutation ordering, double cap).
+- **outcome**: fixed 6 (both message drifts restored verbatim — branch on `fileTypeText is null`; 5 direct-intake tests added), documented double-cap in architecture.md; accepted 4 (state-mutation ordering is pre-existing + callers fail-fast, sort copy is adapter policy, unpre-sized list amortized O(1)). All 1831 unit + 44 analyzer tests + source-driven E2E green, format clean.
+- **telemetry**: host=opencode mode=branch specialists=6 bundle=4824c
+- **lessons**: when a refactor claims byte-identical messages, verify by diffing every message literal against the old file — two slipped through until cross-model review caught them; the deep-module seam made the directory-vs-CSV message branch a one-line `fileTypeText is null` ternary, no adapter complexity returned.
+- **suppressions**: none

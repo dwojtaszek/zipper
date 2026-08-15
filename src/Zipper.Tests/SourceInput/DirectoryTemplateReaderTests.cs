@@ -53,7 +53,7 @@ public class DirectoryTemplateReaderTests : IDisposable
         var ok = DirectoryTemplateReader.TryRead(this.tempDir, out _, out var error, maxRecords: 2);
 
         Assert.False(ok);
-        Assert.Contains("exceeding the maximum of 2 Source Records", error, StringComparison.Ordinal);
+        Assert.Contains("exceeds the maximum of 2 Source Records", error, StringComparison.Ordinal);
     }
 
     [Fact]
