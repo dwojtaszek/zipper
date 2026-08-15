@@ -77,3 +77,11 @@
 - **lessons**: Mentally verified correctness; confirmed formatting and build are fully clean with 0 warnings.
 - **suppressions**: none
 
+
+### 2026-08-15 opencode:branch:phase4-750
+
+- **findings**: 12 (0 ACTION, 12 INFO across correctness/adversarial/security/performance/testing/maintainability; security+performance clean)
+- **outcome**: partial — fixed 4 (test-coverage gap on new Parse value-taking flags, 2 sibling null-guard asserts, dead PipelineTestHelper overload+param, Requirements.md stray space); rejected 8 as intentional (D3 null-guard drop, provenance comments the plan keeps, direct-API companion-flag message shift folded into accepted-divergence PR note, req-traceability.tsv pre-existing debt, ArgumentHelpers public-on-internal cosmetic)
+- **telemetry**: host=opencode mode=branch specialists=6 bundle=4824c
+- **lessons**: new Parse-boundary test arrays drift when new value-taking flags land — the review caught 4 missing; subagents reliably cross-check deleted-type grep gates.
+- **suppressions**: none
