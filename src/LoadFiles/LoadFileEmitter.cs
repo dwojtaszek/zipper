@@ -72,21 +72,23 @@ internal static class LoadFileEmitter
         var writer = new StreamWriter(stream, encoding, leaveOpen: true);
         await using (writer.ConfigureAwait(false))
         {
+            var eolMemory = eol.AsMemory();
+
             if (hasHeader)
             {
-                await writer.WriteAsync(serializer.RenderHeader(headerColumns)).ConfigureAwait(false);
-                await writer.WriteAsync(eol).ConfigureAwait(false);
+                await writer.WriteAsync(serializer.RenderHeader(headerColumns).AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
             }
 
             foreach (var record in records)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await writer.WriteAsync(serializer.RenderRecord(record)).ConfigureAwait(false);
-                await writer.WriteAsync(eol).ConfigureAwait(false);
+                await writer.WriteAsync(serializer.RenderRecord(record).AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
             }
 
-            await writer.FlushAsync().ConfigureAwait(false);
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
