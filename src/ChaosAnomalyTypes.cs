@@ -2,7 +2,7 @@ namespace Zipper;
 
 /// <summary>
 /// Canonical catalog of Chaos anomaly type names.
-/// Single source of truth consumed by both CliValidator and ChaosEngine.
+/// Single source of truth consumed by ChaosModule and ChaosEngine.
 /// </summary>
 internal static class ChaosAnomalyTypes
 {

@@ -116,8 +116,7 @@ public sealed class ProductionModule : CliModule
         }
     }
 
-    // Transitional (Phase 3): test-facing raw state so CliParserTests/RequestBuilderTests can
-    // assert module ownership; ParsedArguments deletes its production fields and these move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public bool ProductionSet => _productionSet;
     public bool ProductionZip => _productionZip;
     public int? VolumeSize => _volumeSize;

@@ -85,8 +85,7 @@ public sealed class BatesModule : CliModule
 
     public bool HasBatesPrefix => !string.IsNullOrEmpty(_prefix);
 
-    // Transitional (Phase 3): test-facing raw state so CliParserTests/RequestBuilderTests can
-    // assert module ownership; ParsedArguments deletes its Bates fields and these move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public string? BatesPrefix => _prefix;
     public long? BatesStart => _start;
     public int? BatesDigits => _digits;

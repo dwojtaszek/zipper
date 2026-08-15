@@ -117,8 +117,7 @@ public sealed class OutputModule : CliModule
         }
     }
 
-    // Transitional (Phase 3): test-facing raw state so CliParserTests/RequestBuilderTests can
-    // assert module ownership; ParsedArguments deletes its output fields and these move too.
+    // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public string? FileType => _fileType;
     public string? FileTypes => _fileTypes;
     public long? Count => _count;
@@ -132,9 +131,9 @@ public sealed class OutputModule : CliModule
 
     internal bool TryBuild(IReadOnlyList<SourceInput.SourceRecord>? sourceRecords, out OutputConfig config)
     {
-        // Check order mirrors today's pipeline: CliValidator (count bounds), then
-        // StandardModeValidator (path, known type, folders, target-zip-size), then
-        // CrossCuttingValidator (--type x --types, ratio syntax, encoding, distribution).
+        // Check order: CrossCuttingRules (--type/--count gates) runs before this TryBuild,
+        // which owns count bounds, path, known type, folders, target-zip-size,
+        // --type x --types conflicts, ratio syntax, encoding, and distribution.
         if (_count is <= 0)
         {
             Console.Error.WriteLine("Error: --count must be a positive number.");
