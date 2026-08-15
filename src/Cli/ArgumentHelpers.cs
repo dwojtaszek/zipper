@@ -11,7 +11,7 @@ internal static class ArgumentHelpers
         ["GB"] = 1024 * 1024 * 1024,
     };
 
-    public static long? ParseSize(string size)
+    internal static long? ParseSize(string size)
     {
         size = size.Trim();
 
@@ -27,7 +27,7 @@ internal static class ArgumentHelpers
         return null;
     }
 
-    public static DistributionType? GetDistributionFromName(string name)
+    internal static DistributionType? GetDistributionFromName(string name)
     {
         return name.ToUpperInvariant() switch
         {
@@ -38,9 +38,9 @@ internal static class ArgumentHelpers
         };
     }
 
-    public static Encoding? GetEncodingFromName(string name) => EncodingHelper.GetEncoding(name);
+    internal static Encoding? GetEncodingFromName(string name) => EncodingHelper.GetEncoding(name);
 
-    public static LoadFileFormat? GetLoadFileFormat(string name)
+    internal static LoadFileFormat? GetLoadFileFormat(string name)
     {
         return name.ToUpperInvariant().Replace("-", string.Empty, StringComparison.Ordinal) switch
         {

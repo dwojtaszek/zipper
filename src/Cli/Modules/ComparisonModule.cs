@@ -55,7 +55,7 @@ public sealed class ComparisonModule : CliModule
     /// </summary>
     public bool TryBuild(out ComparisonRequest? request)
     {
-        if (!HasComparisonRequest)
+        if (string.IsNullOrEmpty(_compareManifests))
         {
             if (!string.IsNullOrEmpty(_comparisonMode) || !string.IsNullOrEmpty(_comparisonOutput))
             {
@@ -90,7 +90,7 @@ public sealed class ComparisonModule : CliModule
             return false;
         }
 
-        request = new ComparisonRequest(_compareManifests!, _comparisonMode, _comparisonOutput);
+        request = new ComparisonRequest(_compareManifests, _comparisonMode, _comparisonOutput);
         return true;
     }
 }

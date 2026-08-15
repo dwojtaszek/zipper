@@ -39,52 +39,42 @@ public static class Pipeline
             return null;
         }
 
-        return AssembleRequest(
-            output, metadata, loadFile, delimiters, bates, tiff, chaos, hash, production, sourceRecords,
-            modules.LoadFile.LoadfileOnly, modules.LoadFile.IsLoadFileFormatExplicit);
-    }
-
-    private static FileGenerationRequest AssembleRequest(
-        OutputConfig output,
-        MetadataConfig metadata,
-        LoadFileConfig loadFile,
-        DelimiterConfig delimiters,
-        BatesNumberConfig? bates,
-        TiffConfig tiff,
-        ChaosConfig chaos,
-        HashConfig hash,
-        ProductionConfig production,
-        IReadOnlyList<SourceInput.SourceRecord>? sourceRecords,
-        bool loadfileOnly,
-        bool isLoadFileFormatExplicit)
-    {
-        // The image-type override (image-only runs get both DAT and OPT load files) keys off
-        // whether the user explicitly chose formats. hasImageType reads output.FileType /
-        // output.FileTypeRatios / sourceRecords — it cannot move to LoadFileModule.
-        if (!isLoadFileFormatExplicit)
-        {
-            var hasImageType = output.FileType is "tiff" or "jpg"
-                || (output.FileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false)
-                || (sourceRecords?.Any(r => r.FileType is "tiff" or "jpg") ?? false);
-            if (hasImageType)
-            {
-                loadFile = loadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
-            }
-        }
-
         return new FileGenerationRequest
         {
             Output = output,
             Metadata = metadata,
-            LoadFile = loadFile,
+            LoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords),
             Delimiters = delimiters,
             Bates = bates,
             Tiff = tiff,
             Chaos = chaos,
             Production = production,
-            LoadfileOnly = loadfileOnly,
+            LoadfileOnly = modules.LoadFile.LoadfileOnly,
             Hash = hash,
             SourceRecords = sourceRecords,
         };
+    }
+
+    // The image-type override (image-only runs get both DAT and OPT load files) keys off
+    // whether the user explicitly chose formats. hasImageType reads output.FileType /
+    // output.FileTypeRatios / sourceRecords — it cannot move to LoadFileModule.
+    private static LoadFileConfig ApplyImageTypeLoadFileOverride(
+        LoadFileConfig loadFile,
+        bool isLoadFileFormatExplicit,
+        OutputConfig output,
+        IReadOnlyList<SourceInput.SourceRecord>? sourceRecords)
+    {
+        if (isLoadFileFormatExplicit)
+        {
+            return loadFile;
+        }
+
+        var hasImageType = output.FileType is "tiff" or "jpg"
+            || (output.FileTypeRatios?.Any(r => r.Type is "tiff" or "jpg") ?? false)
+            || (sourceRecords?.Any(r => r.FileType is "tiff" or "jpg") ?? false);
+
+        return hasImageType
+            ? loadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } }
+            : loadFile;
     }
 }

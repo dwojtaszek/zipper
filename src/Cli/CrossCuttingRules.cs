@@ -94,36 +94,50 @@ internal static class CrossCuttingRules
             return false;
         }
 
-        if (modules.Production.SourcePathMode is not null)
-        {
-            if (!modules.Production.ProductionSet)
-            {
-                Console.Error.WriteLine("Error: --source-path-mode requires --production-set.");
-                return false;
-            }
+        return ValidateSourcePathMode(modules) && ValidateSourceInput(modules) && ValidateColumnProfile(modules);
+    }
 
-            if (!modules.SourceInput.HasSourceInput)
-            {
-                Console.Error.WriteLine("Error: --source-path-mode requires --input-csv or --directory-template.");
-                return false;
-            }
+    private static bool ValidateSourcePathMode(CliModuleSet modules)
+    {
+        if (modules.Production.SourcePathMode is null)
+        {
+            return true;
         }
 
-        if (modules.SourceInput.HasSourceInput)
+        if (!modules.Production.ProductionSet)
         {
-            if (!string.IsNullOrEmpty(modules.Output.FileType))
-            {
-                Console.Error.WriteLine("Error: --type cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
-                return false;
-            }
-
-            if (modules.Output.FileTypes is not null)
-            {
-                Console.Error.WriteLine("Error: --types cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
-                return false;
-            }
+            Console.Error.WriteLine("Error: --source-path-mode requires --production-set.");
+            return false;
         }
 
+        if (!modules.SourceInput.HasSourceInput)
+        {
+            Console.Error.WriteLine("Error: --source-path-mode requires --input-csv or --directory-template.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateSourceInput(CliModuleSet modules)
+    {
+        if (modules.SourceInput.HasSourceInput && !string.IsNullOrEmpty(modules.Output.FileType))
+        {
+            Console.Error.WriteLine("Error: --type cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
+            return false;
+        }
+
+        if (modules.SourceInput.HasSourceInput && modules.Output.FileTypes is not null)
+        {
+            Console.Error.WriteLine("Error: --types cannot be used with --input-csv/--directory-template. File Types come from the Source Records.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateColumnProfile(CliModuleSet modules)
+    {
         if (modules.Metadata.HasColumnProfile && modules.Production.ProductionSet)
         {
             Console.Error.WriteLine("Error: --column-profile is not supported with --production-set.");

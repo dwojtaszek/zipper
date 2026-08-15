@@ -29,33 +29,34 @@ public sealed class CliModuleSet
         ArgumentNullException.ThrowIfNull(args);
 
         var modules = All;
-        for (int i = 0; i < args.Length; i++)
+        int i = 0;
+        while (i < args.Length)
         {
             var arg = args[i].ToLowerInvariant();
 
             var module = modules.FirstOrDefault(m => m.Owns(arg));
-            if (module is not null)
+            if (module is null)
             {
-                string? value = null;
-                if (module.TakesValue(arg))
-                {
-                    if (!TryGetValue(args, i, out value))
-                    {
-                        Console.Error.WriteLine($"Error: {arg} requires a value.");
-                        return false;
-                    }
-                    i++;
-                }
-
-                if (!module.TryApply(arg, value))
-                {
-                    return false;
-                }
-                continue;
+                Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
+                return false;
             }
 
-            Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{args[i]}'");
-            return false;
+            string? value = null;
+            if (module.TakesValue(arg))
+            {
+                if (!TryGetValue(args, i, out value))
+                {
+                    Console.Error.WriteLine($"Error: {arg} requires a value.");
+                    return false;
+                }
+                i++;
+            }
+
+            if (!module.TryApply(arg, value))
+            {
+                return false;
+            }
+            i++;
         }
 
         return true;
