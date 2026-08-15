@@ -342,7 +342,7 @@ public class OutputModuleTests
 
         Assert.True(TryBuild(apply, out var config));
 
-        var parsed = RequestBuilderTestHelper.Parse(new[]
+        var (ok, parsedModules) = PipelineTestHelper.Parse(new[]
         {
             "--type", "PDF",
             "--count", "100",
@@ -354,8 +354,8 @@ public class OutputModuleTests
             "--distribution", "gaussian",
             "--encoding", "UTF-16",
         });
-        Assert.NotNull(parsed.Parsed);
-        var request = RequestBuilderTestHelper.Build(modules: parsed.Modules);
+        Assert.True(ok);
+        var request = PipelineTestHelper.Build(modules: parsedModules);
         Assert.NotNull(request);
 
         Assert.Equal(request!.Output.OutputPath, config.OutputPath);

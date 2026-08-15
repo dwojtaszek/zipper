@@ -73,7 +73,7 @@ public static class Program
             }
         }
 
-        var request = Cli.Pipeline.Build(args);
+        var request = Cli.Pipeline.Build(modules);
         if (request is null)
         {
             return 1;

@@ -24,9 +24,9 @@ public class MixedFileTypeCliTests : IDisposable
     [Fact]
     public void Parse_TypesArgument_StoresRawValue()
     {
-        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--types", "pdf:50,eml:50", "--count", "10", "--output-path", this.tempDir });
+        var (ok, modules) = PipelineTestHelper.Parse(new[] { "--types", "pdf:50,eml:50", "--count", "10", "--output-path", this.tempDir });
 
-        Assert.NotNull(result);
+        Assert.True(ok);
         Assert.Equal("pdf:50,eml:50", modules.Output.FileTypes);
     }
 

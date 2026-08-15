@@ -55,14 +55,14 @@ public class SourceDrivenCliTests : IDisposable
     [Fact]
     public void Parse_InputCsvAndDirectoryTemplate_StoreRawValues()
     {
-        var (result, modules) = RequestBuilderTestHelper.Parse(new[] { "--input-csv", "rows.csv", "--output-path", this.tempDir });
+        var (ok, modules) = PipelineTestHelper.Parse(new[] { "--input-csv", "rows.csv", "--output-path", this.tempDir });
 
-        Assert.NotNull(result);
+        Assert.True(ok);
         Assert.Equal("rows.csv", modules.SourceInput.InputCsv);
 
-        var (resultDir, modulesDir) = RequestBuilderTestHelper.Parse(new[] { "--directory-template", "tpl", "--output-path", this.tempDir });
+        var (okDir, modulesDir) = PipelineTestHelper.Parse(new[] { "--directory-template", "tpl", "--output-path", this.tempDir });
 
-        Assert.NotNull(resultDir);
+        Assert.True(okDir);
         Assert.Equal("tpl", modulesDir.SourceInput.DirectoryTemplate);
     }
 
