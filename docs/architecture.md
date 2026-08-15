@@ -31,6 +31,10 @@ The diagrams in this file are a **contract**, not just documentation:
 3. **Archive writing**: Single consumer (`ZipArchiveSink`, implementing `IArchiveSink`) writes ZIP entries, then delegates Load File emission to `LoadFileOrchestrator`, which drives the composer → serializer → emitter seam (selected via `ILoadFileWriter`; see [Load File Composition Seam](#load-file-composition-seam)).
 4. **Deadlock protection**: `Task.WhenAny` races consumer with producers; if consumer faults, result channel is completed with its exception to unblock producers.
 
+## Source Record Intake
+
+Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in `src/SourceInput/`). The two adapters — `SourceCsvReader` and `DirectoryTemplateReader` — are thin I/O shells that parse/walk their input and feed raw rows into the intake, which owns all Source Record invariants: path normalization and sanitization (`SourcePathSanitizer`), File Type validation, identity rules (character validity + uniqueness), Source Metadata column mapping, and count rules (cap REQ-207, empty input). The CSV adapter keeps its own raw-row parse bound (it materializes rows before the intake validates them); the intake re-enforces the same cap on accepted records, so both parse-time memory and validated record count are bounded. Adapters hand already-validated, normalized `SourceRecord`s to `Pipeline.Build`/`SourceInputModule`, which only assemble the request and apply cross-config gates (Bates/Production Set interactions). A new Source Record invariant needs exactly one edit.
+
 ## Chaos Engine (Loadfile-Only Mode only)
 
 `ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. DAT and OPT anomaly types are cataloged in `ChaosAnomalyTypes.cs` — see source for current list. Tracked in `_properties.json` via `LoadFileAuditWriter`.

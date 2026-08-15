@@ -1,13 +1,14 @@
 namespace Zipper.SourceInput;
 
 /// <summary>
-/// Builds <see cref="SourceRecord"/> rows by walking a user-provided directory template.
-/// The directory structure is mirrored (relative paths and File Types inferred from
-/// extensions); source file bytes are never read or copied.
+/// Thin I/O shell for Directory Template intake: walks a user-provided directory template
+/// (mirroring relative paths, File Types inferred from extensions) and feeds each entry into
+/// the shared <see cref="SourceRecordIntake"/> pipeline, which owns path sanitization,
+/// File Type validation, and count rules. Source file bytes are never read or copied.
 /// </summary>
 internal static class DirectoryTemplateReader
 {
-    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceCsvReader.MaxSourceRecords)
+    internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceRecordIntake.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         error = null;
@@ -18,14 +19,13 @@ internal static class DirectoryTemplateReader
             return false;
         }
 
-        var result = new List<SourceRecord>();
-        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         // Include hidden/system entries: silently skipping files would produce fewer Source
         // Records than the template contains. Reparse points (symbolic links) are skipped to
-        // prevent infinite recursion through link cycles. Each file is validated and converted
-        // during the lazy enumeration (inside the try, so I/O errors stay captured) and the
-        // cap is enforced as entries arrive, so memory stays bounded by the Source Record list.
+        // prevent infinite recursion through link cycles. Each entry is validated and
+        // converted during the lazy enumeration (inside the try, so I/O errors stay captured)
+        // and the cap is enforced by the intake as entries arrive, so memory stays bounded by
+        // the Source Record list.
+        var intake = new SourceRecordIntake($"Directory template '{directoryPath}'", maxRecords);
         try
         {
             foreach (var file in Directory.EnumerateFiles(directoryPath, "*", new EnumerationOptions
@@ -35,39 +35,13 @@ internal static class DirectoryTemplateReader
                 IgnoreInaccessible = false,
             }))
             {
-                if (result.Count >= maxRecords)
-                {
-                    error = $"Directory template '{directoryPath}' contains more than {maxRecords} files, exceeding the maximum of {maxRecords} Source Records; split the template into smaller directories.";
-                    return false;
-                }
-
                 var rawRelative = Path.GetRelativePath(directoryPath, file);
-                if (!SourcePathSanitizer.TryNormalize(rawRelative, out var relativePath, out var pathError))
+                if (!intake.TryAdd(rawRelative, fileTypeText: null, controlNumber: null, batesNumber: null,
+                    metadata: null, rowContext: $"Directory template entry '{rawRelative}'", out var rowError))
                 {
-                    error = $"Directory template entry '{rawRelative}' is not a safe relative path: {pathError}";
+                    error = rowError;
                     return false;
                 }
-
-                var extension = Path.GetExtension(relativePath).ToLowerInvariant();
-                if (!SourceFileTypeMap.TryFromExtension(extension, out var fileType))
-                {
-                    error = extension.Length == 0
-                        ? $"Directory template file '{relativePath}' has no extension; the File Type cannot be inferred."
-                        : $"Directory template file '{relativePath}' has unsupported extension '{extension}'. Supported: {SourceFileTypeMap.SupportedExtensionsDisplay}.";
-                    return false;
-                }
-
-                if (!seenPaths.Add(relativePath))
-                {
-                    error = $"Directory template contains duplicate relative path '{relativePath}'.";
-                    return false;
-                }
-
-                result.Add(new SourceRecord
-                {
-                    RelativePath = relativePath,
-                    FileType = fileType,
-                });
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -76,14 +50,16 @@ internal static class DirectoryTemplateReader
             return false;
         }
 
-        if (result.Count == 0)
+        if (!intake.TryBuild(out var built, out error))
         {
-            error = $"Directory template '{directoryPath}' contains no files.";
             return false;
         }
 
-        result.Sort(static (a, b) => string.CompareOrdinal(a.RelativePath, b.RelativePath));
-        records = result;
+        // Directory Template ordering is the walker's policy: Source CSV preserves source
+        // order, Directory Template sorts by relative path.
+        var sorted = built.ToList();
+        sorted.Sort(static (a, b) => string.CompareOrdinal(a.RelativePath, b.RelativePath));
+        records = sorted;
         return true;
     }
 }

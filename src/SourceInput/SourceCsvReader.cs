@@ -3,17 +3,16 @@ using System.Text;
 namespace Zipper.SourceInput;
 
 /// <summary>
-/// Reads a source-driven generation CSV into <see cref="SourceRecord"/> rows. The header row
-/// must contain FilePath and FileType columns; ControlNumber and BatesNumber are optional;
-/// every other column becomes source Metadata for Column Profile mapping. Quoted fields,
-/// escaped quotes, embedded newlines, and UTF-8 BOMs are supported.
+/// Thin I/O shell for Source CSV intake: parses the CSV text (quoting, escaping, embedded
+/// newlines, UTF-8 BOM, blank lines) and feeds the raw rows into the shared
+/// <see cref="SourceRecordIntake"/> pipeline, which owns column mapping, path/File Type
+/// validation, identity rules, and count rules. The header row must contain FilePath and
+/// FileType columns; ControlNumber and BatesNumber are optional; every other column becomes
+/// source Metadata for Column Profile mapping.
 /// </summary>
 internal static class SourceCsvReader
 {
-    /// <summary>Maximum Source Records a single input may define; Source Records are held in memory, so larger inputs must be split into multiple runs.</summary>
-    internal const int MaxSourceRecords = 10_000_000;
-
-    internal static bool TryRead(string filePath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = MaxSourceRecords)
+    internal static bool TryRead(string filePath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceRecordIntake.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         error = null;
@@ -41,62 +40,13 @@ internal static class SourceCsvReader
             return false;
         }
 
-        var header = rows[0].Fields;
-        var pathIndex = FindColumn(header, out var pathAmbiguous, "filepath");
-        var typeIndex = FindColumn(header, out var typeAmbiguous, "filetype");
-        var controlIndex = FindColumn(header, out var controlAmbiguous, "controlnumber", "docid");
-        var batesIndex = FindColumn(header, out var batesAmbiguous, "batesnumber", "bates", "begbates");
-
-        if (pathIndex < 0)
+        if (!SourceRecordIntake.TryMapCsvColumns(rows[0].Fields, out var layout, out var headerError))
         {
-            error = "Source CSV header is missing the required 'FilePath' column.";
+            error = headerError;
             return false;
         }
 
-        if (typeIndex < 0)
-        {
-            error = "Source CSV header is missing the required 'FileType' column.";
-            return false;
-        }
-
-        if (pathAmbiguous || typeAmbiguous || controlAmbiguous || batesAmbiguous)
-        {
-            error = "Source CSV header maps multiple columns to the same field (aliases such as DocId/ControlNumber or Bates/BegBates are mutually exclusive).";
-            return false;
-        }
-
-        var known = new HashSet<int> { pathIndex, typeIndex };
-        if (controlIndex >= 0)
-        {
-            known.Add(controlIndex);
-        }
-
-        if (batesIndex >= 0)
-        {
-            known.Add(batesIndex);
-        }
-
-        var metadataColumns = new List<(int Index, string Name)>();
-        var seenHeaders = new HashSet<string>(StringComparer.Ordinal);
-        for (int i = 0; i < header.Count; i++)
-        {
-            var name = header[i].Trim();
-            if (!seenHeaders.Add(NormalizeHeader(name)))
-            {
-                error = $"Source CSV header contains a duplicate column '{name}'.";
-                return false;
-            }
-
-            if (!known.Contains(i))
-            {
-                metadataColumns.Add((i, name));
-            }
-        }
-
-        var result = new List<SourceRecord>(rows.Count - 1);
-        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenControlNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenBatesNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var intake = new SourceRecordIntake($"Source CSV '{filePath}'", maxRecords);
         for (int r = 1; r < rows.Count; r++)
         {
             var row = rows[r].Fields;
@@ -104,68 +54,8 @@ internal static class SourceCsvReader
 
             string Cell(int index) => index >= 0 && index < row.Count ? row[index] : string.Empty;
 
-            if (!SourcePathSanitizer.TryNormalize(Cell(pathIndex), out var relativePath, out var pathError))
-            {
-                error = $"Row {rowNumber}: invalid FilePath: {pathError}";
-                return false;
-            }
-
-            var fileType = Cell(typeIndex).Trim().TrimStart('.').ToLowerInvariant();
-            if (fileType.Length == 0)
-            {
-                error = $"Row {rowNumber}: FileType is empty.";
-                return false;
-            }
-
-            if (!FileGeneratorFactory.IsKnownType(fileType))
-            {
-                error = $"Row {rowNumber}: unsupported File Type '{fileType}'. Supported types: pdf, jpg, tiff, eml, docx, xlsx.";
-                return false;
-            }
-
-            var pathExtension = Path.GetExtension(relativePath).ToLowerInvariant();
-            if (!SourceFileTypeMap.TryFromExtension(pathExtension, out var pathType)
-                || !string.Equals(pathType, fileType, StringComparison.Ordinal))
-            {
-                error = $"Row {rowNumber}: FilePath extension '{pathExtension}' does not match FileType '{fileType}'.";
-                return false;
-            }
-
-            if (!seenPaths.Add(relativePath))
-            {
-                error = $"Row {rowNumber}: Duplicate FilePath '{relativePath}'.";
-                return false;
-            }
-
-            var control = NullIfEmpty(Cell(controlIndex));
-            var bates = NullIfEmpty(Cell(batesIndex));
-
-            if (control is not null && !IsValidIdentityValue(control))
-            {
-                error = $"Row {rowNumber}: ControlNumber contains invalid characters (control characters and path separators are not allowed).";
-                return false;
-            }
-
-            if (bates is not null && !IsValidIdentityValue(bates))
-            {
-                error = $"Row {rowNumber}: BatesNumber contains invalid characters (control characters and path separators are not allowed).";
-                return false;
-            }
-
-            if (control is not null && !seenControlNumbers.Add(control))
-            {
-                error = $"Row {rowNumber}: Duplicate ControlNumber '{control}' (identities must be unique across Source Records).";
-                return false;
-            }
-
-            if (bates is not null && !seenBatesNumbers.Add(bates))
-            {
-                error = $"Row {rowNumber}: Duplicate BatesNumber '{bates}' (identities must be unique across Source Records).";
-                return false;
-            }
-
             Dictionary<string, string>? metadata = null;
-            foreach (var (index, name) in metadataColumns)
+            foreach (var (index, name) in layout.MetadataColumns)
             {
                 var value = Cell(index);
                 if (!string.IsNullOrEmpty(value))
@@ -175,69 +65,20 @@ internal static class SourceCsvReader
                 }
             }
 
-            result.Add(new SourceRecord
+            var control = NullIfEmpty(Cell(layout.ControlIndex));
+            var bates = NullIfEmpty(Cell(layout.BatesIndex));
+
+            if (!intake.TryAdd(Cell(layout.PathIndex), Cell(layout.TypeIndex), control, bates, metadata, $"Row {rowNumber}", out var rowError))
             {
-                RelativePath = relativePath,
-                FileType = fileType,
-                ControlNumber = control,
-                BatesNumber = bates,
-                Metadata = metadata,
-            });
-        }
-
-        if (result.Count == 0)
-        {
-            error = $"Source CSV '{filePath}' contains no data rows.";
-            return false;
-        }
-
-        records = result;
-        return true;
-    }
-
-    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
-
-    private static bool IsValidIdentityValue(string value)
-    {
-        foreach (var c in value)
-        {
-            if (char.IsControl(c) || c is '/' or '\\')
-            {
+                error = rowError;
                 return false;
             }
         }
 
-        return true;
+        return intake.TryBuild(out records, out error);
     }
 
-    private static int FindColumn(IReadOnlyList<string> header, out bool ambiguous, params string[] acceptedNames)
-    {
-        ambiguous = false;
-        var found = -1;
-        for (int i = 0; i < header.Count; i++)
-        {
-            var normalized = NormalizeHeader(header[i]);
-            foreach (var accepted in acceptedNames)
-            {
-                if (string.Equals(normalized, accepted, StringComparison.Ordinal))
-                {
-                    if (found >= 0)
-                    {
-                        ambiguous = true;
-                    }
-                    else
-                    {
-                        found = i;
-                    }
-                }
-            }
-        }
-
-        return found;
-    }
-
-    private static string NormalizeHeader(string name)
-        => name.Trim().ToLowerInvariant().Replace(" ", string.Empty, StringComparison.Ordinal).Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal);
+    private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;
 
     private static List<(int RecordNumber, List<string> Fields)> ParseRows(TextReader reader, int maxRecords)
     {
@@ -322,6 +163,9 @@ internal static class SourceCsvReader
                     afterClosingQuote = false;
                     if (row.Exists(static f => f.Length > 0))
                     {
+                        // Parse-time memory bound: raw rows are materialized before intake
+                        // validation, so the cap is enforced here to keep that list bounded
+                        // (REQ-207). The intake re-enforces the same cap on validated records.
                         if (rows.Count > maxRecords)
                         {
                             throw new InvalidDataException($"Source CSV exceeds the maximum of {maxRecords} data rows (record {recordNumber}); split the input into multiple runs.");
