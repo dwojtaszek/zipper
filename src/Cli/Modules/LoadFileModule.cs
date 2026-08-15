@@ -58,9 +58,9 @@ public sealed class LoadFileModule : CliModule
         // encoding/isEncodingExplicit/distribution/targetZipSize/includeLoadFile were bag fields
         // pre-Phase-3; OutputModule now owns them, so they are passed in as parameters.
 
-        // Message-order invariant: today LoadfileOnlyValidator runs first but treats unknown
-        // formats as Dat (GetLoadFileFormat(x) ?? Dat), so the dat/opt restriction does not
-        // fire on garbage; ValidateLoadFileFormats then prints the invalid-format line.
+        // Message-order invariant: unknown formats fail as invalid-format, not as the
+        // loadfile-only dat/opt restriction (GetLoadFileFormat(x) ?? Dat), matching the
+        // old LoadfileOnlyValidator + CrossCuttingValidator order.
         if (!string.IsNullOrEmpty(_loadFileFormat) && ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) is null)
         {
             Console.Error.WriteLine("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.");

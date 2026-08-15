@@ -70,8 +70,8 @@ graph TD
 ```mermaid
 graph LR
     subgraph CLI Layer
-        Program["Program.cs<br/>(parse + comparison short-circuit + SelectMode dispatch)"]
-        Pipeline["Pipeline.Build<br/>(CrossCuttingRules + TryBuild chain + AssembleRequest)"]
+        Program["Program.cs<br/>(CliModuleSet.Parse + comparison short-circuit + SelectMode dispatch)"]
+        Pipeline["Pipeline.Build<br/>(CrossCuttingRules + TryBuild chain + request assembly)"]
         Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output / Comparison<br/>(incl. column profile)"]
         CrossCutting["CrossCuttingRules<br/>(required-flag gates + cross-domain checks)"]
         Program --> Pipeline
@@ -155,7 +155,7 @@ graph LR
     Profiles --> DataGen
 ```
 
-*Phase 1–4 of #750 complete: all eleven parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison). `CliModuleSet.Parse` is the token reader + module dispatcher; `CrossCuttingRules.Validate` runs the generation-path cross-domain checks after parse. `Pipeline.Build` still runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then `Pipeline.AssembleRequest` applies the image-type load-file override and constructs `FileGenerationRequest`. `Program` parses once, short-circuits to the Production Manifest comparer when `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), and otherwise hands the same parsed set to `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
+*Phase 1–4 of #750 complete: all eleven parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison). `Program` owns `CliModuleSet.Parse` (token reader + module dispatcher) and the comparison short-circuit; `CrossCuttingRules.Validate` then runs the generation-path cross-domain checks on the parsed module fields, before any `TryBuild`. `Pipeline.Build` runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then applies the image-type load-file override (`ApplyImageTypeLoadFileOverride`) and constructs `FileGenerationRequest`. When `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), `Program` short-circuits to the Production Manifest comparer and never calls `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
 
 ## Post-Generation Validation
 

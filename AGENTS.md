@@ -248,15 +248,15 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 14. Post-merge: Run `gh pr merge <PR-number> --squash --delete-branch && git checkout main && git pull && git worktree remove .worktrees/<branch-name> --force && gh issue close <issue-number> -c "Resolved in PR #<PR-number>"` to execute clean post-merge closeout in a single sequence. If a **Roadmap:** issue tracks the work, comment there that the leaf issue closed (phase progress) — do not close the roadmap until its exit criteria say so.
 
 **Feature implementation ladder (order matters):**
-1. `src/Cli/ParsedArguments.cs` — add property
-2. `src/Cli/CliParser.cs` — add case in switch
-3. `src/Config/MetadataConfig.cs` — add property + `ShouldInclude*Columns()` method
-4. `src/Cli/RequestBuilder.cs` — wire parsed arg to config
+1. Owning `src/Cli/Modules/*Module.cs` — add the flag to `OwnedFlags`, `TryApply`, and `TryBuild` (typed config)
+2. `src/Cli/CrossCuttingRules.cs` — only if the flag is a cross-domain gate (required-flag / mode conflict)
+3. `src/Config/MetadataConfig.cs` — add property + `ShouldInclude*Columns()` method when the flag is a metadata column
+4. `src/Cli/HelpTextGenerator.cs` — usage line for the new flag
 5. `src/Profiles/BuiltInProfiles.cs` — add legacy profile if needed
 6. `src/LoadFiles/DatComposer.cs` — `BuildHeaderColumns()` then `StandardRowValues()`
 7. `src/LoadFiles/StandardRowComposer.cs` — `BuildOrderedKeys()` then `Resolve()` + call `SyntheticRowValues`
 8. `src/LoadFiles/SyntheticRowValues.cs` — add value-generation method
-9. `src/Zipper.Tests/DatComposingWriterTests.cs` — add tests
+9. `src/Zipper.Tests/DatComposingWriterTests.cs` plus the owning module's `*ModuleTests` — add tests
 10. `README.md` — usage line, Arguments Quick Reference, Argument Interactions
 
 **Test location:** `src/Zipper.Tests/`.
@@ -329,8 +329,9 @@ See [CI.md](CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file procedure
 
 | Path | Purpose |
 |------|---------|
-| `src/Program.cs` | Entry point, CLI orchestration, mode dispatch |
-| `src/Cli/` | CLI parsing, validation, help text, request assembly |
+| `src/Program.cs` | Entry point, `CliModuleSet.Parse`, comparison short-circuit, mode dispatch |
+| `src/Cli/` | `CliModuleSet.Parse`, `CrossCuttingRules`, help text, `Pipeline.Build` request assembly |
+| `src/Cli/Modules/` | Domain modules (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison) |
 | `src/FileGenerationRequest.cs` | Configuration root (9 sub-configs + `LoadfileOnly` flag) |
 | `src/IGenerationMode.cs` / `GenerationRunner.cs` | Mode interface + dispatcher |
 | `src/StandardMode.cs` / `LoadFileOnlyMode.cs` / `ProductionSetMode.cs` | Three generation mode adapters |

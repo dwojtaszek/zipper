@@ -29,6 +29,8 @@ public class HelpTextGeneratorTests
             Assert.Contains("Loadfile-Only Options:", output, StringComparison.Ordinal);
             Assert.Contains("Chaos Engine Options:", output, StringComparison.Ordinal);
             Assert.Contains("Production Set Options:", output, StringComparison.Ordinal);
+            Assert.Contains("--redacted-production", output, StringComparison.Ordinal);
+            Assert.Contains("--withheld-native-policy", output, StringComparison.Ordinal);
             Assert.Contains("Bates Numbering:", output, StringComparison.Ordinal);
             Assert.Contains("TIFF Options:", output, StringComparison.Ordinal);
             Assert.Contains("Column Profile Options:", output, StringComparison.Ordinal);

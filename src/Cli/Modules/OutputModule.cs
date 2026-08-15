@@ -223,7 +223,7 @@ public sealed class OutputModule : CliModule
             return false;
         }
 
-        // Byte-identical to Pipeline.AssembleRequest: single-ratio mix collapses to a single File Type.
+        // Single-ratio mix collapses to a single File Type (parity with the old RequestBuilder assembly).
         var fileType = (_fileType ?? "pdf").ToLowerInvariant();
         IReadOnlyList<FileTypeRatio>? fileTypeRatios = null;
         FileTypePlan? fileTypePlan = null;
