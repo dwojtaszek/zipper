@@ -34,7 +34,8 @@ public class CliModuleSetTests
                 "--load-file-formats", "--dat-delimiters", "--loadfile-format", "--eol", "--col-delim",
             "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim", "--chaos-amount",
             "--chaos-types", "--chaos-scenario", "--volume-size", "--hash-mode", "--hash-algorithms",
-            "--compare-production-manifests", "--comparison-mode", "--comparison-output"
+            "--compare-production-manifests", "--comparison-mode", "--comparison-output",
+            "--types", "--input-csv", "--directory-template", "--source-path-mode"
         };
 
         foreach (var flag in flags)

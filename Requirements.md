@@ -781,7 +781,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ## 17. CLI Contracts for Rolling, Supplemental, and Comparison Workflows
 
- This section pins the public CLI contract for each rolling, supplemental, and comparison option: argument name, default, cardinality and list syntax, accepted values, dependencies and conflicts, early-exit behavior, and output selection. These contracts are immutable and must agree with the README Arguments Quick Reference, the help text emitted by `HelpTextGenerator`, the `CliModule` `TryApply`/`TryBuild` enforcement, the `CrossCuttingRules` cross-domain checks, and the `Pipeline.AssembleRequest` wiring.
+This section pins the public CLI contract for each rolling, supplemental, and comparison option: argument name, default, cardinality and list syntax, accepted values, dependencies and conflicts, early-exit behavior, and output selection. These contracts are immutable and must agree with the README Arguments Quick Reference, the help text emitted by `HelpTextGenerator`, the `CliModule` `TryApply`/`TryBuild` enforcement, the `CrossCuttingRules` cross-domain checks, and the `Pipeline.AssembleRequest` wiring.
 
 ### Rolling Production Set Contracts
 

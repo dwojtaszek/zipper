@@ -31,6 +31,8 @@ public class ComparisonModuleTests
     public void TryApply_MissingValue_ReturnsFalse()
     {
         Assert.False(CreateModules().Comparison.TryApply("--comparison-mode", null));
+        Assert.False(CreateModules().Comparison.TryApply("--compare-production-manifests", null));
+        Assert.False(CreateModules().Comparison.TryApply("--comparison-output", null));
     }
 
     // REQ-177/REQ-178: companion flags without the main flag must fail.

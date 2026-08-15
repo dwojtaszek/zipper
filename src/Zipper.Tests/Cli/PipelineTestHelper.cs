@@ -10,15 +10,9 @@ internal static class PipelineTestHelper
         return (modules.Parse(args), modules);
     }
 
-    public static FileGenerationRequest? Build(
-        CliModuleSet? modules = null,
-        Action<CliModuleSet>? configureModules = null)
+    public static FileGenerationRequest? Build(CliModuleSet? modules = null)
     {
         modules ??= CliModules.Create();
-        configureModules?.Invoke(modules);
         return Cli.Pipeline.Build(modules);
     }
-
-    public static FileGenerationRequest? Build(string[] args)
-        => Cli.Pipeline.Build(args);
 }
