@@ -71,6 +71,8 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --source-path-mode <bates|preserve|originals> Source Path Mode for Source-Driven Production Sets (default: bates)");
         Console.Error.WriteLine("  --production-zip         Wrap production set output in a ZIP archive");
         Console.Error.WriteLine("  --volume-size <number>   Max files per volume subfolder (default: 5000)");
+        Console.Error.WriteLine("  --redacted-production    Generate redacted image/text placeholders");
+        Console.Error.WriteLine("  --withheld-native-policy <keep-native|omit-native-path|replace-with-placeholder> Native path policy for redacted productions (default: keep-native)");
         Console.Error.WriteLine("  --supplemental-production Enable supplemental production set generation mode");
         Console.Error.WriteLine("  --prior-manifest <paths>  Comma-separated list of paths to prior production manifest files");
         Console.Error.WriteLine("  --supplemental-gap-policy <reject|allow> Gap policy for supplemental mode: reject or allow (default: reject)");

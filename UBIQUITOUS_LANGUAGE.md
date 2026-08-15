@@ -178,7 +178,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Generation Request** | The complete configuration (all CLI arguments) for a single generation job. Encapsulated in `FileGenerationRequest` and grouped by sub-configs: Output, Metadata, Load File, Delimiters, Bates, TIFF, Chaos, and Production. The flat pass-through properties were removed in #213 — access configuration via sub-configs directly. | Request, job specification |
+| **Generation Request** | The complete configuration (all CLI arguments) for a single generation job. Encapsulated in `FileGenerationRequest` and grouped by sub-configs: Output, Metadata, Load File, Delimiters, Bates, TIFF, Chaos, Production, and Hash. The flat pass-through properties were removed in #213 — access configuration via sub-configs directly. | Request, job specification |
 | **File Generation** | The process of creating all **Native Files** for an **Archive** or **Production Set**, distributed across **Folders** or **Volumes** according to the **Generation Request**. | File creation, document generation |
 | **Parallel Generation** | Multi-threaded **File Generation** with configurable worker pools optimized for available CPU cores. | Concurrent generation, parallel processing |
 | **Worker Pool** | The set of background threads performing **Parallel Generation**. Size is auto-detected based on CPU core count. | Thread pool, worker threads |
