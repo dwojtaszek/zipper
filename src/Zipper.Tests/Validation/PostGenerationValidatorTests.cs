@@ -584,4 +584,76 @@ public class PostGenerationValidatorTests
                 Directory.Delete(tempDir, true);
         }
     }
+
+    // ---- DatLineParser tests ----
+
+    [Theory]
+    [InlineData("a,b,c", ',', '"', 3)]
+    [InlineData("a,b", ',', '"', 2)]
+    [InlineData("a", ',', '"', 1)]
+    [InlineData("\"a,b\",c", ',', '"', 2)]
+    [InlineData("a,\"b,c\",d", ',', '"', 3)]
+    [InlineData("a,\"b\"\"c\",d", ',', '"', 3)]
+    [InlineData("a\u0014b\u0014c", '\x14', '\xfe', 3)]
+    [InlineData("\u0014a\u0014b\u0014c\u0014", '\x14', '\xfe', 5)]
+    public void DatLineParser_Parse_SplitsFieldsCorrectly(string line, char colDelim, char quoteDelim, int expectedCount)
+    {
+        var fields = DatLineParser.Parse(line, colDelim, quoteDelim);
+        Assert.Equal(expectedCount, fields.Count);
+    }
+
+    [Fact]
+    public void DatLineParser_Parse_WithEmptyLine_ReturnsSingleEmptyField()
+    {
+        var fields = DatLineParser.Parse(string.Empty, ',', '"');
+        Assert.Single(fields);
+        Assert.Empty(fields[0]);
+    }
+
+    // ---- ValidationOrchestrator tests ----
+
+    [Fact]
+    public void ValidationOrchestrator_RunAfterGeneration_WithValidContext_DoesNotThrow()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "a,b,c\n");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
+                Request = new FileGenerationRequest(),
+                SkipEolValidation = true,
+            };
+
+            ValidationOrchestrator.RunAfterGeneration(ctx);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void ValidationOrchestrator_RunAfterGeneration_WithInvalidContext_Throws()
+    {
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(tempFile, "a,b,c\nd,e\n");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
+                Request = new FileGenerationRequest(),
+                SkipEolValidation = true,
+            };
+
+            Assert.Throws<InvalidOperationException>(() => ValidationOrchestrator.RunAfterGeneration(ctx));
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
 }
+

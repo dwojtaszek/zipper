@@ -60,14 +60,7 @@ internal class ProductionSetMode : IGenerationMode
                 LoadFiles = loadFiles,
                 Request = request,
             };
-            var validator = new PostGenerationValidator();
-            var vr = validator.Validate(context);
-            if (vr.HasErrors || vr.HasWarnings)
-            {
-                Console.Error.WriteLine(vr.GetSummary());
-                if (vr.HasErrors)
-                    throw new InvalidOperationException("Post-generation validation failed.");
-            }
+            ValidationOrchestrator.RunAfterGeneration(context);
         }
     }
 }

@@ -236,38 +236,7 @@ public sealed class ValidatorRunner
     {
         char delimiter = format == "csv" ? ',' : columnDelimiter;
         char quote = format == "csv" ? '"' : quoteDelimiter;
-        var fields = new List<string>();
-        var field = new StringBuilder();
-        bool quoted = false;
-
-        for (int i = 0; i < line.Length; i++)
-        {
-            var current = line[i];
-            if (current == quote)
-            {
-                if (quoted && i + 1 < line.Length && line[i + 1] == quote)
-                {
-                    field.Append(quote);
-                    i++;
-                }
-                else
-                {
-                    quoted = !quoted;
-                }
-            }
-            else if (current == delimiter && !quoted)
-            {
-                fields.Add(field.ToString());
-                field.Clear();
-            }
-            else
-            {
-                field.Append(current);
-            }
-        }
-
-        fields.Add(field.ToString());
-        return fields;
+        return DatLineParser.Parse(line, delimiter, quote);
     }
 
     private static string NormalizeColumn(string column)

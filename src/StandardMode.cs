@@ -95,14 +95,7 @@ internal class StandardMode : IGenerationMode
                 Request = request,
                 SkipEolValidation = true, // ponytail: StandardMode uses Environment.NewLine regardless of --eol config
             };
-            var validator = new PostGenerationValidator();
-            var vr = validator.Validate(context);
-            if (vr.HasErrors || vr.HasWarnings)
-            {
-                Console.Error.WriteLine(vr.GetSummary());
-                if (vr.HasErrors)
-                    throw new InvalidOperationException("Post-generation validation failed.");
-            }
+            ValidationOrchestrator.RunAfterGeneration(context);
         }
     }
 
