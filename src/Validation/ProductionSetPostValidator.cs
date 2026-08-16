@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Zipper.Validation;
@@ -454,36 +453,5 @@ internal sealed class ProductionSetPostValidator
     }
 
     public static List<string> ParseDatLine(string line, char colDelim, char quoteDelim)
-    {
-        var fields = new List<string>();
-        var currentField = new StringBuilder();
-        bool inQuotes = false;
-        for (int i = 0; i < line.Length; i++)
-        {
-            char c = line[i];
-            if (quoteDelim != '\0' && c == quoteDelim)
-            {
-                if (inQuotes && i + 1 < line.Length && line[i + 1] == quoteDelim)
-                {
-                    currentField.Append(quoteDelim);
-                    i++; // Skip the second quote
-                }
-                else
-                {
-                    inQuotes = !inQuotes;
-                }
-            }
-            else if (c == colDelim && !inQuotes)
-            {
-                fields.Add(currentField.ToString());
-                currentField.Clear();
-            }
-            else
-            {
-                currentField.Append(c);
-            }
-        }
-        fields.Add(currentField.ToString());
-        return fields;
-    }
+        => DatLineParser.Parse(line, colDelim, quoteDelim);
 }
