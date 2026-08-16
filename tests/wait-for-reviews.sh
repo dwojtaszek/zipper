@@ -25,7 +25,7 @@ EXPECTED_BOTS=(
 )
 # Matches both explicit skip declarations (rate limits) and CodeRabbit's
 # walkthrough-only responses, which carry no formal review object.
-SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|Walkthrough'
+SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Review available on request|Walkthrough'
 POLL_SECONDS=30
 
 # --- Prerequisites ---
@@ -67,10 +67,10 @@ print_ok()    { printf '\033[42m[ OK ]\033[0m %s\n' "$1"; }
 reviews_json=""
 comments_json=""
 fetch_review_state() {
-    reviews_json=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate --slurp 2>/dev/null \
-        | jq '[.[][]]' 2>/dev/null) || reviews_json="[]"
-    comments_json=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --slurp 2>/dev/null \
-        | jq '[.[][]]' 2>/dev/null) || comments_json="[]"
+    reviews_json=$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null \
+        | jq -s 'flatten' 2>/dev/null) || reviews_json="[]"
+    comments_json=$(gh api --paginate "repos/$REPO/issues/$PR/comments" 2>/dev/null \
+        | jq -s 'flatten' 2>/dev/null) || comments_json="[]"
 }
 
 bot_accounted_for() {
