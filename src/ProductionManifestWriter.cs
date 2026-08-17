@@ -133,11 +133,11 @@ internal static class ProductionManifestWriter
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
         if (materializer is not null)
         {
-            await materializer.WriteTextAsync(manifestPath, json, System.Text.Encoding.UTF8).ConfigureAwait(false);
+            await materializer.WriteTextAsync(manifestPath, json, new System.Text.UTF8Encoding(false)).ConfigureAwait(false);
         }
         else
         {
-            await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
+            await File.WriteAllTextAsync(manifestPath, json, new System.Text.UTF8Encoding(false)).ConfigureAwait(false);
         }
 
         return manifestPath;

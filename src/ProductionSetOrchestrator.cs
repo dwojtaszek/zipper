@@ -411,7 +411,7 @@ internal static class ProductionSetOrchestrator
             var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
             var reportPath = Path.Combine(productionPath, "_validation_report.json");
             var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
-            await materializer.WriteTextAsync(reportPath, reportJson, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+            await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
 
             if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
             {
