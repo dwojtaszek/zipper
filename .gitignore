@@ -72,7 +72,11 @@ Thumbs.db
 graphify-out/
 graphify_audit/
 .worktrees/
-.zipper-runner/
+.zipper-runner/.env
+.zipper-runner/logs/
+.zipper-runner/state/
+.zipper-runner/runner.lock
+.zipper-runner/**/__pycache__/
 
 # Local cache
 cache/
