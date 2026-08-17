@@ -474,6 +474,8 @@ def _fetch_issue_body(issue_number: str) -> tuple[str, str]:
     is needed.
     """
     code, out, _ = run_cmd(["gh", "issue", "view", issue_number, "--json", "title,body,comments"], cwd=REPO_PATH)
+    if code != 0 or not out.strip():
+        code, out, _ = run_cmd(["gh", "api", f"/repos/dwojtaszek/zipper/issues/{issue_number}", "--jq", "{title: .title, body: .body, comments: []}"], cwd=REPO_PATH)
     title = ""
     body = ""
     if code == 0:
@@ -1021,11 +1023,18 @@ def babysit_dependabot_prs():
 def select_next_issue():
     print("Fetching open issues from GitHub...")
     code, out, err = run_cmd(["gh", "issue", "list", "--state", "open", "--limit", "500", "--json", "number,title,labels,assignees,author"], cwd=REPO_PATH)
-    if code != 0:
-        print(f"Failed to fetch issues: {err}")
-        return None
+    if code != 0 or not out.strip():
+        print(f"GraphQL issue list failed ({err.strip()}), falling back to REST API...")
+        code, out, err = run_cmd(["gh", "api", "/repos/dwojtaszek/zipper/issues", "--paginate", "--jq", "[.[] | select(.pull_request == null) | {number: .number, title: .title, labels: [.labels[].name], assignees: .assignees, author: {login: .user.login}}]"], cwd=REPO_PATH)
+        if code != 0:
+            print(f"Failed to fetch issues via REST API: {err}")
+            return None
 
-    issues = json.loads(out)
+    try:
+        issues = json.loads(out)
+    except json.JSONDecodeError:
+        print("Failed to decode issues JSON.")
+        return None
     unassigned = [i for i in issues if not i.get("assignees")]
 
     p1_issues = []
@@ -1036,6 +1045,8 @@ def select_next_issue():
     p6_issues = []
 
     pr_code, pr_out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "headRefName"], cwd=REPO_PATH)
+    if pr_code != 0 or not pr_out.strip():
+        pr_code, pr_out, _ = run_cmd(["gh", "api", "/repos/dwojtaszek/zipper/pulls", "--paginate", "--jq", "[.[] | {headRefName: .head.ref}]"], cwd=REPO_PATH)
     active_branches = []
     if pr_code == 0:
         try:
@@ -1060,7 +1071,7 @@ def select_next_issue():
     for issue in unassigned:
         num = issue.get("number")
         title = issue.get("title", "")
-        labels = [l.get("name").lower() for l in issue.get("labels", [])]
+        labels = [(l.get("name") if isinstance(l, dict) else str(l)).lower() for l in issue.get("labels", [])]
         author = issue.get("author", {}).get("login", "")
 
         if author not in TRUSTED_AUTHORS:
