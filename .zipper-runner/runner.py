@@ -1264,6 +1264,7 @@ def main():
                 f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
                 f"Only after all review findings are resolved, open a PR. "
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
+                f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
                 f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
                 f"and make all technical decisions yourself using your best engineering judgment."
             )
@@ -1278,6 +1279,11 @@ def main():
                 _, before_commits, _ = run_cmd(["git", "rev-list", "--count", f"main..{branch_name}"], cwd=REPO_PATH)
                 before_count = int(before_commits.strip() or "0")
                 agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=False, model=_current_model())
+
+                if not _worktree_is_clean(wt_path):
+                    print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
+                    run_cmd(["git", "add", "-A"], cwd=wt_path)
+                    run_cmd(["git", "commit", "-m", f"wip: progress on issue #{num} by {agent_name}"], cwd=wt_path)
 
                 pr_num_val, pr_url = _check_pr(branch_name)
                 pr_create_err = ""
@@ -1314,14 +1320,15 @@ def main():
                         f"<pre>{pr_create_err}</pre>"
                     )
                     break
-                elif agy_code == 0 and work_done:
+                elif work_done:
+                    print(f"Progress recorded on issue #{num} ({added_commits} new commit(s)). Preserving worktree for next cycle/agent.")
                     send_email(
-                        f"[Runner] Progress: Issue #{num} Initial Run Completed",
-                        f"<h3>Agent completed the initial run for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a> but no PR was created yet.</h3>"
+                        f"[Runner] Progress: Issue #{num} Progress Checkpointed",
+                        f"<h3>Agent made progress on Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a> and work was preserved.</h3>"
                         f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
                         f"<p><b>Title:</b> {title}</p>"
                         f"<p><b>Branch:</b> {branch_name}</p>"
-                        f"<p>It might be in planning mode or has open questions. The runner will automatically resume execution in the next cron cycle.</p>"
+                        f"<p>The worktree is preserved and execution will automatically resume in the next cycle.</p>"
                     )
                     break
                 else:
@@ -1378,6 +1385,7 @@ def main():
                         f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
                         f"Only after all review findings are resolved, open a PR. "
                         f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
+                        f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
                         f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
                         f"and make all technical decisions yourself using your best engineering judgment."
                     )
