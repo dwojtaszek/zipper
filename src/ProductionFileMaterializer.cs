@@ -1,9 +1,5 @@
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
 using System.Text;
-using Zipper.Config;
-using Zipper.Profiles.Data;
 
 namespace Zipper;
 

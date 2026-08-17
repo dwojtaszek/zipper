@@ -1,8 +1,3 @@
-using System.IO.Compression;
-using System.Text;
-using Zipper.Config;
-using Zipper.Profiles.Data;
-
 namespace Zipper;
 
 /// <summary>
@@ -12,13 +7,6 @@ namespace Zipper;
 /// </summary>
 internal static class ProductionSetGenerator
 {
-    private static readonly System.Text.Json.JsonSerializerOptions ValidationReportSerializerOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
     /// <summary>
     /// Generates a complete production set using the real filesystem materializer and shared hash computer.
     /// </summary>

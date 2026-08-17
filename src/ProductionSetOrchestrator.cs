@@ -1,7 +1,4 @@
-using System.IO;
-using System.IO.Compression;
 using System.Text;
-using Zipper.Config;
 using Zipper.Profiles.Data;
 
 namespace Zipper;
@@ -405,17 +402,21 @@ internal static class ProductionSetOrchestrator
             productionId: productionName,
             rollingSequenceNumber: rollingIndex + 1,
             batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant(),
-            batesPrefix: prefix).ConfigureAwait(false);
+            batesPrefix: prefix,
+            materializer: materializer).ConfigureAwait(false);
 
-        // Run validation
-        var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
-        var reportPath = Path.Combine(productionPath, "_validation_report.json");
-        var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
-        await materializer.WriteTextAsync(reportPath, reportJson, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
-
-        if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
+        // Run validation when running against real file system
+        if (materializer is ProductionFileMaterializer)
         {
-            throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
+            var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
+            var reportPath = Path.Combine(productionPath, "_validation_report.json");
+            var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
+            await materializer.WriteTextAsync(reportPath, reportJson, Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+
+            if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
+            }
         }
 
         // Optionally wrap in ZIP

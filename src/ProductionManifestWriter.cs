@@ -37,7 +37,8 @@ internal static class ProductionManifestWriter
         string? productionId = null,
         int rollingSequenceNumber = 1,
         string? batesRangeMode = null,
-        string? batesPrefix = null)
+        string? batesPrefix = null,
+        IFileMaterializer? materializer = null)
     {
         var manifestPath = Path.Combine(productionPath, "_manifest.json");
 
@@ -130,7 +131,14 @@ internal static class ProductionManifestWriter
         }
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
-        await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
+        if (materializer is not null)
+        {
+            await materializer.WriteTextAsync(manifestPath, json, System.Text.Encoding.UTF8).ConfigureAwait(false);
+        }
+        else
+        {
+            await File.WriteAllTextAsync(manifestPath, json).ConfigureAwait(false);
+        }
 
         return manifestPath;
     }

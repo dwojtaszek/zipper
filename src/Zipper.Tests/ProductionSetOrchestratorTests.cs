@@ -1,11 +1,5 @@
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Xunit;
-using Zipper;
 using Zipper.Config;
 
 namespace Zipper.Tests;
@@ -17,26 +11,25 @@ public class ProductionSetOrchestratorTests
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
-        var orchestrator = new ProductionSetOrchestrator(materializer, new HashComputer());
 
         var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
 
         Assert.NotEmpty(materializer.CreatedDirectories);
-        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("DATA"));
-        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("NATIVES"));
-        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("TEXT"));
-        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("IMAGES"));
+        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("DATA", System.StringComparison.Ordinal));
+        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("NATIVES", System.StringComparison.Ordinal));
+        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("TEXT", System.StringComparison.Ordinal));
+        Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("IMAGES", System.StringComparison.Ordinal));
 
-        var nativeWrite = Assert.Single(materializer.WrittenBytes, w => w.path.EndsWith(".pdf"));
+        var nativeWrite = Assert.Single(materializer.WrittenBytes, w => w.path.EndsWith(".pdf", System.StringComparison.Ordinal));
         Assert.NotEmpty(nativeWrite.content);
 
-        var textWrite = Assert.Single(materializer.WrittenTexts, w => w.path.EndsWith(".txt"));
-        Assert.Contains("Extracted text", textWrite.text);
+        var textWrite = Assert.Single(materializer.WrittenTexts, w => w.path.EndsWith(".txt", System.StringComparison.Ordinal));
+        Assert.Contains("Extracted text", textWrite.text, System.StringComparison.Ordinal);
 
-        var imageWrite = Assert.Single(materializer.WrittenBytes, w => w.path.EndsWith(".tif"));
+        var imageWrite = Assert.Single(materializer.WrittenBytes, w => w.path.EndsWith(".tif", System.StringComparison.Ordinal));
         Assert.NotEmpty(imageWrite.content);
 
-        Assert.Contains(materializer.WrittenBytes, w => w.path.Contains("VOL001"));
+        Assert.Contains(materializer.WrittenBytes, w => w.path.Contains("VOL001", System.StringComparison.Ordinal));
     }
 
     [Fact]
@@ -44,13 +37,14 @@ public class ProductionSetOrchestratorTests
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
+        request.Output = request.Output with { WithText = true };
         request.Production = request.Production with { RedactedProduction = true };
         var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
 
-        Assert.Contains(materializer.CreatedDirectories, p => p.Contains("REDACTED"));
-        var redactedImage = Assert.Single(materializer.WrittenBytes, w => w.path.Contains("REDACTED") && w.path.EndsWith(".tif"));
-        var redactedText = Assert.Single(materializer.WrittenTexts, w => w.path.Contains("REDACTED") && w.path.EndsWith(".txt"));
-        Assert.Contains("Redacted text", redactedText.text);
+        Assert.Contains(materializer.CreatedDirectories, p => p.Contains("REDACTED", System.StringComparison.Ordinal));
+        var redactedImage = Assert.Single(materializer.WrittenBytes, w => w.path.Contains("REDACTED", System.StringComparison.Ordinal) && w.path.EndsWith(".tif", System.StringComparison.Ordinal));
+        var redactedText = Assert.Single(materializer.WrittenTexts, w => w.path.Contains("REDACTED", System.StringComparison.Ordinal) && w.path.EndsWith(".txt", System.StringComparison.Ordinal));
+        Assert.Contains("Redacted text", redactedText.text, System.StringComparison.Ordinal);
     }
 
     [Fact]
@@ -58,7 +52,7 @@ public class ProductionSetOrchestratorTests
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
-        request.Hash = request.Hash with { Mode = Config.HashMode.Actual, Algorithms = new List<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 } };
+        request.Hash = request.Hash with { Mode = Config.HashMode.Actual, Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 } };
         var hashComputer = new HashComputer();
         var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, hashComputer);
 
@@ -71,7 +65,7 @@ public class ProductionSetOrchestratorTests
     {
         public List<string> CreatedDirectories { get; } = new();
         public List<(string path, byte[] content)> WrittenBytes { get; } = new();
-        public List<(string path, string text, string encoding)> WrittenTexts { get; } = new();
+        public List<(string path, string text, Encoding encoding)> WrittenTexts { get; } = new();
         public List<FileData> FileDataItems { get; } = new();
         public List<(string path, byte[] content)> Attachments { get; } = new();
 
@@ -87,7 +81,7 @@ public class ProductionSetOrchestratorTests
             return Task.CompletedTask;
         }
 
-        public Task WriteTextAsync(string path, string text, string encoding, CancellationToken cancellationToken = default)
+        public Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
         {
             this.WrittenTexts.Add((path, text, encoding));
             return Task.CompletedTask;
@@ -182,9 +176,8 @@ public class ProductionSetOrchestratorTests
             },
             Hash = new HashConfig
             {
-                IsEnabled = false,
                 Mode = Config.HashMode.Actual,
-                Algorithms = new List<Config.HashAlgorithm>(),
+                Algorithms = new HashSet<Config.HashAlgorithm>(),
             },
             LoadFile = new LoadFileConfig
             {

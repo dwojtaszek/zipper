@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using Zipper.Config;
 
 namespace Zipper;
 
@@ -8,10 +8,30 @@ namespace Zipper;
 /// </summary>
 internal class HashComputer : IHashComputer
 {
+    /// <summary>Computes hashes for the given content using the request's hash configuration.</summary>
+    public virtual IReadOnlyDictionary<HashAlgorithm, string>? ComputeHashes(
+        byte[] content,
+        HashConfig hashConfig,
+        FileWorkItem workItem,
+        FileGenerationRequest request)
+    {
+        if (!hashConfig.IsEnabled)
+        {
+            return null;
+        }
+
+        if (hashConfig.Mode == HashMode.Simulated)
+        {
+            return ComputeSimulatedHashes(workItem, hashConfig, request);
+        }
+
+        return ComputeActualHashes(content, hashConfig);
+    }
+
     /// <summary>
     /// Computes real hashes from raw bytes.
     /// </summary>
-    public virtual IReadOnlyDictionary<HashAlgorithm, string> ComputeActualHashes(
+    public static IReadOnlyDictionary<HashAlgorithm, string> ComputeActualHashes(
         byte[] content,
         HashConfig hashConfig)
     {
@@ -21,8 +41,8 @@ internal class HashComputer : IHashComputer
     /// <summary>
     /// Computes real hashes from a byte span.
     /// </summary>
-    public virtual IReadOnlyDictionary<HashAlgorithm, string> ComputeActualHashes(
-        System.ReadOnlySpan<byte> data,
+    public static IReadOnlyDictionary<HashAlgorithm, string> ComputeActualHashes(
+        ReadOnlySpan<byte> data,
         HashConfig hashConfig)
     {
         var dict = new Dictionary<HashAlgorithm, string>(hashConfig.Algorithms.Count);
@@ -37,7 +57,7 @@ internal class HashComputer : IHashComputer
     /// <summary>
     /// Computes deterministic simulated hashes for the given work item.
     /// </summary>
-    public virtual IReadOnlyDictionary<HashAlgorithm, string> ComputeSimulatedHashes(
+    public static IReadOnlyDictionary<HashAlgorithm, string> ComputeSimulatedHashes(
         FileWorkItem workItem,
         HashConfig hashConfig,
         FileGenerationRequest request)
