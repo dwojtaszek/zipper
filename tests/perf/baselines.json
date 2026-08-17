@@ -1,17 +1,16 @@
 {
-  "_captured_on": "ubuntu-latest (5-run median, 2026-08-13)",
+  "_captured_on": "ubuntu-latest (5-run max, 2026-08-17)",
   "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
-  "_note": "loadfile_200k rss_kb raised 30492->38464 by PR #756 (Phase 2). The scenario's --output-path is a /tmp dir that PathValidator rejects, so every run exits on the error path. Phase 2 moved the column-profile load (an ~8MB one-time allocation) ahead of output-path validation, so the failing path now pays it. Success-path RSS is unchanged (verified ~60MB new vs ~60MB main); the gate measures the error path only.",
   "pdf_50k": {
     "wall_s": 0.07,
-    "rss_kb": 30580
+    "rss_kb": 30268
   },
   "eml_20k": {
     "wall_s": 0.06,
-    "rss_kb": 30516
+    "rss_kb": 29988
   },
   "loadfile_200k": {
-    "wall_s": 0.06,
-    "rss_kb": 38464
+    "wall_s": 0.07,
+    "rss_kb": 30156
   }
 }
