@@ -438,26 +438,10 @@ public class ParallelFileGenerator
 
         if (hashConfig.Mode == HashMode.Simulated)
         {
-            return ComputeSimulatedHashes(workItem, request);
+            return HashComputer.ComputeSimulatedHashes(workItem, hashConfig, request);
         }
 
-        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
-        foreach (var algo in hashConfig.Algorithms)
-            dict[algo] = HashUtility.ComputeHashHex(data, algo);
-
-        return dict;
-    }
-
-    private static IReadOnlyDictionary<Config.HashAlgorithm, string> ComputeSimulatedHashes(
-        FileWorkItem workItem, FileGenerationRequest request)
-    {
-        var hashConfig = request.Hash;
-        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
-        var rng = HashUtility.CreateSeededRandom(request, workItem.Index);
-        foreach (var algo in hashConfig.Algorithms)
-            dict[algo] = HashUtility.GenerateSimulatedHash(algo, rng);
-
-        return dict;
+        return HashComputer.ComputeActualHashes(data.ToArray(), hashConfig);
     }
 
     internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
