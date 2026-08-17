@@ -53,13 +53,16 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `claude` | `claude-opus-4-20250514-thinking` (Opus 4 thinking) | 0|
 | `claude` | `default` | 1|
 | `claude` | `claude-sonnet-4-6-20250622` (Sonnet 4.6) | 0|
-| `claude` | `claude-sonnet-4-6-20250622-thinking` (Sonnet 4.6 thinking) | 0|
-| `agy` | `gemini-3.5-flash-medium` | |
-| `agy` | `gemini-3.5-flash-high` | 2|
-| `agy` | `gemini-3.1-pro-low` | 0|
+| `agy` | `gemini-3.7-flash-high` | 1|
+| `agy` | `gemini-3.7-flash-medium` | 2|
+| `agy` | `gemini-3.7-flash-low` | 3|
 | `agy` | `gemini-3.1-pro-high` | 1|
-| `agy` | `claude-sonnet-4.6-thinking` | 3|
-| `agy` | `claude-opus-4.6-thinking` | 0|
+| `agy` | `gemini-3.1-pro-low` | 0|
+| `agy` | `gemini-3.5-flash-high` | 0|
+| `agy` | `gemini-3.5-flash-medium` | 0|
+| `agy` | `gemini-3.5-flash-low` | 0|
+| `agy` | `claude-sonnet-4-6` | 3|
+| `agy` | `claude-opus-4-6-thinking` | 0|
 | `hermes` | `default` | 1|
 | `hermes` | `stepfun/step-3.7-flash:free` | 1|
 | `hermes` | `deepseek-ai/deepseek-v4-flash` | 2|

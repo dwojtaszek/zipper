@@ -936,7 +936,87 @@ def babysit_active_worktrees():
         wait_for_tokens()
         _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
 
+    babysit_dependabot_prs()
     return len(active_worktrees)
+
+def babysit_dependabot_prs():
+    """Scans open Dependabot PRs on GitHub, checks CI and review gates, and auto-merges when green."""
+    print("Scanning for open Dependabot PRs...")
+    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt"], cwd=REPO_PATH)
+    if code != 0 or not out.strip():
+        return
+
+    try:
+        prs = json.loads(out)
+    except json.JSONDecodeError:
+        return
+
+    for pr in prs:
+        author_login = pr.get("author", {}).get("login", "")
+        head_branch = pr.get("headRefName", "")
+        pr_num = pr.get("number")
+        title = pr.get("title", "")
+        pr_url = pr.get("url", f"https://github.com/dwojtaszek/zipper/pull/{pr_num}")
+
+        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]") or head_branch.startswith("dependabot/")
+        if not is_dependabot:
+            continue
+
+        print(f"[dependabot] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
+        rollup = pr.get("statusCheckRollup", [])
+        ci_status = "PENDING"
+        ci_failures = []
+        all_passed = True
+
+        for check in rollup:
+            typename = check.get("__typename")
+            if typename == "CheckRun":
+                status = check.get("status")
+                conclusion = check.get("conclusion")
+                name = check.get("name")
+                if status == "COMPLETED":
+                    if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
+                        ci_failures.append(f"{name} ({conclusion})")
+                else:
+                    all_passed = False
+            elif typename == "StatusContext":
+                state = check.get("state")
+                context = check.get("context")
+                if state in ("FAILURE", "ERROR"):
+                    ci_failures.append(f"{context} ({state})")
+                elif state == "PENDING":
+                    all_passed = False
+
+        if ci_failures:
+            ci_status = "FAILED"
+        elif all_passed and rollup:
+            ci_status = "SUCCESS"
+
+        if ci_status == "SUCCESS":
+            print(f"[dependabot] CI is SUCCESS for Dependabot PR #{pr_num}. Checking robot review gate...")
+            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            if review_code != 0:
+                print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review_out}")
+                continue
+
+            print(f"[dependabot] Robot review gate passed for PR #{pr_num}. Auto-merging...")
+            if not DRY_RUN:
+                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_num), "--squash", "--delete-branch", "--admin"], cwd=REPO_PATH)
+                if merge_code == 0:
+                    print(f"[dependabot] Successfully merged Dependabot PR #{pr_num} into main.")
+                    send_email(
+                        f"[Runner] Success: Dependabot PR #{pr_num} Merged",
+                        f"<h3>Dependabot PR <a href=\"{pr_url}\">#{pr_num}</a> ({title})</h3>"
+                        f"<p>All CI workflows and robot review gates passed. The PR has been automatically squash-merged into <code>main</code> and the branch deleted.</p>"
+                    )
+                else:
+                    print(f"[dependabot] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
+            else:
+                print(f"[DRY RUN] Would auto-merge Dependabot PR #{pr_num} ({head_branch})")
+        elif ci_status == "FAILED":
+            print(f"[dependabot] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}")
+        else:
+            print(f"[dependabot] PR #{pr_num} CI checks still pending...")
 
 def select_next_issue():
     print("Fetching open issues from GitHub...")

@@ -17,7 +17,7 @@ import tempfile
 
 
 def list_models() -> list[str]:
-    """Returns list of available model strings from agy models."""
+    """Returns list of available model identifiers from agy models."""
     try:
         result = subprocess.run(
             ["agy", "models"],
@@ -25,8 +25,15 @@ def list_models() -> list[str]:
             stderr=subprocess.DEVNULL,
             text=True, timeout=15,
         )
-        lines = [l.strip() for l in result.stdout.strip().splitlines() if l.strip()]
-        return lines
+        models = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line or "fetching" in line.lower():
+                continue
+            parts = line.split()
+            if parts:
+                models.append(parts[0])
+        return models
     except Exception:
         return []
 
