@@ -148,4 +148,34 @@ public class DirectoryTemplateReaderTests : IDisposable
         Assert.False(ok);
         Assert.NotNull(error);
     }
+
+    [SkippableFact]
+    public void TryRead_InaccessibleSubdirectory_ReturnsFalse()
+    {
+        Skip.If(OperatingSystem.IsWindows(), "chmod-based permission tests are not reliable on Windows");
+        Skip.If(SourceInputTestHelper.RunningAsRoot(), "Permission bits do not restrict root; cannot provoke UnauthorizedAccessException");
+
+        var blockedDir = Path.Combine(this.tempDir, "blocked");
+        Directory.CreateDirectory(blockedDir);
+        File.WriteAllText(Path.Combine(blockedDir, "x.pdf"), "template content");
+        try
+        {
+            SourceInputTestHelper.RunChmod(blockedDir, "000");
+            var ok = DirectoryTemplateReader.TryRead(this.tempDir, out _, out var error);
+            Assert.False(ok);
+            Assert.Contains("Cannot read directory template", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try
+            {
+                SourceInputTestHelper.RunChmod(blockedDir, "700");
+                Directory.Delete(blockedDir, true);
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+    }
 }

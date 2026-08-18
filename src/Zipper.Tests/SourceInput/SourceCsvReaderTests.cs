@@ -133,7 +133,7 @@ public class SourceCsvReaderTests : IDisposable
     [Fact]
     public void TryRead_RepeatedEmptyIdentityValues_Allowed()
     {
-        var path = this.WriteCsv("FilePath,FileType,ControlNumber,BatesNumber\na.pdf,pdf,,\nb.eml,eml,,\n");
+        var path = this.WriteCsv("FilePath,FileType,ControlNumber,BatesNumber\na.pdf,pdf,\nb.eml,eml,\n");
 
         var ok = SourceCsvReader.TryRead(path, out var records, out var error);
 
@@ -271,7 +271,7 @@ public class SourceCsvReaderTests : IDisposable
     [Fact]
     public void TryRead_Utf8Bom_StillParsesHeaders()
     {
-        var path = this.WriteCsv("﻿FilePath,FileType\na.pdf,pdf\n");
+        var path = this.WriteCsv("\uFEFFFilePath,FileType\na.pdf,pdf\n");
 
         var ok = SourceCsvReader.TryRead(path, out var records, out _);
 
@@ -399,4 +399,57 @@ public class SourceCsvReaderTests : IDisposable
         Assert.False(ok);
         Assert.NotNull(error);
     }
+
+    [SkippableFact]
+    public void TryRead_UnauthorizedAccess_ReturnsFalse()
+    {
+        Skip.If(OperatingSystem.IsWindows(), "chmod-based permission tests are not reliable on Windows");
+        Skip.If(SourceInputTestHelper.RunningAsRoot(), "Permission bits do not restrict root; cannot provoke UnauthorizedAccessException");
+
+        var path = Path.Combine(this.tempDir, "locked.csv");
+        File.WriteAllText(path, "FilePath,FileType\na.pdf,pdf\n");
+
+        SourceInputTestHelper.RunChmod(path, "000");
+        try
+        {
+            var ok = SourceCsvReader.TryRead(path, out _, out var error);
+            Assert.False(ok);
+            Assert.Contains("Cannot read source CSV", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try
+            {
+                SourceInputTestHelper.RunChmod(path, "600");
+                File.Delete(path);
+            }
+            catch
+            {
+                // best-effort cleanup
+            }
+        }
+    }
+
+    [Fact]
+    public void TryRead_UnterminatedQuotedField_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType\n\"abc\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("unterminated quoted field", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryRead_GarbageAfterClosingQuote_ReturnsFalse()
+    {
+        var path = this.WriteCsv("FilePath,FileType\n\"a\"b,pdf\n");
+
+        var ok = SourceCsvReader.TryRead(path, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("unexpected character after a closing quote", error, StringComparison.OrdinalIgnoreCase);
+    }
+
 }
