@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
-using Zipper.Config;
 using Zipper.Emails;
 
 namespace Zipper;
@@ -364,7 +363,7 @@ public class ParallelFileGenerator
                 }
             }
 
-            var hashes = ComputeHashes(data, workItem, request);
+            var hashes = HashComputer.ComputeHashes(data, request.Hash, workItem, request);
             var hash = hashes is not null && hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5Hash)
                 ? md5Hash
                 : string.Empty;
@@ -402,7 +401,7 @@ public class ParallelFileGenerator
             }
 
             var finalMemory = memoryOwner.Memory[..(int)totalSize];
-            var hashes = ComputeHashes(finalMemory.Span, workItem, request);
+            var hashes = HashComputer.ComputeHashes(finalMemory.Span, request.Hash, workItem, request);
             var finalHash = hashes is not null && hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5Hash)
                 ? md5Hash
                 : string.Empty;
@@ -425,23 +424,6 @@ public class ParallelFileGenerator
             memoryOwner.Dispose();
             throw;
         }
-    }
-
-    private static IReadOnlyDictionary<Config.HashAlgorithm, string>? ComputeHashes(
-        ReadOnlySpan<byte> data, FileWorkItem workItem, FileGenerationRequest request)
-    {
-        var hashConfig = request.Hash;
-        if (!hashConfig.IsEnabled)
-        {
-            return null;
-        }
-
-        if (hashConfig.Mode == HashMode.Simulated)
-        {
-            return HashComputer.ComputeSimulatedHashes(workItem, hashConfig, request);
-        }
-
-        return HashComputer.ComputeActualHashes(data.ToArray(), hashConfig);
     }
 
     internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)

@@ -3,8 +3,8 @@ using Zipper.Config;
 namespace Zipper;
 
 /// <summary>
-/// Shared hash computation used by both ParallelFileGenerator and ProductionSetGenerator.
-/// Eliminates the duplicated ComputeActualHashes / ComputeSimulatedHashes logic.
+/// Shared hash computation used by <see cref="ProductionSetOrchestrator"/> via <see cref="IHashComputer"/>
+/// and by <see cref="ParallelFileGenerator"/> via the span-based <see cref="ComputeHashes(ReadOnlySpan{byte}, HashConfig, FileWorkItem, FileGenerationRequest)"/> entry.
 /// </summary>
 internal class HashComputer : IHashComputer
 {
@@ -14,6 +14,15 @@ internal class HashComputer : IHashComputer
         HashConfig hashConfig,
         FileWorkItem workItem,
         FileGenerationRequest request)
+    {
+        return ComputeHashes(content.AsSpan(), hashConfig, workItem, request);
+    }
+
+    /// <summary>
+    /// Shared span-based hash computation used by <see cref="ParallelFileGenerator"/>.
+    /// </summary>
+    internal static IReadOnlyDictionary<HashAlgorithm, string>? ComputeHashes(
+        ReadOnlySpan<byte> content, HashConfig hashConfig, FileWorkItem workItem, FileGenerationRequest request)
     {
         if (!hashConfig.IsEnabled)
         {
