@@ -443,8 +443,8 @@ public class ParallelFileGenerator
 
     private long EstimateCompressedSize(int contentSize, long count, bool withText)
     {
-        // Simple estimation - in reality this would be more complex
-        var baseSize = contentSize * 2; // Assume 50% compression
+        // Assume 50% compression
+        var baseSize = contentSize / 2;
         if (withText)
         {
             baseSize += 50; // Text file overhead
