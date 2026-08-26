@@ -489,15 +489,39 @@ public class ParallelFileGeneratorTests
     }
 
     [Theory]
-    [InlineData(10_485_760, 1000, 100, false, 102_857)]
-    [InlineData(104_857_600, 1000, 1000, false, 102_857)]
-    [InlineData(104_857_600, 1000, 500, false, 207_715)]
+    [InlineData(10_485_760, 1000, 100, false, 104_357)]
+    [InlineData(104_857_600, 1000, 1000, false, 104_357)]
+    [InlineData(104_857_600, 1000, 500, false, 209_215)]
     public void CalculatePaddingPerFile_AtKnownInputs_ProducesPinnedValue(
         long targetSize, int baseSize, long fileCount, bool withText, long expectedPadding)
     {
         var generator = new ParallelFileGenerator();
         var result = generator.CalculatePaddingPerFile(targetSize, baseSize, fileCount, withText);
         Assert.Equal(expectedPadding, result);
+    }
+
+    [Theory]
+    [InlineData(15_000, 1000, 10, false, 1_000)]
+    [InlineData(15_000, 1000, 10, true, 950)]
+    [InlineData(60_000, 1000, 10, false, 5_500)]
+    public void CalculatePaddingPerFile_WithTargetBetweenHalvedAndDoubled_DoesNotThrowAndReturnsCorrectPadding(
+        long targetSize, int baseSize, long fileCount, bool withText, long expectedPadding)
+    {
+        var generator = new ParallelFileGenerator();
+        var result = generator.CalculatePaddingPerFile(targetSize, baseSize, fileCount, withText);
+        Assert.Equal(expectedPadding, result);
+    }
+
+    [Theory]
+    [InlineData(4_000, 1000, 10, false)]
+    [InlineData(4_900, 1000, 10, true)]
+    public void CalculatePaddingPerFile_WhenTargetBelowHalvedEstimate_ThrowsInvalidOperationException(
+        long targetSize, int baseSize, long fileCount, bool withText)
+    {
+        var generator = new ParallelFileGenerator();
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            generator.CalculatePaddingPerFile(targetSize, baseSize, fileCount, withText));
+        Assert.Contains("target ZIP size", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact(Timeout = 10000)]
