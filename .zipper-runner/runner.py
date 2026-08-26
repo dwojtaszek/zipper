@@ -307,9 +307,11 @@ def slugify(text):
     return text[:40]
 
 def _model_key(model: str) -> str:
-    slug = re.sub(r"[^a-z0-9/-]", "-", model.lower())
-    slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug
+    # Normalize model string for lookup in preferences table
+    # Strip any comment in parentheses e.g. "claude-sonnet-4 (Sonnet 4)" -> "claude-sonnet-4"
+    # Preserves dots, colons, slashes, hyphens, underscores needed by CLI model identifiers
+    key = model.split("(")[0].strip().strip("`").strip().lower()
+    return key
 
 
 def load_preferences() -> dict[tuple[str, str], int]:
@@ -329,7 +331,7 @@ def load_preferences() -> dict[tuple[str, str], int]:
                 cols = [c.strip().strip("`") for c in csv.reader([stripped[1:-1]], delimiter="|").__next__()]
                 if len(cols) < 3:
                     continue
-                agent = cols[0].strip()
+                agent = cols[0].strip().strip("`").lower()
                 model = _model_key(cols[1].strip())
                 raw_prio = cols[2].strip()
                 try:
@@ -398,10 +400,10 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             clean_model = _model_key(model)
             prio = prefs.get((name, clean_model), 0)
             if prio == 0:
-                print(f"[select] {name}/{clean_model}: priority 0 (or not in prefs), skipping")
+                print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
                 continue
-            candidates.append((prio, name, clean_model))
-            print(f"[select] {name}/{clean_model}: priority {prio}, queued")
+            candidates.append((prio, name, model))
+            print(f"[select] {name}/{model}: priority {prio}, queued")
 
     if not candidates:
         print("[select] No healthy candidates found. Exiting.")
