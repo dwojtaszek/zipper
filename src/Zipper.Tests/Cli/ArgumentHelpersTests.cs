@@ -23,6 +23,21 @@ public class ArgumentHelpersTests
     }
 
     [Fact]
+    public void ParseSize_HugeInput_ReturnsNull()
+    {
+        // 18014398509481985 * 1024 > long.MaxValue (9223372036854775807)
+        Assert.Null(ArgumentHelpers.ParseSize("18014398509481985KB"));
+
+        // Exact boundary for MB: long.MaxValue / 1024 / 1024 = 8796093022207
+        Assert.NotNull(ArgumentHelpers.ParseSize("8796093022207MB"));
+        Assert.Null(ArgumentHelpers.ParseSize("8796093022208MB"));
+
+        // Exact boundary for GB: long.MaxValue / 1024 / 1024 / 1024 = 8589934591
+        Assert.NotNull(ArgumentHelpers.ParseSize("8589934591GB"));
+        Assert.Null(ArgumentHelpers.ParseSize("8589934592GB"));
+    }
+
+    [Fact]
     public void GetDistributionFromName_ValidNames_ReturnsCorrectType()
     {
         Assert.Equal(DistributionType.Proportional, ArgumentHelpers.GetDistributionFromName("proportional"));

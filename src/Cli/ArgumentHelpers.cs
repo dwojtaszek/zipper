@@ -20,7 +20,21 @@ internal static class ArgumentHelpers
             if (size.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {
                 var numberPart = size.Substring(0, size.Length - suffix.Length);
-                return long.TryParse(numberPart, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value * multiplier : null;
+                if (long.TryParse(numberPart, System.Globalization.CultureInfo.InvariantCulture, out var value))
+                {
+                    try
+                    {
+                        checked
+                        {
+                            return value * multiplier;
+                        }
+                    }
+                    catch (OverflowException)
+                    {
+                        return null;
+                    }
+                }
+                return null;
             }
         }
 
