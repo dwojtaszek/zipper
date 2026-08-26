@@ -163,15 +163,12 @@ public class ColumnCountValidatorTests
     [Fact]
     public void ColumnCountValidator_ValidateDat_BlankLine_Skipped()
     {
-        // NOTE: Current implementation does not skip blank lines for DAT content,
-        // which may be a bug. This test pins the current behavior. A separate issue
-        // should be filed to align DAT blank-line handling with CSV/Concordance.
         var result = new ValidationResult();
         var validator = new ColumnCountValidator();
 
-        validator.ValidateDat("a\x1eb\x1ec\n\n d\x1ee\x1ef\n", 3, '\x1e', "test.dat", result);
+        validator.ValidateDat("a\u001eb\u001ec\n\n d\u001ee\u001ef\n", 3, '\x1e', "test.dat", result);
 
-        Assert.True(result.HasErrors);
+        Assert.False(result.HasErrors);
     }
 
     [Fact]
