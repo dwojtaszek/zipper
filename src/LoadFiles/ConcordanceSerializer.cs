@@ -26,7 +26,7 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
     public string FileExtension => ".dat";
 
     public string RenderHeader(IReadOnlyList<string> columns) =>
-        string.Join(this.fieldDelim, columns.Select(c => $"{this.quoteDelim}{c}{this.quoteDelim}"));
+        string.Join(this.fieldDelim, columns.Select(c => $"{this.quoteDelim}{EscapeHeader(c)}{this.quoteDelim}"));
 
     public string RenderRecord(LoadFileRecord record) =>
         string.Join(
@@ -43,5 +43,20 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
         return this.hasQuote && field.Contains(this.quoteDelim, StringComparison.Ordinal)
             ? field.Replace(this.quoteDelim.ToString(), new string(this.quoteDelim, 2), StringComparison.Ordinal)
             : field;
+    }
+
+    private string EscapeHeader(string header)
+    {
+        if (string.IsNullOrEmpty(header))
+        {
+            return string.Empty;
+        }
+
+        if (this.hasQuote && header.Contains(this.quoteDelim, StringComparison.Ordinal))
+        {
+            return header.Replace(this.quoteDelim.ToString(), new string(this.quoteDelim, 2), StringComparison.Ordinal);
+        }
+
+        return header;
     }
 }
