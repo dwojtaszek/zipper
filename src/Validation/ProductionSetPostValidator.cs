@@ -89,8 +89,8 @@ internal sealed class ProductionSetPostValidator
                 {
                     datRowsChecked++;
                     var headerLine = enumerator.Current;
-                    var colDelimChar = string.IsNullOrEmpty(request.Delimiters?.ColumnDelimiter) ? '\x14' : request.Delimiters.ColumnDelimiter[0];
-                    var quoteDelimChar = string.IsNullOrEmpty(request.Delimiters?.QuoteDelimiter) ? '\xfe' : request.Delimiters.QuoteDelimiter[0];
+                    var colDelimChar = request.Delimiters?.GetColumnChar() ?? '\x14';
+                    var quoteDelimChar = request.Delimiters?.GetQuoteChar() ?? '\xfe';
 
                     var headers = ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
                     int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));

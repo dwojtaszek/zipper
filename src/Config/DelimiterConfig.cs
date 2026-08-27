@@ -14,7 +14,7 @@ public record DelimiterConfig
 
     public string EndOfLine { get; init; } = "CRLF";
 
-    public char GetColumnChar() => this.ColumnDelimiter[0];
+    public char GetColumnChar() => this.ColumnDelimiter.Length > 0 ? this.ColumnDelimiter[0] : '\u0014';
 
     public char GetQuoteChar() => this.QuoteDelimiter.Length > 0 ? this.QuoteDelimiter[0] : '\0';
 

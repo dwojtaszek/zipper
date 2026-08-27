@@ -195,4 +195,31 @@ public class ProductionSetValidationTests : IDisposable
         Assert.Equal("value \"2\" hello", fields[1]);
         Assert.Equal("value3", fields[2]);
     }
+
+    [Fact]
+    public async Task Validate_QuoteDelimNone_WithThorn_ShouldNotFailColumnCount()
+    {
+        var request = this.CreateTestRequest(count: 1);
+        request.Delimiters = new DelimiterConfig
+        {
+            QuoteDelimiter = string.Empty,
+        };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Modify DAT file to contain a thorn in the middle of a field
+        var datLines = await File.ReadAllLinesAsync(result.DatFilePath);
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+
+        // The generator won't quote anything because QuoteDelimiter is empty.
+        // We inject a thorn inside a value to simulate it
+        var fields = datLines[1].Split(colDelim).ToList();
+        fields[0] = fields[0] + "\xfe"; // append thorn to the DOCID field
+        datLines[1] = string.Join(colDelim.ToString(), fields);
+
+        await File.WriteAllLinesAsync(result.DatFilePath, datLines);
+
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+        Assert.DoesNotContain(report.Findings, f => f.Code == "ColumnCount");
+    }
 }

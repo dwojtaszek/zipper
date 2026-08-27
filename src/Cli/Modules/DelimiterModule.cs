@@ -141,6 +141,20 @@ public sealed class DelimiterModule : CliModule
         string nestedDelim = "\\";
         if (!string.IsNullOrEmpty(_nestedDelim)) nestedDelim = ParseStrictDelimiter(_nestedDelim!);
 
+        if (columnDelim.Length != 1)
+        {
+            Console.Error.WriteLine($"Error: Column delimiter must be exactly one character.");
+            config = default!;
+            return false;
+        }
+
+        if (quoteDelim.Length > 1)
+        {
+            Console.Error.WriteLine($"Error: Quote delimiter must be a single character or empty.");
+            config = default!;
+            return false;
+        }
+
         config = new DelimiterConfig
         {
             ColumnDelimiter = columnDelim,
