@@ -183,6 +183,12 @@ public class DelimiterModuleTests
     }
 
     [Fact]
+    public void TryBuild_MultiCharColumnDelimiter_ReturnsFalse()
+    {
+        Assert.False(TryBuild(new[] { "--delimiter-column", "\\r\\n" }, out _));
+    }
+
+    [Fact]
     public void TryBuild_InvalidNewlineDelim_ReturnsFalse()
     {
         Assert.False(TryBuild(new[] { "--newline-delim", "20" }, out _, loadfileOnly: true));
