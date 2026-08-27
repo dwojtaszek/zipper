@@ -8,15 +8,17 @@ namespace Zipper.LoadFiles;
 /// </summary>
 internal sealed class ConcordanceSerializer : ILoadFileSerializer
 {
-    private const char QuoteDelim = 'þ'; // ASCII 254 — Concordance standard quote character
-
     private readonly char fieldDelim;
+    private readonly char quoteDelim;
+    private readonly bool hasQuote;
 
     public ConcordanceSerializer(FileGenerationRequest request)
     {
         this.fieldDelim = !string.IsNullOrEmpty(request.Delimiters.ColumnDelimiter)
             ? request.Delimiters.ColumnDelimiter[0]
             : '\u0014';
+        this.hasQuote = !string.IsNullOrEmpty(request.Delimiters.QuoteDelimiter);
+        this.quoteDelim = this.hasQuote ? request.Delimiters.QuoteDelimiter[0] : 'þ';
     }
 
     public string FormatName => "CONCORDANCE";
@@ -24,22 +26,37 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
     public string FileExtension => ".dat";
 
     public string RenderHeader(IReadOnlyList<string> columns) =>
-        string.Join(this.fieldDelim, columns.Select(c => $"{QuoteDelim}{c}{QuoteDelim}"));
+        string.Join(this.fieldDelim, columns.Select(c => $"{this.quoteDelim}{EscapeHeader(c)}{this.quoteDelim}"));
 
     public string RenderRecord(LoadFileRecord record) =>
         string.Join(
             this.fieldDelim,
-            record.Columns.Select((_, i) => $"{QuoteDelim}{Escape(i < record.Values.Count ? record.Values[i] : string.Empty)}{QuoteDelim}"));
+            record.Columns.Select((_, i) => $"{this.quoteDelim}{Escape(i < record.Values.Count ? record.Values[i] : string.Empty)}{this.quoteDelim}"));
 
-    private static string Escape(string field)
+    private string Escape(string field)
     {
         if (string.IsNullOrEmpty(field))
         {
             return string.Empty;
         }
 
-        return field.Contains(QuoteDelim, StringComparison.Ordinal)
-            ? field.Replace(QuoteDelim.ToString(), new string(QuoteDelim, 2), StringComparison.Ordinal)
+        return this.hasQuote && field.Contains(this.quoteDelim, StringComparison.Ordinal)
+            ? field.Replace(this.quoteDelim.ToString(), new string(this.quoteDelim, 2), StringComparison.Ordinal)
             : field;
+    }
+
+    private string EscapeHeader(string header)
+    {
+        if (string.IsNullOrEmpty(header))
+        {
+            return string.Empty;
+        }
+
+        if (this.hasQuote && header.Contains(this.quoteDelim, StringComparison.Ordinal))
+        {
+            return header.Replace(this.quoteDelim.ToString(), new string(this.quoteDelim, 2), StringComparison.Ordinal);
+        }
+
+        return header;
     }
 }

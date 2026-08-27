@@ -86,6 +86,32 @@ public class DatSerializerTests
     }
 
     [Fact]
+    public void RenderHeader_EscapesSpecialCharacters()
+    {
+        var serializer = new DatSerializer();
+        var columns = new List<string> { "has\xfeþ", "has\nline" };
+
+        var content = serializer.RenderHeader(columns);
+
+        // Quote delimiter should be doubled in header fields
+        Assert.Contains("\xfe\xfe", content, StringComparison.Ordinal);
+        // Newlines should be replaced with the configured newline delimiter
+        Assert.DoesNotContain("\n", content, StringComparison.Ordinal);
+        Assert.Contains("\xae", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderHeader_DoesNotEscapePlainColumns()
+    {
+        var serializer = new DatSerializer();
+        var columns = new List<string> { "DOCID", "FILEPATH" };
+
+        var content = serializer.RenderHeader(columns);
+
+        Assert.Equal("þDOCIDþ\x14þFILEPATHþ", content);
+    }
+
+    [Fact]
     public void RenderRecord_ShortValues_RendersTrailingEmptyFields()
     {
         var serializer = new DatSerializer(columnDelimiter: '|', quoteDelimiter: '\0');
