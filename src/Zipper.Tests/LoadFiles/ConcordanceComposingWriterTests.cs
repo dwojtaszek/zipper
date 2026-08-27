@@ -104,6 +104,84 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task ConcordanceWriter_ShouldRespectCustomQuoteDelimiter()
+    {
+        var request = this.CreateTestRequest();
+        request.Delimiters = new DelimiterConfig
+        {
+            ColumnDelimiter = "\u0014",
+            QuoteDelimiter = "'"
+        };
+        var fileData = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FilePathInZip = "folder_001/file_with_'char.pdf"
+                },
+                Data = Array.Empty<byte>()
+            },
+        };
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Concordance);
+        var outputPath = Path.Combine(this.TempDir, "test.dat");
+
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, fileData);
+        }
+
+        var content = await File.ReadAllTextAsync(outputPath);
+        Assert.Contains("''", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u00fe", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConcordanceWriter_EscapesQuoteInHeaders()
+    {
+        var request = this.CreateTestRequest();
+        request.Delimiters = new DelimiterConfig
+        {
+            ColumnDelimiter = "\u0014",
+            QuoteDelimiter = "'"
+        };
+        var fileData = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FilePathInZip = "file.pdf"
+                },
+                Data = Array.Empty<byte>()
+            },
+        };
+        var serializer = new ConcordanceSerializer(request);
+        var header = serializer.RenderHeader(new List<string> { "has'quote", "plain" });
+        Assert.Equal("'has''quote'\u0014'plain'", header);
+    }
+
+    [Fact]
+    public async Task ConcordanceWriter_EscapesHeaderQuoteCharacter()
+    {
+        var serializer = new ConcordanceSerializer(new FileGenerationRequest
+        {
+            Delimiters = new DelimiterConfig
+            {
+                ColumnDelimiter = "\u0014",
+                QuoteDelimiter = "'"
+            }
+        });
+        var columns = new List<string> { "has'quote" };
+        var header = serializer.RenderHeader(columns);
+        Assert.Equal("'has''quote'", header);
+    }
+
+    [Fact]
     public async Task WriteAsync_EmlWithTextAndBates_EmitsEmailTextPathAndBatesColumns()
     {
         var request = new FileGenerationRequest

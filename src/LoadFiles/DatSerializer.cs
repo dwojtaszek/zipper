@@ -49,7 +49,7 @@ internal sealed class DatSerializer : ILoadFileSerializer
                 sb.Append(this.columnDelimiter);
             }
 
-            this.AppendField(sb, columns[i]);
+            this.AppendField(sb, this.EscapeField(columns[i]));
         }
 
         return sb.ToString();
