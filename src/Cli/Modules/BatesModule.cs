@@ -186,24 +186,21 @@ public sealed class BatesModule : CliModule
         }
 
         var modeStr = rollingBatesMode?.ToLowerInvariant() ?? "continuous";
-        if (modeStr == "continuous")
+        for (int i = 0; i < ranges.Count; i++)
         {
-            for (int i = 0; i < ranges.Count; i++)
+            for (int j = i + 1; j < ranges.Count; j++)
             {
-                for (int j = i + 1; j < ranges.Count; j++)
+                if (string.Equals(ranges[i].Prefix, ranges[j].Prefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(ranges[i].Prefix, ranges[j].Prefix, StringComparison.OrdinalIgnoreCase))
+                    long maxStart = Math.Max(ranges[i].Start, ranges[j].Start);
+                    long minEnd = Math.Min(ranges[i].End, ranges[j].End);
+                    if (maxStart <= minEnd && (modeStr != "restart" || ranges[i].Start != ranges[j].Start))
                     {
-                        long maxStart = Math.Max(ranges[i].Start, ranges[j].Start);
-                        long minEnd = Math.Min(ranges[i].End, ranges[j].End);
-                        if (maxStart <= minEnd)
-                        {
-                            Console.Error.WriteLine(
-                                $"Error: Bates ranges overlap for prefix '{ranges[i].Prefix}': " +
-                                $"Set {i + 1} ({ranges[i].Start}-{ranges[i].End}) and " +
-                                $"Set {j + 1} ({ranges[j].Start}-{ranges[j].End}).");
-                            return false;
-                        }
+                        Console.Error.WriteLine(
+                            $"Error: Bates ranges overlap for prefix '{ranges[i].Prefix}': " +
+                            $"Set {i + 1} ({ranges[i].Start}-{ranges[i].End}) and " +
+                            $"Set {j + 1} ({ranges[j].Start}-{ranges[j].End}).");
+                        return false;
                     }
                 }
             }
