@@ -126,14 +126,7 @@ public class ParallelFileGenerator
                         // Consumer died — complete channels with its exception to unblock producers and the feeder
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
                         workChannelWriter.TryComplete(consumerTask.Exception);
-                        try
-                        {
-                            await allProducersTask.ConfigureAwait(false);
-                        }
-                        catch
-                        {
-                            // Producers will get ChannelClosedException — expected
-                        }
+                        await Task.WhenAll(producerTasks).ContinueWith(_ => { });
                     }
                     else
                     {
