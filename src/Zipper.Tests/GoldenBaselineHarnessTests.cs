@@ -16,11 +16,13 @@ public class GoldenBaselineHarnessTests
             File.WriteAllText(Path.Combine(tempDir.FullName, "loadfile_properties.json"), "{\"productionDate\":\"2025-01-01T00:00:00Z\"}");
             File.WriteAllText(Path.Combine(tempDir.FullName, "manifest.json"), "{\"generationTime\":\"2025-01-01T00:00:00Z\"}");
 
-            using var zip = ZipFile.Open(Path.Combine(tempDir.FullName, "archive.zip"), ZipArchiveMode.Create);
-            var entry = zip.CreateEntry("DOC001.pdf");
-            using var entryStream = entry.Open();
-            using var writer = new StreamWriter(entryStream);
-            writer.Write("PDF content");
+            using (var zip = ZipFile.Open(Path.Combine(tempDir.FullName, "archive.zip"), ZipArchiveMode.Create))
+            {
+                var entry = zip.CreateEntry("DOC001.pdf");
+                using var entryStream = entry.Open();
+                using var writer = new StreamWriter(entryStream);
+                writer.Write("PDF content");
+            }
 
             string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir.FullName);
             string manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir.FullName);

@@ -36,7 +36,8 @@ public static class GoldenBaselineHarness
             {
                 try
                 {
-                    using var zip = ZipFile.OpenRead(fullPath);
+                    using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
                     foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
                     {
                         if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
