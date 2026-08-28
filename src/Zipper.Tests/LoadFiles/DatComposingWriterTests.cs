@@ -1173,4 +1173,37 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         Assert.Contains("TEST00000001_A001", lines[2], StringComparison.Ordinal);
         Assert.Contains("TEST00000001", lines[2], StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task WriteAsync_ProductionSet_PathDerivation_GoldenBaseline()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { Seed = 42, WithFamilies = false };
+        request.Output = request.Output with { WithText = true };
+        request.Production = new ProductionConfig { ProductionSet = true };
+        request.Bates = new BatesNumberConfig
+        {
+            Prefix = "TEST",
+            Start = 1,
+            Digits = 6,
+            Increment = 1,
+        };
+        var files = new List<FileData>
+        {
+            MakeFileData(1) with { WorkItem = new FileWorkItem { Index = 1, FilePathInZip = "NATIVES/001/normal.pdf", FolderName = "001", FileType = "pdf" }, ImageRelPath = null, TextRelPath = null, NativePathOverride = null },
+            MakeFileData(2) with { WorkItem = new FileWorkItem { Index = 2, FilePathInZip = "NATIVES/001/report.eml.eml", FolderName = "001", FileType = "eml" }, ImageRelPath = null, TextRelPath = null, NativePathOverride = null },
+            MakeFileData(3) with { WorkItem = new FileWorkItem { Index = 3, FilePathInZip = "NATIVES/001/scan.tif", FolderName = "001", FileType = "tif" }, ImageRelPath = null, TextRelPath = null, NativePathOverride = null },
+        };
+
+        using var stream = new MemoryStream();
+        var writer = new DatComposingWriter(Zipper.LoadFiles.WriterMode.ProductionSet);
+        await writer.WriteAsync(stream, request, files);
+        var expected = "﻿þDOCIDþ\x14þBATES_NUMBERþ\x14þVOLUMEþ\x14þNATIVE_PATHþ\x14þTEXT_PATHþ\x14þIMAGE_PATHþ\x14þCUSTODIANþ\x14þDATE_CREATEDþ\x14þFILE_SIZEþ\x14þFILE_TYPEþ\r\n" +
+            "þTEST000001þ\x14þTEST000001þ\x14þ001þ\x14þNATIVES\\001\\normal.pdfþ\x14þTEXT\\001\\normal.txtþ\x14þIMAGES\\001\\normal.tifþ\x14þCustodian 2þ\x14þ2024-02-19þ\x14þ7þ\x14þPDFþ\r\n" +
+            "þTEST000002þ\x14þTEST000002þ\x14þ001þ\x14þNATIVES\\001\\report.eml.emlþ\x14þTEXT\\001\\report.eml.txtþ\x14þIMAGES\\001\\report.eml.tifþ\x14þCustodian 8þ\x14þ2023-07-20þ\x14þ7þ\x14þEMLþ\r\n" +
+            "þTEST000003þ\x14þTEST000003þ\x14þ001þ\x14þNATIVES\\001\\scan.tifþ\x14þTEXT\\001\\scan.txtþ\x14þIMAGES\\001\\scan.tifþ\x14þCustodian 3þ\x14þ2024-12-16þ\x14þ7þ\x14þTIFþ\r\n";
+
+        var actual = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Equal(expected, actual);
+    }
 }
