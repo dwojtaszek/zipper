@@ -1120,7 +1120,7 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task DatWriter_WithFamilies_ProductionSetMode_IncludesFamilyColumnsAndRows()
+    public async Task DatWriter_WithFamilies_ProductionSetMode_DoesNotReplaceNonImageExtension()
     {
         var request = new FileGenerationRequest
         {
