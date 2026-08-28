@@ -1175,7 +1175,7 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task WriteAsync_ProductionSet_PathDerivation_GoldenBaseline()
+    public async Task WriteAsync_ProductionSet_PathDerivation_ForDoubleExtension_ReplacesOnlyTrailingExtension()
     {
         var request = DefaultRequest();
         request.Metadata = request.Metadata with { Seed = 42, WithFamilies = false };
