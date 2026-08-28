@@ -92,7 +92,7 @@ All command-line flags recognized by Zipper:
 | `--attachment-rate` | `0` | `0` to `100` | Percentage of Emails containing attachments |
 | `--target-zip-size` | none | e.g. `500MB`, `10GB` | Target padded Archive size |
 | `--include-load-file` | `false` | flag | Include Load File inside ZIP Archive |
-| `--load-file-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `concordance` | Single Load File format |
+| `--load-file-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Single Load File format |
 | `--load-file-formats` | none | comma-separated list (e.g. `dat,opt,csv`) | Multiple simultaneous Load File formats |
 | `--loadfile-format` | `dat` | `dat`, `opt` | Alias for `--load-file-format` in Loadfile-Only mode |
 | `--dat-delimiters` | `standard` | `standard`, `csv` | Preset delimiter style for DAT format |
