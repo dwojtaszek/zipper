@@ -61,10 +61,11 @@ graph TD
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
     Chaos --> Audit["_properties.json Audit"]
 
-    ProductionSetMode --> PSG["ProductionSetGenerator"]
+    ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
     PSG --> PSP["ProductionSetPlanner (no I/O)"]
     PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
-    PSG --> LFO
+    PSG --> PSO["ProductionSetOrchestrator"]
+    PSO --> LFO
     LFO --> LF3["Load Files + Audit Files"]
     PSG --> Manifest["Production Manifest"]
 ```
