@@ -44,7 +44,7 @@ public class AllWritersTests : TempDirectoryTestBase
         };
         var fileData = this.CreateTestFileData();
 
-        foreach (LoadFileFormat format in Enum.GetValues(typeof(LoadFileFormat)))
+        foreach (LoadFileFormat format in Enum.GetValues<LoadFileFormat>())
         {
             var writer = LoadFileWriterFactory.CreateWriter(format);
             var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");
@@ -71,7 +71,7 @@ public class AllWritersTests : TempDirectoryTestBase
         fileData[1] = fileData[1] with { PageCount = 7 };
         fileData[2] = fileData[2] with { PageCount = 3 };
 
-        foreach (LoadFileFormat format in Enum.GetValues(typeof(LoadFileFormat)))
+        foreach (LoadFileFormat format in Enum.GetValues<LoadFileFormat>())
         {
             var writer = LoadFileWriterFactory.CreateWriter(format);
             var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");

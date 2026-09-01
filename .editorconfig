@@ -235,3 +235,27 @@ dotnet_diagnostic.CA1513.severity = none
 dotnet_diagnostic.CA1805.severity = none
 dotnet_diagnostic.CA1860.severity = none
 dotnet_diagnostic.CA1869.severity = none
+
+# Roslyn .NET SDK Analyzers (.NET 8/9/10)
+dotnet_diagnostic.CA1870.severity = warning
+dotnet_diagnostic.CA1872.severity = warning
+dotnet_diagnostic.CA1865.severity = warning
+dotnet_diagnostic.CA1866.severity = warning
+dotnet_diagnostic.CA1867.severity = warning
+dotnet_diagnostic.CA1868.severity = warning
+dotnet_diagnostic.CA1863.severity = suggestion
+dotnet_diagnostic.CA2022.severity = error
+dotnet_diagnostic.CA1511.severity = suggestion
+dotnet_diagnostic.CA2263.severity = warning
+dotnet_diagnostic.CA2265.severity = warning
+dotnet_diagnostic.IDE0300.severity = suggestion
+dotnet_diagnostic.IDE0301.severity = suggestion
+dotnet_diagnostic.IDE0305.severity = suggestion
+dotnet_diagnostic.IDE0290.severity = suggestion
+
+# Meziantou.Analyzer 3.0.x
+dotnet_diagnostic.MA0189.severity = warning
+dotnet_diagnostic.MA0190.severity = warning
+dotnet_diagnostic.MA0178.severity = warning
+dotnet_diagnostic.MA0188.severity = warning
+dotnet_diagnostic.MA0074.severity = error

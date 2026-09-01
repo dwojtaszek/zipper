@@ -84,7 +84,7 @@ public class FieldNamingTests : IDisposable
 
         // Assert
         var content = Encoding.UTF8.GetString(stream.ToArray());
-        if (content.StartsWith("\uFEFF", StringComparison.Ordinal))
+        if (content.StartsWith('﻿'))
         {
             content = content.Substring(1);
         }
@@ -119,7 +119,7 @@ public class FieldNamingTests : IDisposable
 
         // Assert
         var content = Encoding.UTF8.GetString(stream.ToArray());
-        if (content.StartsWith("\uFEFF", StringComparison.Ordinal))
+        if (content.StartsWith('﻿'))
         {
             content = content.Substring(1);
         }

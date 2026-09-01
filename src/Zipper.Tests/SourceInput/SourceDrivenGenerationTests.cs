@@ -147,7 +147,7 @@ public class SourceDrivenGenerationTests : IDisposable
         var names = archive.Entries.Select(e => e.FullName).ToList();
         Assert.Contains("root.pdf", names);
         Assert.Contains("root.txt", names);
-        Assert.DoesNotContain(names, n => n.StartsWith("/", StringComparison.Ordinal));
+        Assert.DoesNotContain(names, n => n.StartsWith('/'));
     }
 
     [Fact]
