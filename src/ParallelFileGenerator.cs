@@ -97,7 +97,7 @@ public class ParallelFileGenerator
             }
 
             // Create channels for work distribution
-            var workChannelReader = CreateWorkChannel(request, cancellationToken);
+            var (workChannelReader, workChannelWriter) = CreateWorkChannel(request, cancellationToken);
             var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
             {
                 FullMode = BoundedChannelFullMode.Wait,
@@ -123,16 +123,10 @@ public class ParallelFileGenerator
                     var completed = await Task.WhenAny(allProducersTask, consumerTask).ConfigureAwait(false);
                     if (completed == consumerTask && consumerTask.IsFaulted)
                     {
-                        // Consumer died — complete channel with its exception to unblock producers
+                        // Consumer died — complete channels with its exception to unblock producers and the feeder
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
-                        try
-                        {
-                            await allProducersTask.ConfigureAwait(false);
-                        }
-                        catch
-                        {
-                            // Producers will get ChannelClosedException — expected
-                        }
+                        workChannelWriter.TryComplete(consumerTask.Exception);
+                        await Task.WhenAll(producerTasks).ContinueWith(_ => { }, CancellationToken.None);
                     }
                     else
                     {
@@ -148,6 +142,7 @@ public class ParallelFileGenerator
                 {
                     // Signal production done so consumer can drain and exit
                     resultChannel.Writer.TryComplete(null);
+                    workChannelWriter.TryComplete(null);
                 }
 
                 // Always wait for consumer (releases zip file handles)
@@ -185,6 +180,7 @@ public class ParallelFileGenerator
             finally
             {
                 resultChannel.Writer.TryComplete();
+                workChannelWriter.TryComplete();
                 while (resultChannel.Reader.TryRead(out var fileData))
                 {
                     fileData.MemoryOwner?.Dispose();
@@ -214,7 +210,7 @@ public class ParallelFileGenerator
     private static IReadOnlyDictionary<string, IFileGenerator> BuildGenerators(FileGenerationRequest request)
         => FileGeneratorFactory.CreateMap(request);
 
-    private static ChannelReader<FileWorkItem> CreateWorkChannel(FileGenerationRequest request, CancellationToken cancellationToken)
+    private static (ChannelReader<FileWorkItem> Reader, ChannelWriter<FileWorkItem> Writer) CreateWorkChannel(FileGenerationRequest request, CancellationToken cancellationToken)
     {
         var output = request.Output;
         var fileCount = output.FileCount;
@@ -272,7 +268,7 @@ public class ParallelFileGenerator
             }
         }, cancellationToken);
 
-        return channel.Reader;
+        return (channel.Reader, writer);
     }
 
     private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IReadOnlyDictionary<string, IFileGenerator> generators, CancellationToken cancellationToken)
