@@ -958,6 +958,7 @@ def babysit_active_worktrees():
         wait_for_tokens()
         _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
 
+    babysit_orphaned_issue_prs()
     babysit_dependabot_prs()
     return len(active_worktrees)
 
