@@ -11,7 +11,7 @@ namespace Zipper.Analyzers;
 /// Encourages sealed keyword for types that should not be inherited.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class SealedDomainTypeAnalyzer : DiagnosticAnalyzer
+public sealed class SealedDomainTypeAnalyzer : ZipperAnalyzerBase
 {
     public const string DiagnosticId = "ZIP004";
 
@@ -26,15 +26,9 @@ public sealed class SealedDomainTypeAnalyzer : DiagnosticAnalyzer
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
-    public override void Initialize(AnalysisContext context)
+    protected override void RegisterActions(AnalysisContext context)
     {
-        if (context is null)
-        {
-            throw new ArgumentNullException(nameof(context));
-        }
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-        context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeTypeDeclarations, SyntaxKind.ClassDeclaration);
     }
 

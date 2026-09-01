@@ -11,7 +11,7 @@ namespace Zipper.Analyzers;
 /// Flags inexact <c>Stream.Read</c> / <c>ReadAsync</c> usage in sink layers.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class ExactStreamReadAnalyzer : DiagnosticAnalyzer
+public sealed class ExactStreamReadAnalyzer : ZipperAnalyzerBase
 {
     public const string DiagnosticId = "ZIP003";
 
@@ -26,15 +26,9 @@ public sealed class ExactStreamReadAnalyzer : DiagnosticAnalyzer
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
-    public override void Initialize(AnalysisContext context)
+    protected override void RegisterActions(AnalysisContext context)
     {
-        if (context is null)
-        {
-            throw new ArgumentNullException(nameof(context));
-        }
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-        context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeReadAccess, SyntaxKind.SimpleMemberAccessExpression);
     }
 

@@ -12,7 +12,7 @@ namespace Zipper.Analyzers;
 /// inside formatter/composer/emitter layers to avoid culture-sensitive formatting.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class DeterministicFormattableAnalyzer : DiagnosticAnalyzer
+public sealed class DeterministicFormattableAnalyzer : ZipperAnalyzerBase
 {
     public const string DiagnosticId = "ZIP002";
 
@@ -27,15 +27,9 @@ public sealed class DeterministicFormattableAnalyzer : DiagnosticAnalyzer
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(ToStringRule);
 
-    public override void Initialize(AnalysisContext context)
+    protected override void RegisterActions(AnalysisContext context)
     {
-        if (context is null)
-        {
-            throw new ArgumentNullException(nameof(context));
-        }
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-        context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeToString, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeStringFormat, SyntaxKind.InvocationExpression);
     }

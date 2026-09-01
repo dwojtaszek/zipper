@@ -12,7 +12,7 @@ namespace Zipper.Analyzers;
 /// <see cref="ILoadFileSerializer"/> inside load-file composer/emitter layers are flagged.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-public sealed class LoadFileSeamInvariantAnalyzer : DiagnosticAnalyzer
+public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
 {
     public const string DiagnosticId = "ZIP001";
 
@@ -27,15 +27,9 @@ public sealed class LoadFileSeamInvariantAnalyzer : DiagnosticAnalyzer
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
 
-    public override void Initialize(AnalysisContext context)
+    protected override void RegisterActions(AnalysisContext context)
     {
-        if (context is null)
-        {
-            throw new ArgumentNullException(nameof(context));
-        }
 
-        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-        context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeWriteAccess, SyntaxKind.SimpleMemberAccessExpression);
     }
 
