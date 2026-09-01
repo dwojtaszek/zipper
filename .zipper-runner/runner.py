@@ -882,11 +882,17 @@ def babysit_active_worktrees():
                 )
             else:
                 print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
-                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", branch, "--squash", "--delete-branch", "--admin"], cwd=REPO_PATH)
-                if merge_code == 0:
-                    wt_rc, _, _ = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-                    if wt_rc == 0:
-                        run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
+                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_number), "--squash", "--admin"], cwd=REPO_PATH)
+                is_merged = (merge_code == 0)
+                if not is_merged:
+                    st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
+                    if st_code == 0 and st_out.strip() == "MERGED":
+                        is_merged = True
+
+                if is_merged:
+                    _clear_pr_state(issue_number)
+                    _remove_worktree(wt_path, branch)
+                    run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
                     send_email(
                         f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
                         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> was fully green and has been automatically merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
