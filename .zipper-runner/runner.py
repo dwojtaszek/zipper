@@ -85,6 +85,10 @@ REFRESH_MODELS = "--refresh-models" in sys.argv
 if REFRESH_MODELS:
     print("INFO: Running in REFRESH-MODELS mode. Probing all agents and updating AGENT_PREFERENCES.md.")
 
+STATUS_ONLY = "--status" in sys.argv
+if STATUS_ONLY:
+    print("INFO: Running in STATUS-ONLY diagnostics mode.")
+
 # ---------------------------------------------------------------------------
 # Agent selection — ordered list of (agent_name, model_or_None) candidates
 # populated during main() startup. On failure, the front candidate is popped
@@ -347,7 +351,7 @@ def list_agent_models() -> dict[str, list[str]]:
     for name, module in AGENT_PLUGINS.items():
         if callable(getattr(module, "list_models", None)):
             try:
-                models = module.list_models()
+                models = module.list_models() or ["default"]
                 if models:
                     result[name] = models
                     print(f"[model discovery] {name!r}: {len(models)} models found")
@@ -390,7 +394,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
 
         if callable(getattr(module, "list_models", None)):
             try:
-                models = module.list_models()
+                models = module.list_models() or ["default"]
             except Exception:
                 models = ["default"]
         else:
@@ -1167,8 +1171,72 @@ def verify_repo_on_main():
     )
     return True
 
+def show_status():
+    print("=== Zipper Runner Diagnostics ===")
+    locked = False
+    try:
+        test_lock = open(LOCK_FILE_PATH, "a")
+        fcntl.flock(test_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(test_lock, fcntl.LOCK_UN)
+        test_lock.close()
+    except (IOError, OSError):
+        locked = True
+    print(f"Runner Lock Status: {'ACTIVE / LOCKED' if locked else 'IDLE / UNLOCKED'}")
+
+    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+    branch = branch.strip()
+    code, head, _ = run_cmd(["git", "log", "-1", "--format=%h - %s (%cr)"], cwd=REPO_PATH)
+    is_clean = _repo_is_clean(REPO_PATH)
+    print(f"\n=== Main Repository ({REPO_PATH}) ===")
+    print(f"  Branch: {branch}")
+    print(f"  HEAD: {head.strip()}")
+    print(f"  Clean: {is_clean}")
+
+    print("\n=== Active Worktrees ===")
+    if os.path.exists(WORKTREES_BASE):
+        wts = [d for d in os.listdir(WORKTREES_BASE) if d.startswith("issue-")]
+        if wts:
+            for wt in wts:
+                wt_path = os.path.join(WORKTREES_BASE, wt)
+                _, wt_br, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
+                _, wt_head, _ = run_cmd(["git", "log", "-1", "--format=%h - %s (%cr)"], cwd=wt_path)
+                print(f"  - {wt}: branch '{wt_br.strip()}', HEAD: {wt_head.strip()}")
+        else:
+            print("  None")
+    else:
+        print("  None")
+
+    print("\n=== Agent Candidates & Health ===")
+    candidates = probe_and_select_agents()
+    if candidates:
+        print(f"  Selected top candidate: {candidates[0][0]}/{candidates[0][1]}")
+        print(f"  Total viable candidates: {len(candidates)}")
+        for prio_item in candidates:
+            print(f"    * {prio_item[0]}/{prio_item[1]}")
+    else:
+        print("  No healthy agent candidates found.")
+
+    print("\n=== Open GitHub Pull Requests ===")
+    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,headRefName,url"], cwd=REPO_PATH)
+    if code == 0 and out.strip():
+        try:
+            prs = json.loads(out)
+            for pr in prs:
+                print(f"  - PR #{pr['number']}: {pr['title']} ({pr['headRefName']}) -> {pr['url']}")
+        except Exception:
+            print(f"  {out.strip()}")
+    else:
+        print("  None")
+
+    print("\nStatus check completed cleanly.")
+    sys.exit(0)
+
+
 def main():
     global AGENT_CANDIDATES
+
+    if STATUS_ONLY:
+        show_status()
 
     lock_file = open(LOCK_FILE_PATH, "w")
     try:

@@ -19,6 +19,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `opencode/claude-haiku-4-5` | 0|
 | `opencode` | `opencode/deepseek-v4-flash` | 0|
 | `opencode` | `opencode/deepseek-v4-flash-free` | 0|
+| `opencode` | `default` | 2|
 | `opencode` | `opencode/big-pickle` | 3|
 | `opencode` | `opencode/deepseek-v4-pro` | 0|
 | `opencode` | `opencode/gemini-3-flash` | 0|
@@ -53,6 +54,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `claude` | `claude-opus-4-20250514-thinking` (Opus 4 thinking) | 0|
 | `claude` | `default` | 1|
 | `claude` | `claude-sonnet-4-6-20250622` (Sonnet 4.6) | 0|
+| `agy` | `default` | 1|
 | `agy` | `gemini-3.7-flash-high` | 1|
 | `agy` | `gemini-3.7-flash-medium` | 2|
 | `agy` | `gemini-3.7-flash-low` | 3|
