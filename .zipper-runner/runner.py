@@ -604,7 +604,7 @@ def _count_review_threads(pr_number: int) -> int:
 
 def _babysit_with_fallback(prompt: str, wt_path: str, branch: str, issue_number: int, pr_number: int = 0) -> None:
     """Try babysit with each agent candidate until one succeeds.
-    Verifies PR state actually changed after exit 0 to catch agents that
+    Verifies PR state or local commit changed after exit 0 to catch agents that
     run out of credits mid-mission and exit 0 without pushing anything.
     """
     before_threads = _count_review_threads(pr_number) if pr_number else -1
@@ -613,6 +613,7 @@ def _babysit_with_fallback(prompt: str, wt_path: str, branch: str, issue_number:
         cwd=REPO_PATH
     )
     before_state = before_out if before_code == 0 else ""
+    before_head_code, before_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
 
     for agent_name, model_name in AGENT_CANDIDATES:
         plugin = AGENT_PLUGINS.get(agent_name)
@@ -626,6 +627,9 @@ def _babysit_with_fallback(prompt: str, wt_path: str, branch: str, issue_number:
             cwd=REPO_PATH
         )
         after_threads = _count_review_threads(pr_number) if pr_number else -1
+        after_head_code, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+
+        head_changed = (after_head_code == 0 and before_head_code == 0 and after_head != before_head)
         state_changed = (
             after_code == 0
             and before_state
@@ -637,16 +641,20 @@ def _babysit_with_fallback(prompt: str, wt_path: str, branch: str, issue_number:
             and after_threads < before_threads
         )
 
-        if code == 0 and (state_changed or threads_improved):
-            print(f"[babysit] {agent_name}/{model_name} succeeded (state/threads changed)")
+        if code == 0 and (head_changed or state_changed or threads_improved):
+            print(f"[babysit] {agent_name}/{model_name} succeeded (commits/state/threads changed)")
             return
         if code == 0:
+            if after_code == 0 and "PENDING" in after_out:
+                print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
+                return
             print(f"[babysit] {agent_name}/{model_name} exit=0 but no PR progress — treating as failure")
         else:
             print(f"[babysit] {agent_name}/{model_name} failed (exit={code})")
 
         before_state = after_out
         before_threads = after_threads
+        before_head = after_head
 
     if _should_send_rate_limited(f"[Runner] Babysit Failed: Issue #{issue_number}"):
         send_email(
@@ -952,6 +960,132 @@ def babysit_active_worktrees():
 
     babysit_dependabot_prs()
     return len(active_worktrees)
+
+def _recreate_worktree_for_pr(issue_number: str, branch: str) -> None:
+    wt_path = os.path.join(WORKTREES_BASE, f"issue-{issue_number}")
+    if os.path.exists(wt_path):
+        return
+    print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
+    run_cmd(["git", "fetch", "origin", f"{branch}:{branch}"], cwd=REPO_PATH)
+    wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, branch], cwd=REPO_PATH)
+    if wt_code == 0:
+        print(f"Successfully recreated worktree at {wt_path} on branch '{branch}'.")
+    else:
+        print(f"Failed to recreate worktree at {wt_path}: {wt_err}")
+
+
+def babysit_orphaned_issue_prs():
+    """Scans open issue PRs on GitHub without local worktrees, checking CI and review gates, and auto-merging or recreating worktrees."""
+    print("Scanning for open issue PRs without local worktrees...")
+    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body"], cwd=REPO_PATH)
+    if code != 0 or not out.strip():
+        return
+
+    try:
+        prs = json.loads(out)
+    except json.JSONDecodeError:
+        return
+
+    existing_wt_issues = set()
+    if os.path.exists(WORKTREES_BASE):
+        for item in os.listdir(WORKTREES_BASE):
+            if item.startswith("issue-"):
+                existing_wt_issues.add(item.replace("issue-", ""))
+
+    for pr in prs:
+        author_login = pr.get("author", {}).get("login", "")
+        head_branch = pr.get("headRefName", "")
+        pr_num = pr.get("number")
+        title = pr.get("title", "")
+        body = pr.get("body", "")
+        pr_url = pr.get("url", f"https://github.com/dwojtaszek/zipper/pull/{pr_num}")
+
+        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]") or head_branch.startswith("dependabot/")
+        if is_dependabot:
+            continue
+
+        m = re.search(r"ISSUE-(\d+)", head_branch, re.IGNORECASE)
+        if not m:
+            m = re.search(r"issue-(\d+)", head_branch, re.IGNORECASE)
+        if not m:
+            m = re.search(r"#(\d+)", title)
+        if not m:
+            m = re.search(r"#(\d+)", body)
+
+        issue_num_str = m.group(1) if m else None
+        if issue_num_str and issue_num_str in existing_wt_issues:
+            continue
+
+        print(f"[orphan-pr] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
+        rollup = pr.get("statusCheckRollup", [])
+        ci_status = "PENDING"
+        ci_failures = []
+        all_passed = True
+
+        for check in rollup:
+            typename = check.get("__typename")
+            if typename == "CheckRun":
+                status = check.get("status")
+                conclusion = check.get("conclusion")
+                name = check.get("name")
+                if status == "COMPLETED":
+                    if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
+                        ci_failures.append(f"{name} ({conclusion})")
+                else:
+                    all_passed = False
+            elif typename == "StatusContext":
+                state = check.get("state")
+                context = check.get("context")
+                if state in ("FAILURE", "ERROR"):
+                    ci_failures.append(f"{context} ({state})")
+                elif state == "PENDING":
+                    all_passed = False
+
+        if ci_failures:
+            ci_status = "FAILED"
+        elif all_passed and rollup:
+            ci_status = "SUCCESS"
+
+        if ci_status == "SUCCESS":
+            print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
+            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            if review_code != 0:
+                print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
+                if issue_num_str:
+                    _recreate_worktree_for_pr(issue_num_str, head_branch)
+                continue
+
+            print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
+            if not DRY_RUN:
+                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_num), "--squash", "--admin"], cwd=REPO_PATH)
+                is_merged = (merge_code == 0)
+                if not is_merged:
+                    st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_num), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
+                    if st_code == 0 and st_out.strip() == "MERGED":
+                        is_merged = True
+
+                if is_merged:
+                    print(f"[orphan-pr] Successfully merged PR #{pr_num} into main.")
+                    if issue_num_str:
+                        _clear_pr_state(issue_num_str)
+                    run_cmd(["git", "push", "origin", "--delete", head_branch], cwd=REPO_PATH)
+                    send_email(
+                        f"[Runner] Success: PR #{pr_num} Merged Automatically",
+                        f"<h3>PR <a href=\"{pr_url}\">#{pr_num}</a> ({title})</h3>"
+                        f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
+                    )
+                else:
+                    print(f"[orphan-pr] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
+                    if issue_num_str:
+                        _recreate_worktree_for_pr(issue_num_str, head_branch)
+            else:
+                print(f"[DRY RUN] Would auto-merge PR #{pr_num} ({head_branch})")
+        elif ci_status == "FAILED":
+            print(f"[orphan-pr] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}. Recreating worktree for babysitting.")
+            if issue_num_str:
+                _recreate_worktree_for_pr(issue_num_str, head_branch)
+        else:
+            print(f"[orphan-pr] PR #{pr_num} CI checks still pending...")
 
 def babysit_dependabot_prs():
     """Scans open Dependabot PRs on GitHub, checks CI and review gates, and auto-merges when green."""
