@@ -68,7 +68,7 @@ public sealed class ExactStreamReadAnalyzer : DiagnosticAnalyzer
             return false;
         }
 
-        var symbol = context.SemanticModel.GetSymbolInfo(memberAccess).Symbol;
+        var symbol = context.SemanticModel.GetSymbolInfo(memberAccess, context.CancellationToken).Symbol;
         if (symbol is not IMethodSymbol method)
         {
             return false;

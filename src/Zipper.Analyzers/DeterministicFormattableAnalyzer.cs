@@ -68,7 +68,7 @@ public sealed class DeterministicFormattableAnalyzer : DiagnosticAnalyzer
             return;
         }
 
-        var symbolInfo = context.SemanticModel.GetSymbolInfo(memberAccess);
+        var symbolInfo = context.SemanticModel.GetSymbolInfo(memberAccess, context.CancellationToken);
         if (symbolInfo.Symbol is not IMethodSymbol method)
         {
             return;
