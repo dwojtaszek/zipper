@@ -17,6 +17,15 @@ internal static class ProductionSetOrchestrator
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
     };
 
+    private static readonly string[] RedactionReasons =
+    [
+        "Privileged",
+        "Attorney Work Product",
+        "Settlement Communication",
+        "Trade Secret",
+        "Personal Privacy",
+    ];
+
     /// <summary>
     /// Generates a complete production set with injected seams for testing.
     /// </summary>
@@ -52,7 +61,7 @@ internal static class ProductionSetOrchestrator
             var productionName = prodIds[i];
             var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
-            if (await materializer.DirectoryExistsAsync(productionPath, cancellationToken))
+            if (await materializer.DirectoryExistsAsync(productionPath, cancellationToken).ConfigureAwait(false))
             {
                 throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
             }
@@ -146,7 +155,62 @@ internal static class ProductionSetOrchestrator
                 request, plans[0].BatesNumber, plans[^1].BatesNumber).ConfigureAwait(false);
         }
 
+        var dataDir = Path.Combine(productionPath, "DATA");
+        int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
+
         // Create directory structure
+        await SetupDirectoriesAsync(productionPath, request, volumeCount, plans, materializer, cancellationToken).ConfigureAwait(false);
+
+        // Generate files using the plan
+        var fileDataList = await GenerateVolumeFilesAsync(
+            productionPath, request, plans, materializer, hashComputer, cancellationToken).ConfigureAwait(false);
+
+        // Write DAT + OPT load files and their audits through the shared orchestrator
+        var (datPath, optPath) = await EmitLoadFilesAsync(dataDir, request, fileDataList, materializer, cancellationToken).ConfigureAwait(false);
+
+        // Write manifest
+        var manifestPath = await WriteManifestAsync(
+            productionPath,
+            request,
+            plans,
+            volumeCount,
+            stopwatch.Elapsed,
+            fileDataList,
+            supplementalReport,
+            productionName,
+            rollingIndex,
+            materializer).ConfigureAwait(false);
+
+        // Run validation when running against real file system
+        await ValidateProductionSetAsync(productionPath, request, materializer, cancellationToken).ConfigureAwait(false);
+
+        // Optionally wrap in ZIP
+        var zipPath = await CreateZipArchiveAsync(productionPath, productionName, request, materializer, cancellationToken).ConfigureAwait(false);
+
+        stopwatch.Stop();
+
+        return new ProductionSetResult
+        {
+            ProductionPath = productionPath,
+            ZipFilePath = zipPath,
+            DatFilePath = datPath,
+            OptFilePath = optPath,
+            ManifestPath = manifestPath,
+            TotalDocuments = request.Output.FileCount,
+            BatesRange = $"{plans[0].BatesNumber} - {plans[^1].BatesNumber}",
+            VolumeCount = volumeCount,
+            GenerationTime = stopwatch.Elapsed,
+        };
+    }
+
+    private static async Task SetupDirectoriesAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        int volumeCount,
+        IReadOnlyList<ProductionNativeFilePlan> plans,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
         var dataDir = Path.Combine(productionPath, "DATA");
         var nativesDir = Path.Combine(productionPath, "NATIVES");
         var textDir = Path.Combine(productionPath, "TEXT");
@@ -167,11 +231,6 @@ internal static class ProductionSetOrchestrator
             await materializer.CreateDirectoryAsync(redactedImagesDir, cancellationToken).ConfigureAwait(false);
             await materializer.CreateDirectoryAsync(redactedTextDir, cancellationToken).ConfigureAwait(false);
         }
-
-#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
-        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
-#pragma warning restore S2245
-        int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
         // Pre-create volume subdirectories
         for (int v = 1; v <= volumeCount; v++)
@@ -196,161 +255,43 @@ internal static class ProductionSetOrchestrator
                 await materializer.CreateDirectoryAsync(Path.Combine(productionPath, dir!), cancellationToken).ConfigureAwait(false);
             }
         }
+    }
 
+    private static async Task<List<FileData>> GenerateVolumeFilesAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        IReadOnlyList<ProductionNativeFilePlan> plans,
+        IFileMaterializer materializer,
+        IHashComputer hashComputer,
+        CancellationToken cancellationToken)
+    {
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-
         var fileGenerators = FileGeneratorFactory.CreateMap(request);
 
-        // Generate files using the plan
-        var fileDataList = new List<FileData>();
-        var hashConfig = request.Hash;
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
+        var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : new Random();
+#pragma warning restore S2245
 
-        // Redaction reasons cycle for deterministic redacted-mode generation
-        string[] redactionReasons = ["Privileged", "Attorney Work Product", "Settlement Communication", "Trade Secret", "Personal Privacy"];
-        string withheldPolicy = request.Production.WithheldNativePolicy;
-        int redactedCount = 0;
-        int withheldCount = 0;
+        var fileDataList = new List<FileData>(plans.Count);
 
-        foreach (var plan in plans)
+        for (int i = 0; i < plans.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var workItem = new FileWorkItem
-            {
-                Index = plan.Index + 1,
-                FolderNumber = plan.VolumeIndex,
-                FolderName = plan.VolumeName,
-                FileName = Path.GetFileName(plan.NativeRelPath),
-                FilePathInZip = plan.NativeRelPath,
-                FileType = plan.FileType,
-            };
-            var generated = fileGenerators[plan.FileType].Generate(workItem, request);
-            var nativeContent = generated.Content;
-
-            await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent, cancellationToken).ConfigureAwait(false);
-
-            var textContent = $"Extracted text for document {plan.BatesNumber}. " +
-                              LoremIpsum.GetParagraph(random);
-            await materializer.WriteTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding, cancellationToken).ConfigureAwait(false);
-
-            // Write placeholder TIFF image (single-pixel stub)
-            if (generated.PageCount > 1)
-            {
-                var imageExt = Path.GetExtension(plan.ImageRelPath) ?? string.Empty;
-                var imagePathWithoutExt = plan.ImageRelPath[..^imageExt.Length];
-
-                for (int pageIdx = 1; pageIdx <= generated.PageCount; pageIdx++)
-                {
-                    var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
-                    await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
-                }
-            }
-            else
-            {
-                await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.ImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
-            }
-
-            // Write redacted image/text files when redacted mode is on
-            string? nativePathOverride = null;
-            string? redactionReason = null;
-            if (isRedacted)
-            {
-                redactionReason = redactionReasons[plan.Index % redactionReasons.Length];
-                Interlocked.Increment(ref redactedCount);
-
-                if (plan.RedactedImageRelPath is not null)
-                {
-                    await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.RedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
-                }
-
-                if (plan.RedactedTextRelPath is not null && request.Output.WithText)
-                {
-                    var redactedText = $"Redacted text for document {plan.BatesNumber}. {LoremIpsum.GetParagraph(random)}";
-                    await materializer.WriteTextAsync(Path.Combine(productionPath, plan.RedactedTextRelPath), redactedText, encoding, cancellationToken).ConfigureAwait(false);
-                }
-
-                // Apply withheld native policy
-                nativePathOverride = withheldPolicy switch
-                {
-                    "omit-native-path" => string.Empty,
-                    "replace-with-placeholder" => $"PLACEHOLDER/{plan.VolumeName}/{plan.BatesNumber}.{plan.FileType}",
-                    _ => null,
-                };
-                if (nativePathOverride is not null)
-                {
-                    Interlocked.Increment(ref withheldCount);
-                }
-            }
-
-            var fileDataHash = string.Empty;
-            IReadOnlyDictionary<Config.HashAlgorithm, string>? fileDataHashes = null;
-            if (hashConfig.IsEnabled)
-            {
-                var hashes = hashComputer.ComputeHashes(nativeContent, hashConfig, workItem, request);
-                if (hashes is not null)
-                {
-                    fileDataHashes = hashes;
-                    if (hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5))
-                    {
-                        fileDataHash = md5;
-                    }
-                }
-            }
-
-            var fileData = new FileData
-            {
-                WorkItem = workItem,
-                DataLength = nativeContent.Length,
-                Attachment = generated.Attachment,
-                PageCount = generated.PageCount,
-                Email = generated.Email,
-                Hash = fileDataHash,
-                Hashes = fileDataHashes,
-                RedactedImageRelPath = plan.RedactedImageRelPath,
-                RedactedTextRelPath = plan.RedactedTextRelPath,
-
-                // Only source-driven runs override composer path derivation; legacy runs keep
-                // the historical NATIVES-rooted derivation byte-for-byte (Rule 6 quirk preservation).
-                TextRelPath = request.SourceRecords is not null ? plan.TextRelPath : null,
-                ImageRelPath = request.SourceRecords is not null ? plan.ImageRelPath : null,
-                NativePathOverride = nativePathOverride,
-                RedactionReason = redactionReason,
-            };
+            var plan = plans[i];
+            var fileData = await GenerateDocumentFilesAsync(
+                productionPath,
+                request,
+                plan,
+                fileGenerators,
+                encoding,
+                random,
+                materializer,
+                hashComputer,
+                cancellationToken).ConfigureAwait(false);
 
             materializer.AddFileData(fileData);
             fileDataList.Add(fileData);
-
-            if (request.Metadata.WithFamilies && string.Equals(plan.FileType, "eml", StringComparison.Ordinal) && generated.Attachment.HasValue)
-            {
-                var attach = generated.Attachment.Value;
-                var childBates = $"{plan.BatesNumber}_A001";
-                var childExt = Path.GetExtension(attach.filename) ?? string.Empty;
-
-                var childNativeRelPath = Path.Combine("NATIVES", plan.VolumeName, $"{childBates}{childExt}");
-                var childTextRelPath = Path.Combine("TEXT", plan.VolumeName, $"{childBates}.txt");
-                var childImageRelPath = Path.Combine("IMAGES", plan.VolumeName, $"{childBates}.tif");
-
-                await materializer.WriteChildAttachmentAsync(Path.Combine(productionPath, childNativeRelPath), attach, cancellationToken).ConfigureAwait(false);
-
-                var childTextContent = $"Extracted text for attachment {childBates}.";
-                await materializer.WriteTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding, cancellationToken).ConfigureAwait(false);
-
-                await materializer.WriteBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
-
-                // Write redacted child files when redacted mode is on
-                if (isRedacted)
-                {
-                    var childRedactedImageRelPath = Path.Combine("REDACTED", "IMAGES", plan.VolumeName, $"{childBates}.tif");
-                    await materializer.WriteBytesAsync(Path.Combine(productionPath, childRedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
-
-                    if (request.Output.WithText)
-                    {
-                        var childRedactedTextRelPath = Path.Combine("REDACTED", "TEXT", plan.VolumeName, $"{childBates}.txt");
-                        var childRedactedText = $"Redacted text for attachment {childBates}.";
-                        await materializer.WriteTextAsync(Path.Combine(productionPath, childRedactedTextRelPath), childRedactedText, encoding, cancellationToken).ConfigureAwait(false);
-                    }
-                }
-            }
 
             // Progress reporting
             if ((plan.Index + 1) % 1000 == 0 || plan.Index == request.Output.FileCount - 1)
@@ -360,8 +301,217 @@ internal static class ProductionSetOrchestrator
         }
 
         Console.WriteLine();
+        return fileDataList;
+    }
 
-        // Write DAT + OPT load files and their audits through the shared orchestrator
+    private static async Task<FileData> GenerateDocumentFilesAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        ProductionNativeFilePlan plan,
+        IReadOnlyDictionary<string, IFileGenerator> fileGenerators,
+        Encoding encoding,
+        Random random,
+        IFileMaterializer materializer,
+        IHashComputer hashComputer,
+        CancellationToken cancellationToken)
+    {
+        var workItem = new FileWorkItem
+        {
+            Index = plan.Index + 1,
+            FolderNumber = plan.VolumeIndex,
+            FolderName = plan.VolumeName,
+            FileName = Path.GetFileName(plan.NativeRelPath),
+            FilePathInZip = plan.NativeRelPath,
+            FileType = plan.FileType,
+        };
+        var generated = fileGenerators[plan.FileType].Generate(workItem, request);
+        var nativeContent = generated.Content;
+
+        await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent, cancellationToken).ConfigureAwait(false);
+
+        var textContent = $"Extracted text for document {plan.BatesNumber}. " +
+                          LoremIpsum.GetParagraph(random);
+        await materializer.WriteTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding, cancellationToken).ConfigureAwait(false);
+
+        // Write placeholder TIFF image (single-pixel stub)
+        await WritePlaceholderImagesAsync(productionPath, plan.ImageRelPath, generated.PageCount, materializer, cancellationToken).ConfigureAwait(false);
+
+        // Write redacted image/text files when redacted mode is on
+        var (nativePathOverride, redactionReason) = await WriteRedactedDocumentFilesAsync(
+            productionPath,
+            request,
+            plan,
+            encoding,
+            random,
+            materializer,
+            cancellationToken).ConfigureAwait(false);
+
+        var (fileDataHash, fileDataHashes) = ComputeFileDataHashes(nativeContent, workItem, request, hashComputer);
+
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            DataLength = nativeContent.Length,
+            Attachment = generated.Attachment,
+            PageCount = generated.PageCount,
+            Email = generated.Email,
+            Hash = fileDataHash,
+            Hashes = fileDataHashes,
+            RedactedImageRelPath = plan.RedactedImageRelPath,
+            RedactedTextRelPath = plan.RedactedTextRelPath,
+
+            // Only source-driven runs override composer path derivation; legacy runs keep
+            // the historical NATIVES-rooted derivation byte-for-byte (Rule 6 quirk preservation).
+            TextRelPath = request.SourceRecords is not null ? plan.TextRelPath : null,
+            ImageRelPath = request.SourceRecords is not null ? plan.ImageRelPath : null,
+            NativePathOverride = nativePathOverride,
+            RedactionReason = redactionReason,
+        };
+
+        if (request.Metadata.WithFamilies && string.Equals(plan.FileType, "eml", StringComparison.Ordinal) && generated.Attachment.HasValue)
+        {
+            await WriteChildAttachmentFilesAsync(
+                productionPath,
+                request,
+                plan,
+                generated.Attachment.Value,
+                encoding,
+                materializer,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return fileData;
+    }
+
+    private static async Task WritePlaceholderImagesAsync(
+        string productionPath,
+        string imageRelPath,
+        int pageCount,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
+        if (pageCount > 1)
+        {
+            var imageExt = Path.GetExtension(imageRelPath) ?? string.Empty;
+            var imagePathWithoutExt = imageRelPath[..^imageExt.Length];
+
+            for (int pageIdx = 1; pageIdx <= pageCount; pageIdx++)
+            {
+                var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
+                await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, imageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<(string? NativePathOverride, string? RedactionReason)> WriteRedactedDocumentFilesAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        ProductionNativeFilePlan plan,
+        Encoding encoding,
+        Random random,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Production.RedactedProduction)
+        {
+            return (null, null);
+        }
+
+        var redactionReason = RedactionReasons[plan.Index % RedactionReasons.Length];
+
+        if (plan.RedactedImageRelPath is not null)
+        {
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.RedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (plan.RedactedTextRelPath is not null && request.Output.WithText)
+        {
+            var redactedText = $"Redacted text for document {plan.BatesNumber}. {LoremIpsum.GetParagraph(random)}";
+            await materializer.WriteTextAsync(Path.Combine(productionPath, plan.RedactedTextRelPath), redactedText, encoding, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Apply withheld native policy
+        var nativePathOverride = request.Production.WithheldNativePolicy switch
+        {
+            "omit-native-path" => string.Empty,
+            "replace-with-placeholder" => $"PLACEHOLDER/{plan.VolumeName}/{plan.BatesNumber}.{plan.FileType}",
+            _ => null,
+        };
+
+        return (nativePathOverride, redactionReason);
+    }
+
+    private static (string Hash, IReadOnlyDictionary<Config.HashAlgorithm, string>? Hashes) ComputeFileDataHashes(
+        byte[] nativeContent,
+        FileWorkItem workItem,
+        FileGenerationRequest request,
+        IHashComputer hashComputer)
+    {
+        var hashConfig = request.Hash;
+        if (!hashConfig.IsEnabled)
+        {
+            return (string.Empty, null);
+        }
+
+        var hashes = hashComputer.ComputeHashes(nativeContent, hashConfig, workItem, request);
+        if (hashes is null)
+        {
+            return (string.Empty, null);
+        }
+
+        var fileDataHash = hashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5) ? md5 : string.Empty;
+        return (fileDataHash, hashes);
+    }
+
+    private static async Task WriteChildAttachmentFilesAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        ProductionNativeFilePlan plan,
+        (string filename, byte[] content) attach,
+        Encoding encoding,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
+        var childBates = $"{plan.BatesNumber}_A001";
+        var childExt = Path.GetExtension(attach.filename) ?? string.Empty;
+
+        var childNativeRelPath = Path.Combine("NATIVES", plan.VolumeName, $"{childBates}{childExt}");
+        var childTextRelPath = Path.Combine("TEXT", plan.VolumeName, $"{childBates}.txt");
+        var childImageRelPath = Path.Combine("IMAGES", plan.VolumeName, $"{childBates}.tif");
+
+        await materializer.WriteChildAttachmentAsync(Path.Combine(productionPath, childNativeRelPath), attach, cancellationToken).ConfigureAwait(false);
+
+        var childTextContent = $"Extracted text for attachment {childBates}.";
+        await materializer.WriteTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding, cancellationToken).ConfigureAwait(false);
+
+        await materializer.WriteBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+
+        // Write redacted child files when redacted mode is on
+        if (request.Production.RedactedProduction)
+        {
+            var childRedactedImageRelPath = Path.Combine("REDACTED", "IMAGES", plan.VolumeName, $"{childBates}.tif");
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, childRedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+
+            if (request.Output.WithText)
+            {
+                var childRedactedTextRelPath = Path.Combine("REDACTED", "TEXT", plan.VolumeName, $"{childBates}.txt");
+                var childRedactedText = $"Redacted text for attachment {childBates}.";
+                await materializer.WriteTextAsync(Path.Combine(productionPath, childRedactedTextRelPath), childRedactedText, encoding, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task<(string DatPath, string OptPath)> EmitLoadFilesAsync(
+        string dataDir,
+        FileGenerationRequest request,
+        IReadOnlyList<FileData> fileDataList,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
         await LoadFiles.LoadFileOrchestrator.EmitAllAsync(
             request,
             fileDataList,
@@ -380,8 +530,21 @@ internal static class ProductionSetOrchestrator
 
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var optPath = Path.Combine(dataDir, "loadfile.opt");
+        return (datPath, optPath);
+    }
 
-        // Write manifest
+    private static async Task<string> WriteManifestAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        IReadOnlyList<ProductionNativeFilePlan> plans,
+        int volumeCount,
+        TimeSpan generationTime,
+        IReadOnlyList<FileData> fileDataList,
+        Validation.SupplementalValidationReport? supplementalReport,
+        string productionName,
+        int rollingIndex,
+        IFileMaterializer materializer)
+    {
         var batesStart = plans[0].BatesNumber;
         var batesEnd = plans[^1].BatesNumber;
         var batesConfig = request.Bates;
@@ -389,13 +552,13 @@ internal static class ProductionSetOrchestrator
             ? batesConfig.Prefixes[rollingIndex]
             : batesConfig?.Prefix ?? string.Empty;
 
-        var manifestPath = await ProductionManifestWriter.WriteAsync(
+        return await ProductionManifestWriter.WriteAsync(
             productionPath,
             request,
             batesStart,
             batesEnd,
             volumeCount,
-            stopwatch.Elapsed,
+            generationTime,
             fileDataList,
             request.Production.PriorManifests,
             supplementalReport,
@@ -404,8 +567,14 @@ internal static class ProductionSetOrchestrator
             batesRangeMode: request.Production.RollingBatesMode.ToString().ToLowerInvariant(),
             batesPrefix: prefix,
             materializer: materializer).ConfigureAwait(false);
+    }
 
-        // Run validation when running against real file system
+    private static async Task ValidateProductionSetAsync(
+        string productionPath,
+        FileGenerationRequest request,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
         if (materializer is ProductionFileMaterializer)
         {
             var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
@@ -418,30 +587,24 @@ internal static class ProductionSetOrchestrator
                 throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
             }
         }
+    }
 
-        // Optionally wrap in ZIP
-        string? zipPath = null;
-        if (request.Production.ProductionZip)
+    private static async Task<string?> CreateZipArchiveAsync(
+        string productionPath,
+        string productionName,
+        FileGenerationRequest request,
+        IFileMaterializer materializer,
+        CancellationToken cancellationToken)
+    {
+        if (!request.Production.ProductionZip)
         {
-            zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
-            Console.Write("  Creating ZIP archive...");
-            await materializer.CreateZipAsync(productionPath, zipPath, cancellationToken).ConfigureAwait(false);
-            Console.WriteLine(" done.");
+            return null;
         }
 
-        stopwatch.Stop();
-
-        return new ProductionSetResult
-        {
-            ProductionPath = productionPath,
-            ZipFilePath = zipPath,
-            DatFilePath = datPath,
-            OptFilePath = optPath,
-            ManifestPath = manifestPath,
-            TotalDocuments = request.Output.FileCount,
-            BatesRange = $"{batesStart} - {batesEnd}",
-            VolumeCount = volumeCount,
-            GenerationTime = stopwatch.Elapsed,
-        };
+        var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
+        Console.Write("  Creating ZIP archive...");
+        await materializer.CreateZipAsync(productionPath, zipPath, cancellationToken).ConfigureAwait(false);
+        Console.WriteLine(" done.");
+        return zipPath;
     }
 }
