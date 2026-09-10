@@ -21,7 +21,8 @@ internal sealed record ArchiveFixtureArtifact(
     byte[] ArchiveBytes,
     string ArchiveSha256,
     ArchiveFixtureLayout Layout,
-    IReadOnlyList<ArchiveFixtureEntryExpectation> Entries);
+    IReadOnlyList<ArchiveFixtureEntryExpectation> Entries,
+    IReadOnlyList<ArchiveTestMutation> Mutations);
 
 /// <summary>
 /// Builds the valid baseline (control) Archives for Archive Test cases using the
@@ -40,6 +41,28 @@ internal static class ArchiveFixtureBuilder
     {
         ArgumentNullException.ThrowIfNull(definition);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // Malformed cases start from their named valid control at the same Seed, then apply
+        // the recorded mutation; the artifact keeps the control's layout and entry expectations
+        // (before-mutation coordinates) plus the mutation records.
+        if (definition.Mutation is { } mutation && definition.ControlCaseKey is { } controlCaseKey)
+        {
+            var controlDefinition = ArchiveTestCatalog.GetCase(controlCaseKey);
+            if (controlDefinition.IsMutation)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test case '{definition.CaseKey}': its control '{controlCaseKey}' is itself a mutation case; controls must be valid cases.");
+            }
+
+            var control = Build(controlDefinition, seed, cancellationToken);
+            var mutated = ArchiveFixtureMutator.Apply(mutation, control);
+            return control with
+            {
+                ArchiveBytes = mutated.ArchiveBytes,
+                ArchiveSha256 = mutated.ArchiveSha256,
+                Mutations = mutated.Mutations,
+            };
+        }
 
         var expectations = new List<ArchiveFixtureEntryExpectation>(definition.Recipe.Entries.Count);
         using var stream = new MemoryStream();
@@ -103,7 +126,8 @@ internal static class ArchiveFixtureBuilder
             ArchiveBytes: archiveBytes,
             ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(archiveBytes)),
             Layout: layout,
-            Entries: expectations);
+            Entries: expectations,
+            Mutations: []);
     }
 
     /// <summary>

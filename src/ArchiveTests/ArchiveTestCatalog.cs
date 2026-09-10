@@ -23,7 +23,9 @@ internal sealed record ArchiveTestRecipe(IReadOnlyList<ArchiveTestRecipeEntry> E
 
 /// <summary>
 /// A Case Key in the finite Archive Test catalog: revisions, classification, suite
-/// membership, and the baseline recipe (REQ-208). Suite selection never changes a
+/// membership, and the baseline recipe (REQ-208). Malformed cases name their
+/// <see cref="ControlCaseKey"/> and <see cref="Mutation"/>: the control's bytes plus the
+/// recorded mutation chain reconstruct the fixture. Suite selection never changes a
 /// case's bytes; it only selects which cases run.
 /// </summary>
 internal sealed record ArchiveTestCaseDefinition(
@@ -32,7 +34,12 @@ internal sealed record ArchiveTestCaseDefinition(
     int ExpectationRevision,
     string Classification,
     IReadOnlyList<string> Suites,
-    ArchiveTestRecipe Recipe);
+    ArchiveTestRecipe Recipe,
+    string? ControlCaseKey = null,
+    ArchiveTestMutationKind? Mutation = null)
+{
+    public bool IsMutation => Mutation is not null;
+}
 
 /// <summary>
 /// The explicit, finite list of Archive Test case definitions. Case Keys and revisions
@@ -62,11 +69,7 @@ internal static class ArchiveTestCatalog
         ["valid-stored"] = new(
             "valid-stored", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: ValidControlSuites,
-            Recipe: new ArchiveTestRecipe(
-            [
-                ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
-                ArchiveTestRecipeEntry.File("b.bin", 40, "stored"),
-            ])),
+            Recipe: StoredControlRecipe),
         ["valid-deflate"] = new(
             "valid-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: ValidControlSuites,
@@ -83,7 +86,33 @@ internal static class ArchiveTestCatalog
                 ArchiveTestRecipeEntry.File("dir/file.txt", 60, "stored"),
                 ArchiveTestRecipeEntry.File("top.txt", 30, "stored"),
             ])),
+        // Malformed cases: built from the named valid control at the same Seed by applying
+        // the recorded mutation. The control recipe is repeated so a fixture is reconstructible
+        // from controlCaseKey + mutations alone.
+        ["crc-local-mismatch"] = MalformedDefinition(ArchiveTestMutationKind.CrcLocalMismatch),
+        ["crc-central-mismatch"] = MalformedDefinition(ArchiveTestMutationKind.CrcCentralMismatch),
+        ["crc-both-mismatch"] = MalformedDefinition(ArchiveTestMutationKind.CrcBothMismatch),
+        ["truncate-payload-tail"] = MalformedDefinition(ArchiveTestMutationKind.TruncatePayloadTail),
+        ["truncate-central-tail"] = MalformedDefinition(ArchiveTestMutationKind.TruncateCentralTail),
+        ["truncate-eocd"] = MalformedDefinition(ArchiveTestMutationKind.TruncateEocd),
+        ["missing-eocd"] = MalformedDefinition(ArchiveTestMutationKind.MissingEocd),
     };
+
+    private const string MalformedClassification = "malformed";
+    private const string StoredControlCaseKey = "valid-stored";
+
+    private static ArchiveTestCaseDefinition MalformedDefinition(ArchiveTestMutationKind mutation) => new(
+        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 1, Classification: MalformedClassification,
+        Suites: [MalformedSuite],
+        Recipe: StoredControlRecipe,
+        ControlCaseKey: StoredControlCaseKey,
+        Mutation: mutation);
+
+    private static ArchiveTestRecipe StoredControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
+        ArchiveTestRecipeEntry.File("b.bin", 40, "stored"),
+    ]);
 
     internal static ArchiveTestCaseDefinition GetCase(string caseKey) =>
         Cases.TryGetValue(caseKey, out var definition)
@@ -95,7 +124,7 @@ internal static class ArchiveTestCatalog
         AllSuites => [.. Cases.Values.OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         SmokeSuite => [.. Cases.Values.Where(c => c.Suites.Contains(SmokeSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         CompatibilitySuite => [.. Cases.Values.Where(c => c.Suites.Contains(CompatibilitySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        MalformedSuite => [],
+        MalformedSuite => [.. Cases.Values.Where(c => c.Suites.Contains(MalformedSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         SecuritySuite => [],
         _ => throw new ArgumentException($"Unknown Archive Test suite '{suite}'."),
     };

@@ -138,42 +138,8 @@ internal static class ArchiveTestSuiteGenerator
             Classification: definition.Classification,
             Archive: new ArchiveTestArchive(fixtureId + ".zip", artifact.ArchiveBytes.Length, artifact.ArchiveSha256),
             Entries: entries,
-            Mutations: [],
-            Expectations:
-            [
-                new ArchiveTestExpectation(
-                    Operation: "list",
-                    Profile: "strict",
-                    AllowedOutcomes: ["listed-count-matches-entries"],
-                    Invariants: ["no-partial-writes", "listed-count == entry-count"],
-                    Platform: null,
-                    Capability: null,
-                    FailureStages: null),
-                new ArchiveTestExpectation(
-                    Operation: "read-entry",
-                    Profile: "strict",
-                    AllowedOutcomes: ["read-entry-content-matches"],
-                    Invariants: ["no-partial-writes"],
-                    Platform: null,
-                    Capability: null,
-                    FailureStages: null),
-                new ArchiveTestExpectation(
-                    Operation: "integrity-check",
-                    Profile: "strict",
-                    AllowedOutcomes: ["integrity-passes"],
-                    Invariants: ["no-partial-writes"],
-                    Platform: null,
-                    Capability: null,
-                    FailureStages: null),
-                new ArchiveTestExpectation(
-                    Operation: "extract",
-                    Profile: "strict",
-                    AllowedOutcomes: ["extract-completes"],
-                    Invariants: ["no-partial-writes", "extracted-bytes-match-content-hashes"],
-                    Platform: null,
-                    Capability: null,
-                    FailureStages: null),
-            ],
+            Mutations: artifact.Mutations,
+            Expectations: BuildExpectations(definition),
             Limits: new ArchiveTestLimits(
                 EntryCount: artifact.Layout.EntryCount,
                 ExpandedBytesBudget: expandedBytes,
@@ -189,6 +155,71 @@ internal static class ArchiveTestSuiteGenerator
 
         return testCase;
     }
+
+    /// <summary>
+    /// Capability-specific expectations (REQ-212): valid controls must fully pass;
+    /// CRC-defect fixtures allow both detected and undetected outcomes under the strict
+    /// integrity profile (some readers do not check CRC) while the payload bytes must
+    /// stay unchanged; truncation fixtures may fail at any defined stage.
+    /// </summary>
+    private const string StrictProfile = "strict";
+    private const string ListOperation = "list";
+    private const string ReadEntryOperation = "read-entry";
+    private const string IntegrityCheckOperation = "integrity-check";
+    private const string ExtractOperation = "extract";
+    private const string NoPartialWrites = "no-partial-writes";
+    private const string PayloadBytesUnchanged = "payload-bytes-unchanged";
+    private const string OperationFails = "operation-fails";
+
+    private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
+    {
+        if (!definition.IsMutation)
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"]),
+            ];
+        }
+
+        return definition.Mutation switch
+        {
+            ArchiveTestMutationKind.CrcLocalMismatch
+                or ArchiveTestMutationKind.CrcCentralMismatch
+                or ArchiveTestMutationKind.CrcBothMismatch =>
+            [
+                Expectation(ListOperation, StrictProfile, ["list-succeeds", "list-fails"], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "crc-mismatch-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            _ =>
+            [
+                Expectation(ListOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+        };
+    }
+
+    private static ArchiveTestExpectation Expectation(
+        string operation,
+        string profile,
+        string[] allowedOutcomes,
+        string[] invariants,
+        string[]? failureStages = null,
+        string? capability = null) =>
+        new(
+            Operation: operation,
+            Profile: profile,
+            AllowedOutcomes: allowedOutcomes,
+            Invariants: invariants,
+            Platform: null,
+            Capability: capability,
+            FailureStages: failureStages);
 
     private static async Task WritePairAsync(
         string staging, string fixtureId, byte[] archiveBytes, byte[] jsonBytes, CancellationToken cancellationToken)

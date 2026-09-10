@@ -221,9 +221,18 @@ internal static class ArchiveTestCaseSemantics
                 errors.Add($"mutation '{mutation.Code}': offsetBasis must be before-mutation");
             }
 
-            if (mutation.Offset is < 0 || mutation.Offset > archive.PhysicalSize)
+            // Offsets and deleted lengths are on the before-mutation basis (REQ-218):
+            // a truncation record may legitimately point at bytes that the final Archive
+            // no longer contains, so bounds come from the before size, not physicalSize.
+            var beforeSize = mutation.BeforeSize ?? archive.PhysicalSize;
+            if (mutation.Offset is < 0 || mutation.Offset > beforeSize)
             {
-                errors.Add($"mutation '{mutation.Code}': offset must be between 0 and archive.physicalSize");
+                errors.Add($"mutation '{mutation.Code}': offset must be between 0 and the before-mutation size ({beforeSize})");
+            }
+
+            if (mutation.DeletedLength > beforeSize - mutation.Offset)
+            {
+                errors.Add($"mutation '{mutation.Code}': deletedLength exceeds the bytes available at the before-mutation offset");
             }
 
             if (mutation.DeletedLength is null && mutation.InsertedLength is null)
@@ -234,11 +243,6 @@ internal static class ArchiveTestCaseSemantics
             if (mutation.DeletedLength is < 0 || mutation.InsertedLength is < 0)
             {
                 errors.Add($"mutation '{mutation.Code}': lengths must not be negative");
-            }
-
-            if (mutation.DeletedLength > archive.PhysicalSize - mutation.Offset)
-            {
-                errors.Add($"mutation '{mutation.Code}': deletedLength exceeds the bytes available at offset");
             }
 
             if (mutation.BeforeSize is < 0 || mutation.AfterSize is < 0)
