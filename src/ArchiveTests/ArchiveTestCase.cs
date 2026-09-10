@@ -310,7 +310,7 @@ internal static class ArchiveTestCaseSemantics
 
     private static bool IsBoundedHex(string value, int maxBytes) =>
         value.Length % 2 == 0
-        && value.Length <= maxBytes * 2
+        && value.Length <= (long)maxBytes * 2
         && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     private static bool IsUnsafeBasename(string fileName) =>
