@@ -192,10 +192,10 @@ REQ-206	unit	SourceDrivenCliTests.Build_InputCsvBatesColumnWithProductionSet_Ret
 REQ-207	unit	SourceCsvReaderTests.TryRead_RowCapExceeded_ReturnsFalse	Source Record cap (10M rows/files) enforced with a clear error
 REQ-208	exemption	-	planned: CLI flags land with the dispatch slice (#844)
 REQ-209	exemption	-	planned: folder publishing lands with the publisher slice (#838)
-REQ-210	unit	ArchiveTestCaseSchemaTests.FixtureIdentity_ValidEmptyExample_MatchesFrozenVector	Fixture ID algorithm frozen in docs; identity vector recomputed from real fixture bytes
-REQ-211	exemption	-	planned: seed determinism tests land with the records slice (#836)
-REQ-212	exemption	-	planned: expectation records land with the records slice (#836)
-REQ-213	exemption	-	planned: budget enforcement lands with the bounded resource slice (#843)
+REQ-210	unit	ArchiveTestIdentityTests.ComputeFixtureId_FrozenValidEmptyVector_MatchesPublishedId	Fixture ID algorithm implemented in src/ArchiveTests/ArchiveTestIdentity.cs; frozen vector recomputed; schema-level checks in ArchiveTestCaseSchemaTests
+REQ-211	unit	ArchiveTestIdentityTests.ComputeFixtureId_IdenticalInputs_ProduceSameId	Seed determinism of identity; fixture byte-determinism tests land with #837 (ArchiveFixtureBuilderTests)
+REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_EmptyExpectations_IsRejected	Expectation records with per-operation outcomes validated by ArchiveTestCaseSemantics
+REQ-213	exemption	-	record-level budget validation landed (ArchiveTestCaseSemanticsTests.Validate_OverBudgetLimits_AreRejected); generation-time enforcement lands with #843
 REQ-214	exemption	-	planned: publication safety lands with the publisher slice (#838)
 REQ-215	exemption	-	planned: exit codes land with the dispatch slice (#844)
 REQ-216	exemption	-	planned: Program short-circuit lands with the dispatch slice (#844, ADR-0008)

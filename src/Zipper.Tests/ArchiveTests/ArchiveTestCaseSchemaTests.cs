@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -193,12 +192,9 @@ public class ArchiveTestCaseSchemaTests
         value.Length == 64 && IsLowercaseHex(value);
 
     internal static string ComputeFixtureId(
-        string generatorContractVersion, string caseKey, int caseRevision, int expectationRevision, long seed, string archiveSha256)
-    {
-        var descriptor = $"zipper-archive-test\n1\n{generatorContractVersion}\n{caseKey}\n{caseRevision}\n{expectationRevision}\n{seed}\n{archiveSha256}\n";
-        var hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(descriptor));
-        return "atc-" + Convert.ToHexStringLower(hash);
-    }
+        string generatorContractVersion, string caseKey, int caseRevision, int expectationRevision, int seed, string archiveSha256) =>
+        Zipper.ArchiveTests.ArchiveTestIdentity.ComputeFixtureId(
+            generatorContractVersion, caseKey, caseRevision, expectationRevision, seed, archiveSha256);
 
     [Fact]
     public void Load_SchemaFile_DeclaresDraft07Contract()
@@ -249,7 +245,7 @@ public class ArchiveTestCaseSchemaTests
             root.GetProperty("caseKey").GetString()!,
             root.GetProperty("caseRevision").GetInt32(),
             root.GetProperty("expectationRevision").GetInt32(),
-            root.GetProperty("seed").GetInt64(),
+            checked((int)root.GetProperty("seed").GetInt64()),
             archiveSha256);
 
         Assert.Equal(FrozenValidFixtureId, recomputed);
