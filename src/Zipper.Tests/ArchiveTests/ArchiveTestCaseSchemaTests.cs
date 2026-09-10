@@ -182,7 +182,7 @@ public class ArchiveTestCaseSchemaTests
 
     private static bool IsBoundedHex(string value, int maxBytes) =>
         value.Length % 2 == 0
-        && value.Length <= maxBytes * 2
+        && value.Length <= (long)maxBytes * 2
         && IsLowercaseHex(value);
 
     private static bool IsLowercaseHex(string value) =>

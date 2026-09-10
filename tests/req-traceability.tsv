@@ -191,12 +191,12 @@ REQ-205	unit	ProductionSetPlannerTests.Plan_SourceDrivenOriginalsMode_MirrorsFul
 REQ-206	unit	SourceDrivenCliTests.Build_InputCsvBatesColumnWithProductionSet_ReturnsNull	BatesNumber column rejected with --production-set to keep manifest volume ranges exact
 REQ-207	unit	SourceCsvReaderTests.TryRead_RowCapExceeded_ReturnsFalse	Source Record cap (10M rows/files) enforced with a clear error
 REQ-208	exemption	-	planned: CLI flags land with the dispatch slice (#844)
-REQ-209	exemption	-	planned: folder publishing lands with the publisher slice (#838)
+REQ-209	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds	Flat fixtureId.zip/fixtureId.json pairs with matching IDs verified from disk bytes
 REQ-210	unit	ArchiveTestIdentityTests.ComputeFixtureId_FrozenValidEmptyVector_MatchesPublishedId	Fixture ID algorithm implemented in src/ArchiveTests/ArchiveTestIdentity.cs; frozen vector recomputed; schema-level checks in ArchiveTestCaseSchemaTests
 REQ-211	unit	ArchiveFixtureBuilderTests.BuildControl_SameSeed_ProducesIdenticalBytes	Seed determinism: identity (ArchiveTestIdentityTests) and fixture bytes (ArchiveFixtureBuilderTests); Seed default wiring lands with #844
 REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_EmptyExpectations_IsRejected	Expectation records with per-operation outcomes validated by ArchiveTestCaseSemantics
 REQ-213	unit	ArchiveFixtureBuilderTests.Build_ExpandedBudgetOverLimit_ThrowsDescriptively	Budgets enforced during writes (checked arithmetic); record-level validation in ArchiveTestCaseSemanticsTests
-REQ-214	exemption	-	planned: publication safety lands with the publisher slice (#838)
+REQ-214	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_TargetCollisionDuringPublication_FailsSafely	Existing-target rejection, sentinel intact, staged cleanup; see also Create_ExistingTarget* and cancellation tests
 REQ-215	exemption	-	planned: exit codes land with the dispatch slice (#844)
 REQ-216	exemption	-	planned: Program short-circuit lands with the dispatch slice (#844, ADR-0008)
 REQ-217	unit	ArchiveTestCaseSchemaTests.Load_SchemaFile_DeclaresDraft07Contract	Expectation File schema contract frozen; semantic checks in ArchiveTestCaseSchemaTests
