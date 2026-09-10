@@ -1,0 +1,303 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Zipper Archive Test Fixture Expectation File",
+  "description": "Schema for the atc-<64hex>.json file paired with each Archive Test Fixture. Contract: docs/archive-test-suites.md (planned, tracked in #834). Semantic equalities that draft-07 cannot express (archive.fileName == fixtureId + \".zip\", unique entry ordinals) are verified by src/Zipper.Tests/ArchiveTests/.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generatorContractVersion",
+    "generatorVersion",
+    "fixtureId",
+    "caseKey",
+    "caseRevision",
+    "expectationRevision",
+    "seed",
+    "classification",
+    "archive",
+    "entries",
+    "mutations",
+    "expectations",
+    "limits"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Expectation File schema version."
+    },
+    "generatorContractVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Contract version of the fixture generator; part of the Fixture ID descriptor."
+    },
+    "generatorVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Version of the generator build that produced the fixture. Informational; not part of the Fixture ID."
+    },
+    "fixtureId": {
+      "type": "string",
+      "pattern": "^atc-[0-9a-f]{64}$",
+      "description": "Unique instance identifier: atc- plus 64 lowercase SHA-256 hex characters over the canonical descriptor (docs/archive-test-suites.md)."
+    },
+    "caseKey": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Human-readable scenario name (e.g. valid-empty). Identifies the scenario, not the instance."
+    },
+    "caseRevision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Revision of the case recipe."
+    },
+    "expectationRevision": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Revision of the expectation records."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seed used for fixture generation (default 42)."
+    },
+    "classification": {
+      "type": "string",
+      "enum": ["valid", "malformed", "policy-sensitive"],
+      "description": "valid: well-formed. malformed: corrupt structure. policy-sensitive: well-formed bytes whose extraction outcome depends on extractor policy."
+    },
+    "archive": {
+      "type": "object",
+      "required": ["fileName", "physicalSize", "sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "fileName": {
+          "type": "string",
+          "pattern": "^atc-[0-9a-f]{64}\\.zip$",
+          "description": "Output basename; semantically must equal fixtureId + \".zip\"."
+        },
+        "physicalSize": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Physical byte size of the published Archive."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the final Archive bytes; part of the Fixture ID descriptor."
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Archive entries keyed by ordinal. Duplicate entry names are representable; duplicate ordinals are rejected semantically.",
+      "items": {
+        "type": "object",
+        "required": ["ordinal", "kind", "localNameRaw", "centralNameRaw", "readableName"],
+        "additionalProperties": false,
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["file", "directory"]
+          },
+          "localNameRaw": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{2})*$",
+            "description": "Raw local-header name bytes, lowercase hex (empty string allowed for a name-less record)."
+          },
+          "centralNameRaw": {
+            "type": "string",
+            "pattern": "^([0-9a-f]{2})*$",
+            "description": "Raw central-header name bytes, lowercase hex."
+          },
+          "readableName": {
+            "type": "string",
+            "description": "Best-effort readable rendering of the name; lossless bytes live in the raw fields."
+          },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 of the entry payload when knowable (known-content cases)."
+          },
+          "contentSize": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Uncompressed payload byte size when knowable."
+          },
+          "localHeaderOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Offset of the local header within the pre-mutation Archive."
+          },
+          "dataOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Offset of the entry payload within the pre-mutation Archive."
+          },
+          "centralDirectoryOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Offset of the central-header record within the pre-mutation Archive."
+          }
+        }
+      }
+    },
+    "mutations": {
+      "type": "array",
+      "description": "Ordered mutations applied to the pre-mutation Archive. All offsets and lengths use the before-mutation basis.",
+      "items": {
+        "type": "object",
+        "required": ["code", "structure", "offsetBasis", "offset", "explanation"],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Machine-readable mutation code (e.g. crc-local-mismatch)."
+          },
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Affected entry ordinal, when applicable."
+          },
+          "structure": {
+            "type": "string",
+            "enum": ["local-header", "file-data", "data-descriptor", "central-header", "central-directory", "eocd", "comment", "whole-archive"]
+          },
+          "offsetBasis": {
+            "type": "string",
+            "enum": ["before-mutation"]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletedLength": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "insertedLength": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "beforeSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "afterSize": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "beforeSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "afterSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "beforeHex": {
+            "type": "string",
+            "maxLength": 512,
+            "pattern": "^([0-9a-f]{2})*$",
+            "description": "Inline before-mutation bytes, capped at 256 bytes (512 hex characters). Larger ranges are referenced by hash."
+          },
+          "afterHex": {
+            "type": "string",
+            "maxLength": 512,
+            "pattern": "^([0-9a-f]{2})*$",
+            "description": "Inline after-mutation bytes, capped at 256 bytes (512 hex characters)."
+          },
+          "declaredValue": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Adversarial declared size (e.g. an oversized declared uncompressed size) as a decimal string or raw hex. Never a trusted JSON integer; expansion budgets are declared separately in limits."
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Human-readable description of the injected defect."
+          }
+        }
+      }
+    },
+    "expectations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Per-operation expected outcomes for named reader profiles. unsupported and not-run are not passing verifications.",
+      "items": {
+        "type": "object",
+        "required": ["operation", "profile", "allowedOutcomes", "invariants"],
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["list", "read-entry", "integrity-check", "extract"]
+          },
+          "profile": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Named reader profile (e.g. strict, common)."
+          },
+          "platform": {
+            "type": "string",
+            "description": "Applicable platform, when the outcome is platform-dependent."
+          },
+          "capability": {
+            "type": "string",
+            "description": "Required reader capability (e.g. zip64, utf8-name)."
+          },
+          "allowedOutcomes": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Outcomes that count as passing (e.g. empty-list, full-extract, header-crc-rejected)."
+          },
+          "failureStages": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Stages at which failure is allowed to be reported (e.g. open, list, per-entry)."
+          },
+          "invariants": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Invariants that must hold for any passing outcome (e.g. no-partial-writes, entry-count-matches)."
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": ["entryCount", "expandedBytesBudget", "jsonBytesBudget", "deadlineSeconds"],
+      "additionalProperties": false,
+      "properties": {
+        "entryCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Actual entry count in this fixture (budget: 1,000)."
+        },
+        "expandedBytesBudget": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Declared expansion budget for this fixture (budget: 32 MiB), independent of adversarial declared sizes."
+        },
+        "jsonBytesBudget": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Expectation File size budget (global: 1 MiB)."
+        },
+        "deadlineSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Per-fixture processing deadline (global: 10 s)."
+        }
+      }
+    }
+  },
+  "definitions": {}
+}
