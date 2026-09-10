@@ -8,5 +8,6 @@ This directory records significant architecture decisions for Zipper. ADR number
 | [ADR-0005](ADR-0005-email-aggregate.md) | Email value object + `EmailFactory` as sole constructor |
 | [ADR-0006](ADR-0006-three-mode-pipeline.md) | Three-mode pipeline (Standard / Loadfile-Only / Production Set) |
 | [ADR-0007](ADR-0007-loadfile-composition-seam.md) | Load File composer → serializer → emitter seam |
+| [ADR-0008](ADR-0008-archive-test-dispatch.md) | Archive Test Fixture CLI short-circuit before `Pipeline.Build` |
 
-New ADRs use the next available number (ADR-0008).
+New ADRs use the next available number (ADR-0009).

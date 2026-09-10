@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "generatorContractVersion": "1",
+  "generatorVersion": "0.0.0",
+  "fixtureId": "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950",
+  "caseKey": "valid-empty",
+  "caseRevision": 1,
+  "expectationRevision": 1,
+  "seed": 42,
+  "classification": "valid",
+  "archive": {
+    "fileName": "atc-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.zip",
+    "physicalSize": 22,
+    "sha256": "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"
+  },
+  "entries": [],
+  "mutations": [],
+  "expectations": [
+    {
+      "operation": "list",
+      "profile": "strict",
+      "allowedOutcomes": [
+        "empty-list"
+      ],
+      "invariants": [
+        "listed-count == 0"
+      ]
+    },
+    {
+      "operation": "extract",
+      "profile": "strict",
+      "allowedOutcomes": [
+        "extract-completes-empty"
+      ],
+      "invariants": [
+        "no-files-created",
+        "no-partial-writes"
+      ]
+    }
+  ],
+  "limits": {
+    "entryCount": 0,
+    "expandedBytesBudget": 0,
+    "jsonBytesBudget": 1048576,
+    "deadlineSeconds": 10
+  }
+}

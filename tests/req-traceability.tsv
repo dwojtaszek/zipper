@@ -190,3 +190,14 @@ REQ-204	e2e	test-source-driven.sh	Multiple source File Types: File Type column, 
 REQ-205	unit	ProductionSetPlannerTests.Plan_SourceDrivenOriginalsMode_MirrorsFullSourcePathUnderOriginals	Source-driven Production Sets: source-path-mode placement (bates/preserve/originals), record order, Bates identity
 REQ-206	unit	SourceDrivenCliTests.Build_InputCsvBatesColumnWithProductionSet_ReturnsNull	BatesNumber column rejected with --production-set to keep manifest volume ranges exact
 REQ-207	unit	SourceCsvReaderTests.TryRead_RowCapExceeded_ReturnsFalse	Source Record cap (10M rows/files) enforced with a clear error
+REQ-208	exemption	-	planned: CLI flags land with the dispatch slice (#844)
+REQ-209	exemption	-	planned: folder publishing lands with the publisher slice (#838)
+REQ-210	unit	ArchiveTestCaseSchemaTests.FixtureIdentity_ValidEmptyExample_MatchesFrozenVector	Fixture ID algorithm frozen in docs; identity vector recomputed from real fixture bytes
+REQ-211	exemption	-	planned: seed determinism tests land with the records slice (#836)
+REQ-212	exemption	-	planned: expectation records land with the records slice (#836)
+REQ-213	exemption	-	planned: budget enforcement lands with the bounded resource slice (#843)
+REQ-214	exemption	-	planned: publication safety lands with the publisher slice (#838)
+REQ-215	exemption	-	planned: exit codes land with the dispatch slice (#844)
+REQ-216	exemption	-	planned: Program short-circuit lands with the dispatch slice (#844, ADR-0008)
+REQ-217	unit	ArchiveTestCaseSchemaTests.Load_SchemaFile_DeclaresDraft07Contract	Expectation File schema contract frozen; semantic checks in ArchiveTestCaseSchemaTests
+REQ-218	exemption	-	planned: mutation records land with the defect slices (#839–#843)

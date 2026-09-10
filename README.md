@@ -175,6 +175,7 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 
 - [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow (Windows, macOS, Linux)
 - [Advanced CLI & Reference Guide](docs/advanced-guide.md) — Complete flag reference, Chaos Engine, delimiter tuning, and schemas
+- [Archive Test Suites](docs/archive-test-suites.md) — Planned contract for extractor-test fixture pairs with paired unique IDs (tracked in #834; not shipped yet)
 - [Architecture Specifications](docs/architecture.md) — Core system design, seams, and pipeline architecture
 - [Requirements & Specifications](Requirements.md) — Immutable functional requirement definitions (`REQ-XXX`)
 - [Ubiquitous Language](UBIQUITOUS_LANGUAGE.md) — Domain language definitions
