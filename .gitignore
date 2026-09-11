@@ -77,6 +77,8 @@ graphify_audit/
 .zipper-runner/state/
 .zipper-runner/runner.lock
 .zipper-runner/**/__pycache__/
+__pycache__/
+*.pyc
 
 # Local cache
 cache/

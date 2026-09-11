@@ -103,6 +103,45 @@ else
   check 0 "missing --output-path rejected"
 fi
 
+# 8. Independent verifier: the published pairs pass cross-implementation verification
+#     (schema, identity, mutation audit, reader operations; ticket #845).
+if python3 tests/archive-tests/verify-fixtures.py "$TEST_OUTPUT_DIR/smoke" \
+     --report "$TEST_OUTPUT_DIR/smoke-verification.json" >/dev/null 2>&1; then
+  check 0 "independent verifier passed the smoke pairs"
+else
+  check 1 "independent verifier must pass the smoke pairs"
+fi
+
+if python3 tests/archive-tests/verify-fixtures.py "$TEST_OUTPUT_DIR/two-cases" \
+     --report "$TEST_OUTPUT_DIR/two-cases-verification.json" >/dev/null 2>&1; then
+  check 0 "independent verifier passed the malformed selection"
+else
+  check 1 "independent verifier must pass the malformed selection"
+fi
+
+# 9. Tamper detection: one flipped Archive byte must fail verification.
+TAMPER="$TEST_OUTPUT_DIR/tamper"
+mkdir -p "$TAMPER"
+cp "$TEST_OUTPUT_DIR"/smoke/* "$TAMPER/" || check 1 "tamper preparation copy failed"
+FIRST_ZIP=$(find "$TAMPER" -name '*.zip' | sort | head -n 1)
+if [ -n "$FIRST_ZIP" ] && python3 tests/archive-tests/flip-last-byte.py "$FIRST_ZIP"; then
+  if python3 tests/archive-tests/verify-fixtures.py "$TAMPER" \
+       --report "$TEST_OUTPUT_DIR/tamper-verification.json" >/dev/null 2>&1; then
+    check 1 "tampered Archive byte must fail verification"
+  else
+    check 0 "tampered Archive byte rejected by the verifier"
+  fi
+else
+  check 1 "tamper preparation failed"
+fi
+
+# 10. Verifier self-test module (tamper reasons, sleeper deadline, prerequisites).
+if python3 tests/archive-tests/test_verify_fixtures.py >/dev/null 2>&1; then
+  check 0 "verifier self-test module passed"
+else
+  check 1 "verifier self-test module must pass"
+fi
+
 if [ "$failures" -ne 0 ]; then
   echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors."
   exit 1

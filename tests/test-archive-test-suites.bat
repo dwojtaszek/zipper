@@ -108,6 +108,65 @@ call :assert_rejected "unknown suite" --archive-test-suite bogus --output-path "
 call :assert_rejected "unknown Case Key" --archive-test-suite smoke --archive-test-cases no-such-case --output-path "%TEST_OUTPUT_DIR%\x"
 call :assert_rejected "missing --output-path" --archive-test-suite smoke
 
+REM 8. Independent verifier: the published pairs pass cross-implementation
+REM     verification (schema, identity, mutation audit, reader operations; #845).
+REM     Prefer 'python'; fall back to the 'py -3' launcher when it is the only one.
+set "PYCMD=python"
+where python >nul 2>&1 || set "PYCMD=py -3"
+
+%PYCMD% tests\archive-tests\verify-fixtures.py "%TEST_OUTPUT_DIR%\smoke" --report "%TEST_OUTPUT_DIR%\smoke-verification.json" >nul 2>&1
+if errorlevel 1 (
+    call :fail "independent verifier must pass the smoke pairs"
+) else (
+    call :pass "independent verifier passed the smoke pairs"
+)
+
+%PYCMD% tests\archive-tests\verify-fixtures.py "%TEST_OUTPUT_DIR%\two-cases" --report "%TEST_OUTPUT_DIR%\two-cases-verification.json" >nul 2>&1
+if errorlevel 1 (
+    call :fail "independent verifier must pass the malformed selection"
+) else (
+    call :pass "independent verifier passed the malformed selection"
+)
+
+REM 9. Tamper detection: one flipped Archive byte must fail verification. The
+REM     copy and the flip are guarded so the check cannot pass vacuously.
+set "TAMPER=%TEST_OUTPUT_DIR%\tamper"
+mkdir "%TAMPER%" >nul 2>&1
+copy /y "%TEST_OUTPUT_DIR%\smoke\*.*" "%TAMPER%\" >nul
+if errorlevel 1 (
+    call :fail "tamper preparation copy failed"
+    goto :summary
+)
+set "FIRST_TAMPER_ZIP="
+for /f "delims=" %%Z in ('dir /b /o:n "%TAMPER%\*.zip"') do (
+    if not defined FIRST_TAMPER_ZIP (
+        set "FIRST_TAMPER_ZIP=%TAMPER%\%%Z"
+    )
+)
+if not defined FIRST_TAMPER_ZIP (
+    call :fail "tamper preparation found no Archive to flip"
+    goto :summary
+)
+%PYCMD% tests\archive-tests\flip-last-byte.py "%FIRST_TAMPER_ZIP%" >nul 2>&1
+if errorlevel 1 (
+    call :fail "tamper preparation flip failed"
+    goto :summary
+)
+%PYCMD% tests\archive-tests\verify-fixtures.py "%TAMPER%" --report "%TEST_OUTPUT_DIR%\tamper-verification.json" >nul 2>&1
+if errorlevel 1 (
+    call :pass "tampered Archive byte rejected by the verifier"
+) else (
+    call :fail "tampered Archive byte must fail verification"
+)
+
+REM 10. Verifier self-test module (tamper reasons, sleeper deadline, prerequisites).
+%PYCMD% tests\archive-tests\test_verify_fixtures.py >nul 2>&1
+if errorlevel 1 (
+    call :fail "verifier self-test module must pass"
+) else (
+    call :pass "verifier self-test module passed"
+)
+
 :summary
 echo [ INFO ] Passed: %PASSED%, Failed: %FAILED%
 if %FAILED% GTR 0 (
