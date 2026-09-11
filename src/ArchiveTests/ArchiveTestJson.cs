@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Zipper.ArchiveTests;
 
@@ -18,6 +19,10 @@ internal static class ArchiveTestJson
     {
         WriteIndented = false,
         PropertyNamingPolicy = null,
+        // Optional contract fields (platform, capability, ordinal, declaredValue, ...)
+        // are omitted rather than emitted as JSON null: the authoritative draft-07 schema
+        // declares them as string/integer, and null members would fail schema validation.
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
     internal static byte[] SerializeToUtf8Bytes(ArchiveTestCase testCase)

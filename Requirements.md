@@ -847,9 +847,9 @@ This section pins the public CLI contract for each rolling, supplemental, and co
 
 ## 21. Archive Test Fixtures
 
-### FR-028: Archive Test Fixtures (`--archive-test-suite`, `--archive-test-cases`) — PLANNED
+### FR-028: Archive Test Fixtures (`--archive-test-suite`, `--archive-test-cases`)
 
-Contract frozen ahead of runtime delivery; implementation is tracked in #834 and [docs/archive-test-suites.md](docs/archive-test-suites.md). These flags are not shipped until the CLI slice merges. This feature is not a generation mode: it dispatches as a Program short-circuit before `Pipeline.Build`, is not a fourth `IGenerationMode`, and does not extend `FileGenerationRequest` (ADR-0008).
+Shipped (CLI slice #844, ADR-0008); the contract lives in [docs/archive-test-suites.md](docs/archive-test-suites.md). This feature is not a generation mode: it dispatches as a Program short-circuit before `Pipeline.Build`, is not a fourth `IGenerationMode`, and does not extend `FileGenerationRequest` (ADR-0008).
 
 - **REQ-208**: A new optional argument `--archive-test-suite <smoke|compatibility|malformed|security|all>` shall select a predefined Archive Test Fixture suite, and a new optional argument `--archive-test-cases <key,key,...>` shall filter generation to the named Case Keys. Unknown Case Keys, an omitted `--output-path`, or any generation flag combined with these arguments shall fail validation with a clear error and non-zero exit code.
 - **REQ-209**: Archive Test Fixture output shall be a flat folder of pairs: `<fixtureId>.zip` plus `<fixtureId>.json` per fixture, both basenames carrying the same Fixture ID, and the JSON recording the same `fixtureId`. No outer Archive, per-case subfolders, embedded expectation JSON, or suite manifest shall be produced in v1.

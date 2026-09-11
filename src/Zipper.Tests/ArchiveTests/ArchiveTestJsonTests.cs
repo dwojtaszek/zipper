@@ -67,6 +67,21 @@ public class ArchiveTestJsonTests
     }
 
     [Fact]
+    public void Serialize_OptionalNullMembers_AreOmittedNotEmitted()
+    {
+        // The authoritative draft-07 schema declares optional members (platform,
+        // capability, ordinal, declaredValue, ...) as string/integer: a JSON null
+        // would fail schema validation. Found by the ticket #845 Ajv verifier;
+        // this guards the WhenWritingNull policy against regression.
+        var bytes = ArchiveTestJson.SerializeToUtf8Bytes(ValidEmptyCase());
+        var text = Encoding.UTF8.GetString(bytes);
+
+        Assert.DoesNotContain("null", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("platform", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("capability", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Serialize_AcrossCultures_ProduceIdenticalBytes()
     {
         var original = CultureInfo.CurrentCulture;

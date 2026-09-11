@@ -275,10 +275,12 @@ internal static class ArchiveTestSuiteGenerator
             ArchiveTestMutationKind.EncryptionFlagWithPlaintext =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
-                // Read-entry allows only failure: every mainstream reader honors the
-                // encrypted flag and cannot decrypt the plaintext without a password.
-                // Unlike the CRC and offset lies, no lenient middle ground exists.
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                // Read-entry primarily expects failure: mainstream readers honor the
+                // encrypted flag and refuse without a password. Cross-implementation
+                // note (ticket #845): at least one real reader (.NET ZipArchive)
+                // streams the plaintext without honoring the flag, serving bytes it
+                // never authenticated — that unverified middle ground is allowed too.
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
@@ -305,12 +307,15 @@ internal static class ArchiveTestSuiteGenerator
             ],
             // Declared uncompressed size beyond the 32 MiB expanded budget over tiny
             // physical bytes: readers must never allocate or read to the untrusted
-            // declared size (ticket #843).
+            // declared size (ticket #843). Cross-implementation note (ticket #845):
+            // a streaming reader that ignores the declared size and stops at the
+            // compressed-data end returns the true payload — the content hash still
+            // matches and the CRC verifies, so those lenient outcomes are allowed.
             ArchiveTestMutationKind.DeclaredSizeOversized =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "read-entry-content-matches"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
             // Tail truncations (ticket #839): every operation fails at a defined stage.
