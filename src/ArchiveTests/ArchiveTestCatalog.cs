@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.ArchiveTests;
 
 /// <summary>
@@ -37,20 +39,43 @@ internal sealed record ArchiveTestCaseDefinition(
     ArchiveTestRecipe Recipe,
     string? ControlCaseKey = null,
     ArchiveTestMutationKind? Mutation = null,
-    ArchiveControlEnrichment? Enrichment = null)
+    ArchiveControlConstruction? Construction = null)
 {
     public bool IsMutation => Mutation is not null;
 }
 
 /// <summary>
-/// Baseline construction steps applied to a valid control after the standard writer
-/// finalized it (ticket #840 step 1). Enrichment is valid construction, never a defect:
-/// the Archive stays fully readable with matching content hashes.
+/// Baseline construction steps for valid controls (tickets #840 and #841). Construction
+/// is valid building, never a defect: the Archive stays fully readable with matching
+/// content hashes. <see cref="LocalExtraField"/> through <see cref="ArchiveComment"/>
+/// are applied after the standard writer finalized the Archive;
+/// <see cref="NonSeekableDescriptor"/> and <see cref="Zip64HandBuilt"/> change how the
+/// baseline bytes are produced in the first place.
 /// </summary>
-internal enum ArchiveControlEnrichment
+internal enum ArchiveControlConstruction
 {
     /// <summary>Inserts an 8-byte extra subfield into entry 0's local header.</summary>
     LocalExtraField,
+
+    /// <summary>Writes through a non-seekable stream so the standard writer emits
+    /// data descriptors with the signature (APPNOTE §4.3.9).</summary>
+    NonSeekableDescriptor,
+
+    /// <summary>Removes the descriptor's optional signature and re-links subsequent
+    /// offsets; the unsigned descriptor form is equally valid.</summary>
+    StripDescriptorSignature,
+
+    /// <summary>Swaps one ASCII name byte for its legacy CP437 byte with bit 11 clear.</summary>
+    Cp437Name,
+
+    /// <summary>Appends an archive comment containing signature-like bytes; the comment
+    /// length field, not a signature search, determines the layout.</summary>
+    ArchiveComment,
+
+    /// <summary>Serializes the tiny Zip64 records directly (sentinels, extended fields in
+    /// specification order, Zip64 EOCD and locator); the standard writer cannot select
+    /// Zip64 for small Archives.</summary>
+    Zip64HandBuilt,
 }
 
 /// <summary>
@@ -75,6 +100,17 @@ internal static class ArchiveTestCatalog
     /// initialization, and C# static field initializers run in textual order.
     /// </summary>
     private static readonly byte[] SignatureLikePrefix = [0x50, 0x4b, 0x03, 0x04, 0x14, 0x00];
+
+    /// <summary>The archive comment for valid-signatures-in-comment: signature-like
+    /// PK bytes (local, central, and descriptor signatures — the EOCD signature is
+    /// excluded because a reference reader's backward EOCD scan misreads it) plus
+    /// padding; pure data, located by the EOCD comment length field.</summary>
+    internal static readonly byte[] SignatureComment =
+        [0x50, 0x4b, 0x03, 0x04, 0x50, 0x4b, 0x01, 0x02, 0x50, 0x4b, 0x07, 0x08, .. Encoding.ASCII.GetBytes("atc-comment!")];
+
+    /// <summary>The length of <see cref="SignatureComment"/>; also declared by the
+    /// builder so the layout reader locates the EOCD by length, never by search.</summary>
+    internal const int SignatureCommentLength = 24;
 
     private static readonly IReadOnlyDictionary<string, ArchiveTestCaseDefinition> Cases = new Dictionary<string, ArchiveTestCaseDefinition>(StringComparer.Ordinal)
     {
@@ -118,7 +154,38 @@ internal static class ArchiveTestCatalog
             "valid-extra-field", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: StoredControlRecipe,
-            Enrichment: ArchiveControlEnrichment.LocalExtraField),
+            Construction: ArchiveControlConstruction.LocalExtraField),
+        // Ticket #841 compatibility controls: descriptors (APPNOTE §4.3.9), name encodings
+        // (bit 11 / CP437), signature-like comment bytes, and a tiny genuine Zip64 Archive.
+        ["valid-descriptor-signature"] = new(
+            "valid-descriptor-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: DescriptorControlRecipe,
+            Construction: ArchiveControlConstruction.NonSeekableDescriptor),
+        ["valid-descriptor-no-signature"] = new(
+            "valid-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: DescriptorControlRecipe,
+            Construction: ArchiveControlConstruction.StripDescriptorSignature),
+        ["valid-utf8-name"] = new(
+            "valid-utf8-name", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: Utf8NameControlRecipe),
+        ["valid-cp437-name"] = new(
+            "valid-cp437-name", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: Cp437NameControlRecipe,
+            Construction: ArchiveControlConstruction.Cp437Name),
+        ["valid-signatures-in-comment"] = new(
+            "valid-signatures-in-comment", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: SignatureCommentControlRecipe,
+            Construction: ArchiveControlConstruction.ArchiveComment),
+        ["valid-zip64-small"] = new(
+            "valid-zip64-small", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: Zip64ControlRecipe,
+            Construction: ArchiveControlConstruction.Zip64HandBuilt),
         // Malformed or policy-sensitive cases: built from the named valid control at the
         // same Seed by applying the recorded mutation. The control recipe is repeated so
         // a fixture is reconstructible from controlCaseKey + mutations alone.
@@ -141,6 +208,11 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.UnsupportedMethod, classification: PolicySensitiveClassification),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
+        ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
+        ["zip64-missing-extra"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),
+        ["zip64-truncated-extra"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64TruncatedExtra, controlCaseKey: Zip64ControlCaseKey),
     };
 
     private const string MalformedClassification = "malformed";
@@ -148,6 +220,7 @@ internal static class ArchiveTestCatalog
     private const string StoredControlCaseKey = "valid-stored";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
+    private const string Zip64ControlCaseKey = "valid-zip64-small";
 
     private static ArchiveTestCaseDefinition MutatedDefinition(
         ArchiveTestMutationKind mutation,
@@ -163,6 +236,7 @@ internal static class ArchiveTestCatalog
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
+        Zip64ControlCaseKey => Zip64ControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
     };
 
@@ -176,6 +250,39 @@ internal static class ArchiveTestCatalog
     [
         new ArchiveTestRecipeEntry(
             "sig.txt", 40, "stored", IsDirectory: false, PayloadPrefix: SignatureLikePrefix),
+    ]);
+
+    // A single stored entry so the descriptor controls carry exactly one data descriptor
+    // whose form is the only variable between the signed and unsigned variants.
+    private static ArchiveTestRecipe DescriptorControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("d.txt", 100, "stored"),
+    ]);
+
+    // A non-ASCII name: the standard writer encodes it as UTF-8 with bit 11 set.
+    private static ArchiveTestRecipe Utf8NameControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("café.txt", 60, "stored"),
+    ]);
+
+    // An ASCII placeholder name of the same byte length as its CP437 target
+    // ("caf\x82.txt"): the Cp437Name construction swaps one byte, no offsets shift.
+    private static ArchiveTestRecipe Cp437NameControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("cafx.txt", 60, "stored"),
+    ]);
+
+    // The entry payload itself begins with signature-like bytes (pure data), and the
+    // archive comment adds more signature-like bytes after the EOCD.
+    private static ArchiveTestRecipe SignatureCommentControlRecipe => new(
+    [
+        new ArchiveTestRecipeEntry(
+            "note.txt", 40, "stored", IsDirectory: false, PayloadPrefix: SignatureLikePrefix),
+    ]);
+
+    private static ArchiveTestRecipe Zip64ControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("z64.txt", 30, "stored"),
     ]);
 
     internal static ArchiveTestCaseDefinition GetCase(string caseKey) =>

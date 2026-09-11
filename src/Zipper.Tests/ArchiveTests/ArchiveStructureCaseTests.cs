@@ -337,7 +337,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(16, malformed.Count);
+        Assert.Equal(19, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
 
@@ -372,7 +372,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(23, all.Count);
+        Assert.Equal(32, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

@@ -56,8 +56,132 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.UnsupportedMethod => DeclareUnsupportedMethod(control, before),
             ArchiveTestMutationKind.EncryptionFlagWithPlaintext => SetEncryptionFlagOnPlaintext(control, before),
             ArchiveTestMutationKind.OverlappingEntryRanges => OverlapEntryRanges(control, before),
+            ArchiveTestMutationKind.InvalidUtf8Name => InvalidateUtf8Name(control, before),
+            ArchiveTestMutationKind.Zip64MissingExtra => HideZip64Extra(control, before),
+            ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
+    }
+
+    /// <summary>
+    /// Marks both headers' names UTF-8 (bit 11) while the raw name bytes are a fixed
+    /// invalid UTF-8 sequence (0xC3 followed by a non-continuation byte): the sidecar's
+    /// raw hex stays representable, and the physical name bytes are the defect (ticket
+    /// #841 step 4).
+    /// </summary>
+    private static MutatedArchiveFixture InvalidateUtf8Name(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort Utf8Flag = 0x0800;
+        var entry = control.Layout.Entries[0];
+        var localNameOffset = entry.LocalHeaderOffset + 30;
+        var centralNameOffset = entry.CentralDirectoryOffset + 46;
+        var localFlagsOffset = entry.LocalHeaderOffset + 6;
+        var centralFlagsOffset = entry.CentralDirectoryOffset + 8;
+        var nameLength = entry.LocalNameLength;
+        var invalidName = BuildInvalidUtf8Name(nameLength);
+        var code = ArchiveTestMutationKind.InvalidUtf8Name.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.InvalidUtf8Name, before,
+        [
+            new MutationSpec(
+                code, "local-header", localNameOffset,
+                $"Replaces the local header's {nameLength}-byte name with a fixed invalid UTF-8 sequence (0xC3 followed by a non-continuation byte) while setting the UTF-8 flag (bit 11); the central header's name and flag are rewritten identically. The sidecar's raw name hex stays representable.",
+                entry.Ordinal, nameLength, nameLength, DeclaredValue: $"local-name-hex={Convert.ToHexStringLower(invalidName)} utf8-flag=true"),
+            new MutationSpec(
+                code, "central-header", centralNameOffset,
+                "Replaces the central header's name bytes with the same fixed invalid UTF-8 sequence; applied in parallel with the local-header record, not chained.",
+                entry.Ordinal, nameLength, nameLength, DeclaredValue: $"central-name-hex={Convert.ToHexStringLower(invalidName)} utf8-flag=true"),
+            new MutationSpec(
+                code, "local-header", localFlagsOffset,
+                "Sets the UTF-8 flag (general-purpose bit 11) on the local header, declaring an encoding the name bytes do not satisfy.",
+                entry.Ordinal, 2, 2, DeclaredValue: "general-purpose-bits+=0x0800"),
+            new MutationSpec(
+                code, "central-header", centralFlagsOffset,
+                "Sets the UTF-8 flag (general-purpose bit 11) on the central header; applied in parallel with the local-header record, not chained.",
+                entry.Ordinal, 2, 2, DeclaredValue: "general-purpose-bits+=0x0800"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localFlagsOffset, 2), (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)localFlagsOffset, 2)) | Utf8Flag));
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralFlagsOffset, 2), (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)centralFlagsOffset, 2)) | Utf8Flag));
+            WriteBytes(after, localNameOffset, invalidName);
+            WriteBytes(after, centralNameOffset, invalidName);
+        });
+    }
+
+    /// <summary>
+    /// A same-length name whose bytes are invalid UTF-8: 0xC3 0x28 pairs (a lead byte
+    /// followed by a non-continuation byte), padded with ASCII if the name is odd-length.
+    /// </summary>
+    private static byte[] BuildInvalidUtf8Name(int nameLength)
+    {
+        var bytes = new byte[nameLength];
+        for (var i = 0; i + 1 < nameLength; i += 2)
+        {
+            bytes[i] = 0xC3;
+            bytes[i + 1] = 0x28;
+        }
+
+        if (nameLength % 2 == 1)
+        {
+            bytes[^1] = 0x74;  // 't'
+        }
+
+        return bytes;
+    }
+
+    /// <summary>
+    /// Sets the central header's extra-length to 0 while the sizes stay Zip64 sentinels:
+    /// the required Zip64 extended-information field is missing, so a resolving reader
+    /// has no values to read. The 28 extra bytes remain in place as trailing bytes the
+    /// declared central span no longer covers.
+    /// </summary>
+    private static MutatedArchiveFixture HideZip64Extra(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries[0];
+        if (entry.CentralExtraLength is not 28)
+        {
+            throw new InvalidOperationException(
+                $"zip64-missing-extra expects the control's entry 0 to carry the 28-byte central Zip64 extra field; found {entry.CentralExtraLength}.");
+        }
+
+        var centralExtraLengthOffset = entry.CentralDirectoryOffset + 30;
+        var code = ArchiveTestMutationKind.Zip64MissingExtra.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.Zip64MissingExtra, before,
+        [
+            new MutationSpec(
+                code, "central-header", centralExtraLengthOffset,
+                $"Sets the central header's extra-length from 28 to 0 while the compressed, uncompressed, and local-header-offset fields stay Zip64 sentinels (0xFFFFFFFF): the required Zip64 extended-information field is missing, so a resolving reader has nothing to read. The 28 extra bytes remain physically present as trailing bytes outside the declared central span.",
+                entry.Ordinal, 2, 2, DeclaredValue: "central-extra-length=0 sizes-remain=0xFFFFFFFF"),
+        ], after => BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralExtraLengthOffset, 2), 0));
+    }
+
+    /// <summary>
+    /// Rewrites the central Zip64 extra subfield's data size from 24 to 30, claiming
+    /// more bytes than the enclosing 28-byte extra area holds (4-byte subfield header +
+    /// 24 data bytes). The claim stays tiny, so a defensive reader must not allocate
+    /// based on it (ticket #841 test plan).
+    /// </summary>
+    private static MutatedArchiveFixture OverrunZip64Extra(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort claimedSubfieldSize = 30;
+        var entry = control.Layout.Entries[0];
+        if (entry.CentralExtraLength is not 28)
+        {
+            throw new InvalidOperationException(
+                $"zip64-truncated-extra expects the control's entry 0 to carry the 28-byte central Zip64 extra field; found {entry.CentralExtraLength}.");
+        }
+
+        var subfieldSizeOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + 2;
+        var code = ArchiveTestMutationKind.Zip64TruncatedExtra.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.Zip64TruncatedExtra, before,
+        [
+            new MutationSpec(
+                code, "central-header", subfieldSizeOffset,
+                $"Rewrites the central Zip64 extra subfield's data size from 24 to {claimedSubfieldSize}, claiming 6 more bytes than the enclosing 28-byte extra area holds (4-byte subfield header + 24 data bytes); the enclosing header lengths stay intact so the overrun is the only defect. The claim stays tiny: a defensive reader must never allocate from it.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"zip64-subfield-size={claimedSubfieldSize} enclosing-extra-area=28"),
+        ], after => BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)subfieldSizeOffset, 2), claimedSubfieldSize));
     }
 
     private static MutatedArchiveFixture FlipCrc(ArchiveTestMutationKind kind, ArchiveFixtureArtifact control, byte[] before)
@@ -439,6 +563,9 @@ internal enum ArchiveTestMutationKind
     UnsupportedMethod,
     EncryptionFlagWithPlaintext,
     OverlappingEntryRanges,
+    InvalidUtf8Name,
+    Zip64MissingExtra,
+    Zip64TruncatedExtra,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -463,6 +590,9 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.UnsupportedMethod => "unsupported-method",
         ArchiveTestMutationKind.EncryptionFlagWithPlaintext => "encryption-flag-with-plaintext",
         ArchiveTestMutationKind.OverlappingEntryRanges => "overlapping-entry-ranges",
+        ArchiveTestMutationKind.InvalidUtf8Name => "invalid-utf8-name",
+        ArchiveTestMutationKind.Zip64MissingExtra => "zip64-missing-extra",
+        ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }
