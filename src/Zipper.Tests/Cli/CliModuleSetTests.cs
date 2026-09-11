@@ -35,7 +35,8 @@ public class CliModuleSetTests
             "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim", "--chaos-amount",
             "--chaos-types", "--chaos-scenario", "--volume-size", "--hash-mode", "--hash-algorithms",
             "--compare-production-manifests", "--comparison-mode", "--comparison-output",
-            "--types", "--input-csv", "--directory-template", "--source-path-mode"
+            "--types", "--input-csv", "--directory-template", "--source-path-mode",
+            "--archive-test-suite", "--archive-test-cases"
         };
 
         foreach (var flag in flags)
@@ -187,5 +188,49 @@ public class CliModuleSetTests
         Assert.Equal("yyyy-MM-dd", modules.Metadata.DateFormat);
         Assert.Equal(15, modules.Metadata.EmptyPercentage);
         Assert.Equal(50, modules.Metadata.CustodianCount);
+    }
+
+    [Fact]
+    public void Parse_ArchiveTestArgs_ParsesCorrectly()
+    {
+        var modules = CliModules.Create();
+        var ok = modules.Parse(new[] { "--archive-test-suite", "smoke", "--archive-test-cases", "valid-empty,valid-stored", "--seed", "42", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), "archive-cases") });
+        Assert.True(ok);
+        Assert.Equal("smoke", modules.ArchiveTest.RawSuite);
+        Assert.Equal("valid-empty,valid-stored", modules.ArchiveTest.RawCases);
+        Assert.Equal(42, modules.Metadata.Seed);
+        Assert.NotNull(modules.Output.RawOutputPath);
+    }
+
+    [Fact]
+    public void Parse_ConsumedFlags_TrackSuccessfullyAppliedFlagsOnly()
+    {
+        var modules = CliModules.Create();
+        Assert.True(modules.Parse(new[] { "--archive-test-suite", "smoke", "--seed", "7" }));
+        Assert.Equal(new[] { "--archive-test-suite", "--seed" }, modules.ConsumedFlags.Order(StringComparer.Ordinal));
+
+        // Within one failed parse, flags applied before the failing token stay
+        // recorded — but Program returns 1 on a failed parse, so the Archive Test
+        // workflow never observes a half-applied set.
+        Assert.False(modules.Parse(new[] { "--archive-test-suite", "smoke", "--bogus-flag" }));
+        Assert.Equal(new[] { "--archive-test-suite" }, modules.ConsumedFlags.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void All_EachRegisteredFlag_HasExactlyOneOwningModule()
+    {
+        // ADR-0008 closed flag set: --seed is owned only by MetadataModule, so the
+        // Archive Test workflow can combine it without double registration.
+        var owners = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var module in CliModules.Create().All)
+        {
+            foreach (var flag in module.OwnedFlags)
+            {
+                owners.TryGetValue(flag, out var count);
+                owners[flag] = count + 1;
+            }
+        }
+
+        Assert.All(owners, pair => Assert.Equal(1, pair.Value));
     }
 }

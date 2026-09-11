@@ -1,8 +1,8 @@
 # ADR-0008: Archive Test Fixture CLI Short-Circuit
 
-## Status: Proposed
+## Status: Accepted
 
-Approval is tracked in [#834](https://github.com/dwojtaszek/zipper/issues/834): the maintainer gate required by AGENTS.md (architecture invariants) is satisfied by the recorded directive to implement the Archive Test Fixture slices. This ADR is proposed in slice 01 (#835); the runtime dispatch and the `docs/architecture.md` mode-dispatch diagram update land together in slice 10 (#844), at which point the status becomes Accepted.
+Approval is tracked in [#834](https://github.com/dwojtaszek/zipper/issues/834): the maintainer gate required by AGENTS.md (architecture invariants) is satisfied by the recorded directive to implement the Archive Test Fixture slices. Proposed in slice 01 (#835); the runtime dispatch and the `docs/architecture.md` mode-dispatch diagram update landed together in slice 10 (#844), at which point this status became Accepted.
 
 ## Context
 

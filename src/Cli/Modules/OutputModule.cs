@@ -121,6 +121,12 @@ public sealed class OutputModule : CliModule
     public string? FileType => _fileType;
     public string? FileTypes => _fileTypes;
     public long? Count => _count;
+
+    /// <summary>The raw --output-path value as typed: the Archive Test workflow resolves
+    /// it through PathValidator itself (REQ-208) instead of TryBuild, which requires a
+    /// full OutputConfig.</summary>
+    public string? RawOutputPath => _outputPath;
+
     public string? TargetZipSize => _targetZipSize;
     public string Encoding => _encoding;
     public bool IsEncodingExplicit => _isEncodingExplicit;

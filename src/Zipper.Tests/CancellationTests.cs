@@ -229,6 +229,22 @@ public class CancellationTests
         Assert.Contains("Operation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ArchiveTestCliWorkflow_PreCancelledToken_Returns130AndLeavesNoDestination()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var destination = Path.Combine(Directory.GetCurrentDirectory(), $"atc-cancel-{Guid.NewGuid():N}");
+        var modules = Cli.Modules.CliModules.Create();
+        Assert.True(modules.Parse(new[] { "--archive-test-suite", "smoke", "--output-path", destination }));
+
+        int exitCode = await ArchiveTests.ArchiveTestCliWorkflow.RunAsync(modules, cts.Token);
+
+        Assert.Equal(130, exitCode);
+        Assert.False(Directory.Exists(destination));
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # Archive Test Suites
 
-**Status: Planned.** This contract is frozen ahead of runtime delivery; the implementation is tracked in [issue #834](https://github.com/dwojtaszek/zipper/issues/834) as twelve sequential slices. The CLI flags described here are **not shipped yet** — see [ADR-0008](adr/ADR-0008-archive-test-dispatch.md). Do not treat the commands below as available until the CLI slice (#844) merges.
+**Status: Shipped.** The contract is frozen and delivered; the implementation was tracked in [issue #834](https://github.com/dwojtaszek/zipper/issues/834) as twelve sequential slices. The CLI flags shipped in slice 10 (#844) — see [ADR-0008](adr/ADR-0008-archive-test-dispatch.md).
 
 ## Purpose
 
@@ -34,7 +34,7 @@ where `<archiveSha256>` is the SHA-256 of the final Archive bytes.
 
 **Test vector** (frozen in `tests/fixtures/archive-tests/valid-empty.json`): the 22-byte empty Archive `504b0506000000000000000000000000000000000000` (EOCD only), SHA-256 `8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85`, Case Key `valid-empty`, all revisions 1, Seed 42 → Fixture ID `atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950`.
 
-## Suites and case filtering (planned CLI)
+## Suites and case filtering (CLI)
 
 ```
 zipper --archive-test-suite <smoke|compatibility|malformed|security|all>

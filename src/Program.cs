@@ -21,6 +21,16 @@ public static class Program
             return 0;
         }
 
+        // ADR-0008 / REQ-208: the Archive Test workflow is a closed flag set, but
+        // --benchmark and --chaos-list short-circuit before parsing — detect their
+        // combination with the Archive Test flags here, before either early exit wins.
+        if (ContainsFlag(args, "--archive-test-suite", "--archive-test-cases")
+            && ContainsFlag(args, "--benchmark", "--chaos-list"))
+        {
+            Console.Error.WriteLine("Error: --archive-test-suite cannot be combined with --benchmark or --chaos-list.");
+            return 1;
+        }
+
         if (args.Contains("--benchmark", StringComparer.OrdinalIgnoreCase))
         {
             try
@@ -53,6 +63,30 @@ public static class Program
             return 1;
         }
 
+        using var cts = new CancellationTokenSource();
+        using var sigInt = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+            System.Runtime.InteropServices.PosixSignal.SIGINT,
+            context =>
+            {
+                context.Cancel = true;
+                cts.Cancel();
+            });
+        using var sigTerm = System.Runtime.InteropServices.PosixSignalRegistration.Create(
+            System.Runtime.InteropServices.PosixSignal.SIGTERM,
+            context =>
+            {
+                context.Cancel = true;
+                cts.Cancel();
+            });
+
+        // ADR-0008: the Archive Test workflow short-circuits before comparison and
+        // Pipeline.Build. Its closed flag set is enforced inside the workflow, so a
+        // mixed comparison/generation invocation is rejected before anything writes.
+        if (modules.ArchiveTest.IsRequested)
+        {
+            return await ArchiveTests.ArchiveTestCliWorkflow.RunAsync(modules, cts.Token).ConfigureAwait(false);
+        }
+
         if (!modules.Comparison.TryBuild(out var comparison))
         {
             return 1;
@@ -79,25 +113,12 @@ public static class Program
             return 1;
         }
 
-        using var cts = new CancellationTokenSource();
-        using var sigInt = System.Runtime.InteropServices.PosixSignalRegistration.Create(
-            System.Runtime.InteropServices.PosixSignal.SIGINT,
-            context =>
-            {
-                context.Cancel = true;
-                cts.Cancel();
-            });
-        using var sigTerm = System.Runtime.InteropServices.PosixSignalRegistration.Create(
-            System.Runtime.InteropServices.PosixSignal.SIGTERM,
-            context =>
-            {
-                context.Cancel = true;
-                cts.Cancel();
-            });
-
         IGenerationMode mode = SelectMode(request);
         return await GenerationRunner.RunAsync(mode, request, cts.Token).ConfigureAwait(false);
     }
+
+    private static bool ContainsFlag(string[] args, params string[] flags) =>
+        args.Any(arg => flags.Any(flag => string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Picks the appropriate generation mode based on flags on the request.
