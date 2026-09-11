@@ -481,4 +481,119 @@ public class ProgramTests
             }
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Archive Test workflow dispatch (ticket #844, ADR-0008)
+    // -----------------------------------------------------------------------
+
+    private static readonly System.Text.RegularExpressions.Regex FixturePairPattern =
+        new("^atc-[0-9a-f]{64}\\.(zip|json)$", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuite_PublishesPairsAndReturnsZero()
+    {
+        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        try
+        {
+            string[] args = { "--archive-test-suite", "smoke", "--seed", "42", "--output-path", tempPath };
+
+            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+            Assert.Equal(0, exitCode);
+
+            // Flat fixture pairs only: no outer Archive, no subfolders.
+            string[] files = Directory.GetFiles(tempPath);
+            Assert.Equal(6, files.Length);
+            Assert.All(files, file => Assert.Matches(FixturePairPattern, Path.GetFileName(file)));
+
+            // JSON identity and filenames agree.
+            foreach (string jsonPath in Directory.GetFiles(tempPath, "*.json"))
+            {
+                var testCase = ArchiveTests.ArchiveTestJson.Parse(File.ReadAllBytes(jsonPath));
+                Assert.Equal(Path.GetFileNameWithoutExtension(jsonPath), testCase.FixtureId);
+                Assert.Equal(testCase.FixtureId + ".zip", testCase.Archive.FileName);
+                Assert.True(File.Exists(Path.Combine(tempPath, testCase.Archive.FileName)));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuiteAndGenerationFlag_ReturnsOne()
+    {
+        string[] args = { "--archive-test-suite", "smoke", "--folders", "1", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString()) };
+
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuiteAndBenchmarkFlag_ReturnsOne()
+    {
+        string[] args = { "--archive-test-suite", "smoke", "--benchmark" };
+
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuiteAndVersionFlag_ReturnsOne()
+    {
+        // --version only short-circuits as a single argument; combined with the
+        // Archive Test workflow it is an unowned flag and the closed set rejects it.
+        string[] args = { "--archive-test-suite", "smoke", "--version" };
+
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuiteAndChaosListFlag_ReturnsOne()
+    {
+        string[] args = { "--archive-test-suite", "smoke", "--chaos-list" };
+
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestCasesWithoutSuite_ReturnsOne()
+    {
+        string[] args = { "--archive-test-cases", "valid-empty", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString()) };
+
+        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        Assert.Equal(1, exitCode);
+    }
+
+    [Fact]
+    public async Task Main_WithArchiveTestSuiteRepeatedRunIntoSameDirectory_ReturnsOneAndPreservesFirstRun()
+    {
+        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        try
+        {
+            string[] args = { "--archive-test-suite", "smoke", "--output-path", tempPath };
+
+            Assert.Equal(0, await RunWithRedirectedConsole(() => Program.Main(args)));
+            string[] before = Directory.GetFiles(tempPath).Order(StringComparer.Ordinal).ToArray();
+            var beforeBytes = before.Select(File.ReadAllBytes).ToList();
+
+            Assert.Equal(1, await RunWithRedirectedConsole(() => Program.Main(args)));
+
+            string[] after = Directory.GetFiles(tempPath).Order(StringComparer.Ordinal).ToArray();
+            Assert.Equal(before, after);
+            Assert.Equal(beforeBytes, after.Select(File.ReadAllBytes).ToList());
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
 }

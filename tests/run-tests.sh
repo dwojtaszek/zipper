@@ -601,6 +601,11 @@ print_info "Running unified workflow tests..."
 bash ./tests/test-unified-workflow.sh || print_error "test-unified-workflow.sh failed."
 print_success "Unified workflow tests passed."
 
+# Test 11b: Archive Test workflow CLI tests
+print_info "Running Archive Test suite CLI tests..."
+bash ./tests/test-archive-test-suites.sh || print_error "test-archive-test-suites.sh failed."
+print_success "Archive Test suite CLI tests passed."
+
 # Test 12: Loadfile-only and Chaos Engine tests
 print_info "Running loadfile-only and Chaos Engine tests..."
 if ! bash ./tests/run-e2e-loadfile.sh; then

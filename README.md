@@ -139,6 +139,8 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `all` | Publish an Archive Test Fixture suite (exclusive workflow; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases |
 | `--version` | `false` | flag | Print version string and exit |
 
 For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md).
@@ -175,7 +177,7 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 
 - [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow (Windows, macOS, Linux)
 - [Advanced CLI & Reference Guide](docs/advanced-guide.md) — Complete flag reference, Chaos Engine, delimiter tuning, and schemas
-- [Archive Test Suites](docs/archive-test-suites.md) — Planned contract for extractor-test fixture pairs with paired unique IDs (tracked in #834; not shipped yet)
+- [Archive Test Suites](docs/archive-test-suites.md) — Extractor-test fixture pairs with paired unique IDs (`--archive-test-suite`, ADR-0008)
 - [Architecture Specifications](docs/architecture.md) — Core system design, seams, and pipeline architecture
 - [Requirements & Specifications](Requirements.md) — Immutable functional requirement definitions (`REQ-XXX`)
 - [Ubiquitous Language](UBIQUITOUS_LANGUAGE.md) — Domain language definitions

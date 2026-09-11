@@ -546,6 +546,11 @@ call :print_info "Running unified workflow tests..."
 call .\tests\test-unified-workflow.bat
 call :print_success "Unified workflow tests passed."
 
+REM Test 11b: Archive Test workflow CLI tests
+call :print_info "Running Archive Test suite CLI tests..."
+call .\tests\test-archive-test-suites.bat
+call :print_success "Archive Test suite CLI tests passed."
+
 REM Test 12: Loadfile-only and Chaos Engine tests
 call :print_info "Running loadfile-only and Chaos Engine tests..."
 call .\tests\run-e2e-loadfile.bat

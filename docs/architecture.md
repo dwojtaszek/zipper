@@ -75,9 +75,9 @@ graph TD
 ```mermaid
 graph LR
     subgraph CLI Layer
-        Program["Program.cs<br/>(CliModuleSet.Parse + comparison short-circuit + SelectMode dispatch)"]
+        Program["Program.cs<br/>(CliModuleSet.Parse + short-circuits + SelectMode dispatch)"]
         Pipeline["Pipeline.Build<br/>(CrossCuttingRules + TryBuild chain + request assembly)"]
-        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output / Comparison<br/>(incl. column profile)"]
+        Modules["Domain Modules<br/>Hash / Delimiter / Tiff / Chaos / Bates / Metadata / LoadFile / Production / SourceInput / Output / Comparison / ArchiveTest<br/>(incl. column profile)"]
         CrossCutting["CrossCuttingRules<br/>(required-flag gates + cross-domain checks)"]
         Program --> Pipeline
         Program --> Modules
@@ -146,8 +146,15 @@ graph LR
         PMC["ProductionManifestComparer<br/>(--compare-production-manifests)"]
     end
 
+    subgraph Archive Test Dispatch
+        ATCW["ArchiveTestCliWorkflow<br/>(--archive-test-suite / --archive-test-cases)"]
+        ATCW --> ATG["ArchiveTestSuiteGenerator"]
+        ATG --> ATF["Archive Test Fixtures + Expectation Files"]
+    end
+
     Program --> Pipeline --> FGR
     Program -->|"--compare-production-manifests"| PMC
+    Program -->|"--archive-test-suite"| ATCW
     Program -->|"SelectMode(request)"| StdMode
     Program -->|"SelectMode(request)"| LFMode
     Program -->|"SelectMode(request)"| PSMode
@@ -161,6 +168,8 @@ graph LR
 ```
 
 *Phase 1–4 of #750 complete: all eleven parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison). `Program` owns `CliModuleSet.Parse` (token reader + module dispatcher) and the comparison short-circuit; `CrossCuttingRules.Validate` then runs the generation-path cross-domain checks on the parsed module fields, before any `TryBuild`. `Pipeline.Build` runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then applies the image-type load-file override (`ApplyImageTypeLoadFileOverride`) and constructs `FileGenerationRequest`. When `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), `Program` short-circuits to the Production Manifest comparer and never calls `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
+
+*Archive Test dispatch (#844, per ADR-0008): `ArchiveTestModule` parses `--archive-test-suite` / `--archive-test-cases`; when requested, `Program` short-circuits to `ArchiveTestCliWorkflow` before the comparison check and before `Pipeline.Build`. The workflow enforces a closed flag set (no generation flags, `--benchmark`, or `--chaos-list` may be combined with it), resolves the suite and Case Key selection, and drives `ArchiveTestSuiteGenerator` to publish Archive Test Fixture + Expectation File pairs. It is not a generation mode and never constructs a `FileGenerationRequest`.*
 
 ## Post-Generation Validation
 

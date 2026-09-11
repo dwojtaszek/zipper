@@ -99,6 +99,15 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --custodian-count <n>    Override custodian count (max: 1000)");
         Console.Error.WriteLine("  --with-families          Generate parent-child document relationships");
         Console.Error.WriteLine();
+        Console.Error.WriteLine("Archive Test Options:");
+        Console.Error.WriteLine("  --archive-test-suite <s>  Generate Archive Test Fixture pairs for one suite:");
+        Console.Error.WriteLine("                           smoke, compatibility, malformed, security, all");
+        Console.Error.WriteLine("  --archive-test-cases <k>  Comma-separated Case Keys from the selected suite");
+        Console.Error.WriteLine("                           (default: all members of the suite)");
+        Console.Error.WriteLine("  --seed <number>           Fixture Seed (default: 42)");
+        Console.Error.WriteLine("  --output-path <path>      New output directory for the fixture pairs (required)");
+        Console.Error.WriteLine("                           Only these flags may be combined with --archive-test-suite.");
+        Console.Error.WriteLine();
         Console.Error.WriteLine("Utility Options:");
         Console.Error.WriteLine("  --benchmark              Run performance benchmark suite and exit");
         Console.Error.WriteLine("  --version                Print the version string and exit");

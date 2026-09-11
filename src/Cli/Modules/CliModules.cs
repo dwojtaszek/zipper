@@ -17,7 +17,17 @@ public sealed class CliModuleSet
     public required ChaosModule Chaos { get; init; }
     public required HashModule Hash { get; init; }
     public required ComparisonModule Comparison { get; init; }
-    public IReadOnlyList<CliModule> All => new CliModule[] { Production, SourceInput, Output, Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash, Comparison };
+    public required ArchiveTestModule ArchiveTest { get; init; }
+    public IReadOnlyList<CliModule> All => new CliModule[] { Production, SourceInput, Output, Bates, Metadata, LoadFile, Delimiter, Tiff, Chaos, Hash, Comparison, ArchiveTest };
+
+    private readonly HashSet<string> _consumedFlags = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The flags successfully applied by the last <see cref="Parse"/> (lowercase,
+    /// "--"-prefixed). Presence-based on purpose: a flag explicitly set to its default
+    /// value still counts as consumed, which the closed Archive Test flag set relies on.
+    /// </summary>
+    public IReadOnlyCollection<string> ConsumedFlags => _consumedFlags;
 
     /// <summary>
     /// Token reader + module dispatcher: for each token finds the owning module, pulls a
@@ -27,6 +37,7 @@ public sealed class CliModuleSet
     public bool Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
+        _consumedFlags.Clear();
 
         var modules = All;
         int i = 0;
@@ -56,6 +67,8 @@ public sealed class CliModuleSet
             {
                 return false;
             }
+
+            _consumedFlags.Add(arg);
             i++;
         }
 
@@ -96,6 +109,7 @@ public static class CliModules
             Chaos = new ChaosModule(),
             Hash = new HashModule(),
             Comparison = new ComparisonModule(),
+            ArchiveTest = new ArchiveTestModule(),
         };
     }
 }

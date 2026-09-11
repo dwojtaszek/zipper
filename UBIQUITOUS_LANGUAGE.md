@@ -4,7 +4,7 @@
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Archive Test Fixture** | A deliberately constructed ZIP **Archive** — valid, malformed, or **policy-sensitive** — published as a flat folder pair: `atc-<64-hex>.zip` plus its **Expectation File**, for testing unzip implementations. Produced by the Archive Test workflow (planned, #834; not a generation mode, ADR-0008); distinct from user-facing Standard/Production Set **Archives**. | Test zip, fixture archive |
+| **Archive Test Fixture** | A deliberately constructed ZIP **Archive** — valid, malformed, or **policy-sensitive** — published as a flat folder pair: `atc-<64-hex>.zip` plus its **Expectation File**, for testing unzip implementations. Produced by the Archive Test workflow (#844; not a generation mode, ADR-0008); distinct from user-facing Standard/Production Set **Archives**. | Test zip, fixture archive |
 | **Fixture ID** | The unique instance identifier of an **Archive Test Fixture**: `atc-` plus 64 lowercase SHA-256 hex characters over the canonical descriptor (**Case Key**, revisions, **Seed**, final Archive SHA-256). Names both the `.zip` and the `.json` of a pair. | Fixture name, case ID |
 | **Case Key** | The human-readable scenario name of an **Archive Test Fixture** (e.g. `valid-empty`). Identifies the scenario, not the instance; one Case Key plus revisions, **Seed**, and final bytes determine the **Fixture ID**. | Scenario name, test id |
 | **Expectation File** | The JSON sidecar (`atc-<64-hex>.json`) paired with an **Archive Test Fixture**, recording identity, entries, mutations, expectations, and budgets per `tests/fixtures/archive-test-case.schema.json`. Distinct from the **Audit File** (`_properties.json`). | Expected file, JSON manifest |
