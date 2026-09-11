@@ -170,6 +170,8 @@ internal static class ArchiveTestSuiteGenerator
     private const string NoPartialWrites = "no-partial-writes";
     private const string PayloadBytesUnchanged = "payload-bytes-unchanged";
     private const string OperationFails = "operation-fails";
+    private const string ListSucceeds = "list-succeeds";
+    private const string ListFails = "list-fails";
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
@@ -190,18 +192,67 @@ internal static class ArchiveTestSuiteGenerator
                 or ArchiveTestMutationKind.CrcCentralMismatch
                 or ArchiveTestMutationKind.CrcBothMismatch =>
             [
-                Expectation(ListOperation, StrictProfile, ["list-succeeds", "list-fails"], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
                 Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "crc-mismatch-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
             ],
-            _ =>
+            // Local-header lies with an intact central directory: lenient central-based
+            // readers succeed; strict local-header validators reject (ticket #840).
+            ArchiveTestMutationKind.NameLocalCentralMismatch
+                or ArchiveTestMutationKind.MethodLocalCentralMismatch
+                or ArchiveTestMutationKind.SizeLocalCentralMismatch
+                or ArchiveTestMutationKind.ExtraFieldLengthOverrun =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            // Central-declared offset lies: the physical bytes are unchanged; a lenient
+            // reader may still list entries, but reads at the declared offsets fail or
+            // return unverified bytes.
+            ArchiveTestMutationKind.OffsetOutsideArchive
+                or ArchiveTestMutationKind.OffsetIntoPayload
+                or ArchiveTestMutationKind.OverlappingEntryRanges =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-offsets-are-lies"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            // Policy-sensitive: the method code is consistent but unimplemented; the
+            // payload bytes stay the stored control bytes (ticket #840).
+            ArchiveTestMutationKind.UnsupportedMethod =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["unsupported-method-rejected", "unsupported-method-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-98-ppmd"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
+            ],
+            ArchiveTestMutationKind.EncryptionFlagWithPlaintext =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                // Read-entry allows only failure: every mainstream reader honors the
+                // encrypted flag and cannot decrypt the plaintext without a password.
+                // Unlike the CRC and offset lies, no lenient middle ground exists.
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
+            ],
+            // Tail truncations (ticket #839): every operation fails at a defined stage.
+            ArchiveTestMutationKind.TruncatePayloadTail
+                or ArchiveTestMutationKind.TruncateCentralTail
+                or ArchiveTestMutationKind.TruncateEocd
+                or ArchiveTestMutationKind.MissingEocd =>
             [
                 Expectation(ListOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation]),
                 Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            _ => throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': no expectation set defined for mutation '{definition.Mutation}'."),
         };
     }
 
