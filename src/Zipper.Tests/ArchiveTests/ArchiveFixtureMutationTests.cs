@@ -179,14 +179,13 @@ public class ArchiveFixtureMutationTests : TempDirectoryTestBase
     public async Task GenerateAsync_MalformedSuite_PublishesStandalonePairsWithMutationRecords()
     {
         var malformedCases = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
-        Assert.Equal(7, malformedCases.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(malformedCases.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "malformed")),
             CancellationToken.None);
 
-        Assert.Equal(7, result.FixtureIds.Count);
-        Assert.Equal(14, Directory.GetFiles(result.PublishedDirectory).Length);
+        Assert.Equal(malformedCases.Count, result.FixtureIds.Count);
+        Assert.Equal(malformedCases.Count * 2, Directory.GetFiles(result.PublishedDirectory).Length);
 
         // The missing-EOCD Archive is unopenable, but its adjacent JSON still parses,
         // matches the filename, and verifies the final hash from disk bytes.
@@ -196,13 +195,14 @@ public class ArchiveFixtureMutationTests : TempDirectoryTestBase
                 Sha: Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(Path.Combine(result.PublishedDirectory, id + ".zip"))))))
             .ToDictionary(pair => pair.Id, pair => pair.Sha);
 
+        var classificationByKey = malformedCases.ToDictionary(c => c.CaseKey, c => c.Classification);
         foreach (var fixtureId in result.FixtureIds)
         {
             var testCase = ArchiveTestJson.Parse(
                 await File.ReadAllBytesAsync(Path.Combine(result.PublishedDirectory, fixtureId + ".json")));
 
             Assert.Equal(fixtureId, testCase.FixtureId);
-            Assert.Equal("malformed", testCase.Classification);
+            Assert.Equal(classificationByKey[testCase.CaseKey], testCase.Classification);
             Assert.NotEmpty(testCase.Mutations);
             Assert.All(testCase.Mutations, mutation => Assert.Equal("before-mutation", mutation.OffsetBasis));
             Assert.Equal(zipShaById[fixtureId], testCase.Archive.Sha256);
