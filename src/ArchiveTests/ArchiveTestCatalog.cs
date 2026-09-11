@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 
 namespace Zipper.ArchiveTests;
@@ -44,8 +45,10 @@ internal sealed record ArchiveTestRecipe(IReadOnlyList<ArchiveTestRecipeEntry> E
 /// <summary>
 /// A Case Key in the finite Archive Test catalog: revisions, classification, suite
 /// membership, and the baseline recipe (REQ-208). Malformed cases name their
-/// <see cref="ControlCaseKey"/> and <see cref="Mutation"/>: the control's bytes plus the
-/// recorded mutation chain reconstruct the fixture. Suite selection never changes a
+/// <see cref="ControlCaseKey"/> and an ordered <see cref="Mutations"/> chain: the
+/// control's bytes plus the recorded chain reconstruct the fixture (a single-element
+/// chain is the one-mutation form; ticket #843 adds finite, explicit multi-mutation
+/// chains — never a cross-product of every mutation). Suite selection never changes a
 /// case's bytes; it only selects which cases run.
 /// </summary>
 internal sealed record ArchiveTestCaseDefinition(
@@ -56,10 +59,10 @@ internal sealed record ArchiveTestCaseDefinition(
     IReadOnlyList<string> Suites,
     ArchiveTestRecipe Recipe,
     string? ControlCaseKey = null,
-    ArchiveTestMutationKind? Mutation = null,
+    IReadOnlyList<ArchiveTestMutationKind>? Mutations = null,
     ArchiveControlConstruction? Construction = null)
 {
-    public bool IsMutation => Mutation is not null;
+    public bool IsMutation => Mutations is { Count: > 0 };
 }
 
 /// <summary>
@@ -147,10 +150,7 @@ internal static class ArchiveTestCatalog
         ["valid-deflate"] = new(
             "valid-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: ValidControlSuites,
-            Recipe: new ArchiveTestRecipe(
-            [
-                ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate"),
-            ])),
+            Recipe: DeflateControlRecipe),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -247,6 +247,33 @@ internal static class ArchiveTestCatalog
         ["unicode-normalization-collision"] = PolicyDefinition("unicode-normalization-collision", NormalizationCollisionRecipe),
         ["file-directory-conflict"] = PolicyDefinition("file-directory-conflict", FileDirectoryConflictRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        // Ticket #843 bounded resource cases: honest high compression, genuine
+        // depth-two nesting, and the exact entry cap — all valid Archives.
+        ["high-ratio-bounded"] = new(
+            "high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: HighRatioControlRecipe),
+        ["nested-archives-depth-two"] = new(
+            "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: NestedArchiveControlRecipe),
+        ["many-small-entries"] = new(
+            "many-small-entries", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: ManySmallEntriesRecipe),
+        // A declared uncompressed size beyond the expanded budget over tiny physical
+        // bytes: a declaration lie, never a real allocation (ticket #843).
+        ["declared-size-oversized"] = MutatedDefinition(
+            ArchiveTestMutationKind.DeclaredSizeOversized, controlCaseKey: DeflateControlCaseKey),
+        // Ticket #843 combined chains: the audited field-level mutations composed in a
+        // finite, explicit list; the chain order is the recipe, each mutation consumes
+        // the previous result.
+        ["combined-crc-and-name"] = CombinedDefinition(
+            "combined-crc-and-name",
+            ArchiveTestMutationKind.CrcLocalMismatch, ArchiveTestMutationKind.NameLocalCentralMismatch),
+        ["combined-crc-and-truncate"] = CombinedDefinition(
+            "combined-crc-and-truncate",
+            ArchiveTestMutationKind.CrcLocalMismatch, ArchiveTestMutationKind.TruncatePayloadTail),
     };
 
     private const string MalformedClassification = "malformed";
@@ -255,6 +282,7 @@ internal static class ArchiveTestCatalog
     /// <summary>Unix host system code (version-made-by high byte) for symlink entries.</summary>
     internal const byte UnixHostSystem = 3;
     private const string StoredControlCaseKey = "valid-stored";
+    private const string DeflateControlCaseKey = "valid-deflate";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
     private const string Zip64ControlCaseKey = "valid-zip64-small";
@@ -267,7 +295,16 @@ internal static class ArchiveTestCatalog
         Suites: [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
-        Mutation: mutation);
+        Mutations: [mutation]);
+
+    /// <summary>An ordered mutation chain (ticket #843): a finite, explicit combination
+    /// over the stored control; each mutation consumes the previous result.</summary>
+    private static ArchiveTestCaseDefinition CombinedDefinition(string caseKey, params ArchiveTestMutationKind[] chain) => new(
+        caseKey, CaseRevision: 1, ExpectationRevision: 1, Classification: MalformedClassification,
+        Suites: [MalformedSuite],
+        Recipe: ControlRecipe(StoredControlCaseKey),
+        ControlCaseKey: StoredControlCaseKey,
+        Mutations: chain);
 
     /// <summary>A policy-sensitive direct recipe (ticket #842): suite security, no
     /// mutation, no construction — the standard writer's bytes for these names.</summary>
@@ -279,6 +316,7 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe ControlRecipe(string controlCaseKey) => controlCaseKey switch
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
+        DeflateControlCaseKey => DeflateControlRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
@@ -288,6 +326,13 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
         ArchiveTestRecipeEntry.File("b.bin", 40, "stored"),
+    ]);
+
+    // The control for the declared-size-oversized mutation: one deflated entry whose
+    // compressed bytes are far smaller than its honest uncompressed size.
+    private static ArchiveTestRecipe DeflateControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate"),
     ]);
 
     private static ArchiveTestRecipe SignaturePayloadControlRecipe => new(
@@ -327,6 +372,64 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe Zip64ControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("z64.txt", 30, "stored"),
+    ]);
+
+    // Ticket #843 resource recipes: honest high compression, genuine depth-two
+    // nesting, and the exact entry cap. All are valid Archives with true sizes.
+
+    // One MiB of a single repeated byte under deflate: an intentionally high, honest
+    // compression ratio — the bounded counterpart of a decompression bomb.
+    private static ArchiveTestRecipe HighRatioControlRecipe
+    {
+        get
+        {
+            const int ExpandedLength = 1024 * 1024;
+            var repeated = new byte[ExpandedLength];
+            Array.Fill(repeated, (byte)0x41);
+            return new ArchiveTestRecipe(
+            [
+                new ArchiveTestRecipeEntry("hi-ratio.bin", ExpandedLength, "deflate", IsDirectory: false, PayloadPrefix: repeated),
+            ]);
+        }
+    }
+
+    // A genuine depth-two nesting: the outer Archive carries a real inner Archive as
+    // one member's exact content plus a plain sibling file; the inner Archive holds
+    // only a regular file — no recursive self-reference, no third level.
+    private static ArchiveTestRecipe NestedArchiveControlRecipe
+    {
+        get
+        {
+            var inner = BuildInnerArchiveBytes();
+            return new ArchiveTestRecipe(
+            [
+                new ArchiveTestRecipeEntry("inner.zip", inner.Length, "stored", IsDirectory: false, PayloadPrefix: inner),
+                ArchiveTestRecipeEntry.File("outer.txt", 30, "stored"),
+            ]);
+        }
+    }
+
+    // Built with the standard writer and a fixed timestamp so the inner Archive's
+    // bytes are deterministic recipe content, like every other payload.
+    private static byte[] BuildInnerArchiveBytes()
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("inner.txt", CompressionLevel.NoCompression);
+            entry.LastWriteTime = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            using var entryStream = entry.Open();
+            entryStream.Write("atc-nested-inner"u8);
+        }
+
+        return stream.ToArray();
+    }
+
+    // Exactly the 1,000-entry cap: small, distinct, honest members; no hidden extras.
+    private static ArchiveTestRecipe ManySmallEntriesRecipe => new(
+    [
+        .. Enumerable.Range(0, ArchiveTestCaseSemantics.MaxEntries)
+            .Select(index => ArchiveTestRecipeEntry.File($"small-{index:0000}.txt", 8, "stored")),
     ]);
 
     // Ticket #842 policy-sensitive recipes: tiny inert ASCII payloads; the member

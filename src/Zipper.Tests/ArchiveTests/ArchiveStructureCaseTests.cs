@@ -65,7 +65,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
         Assert.True(definition.IsMutation, $"case '{caseKey}' must be a mutation case");
-        return ArchiveFixtureMutator.Apply(definition.Mutation!.Value, BuildControl(definition.ControlCaseKey!));
+        return ArchiveFixtureMutator.Apply(definition.Mutations![0], BuildControl(definition.ControlCaseKey!));
     }
 
     // ---- New valid controls (ticket #840 step 1) ----
@@ -337,7 +337,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(19, malformed.Count);
+        Assert.Equal(22, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
 
@@ -372,7 +372,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(43, all.Count);
+        Assert.Equal(49, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -416,15 +416,16 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                 // The ticket #840 structure cases store their malformed declared values
                 // separately from the physical facts; the #839 truncations have no declared
                 // value (the defect is the deletion itself).
-                if (definition.Mutation is ArchiveTestMutationKind.NameLocalCentralMismatch
-                    or ArchiveTestMutationKind.MethodLocalCentralMismatch
-                    or ArchiveTestMutationKind.SizeLocalCentralMismatch
-                    or ArchiveTestMutationKind.OffsetOutsideArchive
-                    or ArchiveTestMutationKind.OffsetIntoPayload
-                    or ArchiveTestMutationKind.ExtraFieldLengthOverrun
-                    or ArchiveTestMutationKind.UnsupportedMethod
-                    or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
-                    or ArchiveTestMutationKind.OverlappingEntryRanges)
+                if (definition.Mutations is [var single]
+                    && single is ArchiveTestMutationKind.NameLocalCentralMismatch
+                        or ArchiveTestMutationKind.MethodLocalCentralMismatch
+                        or ArchiveTestMutationKind.SizeLocalCentralMismatch
+                        or ArchiveTestMutationKind.OffsetOutsideArchive
+                        or ArchiveTestMutationKind.OffsetIntoPayload
+                        or ArchiveTestMutationKind.ExtraFieldLengthOverrun
+                        or ArchiveTestMutationKind.UnsupportedMethod
+                        or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
+                        or ArchiveTestMutationKind.OverlappingEntryRanges)
                 {
                     Assert.All(testCase.Mutations, mutation => Assert.NotNull(mutation.DeclaredValue));
                 }

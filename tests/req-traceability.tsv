@@ -200,4 +200,4 @@ REQ-214	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_TargetCollisionDuringP
 REQ-215	exemption	-	planned: exit codes land with the dispatch slice (#844)
 REQ-216	exemption	-	planned: Program short-circuit lands with the dispatch slice (#844, ADR-0008)
 REQ-217	unit	ArchiveTestCaseSchemaTests.Load_SchemaFile_DeclaresDraft07Contract	Expectation File schema contract frozen; semantic checks in ArchiveTestCaseSchemaTests
-REQ-218	unit	ArchiveFixtureMutationTests.Apply_Truncation_RemovesTailBytesAndRecordsThem	Mutation records with before-mutation offsets, before/after hashes/sizes, and declared values; byte-level structure cases in ArchiveStructureCaseTests; CRC-both records two parallel field ranges
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_Truncation_RemovesTailBytesAndRecordsThem	Mutation records with before-mutation offsets, before/after hashes/sizes, and declared values; ordered combined chains in ArchiveCombinedCaseTests prove each mutation consumes the previous result
