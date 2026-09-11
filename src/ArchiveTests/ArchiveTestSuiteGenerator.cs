@@ -240,6 +240,27 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
+            ArchiveTestMutationKind.InvalidUtf8Name =>
+            [
+                // Both headers declare UTF-8 the raw name bytes do not satisfy: readers
+                // may list (raw or lossy-decoded names) or reject; returned content is
+                // unverified because the name contract is broken (ticket #841 step 4).
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-unchecked", "integrity-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
+            ],
+            // Zip64 resolution lies: the sentinels stay but the extended field is gone
+            // or claims more than it holds. Claims stay tiny; no allocation may follow
+            // them (ticket #841 test plan).
+            ArchiveTestMutationKind.Zip64MissingExtra
+                or ArchiveTestMutationKind.Zip64TruncatedExtra =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Tail truncations (ticket #839): every operation fails at a defined stage.
             ArchiveTestMutationKind.TruncatePayloadTail
                 or ArchiveTestMutationKind.TruncateCentralTail

@@ -7,8 +7,13 @@ namespace Zipper.ArchiveTests;
 /// Exact structure offsets of one owned generated Archive, captured with checked
 /// BinaryPrimitives reads after the standard writer finalized its central directory.
 /// This is not a general untrusted-ZIP parser: it only reads archives produced by
-/// <see cref="ArchiveFixtureBuilder"/> (EOCD last, empty archive comment, counts known).
-/// Signature-like bytes inside payloads or names are data and are never searched for.
+/// <see cref="ArchiveFixtureBuilder"/> (EOCD last, a declared comment, counts known).
+/// Signature-like bytes inside payloads, names, or comments are data and are never
+/// searched for: the EOCD is located from the archive length minus its record minus the
+/// caller-declared comment length. Zip64 sentinels in the EOCD or a central header are
+/// resolved through the Zip64 EOCD locator and the central Zip64 extra field (APPNOTE
+/// §4.5.3), reading only the fields whose 32-bit counterparts are sentinels, in
+/// specification order.
 /// </summary>
 internal sealed record ArchiveFixtureEntryLayout(
     int Ordinal,
@@ -40,21 +45,43 @@ internal sealed record ArchiveFixtureLayout(
     internal const uint EocdSignature = 0x06054b50;
     internal const uint CentralHeaderSignature = 0x02014b50;
     internal const uint LocalHeaderSignature = 0x04034b50;
+    internal const uint Zip64EocdSignature = 0x06064b50;
+    internal const uint Zip64LocatorSignature = 0x07064b50;
+    internal const uint Zip64ExtraFieldId = 0x0001;
+    internal const uint Zip64SizeSentinel = 0xFFFFFFFF;
+    internal const ushort Zip64CountSentinel = 0xFFFF;
     internal const ushort DataDescriptorFlag = 0x0008;
 
-    internal static ArchiveFixtureLayout Read(ReadOnlySpan<byte> archive)
+    /// <summary>
+    /// Reads the layout of an owned Archive. The caller declares the archive comment
+    /// length when it constructed one (ticket #841): the EOCD sits at
+    /// <c>length - 22 - expectedCommentLength</c>, located by length, never by search.
+    /// </summary>
+    internal static ArchiveFixtureLayout Read(ReadOnlySpan<byte> archive, int expectedCommentLength = 0)
     {
         const int EocdLength = 22;
 
-        if (archive.Length < EocdLength)
+        if (expectedCommentLength is < 0)
         {
-            throw new InvalidDataException($"Archive is {archive.Length} bytes, too small for an EOCD record ({EocdLength}).");
+            throw new ArgumentOutOfRangeException(nameof(expectedCommentLength), "The expected comment length must not be negative.");
         }
 
-        var eocdOffset = archive.Length - EocdLength;
+        if (archive.Length < checked(EocdLength + expectedCommentLength))
+        {
+            throw new InvalidDataException(
+                $"Archive is {archive.Length} bytes, too small for an EOCD record ({EocdLength}) plus the declared {expectedCommentLength}-byte comment.");
+        }
+
+        var eocdOffset = archive.Length - EocdLength - expectedCommentLength;
         if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, eocdOffset, 4, "EOCD signature")) != EocdSignature)
         {
-            throw new InvalidDataException($"Expected the EOCD signature 0x06054b50 at offset {eocdOffset} (owned archives have no comment); bytes differ.");
+            throw new InvalidDataException($"Expected the EOCD signature 0x06054b50 at offset {eocdOffset} (owned archives declare their comment length); bytes differ.");
+        }
+
+        var commentLength = ReadUInt16(archive, eocdOffset + 20, "EOCD comment length");
+        if (commentLength != expectedCommentLength)
+        {
+            throw new InvalidDataException($"EOCD comment length is {commentLength}, expected the declared {expectedCommentLength}.");
         }
 
         var diskNumber = ReadUInt16(archive, eocdOffset + 4, "EOCD disk number");
@@ -66,17 +93,45 @@ internal sealed record ArchiveFixtureLayout(
 
         var thisDiskEntries = ReadUInt16(archive, eocdOffset + 8, "EOCD entry count on this disk");
         var totalEntries = ReadUInt16(archive, eocdOffset + 10, "EOCD total entry count");
-        if (thisDiskEntries != totalEntries)
-        {
-            throw new InvalidDataException($"EOCD entry counts disagree: disk {thisDiskEntries}, total {totalEntries}.");
-        }
-
         var centralDirectorySize = ReadUInt32(archive, eocdOffset + 12, "EOCD central directory size");
         var centralDirectoryOffset = ReadUInt32(archive, eocdOffset + 16, "EOCD central directory offset");
-        if (checked((long)centralDirectoryOffset + centralDirectorySize) != eocdOffset)
+
+        // Zip64: when the EOCD's counts or spans are sentinels, the real values live in
+        // the Zip64 EOCD, located through the locator that immediately precedes the EOCD
+        // in owned archives (never a search).
+        if (thisDiskEntries == Zip64CountSentinel || totalEntries == Zip64CountSentinel
+            || centralDirectorySize == Zip64SizeSentinel || centralDirectoryOffset == Zip64SizeSentinel)
+        {
+            var locatorOffset = checked(eocdOffset - 20);
+            if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, locatorOffset, 4, "Zip64 EOCD locator signature")) != Zip64LocatorSignature)
+            {
+                throw new InvalidDataException($"Expected the Zip64 EOCD locator signature 0x07064b50 at offset {locatorOffset} (immediately before the EOCD in owned archives).");
+            }
+
+            var zip64EocdOffset = ReadUInt32(archive, locatorOffset + 8, "Zip64 EOCD locator offset");
+            if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, (long)zip64EocdOffset, 4, "Zip64 EOCD signature")) != Zip64EocdSignature)
+            {
+                throw new InvalidDataException($"Expected the Zip64 EOCD signature 0x06064b50 at offset {zip64EocdOffset}.");
+            }
+
+            thisDiskEntries = totalEntries = (ushort)ReadUInt32(archive, (long)zip64EocdOffset + 32, "Zip64 EOCD total entry count");
+            centralDirectorySize = ReadUInt32(archive, (long)zip64EocdOffset + 40, "Zip64 EOCD central directory size");
+            centralDirectoryOffset = ReadUInt32(archive, (long)zip64EocdOffset + 48, "Zip64 EOCD central directory offset");
+            if (checked((long)centralDirectoryOffset + centralDirectorySize) != (long)zip64EocdOffset)
+            {
+                throw new InvalidDataException(
+                    $"Central directory span ({centralDirectoryOffset}..{centralDirectoryOffset + centralDirectorySize}) does not end at the Zip64 EOCD offset {zip64EocdOffset}.");
+            }
+        }
+        else if (checked((long)centralDirectoryOffset + centralDirectorySize) != eocdOffset)
         {
             throw new InvalidDataException(
                 $"Central directory span ({centralDirectoryOffset}..{centralDirectoryOffset + centralDirectorySize}) does not end at the EOCD offset {eocdOffset}.");
+        }
+
+        if (thisDiskEntries != totalEntries)
+        {
+            throw new InvalidDataException($"EOCD entry counts disagree: disk {thisDiskEntries}, total {totalEntries}.");
         }
 
         var entries = new ArchiveFixtureEntryLayout[totalEntries];
@@ -86,9 +141,13 @@ internal sealed record ArchiveFixtureLayout(
             entries[ordinal] = ReadCentralEntry(archive, ordinal, ref cursor);
         }
 
-        if (cursor != eocdOffset)
+        // The span check (central directory ends at the EOCD, or at the Zip64 EOCD for
+        // Zip64 archives) already ran per branch above; here the walked bytes must cover
+        // exactly the declared span.
+        var centralEnd = checked((long)centralDirectoryOffset + centralDirectorySize);
+        if (cursor != centralEnd)
         {
-            throw new InvalidDataException($"Central directory walk ended at {cursor}, expected {eocdOffset}.");
+            throw new InvalidDataException($"Central directory walk ended at {cursor}, expected {centralEnd}.");
         }
 
         for (var ordinal = 0; ordinal < totalEntries; ordinal++)
@@ -122,6 +181,35 @@ internal sealed record ArchiveFixtureLayout(
         var commentLength = ReadUInt16(archive, start + 32, $"entry {ordinal} central comment length");
         var localHeaderOffset = ReadUInt32(archive, start + 42, $"entry {ordinal} local header offset");
         var nameBytes = Slice(archive, start + 46, nameLength, $"entry {ordinal} name");
+
+        // Zip64 sentinels resolve through the central Zip64 extra field (0x0001),
+        // reading exactly the fields whose 32-bit counterparts are sentinels, in
+        // specification order: uncompressed size (offset +4), compressed size (+12),
+        // local header offset (+20) — each an 8-byte field.
+        if (uncompressedSize == Zip64SizeSentinel || compressedSize == Zip64SizeSentinel || localHeaderOffset == Zip64SizeSentinel)
+        {
+            var zip64ExtraOffset = checked(start + 46 + nameLength);
+            if (extraLength < 4 || ReadUInt16(archive, zip64ExtraOffset, $"entry {ordinal} Zip64 extra field id") != Zip64ExtraFieldId)
+            {
+                throw new InvalidDataException(
+                    $"Entry {ordinal} declares Zip64 sentinel sizes but its central extra field is not a Zip64 (0x0001) extra field.");
+            }
+
+            if (uncompressedSize == Zip64SizeSentinel)
+            {
+                uncompressedSize = ReadUInt32(archive, zip64ExtraOffset + 4, $"entry {ordinal} Zip64 uncompressed size");
+            }
+
+            if (compressedSize == Zip64SizeSentinel)
+            {
+                compressedSize = ReadUInt32(archive, zip64ExtraOffset + 12, $"entry {ordinal} Zip64 compressed size");
+            }
+
+            if (localHeaderOffset == Zip64SizeSentinel)
+            {
+                localHeaderOffset = ReadUInt32(archive, zip64ExtraOffset + 20, $"entry {ordinal} Zip64 local header offset");
+            }
+        }
 
         cursor = checked(start + 46 + nameLength + extraLength + commentLength);
 
