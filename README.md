@@ -57,6 +57,12 @@ Mirror an input CSV or existing directory structure using synthetic placeholder 
 zipper --input-csv ./source.csv --output-path ./source_output --bates-prefix ABC
 ```
 
+#### 6. Publish Archive Test Fixture pairs
+Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
+```bash
+zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
+```
+
 ---
 
 ## Features & Supported Formats
