@@ -500,9 +500,10 @@ public class ProgramTests
             int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
             Assert.Equal(0, exitCode);
 
-            // Flat fixture pairs only: no outer Archive, no subfolders.
+            // Flat fixture pairs only: no outer Archive, no subfolders. The smoke suite
+            // is the five frozen Case Keys (#834), so exactly ten flat files publish.
             string[] files = Directory.GetFiles(tempPath);
-            Assert.Equal(6, files.Length);
+            Assert.Equal(10, files.Length);
             Assert.All(files, file => Assert.Matches(FixturePairPattern, Path.GetFileName(file)));
 
             // JSON identity and filenames agree.

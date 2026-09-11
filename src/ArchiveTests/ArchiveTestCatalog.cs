@@ -114,6 +114,10 @@ internal static class ArchiveTestCatalog
 
     internal static readonly IReadOnlyList<string> ValidControlSuites = [SmokeSuite, CompatibilitySuite];
 
+    /// <summary>The two frozen reader-hostile smoke members (#834): malformed cases
+    /// that ride the smoke suite in addition to their malformed-suite home.</summary>
+    internal static readonly IReadOnlyList<string> SmokeMalformedSuites = [SmokeSuite, MalformedSuite];
+
     /// <summary>
     /// Local-header-signature-like prefix (PK\x03\x04 plus a length-like word) placed at
     /// the start of the signature-payload control's stored content. Declared before
@@ -209,11 +213,16 @@ internal static class ArchiveTestCatalog
         // a fixture is reconstructible from controlCaseKey + mutations alone.
         ["crc-local-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.CrcLocalMismatch),
         ["crc-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.CrcCentralMismatch),
-        ["crc-both-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.CrcBothMismatch),
+        // The two reader-hostile smoke members frozen in #834: every consumer
+        // pipeline must survive a CRC lie and a missing EOCD, so they ride the
+        // smoke suite alongside the healthy controls while staying malformed.
+        ["crc-both-mismatch"] = MutatedDefinition(
+            ArchiveTestMutationKind.CrcBothMismatch, suites: SmokeMalformedSuites),
         ["truncate-payload-tail"] = MutatedDefinition(ArchiveTestMutationKind.TruncatePayloadTail),
         ["truncate-central-tail"] = MutatedDefinition(ArchiveTestMutationKind.TruncateCentralTail),
         ["truncate-eocd"] = MutatedDefinition(ArchiveTestMutationKind.TruncateEocd),
-        ["missing-eocd"] = MutatedDefinition(ArchiveTestMutationKind.MissingEocd),
+        ["missing-eocd"] = MutatedDefinition(
+            ArchiveTestMutationKind.MissingEocd, suites: SmokeMalformedSuites),
         ["name-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.NameLocalCentralMismatch),
         ["method-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.MethodLocalCentralMismatch),
         ["size-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.SizeLocalCentralMismatch),
@@ -222,8 +231,13 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.OffsetIntoPayload, controlCaseKey: SignaturePayloadControlCaseKey),
         ["extra-field-length-overrun"] = MutatedDefinition(
             ArchiveTestMutationKind.ExtraFieldLengthOverrun, controlCaseKey: ExtraFieldControlCaseKey),
+        // Unsupported-feature case: classification policy-sensitive; housed in the
+        // security suite per #834 alongside the policy recipes, and in malformed as
+        // the structure-case home pinned since ticket #840.
         ["unsupported-method"] = MutatedDefinition(
-            ArchiveTestMutationKind.UnsupportedMethod, classification: PolicySensitiveClassification),
+            ArchiveTestMutationKind.UnsupportedMethod,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
         ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
@@ -248,23 +262,27 @@ internal static class ArchiveTestCatalog
         ["file-directory-conflict"] = PolicyDefinition("file-directory-conflict", FileDirectoryConflictRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
-        // depth-two nesting, and the exact entry cap — all valid Archives.
+        // depth-two nesting, and the exact entry cap — all valid Archives that also
+        // serve the security suite per #834 ("bounded resource cases").
         ["high-ratio-bounded"] = new(
             "high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
-            Suites: [CompatibilitySuite],
+            Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: HighRatioControlRecipe),
         ["nested-archives-depth-two"] = new(
             "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
-            Suites: [CompatibilitySuite],
+            Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: NestedArchiveControlRecipe),
         ["many-small-entries"] = new(
             "many-small-entries", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
-            Suites: [CompatibilitySuite],
+            Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: ManySmallEntriesRecipe),
         // A declared uncompressed size beyond the expanded budget over tiny physical
-        // bytes: a declaration lie, never a real allocation (ticket #843).
+        // bytes: a declaration lie, never a real allocation (ticket #843). A bounded
+        // resource case, so it serves the security suite per #834 as well.
         ["declared-size-oversized"] = MutatedDefinition(
-            ArchiveTestMutationKind.DeclaredSizeOversized, controlCaseKey: DeflateControlCaseKey),
+            ArchiveTestMutationKind.DeclaredSizeOversized,
+            controlCaseKey: DeflateControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
         // Ticket #843 combined chains: the audited field-level mutations composed in a
         // finite, explicit list; the chain order is the recipe, each mutation consumes
         // the previous result.
@@ -290,9 +308,10 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestCaseDefinition MutatedDefinition(
         ArchiveTestMutationKind mutation,
         string controlCaseKey = StoredControlCaseKey,
-        string classification = MalformedClassification) => new(
+        string classification = MalformedClassification,
+        IReadOnlyList<string>? suites = null) => new(
         mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 1, Classification: classification,
-        Suites: [MalformedSuite],
+        Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
         Mutations: [mutation]);

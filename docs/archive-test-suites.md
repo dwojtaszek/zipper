@@ -34,6 +34,8 @@ where `<archiveSha256>` is the SHA-256 of the final Archive bytes.
 
 **Test vector** (frozen in `tests/fixtures/archive-tests/valid-empty.json`): the 22-byte empty Archive `504b0506000000000000000000000000000000000000` (EOCD only), SHA-256 `8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85`, Case Key `valid-empty`, all revisions 1, Seed 42 → Fixture ID `atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950`.
 
+**Byte goldens and replay:** the same seed and options into separate fresh directories publish byte-identical pairs — Archive bytes and Expectation File bytes both (E2E-asserted). Stored/header-only controls are byte-stable across OS hosts on the pinned .NET major (`global.json`), so their Fixture IDs are frozen and asserted by the E2E matrix on Linux, Windows, and macOS (`valid-stored` at Seed 42 → `atc-662d70277000fd379d41c3d096e0ef7d3075b668f7a33860bdf52117ab2e04ca`); a future .NET serialization change turns that check red by design. Deflate output has **no cross-runtime byte promise**: deflate controls are replay-checked for same-runtime identity only, and new hashes are never auto-accepted.
+
 ## Suites and case filtering (CLI)
 
 ```
@@ -43,8 +45,13 @@ zipper --archive-test-suite <smoke|compatibility|malformed|security|all>
        [--seed <n>]
 ```
 
-- `--archive-test-suite` selects a predefined suite: `smoke` (a few fast valid controls), `compatibility` (well-formed but structurally unusual), `malformed` (corrupt structures), `security` (path/link/collision policy), `all`.
-- `--archive-test-cases` filters to named Case Keys; unknown keys fail validation.
+- `--archive-test-suite` selects a predefined suite (the catalogue explicitly owns membership; the frozen contract is #834):
+  - `smoke` — exactly the five frozen Case Keys: `valid-empty`, `valid-stored`, `valid-deflate`, `crc-both-mismatch`, `missing-eocd` (healthy controls plus the two reader-hostile cases every consumer pipeline must survive).
+  - `compatibility` — every valid control/compatibility case.
+  - `malformed` — malformed atomic/combined cases (plus the pinned structure cases `unsupported-method` and `declared-size-oversized`).
+  - `security` — policy-sensitive path and collision cases, the unsupported-feature case (`unsupported-method`), and the bounded resource cases (`high-ratio-bounded`, `nested-archives-depth-two`, `many-small-entries`, `declared-size-oversized`).
+  - `all` — the distinct union of every case.
+- Generation order is ordinal Case Key. `--archive-test-cases` filters to named Case Keys; unknown, empty, duplicate, or out-of-suite keys fail validation.
 - `--seed` defaults to 42.
 - `--output-path` must be a **new** directory inside the working directory. Only these flags may be combined; all generation flags are rejected (ADR-0008).
 - Exit codes: `0` success, `1` validation or generation failure (no partial publication), `130` cancellation.
@@ -88,6 +95,16 @@ Structural rules the schema and its semantic companion checks enforce:
 ## Architecture
 
 The Archive Test workflow is a dedicated Program short-circuit dispatched before `Pipeline.Build`, analogous to the comparison module. It is **not a fourth `IGenerationMode`** and does not extend `FileGenerationRequest` — see [ADR-0008](adr/ADR-0008-archive-test-dispatch.md). Production code lives under `src/ArchiveTests/`. Standard and Production Set output, `ZipArchiveSink`, `SourcePathSanitizer`, `ChaosEngine`, and the Composer → Serializer → Emitter seam are never altered to produce intentional defects: fixtures are built by their own byte-level writer.
+
+## Consuming fixtures safely
+
+The Expectation File is **external** to the Archive on purpose: expectations never ride inside the bytes under test, an unopenable or truncated Archive still leaves a fully readable standalone JSON contract, and no fixture ever embeds a second copy of itself. Safe consumer workflow:
+
+1. Read the `.json` first — never the Archive. The JSON names the classification, the operations, and the allowed outcomes before any reader touches hostile bytes.
+2. Treat `unsupported` and `not-run` as facts, not passes. `not-run` extraction on `malformed` and `policy-sensitive` fixtures is the honest record that unsafe extraction was not executed on the host.
+3. Extract only what the JSON independently justifies: valid controls with safe names and in-budget expansion. Path/link/collision fixtures and every `malformed` fixture stay unextracted on normal hosts; exercising unsafe extractor behavior requires an isolated VM/container with explicit opt-in (out of scope for v1).
+4. Reproduce a fixture by Case Key + revisions + Seed with the independent verifier (`tests/archive-tests/verify-fixtures.py`), which recomputes the canonical Fixture ID and audits mutations without sharing code with the generator.
+
 
 ## Independent verification
 

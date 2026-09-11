@@ -103,19 +103,9 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // ---- Catalog wiring ----
 
-    [Fact]
-    public void ListSuite_Security_ContainsExactlyTheElevenPolicyCases()
-    {
-        var security = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite);
-
-        Assert.Equal(PolicyCaseKeys.Order(StringComparer.Ordinal), security.Select(c => c.CaseKey));
-        Assert.All(security, c =>
-        {
-            Assert.Equal("policy-sensitive", c.Classification);
-            Assert.False(c.IsMutation);
-            Assert.Null(c.Construction);
-        });
-    }
+    // The security-suite membership contract (policy, collision, unsupported-feature,
+    // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
+    // policy-case tests target the eleven policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -384,13 +374,36 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesPairsWithSafeBasenamesOnly()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllSixteenMembersWithSafeBasenames()
     {
-        // Derived from the catalog (not the local key list) so the publication contract
-        // cannot drift from ListSuite(SecuritySuite).
-        // Publishes exactly the security suite: PublishPolicySuiteAsync uses
-        // PolicyCaseKeys, which ListSuite_Security_... pins to the catalog's
-        // SecuritySuite, so the publication contract cannot drift.
+        // The full security suite per #834 (eleven policy recipes plus the
+        // unsupported-feature and bounded resource cases), not just the policy
+        // subset: every member publishes a safe Fixture ID pair.
+        var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
+            .Select(c => c.CaseKey)
+            .ToList();
+        Assert.Equal(16, securityKeys.Count);
+
+        var result = await ArchiveTestSuiteGenerator.GenerateAsync(
+            ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
+            CancellationToken.None);
+
+        Assert.Equal(securityKeys.Count, result.FixtureIds.Count);
+        Assert.Equal(securityKeys.Count * 2, Directory.GetFiles(result.PublishedDirectory).Length);
+
+        // Every published basename is the safe Fixture ID pair — hostile member
+        // names never reach output destinations.
+        var pattern = new Regex("^atc-[0-9a-f]{64}\\.(zip|json)$", RegexOptions.None, TimeSpan.FromSeconds(1));
+        Assert.All(Directory.GetFiles(result.PublishedDirectory), file =>
+            Assert.Matches(pattern, Path.GetFileName(file)));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
+    {
+        // Publishes the eleven policy-sensitive recipes (the path/collision subset of
+        // the security suite; the full suite membership is pinned by
+        // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
 
         Assert.Equal(PolicyCaseKeys.Length, result.FixtureIds.Count);
