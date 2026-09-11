@@ -91,7 +91,14 @@ internal static class ArchiveFixtureBuilder
                     throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxEntries}-entry budget.");
                 }
 
-                ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
+                // Policy-sensitive entries (ticket #842) keep their names verbatim: the
+                // name bytes are the hazard under test, so the generation-time guard is
+                // bypassed for them alone. This builder never materializes member paths;
+                // it only writes Archive bytes to memory.
+                if (!recipeEntry.IsPolicyName)
+                {
+                    ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
+                }
 
                 var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
                 expandedBytes = checked(expandedBytes + content.Length);
@@ -110,6 +117,12 @@ internal static class ArchiveFixtureBuilder
                 var level = recipeEntry.Method == "stored" ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
                 var entry = archive.CreateEntry(recipeEntry.Name, level);
                 entry.LastWriteTime = FixedDosTimestamp;
+                if (recipeEntry.ExternalAttributes != 0)
+                {
+                    // Documented Unix mode bits (e.g. S_IFLNK | 0777 for symlink entries);
+                    // pure metadata bytes — no filesystem object is ever created.
+                    entry.ExternalAttributes = unchecked((int)recipeEntry.ExternalAttributes);
+                }
                 using (var entryStream = entry.Open())
                 {
                     entryStream.Write(content);
@@ -159,6 +172,14 @@ internal static class ArchiveFixtureBuilder
             ? ArchiveTestCatalog.SignatureCommentLength
             : 0;
         var layout = ArchiveFixtureLayout.Read(archiveBytes, expectedCommentLength);
+        // Policy-sensitive Unix metadata (ticket #842): the standard writer always
+        // records the DOS host; symlink entries additionally declare the Unix host so
+        // the attribute type bits are read as Unix mode bits. Only the central
+        // version-made-by host byte changes — no captured layout field moves.
+        if (definition.Recipe.Entries.Any(e => e.HostSystem != 0))
+        {
+            PatchUnixHostSystem(archiveBytes, definition.Recipe.Entries, layout);
+        }
         if (definition.Construction is ArchiveControlConstruction.Cp437Name)
         {
             // The raw name bytes are CP437: record the legacy-decoded readable name while
@@ -174,6 +195,35 @@ internal static class ArchiveFixtureBuilder
             Layout: layout,
             Entries: expectations,
             Mutations: []);
+    }
+
+    /// <summary>
+    /// Rewrites the central version-made-by host byte (upper byte at central + 4) to the
+    /// recipe's declared host system for entries that carry one (Unix, for symlink
+    /// metadata). The version low byte and every other field stay untouched, so the
+    /// previously captured layout remains valid without a re-read. Patches the freshly
+    /// built buffer in place — no other holder of these bytes exists.
+    /// </summary>
+    private static void PatchUnixHostSystem(
+        byte[] archiveBytes,
+        IReadOnlyList<ArchiveTestRecipeEntry> recipeEntries,
+        ArchiveFixtureLayout layout)
+    {
+        for (var ordinal = 0; ordinal < recipeEntries.Count; ordinal++)
+        {
+            var recipeEntry = recipeEntries[ordinal];
+            if (recipeEntry.HostSystem == 0)
+            {
+                continue;
+            }
+
+            var entry = layout.Entries[ordinal];
+            var versionMadeBy = BinaryPrimitives.ReadUInt16LittleEndian(
+                archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 4, 2));
+            BinaryPrimitives.WriteUInt16LittleEndian(
+                archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 4, 2),
+                (ushort)((recipeEntry.HostSystem << 8) | (versionMadeBy & 0xFF)));
+        }
     }
 
     /// <summary>

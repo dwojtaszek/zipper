@@ -12,13 +12,31 @@ internal sealed record ArchiveTestRecipeEntry(
     int Length,
     string Method,
     bool IsDirectory,
-    byte[]? PayloadPrefix)
+    byte[]? PayloadPrefix,
+    bool IsPolicyName = false,
+    uint ExternalAttributes = 0,
+    byte HostSystem = 0)
 {
     internal static ArchiveTestRecipeEntry File(string name, int length, string method = "deflate") =>
         new(name, length, method, IsDirectory: false, PayloadPrefix: null);
 
     internal static ArchiveTestRecipeEntry Directory(string name) =>
         new(name, 0, "stored", IsDirectory: true, PayloadPrefix: null);
+
+    /// <summary>
+    /// A policy-sensitive entry (ticket #842): the name is written verbatim — the name
+    /// bytes are themselves the hazard under test, so generation-time path validation
+    /// is bypassed on purpose (the extractor-facing guards in SourcePathSanitizer and
+    /// PathValidator stay untouched). The payload is tiny inert ASCII text; duplicate
+    /// and collision variants must carry different texts so overwrite choices stay
+    /// observable by content hash. Optional Unix external attributes and host system
+    /// mark symlink entries (S_IFLNK type bits; building the Archive bytes never
+    /// creates an OS symlink).
+    /// </summary>
+    internal static ArchiveTestRecipeEntry PolicyFile(string name, string text, uint externalAttributes = 0, byte hostSystem = 0) =>
+        new(
+            name, text.Length, "stored", IsDirectory: false, PayloadPrefix: Encoding.ASCII.GetBytes(text),
+            IsPolicyName: true, ExternalAttributes: externalAttributes, HostSystem: hostSystem);
 }
 
 internal sealed record ArchiveTestRecipe(IReadOnlyList<ArchiveTestRecipeEntry> Entries);
@@ -213,10 +231,29 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),
         ["zip64-truncated-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64TruncatedExtra, controlCaseKey: Zip64ControlCaseKey),
+        // Ticket #842 policy-sensitive cases: member names and metadata that exercise
+        // extractor safety. All are direct recipes (no mutation, no construction): the
+        // bytes are exactly what the standard writer emits for these names. They are
+        // valid ZIP syntax — classification policy-sensitive, suite security — so only
+        // extraction policy, never ZIP validity, is in question.
+        ["path-parent-traversal"] = PolicyDefinition("path-parent-traversal", ParentTraversalRecipe),
+        ["path-posix-absolute"] = PolicyDefinition("path-posix-absolute", PosixAbsoluteRecipe),
+        ["path-windows-drive"] = PolicyDefinition("path-windows-drive", WindowsDriveRecipe),
+        ["path-unc"] = PolicyDefinition("path-unc", UncRecipe),
+        ["path-reserved-device"] = PolicyDefinition("path-reserved-device", ReservedDeviceRecipe),
+        ["path-trailing-dot-space"] = PolicyDefinition("path-trailing-dot-space", TrailingDotSpaceRecipe),
+        ["duplicate-name"] = PolicyDefinition("duplicate-name", DuplicateNameRecipe),
+        ["case-collision"] = PolicyDefinition("case-collision", CaseCollisionRecipe),
+        ["unicode-normalization-collision"] = PolicyDefinition("unicode-normalization-collision", NormalizationCollisionRecipe),
+        ["file-directory-conflict"] = PolicyDefinition("file-directory-conflict", FileDirectoryConflictRecipe),
+        ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
     };
 
     private const string MalformedClassification = "malformed";
-    private const string PolicySensitiveClassification = "policy-sensitive";
+    internal const string PolicySensitiveClassification = "policy-sensitive";
+
+    /// <summary>Unix host system code (version-made-by high byte) for symlink entries.</summary>
+    internal const byte UnixHostSystem = 3;
     private const string StoredControlCaseKey = "valid-stored";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
@@ -231,6 +268,13 @@ internal static class ArchiveTestCatalog
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
         Mutation: mutation);
+
+    /// <summary>A policy-sensitive direct recipe (ticket #842): suite security, no
+    /// mutation, no construction — the standard writer's bytes for these names.</summary>
+    private static ArchiveTestCaseDefinition PolicyDefinition(string caseKey, ArchiveTestRecipe recipe) => new(
+        caseKey, CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+        Suites: [SecuritySuite],
+        Recipe: recipe);
 
     private static ArchiveTestRecipe ControlRecipe(string controlCaseKey) => controlCaseKey switch
     {
@@ -285,6 +329,81 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.File("z64.txt", 30, "stored"),
     ]);
 
+    // Ticket #842 policy-sensitive recipes: tiny inert ASCII payloads; the member
+    // name bytes are the hazard under test. Collision variants carry different texts
+    // so overwrite choices stay observable by content hash.
+
+    private static ArchiveTestRecipe ParentTraversalRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("../escape.txt", "atc-parent-traversal"),
+    ]);
+
+    private static ArchiveTestRecipe PosixAbsoluteRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("/etc/target.txt", "atc-posix-absolute"),
+    ]);
+
+    private static ArchiveTestRecipe WindowsDriveRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(@"C:\boot.txt", "atc-windows-drive"),
+    ]);
+
+    private static ArchiveTestRecipe UncRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(@"\\server\share\doc.txt", "atc-unc-escape"),
+    ]);
+
+    // Windows reserved device names with innocuous extensions.
+    private static ArchiveTestRecipe ReservedDeviceRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("NUL.txt", "atc-reserved-nul"),
+        ArchiveTestRecipeEntry.PolicyFile("CON.txt", "atc-reserved-con"),
+    ]);
+
+    // Win32 strips trailing dots and spaces from filenames; POSIX keeps them.
+    private static ArchiveTestRecipe TrailingDotSpaceRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("trailing.dot.", "atc-trailing-dot"),
+        ArchiveTestRecipeEntry.PolicyFile("trailing.txt ", "atc-trailing-space"),
+    ]);
+
+    private static ArchiveTestRecipe DuplicateNameRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("dup.txt", "atc-duplicate-first"),
+        ArchiveTestRecipeEntry.PolicyFile("dup.txt", "atc-duplicate-second"),
+    ]);
+
+    private static ArchiveTestRecipe CaseCollisionRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("node.txt", "atc-case-lower"),
+        ArchiveTestRecipeEntry.PolicyFile("Node.txt", "atc-case-upper"),
+    ]);
+
+    // NFC ("café.txt", U+00E9) and NFD ("cafe" + U+0301) byte sequences: distinct
+    // raw bytes that decode to equal names under Unicode normalization.
+    private static ArchiveTestRecipe NormalizationCollisionRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("café.txt", "atc-nfc-text"),
+        ArchiveTestRecipeEntry.PolicyFile("cafe\u0301.txt", "atc-nfd-text"),
+    ]);
+
+    // A file and a same-named directory path: the conflict an extractor must resolve
+    // without silently dropping either member.
+    private static ArchiveTestRecipe FileDirectoryConflictRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("node", "atc-conflict-file"),
+        ArchiveTestRecipeEntry.PolicyFile("node/child.txt", "atc-conflict-child"),
+    ]);
+
+    // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text
+    // content holds a relative escape target, followed by a descendant entry. Only
+    // Archive bytes are created; no OS symlink ever exists.
+    private static ArchiveTestRecipe SymlinkThenDescendantRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("link", "../outside.txt", externalAttributes: 0xA1FF_0000, hostSystem: UnixHostSystem),
+        ArchiveTestRecipeEntry.PolicyFile("link/child.txt", "atc-symlink-descendant"),
+    ]);
+
     internal static ArchiveTestCaseDefinition GetCase(string caseKey) =>
         Cases.TryGetValue(caseKey, out var definition)
             ? definition
@@ -296,7 +415,7 @@ internal static class ArchiveTestCatalog
         SmokeSuite => [.. Cases.Values.Where(c => c.Suites.Contains(SmokeSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         CompatibilitySuite => [.. Cases.Values.Where(c => c.Suites.Contains(CompatibilitySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         MalformedSuite => [.. Cases.Values.Where(c => c.Suites.Contains(MalformedSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        SecuritySuite => [],
+        SecuritySuite => [.. Cases.Values.Where(c => c.Suites.Contains(SecuritySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         _ => throw new ArgumentException($"Unknown Archive Test suite '{suite}'."),
     };
 }

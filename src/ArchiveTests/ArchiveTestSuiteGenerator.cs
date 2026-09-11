@@ -177,6 +177,14 @@ internal static class ArchiveTestSuiteGenerator
     {
         if (!definition.IsMutation)
         {
+            // Policy-sensitive direct recipes (ticket #842): valid ZIP syntax whose
+            // names/metadata exercise extractor policy. unsupported-method is also
+            // policy-sensitive but is a mutation case, handled by the switch below.
+            if (definition.Classification == ArchiveTestCatalog.PolicySensitiveClassification)
+            {
+                return PolicyExpectations(definition);
+            }
+
             return
             [
                 Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
@@ -277,19 +285,84 @@ internal static class ArchiveTestSuiteGenerator
         };
     }
 
+    // Policy-sensitive expectation vocabulary (ticket #842): required behavior is
+    // containment, a named no-silent-overwrite policy, and never following escape
+    // targets — recorded as invariants plus a permitted rejection stage, never a
+    // universal exact exception string. Renaming or rejecting by a documented adapter
+    // policy is acceptable; silently writing outside the root is not.
+    private const string NoSilentOverwrite = "no-silent-overwrite";
+    private const string NoWritesOutsideRoot = "no-writes-outside-root";
+    private const string ContainmentRequired = "containment-required";
+    private const string DistinctContentHashes = "distinct-content-hashes-observable";
+    private const string LinksNeverMaterialized = "links-never-materialized-as-os-links";
+    private const string EscapeTargetsNeverFollowed = "escape-targets-never-followed";
+    private const string ListedCountMatchesEntries = "listed-count-matches-entries";
+    private const string ReadEntryContentMatches = "read-entry-content-matches";
+    private const string IntegrityPasses = "integrity-passes";
+
+    /// <summary>Per-Case Key platform sensitivity and collision invariants.</summary>
+    private sealed record PolicyExpectationProfile(string? Platform, string[] CollisionInvariants);
+
+    private static IReadOnlyList<ArchiveTestExpectation> PolicyExpectations(ArchiveTestCaseDefinition definition)
+    {
+        var profile = definition.CaseKey switch
+        {
+            // Containment hazards that exist on every platform.
+            "path-parent-traversal" or "path-posix-absolute" =>
+                new PolicyExpectationProfile(null, []),
+            // Windows-only hazards: drive letters, UNC paths, reserved device names, and
+            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).
+            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" =>
+                new PolicyExpectationProfile("windows", []),
+            // Collisions: the entries are individually valid; the policy is that no
+            // variant may silently overwrite another (reject or rename instead).
+            "duplicate-name" or "file-directory-conflict" =>
+                new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
+            "case-collision" =>
+                new PolicyExpectationProfile("case-insensitive-filesystems", [NoSilentOverwrite, DistinctContentHashes]),
+            "unicode-normalization-collision" =>
+                new PolicyExpectationProfile("normalizing-filesystems", [NoSilentOverwrite, DistinctContentHashes]),
+            // Symlink metadata: the type bits and escape target are data; extraction
+            // must neither materialize OS links nor follow the target.
+            "symlink-then-descendant" =>
+                new PolicyExpectationProfile(null, [LinksNeverMaterialized, EscapeTargetsNeverFollowed]),
+            _ => throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': no policy expectation set defined for a policy-sensitive direct recipe."),
+        };
+
+        return
+        [
+            Expectation(ListOperation, StrictProfile, [ListedCountMatchesEntries], [NoPartialWrites], platform: profile.Platform),
+            Expectation(ReadEntryOperation, StrictProfile, [ReadEntryContentMatches], [NoPartialWrites], platform: profile.Platform),
+            Expectation(IntegrityCheckOperation, StrictProfile, [IntegrityPasses], [NoPartialWrites], platform: profile.Platform),
+            // Extract deliberately does NOT carry no-partial-writes: a documented
+            // per-entry policy may reject or rename one member and still extract the
+            // rest of a multi-entry Archive. The required invariants are containment
+            // (never outside the root) and, for collisions, no silent overwrites.
+            Expectation(
+                ExtractOperation,
+                StrictProfile,
+                ["entry-rejected", "entry-renamed-by-policy", "extract-fails"],
+                [NoWritesOutsideRoot, ContainmentRequired, .. profile.CollisionInvariants],
+                [ExtractOperation],
+                platform: profile.Platform),
+        ];
+    }
+
     private static ArchiveTestExpectation Expectation(
         string operation,
         string profile,
         string[] allowedOutcomes,
         string[] invariants,
         string[]? failureStages = null,
-        string? capability = null) =>
+        string? capability = null,
+        string? platform = null) =>
         new(
             Operation: operation,
             Profile: profile,
             AllowedOutcomes: allowedOutcomes,
             Invariants: invariants,
-            Platform: null,
+            Platform: platform,
             Capability: capability,
             FailureStages: failureStages);
 
