@@ -194,7 +194,41 @@ internal static class ArchiveTestSuiteGenerator
             ];
         }
 
-        return definition.Mutation switch
+        var chain = definition.Mutations!;
+        return chain switch
+        {
+            // The one-mutation form: expectations per named mutation kind.
+            [var single] => SingleMutationExpectations(single, definition),
+            // Combined chains (ticket #843): a finite, explicit compatibility list —
+            // never a cross-product of every mutation. The chain order is the recipe.
+            [ArchiveTestMutationKind.CrcLocalMismatch, ArchiveTestMutationKind.NameLocalCentralMismatch] =>
+            [
+                // Two independent field-level lies: a lenient reader may still list and
+                // read (with unverified content), a strict one may reject either.
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "crc-mismatch-unchecked", OperationFails], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            [ArchiveTestMutationKind.CrcLocalMismatch, ArchiveTestMutationKind.TruncatePayloadTail] =>
+            [
+                // The CRC lie is consumed first; the tail truncation then removes the
+                // rest of the payload, the central directory, and the EOCD: every
+                // operation fails at a defined stage.
+                Expectation(ListOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            _ => throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': no expectation set defined for the mutation chain [{string.Join(", ", chain.Select(kind => kind.ToCaseKey()))}]."),
+        };
+    }
+
+    private static IReadOnlyList<ArchiveTestExpectation> SingleMutationExpectations(
+        ArchiveTestMutationKind kind,
+        ArchiveTestCaseDefinition definition) =>
+        kind switch
         {
             ArchiveTestMutationKind.CrcLocalMismatch
                 or ArchiveTestMutationKind.CrcCentralMismatch
@@ -269,6 +303,16 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Declared uncompressed size beyond the 32 MiB expanded budget over tiny
+            // physical bytes: readers must never allocate or read to the untrusted
+            // declared size (ticket #843).
+            ArchiveTestMutationKind.DeclaredSizeOversized =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Tail truncations (ticket #839): every operation fails at a defined stage.
             ArchiveTestMutationKind.TruncatePayloadTail
                 or ArchiveTestMutationKind.TruncateCentralTail
@@ -281,9 +325,8 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
             _ => throw new InvalidOperationException(
-                $"Archive Test case '{definition.CaseKey}': no expectation set defined for mutation '{definition.Mutation}'."),
+                $"Archive Test case '{definition.CaseKey}': no expectation set defined for mutation '{kind}'."),
         };
-    }
 
     // Policy-sensitive expectation vocabulary (ticket #842): required behavior is
     // containment, a named no-silent-overwrite policy, and never following escape

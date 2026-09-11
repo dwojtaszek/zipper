@@ -59,8 +59,40 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.InvalidUtf8Name => InvalidateUtf8Name(control, before),
             ArchiveTestMutationKind.Zip64MissingExtra => HideZip64Extra(control, before),
             ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
+            ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
+    }
+
+    /// <summary>
+    /// Declares an uncompressed size beyond the 32 MiB expanded budget (ticket #843) in
+    /// both headers while the physical content stays tiny: a pure declaration lie. The
+    /// declared value is recorded separately from the actual known content length, and
+    /// no reader may allocate or read to the untrusted declared size.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareOversizedUncompressedSize(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const uint Oversized = 32 * 1024 * 1024 + 1;
+        var entry = control.Layout.Entries[0];
+        var localSizeOffset = entry.LocalHeaderOffset + 22;
+        var centralSizeOffset = entry.CentralDirectoryOffset + 24;
+        var code = ArchiveTestMutationKind.DeclaredSizeOversized.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.DeclaredSizeOversized, before,
+        [
+            new MutationSpec(
+                code, "local-header", localSizeOffset,
+                $"Rewrites the local header's uncompressed size to {Oversized} bytes, beyond the {32 * 1024 * 1024}-byte expanded budget, while the entry physically holds {control.Entries[0].Content.Length} bytes; applied in parallel with the central-header record, not chained.",
+                entry.Ordinal, 4, 4, DeclaredValue: $"declared-uncompressed-size={Oversized} actual-content-length={control.Entries[0].Content.Length}"),
+            new MutationSpec(
+                code, "central-header", centralSizeOffset,
+                "Rewrites the central header's uncompressed size to the same oversized declaration; the lie is identical in both headers.",
+                entry.Ordinal, 4, 4, DeclaredValue: $"declared-uncompressed-size={Oversized} actual-content-length={control.Entries[0].Content.Length}"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localSizeOffset, 4), Oversized);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralSizeOffset, 4), Oversized);
+        });
     }
 
     /// <summary>
@@ -566,6 +598,7 @@ internal enum ArchiveTestMutationKind
     InvalidUtf8Name,
     Zip64MissingExtra,
     Zip64TruncatedExtra,
+    DeclaredSizeOversized,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -593,6 +626,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.InvalidUtf8Name => "invalid-utf8-name",
         ArchiveTestMutationKind.Zip64MissingExtra => "zip64-missing-extra",
         ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
+        ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

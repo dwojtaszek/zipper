@@ -43,10 +43,45 @@ internal static class ArchiveFixtureBuilder
         ArgumentNullException.ThrowIfNull(definition);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Hard budget pre-checks (REQ-213, ticket #843): reject one-over recipes before
+        // generating any payload — an oversized recipe never allocates or hashes its
+        // content. The uncompressed member length is exact for stored entries and a
+        // safe v1 upper bound overall: no catalog case may carry a single member whose
+        // expanded content alone exceeds the physical Archive budget (that is the
+        // decompression-bomb shape this catalog refuses by scope). The in-loop checks
+        // below remain as write-time backstops.
+        if (definition.Recipe.Entries.Count > ArchiveTestCaseSemantics.MaxEntries)
+        {
+            throw new InvalidDataException(
+                $"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxEntries}-entry budget.");
+        }
+
+        long totalExpanded = 0;
+        foreach (var recipeEntry in definition.Recipe.Entries)
+        {
+            totalExpanded = checked(totalExpanded + recipeEntry.Length);
+        }
+
+        if (totalExpanded > ArchiveTestCaseSemantics.MaxExpandedBytesBudget)
+        {
+            throw new InvalidDataException(
+                $"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxExpandedBytesBudget}-byte expanded budget.");
+        }
+
+        foreach (var recipeEntry in definition.Recipe.Entries)
+        {
+            if (30L + Encoding.UTF8.GetByteCount(recipeEntry.Name) + recipeEntry.Length
+                > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+            {
+                throw new InvalidDataException(
+                    $"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxArchivePhysicalBytes}-byte physical Archive budget.");
+            }
+        }
+
         // Malformed cases start from their named valid control at the same Seed, then apply
-        // the recorded mutation; the artifact keeps the control's layout and entry expectations
-        // (before-mutation coordinates) plus the mutation records.
-        if (definition.Mutation is { } mutation && definition.ControlCaseKey is { } controlCaseKey)
+        // the ordered mutation chain; the artifact keeps the control's layout and entry
+        // expectations (before-mutation coordinates) plus the ordered mutation records.
+        if (definition.Mutations is { Count: > 0 } chain && definition.ControlCaseKey is { } controlCaseKey)
         {
             var controlDefinition = ArchiveTestCatalog.GetCase(controlCaseKey);
             if (controlDefinition.IsMutation)
@@ -55,14 +90,47 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': its control '{controlCaseKey}' is itself a mutation case; controls must be valid cases.");
             }
 
-            var control = Build(controlDefinition, seed, cancellationToken);
-            var mutated = ArchiveFixtureMutator.Apply(mutation, control);
-            return control with
+            // The control's own comment expectation carries over to every re-read: a
+            // comment-bearing control must not be misread mid-chain.
+            var controlExpectedCommentLength = controlDefinition.Construction is ArchiveControlConstruction.ArchiveComment
+                ? ArchiveTestCatalog.SignatureCommentLength
+                : 0;
+            var current = Build(controlDefinition, seed, cancellationToken);
+            var records = new List<ArchiveTestMutation>();
+            for (var index = 0; index < chain.Count; index++)
             {
-                ArchiveBytes = mutated.ArchiveBytes,
-                ArchiveSha256 = mutated.ArchiveSha256,
-                Mutations = mutated.Mutations,
-            };
+                var mutated = ArchiveFixtureMutator.Apply(chain[index], current);
+                records.AddRange(mutated.Mutations);
+                current = current with
+                {
+                    ArchiveBytes = mutated.ArchiveBytes,
+                    ArchiveSha256 = mutated.ArchiveSha256,
+                    Mutations = [],
+                };
+
+                // A later mutation still needs field offsets: recompute the layout from
+                // the current bytes instead of reusing the control's (now possibly
+                // stale) coordinates — never a stale offset. An unreadable intermediate
+                // (e.g. a truncation already removed the EOCD) is an invalid recipe
+                // sequence and is rejected descriptively.
+                if (index + 1 < chain.Count)
+                {
+                    try
+                    {
+                        current = current with
+                        {
+                            Layout = ArchiveFixtureLayout.Read(current.ArchiveBytes, controlExpectedCommentLength),
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"Archive Test case '{definition.CaseKey}': invalid mutation chain — the intermediate Archive after '{chain[index].ToCaseKey()}' has no readable layout, so '{chain[index + 1].ToCaseKey()}' cannot be applied ({ex.GetType().Name}: {ex.Message}).", ex);
+                    }
+                }
+            }
+
+            return current with { Mutations = records };
         }
 
         if (definition.Construction is ArchiveControlConstruction.Zip64HandBuilt)
