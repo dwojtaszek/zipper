@@ -7,6 +7,7 @@ import itertools
 import os
 import shutil
 import sys
+import time
 import json
 import fcntl
 import re
@@ -1380,9 +1381,24 @@ def main():
         show_status()
 
     lock_file = open(LOCK_FILE_PATH, "w")
-    try:
-        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except IOError:
+    lock_timeout_sec = int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120"))
+    start_lock = time.time()
+    acquired = False
+    first_attempt = True
+    while True:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+            break
+        except (IOError, BlockingIOError):
+            if first_attempt:
+                print(f"Runner lock held by another instance. Waiting up to {lock_timeout_sec}s...")
+                first_attempt = False
+            if time.time() - start_lock >= lock_timeout_sec:
+                break
+            time.sleep(5)
+
+    if not acquired:
         print("Another instance of the runner is active. Exiting.")
         sys.exit(0)
 

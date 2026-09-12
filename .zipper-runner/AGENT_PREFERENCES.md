@@ -55,6 +55,9 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `claude` | `default` | 1|
 | `claude` | `claude-sonnet-4-6-20250622` (Sonnet 4.6) | 0|
 | `agy` | `default` | 1|
+| `agy` | `gemini-3.8-flash-high` | 1|
+| `agy` | `gemini-3.8-flash-medium` | 2|
+| `agy` | `gemini-3.8-flash-low` | 3|
 | `agy` | `gemini-3.7-flash-high` | 1|
 | `agy` | `gemini-3.7-flash-medium` | 2|
 | `agy` | `gemini-3.7-flash-low` | 3|

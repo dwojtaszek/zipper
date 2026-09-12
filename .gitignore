@@ -98,3 +98,6 @@ _parity.sh
 # Stray diff dumps
 diff.txt
 *.diff
+
+# Node
+node_modules/
