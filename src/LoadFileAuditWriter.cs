@@ -33,13 +33,7 @@ internal static class LoadFileAuditWriter
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
         var json = GenerateAuditJson(outputPath, request, composedRecords, anomalies, format);
-        var stream = new FileStream(propertiesPath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
-        await using (stream.ConfigureAwait(false))
-        await using (var writer = new StreamWriter(stream, System.Text.Encoding.UTF8))
-        {
-            await writer.WriteAsync(json).ConfigureAwait(false);
-        }
-
+        await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
         return propertiesPath;
     }
 
