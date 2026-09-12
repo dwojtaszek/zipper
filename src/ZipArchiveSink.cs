@@ -85,7 +85,7 @@ internal class ZipArchiveSink : IArchiveSink
                 // CancellationToken.None: prior behavior, this phase was non-cancellable, so a
                 // cancellation cannot leave partial DAT/OPT sidecars behind in the output dir.
                 Func<string, Stream> openTarget = request.Output.IncludeLoadFile
-                    ? target => archive.CreateEntry(target, CompressionLevel.Optimal).Open()
+                    ? target => CreateTrackedEntry(archive, target, usedEntryPaths).Open()
                     : target =>
                     {
                         var fullPath = Path.Combine(baseFilePath, target);
@@ -218,19 +218,13 @@ internal class ZipArchiveSink : IArchiveSink
 
     private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {
-        var entryPath = fileData.WorkItem.FilePathInZip.Replace('\\', '/');
-        if (!usedEntryPaths.Add(entryPath))
-        {
-            return;
-        }
-
-        var entry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        var entry = CreateTrackedEntry(archive, fileData.WorkItem.FilePathInZip, usedEntryPaths);
         using var entryStream = entry.Open();
         entryStream.Write(fileData.Data.Span);
     }
 
     /// <summary>
-    /// Writes an Attachment to the Archive. Skips if the entry path already exists.
+    /// Writes an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
     private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {
@@ -240,19 +234,14 @@ internal class ZipArchiveSink : IArchiveSink
         }
 
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
-        var entryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}".Replace('\\', '/');
-        if (!usedEntryPaths.Add(entryPath))
-        {
-            return;
-        }
-
-        var attachmentEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
+        var attachmentEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
         using var attachmentStream = attachmentEntry.Open();
         attachmentStream.Write(fileData.Attachment.Value.content);
     }
 
     /// <summary>
-    /// Writes the extracted text for an Attachment to the Archive. Skips if the entry path already exists.
+    /// Writes the extracted text for an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
     private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {
@@ -263,36 +252,36 @@ internal class ZipArchiveSink : IArchiveSink
 
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
         var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt";
-        var entryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{attachmentTextFileName}".Replace('\\', '/');
-        if (!usedEntryPaths.Add(entryPath))
-        {
-            return;
-        }
-
-        var attachmentTextEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{attachmentTextFileName}";
+        var attachmentTextEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
         using var attachmentTextStream = attachmentTextEntry.Open();
         attachmentTextStream.Write(PlaceholderFiles.ExtractedText);
     }
 
     /// <summary>
-    /// Writes an extracted text version of a Native File to the Archive. Skips if the entry path already exists.
+    /// Writes an extracted text version of a Native File to the Archive. Fails if the entry path already exists.
     /// </summary>
     private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths)
     {
         System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
         var textFileName = LoadFiles.TextPathHelper.GetTextPath(fileData.WorkItem.FileName);
-        var entryPath = $"{fileData.WorkItem.FolderPrefix}{textFileName}".Replace('\\', '/');
-
-        if (!usedEntryPaths.Add(entryPath))
-        {
-            return;
-        }
-
-        var textEntry = archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{textFileName}";
+        var textEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
         using var textEntryStream = textEntry.Open();
 
         // O(1): write pre-computed byte[] directly, no string round-trip
         textEntryStream.Write(textContent);
+    }
+
+    private static ZipArchiveEntry CreateTrackedEntry(ZipArchive archive, string rawPath, HashSet<string> usedEntryPaths)
+    {
+        var entryPath = rawPath.Replace('\\', '/');
+        if (!usedEntryPaths.Add(entryPath))
+        {
+            throw new InvalidOperationException($"Archive entry path collision: '{entryPath}' conflicts with an existing entry.");
+        }
+
+        return archive.CreateEntry(entryPath, CompressionLevel.Optimal);
     }
 }

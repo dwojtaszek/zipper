@@ -101,3 +101,12 @@
 - **telemetry**: host=antigravity mode=branch specialists=7 bundle=~6000c
 - **lessons**: Even when updating multiple load file writers, double check every occurrence of `.content.Length` (and not just `.FileSizeOverride`) across all composers and writers (e.g. `XmlLoadFileWriter.cs` had two places: line 207 and line 319).
 - **suppressions**: none
+
+### 2026-09-12 antigravity:branch:fix/ISSUE-824-reject-native-file-collisions-with-gener
+
+- **findings**: 2 INFO (1 maintainability DRY helper extraction on ZipArchiveSink, 1 testing coverage gap on native-text companion collisions). Correctness, Adversarial, and API Contract reported 0 findings.
+- **outcome**: accepted both — extracted `CreateTrackedEntry` helper in `ZipArchiveSink.cs` and added `StandardArchive_NativeFileCollidesWithExtractedTextCompanion_Throws` unit test in `SourceDrivenGenerationTests.cs`. All 2,285 unit + 60 analyzer tests + source-driven E2E green, format clean.
+- **telemetry**: host=antigravity mode=branch specialists=5 bundle=32725c
+- **lessons**: Centralizing archive entry tracking and collision checks in `CreateTrackedEntry` eliminates code duplication across native file, attachment, attachment text, extracted text, and load file archive sinks.
+- **suppressions**: none
+

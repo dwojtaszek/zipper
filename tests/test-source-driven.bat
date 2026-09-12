@@ -369,9 +369,50 @@ if errorlevel 1 (
   exit /b 1
 )
 
+(
+echo FilePath,FileType
+echo mail.eml,eml
+echo 1_attachment.pdf,pdf
+echo 1_attachment.jpg,jpg
+echo 1_attachment.tiff,tiff
+) > "%TEST_OUTPUT_DIR%\attach-collision.csv"
+if not exist "%TEST_OUTPUT_DIR%\val10" mkdir "%TEST_OUTPUT_DIR%\val10"
+echo keep-me > "%TEST_OUTPUT_DIR%\val10\preexisting.txt"
+%ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\attach-collision.csv" --seed 42 --attachment-rate 100 --target-zip-size 4MB --output-path "%TEST_OUTPUT_DIR%\val10" >nul 2>"%temp%\source_val10.err"
+if not errorlevel 1 (
+  echo [ ERROR ] Test 6: Native file colliding with generated attachment entry path should fail
+  exit /b 1
+)
+findstr /I /C:"collision" "%temp%\source_val10.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: collision message not found in error output
+  exit /b 1
+)
+if not exist "%TEST_OUTPUT_DIR%\val10\preexisting.txt" (
+  echo [ ERROR ] Test 6: Pre-existing file was deleted during collision failure cleanup
+  exit /b 1
+)
+
+(
+echo FilePath,FileType
+echo shared.pdf,pdf
+echo shared.docx,docx
+) > "%TEST_OUTPUT_DIR%\text-collision.csv"
+%ZIPPER_CMD% --input-csv "%TEST_OUTPUT_DIR%\text-collision.csv" --with-text --output-path "%TEST_OUTPUT_DIR%\val11" >nul 2>"%temp%\source_val11.err"
+if not errorlevel 1 (
+  echo [ ERROR ] Test 6: Shared-stem extracted text collision should fail
+  exit /b 1
+)
+findstr /I /C:"collision" "%temp%\source_val11.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Text collision message not found in error output
+  exit /b 1
+)
+
 echo [ SUCCESS ] Test Case 6: Validation failures passed
 
 :: --- All Tests Passed ---
 
 rmdir /s /q "%TEST_OUTPUT_DIR%"
 echo [ SUCCESS ] All Source-Driven Generation E2E tests passed!
+

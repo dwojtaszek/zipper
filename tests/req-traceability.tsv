@@ -183,7 +183,7 @@ REQ-197	unit	SourceCsvReaderTests.TryRead_FullCsv_MapsControlBatesAndExtraColumn
 REQ-198	unit	DirectoryTemplateReaderTests.TryRead_ExtensionInference_MapsToFileType	Directory Template walk; extension inference; placeholder bytes only
 REQ-199	unit	SourcePathSanitizerTests.TryNormalize_ParentTraversal_Rejected	Path safety: traversal, rooted, UNC, drive-qualified, reserved device names, trailing dot/space rejected
 REQ-200	e2e	test-source-driven.sh	Source input validation: count match, --type/--types rejection (production-set allowed per REQ-205)
-REQ-201	unit	SourceDrivenGenerationTests.StandardArchive_SourceRows_ZipEntriesAndDatPathsMatchRelativePaths	Archive entries and Load File rows mirror source records in order
+REQ-201	unit	SourceDrivenGenerationTests.StandardArchive_SourceRows_ZipEntriesAndDatPathsMatchRelativePaths	Archive entries and Load File rows mirror source records in order; combined entry namespace collision rejection
 REQ-202	unit	SourceDrivenGenerationTests.StandardArchive_SourceBates_BatesColumnUsesRowOverride	ControlNumber/BatesNumber overrides; sequence fallback; duplicate identity values rejected (SourceCsvReaderTests)
 REQ-203	unit	SourceDrivenGenerationTests.StandardArchive_ProfileMapsSourceMetadataIntoDatColumns	Source Metadata via Column Profile (DAT), unmatched ignored
 REQ-204	e2e	test-source-driven.sh	Multiple source File Types: File Type column, per-record gating, DAT+OPT default
