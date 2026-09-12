@@ -34,7 +34,7 @@ echo [ INFO ] === Archive Test Suite E2E ===
 REM 1. Pinned schema-validation prerequisite (ticket #846): install the frozen
 REM    Ajv explicitly and validate the committed frozen vector before anything
 REM    else — no network install per fixture, no skip-as-pass.
-npx --yes ajv-cli@5.0.0 test -s tests\fixtures\archive-test-case.schema.json -d tests\fixtures\archive-tests\valid-empty.json --valid --spec=draft7 >nul 2>&1
+npm exec --yes -- ajv-cli@5.0.0 test -s tests\fixtures\archive-test-case.schema.json -d tests\fixtures\archive-tests\valid-empty.json --valid --spec=draft7 >nul 2>&1
 if errorlevel 1 (
     call :fail "pinned Ajv prerequisite must be installed and validate the frozen vector"
 ) else (

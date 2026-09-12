@@ -29,29 +29,35 @@ FROZEN_VALID_EMPTY_ID=atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d
 failures=0
 
 function check() {
-  if [ "$1" -eq 0 ]; then
-    echo -e "\e[42m[ SUCCESS ]\e[0m $2"
+  local status=$1
+  local message=$2
+  if [[ $status -eq 0 ]]; then
+    echo -e "\e[42m[ SUCCESS ]\e[0m $message"
   else
-    echo -e "\e[41m[ ERROR ]\e[0m $2"
+    echo -e "\e[41m[ ERROR ]\e[0m $message"
     failures=$((failures + 1))
   fi
 }
 
 # Guarded numeric assertion (#846): a failing condition records the failure and
-# keeps running the remaining checks — never a bare `[ ... ]; check $?`, which
+# keeps running the remaining checks — never a bare `[[ ... ]]; check $?`, which
 # `set -e` aborts before the failure is recorded.
 function assert_eq() {
-  if [ "$1" -eq "$2" ]; then
-    check 0 "$3"
+  local actual=$1
+  local expected=$2
+  local message=$3
+  if [[ $actual -eq $expected ]]; then
+    check 0 "$message"
   else
-    check 1 "$3"
+    check 1 "$message"
   fi
 }
 
 # 1. Pinned schema-validation prerequisite (ticket #846): install the frozen Ajv
-#    explicitly and validate the committed frozen vector before anything else —
-#    no network install per fixture, and a missing tool fails instead of skipping.
-if npx --yes ajv-cli@5.0.0 test -s tests/fixtures/archive-test-case.schema.json \
+#    explicitly via npm exec (the pinned-package runner) and validate the
+#    committed frozen vector before anything else — no network install per
+#    fixture, and a missing tool fails instead of skipping.
+if npm exec --yes -- ajv-cli@5.0.0 test -s tests/fixtures/archive-test-case.schema.json \
      -d tests/fixtures/archive-tests/valid-empty.json --valid --spec=draft7 >/dev/null 2>&1; then
   check 0 "pinned Ajv prerequisite installed and validated the frozen vector"
 else
@@ -66,7 +72,7 @@ assert_eq "$files" $((SMOKE_CASES * 2)) "smoke suite published $files files ($SM
 
 zips=$(find "$OUT" -maxdepth 1 -name '*.zip' | wc -l)
 jsons=$(find "$OUT" -maxdepth 1 -name '*.json' | wc -l)
-if [ "$zips" -eq "$SMOKE_CASES" ] && [ "$jsons" -eq "$SMOKE_CASES" ]; then
+if [[ $zips -eq $SMOKE_CASES && $jsons -eq $SMOKE_CASES ]]; then
   check 0 "smoke suite published $SMOKE_CASES .zip and $SMOKE_CASES .json files"
 else
   check 1 "smoke suite published $zips .zip and $jsons .json files (expected $SMOKE_CASES each)"
@@ -80,16 +86,16 @@ for json in "$OUT"/*.json; do
   base=$(basename "$json" .json)
   grep -Eq "\"fixtureId\": *\"$base\"" "$json" || names_ok=0
   grep -Eq "\"fileName\": *\"$base\.zip\"" "$json" || names_ok=0
-  [ -f "$OUT/$base.zip" ] || names_ok=0
+  [[ -f $OUT/$base.zip ]] || names_ok=0
 done
 assert_eq "$names_ok" 1 "JSON fixtureId/fileName match basenames"
 
-if [ -f "$OUT/$FROZEN_VALID_STORED_ID.zip" ] && [ -f "$OUT/$FROZEN_VALID_STORED_ID.json" ]; then
+if [[ -f $OUT/$FROZEN_VALID_STORED_ID.zip && -f $OUT/$FROZEN_VALID_STORED_ID.json ]]; then
   check 0 "stored control matches the frozen cross-platform Fixture ID"
 else
   check 1 "stored control must match the frozen cross-platform Fixture ID"
 fi
-if [ -f "$OUT/$FROZEN_VALID_EMPTY_ID.zip" ] && [ -f "$OUT/$FROZEN_VALID_EMPTY_ID.json" ]; then
+if [[ -f $OUT/$FROZEN_VALID_EMPTY_ID.zip && -f $OUT/$FROZEN_VALID_EMPTY_ID.json ]]; then
   check 0 "empty control matches the frozen Fixture ID"
 else
   check 1 "empty control must match the frozen Fixture ID"
@@ -100,7 +106,7 @@ fi
 #    standalone — the external-sidecar rationale in practice.
 ME_JSON=$(python3 -c 'import glob,json,sys
 print(next((p for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]=="missing-eocd"), ""))' "$OUT" || true)
-if [ -n "$ME_JSON" ]; then
+if [[ -n $ME_JSON ]]; then
   if python3 -c 'import sys,zipfile; zipfile.ZipFile(sys.argv[1])' "${ME_JSON%.json}.zip" >/dev/null 2>&1; then
     check 1 "missing-eocd Archive must be unopenable by a reference reader"
   else
@@ -218,7 +224,7 @@ distinct=$(python3 -c 'import glob,json,sys
 print(len({json.load(open(p))["caseKey"] for p in glob.glob(sys.argv[1]+"/*.json")}))' "$ALL_OUT" || true)
 distinct=${distinct:-0}
 assert_eq "$distinct" "$ALL_CASES" "all suite published the frozen $ALL_CASES unique Case Keys (found $distinct)"
-if [ "$all_files" -eq $((distinct * 2)) ] && [ "$all_zips" -eq "$distinct" ] && [ "$all_jsons" -eq "$distinct" ]; then
+if [[ $all_files -eq $((distinct * 2)) && $all_zips -eq $distinct && $all_jsons -eq $distinct ]]; then
   check 0 "all suite published exactly one pair per unique Case Key"
 else
   check 1 "all suite pair counts mismatch: $all_files files, $all_zips zips, $all_jsons jsons, $distinct Case Keys"
@@ -236,7 +242,7 @@ TAMPER="$TEST_OUTPUT_DIR/tamper"
 mkdir -p "$TAMPER"
 cp "$TEST_OUTPUT_DIR"/smoke/* "$TAMPER/" || check 1 "tamper preparation copy failed"
 FIRST_ZIP=$(find "$TAMPER" -name '*.zip' | sort | head -n 1)
-if [ -n "$FIRST_ZIP" ] && python3 tests/archive-tests/flip-last-byte.py "$FIRST_ZIP"; then
+if [[ -n $FIRST_ZIP ]] && python3 tests/archive-tests/flip-last-byte.py "$FIRST_ZIP"; then
   if python3 tests/archive-tests/verify-fixtures.py "$TAMPER" \
        --report "$TEST_OUTPUT_DIR/tamper-verification.json" >/dev/null 2>&1; then
     check 1 "tampered Archive byte must fail verification"
@@ -254,7 +260,7 @@ else
   check 1 "verifier self-test module must pass"
 fi
 
-if [ "$failures" -ne 0 ]; then
+if [[ $failures -ne 0 ]]; then
   echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors."
   exit 1
 fi
