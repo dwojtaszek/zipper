@@ -222,4 +222,120 @@ public class ProductionSetValidationTests : IDisposable
         var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
         Assert.DoesNotContain(report.Findings, f => f.Code == "ColumnCount");
     }
+
+    [Fact]
+    public async Task Validate_ManifestBatesMismatch_ShouldCreateFailedReport()
+    {
+        // Issue #822 regression: Manifest start does not match DAT first Bates
+        var request = this.CreateTestRequest(count: 1);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Modify DAT file: replace BATES_NUMBER with a mismatched Bates number
+        var datLines = await File.ReadAllLinesAsync(result.DatFilePath);
+        Assert.True(datLines.Length >= 2);
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var fields = ProductionSetPostValidator.ParseDatLine(datLines[1], colDelim, quoteDelim);
+
+        var headers = ProductionSetPostValidator.ParseDatLine(datLines[0], colDelim, quoteDelim);
+        int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase));
+        Assert.True(batesIdx >= 0);
+
+        fields[batesIdx] = "TEST00000099";
+
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+        datLines[1] = string.Join(colStr, fields.Select(f => $"{quoteStr}{f}{quoteStr}"));
+        await File.WriteAllLinesAsync(result.DatFilePath, datLines);
+
+        // Validator should detect that DAT first Bates number does not match manifest start
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        Assert.Contains(report.Findings, f => f.Code == "BatesConsistency" && f.Message.Contains("does not match manifest start", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Validate_ManifestEndBatesMismatch_ShouldCreateFailedReport()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datLines = await File.ReadAllLinesAsync(result.DatFilePath);
+        Assert.True(datLines.Length >= 4);
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var headers = ProductionSetPostValidator.ParseDatLine(datLines[0], colDelim, quoteDelim);
+        int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase));
+        Assert.True(batesIdx >= 0);
+
+        // Mutate last row only
+        var fields = ProductionSetPostValidator.ParseDatLine(datLines[3], colDelim, quoteDelim);
+        fields[batesIdx] = "TEST00000099";
+
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+        datLines[3] = string.Join(colStr, fields.Select(f => $"{quoteStr}{f}{quoteStr}"));
+        await File.WriteAllLinesAsync(result.DatFilePath, datLines);
+
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        Assert.Contains(report.Findings, f => f.Code == "BatesConsistency" && f.Message.Contains("does not match manifest end", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Validate_CorruptManifest_ShouldCreateFailedReport()
+    {
+        var request = this.CreateTestRequest(count: 2);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var manifestPath = Path.Combine(result.ProductionPath, "_manifest.json");
+        await File.WriteAllTextAsync(manifestPath, "{ invalid json content");
+
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        Assert.Contains(report.Findings, f => f.Code == "ManifestSyntax");
+    }
+
+    [Fact]
+    public async Task Validate_RollingSet2_ResolvesEffectiveBatesDirectly()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = this.testOutputPath,
+                FileCount = 3,
+                FileType = "pdf",
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 10,
+                ProductionId = "DIRVAL",
+                RollingCount = 2,
+                RollingBatesMode = RollingBatesMode.Continuous,
+            },
+            Bates = new BatesNumberConfig { Prefix = "VAL", Start = 100, Digits = 8 },
+        };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        var dir2 = Path.Combine(this.testOutputPath, "DIRVAL_2");
+        Assert.True(Directory.Exists(dir2));
+
+        // Validate Set 2 directly using the root un-sliced request
+        var report = ProductionSetPostValidator.Validate(dir2, request);
+
+        Assert.Equal("passed", report.Status);
+        Assert.Equal(0, report.ErrorCount);
+    }
 }

@@ -199,6 +199,44 @@ if m3["batesNumberStart"] != "CONT00000020": raise SystemExit("m3 start invalid"
 if m3["batesNumberEnd"] != "CONT00000024": raise SystemExit("m3 end invalid")
 
 if m1["batesRangeMode"] != "continuous": raise SystemExit("m1 mode invalid")
+
+# Check DAT, OPT, and Native files for CONT_001, CONT_002, CONT_003
+sets = [
+    ("CONT_001", 10, 14),
+    ("CONT_002", 15, 19),
+    ("CONT_003", 20, 24),
+]
+for folder, start_num, _ in sets:
+    dat_path = root / folder / "DATA" / "loadfile.dat"
+    opt_path = root / folder / "DATA" / "loadfile.opt"
+    if not dat_path.exists(): raise SystemExit(f"Missing DAT in {folder}")
+    if not opt_path.exists(): raise SystemExit(f"Missing OPT in {folder}")
+
+    dat_lines = [l for l in dat_path.read_text(encoding="utf-8-sig").splitlines() if l]
+    opt_lines = [l for l in opt_path.read_text(encoding="utf-8-sig").splitlines() if l]
+
+    if len(dat_lines) != 6: raise SystemExit(f"Expected 6 DAT lines in {folder}, got {len(dat_lines)}")
+    if len(opt_lines) != 5: raise SystemExit(f"Expected 5 OPT lines in {folder}, got {len(opt_lines)}")
+
+    headers = [h.strip('\xfe') for h in dat_lines[0].split('\x14')]
+    docid_idx = headers.index("DOCID")
+    bates_idx = headers.index("BATES_NUMBER")
+    native_idx = headers.index("NATIVE_PATH")
+
+    for i in range(5):
+        expected_bates = f"CONT{start_num + i:08d}"
+        fields = [f.strip('\xfe') for f in dat_lines[i + 1].split('\x14')]
+        if fields[docid_idx] != expected_bates: raise SystemExit(f"DOCID mismatch in {folder}: {fields[docid_idx]} != {expected_bates}")
+        if fields[bates_idx] != expected_bates: raise SystemExit(f"BATES mismatch in {folder}: {fields[bates_idx]} != {expected_bates}")
+
+        opt_fields = opt_lines[i].split(',')
+        if opt_fields[0] != expected_bates: raise SystemExit(f"OPT Bates mismatch in {folder}: {opt_fields[0]} != {expected_bates}")
+
+        # Check native file exists on disk and matches Bates number
+        native_rel = fields[native_idx].replace('\\', '/')
+        native_file = root / folder / native_rel
+        if not native_file.exists(): raise SystemExit(f"Missing native file on disk: {native_file}")
+        if native_file.stem != expected_bates: raise SystemExit(f"Native filename does not match Bates in {folder}: {native_file.stem} != {expected_bates}")
 PY
 
 print_success "Test Case 4: Rolling production sets continuous mode passed"

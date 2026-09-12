@@ -104,9 +104,10 @@ public sealed class BatesModule : CliModule
 
         if (_prefix is not null || _start is not null || _digits is not null)
         {
+            var primaryPrefix = _prefixes is not null && _prefixes.Count > 0 ? _prefixes[0] : (_prefix ?? "DOC");
             var built = new BatesNumberConfig
             {
-                Prefix = _prefix ?? "DOC",
+                Prefix = primaryPrefix,
                 Start = _start ?? 1,
                 Digits = _digits ?? 8,
                 Prefixes = _prefixes,
@@ -141,6 +142,14 @@ public sealed class BatesModule : CliModule
             {
                 Console.Error.WriteLine("Error: Bates prefix cannot be empty or whitespace.");
                 return false;
+            }
+            foreach (var p in _prefixes)
+            {
+                if (!BatesSequence.ValidatePrefix(p, out var errorMessage))
+                {
+                    Console.Error.WriteLine($"Error: {errorMessage}");
+                    return false;
+                }
             }
         }
 

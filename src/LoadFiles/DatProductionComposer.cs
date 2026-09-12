@@ -100,7 +100,7 @@ internal sealed class DatProductionComposer
     private List<string> ProductionRowValues(FileData fileData, DatRowContext ctx)
     {
         var wi = fileData.WorkItem;
-        var batesNumber = ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString();
+        var batesNumber = ctx.IdOverride!;
         // Planned Text/Image paths win when present (Source-Driven path modes break the
         // NATIVES-rooted derivation from FilePathInZip); legacy derivation otherwise.
         var imagePath = ctx.ImagePathOverride ?? fileData.ImageRelPath?.Replace('/', '\\') ?? ImagePathHelper.GetImagePath(wi.FilePathInZip.Replace("NATIVES", "IMAGES", StringComparison.OrdinalIgnoreCase));
@@ -109,8 +109,8 @@ internal sealed class DatProductionComposer
         var nativePath = ctx.NativePathOverride ?? fileData.NativePathOverride ?? wi.FilePathInZip.Replace('/', '\\');
         // Derive text path from the original FilePathInZip (not the overridden nativePath) so
         // replace-with-placeholder policy doesn't produce wrong text paths in the DAT.
-        var originalNativePath = wi.FilePathInZip.Replace('/', '\\');
-        var textPathFallback = TextPathHelper.GetTextPath(wi.FilePathInZip.StartsWith("NATIVES/", StringComparison.OrdinalIgnoreCase) ? "TEXT/" + wi.FilePathInZip.Substring(8) : wi.FilePathInZip).Replace('/', '\\');
+        var originalNativePath = wi.FilePathInZip.Replace('\\', '/');
+        var textPathFallback = TextPathHelper.GetTextPath(originalNativePath.StartsWith("NATIVES/", StringComparison.OrdinalIgnoreCase) ? "TEXT/" + originalNativePath.Substring(8) : originalNativePath).Replace('/', '\\');
         var textPath = ctx.TextPathOverride ?? fileData.TextRelPath?.Replace('/', '\\') ?? textPathFallback;
         var imagesPath = imagePath.Replace('/', '\\');
 

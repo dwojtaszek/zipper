@@ -115,16 +115,33 @@ internal static class ProductionSetOrchestrator
                         : currentBatesStart;
                 }
 
+                string prefixToUse = request.Bates?.Prefixes is not null && request.Bates.Prefixes.Count > i
+                    ? request.Bates.Prefixes[i]
+                    : request.Bates?.Prefix ?? string.Empty;
+
+                var effectiveBates = request.Bates is not null
+                    ? request.Bates with
+                    {
+                        Prefix = prefixToUse,
+                        Start = startToUse,
+                        Prefixes = null,
+                        Starts = null,
+                    }
+                    : null;
+
+                var setRequest = request.Clone();
+                setRequest.Bates = effectiveBates;
+                setRequest.Production = request.Production with { ProductionId = productionName };
+
                 var stepStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 int batesConsumed = 0;
                 lastResult = await GenerateCoreAsync(
-                    request,
+                    setRequest,
                     materializer,
                     hashComputer,
                     productionPath,
                     productionName,
                     i,
-                    startToUse,
                     count => batesConsumed = count,
                     stepStopwatch,
                     createdDirectories,
@@ -196,7 +213,6 @@ internal static class ProductionSetOrchestrator
         string productionPath,
         string productionName,
         int rollingIndex,
-        long batesStartOverride,
         Action<int> onPlansGenerated,
         System.Diagnostics.Stopwatch stopwatch,
         List<string> createdDirectories,
@@ -204,7 +220,7 @@ internal static class ProductionSetOrchestrator
         CancellationToken cancellationToken)
     {
         // Plan document layout (no I/O)
-        var plans = ProductionSetPlanner.Plan(request, rollingIndex, batesStartOverride);
+        var plans = ProductionSetPlanner.Plan(request);
         onPlansGenerated(plans.Count);
 
         // Run supplemental validation before any output is created
@@ -263,6 +279,7 @@ internal static class ProductionSetOrchestrator
             BatesRange = $"{plans[0].BatesNumber} - {plans[^1].BatesNumber}",
             VolumeCount = volumeCount,
             GenerationTime = stopwatch.Elapsed,
+            EffectiveRequest = request,
         };
     }
 
@@ -386,6 +403,8 @@ internal static class ProductionSetOrchestrator
             FileName = Path.GetFileName(plan.NativeRelPath),
             FilePathInZip = plan.NativeRelPath,
             FileType = plan.FileType,
+            BatesNumberOverride = plan.BatesNumber,
+            SourceMetadata = request.SourceRecords?[(int)plan.Index].Metadata,
         };
         var generated = fileGenerators[plan.FileType].Generate(workItem, request);
         var nativeContent = generated.Content;

@@ -78,23 +78,10 @@ internal sealed class OptComposer : ILoadFileComposer
         foreach (var fileData in processedFiles)
         {
             var workItem = fileData.WorkItem;
-            string baseBatesNumber;
-            if (isProductionSet)
-            {
-                baseBatesNumber = this.batesSequence!.Format(workItem.Index - 1).ToString();
-            }
-            else if (workItem.BatesNumberOverride is not null)
-            {
-                baseBatesNumber = workItem.BatesNumberOverride;
-            }
-            else if (this.batesSequence is not null)
-            {
-                baseBatesNumber = this.batesSequence.Format(workItem.Index - 1).ToString();
-            }
-            else
-            {
-                baseBatesNumber = $"DOC{workItem.Index:D8}";
-            }
+            string baseBatesNumber = workItem.BatesNumberOverride
+                ?? (this.batesSequence is not null
+                    ? this.batesSequence.Format(workItem.Index - 1).ToString()
+                    : $"DOC{workItem.Index:D8}");
 
             string volume = isProductionSet ? workItem.FolderName : "VOL001";
             // Planned image path wins when present (Source-Driven path modes break the

@@ -330,10 +330,71 @@ internal sealed class ProductionSetPostValidator
             }
         }
 
+        // Manifest Bates range consistency
+        var manifestPath = Path.Combine(productionPath, "_manifest.json");
+        string? mStart = null;
+        string? mEnd = null;
+        int? rollingSeqNum = null;
+        if (File.Exists(manifestPath))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
+                if (doc.RootElement.TryGetProperty("batesNumberStart", out var startElem))
+                {
+                    mStart = startElem.GetString();
+                }
+                if (doc.RootElement.TryGetProperty("batesNumberEnd", out var endElem))
+                {
+                    mEnd = endElem.GetString();
+                }
+                if (doc.RootElement.TryGetProperty("rollingSequenceNumber", out var seqElem) &&
+                    seqElem.TryGetInt32(out var sNum))
+                {
+                    rollingSeqNum = sNum;
+                }
+
+                if (parentBatesList.Count > 0)
+                {
+                    if (!string.IsNullOrEmpty(mStart) && !string.Equals(parentBatesList[0], mStart, StringComparison.Ordinal))
+                    {
+                        findings.Add(new ValidationReportFinding
+                        {
+                            Code = "BatesConsistency",
+                            Severity = "error",
+                            Path = datRelPath,
+                            Message = $"DAT first Bates number '{parentBatesList[0]}' does not match manifest start '{mStart}'"
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(mEnd) && !string.Equals(parentBatesList[^1], mEnd, StringComparison.Ordinal))
+                    {
+                        findings.Add(new ValidationReportFinding
+                        {
+                            Code = "BatesConsistency",
+                            Severity = "error",
+                            Path = datRelPath,
+                            Message = $"DAT last Bates number '{parentBatesList[^1]}' does not match manifest end '{mEnd}'"
+                        });
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is System.Text.Json.JsonException or System.IO.IOException)
+            {
+                findings.Add(new ValidationReportFinding
+                {
+                    Code = "ManifestSyntax",
+                    Severity = "error",
+                    Path = "_manifest.json",
+                    Message = $"Manifest file '_manifest.json' could not be read or parsed: {ex.Message}"
+                });
+            }
+        }
+
         // Bates range continuity/sequence check
         if (request.Bates != null && parentBatesList.Count > 0)
         {
-            var batesSequence = BatesSequence.FromConfig(request.Bates);
+            var effectiveBates = ResolveEffectiveBates(request, rollingSeqNum, mStart);
+            var batesSequence = BatesSequence.FromConfig(effectiveBates);
             for (int i = 0; i < parentBatesList.Count; i++)
             {
                 var expectedBates = batesSequence.Format(i).ToString();
@@ -366,6 +427,8 @@ internal sealed class ProductionSetPostValidator
         {
             var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
             int i = -1;
+            string? firstOptBates = null;
+            string? lastOptBates = null;
             foreach (var line in File.ReadLines(optPath, optEncoding))
             {
                 i++;
@@ -392,6 +455,8 @@ internal sealed class ProductionSetPostValidator
                     var optBates = columns[0];
                     if (!string.IsNullOrEmpty(optBates))
                     {
+                        firstOptBates ??= optBates;
+                        lastOptBates = optBates;
                         if (!seenOptBates.Add(optBates))
                         {
                             findings.Add(new ValidationReportFinding
@@ -427,6 +492,28 @@ internal sealed class ProductionSetPostValidator
                     }
                 }
             }
+
+            // OPT Bates boundaries consistency with manifest
+            if (!string.IsNullOrEmpty(firstOptBates) && !string.IsNullOrEmpty(mStart) && !firstOptBates.StartsWith(mStart, StringComparison.Ordinal))
+            {
+                findings.Add(new ValidationReportFinding
+                {
+                    Code = "BatesConsistency",
+                    Severity = "error",
+                    Path = optRelPath,
+                    Message = $"OPT first Bates number '{firstOptBates}' does not match manifest start '{mStart}'"
+                });
+            }
+            if (!string.IsNullOrEmpty(lastOptBates) && !string.IsNullOrEmpty(mEnd) && !lastOptBates.StartsWith(mEnd, StringComparison.Ordinal))
+            {
+                findings.Add(new ValidationReportFinding
+                {
+                    Code = "BatesConsistency",
+                    Severity = "error",
+                    Path = optRelPath,
+                    Message = $"OPT last Bates number '{lastOptBates}' does not match manifest end '{mEnd}'"
+                });
+            }
         }
 
         // Set counts and status
@@ -450,6 +537,48 @@ internal sealed class ProductionSetPostValidator
         };
 
         return report;
+    }
+
+    private static Config.BatesNumberConfig ResolveEffectiveBates(FileGenerationRequest request, int? rollingSeqNum, string? manifestStart)
+    {
+        var bates = request.Bates!;
+        if (rollingSeqNum.HasValue && rollingSeqNum.Value >= 1 && !string.IsNullOrEmpty(manifestStart))
+        {
+            // If request.Bates already formats index 0 to manifestStart, it is already effective
+            if (string.Equals(BatesSequence.FromConfig(bates).Format(0).ToString(), manifestStart, StringComparison.Ordinal))
+            {
+                return bates;
+            }
+
+            int rollingIndex = rollingSeqNum.Value - 1;
+            long start;
+            if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
+            {
+                start = bates.Starts is not null && bates.Starts.Count > rollingIndex
+                    ? bates.Starts[rollingIndex]
+                    : bates.Start;
+            }
+            else
+            {
+                start = bates.Starts is not null && bates.Starts.Count > rollingIndex
+                    ? bates.Starts[rollingIndex]
+                    : bates.Start + (rollingIndex * request.Output.FileCount * bates.Increment);
+            }
+
+            string prefix = bates.Prefixes is not null && bates.Prefixes.Count > rollingIndex
+                ? bates.Prefixes[rollingIndex]
+                : bates.Prefix;
+
+            return bates with
+            {
+                Prefix = prefix,
+                Start = start,
+                Prefixes = null,
+                Starts = null,
+            };
+        }
+
+        return bates;
     }
 
     public static List<string> ParseDatLine(string line, char colDelim, char quoteDelim)
