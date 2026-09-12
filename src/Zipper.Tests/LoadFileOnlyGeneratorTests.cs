@@ -741,4 +741,57 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         Assert.Equal(10 + childCount, totalRecords);
         Assert.Equal(10 + childCount, result.TotalRecords);
     }
+
+    [Fact]
+    public async Task GenerateAsync_SequentialSameSecondCalls_AllocateDistinctBasenamesAndPreserveFirstLoadFile()
+    {
+        var request1 = this.CreateRequest(count: 5);
+        var result1 = await LoadFileOnlyGenerator.GenerateAsync(request1);
+
+        var request2 = this.CreateRequest(count: 5);
+        var result2 = await LoadFileOnlyGenerator.GenerateAsync(request2);
+
+        Assert.NotEqual(result1.LoadFilePath, result2.LoadFilePath);
+        Assert.True(File.Exists(result1.LoadFilePath));
+        Assert.True(File.Exists(result2.LoadFilePath));
+        Assert.True(File.Exists(result1.PropertiesFilePath));
+        Assert.True(File.Exists(result2.PropertiesFilePath));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_PreExistingLoadFile_AllocatesNonCollidingBasenameAndPreservesSentinelFile()
+    {
+        var baseName = $"loadfile_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var sentinelFile = Path.Combine(this.tempDir, $"{baseName}.dat");
+        var sentinelBytes = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
+        await File.WriteAllBytesAsync(sentinelFile, sentinelBytes);
+
+        var request = this.CreateRequest(count: 5);
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        Assert.NotEqual(sentinelFile, result.LoadFilePath);
+        Assert.True(File.Exists(sentinelFile));
+        var preservedBytes = await File.ReadAllBytesAsync(sentinelFile);
+        Assert.Equal(sentinelBytes, preservedBytes);
+        Assert.True(File.Exists(result.LoadFilePath));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_FaultDuringGeneration_PreservesPreExistingFiles()
+    {
+        var sentinelFile = Path.Combine(this.tempDir, "preexisting.dat");
+        var sentinelBytes = new byte[] { 0xAA, 0xBB, 0xCC };
+        await File.WriteAllBytesAsync(sentinelFile, sentinelBytes);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var request = this.CreateRequest(count: 5);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => LoadFileOnlyGenerator.GenerateAsync(request, cts.Token));
+
+        Assert.True(File.Exists(sentinelFile));
+        var preservedBytes = await File.ReadAllBytesAsync(sentinelFile);
+        Assert.Equal(sentinelBytes, preservedBytes);
+    }
 }

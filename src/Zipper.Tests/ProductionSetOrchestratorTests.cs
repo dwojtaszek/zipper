@@ -229,10 +229,28 @@ public class ProductionSetOrchestratorTests
         Assert.True(materializer.ZipCreated);
     }
 
+    [Fact]
+    public async Task GenerateAsync_WhenProductionZipExists_ThrowsInvalidOperationException()
+    {
+        var materializer = new FakeMaterializer { FileExistsResult = true };
+        var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
+        request.Production = request.Production with { ProductionZip = true };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(materializer.CreatedDirectories);
+        Assert.Empty(materializer.DeletedFiles);
+    }
+
     private sealed class FakeMaterializer : IFileMaterializer
     {
         public bool DirectoryExistsResult { get; set; }
+        public bool FileExistsResult { get; set; }
         public List<string> CreatedDirectories { get; } = new();
+        public List<string> DeletedDirectories { get; } = new();
+        public List<string> DeletedFiles { get; } = new();
         public List<(string path, byte[] content)> WrittenBytes { get; } = new();
         public List<(string path, string text, Encoding encoding)> WrittenTexts { get; } = new();
         public List<FileData> FileDataItems { get; } = new();
@@ -279,11 +297,13 @@ public class ProductionSetOrchestratorTests
 
         public Task DeleteDirectoryAsync(string path, CancellationToken cancellationToken = default)
         {
+            this.DeletedDirectories.Add(path);
             return Task.CompletedTask;
         }
 
         public Task DeleteFileAsync(string path, CancellationToken cancellationToken = default)
         {
+            this.DeletedFiles.Add(path);
             return Task.CompletedTask;
         }
 
@@ -294,7 +314,7 @@ public class ProductionSetOrchestratorTests
 
         public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(false);
+            return Task.FromResult(this.FileExistsResult);
         }
 
         public bool ZipCreated { get; private set; }
@@ -305,6 +325,7 @@ public class ProductionSetOrchestratorTests
             return Task.CompletedTask;
         }
     }
+
 
     private sealed class FakeStream : Stream
     {

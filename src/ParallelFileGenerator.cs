@@ -27,6 +27,8 @@ public class ParallelFileGenerator
     {
         string? zipFilePath = null;
         string? loadFilePath = null;
+        var createdFiles = new List<string>();
+        FileStream? archiveStream = null;
 
         ArgumentNullException.ThrowIfNull(request);
 
@@ -57,8 +59,35 @@ public class ParallelFileGenerator
 
             Directory.CreateDirectory(request.Output.OutputPath);
 
-            var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
-            zipFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.zip");
+            string baseFileName = string.Empty;
+            var baseTime = DateTime.UtcNow;
+            int suffix = 0;
+
+            while (archiveStream is null)
+            {
+                baseFileName = suffix == 0
+                    ? $"archive_{baseTime:yyyyMMdd_HHmmss}"
+                    : $"archive_{baseTime:yyyyMMdd_HHmmss}_{suffix}";
+
+                var candidateZip = Path.Combine(request.Output.OutputPath, $"{baseFileName}.zip");
+                if (HasExistingRunFiles(request.Output.OutputPath, baseFileName))
+                {
+                    suffix++;
+                    continue;
+                }
+
+                try
+                {
+                    archiveStream = new FileStream(candidateZip, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
+                    zipFilePath = candidateZip;
+                    createdFiles.Add(zipFilePath);
+                }
+                catch (IOException)
+                {
+                    suffix++;
+                }
+            }
+
             var loadFileName = $"{baseFileName}.dat";
             loadFilePath = Path.Combine(request.Output.OutputPath, loadFileName);
 
@@ -104,7 +133,17 @@ public class ParallelFileGenerator
             });
 
             // Start the consumer task to write the archive concurrently
-            var consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+            Task<string> consumerTask;
+            if (this.archiveSink is ZipArchiveSink zipSink)
+            {
+                consumerTask = zipSink.CreateArchiveAsync(zipFilePath!, archiveStream, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+            }
+            else
+            {
+                archiveStream.Dispose();
+                archiveStream = null;
+                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath!, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+            }
 
             // Generate files in parallel (producers)
             try
@@ -190,21 +229,65 @@ public class ParallelFileGenerator
         catch
         {
             this.performanceMonitor.Stop();
-            try
+            if (archiveStream is not null)
             {
-                if (zipFilePath is not null && File.Exists(zipFilePath)) File.Delete(zipFilePath);
-                if (loadFilePath is not null && File.Exists(loadFilePath)) File.Delete(loadFilePath);
+                await archiveStream.DisposeAsync().ConfigureAwait(false);
             }
+
+            foreach (var file in createdFiles)
+            {
+                if (File.Exists(file))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
 #pragma warning disable CA1031
 #pragma warning disable RCS1075
-            catch (Exception)
-            {
-                // Best-effort cleanup; do not mask the original generation exception.
-            }
+                    catch (Exception)
+                    {
+                        // Best-effort cleanup; do not mask the original generation exception.
+                    }
 #pragma warning restore RCS1075
 #pragma warning restore CA1031
+                }
+            }
+
             throw;
         }
+    }
+
+    internal static bool HasExistingRunFiles(string outputPath, string baseFileName)
+    {
+        if (!Directory.Exists(outputPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var pattern = $"{baseFileName}*";
+            foreach (var file in Directory.EnumerateFiles(outputPath, pattern))
+            {
+                var fileName = Path.GetFileName(file);
+                if (string.Equals(fileName, baseFileName, StringComparison.OrdinalIgnoreCase) ||
+                    fileName.StartsWith(baseFileName + ".", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.StartsWith(baseFileName + "_", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+        catch (Exception)
+        {
+            // Best-effort check
+        }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
+
+        return false;
     }
 
     private static IReadOnlyDictionary<string, IFileGenerator> BuildGenerators(FileGenerationRequest request)

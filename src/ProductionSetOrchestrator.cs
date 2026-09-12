@@ -56,6 +56,30 @@ internal static class ProductionSetOrchestrator
         ProductionSetResult? lastResult = null;
         long currentBatesStart = request.Bates?.Start ?? 1;
 
+        // Upfront check: reject existing output before generation
+        for (int i = 0; i < rollingCount; i++)
+        {
+            var prodName = prodIds[i];
+            var prodPath = Path.Combine(request.Output.OutputPath, prodName);
+
+            if (await materializer.DirectoryExistsAsync(prodPath, cancellationToken).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException($"Production directory already exists: '{prodPath}'");
+            }
+
+            if (request.Production.ProductionZip)
+            {
+                var prodZip = Path.Combine(request.Output.OutputPath, $"{prodName}.zip");
+                if (await materializer.FileExistsAsync(prodZip, cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException($"Production zip already exists: '{prodZip}'");
+                }
+            }
+        }
+
+        var createdDirectories = new List<string>();
+        var createdZips = new List<string>();
+
         for (int i = 0; i < rollingCount; i++)
         {
             var productionName = prodIds[i];
@@ -64,6 +88,15 @@ internal static class ProductionSetOrchestrator
             if (await materializer.DirectoryExistsAsync(productionPath, cancellationToken).ConfigureAwait(false))
             {
                 throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
+            }
+
+            if (request.Production.ProductionZip)
+            {
+                var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
+                if (await materializer.FileExistsAsync(zipPath, cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException($"Production zip already exists: '{zipPath}'");
+                }
             }
 
             try
@@ -94,6 +127,8 @@ internal static class ProductionSetOrchestrator
                     startToUse,
                     count => batesConsumed = count,
                     stepStopwatch,
+                    createdDirectories,
+                    createdZips,
                     cancellationToken).ConfigureAwait(false);
 
                 if (request.Production.RollingBatesMode == Config.RollingBatesMode.Continuous)
@@ -107,13 +142,36 @@ internal static class ProductionSetOrchestrator
 
                 if (ex is not Validation.ValidationFailedException)
                 {
-                    for (int j = 0; j <= i; j++)
+                    foreach (var zipToDelete in createdZips)
                     {
-                        var pathToDelete = Path.Combine(request.Output.OutputPath, prodIds[j]);
-                        await materializer.DeleteDirectoryAsync(pathToDelete, cancellationToken).ConfigureAwait(false);
+                        try
+                        {
+                            await materializer.DeleteFileAsync(zipToDelete, cancellationToken).ConfigureAwait(false);
+                        }
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+                        catch (Exception)
+                        {
+                            // Suppress cleanup exceptions to preserve original error
+                        }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
+                    }
 
-                        var zipToDelete = Path.Combine(request.Output.OutputPath, $"{prodIds[j]}.zip");
-                        await materializer.DeleteFileAsync(zipToDelete, cancellationToken).ConfigureAwait(false);
+                    foreach (var dirToDelete in createdDirectories)
+                    {
+                        try
+                        {
+                            await materializer.DeleteDirectoryAsync(dirToDelete, cancellationToken).ConfigureAwait(false);
+                        }
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+                        catch (Exception)
+                        {
+                            // Suppress cleanup exceptions to preserve original error
+                        }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
                     }
                 }
 
@@ -141,6 +199,8 @@ internal static class ProductionSetOrchestrator
         long batesStartOverride,
         Action<int> onPlansGenerated,
         System.Diagnostics.Stopwatch stopwatch,
+        List<string> createdDirectories,
+        List<string> createdZips,
         CancellationToken cancellationToken)
     {
         // Plan document layout (no I/O)
@@ -158,8 +218,11 @@ internal static class ProductionSetOrchestrator
         var dataDir = Path.Combine(productionPath, "DATA");
         int volumeCount = (int)Math.Ceiling((double)request.Output.FileCount / request.Production.VolumeSize);
 
+        createdDirectories.Add(productionPath);
+
         // Create directory structure
         await SetupDirectoriesAsync(productionPath, request, volumeCount, plans, materializer, cancellationToken).ConfigureAwait(false);
+
 
         // Generate files using the plan
         var fileDataList = await GenerateVolumeFilesAsync(
@@ -185,7 +248,7 @@ internal static class ProductionSetOrchestrator
         await ValidateProductionSetAsync(productionPath, request, materializer, cancellationToken).ConfigureAwait(false);
 
         // Optionally wrap in ZIP
-        var zipPath = await CreateZipArchiveAsync(productionPath, productionName, request, materializer, cancellationToken).ConfigureAwait(false);
+        var zipPath = await CreateZipArchiveAsync(productionPath, productionName, request, materializer, createdZips, cancellationToken).ConfigureAwait(false);
 
         stopwatch.Stop();
 
@@ -594,6 +657,7 @@ internal static class ProductionSetOrchestrator
         string productionName,
         FileGenerationRequest request,
         IFileMaterializer materializer,
+        List<string> createdZips,
         CancellationToken cancellationToken)
     {
         if (!request.Production.ProductionZip)
@@ -604,7 +668,9 @@ internal static class ProductionSetOrchestrator
         var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
         Console.Write("  Creating ZIP archive...");
         await materializer.CreateZipAsync(productionPath, zipPath, cancellationToken).ConfigureAwait(false);
+        createdZips.Add(zipPath);
         Console.WriteLine(" done.");
         return zipPath;
     }
 }
+

@@ -74,6 +74,7 @@ zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
   - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`)
   - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
 - **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and chaos anomaly injection (`--chaos-mode`).
+- **Output Safety & Preservation**: Collision-resistant base naming with incremental suffixes (`_1`, `_2`, …) and atomic creation (`FileMode.CreateNew`) prevent overwriting existing Archives or Load Files. Production Set mode rejects existing output directories and zip archives upfront before generation, and cleanup routines delete only artifacts created during the failed run.
 
 ---
 

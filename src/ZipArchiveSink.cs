@@ -18,8 +18,9 @@ internal class ZipArchiveSink : IArchiveSink
     /// <param name="loadFilePath">Path where Load File should be saved separately (if not included in Archive).</param>
     /// <param name="request">File generation request parameters.</param>
     /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The actual Load File path that was created (or original if included in Archive).</returns>
-    public async Task<string> CreateArchiveAsync(
+    public Task<string> CreateArchiveAsync(
         string zipFilePath,
         string loadFileName,
         string loadFilePath,
@@ -27,58 +28,113 @@ internal class ZipArchiveSink : IArchiveSink
         ChannelReader<FileData> fileDataReader,
         CancellationToken cancellationToken = default)
     {
-        using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+        return this.CreateArchiveAsync(zipFilePath, null, loadFileName, loadFilePath, request, fileDataReader, cancellationToken);
+    }
 
-        using var processedFiles = new DiskBackedFileDataList();
-        var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Creates an Archive containing the generated Native Files and optionally a Load File, using an existing archive stream if provided.
+    /// </summary>
+    public async Task<string> CreateArchiveAsync(
+        string zipFilePath,
+        Stream? archiveStream,
+        string loadFileName,
+        string loadFilePath,
+        FileGenerationRequest request,
+        ChannelReader<FileData> fileDataReader,
+        CancellationToken cancellationToken = default)
+    {
+        if (archiveStream is null)
+        {
+            archiveStream = new FileStream(zipFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
+        }
 
-        // Cached per-type text payloads; the per-record File Type selects which one is written.
-        var standardTextContent = request.Output.WithText ? PlaceholderFiles.ExtractedText : null;
-        var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : null;
-
-        var outOfOrderBuffer = new Dictionary<long, FileData>();
+        var createdSidecars = new List<string>();
 
         try
         {
-            await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            CleanupOperations(outOfOrderBuffer, fileDataReader);
-        }
-
-        var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
-            ? request.LoadFile.Formats
-            : new List<LoadFileFormat> { LoadFileFormat.Dat };
-
-        var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
-        var baseFilePath = Path.GetDirectoryName(loadFilePath) ?? string.Empty;
-
-        // Load Files land inside the ZIP (IncludeLoadFile) or next to it on disk; the
-        // orchestrator owns the per-format write + audit loop in either case.
-        // CancellationToken.None: prior behavior, this phase was non-cancellable, so a
-        // cancellation cannot leave partial DAT/OPT sidecars behind in the output dir.
-        Func<string, Stream> openTarget = request.Output.IncludeLoadFile
-            ? target => archive.CreateEntry(target, CompressionLevel.Optimal).Open()
-            : target => new FileStream(Path.Combine(baseFilePath, target), FileMode.Create);
-
-        var actualLoadFileTarget = await LoadFileOrchestrator.EmitAllAsync(
-            request,
-            processedFiles,
-            formatsToGenerate,
-            WriterMode.Standard,
-            (format, writer) =>
+            await using (archiveStream.ConfigureAwait(false))
+            using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, leaveOpen: false))
             {
-                var actualLoadFileName = baseFileName + writer.FileExtension;
-                return (actualLoadFileName, actualLoadFileName + "_properties.json");
-            },
-            openTarget,
-            CancellationToken.None).ConfigureAwait(false);
+                using var processedFiles = new DiskBackedFileDataList();
+                var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        return request.Output.IncludeLoadFile
-            ? actualLoadFileTarget
-            : Path.Combine(baseFilePath, actualLoadFileTarget);
+                // Cached per-type text payloads; the per-record File Type selects which one is written.
+                var standardTextContent = request.Output.WithText ? PlaceholderFiles.ExtractedText : null;
+                var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : null;
+
+                var outOfOrderBuffer = new Dictionary<long, FileData>();
+
+                try
+                {
+                    await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    CleanupOperations(outOfOrderBuffer, fileDataReader);
+                }
+
+                var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
+                    ? request.LoadFile.Formats
+                    : new List<LoadFileFormat> { LoadFileFormat.Dat };
+
+                var baseFileName = Path.GetFileNameWithoutExtension(loadFileName);
+                var baseFilePath = Path.GetDirectoryName(loadFilePath) ?? string.Empty;
+
+                // Load Files land inside the ZIP (IncludeLoadFile) or next to it on disk; the
+                // orchestrator owns the per-format write + audit loop in either case.
+                // CancellationToken.None: prior behavior, this phase was non-cancellable, so a
+                // cancellation cannot leave partial DAT/OPT sidecars behind in the output dir.
+                Func<string, Stream> openTarget = request.Output.IncludeLoadFile
+                    ? target => archive.CreateEntry(target, CompressionLevel.Optimal).Open()
+                    : target =>
+                    {
+                        var fullPath = Path.Combine(baseFilePath, target);
+                        var stream = new FileStream(fullPath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
+                        createdSidecars.Add(fullPath);
+                        return stream;
+                    };
+
+                var actualLoadFileTarget = await LoadFileOrchestrator.EmitAllAsync(
+                    request,
+                    processedFiles,
+                    formatsToGenerate,
+                    WriterMode.Standard,
+                    (format, writer) =>
+                    {
+                        var actualLoadFileName = baseFileName + writer.FileExtension;
+                        return (actualLoadFileName, actualLoadFileName + "_properties.json");
+                    },
+                    openTarget,
+                    CancellationToken.None).ConfigureAwait(false);
+
+                return request.Output.IncludeLoadFile
+                    ? actualLoadFileTarget
+                    : Path.Combine(baseFilePath, actualLoadFileTarget);
+            }
+        }
+        catch
+        {
+            foreach (var sidecar in createdSidecars)
+            {
+                if (File.Exists(sidecar))
+                {
+                    try
+                    {
+                        File.Delete(sidecar);
+                    }
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+                    catch (Exception)
+                    {
+                        // Suppress cleanup exceptions to preserve original error
+                    }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
+                }
+            }
+
+            throw;
+        }
     }
 
     private async Task DrainReaderAndOrderFilesAsync(
