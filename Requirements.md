@@ -863,3 +863,13 @@ Shipped (CLI slice #844, ADR-0008); the contract lives in [docs/archive-test-sui
 - **REQ-217**: Each Expectation File shall conform to `tests/fixtures/archive-test-case.schema.json` (JSON Schema draft-07): required fields `schemaVersion`, `generatorContractVersion`, `generatorVersion`, `fixtureId`, `caseKey`, `caseRevision`, `expectationRevision`, `seed`, `classification`, `archive`, `entries`, `mutations`, `expectations`, `limits`; entries keyed by unique ordinal with raw local/central name bytes; mutation records on the before-mutation offset basis with before/after hashes and sizes; inline hex capped at 256 bytes (512 hex characters), larger removed ranges referenced by hash. Semantics that draft-07 cannot express (basename ↔ Fixture ID equality, ordinal uniqueness) shall be verified by the test suite.
 - **REQ-218**: Every applied mutation shall be recorded in the Expectation File with a machine-readable code, affected structure, offset on the before-mutation basis, deleted/inserted lengths, before/after Archive hashes and sizes, and a human-readable explanation, so the defect chain from a valid control to the published fixture is fully auditable.
 
+## 22. Output Preservation and Ownership
+
+### FR-029: Output Preservation and Ownership
+
+- **REQ-219**: Generation workflows shall never overwrite or delete pre-existing user files or Archives on output collision, failure, or cancellation:
+  - **Standard Mode**: Run basenames (`archive_YYYYMMDD_HHMMSS`) colliding with pre-existing files in the output directory shall append an incremental suffix (`_1`, `_2`, …). Output archive files, load files, and properties sidecars shall be claimed exclusively with atomic creation (`FileMode.CreateNew`) to eliminate race conditions between sequential same-second and concurrent runs.
+  - **Production Set Mode**: When `--production-set` is specified, the application shall validate upfront that neither the target volume directory (`<output-path>/<production-id>`) nor, when `--production-zip` is specified, the target archive (`<output-path>/<production-id>.zip`) exists for any target Volume or rolling Production ID across the entire run. If an existing directory or zip is detected, generation shall fail immediately before any files are written.
+  - **Ownership Tracking and Fault Cleanup**: The application shall track only those files and directories created during the active run. If generation faults or is cancelled, cleanup shall delete only the partial artifacts created by the current run, leaving pre-existing files and unowned archives untouched.
+
+

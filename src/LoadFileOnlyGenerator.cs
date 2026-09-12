@@ -23,7 +23,22 @@ internal static class LoadFileOnlyGenerator
 
         Directory.CreateDirectory(request.Output.OutputPath);
 
-        var baseFileName = $"loadfile_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
+        var baseTime = DateTime.UtcNow;
+        int suffix = 0;
+        string baseFileName = string.Empty;
+        while (true)
+        {
+            baseFileName = suffix == 0
+                ? $"loadfile_{baseTime:yyyyMMdd_HHmmss}"
+                : $"loadfile_{baseTime:yyyyMMdd_HHmmss}_{suffix}";
+
+            if (ParallelFileGenerator.HasExistingRunFiles(request.Output.OutputPath, baseFileName))
+            {
+                suffix++;
+                continue;
+            }
+            break;
+        }
 
         var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
             ? request.LoadFile.Formats
@@ -33,7 +48,7 @@ internal static class LoadFileOnlyGenerator
         string primaryPropertiesPath = string.Empty;
         long totalRecords = 0;
 
-        var generatedFiles = new List<string>();
+        var createdFiles = new List<string>();
 
         try
         {
@@ -42,7 +57,6 @@ internal static class LoadFileOnlyGenerator
                 var formatRequest = EnsureStableOptPageCounts(request, format);
                 var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
-                generatedFiles.Add(loadFilePath);
 
                 // Source-Driven Generation: rows become FileData shells (no Native File bytes)
                 // and flow through the Standard composers so every Load File Format reflects
@@ -59,7 +73,8 @@ internal static class LoadFileOnlyGenerator
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
                     writerMode);
 
-                var fileStream = new FileStream(loadFilePath, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+                var fileStream = new FileStream(loadFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+                createdFiles.Add(loadFilePath);
                 await using (fileStream.ConfigureAwait(false))
                 {
                     await writer.WriteAsync(fileStream, formatRequest, records, chaosEngine, cancellationToken).ConfigureAwait(false);
@@ -71,7 +86,7 @@ internal static class LoadFileOnlyGenerator
                     records,
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
-                generatedFiles.Add(propertiesPath);
+                createdFiles.Add(propertiesPath);
 
                 if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
                 {
@@ -94,7 +109,7 @@ internal static class LoadFileOnlyGenerator
         }
         catch
         {
-            foreach (var file in generatedFiles)
+            foreach (var file in createdFiles)
             {
                 if (File.Exists(file))
                 {
@@ -102,10 +117,14 @@ internal static class LoadFileOnlyGenerator
                     {
                         File.Delete(file);
                     }
-                    catch
+#pragma warning disable CA1031
+#pragma warning disable RCS1075
+                    catch (Exception)
                     {
                         // Best effort cleanup
                     }
+#pragma warning restore RCS1075
+#pragma warning restore CA1031
                 }
             }
 

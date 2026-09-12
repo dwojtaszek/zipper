@@ -879,4 +879,191 @@ public class ParallelFileGeneratorTests
 
         fileData.MemoryOwner?.Dispose();
     }
+
+    [Fact]
+    public async Task GenerateFilesAsync_SequentialSameSecondCalls_AllocateDistinctBasenamesAndPreserveFirstArchive()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var generator = new ParallelFileGenerator();
+
+            var request1 = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = tempDir,
+                    FileCount = 1,
+                    FileType = "pdf",
+                },
+            };
+
+            var request2 = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = tempDir,
+                    FileCount = 1,
+                    FileType = "jpg",
+                },
+            };
+
+            var result1 = await generator.GenerateFilesAsync(request1);
+            var bytes1Before = await File.ReadAllBytesAsync(result1.ZipFilePath);
+
+            var result2 = await generator.GenerateFilesAsync(request2);
+            var bytes1After = await File.ReadAllBytesAsync(result1.ZipFilePath);
+            var bytes2 = await File.ReadAllBytesAsync(result2.ZipFilePath);
+
+            Assert.NotEqual(result1.ZipFilePath, result2.ZipFilePath);
+            Assert.NotEqual(result1.LoadFilePath, result2.LoadFilePath);
+            Assert.Equal(bytes1Before, bytes1After);
+            Assert.True(File.Exists(result1.ZipFilePath));
+            Assert.True(File.Exists(result2.ZipFilePath));
+            Assert.True(File.Exists(result1.LoadFilePath));
+            Assert.True(File.Exists(result2.LoadFilePath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateFilesAsync_ConcurrentCalls_NeverOverwriteEachOther()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var generator = new ParallelFileGenerator();
+            const int concurrentRuns = 5;
+
+            var tasks = Enumerable.Range(0, concurrentRuns).Select(async i =>
+            {
+                var request = new FileGenerationRequest
+                {
+                    Output = new OutputConfig
+                    {
+                        OutputPath = tempDir,
+                        FileCount = 2,
+                        FileType = "pdf",
+                    },
+                    Metadata = new MetadataConfig { Seed = i + 1 },
+                };
+                return await generator.GenerateFilesAsync(request);
+            }).ToArray();
+
+            var results = await Task.WhenAll(tasks);
+
+            var zipPaths = results.Select(r => r.ZipFilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var loadPaths = results.Select(r => r.LoadFilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            Assert.Equal(concurrentRuns, zipPaths.Count);
+            Assert.Equal(concurrentRuns, loadPaths.Count);
+
+            foreach (var r in results)
+            {
+                Assert.True(File.Exists(r.ZipFilePath));
+                Assert.True(File.Exists(r.LoadFilePath));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateFilesAsync_PreExistingLoadFile_AllocatesNonCollidingBasenameAndPreservesLoadFile()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var now = DateTime.UtcNow;
+            var existingDatName = $"archive_{now:yyyyMMdd_HHmmss}.dat";
+            var existingDatPath = Path.Combine(tempDir, existingDatName);
+            var sentinelBytes = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
+            await File.WriteAllBytesAsync(existingDatPath, sentinelBytes);
+
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = tempDir,
+                    FileCount = 1,
+                    FileType = "pdf",
+                },
+            };
+
+            var result = await generator.GenerateFilesAsync(request);
+
+            Assert.NotEqual(existingDatPath, result.LoadFilePath);
+            Assert.True(File.Exists(existingDatPath));
+            var actualSentinel = await File.ReadAllBytesAsync(existingDatPath);
+            Assert.Equal(sentinelBytes, actualSentinel);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateFilesAsync_FaultDuringGeneration_CleansOnlyThisRunsPartialZipAndPreservesPreExistingFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var preExistingFile = Path.Combine(tempDir, "pre_existing.txt");
+            await File.WriteAllTextAsync(preExistingFile, "important sentinel data");
+
+            var faultingSink = new InMemorySink
+            {
+                IsFaulted = true,
+                FaultException = new InvalidOperationException("Simulated consumer fault"),
+            };
+            var generator = new ParallelFileGenerator(faultingSink);
+
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = tempDir,
+                    FileCount = 5,
+                    FileType = "pdf",
+                },
+            };
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => generator.GenerateFilesAsync(request));
+
+            Assert.True(File.Exists(preExistingFile));
+            Assert.Equal("important sentinel data", await File.ReadAllTextAsync(preExistingFile));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
+

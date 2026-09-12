@@ -1381,7 +1381,63 @@ public class ProductionSetTests : IDisposable
         Assert.Equal("error", finding.Severity);
         Assert.True(finding.Line > 0);
     }
+
+    [Fact]
+    public async Task GenerateAsync_PreExistingProductionZip_ThrowsAndPreservesSentinelBytes()
+    {
+        var tempDir = Path.Combine(this.testOutputPath, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+
+        var sentinelBytes = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04 };
+        var zipPath = Path.Combine(tempDir, "CASE001.zip");
+        await File.WriteAllBytesAsync(zipPath, sentinelBytes);
+
+        var request = this.CreateTestRequest(count: 1);
+        request.Output = request.Output with { OutputPath = tempDir };
+        request.Production = request.Production with
+        {
+            ProductionId = "CASE001",
+            ProductionZip = true,
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ProductionSetGenerator.GenerateAsync(request));
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        Assert.True(File.Exists(zipPath), "Pre-existing ZIP archive was deleted!");
+        var actualBytes = await File.ReadAllBytesAsync(zipPath);
+        Assert.Equal(sentinelBytes, actualBytes);
+        Assert.False(Directory.Exists(Path.Combine(tempDir, "CASE001")), "Production directory should not exist on collision!");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenGenerationFails_DoesNotDeletePreExistingZipWhenProductionZipDisabled()
+    {
+        var tempDir = Path.Combine(this.testOutputPath, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+
+        var sentinelBytes = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+        var zipPath = Path.Combine(tempDir, "CASE001.zip");
+        await File.WriteAllBytesAsync(zipPath, sentinelBytes);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var request = this.CreateTestRequest(count: 5);
+        request.Output = request.Output with { OutputPath = tempDir };
+        request.Production = request.Production with
+        {
+            ProductionId = "CASE001",
+            ProductionZip = false,
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProductionSetGenerator.GenerateAsync(request, cts.Token));
+
+        Assert.True(File.Exists(zipPath), "Pre-existing ZIP archive was deleted during failure cleanup when ProductionZip is disabled!");
+        var actualBytes = await File.ReadAllBytesAsync(zipPath);
+        Assert.Equal(sentinelBytes, actualBytes);
+    }
 }
+
 
 
 
