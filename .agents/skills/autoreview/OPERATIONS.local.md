@@ -93,3 +93,11 @@
 - **telemetry**: host=opencode mode=branch specialists=6 bundle=4824c
 - **lessons**: when a refactor claims byte-identical messages, verify by diffing every message literal against the old file — two slipped through until cross-model review caught them; the deep-module seam made the directory-vs-CSV message branch a one-line `fileTypeText is null` ternary, no adapter complexity returned.
 - **suppressions**: none
+
+### 2026-09-12 antigravity:branch:fix/ISSUE-823-preserve-cc-and-attachment-length-throug
+
+- **findings**: 2 ACTION (XmlLoadFileWriter child FileSize tag accessing stripped byte array length, child attachment hashing on stripped byte array), 1 INFO test gap (EDRM XML Tag assertion). Multi-source confirmed (correctness + adversarial): XmlLoadFileWriter line 319 emitted FileSize=0 for child records.
+- **outcome**: accepted and fixed XmlLoadFileWriter line 319 to use `fileData.AttachmentLength`, added Tag FileSize and CC assertions to `StandardModeSpoolingMetadataTests.cs`. All 2,276 unit tests + 60 analyzer tests + 20 golden scenarios passed.
+- **telemetry**: host=antigravity mode=branch specialists=7 bundle=~6000c
+- **lessons**: Even when updating multiple load file writers, double check every occurrence of `.content.Length` (and not just `.FileSizeOverride`) across all composers and writers (e.g. `XmlLoadFileWriter.cs` had two places: line 207 and line 319).
+- **suppressions**: none

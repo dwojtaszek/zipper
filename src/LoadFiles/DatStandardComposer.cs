@@ -121,7 +121,7 @@ internal sealed class DatStandardComposer
                         IdOverride = childId,
                         ControlOverride = this.batesSequence is null ? childId : $"DOC{fileData.WorkItem.Index:D8}_A001",
                         FilePathOverride = attachmentPath,
-                        FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        FileSizeOverride = fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         IsChild = true,
                         BegAttach = parentId,
                         EndAttach = childId,

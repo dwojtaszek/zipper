@@ -72,6 +72,115 @@ public class DiskBackedFileDataListTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesEmailCc_WhenPresentSingleRecipient()
+    {
+        using var list = new DiskBackedFileDataList();
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Email = new Email
+            {
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "Subj",
+                SentDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Cc = "cc001@example.com",
+            }
+        };
+
+        list.Add(originalData);
+        var deserialized = Assert.Single(list.ToList());
+
+        Assert.NotNull(deserialized.Email);
+        Assert.Equal("cc001@example.com", deserialized.Email.Cc);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesEmailCc_WhenPresentMultipleRecipients()
+    {
+        using var list = new DiskBackedFileDataList();
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Email = new Email
+            {
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "Subj",
+                SentDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Cc = "cc001@example.com, cc002@example.com, cc003@example.com",
+            }
+        };
+
+        list.Add(originalData);
+        var deserialized = Assert.Single(list.ToList());
+
+        Assert.NotNull(deserialized.Email);
+        Assert.Equal("cc001@example.com, cc002@example.com, cc003@example.com", deserialized.Email.Cc);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesEmailCc_WhenNullOrEmpty()
+    {
+        using var list = new DiskBackedFileDataList();
+        var dataNullCc = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Email = new Email
+            {
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "Subj",
+                SentDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Cc = null,
+            }
+        };
+        var dataEmptyCc = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 2 },
+            Email = new Email
+            {
+                To = "to2@example.com",
+                From = "from2@example.com",
+                Subject = "Subj2",
+                SentDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Cc = string.Empty,
+            }
+        };
+
+        list.Add(dataNullCc);
+        list.Add(dataEmptyCc);
+        var items = list.ToList();
+
+        Assert.Equal(2, items.Count);
+        Assert.Null(items[0].Email!.Cc);
+        Assert.Equal(string.Empty, items[1].Email!.Cc);
+    }
+
+    [Fact]
+    public void RoundTrip_PreservesAttachmentLength_WithoutSpoolingFullPayload()
+    {
+        using var list = new DiskBackedFileDataList();
+        var attachmentContent = new byte[158];
+        Array.Fill(attachmentContent, (byte)0xAB);
+
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Attachment = ("document.pdf", attachmentContent),
+        };
+
+        list.Add(originalData);
+        var deserialized = Assert.Single(list.ToList());
+
+        Assert.True(deserialized.Attachment.HasValue);
+        Assert.Equal("document.pdf", deserialized.Attachment.Value.filename);
+        Assert.Equal(158, deserialized.AttachmentLength);
+        // Payload in deserialized Attachment is empty to conserve memory/spool disk footprint
+        Assert.Empty(deserialized.Attachment.Value.content);
+    }
+
+    [Fact]
     public void RoundTrip_NullAndEmptyValues_PreservedProperly()
     {
         using var list = new DiskBackedFileDataList();

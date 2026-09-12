@@ -101,7 +101,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                     IdOverride = childId,
                     ControlOverride = this.batesSequence is null ? childId : $"DOC{wi.Index:D8}_A001",
                     FilePathOverride = attachmentPath,
-                    FileSizeOverride = attach.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    FileSizeOverride = fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     IsChild = true,
                     BegAttach = parentId,
                     EndAttach = childId,
