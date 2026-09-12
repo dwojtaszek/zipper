@@ -619,6 +619,19 @@ internal record FileData
 
     public (string filename, byte[] content)? Attachment { get; init; }
 
+    private int? attachmentLength;
+
+    /// <summary>
+    /// Byte length of the Attachment content, stored explicitly because attachment payloads
+    /// are not spooled to disk or preserved in memory for load file generation.
+    /// Access AttachmentLength rather than Attachment.Value.content.Length after spooling/deserialization.
+    /// </summary>
+    public int AttachmentLength
+    {
+        get => this.attachmentLength ?? this.Attachment?.content.Length ?? 0;
+        init => this.attachmentLength = value;
+    }
+
     public IMemoryOwner<byte>? MemoryOwner { get; init; }
 
     public int PageCount { get; init; } = 1;

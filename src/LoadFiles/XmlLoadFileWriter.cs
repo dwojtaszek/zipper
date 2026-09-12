@@ -204,7 +204,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 "ExternalFile",
                 new XAttribute("FilePath", childNativePath),
                 new XAttribute("FileName", sanitizedFilename),
-                new XAttribute("FileSize", attach.content.Length),
+                new XAttribute("FileSize", fileData.AttachmentLength),
                 new XAttribute("Hash", childHash));
 
             if (request.Hash.IsEnabled)
@@ -316,7 +316,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             AddTag(tagsElement, "Custodian", meta.Custodian, namingConvention);
             AddTag(tagsElement, "DateSent", isChild ? string.Empty : meta.DateSent, namingConvention);
             AddTag(tagsElement, "Author", isChild ? string.Empty : meta.Author, namingConvention);
-            AddTag(tagsElement, "FileSize", isChild ? actualAttachment!.Value.content.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) : meta.FileSize, namingConvention);
+            AddTag(tagsElement, "FileSize", isChild ? fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture) : meta.FileSize, namingConvention);
         }
 
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))

@@ -82,6 +82,14 @@ internal sealed class DiskBackedFileDataList : IReadOnlyList<FileData>, IDisposa
     }
 }
 
+/// <summary>
+/// Serializes metadata-only projections of <see cref="FileData"/> for temporary disk-backed spooling.
+/// Heavy payload byte arrays (Native file content, Attachment file content, and Email Body) are
+/// intentionally omitted to minimize memory consumption and spooling disk I/O.
+/// Downstream consumers (load file composers, audit writers, manifest writers) consume only
+/// metadata properties (<see cref="FileData.DataLength"/>, <see cref="FileData.AttachmentLength"/>,
+/// Attachment filename, and Email address/subject/date fields).
+/// </summary>
 internal static class FileDataSerializer
 {
     public static void Serialize(BinaryWriter writer, FileData data)
@@ -115,15 +123,21 @@ internal static class FileDataSerializer
         if (data.Attachment.HasValue)
         {
             writer.Write(data.Attachment.Value.filename ?? string.Empty);
+            writer.Write(data.AttachmentLength);
         }
 
-        writer.Write(data.Email != null);
-        if (data.Email != null)
+        writer.Write(data.Email is not null);
+        if (data.Email is not null)
         {
             writer.Write(data.Email.To ?? string.Empty);
             writer.Write(data.Email.From ?? string.Empty);
             writer.Write(data.Email.Subject ?? string.Empty);
             writer.Write(data.Email.SentDate.Ticks);
+            writer.Write(data.Email.Cc is not null);
+            if (data.Email.Cc is not null)
+            {
+                writer.Write(data.Email.Cc);
+            }
         }
 
         writer.Write(data.WorkItem.ControlNumberOverride ?? string.Empty);
@@ -173,9 +187,11 @@ internal static class FileDataSerializer
         }
 
         (string filename, byte[] content)? attachment = null;
+        int attachmentLength = 0;
         if (reader.ReadBoolean())
         {
             var attFilename = reader.ReadString();
+            attachmentLength = reader.ReadInt32();
             attachment = (attFilename, Array.Empty<byte>());
         }
 
@@ -186,12 +202,19 @@ internal static class FileDataSerializer
             var from = reader.ReadString();
             var subject = reader.ReadString();
             var sentDateTicks = reader.ReadInt64();
+            string? cc = null;
+            if (reader.ReadBoolean())
+            {
+                cc = reader.ReadString();
+            }
+
             email = new Email
             {
                 To = to,
                 From = from,
                 Subject = subject,
-                SentDate = new DateTime(sentDateTicks, DateTimeKind.Utc)
+                SentDate = new DateTime(sentDateTicks, DateTimeKind.Utc),
+                Cc = cc,
             };
         }
 
@@ -230,6 +253,7 @@ internal static class FileDataSerializer
             Hash = hash,
             Hashes = hashes,
             Attachment = attachment,
+            AttachmentLength = attachmentLength,
             Email = email
         };
     }
