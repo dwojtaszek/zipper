@@ -506,4 +506,153 @@ public class SourceDrivenGenerationTests : IDisposable
         Assert.NotEqual("source-custodian", custodian);
         Assert.NotEmpty(custodian);
     }
+
+    [Fact]
+    public async Task StandardArchive_NativeFileCollidesWithGeneratedAttachment_ThrowsAndPreservesPreExistingFiles()
+    {
+        // Issue #824 reproduction: email 1 creates 1_attachment.jpg, which collides with row 3's native file
+        var rows = new[]
+        {
+            Row("mail.eml", "eml"),
+            Row("1_attachment.pdf", "pdf"),
+            Row("1_attachment.jpg", "jpg"),
+            Row("1_attachment.tiff", "tiff"),
+        };
+        var request = this.CreateSourceRequest(rows, seed: 42);
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+        request.Output = request.Output with { TargetZipSize = 4 * 1024 * 1024 };
+
+        var preExistingFile = Path.Combine(this.tempDir, "preexisting.txt");
+        await File.WriteAllTextAsync(preExistingFile, "preexisting content");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ParallelFileGenerator().GenerateFilesAsync(request));
+        Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        // Assert failure leaves no newly created misleading output and preserves pre-existing files
+        Assert.True(File.Exists(preExistingFile), "Pre-existing file must be preserved on collision failure.");
+        Assert.Equal("preexisting content", await File.ReadAllTextAsync(preExistingFile));
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.zip"));
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.dat"));
+    }
+
+    [Fact]
+    public async Task StandardArchive_NativeFileFirst_ThenCollidingAttachment_ThrowsAndCleansUp()
+    {
+        // Collision order 2: Native files 2_attachment.* written first, then Email at index 2 tries to write 2_attachment.<ext>
+        var rows = new[]
+        {
+            Row("2_attachment.pdf", "pdf"),
+            Row("mail2.eml", "eml"),
+            Row("2_attachment.jpg", "jpg"),
+            Row("2_attachment.tiff", "tiff"),
+        };
+        var request = this.CreateSourceRequest(rows, seed: 42);
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ParallelFileGenerator().GenerateFilesAsync(request));
+        Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.zip"));
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.dat"));
+    }
+
+    [Fact]
+    public async Task StandardArchive_CaseInsensitiveCollision_Throws()
+    {
+        // Case-insensitive collision: Native files 1_ATTACHMENT.* vs Attachment 1_attachment.<ext>
+        var rows = new[]
+        {
+            Row("mail.eml", "eml"),
+            Row("1_ATTACHMENT.PDF", "pdf"),
+            Row("1_ATTACHMENT.JPG", "jpg"),
+            Row("1_ATTACHMENT.TIFF", "tiff"),
+        };
+        var request = this.CreateSourceRequest(rows, seed: 42);
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ParallelFileGenerator().GenerateFilesAsync(request));
+        Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.zip"));
+    }
+
+    [Fact]
+    public async Task StandardArchive_SharedStemExtractedTextCollision_Throws()
+    {
+        // Shared stem: doc.pdf and doc.docx with WithText both derive doc.txt
+        var rows = new[]
+        {
+            Row("docs/shared.pdf", "pdf"),
+            Row("docs/shared.docx", "docx"),
+        };
+        var request = this.CreateSourceRequest(rows, withText: true);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ParallelFileGenerator().GenerateFilesAsync(request));
+        Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.zip"));
+    }
+
+    [Fact]
+    public async Task StandardArchive_NativeFileCollidesWithExtractedTextCompanion_Throws()
+    {
+        // Native file doc.txt collides with generated companion text for doc.pdf
+        var rows = new[]
+        {
+            Row("docs/doc.pdf", "pdf"),
+            Row("docs/doc.txt", "pdf"),
+        };
+        var request = this.CreateSourceRequest(rows, withText: true);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ParallelFileGenerator().GenerateFilesAsync(request));
+        Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.GetFiles(this.tempDir, "*.zip"));
+    }
+
+    [Fact]
+    public async Task StandardArchive_NoCollision_AssertEntryContentLengthHashAndLoadFileReferences()
+    {
+        // Valid non-colliding source records with attachments and text
+        var rows = new[]
+        {
+            Row("docs/first.pdf", "pdf"),
+            Row("messages/note.eml", "eml"),
+            Row("images/photo.jpg", "jpg"),
+        };
+        var request = this.CreateSourceRequest(rows, withText: true, seed: 42);
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+        request.Hash = new HashConfig { Mode = HashMode.Actual, Algorithms = new HashSet<HashAlgorithm> { HashAlgorithm.SHA256 } };
+
+        var result = await new ParallelFileGenerator().GenerateFilesAsync(request);
+
+        Assert.True(File.Exists(result.ZipFilePath));
+        using (var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath))
+        {
+            var entries = archive.Entries.ToDictionary(e => e.FullName, StringComparer.OrdinalIgnoreCase);
+            Assert.True(entries.ContainsKey("docs/first.pdf"));
+            Assert.True(entries.ContainsKey("docs/first.txt"));
+            Assert.True(entries.ContainsKey("messages/note.eml"));
+            Assert.True(entries.ContainsKey("messages/note.txt"));
+            Assert.True(entries.ContainsKey("images/photo.jpg"));
+            Assert.True(entries.ContainsKey("images/photo.txt"));
+
+            // Check attachment and attachment text for the email (index 2 in folder messages/)
+            Assert.True(entries.ContainsKey("messages/2_attachment.jpg") || entries.ContainsKey("messages/2_attachment.pdf") || entries.ContainsKey("messages/2_attachment.tiff"));
+
+            // Verify entry lengths and non-empty content
+            foreach (var entry in archive.Entries)
+            {
+                using var s = entry.Open();
+                using var ms = new MemoryStream();
+                s.CopyTo(ms);
+                Assert.Equal(entry.Length, ms.Length);
+                Assert.True(ms.Length > 0, $"Entry '{entry.FullName}' should not be empty");
+            }
+        }
+
+        var datRows = DatRows(result.LoadFilePath, out var header);
+        Assert.Equal(3, datRows.Count);
+        var pathIndex = Array.IndexOf(header, "File Path");
+        Assert.Equal("docs/first.pdf", datRows[0][pathIndex].Trim('þ'));
+        Assert.Equal("messages/note.eml", datRows[1][pathIndex].Trim('þ'));
+        Assert.Equal("images/photo.jpg", datRows[2][pathIndex].Trim('þ'));
+    }
 }
+

@@ -623,6 +623,106 @@ public class ZipArchiveServiceTests
         }
     }
 
+    [Fact]
+    public async Task CreateArchiveAsync_DuplicateNativeFilePath_ThrowsInvalidOperationException()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "pdf", FileCount = 2, Concurrency = 1 }
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 1, FilePathInZip = "same.pdf" }, Data = new byte[10] });
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 2, FilePathInZip = "same.pdf" }, Data = new byte[10] });
+            channel.Writer.Complete();
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+            Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_AttachmentCollidesWithExistingNativeFile_ThrowsInvalidOperationException()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "pdf", FileCount = 2, Concurrency = 1 }
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            // Item 1 writes native file 2_attachment.jpg
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 1, FilePathInZip = "2_attachment.jpg" }, Data = new byte[10] });
+            // Item 2 is an email that generates attachment.jpg -> 2_attachment.jpg
+            await channel.Writer.WriteAsync(new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 2, FilePathInZip = "mail.eml" },
+                Data = new byte[10],
+                Attachment = ("attachment.jpg", new byte[5])
+            });
+            channel.Writer.Complete();
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+            Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_IncludedLoadFileCollidesWithNativeFile_ThrowsInvalidOperationException()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "pdf", FileCount = 1, Concurrency = 1, IncludeLoadFile = true }
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            // Native file has the same name as the included load file
+            await channel.Writer.WriteAsync(new FileData { WorkItem = new FileWorkItem { Index = 1, FilePathInZip = "load.dat" }, Data = new byte[10] });
+            channel.Writer.Complete();
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+            Assert.Contains("collision", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
     private class MockMemoryOwner : System.Buffers.IMemoryOwner<byte>
     {
         public bool IsDisposed { get; private set; }
@@ -631,4 +731,5 @@ public class ZipArchiveServiceTests
         public void Dispose() { IsDisposed = true; }
     }
 }
+
 

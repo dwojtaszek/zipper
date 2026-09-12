@@ -346,9 +346,44 @@ if ! grep -q "collides with the generated Bates sequence value" "$val_err_dir/va
   print_error "Test 6: Bates collision message not found"
 fi
 
+cat > "$TEST_OUTPUT_DIR/attach-collision.csv" <<'CSV'
+FilePath,FileType
+mail.eml,eml
+1_attachment.pdf,pdf
+1_attachment.jpg,jpg
+1_attachment.tiff,tiff
+CSV
+mkdir -p "$TEST_OUTPUT_DIR/val10"
+echo "keep-me" > "$TEST_OUTPUT_DIR/val10/preexisting.txt"
+if zipper --input-csv "$TEST_OUTPUT_DIR/attach-collision.csv" --seed 42 --attachment-rate 100 --target-zip-size 4MB --output-path "$TEST_OUTPUT_DIR/val10" > /dev/null 2> "$val_err_dir/val10.err"; then
+  print_error "Test 6: Native file colliding with generated attachment entry path should fail"
+fi
+if ! grep -q "collision" "$val_err_dir/val10.err"; then
+  print_error "Test 6: collision message not found in error output"
+fi
+if [[ ! -f "$TEST_OUTPUT_DIR/val10/preexisting.txt" ]]; then
+  print_error "Test 6: Pre-existing file was deleted during collision failure cleanup"
+fi
+if find "$TEST_OUTPUT_DIR/val10" -name "*.zip" -o -name "*.dat" | grep -q .; then
+  print_error "Test 6: Collision failure left partial output artifacts"
+fi
+
+cat > "$TEST_OUTPUT_DIR/text-collision.csv" <<'CSV'
+FilePath,FileType
+shared.pdf,pdf
+shared.docx,docx
+CSV
+if zipper --input-csv "$TEST_OUTPUT_DIR/text-collision.csv" --with-text --output-path "$TEST_OUTPUT_DIR/val11" > /dev/null 2> "$val_err_dir/val11.err"; then
+  print_error "Test 6: Shared-stem extracted text collision should fail"
+fi
+if ! grep -q "collision" "$val_err_dir/val11.err"; then
+  print_error "Test 6: Text collision message not found in error output"
+fi
+
 print_success "Test Case 6: Validation failures passed"
 
 # --- All Tests Passed ---
 
 rm -rf "$TEST_OUTPUT_DIR"
 print_success "All Source-Driven Generation E2E tests passed!"
+
