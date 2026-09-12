@@ -14,4 +14,5 @@ internal class ProductionSetResult
     public string BatesRange { get; set; } = string.Empty;
     public int VolumeCount { get; set; }
     public TimeSpan GenerationTime { get; set; }
+    public FileGenerationRequest? EffectiveRequest { get; set; }
 }

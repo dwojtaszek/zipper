@@ -74,6 +74,21 @@ public class BatesModuleTests
     }
 
     [Fact]
+    public void TryBuild_CommaSeparatedPrefix_BuildsConfigWithPrimaryPrefixAndList()
+    {
+        Assert.True(TryBuild(true, 2, "continuous", 5, new[] { "--bates-prefix", "PROD, PROD2" }, out var config));
+        Assert.NotNull(config);
+        Assert.Equal("PROD", config!.Prefix);
+        Assert.Equal(new[] { "PROD", "PROD2" }, config.Prefixes);
+    }
+
+    [Fact]
+    public void TryBuild_MultiPrefixWithDirectoryTraversal_ReturnsFalse()
+    {
+        Assert.False(TryBuild(true, 2, "continuous", 5, new[] { "--bates-prefix", "PROD, .." }, out _));
+    }
+
+    [Fact]
     public void TryBuild_PrefixWithPathSeparator_ReturnsFalse()
     {
         Assert.False(TryBuild(false, 1, "continuous", null, new[] { "--bates-prefix", "foo/bar" }, out _));

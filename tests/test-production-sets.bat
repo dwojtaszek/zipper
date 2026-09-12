@@ -178,7 +178,30 @@ powershell -NoProfile -Command ^
   "if ($m2.batesNumberEnd -ne 'CONT00000019') { throw 'm2 end invalid' }" ^
   "if ($m3.batesNumberStart -ne 'CONT00000020') { throw 'm3 start invalid' }" ^
   "if ($m3.batesNumberEnd -ne 'CONT00000024') { throw 'm3 end invalid' }" ^
-  "if ($m1.batesRangeMode -ne 'continuous') { throw 'm1 mode invalid' }"
+  "if ($m1.batesRangeMode -ne 'continuous') { throw 'm1 mode invalid' }" ^
+  "$sets = @(('CONT_001', 10), ('CONT_002', 15), ('CONT_003', 20));" ^
+  "foreach ($s in $sets) {" ^
+  "  $f = $s[0]; $start = $s[1];" ^
+  "  $dat = Get-Content (Join-Path $root (Join-Path $f 'DATA\loadfile.dat'));" ^
+  "  $opt = Get-Content (Join-Path $root (Join-Path $f 'DATA\loadfile.opt'));" ^
+  "  if ($dat.Count -ne 6) { throw ('DAT count invalid in ' + $f) };" ^
+  "  if ($opt.Count -ne 5) { throw ('OPT count invalid in ' + $f) };" ^
+  "  $headers = $dat[0] -split [char]0x14 | ForEach-Object { $_.Trim([char]0xFE) };" ^
+  "  $docIdIdx = [array]::IndexOf($headers, 'DOCID');" ^
+  "  $batesIdx = [array]::IndexOf($headers, 'BATES_NUMBER');" ^
+  "  $nativeIdx = [array]::IndexOf($headers, 'NATIVE_PATH');" ^
+  "  for ($i = 0; $i -lt 5; $i++) {" ^
+  "    $expBates = 'CONT' + ($start + $i).ToString('D8');" ^
+  "    $fields = $dat[$i + 1] -split [char]0x14 | ForEach-Object { $_.Trim([char]0xFE) };" ^
+  "    if ($fields[$docIdIdx] -ne $expBates) { throw ('DOCID mismatch in ' + $f) };" ^
+  "    if ($fields[$batesIdx] -ne $expBates) { throw ('BATES mismatch in ' + $f) };" ^
+  "    $optRow = $opt[$i] -split ',';" ^
+  "    if ($optRow[0] -ne $expBates) { throw ('OPT Bates mismatch in ' + $f) };" ^
+  "    $nativeRel = $fields[$nativeIdx].Replace('\', [IO.Path]::DirectorySeparatorChar);" ^
+  "    $nativePath = Join-Path (Join-Path $root $f) $nativeRel;" ^
+  "    if (-not (Test-Path $nativePath)) { throw ('Missing native file in ' + $f) };" ^
+  "  }" ^
+  "}"
 if errorlevel 1 (
   echo [ ERROR ] Test 4 validation failed
   exit /b 1

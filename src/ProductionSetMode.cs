@@ -58,7 +58,7 @@ internal class ProductionSetMode : IGenerationMode
             {
                 ProductionSetPath = result.ProductionPath,
                 LoadFiles = loadFiles,
-                Request = request,
+                Request = result.EffectiveRequest ?? request,
             };
             ValidationOrchestrator.RunAfterGeneration(context);
         }

@@ -58,28 +58,39 @@ public sealed class BatesSequence
             return false;
         }
 
-        if (!string.IsNullOrEmpty(config.Prefix))
+        if (!ValidatePrefix(config.Prefix, out errorMessage))
         {
-            if (string.Equals(config.Prefix, "..", StringComparison.Ordinal) || config.Prefix.Contains("../", StringComparison.Ordinal) || config.Prefix.Contains("..\\", StringComparison.Ordinal))
+            return false;
+        }
+
+        sequence = new BatesSequence(config);
+        return true;
+    }
+
+    internal static bool ValidatePrefix(string? prefix, out string errorMessage)
+    {
+        errorMessage = string.Empty;
+        if (!string.IsNullOrEmpty(prefix))
+        {
+            if (string.Equals(prefix, "..", StringComparison.Ordinal) || prefix.Contains("../", StringComparison.Ordinal) || prefix.Contains("..\\", StringComparison.Ordinal))
             {
                 errorMessage = "--bates-prefix must not contain directory traversal sequences.";
                 return false;
             }
 
-            if (config.Prefix.Contains('/', StringComparison.Ordinal) || config.Prefix.Contains('\\', StringComparison.Ordinal))
+            if (prefix.Contains('/', StringComparison.Ordinal) || prefix.Contains('\\', StringComparison.Ordinal))
             {
                 errorMessage = "--bates-prefix must not contain path separators.";
                 return false;
             }
 
-            if (!config.Prefix.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+            if (!prefix.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
             {
                 errorMessage = "--bates-prefix must only contain letters, digits, underscores, and hyphens.";
                 return false;
             }
         }
 
-        sequence = new BatesSequence(config);
         return true;
     }
 

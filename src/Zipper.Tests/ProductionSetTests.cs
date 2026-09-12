@@ -1003,6 +1003,44 @@ public class ProductionSetTests : IDisposable
         Assert.Equal(3, doc3.RootElement.GetProperty("rollingSequenceNumber").GetInt32());
         Assert.Equal("PROD00000011", doc3.RootElement.GetProperty("batesNumberStart").GetString());
         Assert.Equal("PROD00000015", doc3.RootElement.GetProperty("batesNumberEnd").GetString());
+
+        // Check DAT, OPT, and Native Files agree for all 3 sets
+        var sets = new[]
+        {
+            (Dir: dir1, Start: 1, End: 5),
+            (Dir: dir2, Start: 6, End: 10),
+            (Dir: dir3, Start: 11, End: 15),
+        };
+
+        foreach (var (dir, start, _) in sets)
+        {
+            var datLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.dat"));
+            var optLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.opt"));
+            Assert.Equal(6, datLines.Length); // header + 5 rows
+            Assert.Equal(5, optLines.Length);
+
+            var headers = Validation.ProductionSetPostValidator.ParseDatLine(datLines[0], '\x14', '\xfe');
+            int docIdIdx = headers.IndexOf("DOCID");
+            int batesIdx = headers.IndexOf("BATES_NUMBER");
+            int nativeIdx = headers.IndexOf("NATIVE_PATH");
+
+            for (int i = 0; i < 5; i++)
+            {
+                var expectedBates = $"PROD{start + i:D8}";
+                var datRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[i + 1], '\x14', '\xfe');
+                Assert.Equal(expectedBates, datRow[docIdIdx]);
+                Assert.Equal(expectedBates, datRow[batesIdx]);
+                Assert.Equal($@"NATIVES\VOL001\{expectedBates}.pdf", datRow[nativeIdx]);
+
+                // Check native file on disk
+                Assert.True(File.Exists(Path.Combine(dir, "NATIVES", "VOL001", $"{expectedBates}.pdf")));
+
+                // Check OPT row
+                var optRow = optLines[i].Split(',');
+                Assert.Equal(expectedBates, optRow[0]);
+                Assert.Equal($@"IMAGES\VOL001\{expectedBates}.tif", optRow[2]);
+            }
+        }
     }
 
     [Fact]
@@ -1045,6 +1083,245 @@ public class ProductionSetTests : IDisposable
         Assert.Equal("PROD002", doc2.RootElement.GetProperty("productionId").GetString());
         Assert.Equal("PROD00000001", doc2.RootElement.GetProperty("batesNumberStart").GetString());
         Assert.Equal("PROD00000005", doc2.RootElement.GetProperty("batesNumberEnd").GetString());
+
+        // Check DAT, OPT, and Native Files restart for both sets
+        foreach (var dir in new[] { dir1, dir2 })
+        {
+            var datLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.dat"));
+            var optLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.opt"));
+            Assert.Equal(6, datLines.Length);
+            Assert.Equal(5, optLines.Length);
+
+            var headers = Validation.ProductionSetPostValidator.ParseDatLine(datLines[0], '\x14', '\xfe');
+            int docIdIdx = headers.IndexOf("DOCID");
+            int batesIdx = headers.IndexOf("BATES_NUMBER");
+            int nativeIdx = headers.IndexOf("NATIVE_PATH");
+
+            for (int i = 0; i < 5; i++)
+            {
+                var expectedBates = $"PROD{1 + i:D8}";
+                var datRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[i + 1], '\x14', '\xfe');
+                Assert.Equal(expectedBates, datRow[docIdIdx]);
+                Assert.Equal(expectedBates, datRow[batesIdx]);
+                Assert.Equal($@"NATIVES\VOL001\{expectedBates}.pdf", datRow[nativeIdx]);
+                Assert.True(File.Exists(Path.Combine(dir, "NATIVES", "VOL001", $"{expectedBates}.pdf")));
+
+                var optRow = optLines[i].Split(',');
+                Assert.Equal(expectedBates, optRow[0]);
+                Assert.Equal($@"IMAGES\VOL001\{expectedBates}.tif", optRow[2]);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_ContinuousBates_WithFamilies_GeneratesSequentialRangesWithAttachments()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "2", "--output-path", this.testOutputPath,
+            "--bates-prefix", "FAM",
+            "--bates-start", "1",
+            "--production-id", "FAM001",
+            "--rolling-count", "2",
+            "--rolling-bates-mode", "continuous",
+            "--type", "eml",
+            "--with-families",
+            "--seed", "42",
+            "--attachment-rate", "100"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        var dir1 = Path.Combine(this.testOutputPath, "FAM001");
+        var dir2 = Path.Combine(this.testOutputPath, "FAM002");
+        Assert.True(Directory.Exists(dir1));
+        Assert.True(Directory.Exists(dir2));
+
+        // Set 1 has parents FAM00000001, FAM00000002
+        // Set 2 has parents FAM00000003, FAM00000004
+        var expectedSetStarts = new[] { (Dir: dir1, ParentStart: 1), (Dir: dir2, ParentStart: 3) };
+
+        foreach (var (dir, parentStart) in expectedSetStarts)
+        {
+            var datLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.dat"));
+            var optLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.opt"));
+
+            var headers = Validation.ProductionSetPostValidator.ParseDatLine(datLines[0], '\x14', '\xfe');
+            int docIdIdx = headers.IndexOf("DOCID");
+            int batesIdx = headers.IndexOf("BATES_NUMBER");
+            int begAttachIdx = headers.IndexOf("BEGATTACH");
+            int endAttachIdx = headers.IndexOf("ENDATTACH");
+            int parentDocIdIdx = headers.IndexOf("PARENTDOCID");
+
+            // 2 parents + 2 attachments = 4 rows (+ 1 header)
+            Assert.Equal(5, datLines.Length);
+            Assert.Equal(4, optLines.Length);
+
+            for (int p = 0; p < 2; p++)
+            {
+                var expectedParentBates = $"FAM{parentStart + p:D8}";
+                var expectedChildBates = $"{expectedParentBates}_A001";
+
+                int parentRowIdx = (p * 2) + 1;
+                int childRowIdx = (p * 2) + 2;
+
+                var parentDatRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[parentRowIdx], '\x14', '\xfe');
+                var childDatRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[childRowIdx], '\x14', '\xfe');
+
+                // Parent assertions
+                Assert.Equal(expectedParentBates, parentDatRow[docIdIdx]);
+                Assert.Equal(expectedParentBates, parentDatRow[batesIdx]);
+                Assert.Equal(expectedParentBates, parentDatRow[begAttachIdx]);
+                Assert.Equal(expectedChildBates, parentDatRow[endAttachIdx]);
+                Assert.Empty(parentDatRow[parentDocIdIdx]);
+
+                // Child assertions
+                Assert.Equal(expectedChildBates, childDatRow[docIdIdx]);
+                Assert.Equal(expectedChildBates, childDatRow[batesIdx]);
+                Assert.Equal(expectedParentBates, childDatRow[begAttachIdx]);
+                Assert.Equal(expectedChildBates, childDatRow[endAttachIdx]);
+                Assert.Equal(expectedParentBates, childDatRow[parentDocIdIdx]);
+
+                // OPT assertions
+                var parentOptRow = optLines[p * 2].Split(',');
+                var childOptRow = optLines[(p * 2) + 1].Split(',');
+                Assert.Equal(expectedParentBates, parentOptRow[0]);
+                Assert.Equal(expectedChildBates, childOptRow[0]);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_Rolling_CustomPrefixesAndStarts_GeneratesIndependentRanges()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "3", "--output-path", this.testOutputPath,
+            "--bates-prefix", "ALPHA,BETA",
+            "--bates-start", "100,500",
+            "--production-id", "SET001",
+            "--rolling-count", "2"
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        var dir1 = Path.Combine(this.testOutputPath, "SET001");
+        var dir2 = Path.Combine(this.testOutputPath, "SET002");
+        Assert.True(Directory.Exists(dir1));
+        Assert.True(Directory.Exists(dir2));
+
+        var expectedConfigs = new[]
+        {
+            (Dir: dir1, Prefix: "ALPHA", Start: 100),
+            (Dir: dir2, Prefix: "BETA", Start: 500),
+        };
+
+        foreach (var (dir, prefix, start) in expectedConfigs)
+        {
+            var manifestPath = Path.Combine(dir, "_manifest.json");
+            var json = await File.ReadAllTextAsync(manifestPath);
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal($"{prefix}{start:D8}", doc.RootElement.GetProperty("batesNumberStart").GetString());
+            Assert.Equal($"{prefix}{start + 2:D8}", doc.RootElement.GetProperty("batesNumberEnd").GetString());
+
+            var datLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.dat"));
+            var optLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.opt"));
+            Assert.Equal(4, datLines.Length);
+            Assert.Equal(3, optLines.Length);
+
+            var headers = Validation.ProductionSetPostValidator.ParseDatLine(datLines[0], '\x14', '\xfe');
+            int docIdIdx = headers.IndexOf("DOCID");
+            int batesIdx = headers.IndexOf("BATES_NUMBER");
+            int nativeIdx = headers.IndexOf("NATIVE_PATH");
+
+            for (int i = 0; i < 3; i++)
+            {
+                var expectedBates = $"{prefix}{start + i:D8}";
+                var datRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[i + 1], '\x14', '\xfe');
+                Assert.Equal(expectedBates, datRow[docIdIdx]);
+                Assert.Equal(expectedBates, datRow[batesIdx]);
+                Assert.Equal($@"NATIVES\VOL001\{expectedBates}.pdf", datRow[nativeIdx]);
+                Assert.True(File.Exists(Path.Combine(dir, "NATIVES", "VOL001", $"{expectedBates}.pdf")));
+
+                var optRow = optLines[i].Split(',');
+                Assert.Equal(expectedBates, optRow[0]);
+                Assert.Equal($@"IMAGES\VOL001\{expectedBates}.tif", optRow[2]);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_Rolling_SourceDriven_GeneratesSequentialRanges()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = this.testOutputPath,
+                FileCount = 2,
+                FileType = "pdf",
+                SourceFileTypes = new List<string> { "docx", "pdf" },
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 10,
+                ProductionId = "SRC001",
+                RollingCount = 2,
+                RollingBatesMode = RollingBatesMode.Continuous,
+            },
+            Bates = new BatesNumberConfig { Prefix = "SRC", Start = 10, Digits = 8 },
+            SourceRecords = new List<Zipper.SourceInput.SourceRecord>
+            {
+                new() { RelativePath = "folder/first.pdf", FileType = "pdf" },
+                new() { RelativePath = "folder/second.docx", FileType = "docx" },
+            },
+        };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        Assert.NotNull(result);
+
+        var dir1 = Path.Combine(this.testOutputPath, "SRC001");
+        var dir2 = Path.Combine(this.testOutputPath, "SRC002");
+        Assert.True(Directory.Exists(dir1));
+        Assert.True(Directory.Exists(dir2));
+
+        // Set 1: SRC00000010, SRC00000011
+        // Set 2: SRC00000012, SRC00000013
+        var sets = new[]
+        {
+            (Dir: dir1, Start: 10),
+            (Dir: dir2, Start: 12),
+        };
+
+        foreach (var (dir, start) in sets)
+        {
+            var datLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.dat"));
+            var optLines = await File.ReadAllLinesAsync(Path.Combine(dir, "DATA", "loadfile.opt"));
+            Assert.Equal(3, datLines.Length);
+            Assert.Equal(2, optLines.Length);
+
+            var headers = Validation.ProductionSetPostValidator.ParseDatLine(datLines[0], '\x14', '\xfe');
+            int docIdIdx = headers.IndexOf("DOCID");
+            int batesIdx = headers.IndexOf("BATES_NUMBER");
+
+            for (int i = 0; i < 2; i++)
+            {
+                var expectedBates = $"SRC{start + i:D8}";
+                var datRow = Validation.ProductionSetPostValidator.ParseDatLine(datLines[i + 1], '\x14', '\xfe');
+                Assert.Equal(expectedBates, datRow[docIdIdx]);
+                Assert.Equal(expectedBates, datRow[batesIdx]);
+
+                var optRow = optLines[i].Split(',');
+                Assert.Equal(expectedBates, optRow[0]);
+            }
+        }
     }
 
     // === Redacted Production Tests ===
