@@ -6,6 +6,7 @@
 # Output: JSON to stdout
 
 set -euo pipefail
+shopt -s inherit_errexit 2>/dev/null || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -18,25 +19,58 @@ if [[ ! -x "$ZIPPER" ]]; then
     exit 1
 fi
 
-TIME_CMD="/usr/bin/time"
+TIME_CMD="${TIME_CMD:-/usr/bin/time}"
 if [[ ! -x "$TIME_CMD" ]]; then
-    echo "Error: /usr/bin/time not found (required for RSS measurement)" >&2
+    if [[ "$TIME_CMD" == "/usr/bin/time" ]]; then
+        echo "Error: /usr/bin/time not found (required for RSS measurement)" >&2
+    else
+        echo "Error: Time command not found at $TIME_CMD (required for RSS measurement)" >&2
+    fi
     exit 1
 fi
 
 run_scenario() {
-    shift  # skip scenario name (used by caller for clarity)
-    local out_dir
+    local scenario_name="$1"
+    shift
+    local out_dir time_file err_file
     out_dir=$(mktemp -d)
+    time_file=$(mktemp)
+    err_file=$(mktemp)
+
+    trap 'rm -rf "$out_dir" "$time_file" "$err_file"' EXIT INT TERM
+
+    local exit_code=0
+    "$TIME_CMD" -o "$time_file" -f '%e %M' "$ZIPPER" "$@" --output-path "$out_dir" 2>"$err_file" >/dev/null || exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
+        if [[ -s "$err_file" ]]; then
+            cat "$err_file" >&2
+        fi
+        echo "Error: Scenario '$scenario_name' failed (CLI exited with code $exit_code)" >&2
+        rm -rf "$out_dir" "$time_file" "$err_file"
+        trap - EXIT INT TERM
+        return $exit_code
+    fi
 
     local time_output
-    time_output=$("$TIME_CMD" -f '%e %M' "$ZIPPER" "$@" --output-path "$out_dir" 2>&1 >/dev/null | tail -1)
+    time_output=$(cat "$time_file" 2>/dev/null || true)
 
     local wall_s rss_kb
     wall_s=$(echo "$time_output" | awk '{print $1}')
     rss_kb=$(echo "$time_output" | awk '{print $2}')
 
-    rm -rf "$out_dir"
+    if [[ -z "$wall_s" || -z "$rss_kb" ]] || ! [[ "$wall_s" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! [[ "$rss_kb" =~ ^[0-9]+$ ]]; then
+        if [[ -s "$err_file" ]]; then
+            cat "$err_file" >&2
+        fi
+        echo "Error: Scenario '$scenario_name' failed: malformed or missing timing output (got: '$time_output')" >&2
+        rm -rf "$out_dir" "$time_file" "$err_file"
+        trap - EXIT INT TERM
+        return 1
+    fi
+
+    rm -rf "$out_dir" "$time_file" "$err_file"
+    trap - EXIT INT TERM
     echo "{\"wall_s\": $wall_s, \"rss_kb\": $rss_kb}"
 }
 
