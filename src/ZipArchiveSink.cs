@@ -11,6 +11,11 @@ namespace Zipper;
 internal class ZipArchiveSink : IArchiveSink
 {
     /// <summary>
+    /// Gets or sets an existing archive stream to use, if provided.
+    /// </summary>
+    public Stream? ArchiveStream { get; set; }
+
+    /// <summary>
     /// Creates an Archive containing the generated Native Files and optionally a Load File.
     /// </summary>
     /// <param name="zipFilePath">Path where the Archive should be created.</param>
@@ -18,26 +23,11 @@ internal class ZipArchiveSink : IArchiveSink
     /// <param name="loadFilePath">Path where Load File should be saved separately (if not included in Archive).</param>
     /// <param name="request">File generation request parameters.</param>
     /// <param name="fileDataReader">Channel reader for receiving generated file data.</param>
+    /// <param name="onItemCommitted">Callback invoked when an item is committed and disposed.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The actual Load File path that was created (or original if included in Archive).</returns>
-    public Task<string> CreateArchiveAsync(
-        string zipFilePath,
-        string loadFileName,
-        string loadFilePath,
-        FileGenerationRequest request,
-        ChannelReader<FileData> fileDataReader,
-        Action<FileData>? onItemCommitted = null,
-        CancellationToken cancellationToken = default)
-    {
-        return this.CreateArchiveAsync(zipFilePath, null, loadFileName, loadFilePath, request, fileDataReader, onItemCommitted, cancellationToken);
-    }
-
-    /// <summary>
-    /// Creates an Archive containing the generated Native Files and optionally a Load File, using an existing archive stream if provided.
-    /// </summary>
     public async Task<string> CreateArchiveAsync(
         string zipFilePath,
-        Stream? archiveStream,
         string loadFileName,
         string loadFilePath,
         FileGenerationRequest request,
@@ -45,6 +35,7 @@ internal class ZipArchiveSink : IArchiveSink
         Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
     {
+        var archiveStream = this.ArchiveStream;
         if (archiveStream is null)
         {
             archiveStream = new FileStream(zipFilePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
@@ -65,10 +56,18 @@ internal class ZipArchiveSink : IArchiveSink
                 var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : null;
 
                 var outOfOrderBuffer = new Dictionary<long, FileData>();
+                var processingContext = new ZipProcessingContext(
+                    archive,
+                    request,
+                    standardTextContent,
+                    emlTextContent,
+                    usedEntryPaths,
+                    processedFiles,
+                    onItemCommitted);
 
                 try
                 {
-                    await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, onItemCommitted, cancellationToken).ConfigureAwait(false);
+                    await DrainReaderAndOrderFilesAsync(processingContext, fileDataReader, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -139,16 +138,10 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
-    private async Task DrainReaderAndOrderFilesAsync(
-        ZipArchive archive,
+    private static async Task DrainReaderAndOrderFilesAsync(
+        ZipProcessingContext context,
         ChannelReader<FileData> fileDataReader,
-        FileGenerationRequest request,
-        byte[]? standardTextContent,
-        byte[]? emlTextContent,
-        HashSet<string> usedEntryPaths,
-        DiskBackedFileDataList processedFiles,
         Dictionary<long, FileData> outOfOrderBuffer,
-        Action<FileData>? onItemCommitted,
         CancellationToken cancellationToken)
     {
         long nextExpectedIndex = 1;
@@ -157,12 +150,12 @@ internal class ZipArchiveSink : IArchiveSink
         {
             if (incomingFileData.WorkItem.Index == nextExpectedIndex)
             {
-                ProcessFileData(archive, incomingFileData, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, onItemCommitted);
+                ProcessFileData(context, incomingFileData);
                 nextExpectedIndex++;
 
                 while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
                 {
-                    ProcessFileData(archive, buffered, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, onItemCommitted);
+                    ProcessFileData(context, buffered);
                     nextExpectedIndex++;
                 }
             }
@@ -173,7 +166,7 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
-    private void CleanupOperations(Dictionary<long, FileData> outOfOrderBuffer, ChannelReader<FileData> fileDataReader)
+    private static void CleanupOperations(Dictionary<long, FileData> outOfOrderBuffer, ChannelReader<FileData> fileDataReader)
     {
         foreach (var buffered in outOfOrderBuffer.Values)
         {
@@ -187,38 +180,47 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
-    private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? standardTextContent, byte[]? emlTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles, Action<FileData>? onItemCommitted)
+    private static void ProcessFileData(ZipProcessingContext context, FileData fileData)
     {
         try
         {
-            processedFiles.Add(fileData);
+            context.ProcessedFiles.Add(fileData);
 
-            WriteFileToArchive(archive, fileData, usedEntryPaths);
+            WriteFileToArchive(context.Archive, fileData, context.UsedEntryPaths);
 
-            if (request.Output.WithText)
+            if (context.Request.Output.WithText)
             {
-                var textContent = string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
-                    ? emlTextContent!
-                    : standardTextContent!;
-                WriteExtractedTextToArchive(archive, fileData, request, textContent, usedEntryPaths);
+                var textContent = string.Equals(fileData.WorkItem.EffectiveFileType(context.Request), "eml", StringComparison.Ordinal)
+                    ? context.EmlTextContent!
+                    : context.StandardTextContent!;
+                WriteExtractedTextToArchive(context.Archive, fileData, context.Request, textContent, context.UsedEntryPaths);
             }
 
             if (fileData.Attachment.HasValue)
             {
-                WriteAttachmentToArchive(archive, fileData, usedEntryPaths);
+                WriteAttachmentToArchive(context.Archive, fileData, context.UsedEntryPaths);
             }
 
-            if (fileData.Attachment.HasValue && request.Output.WithText)
+            if (fileData.Attachment.HasValue && context.Request.Output.WithText)
             {
-                WriteAttachmentTextToArchive(archive, fileData, usedEntryPaths);
+                WriteAttachmentTextToArchive(context.Archive, fileData, context.UsedEntryPaths);
             }
         }
         finally
         {
             fileData.MemoryOwner?.Dispose();
-            onItemCommitted?.Invoke(fileData);
+            context.OnItemCommitted?.Invoke(fileData);
         }
     }
+
+    private sealed record ZipProcessingContext(
+        ZipArchive Archive,
+        FileGenerationRequest Request,
+        byte[]? StandardTextContent,
+        byte[]? EmlTextContent,
+        HashSet<string> UsedEntryPaths,
+        DiskBackedFileDataList ProcessedFiles,
+        Action<FileData>? OnItemCommitted);
 
     private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
     {

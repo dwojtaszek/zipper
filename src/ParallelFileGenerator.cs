@@ -38,7 +38,7 @@ public class ParallelFileGenerator
 
     public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
-        string? zipFilePath = null;
+        string zipFilePath = string.Empty;
         string? loadFilePath = null;
         var createdFiles = new List<string>();
         FileStream? archiveStream = null;
@@ -163,20 +163,30 @@ public class ParallelFileGenerator
             Task<string> consumerTask;
             if (this.archiveSink is ZipArchiveSink zipSink)
             {
-                consumerTask = zipSink.CreateArchiveAsync(zipFilePath!, archiveStream, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
+                zipSink.ArchiveStream = archiveStream;
+                consumerTask = zipSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
             }
             else
             {
                 archiveStream.Dispose();
                 archiveStream = null;
-                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath!, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
+                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
             }
 
             // Generate files in parallel (producers)
             try
             {
+                var workerContext = new WorkerContext(
+                    workChannelReader,
+                    paddingPerFile,
+                    resultChannel.Writer,
+                    orderingWindow,
+                    request,
+                    generators,
+                    pipelineCts);
+
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, orderingWindow, request, generators, pipelineCts, cancellationToken)))
+                    .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workerContext, cancellationToken)))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -190,7 +200,7 @@ public class ParallelFileGenerator
                     if (completed == consumerTask && consumerTask.IsFaulted)
                     {
                         // Consumer died — cancel pipeline CTS and complete channels to unblock producers and the feeder
-                        pipelineCts.Cancel();
+                        await pipelineCts.CancelAsync().ConfigureAwait(false);
                         orderingWindow.CancelAll(consumerTask.Exception);
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
                         workChannelWriter.TryComplete(consumerTask.Exception);
@@ -400,29 +410,21 @@ public class ParallelFileGenerator
         return (channel.Reader, writer);
     }
 
-    private async Task ProcessFileWorkAsync(
-        ChannelReader<FileWorkItem> reader,
-        long paddingPerFile,
-        ChannelWriter<FileData> writer,
-        OrderingWindow orderingWindow,
-        FileGenerationRequest request,
-        IReadOnlyDictionary<string, IFileGenerator> generators,
-        CancellationTokenSource pipelineCts,
-        CancellationToken cancellationToken)
+    private async Task ProcessFileWorkAsync(WorkerContext context, CancellationToken cancellationToken)
     {
         long filesProcessed = 0;
 
         try
         {
-            await foreach (var workItem in reader.ReadAllAsync(pipelineCts.Token).ConfigureAwait(false))
+            await foreach (var workItem in context.Reader.ReadAllAsync(context.PipelineCts.Token).ConfigureAwait(false))
             {
-                await orderingWindow.WaitForPermitAsync(workItem.Index, pipelineCts.Token).ConfigureAwait(false);
+                await context.OrderingWindow.WaitForPermitAsync(workItem.Index, context.PipelineCts.Token).ConfigureAwait(false);
 
-                var fileGenerator = generators[workItem.EffectiveFileType(request)];
-                var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+                var fileGenerator = context.Generators[workItem.EffectiveFileType(context.Request)];
+                var fileData = this.GenerateFileData(workItem, context.PaddingPerFile, context.Request, fileGenerator);
                 try
                 {
-                    await writer.WriteAsync(fileData, pipelineCts.Token).ConfigureAwait(false);
+                    await context.Writer.WriteAsync(fileData, context.PipelineCts.Token).ConfigureAwait(false);
                 }
                 catch
                 {
@@ -446,11 +448,20 @@ public class ParallelFileGenerator
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            pipelineCts.Cancel();
-            orderingWindow.CancelAll(ex);
+            await context.PipelineCts.CancelAsync().ConfigureAwait(false);
+            context.OrderingWindow.CancelAll(ex);
             throw;
         }
     }
+
+    private sealed record WorkerContext(
+        ChannelReader<FileWorkItem> Reader,
+        long PaddingPerFile,
+        ChannelWriter<FileData> Writer,
+        OrderingWindow OrderingWindow,
+        FileGenerationRequest Request,
+        IReadOnlyDictionary<string, IFileGenerator> Generators,
+        CancellationTokenSource PipelineCts);
 
     internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
     {
