@@ -27,6 +27,8 @@ public record OutputConfig
 
     public int Concurrency { get; init; } = PerformanceConstants.DefaultConcurrency;
 
+    public int? MaxInFlight { get; init; }
+
     public bool WithText { get; init; }
 
     public long? TargetZipSize { get; init; }

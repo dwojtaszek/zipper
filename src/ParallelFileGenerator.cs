@@ -13,14 +13,27 @@ public class ParallelFileGenerator
 {
     private readonly PerformanceMonitor performanceMonitor = new PerformanceMonitor();
     private readonly IArchiveSink archiveSink;
+    private readonly IReadOnlyDictionary<string, IFileGenerator>? customGenerators;
+    private readonly int? maxInFlight;
 
     public ParallelFileGenerator() : this(new ZipArchiveSink())
     {
     }
 
-    internal ParallelFileGenerator(IArchiveSink archiveSink)
+    public ParallelFileGenerator(int maxInFlight) : this(new ZipArchiveSink(), maxInFlight: maxInFlight)
+    {
+    }
+
+    internal ParallelFileGenerator(IArchiveSink archiveSink, int? maxInFlight = null)
+        : this(archiveSink, customGenerators: null, maxInFlight: maxInFlight)
+    {
+    }
+
+    internal ParallelFileGenerator(IArchiveSink archiveSink, IReadOnlyDictionary<string, IFileGenerator>? customGenerators, int? maxInFlight = null)
     {
         this.archiveSink = archiveSink ?? throw new ArgumentNullException(nameof(archiveSink));
+        this.customGenerators = customGenerators;
+        this.maxInFlight = maxInFlight;
     }
 
     public async Task<FileGenerationResult> GenerateFilesAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
@@ -55,7 +68,7 @@ public class ParallelFileGenerator
                 request.Output = request.Output with { Concurrency = PerformanceConstants.DefaultConcurrency };
             }
 
-            var generators = BuildGenerators(request);
+            var generators = this.customGenerators ?? BuildGenerators(request);
 
             Directory.CreateDirectory(request.Output.OutputPath);
 
@@ -125,31 +138,52 @@ public class ParallelFileGenerator
                 paddingPerFile = this.CalculatePaddingPerFile(request.Output.TargetZipSize.Value, baseSize, request.Output.FileCount, request.Output.WithText);
             }
 
+            int inFlightBound = this.maxInFlight ?? request.Output.MaxInFlight ?? Math.Max(request.Output.Concurrency * 2, 2);
+            if (inFlightBound <= 0)
+            {
+                inFlightBound = Math.Max(request.Output.Concurrency * 2, 2);
+            }
+
+            using var windowSemaphore = new SemaphoreSlim(inFlightBound, inFlightBound);
+            using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
             // Create channels for work distribution
-            var (workChannelReader, workChannelWriter) = CreateWorkChannel(request, cancellationToken);
-            var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(request.Output.Concurrency * 2)
+            var (workChannelReader, workChannelWriter) = CreateWorkChannel(request, pipelineCts.Token);
+            var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(inFlightBound)
             {
                 FullMode = BoundedChannelFullMode.Wait,
             });
+
+            Action<FileData> onItemCommitted = _ =>
+            {
+                try
+                {
+                    windowSemaphore.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore if semaphore was disposed on early teardown
+                }
+            };
 
             // Start the consumer task to write the archive concurrently
             Task<string> consumerTask;
             if (this.archiveSink is ZipArchiveSink zipSink)
             {
-                consumerTask = zipSink.CreateArchiveAsync(zipFilePath!, archiveStream, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+                consumerTask = zipSink.CreateArchiveAsync(zipFilePath!, archiveStream, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
             }
             else
             {
                 archiveStream.Dispose();
                 archiveStream = null;
-                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath!, loadFileName, loadFilePath, request, resultChannel.Reader, cancellationToken);
+                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath!, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
             }
 
             // Generate files in parallel (producers)
             try
             {
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, request, generators, cancellationToken))
+                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, windowSemaphore, request, generators, pipelineCts, cancellationToken))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -162,7 +196,8 @@ public class ParallelFileGenerator
                     var completed = await Task.WhenAny(allProducersTask, consumerTask).ConfigureAwait(false);
                     if (completed == consumerTask && consumerTask.IsFaulted)
                     {
-                        // Consumer died — complete channels with its exception to unblock producers and the feeder
+                        // Consumer died — cancel pipeline CTS and complete channels to unblock producers and the feeder
+                        pipelineCts.Cancel();
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
                         workChannelWriter.TryComplete(consumerTask.Exception);
                         await Task.WhenAll(producerTasks).ContinueWith(_ => { }, CancellationToken.None);
@@ -180,8 +215,8 @@ public class ParallelFileGenerator
                 finally
                 {
                     // Signal production done so consumer can drain and exit
-                    resultChannel.Writer.TryComplete(null);
-                    workChannelWriter.TryComplete(null);
+                    resultChannel.Writer.TryComplete(producerException);
+                    workChannelWriter.TryComplete(producerException);
                 }
 
                 // Always wait for consumer (releases zip file handles)
@@ -354,36 +389,72 @@ public class ParallelFileGenerator
         return (channel.Reader, writer);
     }
 
-    private async Task ProcessFileWorkAsync(ChannelReader<FileWorkItem> reader, long paddingPerFile, ChannelWriter<FileData> writer, FileGenerationRequest request, IReadOnlyDictionary<string, IFileGenerator> generators, CancellationToken cancellationToken)
+    private async Task ProcessFileWorkAsync(
+        ChannelReader<FileWorkItem> reader,
+        long paddingPerFile,
+        ChannelWriter<FileData> writer,
+        SemaphoreSlim windowSemaphore,
+        FileGenerationRequest request,
+        IReadOnlyDictionary<string, IFileGenerator> generators,
+        CancellationTokenSource pipelineCts,
+        CancellationToken cancellationToken)
     {
         long filesProcessed = 0;
 
-        await foreach (var workItem in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        try
         {
-            var fileGenerator = generators[workItem.EffectiveFileType(request)];
-            var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
-            try
+            await foreach (var workItem in reader.ReadAllAsync(pipelineCts.Token).ConfigureAwait(false))
             {
-                await writer.WriteAsync(fileData, cancellationToken).ConfigureAwait(false);
-            }
-            catch
-            {
-                fileData.MemoryOwner?.Dispose();
-                throw;
+                await windowSemaphore.WaitAsync(pipelineCts.Token).ConfigureAwait(false);
+                bool permitPassedToConsumer = false;
+
+                try
+                {
+                    var fileGenerator = generators[workItem.EffectiveFileType(request)];
+                    var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
+                    try
+                    {
+                        await writer.WriteAsync(fileData, pipelineCts.Token).ConfigureAwait(false);
+                        permitPassedToConsumer = true;
+                    }
+                    catch
+                    {
+                        fileData.MemoryOwner?.Dispose();
+                        throw;
+                    }
+                }
+                finally
+                {
+                    if (!permitPassedToConsumer)
+                    {
+                        try
+                        {
+                            windowSemaphore.Release();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                        }
+                    }
+                }
+
+                filesProcessed++;
+                if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
+                {
+                    this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
+                }
             }
 
-            filesProcessed++;
-            if (filesProcessed % PerformanceConstants.ProgressBatchSize == 0)
+            // Report any remaining files
+            if (filesProcessed % PerformanceConstants.ProgressBatchSize != 0)
             {
-                this.performanceMonitor.ReportFilesCompleted(PerformanceConstants.ProgressBatchSize);
+                var remainingFiles = filesProcessed % PerformanceConstants.ProgressBatchSize;
+                this.performanceMonitor.ReportFilesCompleted(remainingFiles);
             }
         }
-
-        // Report any remaining files
-        if (filesProcessed % PerformanceConstants.ProgressBatchSize != 0)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            var remainingFiles = filesProcessed % PerformanceConstants.ProgressBatchSize;
-            this.performanceMonitor.ReportFilesCompleted(remainingFiles);
+            pipelineCts.Cancel();
+            throw;
         }
     }
 

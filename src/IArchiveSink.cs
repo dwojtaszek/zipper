@@ -10,5 +10,6 @@ internal interface IArchiveSink
         string loadFilePath,
         FileGenerationRequest request,
         ChannelReader<FileData> fileDataReader,
+        Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default);
 }

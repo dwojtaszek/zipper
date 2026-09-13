@@ -26,9 +26,10 @@ internal class ZipArchiveSink : IArchiveSink
         string loadFilePath,
         FileGenerationRequest request,
         ChannelReader<FileData> fileDataReader,
+        Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
     {
-        return this.CreateArchiveAsync(zipFilePath, null, loadFileName, loadFilePath, request, fileDataReader, cancellationToken);
+        return this.CreateArchiveAsync(zipFilePath, null, loadFileName, loadFilePath, request, fileDataReader, onItemCommitted, cancellationToken);
     }
 
     /// <summary>
@@ -41,6 +42,7 @@ internal class ZipArchiveSink : IArchiveSink
         string loadFilePath,
         FileGenerationRequest request,
         ChannelReader<FileData> fileDataReader,
+        Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
     {
         if (archiveStream is null)
@@ -66,7 +68,7 @@ internal class ZipArchiveSink : IArchiveSink
 
                 try
                 {
-                    await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, cancellationToken).ConfigureAwait(false);
+                    await DrainReaderAndOrderFilesAsync(archive, fileDataReader, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, outOfOrderBuffer, onItemCommitted, cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -146,6 +148,7 @@ internal class ZipArchiveSink : IArchiveSink
         HashSet<string> usedEntryPaths,
         DiskBackedFileDataList processedFiles,
         Dictionary<long, FileData> outOfOrderBuffer,
+        Action<FileData>? onItemCommitted,
         CancellationToken cancellationToken)
     {
         long nextExpectedIndex = 1;
@@ -154,12 +157,12 @@ internal class ZipArchiveSink : IArchiveSink
         {
             if (incomingFileData.WorkItem.Index == nextExpectedIndex)
             {
-                ProcessFileData(archive, incomingFileData, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles);
+                ProcessFileData(archive, incomingFileData, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, onItemCommitted);
                 nextExpectedIndex++;
 
                 while (outOfOrderBuffer.Remove(nextExpectedIndex, out var buffered))
                 {
-                    ProcessFileData(archive, buffered, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles);
+                    ProcessFileData(archive, buffered, request, standardTextContent, emlTextContent, usedEntryPaths, processedFiles, onItemCommitted);
                     nextExpectedIndex++;
                 }
             }
@@ -184,7 +187,7 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
-    private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? standardTextContent, byte[]? emlTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles)
+    private static void ProcessFileData(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[]? standardTextContent, byte[]? emlTextContent, HashSet<string> usedEntryPaths, DiskBackedFileDataList processedFiles, Action<FileData>? onItemCommitted)
     {
         try
         {
@@ -213,6 +216,7 @@ internal class ZipArchiveSink : IArchiveSink
         finally
         {
             fileData.MemoryOwner?.Dispose();
+            onItemCommitted?.Invoke(fileData);
         }
     }
 
