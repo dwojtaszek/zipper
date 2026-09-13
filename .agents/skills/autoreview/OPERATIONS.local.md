@@ -110,3 +110,13 @@
 - **lessons**: Centralizing archive entry tracking and collision checks in `CreateTrackedEntry` eliminates code duplication across native file, attachment, attachment text, extracted text, and load file archive sinks.
 - **suppressions**: none
 
+### 2026-09-13 antigravity:branch:fix/ISSUE-825-bound-multi-value-coded-selection-when-d
+
+- **findings**: 0 ACTION, 6 INFO (1 stream-draining in subprocess test confirmed by adversarial + testing, 4 testing coverage gaps on null RangeConfig fallback, non-positive count, targetCount=1 multi-pool, custom delimiter, 1 doc/assert improvement). Correctness, Performance, and Maintainability clean (0 findings).
+- **outcome**: accepted all 6 INFO suggestions — updated `CodedGeneratorTests.cs` to drain subprocess standard streams asynchronously, added unit tests for non-positive count, null RangeConfig fallback, targetCount=1 on multi-element pools, and custom delimiters. All 2,295 unit tests + 60 analyzer tests pass cleanly.
+- **telemetry**: host=antigravity mode=branch specialists=5 bundle=~4200c
+- **lessons**: Precomputing distinct pool values and applying sparse Fisher-Yates selection guarantees bounded execution O(k) for multi-value selection regardless of pool duplicates or skew.
+- **suppressions**: none
+
+
+
