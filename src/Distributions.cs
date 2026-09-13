@@ -62,7 +62,7 @@ public static class Distributions
     }
 
     /// <summary>
-    /// Calculates folder number using exponential distribution.
+    /// Calculates folder number using exponential distribution normalized to the finite folder interval.
     /// </summary>
     /// <param name="fileIndex">Current file index (1-based).</param>
     /// <param name="totalFiles">Total number of files.</param>
@@ -76,23 +76,24 @@ public static class Distributions
             return 1;
         }
 
-        // Exponential distribution parameter
-        // lambda = 2/totalFolders gives mean = totalFolders/2 for balanced spread
+        // Exponential distribution parameter (lambda = 2.0 / totalFolders)
         double lambda = 2.0 / totalFolders;
 
         // Convert file index to normalized position (0 to 1)
         double normalizedPosition = (fileIndex - 1.0) / Math.Max(totalFiles - 1.0, 1.0);
+        double p = Math.Clamp(normalizedPosition, 0.0, 1.0);
 
-        // Use inverse exponential CDF: -ln(1-p)/λ
-        // Adjust to prevent ln(0) by clamping with small epsilon
-        double adjustedPosition = Math.Max(0.001, Math.Min(0.999, normalizedPosition));
-        double exponentialValue = -Math.Log(1.0 - adjustedPosition) / lambda;
+        // Inverse CDF of exponential distribution truncated/normalized to [0, totalFolders]:
+        // F(x) = (1 - exp(-lambda * x)) / (1 - exp(-lambda * totalFolders))
+        // x(p) = -ln(1 - p * (1 - exp(-lambda * totalFolders))) / lambda
+        double scale = 1.0 - Math.Exp(-lambda * totalFolders);
+        double exponentialValue = -Math.Log(1.0 - (p * scale)) / lambda;
 
-        // Map to folder number (ceiling to ensure at least folder 1)
-        int folder = (int)Math.Ceiling(exponentialValue);
+        // Map to folder number (1 to totalFolders)
+        int folder = (int)Math.Floor(exponentialValue) + 1;
 
         // Clamp to valid range
-        return Math.Max(1, Math.Min(totalFolders, folder));
+        return Math.Clamp(folder, 1, totalFolders);
     }
 
     /// <summary>
