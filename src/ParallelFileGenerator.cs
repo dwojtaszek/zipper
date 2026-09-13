@@ -144,26 +144,19 @@ public class ParallelFileGenerator
                 inFlightBound = Math.Max(request.Output.Concurrency * 2, 2);
             }
 
-            using var windowSemaphore = new SemaphoreSlim(inFlightBound, inFlightBound);
+            var orderingWindow = new OrderingWindow(inFlightBound);
             using var pipelineCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             // Create channels for work distribution
             var (workChannelReader, workChannelWriter) = CreateWorkChannel(request, pipelineCts.Token);
-            var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(inFlightBound)
+            var resultChannel = Channel.CreateBounded<FileData>(new BoundedChannelOptions(Math.Max(inFlightBound, request.Output.Concurrency * 2))
             {
                 FullMode = BoundedChannelFullMode.Wait,
             });
 
-            Action<FileData> onItemCommitted = _ =>
+            Action<FileData> onItemCommitted = fileData =>
             {
-                try
-                {
-                    windowSemaphore.Release();
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Ignore if semaphore was disposed on early teardown
-                }
+                orderingWindow.OnItemCommitted(fileData.WorkItem.Index);
             };
 
             // Start the consumer task to write the archive concurrently
@@ -183,7 +176,7 @@ public class ParallelFileGenerator
             try
             {
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, windowSemaphore, request, generators, pipelineCts, cancellationToken))
+                    .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workChannelReader, paddingPerFile, resultChannel.Writer, orderingWindow, request, generators, pipelineCts, cancellationToken)))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
@@ -198,6 +191,7 @@ public class ParallelFileGenerator
                     {
                         // Consumer died — cancel pipeline CTS and complete channels to unblock producers and the feeder
                         pipelineCts.Cancel();
+                        orderingWindow.CancelAll(consumerTask.Exception);
                         resultChannel.Writer.TryComplete(consumerTask.Exception);
                         workChannelWriter.TryComplete(consumerTask.Exception);
                         await Task.WhenAll(producerTasks).ContinueWith(_ => { }, CancellationToken.None);
@@ -211,6 +205,15 @@ public class ParallelFileGenerator
                 catch (Exception ex)
                 {
                     producerException = ex;
+                    if (allProducersTask.IsFaulted && allProducersTask.Exception is not null)
+                    {
+                        var nonCancellation = allProducersTask.Exception.Flatten().InnerExceptions
+                            .FirstOrDefault(e => e is not OperationCanceledException || cancellationToken.IsCancellationRequested);
+                        if (nonCancellation is not null)
+                        {
+                            producerException = nonCancellation;
+                        }
+                    }
                 }
                 finally
                 {
@@ -220,7 +223,15 @@ public class ParallelFileGenerator
                 }
 
                 // Always wait for consumer (releases zip file handles)
-                var actualLoadFilePath = await consumerTask.ConfigureAwait(false);
+                string actualLoadFilePath = string.Empty;
+                try
+                {
+                    actualLoadFilePath = await consumerTask.ConfigureAwait(false);
+                }
+                catch when (producerException is not null)
+                {
+                    // If producers faulted first, suppress consumer cancellation/fault and rethrow producerException
+                }
 
                 RethrowIfNotNull(producerException);
 
@@ -393,7 +404,7 @@ public class ParallelFileGenerator
         ChannelReader<FileWorkItem> reader,
         long paddingPerFile,
         ChannelWriter<FileData> writer,
-        SemaphoreSlim windowSemaphore,
+        OrderingWindow orderingWindow,
         FileGenerationRequest request,
         IReadOnlyDictionary<string, IFileGenerator> generators,
         CancellationTokenSource pipelineCts,
@@ -405,36 +416,18 @@ public class ParallelFileGenerator
         {
             await foreach (var workItem in reader.ReadAllAsync(pipelineCts.Token).ConfigureAwait(false))
             {
-                await windowSemaphore.WaitAsync(pipelineCts.Token).ConfigureAwait(false);
-                bool permitPassedToConsumer = false;
+                await orderingWindow.WaitForPermitAsync(workItem.Index, pipelineCts.Token).ConfigureAwait(false);
 
+                var fileGenerator = generators[workItem.EffectiveFileType(request)];
+                var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
                 try
                 {
-                    var fileGenerator = generators[workItem.EffectiveFileType(request)];
-                    var fileData = this.GenerateFileData(workItem, paddingPerFile, request, fileGenerator);
-                    try
-                    {
-                        await writer.WriteAsync(fileData, pipelineCts.Token).ConfigureAwait(false);
-                        permitPassedToConsumer = true;
-                    }
-                    catch
-                    {
-                        fileData.MemoryOwner?.Dispose();
-                        throw;
-                    }
+                    await writer.WriteAsync(fileData, pipelineCts.Token).ConfigureAwait(false);
                 }
-                finally
+                catch
                 {
-                    if (!permitPassedToConsumer)
-                    {
-                        try
-                        {
-                            windowSemaphore.Release();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                        }
-                    }
+                    fileData.MemoryOwner?.Dispose();
+                    throw;
                 }
 
                 filesProcessed++;
@@ -454,6 +447,7 @@ public class ParallelFileGenerator
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             pipelineCts.Cancel();
+            orderingWindow.CancelAll(ex);
             throw;
         }
     }
@@ -726,4 +720,115 @@ internal record FileData
     public string? NativePathOverride { get; init; }
 
     public string? RedactionReason { get; init; }
+}
+
+internal sealed class OrderingWindow
+{
+    private readonly object lockObj = new();
+    private readonly int windowSize;
+    private long committedIndex;
+    private readonly List<(long index, TaskCompletionSource tcs)> waiters = new();
+
+    public OrderingWindow(int windowSize)
+    {
+        if (windowSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(windowSize), "Window size must be positive.");
+        }
+
+        this.windowSize = windowSize;
+        this.committedIndex = 0;
+    }
+
+    public Task WaitForPermitAsync(long itemIndex, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled(cancellationToken);
+        }
+
+        TaskCompletionSource? tcsToWait = null;
+
+        lock (this.lockObj)
+        {
+            if (itemIndex <= this.committedIndex + this.windowSize)
+            {
+                return Task.CompletedTask;
+            }
+
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            this.waiters.Add((itemIndex, tcs));
+            tcsToWait = tcs;
+        }
+
+        if (cancellationToken.CanBeCanceled)
+        {
+            var reg = cancellationToken.Register(() =>
+            {
+                lock (this.lockObj)
+                {
+                    this.waiters.RemoveAll(w => w.tcs == tcsToWait);
+                }
+                tcsToWait.TrySetCanceled(cancellationToken);
+            });
+
+            _ = tcsToWait.Task.ContinueWith(_ => reg.Dispose(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+
+        return tcsToWait.Task;
+    }
+
+    public void OnItemCommitted(long index)
+    {
+        List<TaskCompletionSource>? toNotify = null;
+
+        lock (this.lockObj)
+        {
+            if (index > this.committedIndex)
+            {
+                this.committedIndex = index;
+            }
+
+            long maxAllowed = this.committedIndex + this.windowSize;
+            for (int i = this.waiters.Count - 1; i >= 0; i--)
+            {
+                if (this.waiters[i].index <= maxAllowed)
+                {
+                    toNotify ??= new List<TaskCompletionSource>();
+                    toNotify.Add(this.waiters[i].tcs);
+                    this.waiters.RemoveAt(i);
+                }
+            }
+        }
+
+        if (toNotify is not null)
+        {
+            foreach (var tcs in toNotify)
+            {
+                tcs.TrySetResult();
+            }
+        }
+    }
+
+    public void CancelAll(Exception? exception = null)
+    {
+        List<TaskCompletionSource> toNotify;
+        lock (this.lockObj)
+        {
+            toNotify = this.waiters.Select(w => w.tcs).ToList();
+            this.waiters.Clear();
+        }
+
+        foreach (var tcs in toNotify)
+        {
+            if (exception is not null)
+            {
+                tcs.TrySetException(exception);
+            }
+            else
+            {
+                tcs.TrySetCanceled();
+            }
+        }
+    }
 }
