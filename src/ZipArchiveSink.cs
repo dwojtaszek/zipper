@@ -52,8 +52,8 @@ internal class ZipArchiveSink : IArchiveSink
                 var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 // Cached per-type text payloads; the per-record File Type selects which one is written.
-                var standardTextContent = request.Output.WithText ? PlaceholderFiles.ExtractedText : null;
-                var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : null;
+                var standardTextContent = request.Output.WithText ? PlaceholderFiles.ExtractedText : Array.Empty<byte>();
+                var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : Array.Empty<byte>();
 
                 var outOfOrderBuffer = new Dictionary<long, FileData>();
                 var processingContext = new ZipProcessingContext(
@@ -191,8 +191,8 @@ internal class ZipArchiveSink : IArchiveSink
             if (context.Request.Output.WithText)
             {
                 var textContent = string.Equals(fileData.WorkItem.EffectiveFileType(context.Request), "eml", StringComparison.Ordinal)
-                    ? context.EmlTextContent!
-                    : context.StandardTextContent!;
+                    ? context.EmlTextContent
+                    : context.StandardTextContent;
                 WriteExtractedTextToArchive(context.Archive, fileData, context.Request, textContent, context.UsedEntryPaths);
             }
 
@@ -216,8 +216,8 @@ internal class ZipArchiveSink : IArchiveSink
     private sealed record ZipProcessingContext(
         ZipArchive Archive,
         FileGenerationRequest Request,
-        byte[]? StandardTextContent,
-        byte[]? EmlTextContent,
+        byte[] StandardTextContent,
+        byte[] EmlTextContent,
         HashSet<string> UsedEntryPaths,
         DiskBackedFileDataList ProcessedFiles,
         Action<FileData>? OnItemCommitted);

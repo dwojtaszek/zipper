@@ -186,7 +186,7 @@ public class ParallelFileGenerator
                     pipelineCts);
 
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
-                    .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workerContext, cancellationToken)))
+                    .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workerContext, cancellationToken), cancellationToken))
                     .ToList();
 
                 // Wait for all producers to complete, wrapped in a task that ensures completion
