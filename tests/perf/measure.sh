@@ -33,7 +33,8 @@ run_scenario() {
     local scenario_name="$1"
     shift
     local out_dir time_file err_file
-    out_dir=$(mktemp -d)
+    mkdir -p "$REPO_ROOT/results"
+    out_dir=$(mktemp -d -p "$REPO_ROOT/results" perf_XXXXXX)
     time_file=$(mktemp)
     err_file=$(mktemp)
 

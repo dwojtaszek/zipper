@@ -14,6 +14,7 @@ internal class InMemorySink : IArchiveSink
         string loadFilePath,
         FileGenerationRequest request,
         ChannelReader<FileData> fileDataReader,
+        Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -33,6 +34,7 @@ internal class InMemorySink : IArchiveSink
                     MemoryOwner = null,
                 });
                 fileData.MemoryOwner?.Dispose();
+                onItemCommitted?.Invoke(fileData);
             }
         }
         finally
