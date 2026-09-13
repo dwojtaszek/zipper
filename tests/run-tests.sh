@@ -84,7 +84,14 @@ function verify_output() {
     dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
   fi
 
-  local first_bytes=$(head -c 3 "$dat_file" | xxd -p | tr -d ' ' | tr a-z A-Z)
+  local first_bytes
+  if command -v xxd >/dev/null 2>&1; then
+    first_bytes=$(head -c 3 "$dat_file" | xxd -p | tr -d ' ' | tr a-z A-Z)
+  elif command -v od >/dev/null 2>&1; then
+    first_bytes=$(od -An -tx1 -N3 "$dat_file" | tr -d ' \n' | tr a-z A-Z)
+  else
+    first_bytes=$(python3 -c 'import sys; print(open(sys.argv[1], "rb").read(3).hex().upper())' "$dat_file" 2>/dev/null || true)
+  fi
   if [[ "$encoding" = "UTF-8" ]]; then
     if [[ "$first_bytes" != "EFBBBF" ]]; then
       print_error "Missing UTF-8 BOM in .dat file."
@@ -306,7 +313,14 @@ function verify_load_file_included() {
         dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
     fi
 
-    local first_bytes=$(head -c 3 "$extracted_dat" | xxd -p | tr -d ' ' | tr a-z A-Z)
+    local first_bytes
+    if command -v xxd >/dev/null 2>&1; then
+        first_bytes=$(head -c 3 "$extracted_dat" | xxd -p | tr -d ' ' | tr a-z A-Z)
+    elif command -v od >/dev/null 2>&1; then
+        first_bytes=$(od -An -tx1 -N3 "$extracted_dat" | tr -d ' \n' | tr a-z A-Z)
+    else
+        first_bytes=$(python3 -c 'import sys; print(open(sys.argv[1], "rb").read(3).hex().upper())' "$extracted_dat" 2>/dev/null || true)
+    fi
     if [[ "$encoding" = "UTF-8" ]]; then
         if [[ "$first_bytes" != "EFBBBF" ]]; then
             print_error "Missing UTF-8 BOM in extracted .dat file."
@@ -661,6 +675,10 @@ print_success "CI build properties and docs-only classification tests passed."
 print_info "Running CI per-file coverage gate action tests..."
 bash ./.github/actions/coverage-gate/test-coverage-gate.sh || print_error "test-coverage-gate.sh failed."
 print_success "CI per-file coverage gate action tests passed."
+
+print_info "Running performance measurement regression tests..."
+bash ./tests/test-perf-measure.sh || print_error "test-perf-measure.sh failed."
+print_success "Performance measurement regression tests passed."
 
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."

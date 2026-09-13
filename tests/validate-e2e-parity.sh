@@ -32,9 +32,12 @@ BAT_RUNNER="$SCRIPT_DIR/run-tests.bat"
 #     --meta-test-fail-only path.
 #   .github/actions/coverage-gate/test-coverage-gate — self-test for the
 #     Linux-only CI composite action; no Windows counterpart by design.
+#   tests/test-perf-measure — Linux-only regression guard for measure.sh
+#     and perf-guard / baseline-refresh integrations (#826).
 EXEMPT_SUBSCRIPTS=(
     tests/test-run-tests-fatal
     .github/actions/coverage-gate/test-coverage-gate
+    tests/test-perf-measure
 )
 
 STRICT=0
