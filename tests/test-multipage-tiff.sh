@@ -241,6 +241,103 @@ done
 
 print_success "Test Case 5: Deterministic page counts verified"
 
+# --- Test Case 6: Profile-driven loadfile-only TIFF with constant page range ---
+
+print_info "Test Case 6: Profile-driven loadfile-only TIFF with constant page range (11-11)"
+
+zipper \
+  --loadfile-only \
+  --type tiff \
+  --count 3 \
+  --tiff-pages "11-11" \
+  --column-profile "./tests/fixtures/profiles/pages.json" \
+  --seed 42 \
+  --output-path "$TEST_OUTPUT_DIR/test6"
+
+dat_file=$(find "$TEST_OUTPUT_DIR/test6" -name "*.dat" -print -quit)
+opt_file=$(find "$TEST_OUTPUT_DIR/test6" -name "*.opt" -print -quit)
+
+if [[ -z "$dat_file" ]]; then
+  print_error "Test 6: No .dat file found"
+fi
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 6: No .opt file found"
+fi
+
+# Verify header contains PAGECOUNT
+first_line=$(head -n 1 "$dat_file")
+if ! echo "$first_line" | grep -q "PAGECOUNT"; then
+  print_error "Test 6: 'PAGECOUNT' column not found in .dat header"
+fi
+
+# Verify every row in DAT has PAGECOUNT 11
+tail -n +2 "$dat_file" | while IFS= read -r line; do
+  page_count=$(extract_page_count "$line")
+  if [[ "$page_count" -ne 11 ]]; then
+    print_error "Test 6: Expected page count 11, got '$page_count'"
+  fi
+done
+
+# Verify OPT has exactly 33 page records (3 native files * 11 pages)
+opt_line_count=$(grep -c . "$opt_file" || true)
+if [[ "$opt_line_count" -ne 33 ]]; then
+  print_error "Test 6: Expected 33 OPT lines, got $opt_line_count"
+fi
+
+print_success "Test Case 6: Profile-driven loadfile-only TIFF with constant page range passed"
+
+# --- Test Case 7: Profile-driven loadfile-only TIFF with variable page range ---
+
+print_info "Test Case 7: Profile-driven loadfile-only TIFF with variable page range (1-20)"
+
+zipper \
+  --loadfile-only \
+  --type tiff \
+  --count 3 \
+  --tiff-pages "1-20" \
+  --column-profile "./tests/fixtures/profiles/pages.json" \
+  --seed 42 \
+  --output-path "$TEST_OUTPUT_DIR/test7"
+
+dat_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.dat" -print -quit)
+opt_file=$(find "$TEST_OUTPUT_DIR/test7" -name "*.opt" -print -quit)
+
+if [[ -z "$dat_file" ]]; then
+  print_error "Test 7: No .dat file found"
+fi
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 7: No .opt file found"
+fi
+
+# Extract DAT page counts
+dat_counts=($(tail -n +2 "$dat_file" | while IFS= read -r line; do extract_page_count "$line"; done))
+# Extract document-break page counts from OPT (7th column where 4th column is 'Y')
+opt_counts=($(awk -F',' '$4 == "Y" {print $7}' "$opt_file" | tr -d '\r'))
+
+if [[ "${#dat_counts[@]}" -ne 3 ]]; then
+  print_error "Test 7: Expected 3 DAT records, got ${#dat_counts[@]}"
+fi
+if [[ "${#opt_counts[@]}" -ne 3 ]]; then
+  print_error "Test 7: Expected 3 OPT documents, got ${#opt_counts[@]}"
+fi
+
+# Verify each document's DAT PAGECOUNT matches its OPT page count
+total_pages=0
+for i in "${!dat_counts[@]}"; do
+  if [[ "${dat_counts[$i]}" -ne "${opt_counts[$i]}" ]]; then
+    print_error "Test 7: Record $i page count mismatch: DAT has ${dat_counts[$i]}, OPT has ${opt_counts[$i]}"
+  fi
+  total_pages=$((total_pages + dat_counts[i]))
+done
+
+# Verify total OPT line count matches the sum of page counts
+opt_line_count=$(grep -c . "$opt_file" || true)
+if [[ "$opt_line_count" -ne "$total_pages" ]]; then
+  print_error "Test 7: Expected $total_pages total OPT lines, got $opt_line_count"
+fi
+
+print_success "Test Case 7: Profile-driven loadfile-only TIFF with variable page range passed"
+
 # --- All Tests Passed ---
 
 print_success "All Multipage TIFF E2E tests passed!"

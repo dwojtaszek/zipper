@@ -109,7 +109,7 @@ All command-line flags recognized by Zipper:
 | `--bates-prefix` | none | string (or comma-separated list) | Bates numbering prefix |
 | `--bates-start` | `1` | non-negative integer | Starting Bates number |
 | `--bates-digits` | `8` | `1` to `20` | Bates number digit padding count |
-| `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files |
+| `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |
 | `--column-profile` | none | `minimal`, `standard`, `litigation`, `full`, or file path | Metadata column profile |
 | `--seed` | none | integer | Random seed for reproducible runs |
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |

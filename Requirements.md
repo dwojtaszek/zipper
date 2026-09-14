@@ -387,15 +387,15 @@ Based on the above research, the following requirements apply to the Zipper Load
 #### FR-012: OPT File Generation
 
 - **REQ-057**: When `--type tiff` or `--type jpg` is used **and no Load File format is explicitly selected** (neither `--load-file-format` nor `--load-file-formats` is passed), the tool shall automatically generate both a DAT and an OPT file. If an explicit format is selected, only that format is produced and auto-OPT generation is suppressed (e.g. `--type tiff --load-file-format edrm-xml` yields EDRM-XML only). Note: PDF Native Files do NOT trigger automatic OPT generation as they are treated as Native Files, not page-level images.
-- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`). Note: in `--loadfile-only` OPT mode there are no real Native Files, so page counts are synthetic — when `--tiff-pages` is supplied the page count is drawn from that range, otherwise it defaults to a synthetic multi-page distribution (random 1–10 pages per document), independent of the REQ-047 `1-1` Native-File default.
+- **REQ-058**: The OPT file shall correctly mark document breaks for multi-page documents (when `--tiff-pages` is used). For multi-page TIFFs, page-level Bates numbers shall use suffixes (e.g., `ABC001_00001_001`, `ABC001_00001_002`). Note: in `--loadfile-only` OPT mode there are no real Native Files, so page counts are synthetic — when `--tiff-pages` is supplied the page count is drawn from that range, otherwise it defaults to a synthetic multi-page distribution (random 1–10 pages per document), independent of the REQ-047 `1-1` Native-File default. Similarly, in `--loadfile-only` mode with an explicit `--column-profile` containing a `PAGECOUNT` column, when `--type tiff` and `--tiff-pages` are specified, page counts are drawn from the configured `--tiff-pages` range (matching companion OPT output); when `--tiff-pages` is omitted or `--type` is non-TIFF, page counts default to random 1–10 pages per document.
 
-| Mode | Format | `--tiff-pages` Default |
-|------|--------|------------------------|
-| Standard | OPT | `1-1` (single page) |
-| Standard | DAT | No PAGECOUNT column |
-| Loadfile-Only | OPT | Random `1-10` |
-| Loadfile-Only | DAT | No PAGECOUNT column |
-| Loadfile-Only (Profile) | DAT | Random `1-10` (if column exists) |
+| Mode | Format | `--tiff-pages` Default | `--tiff-pages` Configured |
+|------|--------|------------------------|---------------------------|
+| Standard | OPT | `1-1` (single page) | Configured range |
+| Standard | DAT | No PAGECOUNT column | Configured range (`Page Count` column) |
+| Loadfile-Only | OPT | Random `1-10` | Configured range |
+| Loadfile-Only | DAT | No PAGECOUNT column | No PAGECOUNT column (profile required) |
+| Loadfile-Only (Profile) | DAT | Random `1-10` (if column exists) | Configured range (if column exists and `--type tiff`) |
 - **REQ-059**: OPT files shall default to ANSI (Windows-1252) encoding for maximum platform compatibility. An explicit `--encoding` argument overrides this default (e.g. to UTF-8 or UTF-16), consistent with REQ-051's "by default" wording; note that UTF-8/UTF-16 OPT has limited platform support (Section 8.5).
 
 #### FR-013: Family Relationship Support
@@ -617,6 +617,7 @@ This section clarifies behavior when multiple arguments interact:
 | `--distribution` (folder) + profile distribution | These are independent: `--distribution` controls Folders, profile controls data values |
 | `--encoding` + profile `dateFormat` | Independent: `--encoding` is file encoding, `dateFormat` is value formatting |
 | `--delimiter-*` + `--dat-delimiters` | Specific delimiter flags override the preset for that delimiter only |
+| `--tiff-pages` + `--column-profile` | In `--loadfile-only` mode with `--type tiff`, `--tiff-pages` controls the `PAGECOUNT` profile column values to match companion OPT output; when omitted or with non-TIFF output, defaults to random 1–10. Gated on TIFF output. |
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--production-set` | **Conflict**: cannot use both |
