@@ -38,7 +38,7 @@ internal static class BatesRangeAnalyzer
                     var minNew = newGroups[prefix].Min(g => g.Value);
                     var digits = newGroups[prefix].First().Digits;
 
-                    if (minNew > maxPrior + 1)
+                    if (minNew > maxPrior && minNew - maxPrior > 1)
                     {
                         var gapStart = FormatBates(maxPrior + 1, prefix, digits);
                         var gapEnd = FormatBates(minNew - 1, prefix, digits);
@@ -73,19 +73,51 @@ internal static class BatesRangeAnalyzer
 
     public static void ResultSummaryBatesAnalysis(BatesAnalysis batesAnalysis)
     {
-        // Update summary skipped count
-        int totalSkipped = 0;
-        foreach (var gap in batesAnalysis.Gaps)
+        ArgumentNullException.ThrowIfNull(batesAnalysis);
+
+        if (batesAnalysis.Gaps is null)
         {
-            if (TryParseBates(gap.Start, out var p1, out long v1, out _) && TryParseBates(gap.End, out var p2, out long v2, out _) && p1 == p2)
+            batesAnalysis.TotalSkippedBates = 0;
+            return;
+        }
+
+        // Update summary skipped count
+        long totalSkipped = 0;
+        try
+        {
+            checked
             {
-                totalSkipped += (int)(v2 - v1 + 1);
-            }
-            else
-            {
-                totalSkipped++;
+                foreach (var gap in batesAnalysis.Gaps)
+                {
+                    if (gap is null)
+                    {
+                        continue;
+                    }
+
+                    if (TryParseBates(gap.Start, out var p1, out long v1, out _) &&
+                        TryParseBates(gap.End, out var p2, out long v2, out _) &&
+                        string.Equals(p1, p2, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (v2 < v1)
+                        {
+                            throw new ArgumentException($"Invalid Bates gap range: start '{gap.Start}' is greater than end '{gap.End}'.", nameof(batesAnalysis));
+                        }
+
+                        long gapLength = (v2 - v1) + 1;
+                        totalSkipped += gapLength;
+                    }
+                    else
+                    {
+                        totalSkipped++;
+                    }
+                }
             }
         }
+        catch (OverflowException ex)
+        {
+            throw new OverflowException("Total skipped Bates numbers exceeds the maximum supported value (Int64.MaxValue).", ex);
+        }
+
         batesAnalysis.TotalSkippedBates = totalSkipped;
     }
 
@@ -108,7 +140,7 @@ internal static class BatesRangeAnalyzer
                 var next = items[i + 1].Value;
                 var digits = items[i].Digits;
 
-                if (next > current + 1)
+                if (next - current > 1)
                 {
                     gaps.Add(new BatesRangeReport
                     {

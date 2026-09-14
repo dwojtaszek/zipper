@@ -285,6 +285,48 @@ Written alongside standalone Load Files in Loadfile-Only Mode using `camelCase` 
 
 Written at the root of Production Sets. Records Bates ranges, volume layout, load file paths, document counts (`nativeFileCount`, `parentNativeFileCount`, `attachmentNativeFileCount`), and configuration parameters.
 
+### `report.json` (Comparison Report)
+
+Written by `--compare-production-manifests` to `--comparison-output`. Records comparison mode, record counts, volume analysis, detailed diffs, and Bates Number range analysis (`batesAnalysis`). The `batesAnalysis.totalSkippedBates` property is represented as a 64-bit integer, supporting exact positive totals exceeding `Int32.MaxValue` for large or aggregate gaps.
+
+```json
+{
+  "comparisonMode": "replacement",
+  "manifests": [
+    "/path/to/prior/_manifest.json",
+    "/path/to/new/_manifest.json"
+  ],
+  "summary": {
+    "totalPriorRecords": 1000,
+    "totalNewRecords": 1000,
+    "addedCount": 0,
+    "removedCount": 0,
+    "unchangedCount": 1000,
+    "changedCount": 0,
+    "replacedCount": 0,
+    "duplicateCount": 0
+  },
+  "batesAnalysis": {
+    "priorRange": "PROD001 - PROD1000",
+    "newRange": "PROD001 - PROD1000",
+    "gaps": [],
+    "overlaps": [],
+    "totalSkippedBates": 0,
+    "priorRangesByProductionSet": {}
+  },
+  "volumeAnalysis": [],
+  "details": {
+    "added": [],
+    "removed": [],
+    "unchanged": [],
+    "changed": [],
+    "replaced": [],
+    "duplicates": [],
+    "skipped": []
+  }
+}
+```
+
 ---
 
 ## 7. Argument Interactions Reference

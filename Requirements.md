@@ -770,8 +770,8 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-159**: Comparison reports shall support supplemental workflows.
 - **REQ-160**: Comparison reports shall support reproduction workflows.
 - **REQ-161**: Comparison reports shall identify added, removed, unchanged, replaced, duplicated, skipped, and changed records where data is available.
-- **REQ-162**: Comparison reports shall include Bates Number range analysis by Production Set and Volume.
-- **REQ-163**: Comparison reports shall be written in a machine-readable format and include a human-readable summary.
+- **REQ-162**: Comparison reports shall include Bates Number range analysis by Production Set and Volume, with skipped Bates totals (`totalSkippedBates`) supporting 64-bit non-negative integer values above `Int32.MaxValue` and checked arithmetic.
+- **REQ-163**: Comparison reports shall be written in a machine-readable format (JSON) and include a human-readable summary. The JSON report shall emit exact positive totals for `totalSkippedBates` exceeding `Int32.MaxValue` and define descriptive overflow behavior if the aggregate exceeds the 64-bit representation.
 - **REQ-165**: Zipper shall support `--hash-mode <actual|simulated|none>` to control cryptographic hash generation for Native Files. `actual` computes real hashes from emitted Native File content bytes; `simulated` generates deterministic seeded pseudo-hashes; `none` disables hash generation (default). `--hash-mode actual` is not supported with `--loadfile-only` mode and shall fail validation if combined.
 - **REQ-166**: Zipper shall support `--hash-algorithms <md5|sha1|sha256>` as a comma-separated list of algorithms to compute and emit in Load Files when `--hash-mode` is `actual` or `simulated`. When omitted, if `--hash-mode` is set to `actual` or `simulated`, the default algorithm shall be `md5`.
 - **REQ-167**: When `--hash-mode` is enabled (`actual` or `simulated`), generated Load Files (DAT, CSV, Concordance, EDRM-XML) shall include corresponding hash columns (`MD5HASH`, `SHA1HASH`, `SHA256HASH`) for each specified algorithm.

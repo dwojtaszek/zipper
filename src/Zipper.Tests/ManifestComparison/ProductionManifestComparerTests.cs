@@ -500,6 +500,69 @@ public class ProductionManifestComparerTests
         }
     }
 
+    [Fact]
+    public async Task CompareAndReportAsync_WithLargeBatesGapAboveInt32Max_WritesPositiveJsonTotalAndSummaryMarkdown()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_large_gap_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "B0000000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "B0000000001", "B2147483650" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath);
+
+            Assert.True(success);
+            Assert.True(File.Exists(outputPath));
+
+            var reportJson = await File.ReadAllTextAsync(outputPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var batesAnalysis = doc.RootElement.GetProperty("batesAnalysis");
+            var totalSkipped = batesAnalysis.GetProperty("totalSkippedBates").GetInt64();
+            Assert.Equal(2147483648L, totalSkipped);
+
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+            Assert.True(File.Exists(summaryPath));
+            var summaryMd = await File.ReadAllTextAsync(summaryPath);
+            Assert.Contains("# Production Set Comparison Report", summaryMd, StringComparison.Ordinal);
+            Assert.Contains("### Skipped Bates Ranges (Gaps)", summaryMd, StringComparison.Ordinal);
+            Assert.Contains("- `B0000000002` to `B2147483649`", summaryMd, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_WithOverflowingGapAggregate_ThrowsOverflowException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_overflow_gap_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "A0000000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[]
+            {
+                "A0000000001",
+                "A6000000000000000000",
+                "B0000000001",
+                "B6000000000000000000"
+            });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var ex = await Assert.ThrowsAsync<OverflowException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath));
+
+            Assert.Contains("Total skipped Bates numbers exceeds the maximum supported value", ex.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
     private static string CreateTestProductionSet(string baseDir, string prodId, string volume, string[] batesNumbers)
     {
         return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
