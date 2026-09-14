@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.Config;
 
 namespace Zipper.Cli;
 
@@ -64,6 +65,18 @@ internal static class ArgumentHelpers
             "XML" => LoadFileFormat.EdrmXml,
             "EDRMXML" => LoadFileFormat.EdrmXml,
             "CONCORDANCE" => LoadFileFormat.Concordance,
+            _ => null,
+        };
+    }
+
+    internal static ZipCompressionMethod? GetCompressionMethodFromName(string name)
+    {
+        return name.ToUpperInvariant() switch
+        {
+            "STORE" => ZipCompressionMethod.Store,
+            "DEFLATE" => ZipCompressionMethod.Deflate,
+            "DEFLATE64" => ZipCompressionMethod.Deflate64,
+            "BZIP2" => ZipCompressionMethod.BZip2,
             _ => null,
         };
     }

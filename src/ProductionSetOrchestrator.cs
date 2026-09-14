@@ -686,7 +686,7 @@ internal static class ProductionSetOrchestrator
 
         var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
         Console.Write("  Creating ZIP archive...");
-        await materializer.CreateZipAsync(productionPath, zipPath, cancellationToken).ConfigureAwait(false);
+        await materializer.CreateZipAsync(productionPath, zipPath, request.Output.CompressionMethod, cancellationToken).ConfigureAwait(false);
         createdZips.Add(zipPath);
         Console.WriteLine(" done.");
         return zipPath;

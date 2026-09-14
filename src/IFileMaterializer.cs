@@ -40,5 +40,10 @@ internal interface IFileMaterializer
     Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>Creates a ZIP archive from a directory tree.</summary>
-    Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default);
+    Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
+        => CreateZipAsync(sourceDir, zipPath, Config.ZipCompressionMethod.Deflate, cancellationToken);
+
+    /// <summary>Creates a ZIP archive from a directory tree using the specified compression method.</summary>
+    Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
+        => CreateZipAsync(sourceDir, zipPath, cancellationToken);
 }

@@ -873,4 +873,14 @@ Shipped (CLI slice #844, ADR-0008); the contract lives in [docs/archive-test-sui
   - **Production Set Mode**: When `--production-set` is specified, the application shall validate upfront that neither the target volume directory (`<output-path>/<production-id>`) nor, when `--production-zip` is specified, the target archive (`<output-path>/<production-id>.zip`) exists for any target Volume or rolling Production ID across the entire run. If an existing directory or zip is detected, generation shall fail immediately before any files are written.
   - **Ownership Tracking and Fault Cleanup**: The application shall track only those files and directories created during the active run. If generation faults or is cancelled, cleanup shall delete only the partial artifacts created by the current run, leaving pre-existing files and unowned archives untouched.
 
+## 23. Archive Compression Method
+
+### FR-030: Archive Compression Method (`--compression`)
+
+- **REQ-220**: A new optional command-line argument `--compression <method>` shall be introduced to control the ZIP compression method used for all output Archives (Standard mode, `--include-load-file`, and `--production-zip`). Accepted method names shall be case-insensitive: `store` (method 0, no compression), `deflate` (method 8, standard DEFLATE, default), `deflate64` (method 9), and `bzip2` (method 12).
+- **REQ-221**: When `--compression` is omitted, the compression method shall default to `deflate` (REQ_E-014).
+- **REQ-222**: When `--compression store` is specified, all entries added to the output Archive shall be written with compression method 0 (Store).
+- **REQ-223**: Specifying an unrecognized compression method shall fail validation with a non-zero exit code reporting the invalid method and listing supported values (`store, deflate, deflate64, bzip2`). Specifying `deflate64` or `bzip2` prior to codec support shall report that the method is not yet supported.
+- **REQ-224**: When `--target-zip-size` is combined with `--compression store`, size pre-checks and padding calculations shall use an uncompressed ratio (1.0) rather than the default 50% compression ratio.
+
 

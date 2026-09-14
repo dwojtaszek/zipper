@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading.Channels;
+using Zipper.Config;
 using Zipper.Emails;
 
 namespace Zipper;
@@ -135,7 +136,7 @@ public class ParallelFileGenerator
                     ? (int)Math.Min(int.MaxValue, weightedSize / weightedCount)
                     : 1024;
 
-                paddingPerFile = this.CalculatePaddingPerFile(request.Output.TargetZipSize.Value, baseSize, request.Output.FileCount, request.Output.WithText);
+                paddingPerFile = this.CalculatePaddingPerFile(request.Output.TargetZipSize.Value, baseSize, request.Output.FileCount, request.Output.WithText, request.Output.CompressionMethod);
             }
 
             int inFlightBound = this.maxInFlight ?? request.Output.MaxInFlight ?? Math.Max(request.Output.Concurrency * 2, 2);
@@ -581,9 +582,9 @@ public class ParallelFileGenerator
         }
     }
 
-    internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText)
+    internal long CalculatePaddingPerFile(long targetSize, int baseSize, long fileCount, bool withText, ZipCompressionMethod compressionMethod = ZipCompressionMethod.Deflate)
     {
-        var estimatedBaseSize = this.EstimateCompressedSize(baseSize, fileCount, withText);
+        var estimatedBaseSize = EstimateCompressedSize(baseSize, fileCount, withText, compressionMethod);
         if (estimatedBaseSize >= targetSize)
         {
             throw new InvalidOperationException(
@@ -596,10 +597,19 @@ public class ParallelFileGenerator
         return Math.Min(padding, PerformanceConstants.MaxPaddingPerFile);
     }
 
-    private long EstimateCompressedSize(int contentSize, long count, bool withText)
+    private static double GetCompressionRatio(ZipCompressionMethod method) => method switch
     {
-        // Assume 50% compression
-        var baseSize = contentSize / 2;
+        ZipCompressionMethod.Store => 1.0,
+        ZipCompressionMethod.Deflate => 0.5,
+        ZipCompressionMethod.Deflate64 => 0.5,
+        ZipCompressionMethod.BZip2 => 0.4,
+        _ => 0.5,
+    };
+
+    private static long EstimateCompressedSize(int contentSize, long count, bool withText, ZipCompressionMethod compressionMethod = ZipCompressionMethod.Deflate)
+    {
+        var ratio = GetCompressionRatio(compressionMethod);
+        var baseSize = ratio >= 1.0 ? (long)contentSize : (long)(contentSize * ratio);
         if (withText)
         {
             baseSize += 50; // Text file overhead
