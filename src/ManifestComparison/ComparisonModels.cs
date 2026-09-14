@@ -108,7 +108,7 @@ public class BatesAnalysis
     public List<BatesRangeReport> Overlaps { get; set; } = new();
 
     [JsonPropertyName("totalSkippedBates")]
-    public int TotalSkippedBates { get; set; }
+    public long TotalSkippedBates { get; set; }
 
     [JsonPropertyName("priorRangesByProductionSet")]
     public Dictionary<string, string> PriorRangesByProductionSet { get; set; } = new(StringComparer.OrdinalIgnoreCase);

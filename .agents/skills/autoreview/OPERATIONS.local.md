@@ -117,6 +117,10 @@
 - **telemetry**: host=antigravity mode=branch specialists=5 bundle=~4200c
 - **lessons**: Precomputing distinct pool values and applying sparse Fisher-Yates selection guarantees bounded execution O(k) for multi-value selection regardless of pool duplicates or skew.
 - **suppressions**: none
+### 2026-09-14 antigravity:branch:fix/ISSUE-831-prevent-overflow-in-comparison-report-sk
 
-
-
+- **findings**: 0 ACTION, 7 INFO (2 adversarial: case-insensitive prefix matching and null collection/item defense; 1 maintainability: DRY checked block; 4 testing: supplemental mode large gap test, null guard test, fallback overflow test, sequence large gap test). Correctness, Performance, and API Contract clean (0 findings).
+- **outcome**: accepted all 7 findings — refactored `ResultSummaryBatesAnalysis` with unified checked block, case-insensitive prefix comparison (`StringComparison.OrdinalIgnoreCase`), and null-defense; added unit and integration tests covering supplemental mode gaps > Int32.MaxValue, null guards, fallback overflow, and aggregate overflow in `ProductionManifestComparer.CompareAndReportAsync`. All 2,357 unit tests + 60 analyzer tests pass cleanly.
+- **telemetry**: host=antigravity mode=branch specialists=6 bundle=18830c
+- **lessons**: Using checked scalar arithmetic over gap boundaries ((v2 - v1) + 1) preserves exact O(1) space and time per gap without enumerating identifiers, while safely scaling beyond 32-bit integer limits.
+- **suppressions**: none
