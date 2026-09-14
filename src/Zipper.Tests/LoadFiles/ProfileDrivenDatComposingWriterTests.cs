@@ -452,4 +452,45 @@ public class ProfileDrivenDatComposingWriterTests
             Assert.InRange(count, 1, 10);
         }
     }
+
+    [Fact]
+    public async Task WriteAsync_WithExplicitTiffPageRange_WhenNonTiffFileType_IgnoresTiffPages()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "PAGECOUNT", Type = "number", Required = true },
+            },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "pdf" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (11, 11) }, // explicit TIFF page range
+            LoadfileOnly = true,
+        };
+
+        var datContent = await CaptureOutputAsync(request);
+        var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        // Header + 3 data rows
+        Assert.Equal(4, datLines.Length);
+
+        // For non-TIFF output, explicit --tiff-pages must NOT be applied to PDF rows
+        for (int i = 1; i <= 3; i++)
+        {
+            var fields = datLines[i].Split('\u0014').Select(f => f.Trim('\u00fe')).ToList();
+            var count = int.Parse(fields[1], System.Globalization.CultureInfo.InvariantCulture);
+            Assert.InRange(count, 1, 10);
+            Assert.NotEqual(11, count);
+        }
+    }
 }
+

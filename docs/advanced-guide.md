@@ -307,7 +307,7 @@ Written at the root of Production Sets. Records Bates ranges, volume layout, loa
 | `--source-path-mode` | Requires `--production-set` and source input (`--input-csv` / `--directory-template`) |
 | `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) or when `eml` participates in `--types` |
 | `--with-families` | Only meaningful when `--type eml` (or `eml` participates in `--types`) and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
-| `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types` |
+| `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types`. In Loadfile-Only mode with `--type tiff`, controls page counts in companion OPT and profile-driven DAT `PAGECOUNT` columns. |
 | `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
 | `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
