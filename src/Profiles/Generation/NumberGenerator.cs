@@ -30,12 +30,16 @@ internal sealed class NumberGenerator : IColumnValueGenerator
     /// <returns>A string representation of the generated number.</returns>
     public string Generate(ColumnGenerationContext context)
     {
-        if (this.colName.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase))
+        if (this.colName.Equals("FILESIZE", StringComparison.OrdinalIgnoreCase) ||
+            this.colName.Equals("FILE_SIZE", StringComparison.OrdinalIgnoreCase) ||
+            this.colName.Equals("FILE SIZE", StringComparison.OrdinalIgnoreCase))
         {
             return (context.FileData?.DataLength ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        if (this.colName.Equals("PAGECOUNT", StringComparison.OrdinalIgnoreCase))
+        if (this.colName.Equals("PAGECOUNT", StringComparison.OrdinalIgnoreCase) ||
+            this.colName.Equals("PAGE_COUNT", StringComparison.OrdinalIgnoreCase) ||
+            this.colName.Equals("PAGE COUNT", StringComparison.OrdinalIgnoreCase))
         {
             return (context.FileData?.PageCount ?? 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }

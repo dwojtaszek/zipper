@@ -207,6 +207,121 @@ if not exist "!DAT_FILE_B!" (
 
 echo [ SUCCESS ] Test Case 5: Deterministic page counts verified
 
+:: --- Test Case 6: Profile-driven loadfile-only TIFF with constant page range ---
+
+echo [ INFO ] Test Case 6: Profile-driven loadfile-only TIFF with constant page range (11-11)
+
+%ZIPPER_CMD% ^
+  --loadfile-only ^
+  --type tiff ^
+  --count 3 ^
+  --tiff-pages "11-11" ^
+  --column-profile "tests\fixtures\profiles\pages.json" ^
+  --seed 42 ^
+  --output-path "%TEST_OUTPUT_DIR%\test6"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 6 failed during execution
+  exit /b 1
+)
+
+set DAT_FILE=
+set OPT_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test6\*.dat") do set DAT_FILE=%%f
+for %%f in ("%TEST_OUTPUT_DIR%\test6\*.opt") do set OPT_FILE=%%f
+
+if not defined DAT_FILE (
+  echo [ ERROR ] Test 6: No .dat file found
+  exit /b 1
+)
+if not defined OPT_FILE (
+  echo [ ERROR ] Test 6: No .opt file found
+  exit /b 1
+)
+
+set /p FIRST_LINE=<"!DAT_FILE!"
+echo !FIRST_LINE! | findstr /C:"PAGECOUNT" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: 'PAGECOUNT' column not found in .dat header
+  exit /b 1
+)
+
+:: Verify DAT contains PAGECOUNT 11
+findstr /C:"11" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Page count 11 not found in .dat
+  exit /b 1
+)
+
+:: Verify OPT line count is 33
+set OPT_LINES=0
+for /f %%a in ('type "!OPT_FILE!" ^| find /c /v ""') do set OPT_LINES=%%a
+if not "!OPT_LINES!"=="33" (
+  echo [ ERROR ] Test 6: Expected 33 OPT lines, got !OPT_LINES!
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 6: Profile-driven loadfile-only TIFF with constant page range passed
+
+:: --- Test Case 7: Profile-driven loadfile-only TIFF with variable page range ---
+
+echo [ INFO ] Test Case 7: Profile-driven loadfile-only TIFF with variable page range (1-20)
+
+%ZIPPER_CMD% ^
+  --loadfile-only ^
+  --type tiff ^
+  --count 3 ^
+  --tiff-pages "1-20" ^
+  --column-profile "tests\fixtures\profiles\pages.json" ^
+  --seed 42 ^
+  --output-path "%TEST_OUTPUT_DIR%\test7"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 failed during execution
+  exit /b 1
+)
+
+set DAT_FILE=
+set OPT_FILE=
+for %%f in ("%TEST_OUTPUT_DIR%\test7\*.dat") do set DAT_FILE=%%f
+for %%f in ("%TEST_OUTPUT_DIR%\test7\*.opt") do set OPT_FILE=%%f
+
+if not defined DAT_FILE (
+  echo [ ERROR ] Test 7: No .dat file found
+  exit /b 1
+)
+if not defined OPT_FILE (
+  echo [ ERROR ] Test 7: No .opt file found
+  exit /b 1
+)
+
+:: Total OPT lines with seed 42 and 1-20 range for 3 files: 4 + 15 + 5 = 24
+set OPT_LINES=0
+for /f %%a in ('type "!OPT_FILE!" ^| find /c /v ""') do set OPT_LINES=%%a
+if not "!OPT_LINES!"=="24" (
+  echo [ ERROR ] Test 7: Expected 24 OPT lines, got !OPT_LINES!
+  exit /b 1
+)
+
+:: Verify DAT contains page counts 4, 15, and 5
+findstr /C:"4" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 7: Page count 4 not found in .dat
+  exit /b 1
+)
+findstr /C:"15" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 7: Page count 15 not found in .dat
+  exit /b 1
+)
+findstr /C:"5" "!DAT_FILE!" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 7: Page count 5 not found in .dat
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 7: Profile-driven loadfile-only TIFF with variable page range passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Multipage TIFF E2E tests passed!

@@ -163,7 +163,9 @@ internal sealed class DatStandardComposer
             {
                 WorkItem = workItem,
                 DataLength = rowRandom.Next(1024, 10_485_760),
-                PageCount = rowRandom.Next(1, 11),
+                PageCount = this.request.Tiff.PageRange.HasValue
+                    ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
+                    : rowRandom.Next(1, 11),
                 Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
             };
 

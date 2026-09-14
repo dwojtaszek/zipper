@@ -229,4 +229,227 @@ public class ProfileDrivenDatComposingWriterTests
         Assert.Contains("Boundary 1-2", corruptedLines);
         Assert.Contains("Boundary 4-5", corruptedLines);
     }
+
+    [Fact]
+    public async Task WriteAsync_WithExplicitTiffPageRange_ConstantRange_RendersConfiguredPageCountInDatAndOpt()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "PAGECOUNT", Type = "number", Required = true },
+            },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (11, 11) },
+            LoadfileOnly = true,
+        };
+
+        var datContent = await CaptureOutputAsync(request);
+        var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        // Header + 3 data rows
+        Assert.Equal(4, datLines.Length);
+        Assert.Contains("DOCID", datLines[0], StringComparison.Ordinal);
+        Assert.Contains("PAGECOUNT", datLines[0], StringComparison.Ordinal);
+
+        // Each data row must have PAGECOUNT = 11
+        for (int i = 1; i <= 3; i++)
+        {
+            var fields = datLines[i].Split('\u0014').Select(f => f.Trim('\u00fe')).ToList();
+            Assert.Equal("11", fields[1]);
+        }
+
+        // Companion OPT must have 33 page records (11 per document)
+        var optWriter = new OptComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
+        using var optStream = new MemoryStream();
+        await optWriter.WriteAsync(optStream, request, new List<FileData>());
+        optStream.Position = 0;
+        var optContent = Encoding.UTF8.GetString(optStream.ToArray());
+        var optLines = optContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(33, optLines.Length);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithExplicitTiffPageRange_VariableRange_MatchesOptCountsPerRecord()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "PAGECOUNT", Type = "number", Required = true },
+            },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 5, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (1, 20) },
+            LoadfileOnly = true,
+        };
+
+        var datContent = await CaptureOutputAsync(request);
+        var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        var datPageCounts = new List<int>();
+        for (int i = 1; i <= 5; i++)
+        {
+            var fields = datLines[i].Split('\u0014').Select(f => f.Trim('\u00fe')).ToList();
+            var count = int.Parse(fields[1], System.Globalization.CultureInfo.InvariantCulture);
+            Assert.InRange(count, 1, 20);
+            datPageCounts.Add(count);
+        }
+
+        // Companion OPT page counts per document must match exactly
+        var optWriter = new OptComposingWriter(Zipper.LoadFiles.WriterMode.LoadfileOnly);
+        using var optStream = new MemoryStream();
+        await optWriter.WriteAsync(optStream, request, new List<FileData>());
+        optStream.Position = 0;
+        var optContent = Encoding.UTF8.GetString(optStream.ToArray());
+        var optLines = optContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        // In OPT, the 4th column is "Y" for doc break, 7th is page count on doc break
+        var optDocPageCounts = new List<int>();
+        foreach (var line in optLines)
+        {
+            var parts = line.Split(',');
+            if (parts[3] == "Y")
+            {
+                optDocPageCounts.Add(int.Parse(parts[6], System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
+
+        Assert.Equal(5, optDocPageCounts.Count);
+        Assert.Equal(datPageCounts, optDocPageCounts);
+        Assert.Equal(datPageCounts.Sum(), optLines.Length);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithExplicitTiffPageRange_SeededReproducibility_ProducesIdenticalOutputs()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "PAGECOUNT", Type = "number", Required = true },
+            },
+        };
+
+        var request1 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 10, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (2, 15) },
+            LoadfileOnly = true,
+        };
+
+        var request2 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 10, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (2, 15) },
+            LoadfileOnly = true,
+        };
+
+        var dat1 = await CaptureOutputAsync(request1);
+        var dat2 = await CaptureOutputAsync(request2);
+
+        Assert.Equal(dat1, dat2);
+    }
+
+    [Theory]
+    [InlineData("PAGECOUNT")]
+    [InlineData("PAGE_COUNT")]
+    [InlineData("PAGE COUNT")]
+    public async Task WriteAsync_CustomPageCountColumnNames_RendersConfiguredPageCount(string columnName)
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = columnName, Type = "number", Required = true },
+            },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 2, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = (7, 7) },
+            LoadfileOnly = true,
+        };
+
+        var datContent = await CaptureOutputAsync(request);
+        var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        for (int i = 1; i <= 2; i++)
+        {
+            var fields = datLines[i].Split('\u0014').Select(f => f.Trim('\u00fe')).ToList();
+            Assert.Equal("7", fields[1]);
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_WhenTiffPagesOmitted_PreservesDefaultBehavior()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "pages",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "PAGECOUNT", Type = "number", Required = true },
+            },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 5, FileType = "tiff" },
+            Metadata = new MetadataConfig { ColumnProfile = profile, Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Tiff = new TiffConfig { PageRange = null }, // Omitted --tiff-pages
+            LoadfileOnly = true,
+        };
+
+        var datContent = await CaptureOutputAsync(request);
+        var datLines = datContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        // Data rows should have random 1-10 page count
+        for (int i = 1; i <= 5; i++)
+        {
+            var fields = datLines[i].Split('\u0014').Select(f => f.Trim('\u00fe')).ToList();
+            var count = int.Parse(fields[1], System.Globalization.CultureInfo.InvariantCulture);
+            Assert.InRange(count, 1, 10);
+        }
+    }
 }
