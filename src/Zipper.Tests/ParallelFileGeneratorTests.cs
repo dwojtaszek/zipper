@@ -524,6 +524,20 @@ public class ParallelFileGeneratorTests
         Assert.Contains("target ZIP size", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CalculatePaddingPerFile_WithStoreMethod_AccountsForNoCompressionRatio()
+    {
+        var generator = new ParallelFileGenerator();
+        // With Store (1.0 ratio), base size 1000 * 10 = 10,000. Target 20,000 -> padding (20,000 - 10,000) / 10 = 1,000.
+        var result = generator.CalculatePaddingPerFile(20_000, 1000, 10, false, ZipCompressionMethod.Store);
+        Assert.Equal(1_000, result);
+
+        // When target is below uncompressed size (e.g. 9,000 < 10,000), it must throw.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            generator.CalculatePaddingPerFile(9_000, 1000, 10, false, ZipCompressionMethod.Store));
+        Assert.Contains("target ZIP size", ex.Message, StringComparison.Ordinal);
+    }
+
     [Fact(Timeout = 10000)]
     public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
     {

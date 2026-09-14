@@ -93,6 +93,61 @@ public class ZipArchiveServiceTests
         Assert.NotNull(loadEntry);
     }
 
+    [Theory]
+    [InlineData(ZipCompressionMethod.Store, 0)]
+    [InlineData(ZipCompressionMethod.Deflate, 8)]
+    public async Task CreateArchiveAsync_WithCompressionMethod_ProducesExpectedMethodEntries(
+        ZipCompressionMethod method, int expectedMethodCode)
+    {
+        // Arrange
+        var zipPath = Path.GetTempFileName();
+        var loadPath = Path.GetTempFileName();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 2,
+                Concurrency = 1,
+                IncludeLoadFile = true,
+                CompressionMethod = method,
+            },
+        };
+
+        var testFiles = new List<FileData>
+        {
+            this.CreateTestFileData(1),
+            this.CreateTestFileData(2),
+        };
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        foreach (var file in testFiles)
+        {
+            await channel.Writer.WriteAsync(file);
+        }
+        channel.Writer.Complete();
+
+        // Act
+        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+        // Assert
+        Assert.True(File.Exists(zipPath));
+        using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath))
+        {
+            foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
+            {
+                Assert.Equal(expectedMethodCode, (int)entry.CompressionMethod);
+            }
+        }
+
+        // Clean up
+        File.Delete(zipPath);
+        if (File.Exists(loadPath))
+        {
+            File.Delete(loadPath);
+        }
+    }
+
     [Fact]
     public async Task CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles()
     {

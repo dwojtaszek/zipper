@@ -65,8 +65,12 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
     }
 
     public Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
+        => this.CreateZipAsync(sourceDir, zipPath, Config.ZipCompressionMethod.Deflate, cancellationToken);
+
+    public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
     {
-        ZipFile.CreateFromDirectory(sourceDir, zipPath, CompressionLevel.Optimal, true);
+        var level = method == Config.ZipCompressionMethod.Store ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
+        ZipFile.CreateFromDirectory(sourceDir, zipPath, level, true);
         return Task.CompletedTask;
     }
 

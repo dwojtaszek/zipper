@@ -56,6 +56,7 @@ internal class ZipArchiveSink : IArchiveSink
                 var emlTextContent = request.Output.WithText ? PlaceholderFiles.EmlExtractedText : Array.Empty<byte>();
 
                 var outOfOrderBuffer = new Dictionary<long, FileData>();
+                var compressionLevel = ResolveCompressionLevel(request.Output.CompressionMethod);
                 var processingContext = new ZipProcessingContext(
                     archive,
                     request,
@@ -63,7 +64,8 @@ internal class ZipArchiveSink : IArchiveSink
                     emlTextContent,
                     usedEntryPaths,
                     processedFiles,
-                    onItemCommitted);
+                    onItemCommitted,
+                    compressionLevel);
 
                 try
                 {
@@ -86,7 +88,7 @@ internal class ZipArchiveSink : IArchiveSink
                 // CancellationToken.None: prior behavior, this phase was non-cancellable, so a
                 // cancellation cannot leave partial DAT/OPT sidecars behind in the output dir.
                 Func<string, Stream> openTarget = request.Output.IncludeLoadFile
-                    ? target => CreateTrackedEntry(archive, target, usedEntryPaths).Open()
+                    ? target => CreateTrackedEntry(archive, target, usedEntryPaths, compressionLevel).Open()
                     : target =>
                     {
                         var fullPath = Path.Combine(baseFilePath, target);
@@ -186,24 +188,24 @@ internal class ZipArchiveSink : IArchiveSink
         {
             context.ProcessedFiles.Add(fileData);
 
-            WriteFileToArchive(context.Archive, fileData, context.UsedEntryPaths);
+            WriteFileToArchive(context.Archive, fileData, context.UsedEntryPaths, context.CompressionLevel);
 
             if (context.Request.Output.WithText)
             {
                 var textContent = string.Equals(fileData.WorkItem.EffectiveFileType(context.Request), "eml", StringComparison.Ordinal)
                     ? context.EmlTextContent
                     : context.StandardTextContent;
-                WriteExtractedTextToArchive(context.Archive, fileData, context.Request, textContent, context.UsedEntryPaths);
+                WriteExtractedTextToArchive(context.Archive, fileData, context.Request, textContent, context.UsedEntryPaths, context.CompressionLevel);
             }
 
             if (fileData.Attachment.HasValue)
             {
-                WriteAttachmentToArchive(context.Archive, fileData, context.UsedEntryPaths);
+                WriteAttachmentToArchive(context.Archive, fileData, context.UsedEntryPaths, context.CompressionLevel);
             }
 
             if (fileData.Attachment.HasValue && context.Request.Output.WithText)
             {
-                WriteAttachmentTextToArchive(context.Archive, fileData, context.UsedEntryPaths);
+                WriteAttachmentTextToArchive(context.Archive, fileData, context.UsedEntryPaths, context.CompressionLevel);
             }
         }
         finally
@@ -213,6 +215,13 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
+    private static CompressionLevel ResolveCompressionLevel(Config.ZipCompressionMethod method) => method switch
+    {
+        Config.ZipCompressionMethod.Store => CompressionLevel.NoCompression,
+        Config.ZipCompressionMethod.Deflate => CompressionLevel.Optimal,
+        _ => CompressionLevel.Optimal,
+    };
+
     private sealed record ZipProcessingContext(
         ZipArchive Archive,
         FileGenerationRequest Request,
@@ -220,11 +229,12 @@ internal class ZipArchiveSink : IArchiveSink
         byte[] EmlTextContent,
         HashSet<string> UsedEntryPaths,
         DiskBackedFileDataList ProcessedFiles,
-        Action<FileData>? OnItemCommitted);
+        Action<FileData>? OnItemCommitted,
+        CompressionLevel CompressionLevel);
 
-    private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
+    private static void WriteFileToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
     {
-        var entry = CreateTrackedEntry(archive, fileData.WorkItem.FilePathInZip, usedEntryPaths);
+        var entry = CreateTrackedEntry(archive, fileData.WorkItem.FilePathInZip, usedEntryPaths, compressionLevel);
         using var entryStream = entry.Open();
         entryStream.Write(fileData.Data.Span);
     }
@@ -232,7 +242,7 @@ internal class ZipArchiveSink : IArchiveSink
     /// <summary>
     /// Writes an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
-    private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
+    private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
     {
         if (!fileData.Attachment.HasValue)
         {
@@ -241,7 +251,7 @@ internal class ZipArchiveSink : IArchiveSink
 
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
         var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
-        var attachmentEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
+        var attachmentEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var attachmentStream = attachmentEntry.Open();
         attachmentStream.Write(fileData.Attachment.Value.content);
     }
@@ -249,7 +259,7 @@ internal class ZipArchiveSink : IArchiveSink
     /// <summary>
     /// Writes the extracted text for an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
-    private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths)
+    private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
     {
         if (!fileData.Attachment.HasValue)
         {
@@ -259,7 +269,7 @@ internal class ZipArchiveSink : IArchiveSink
         var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
         var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt";
         var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{attachmentTextFileName}";
-        var attachmentTextEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
+        var attachmentTextEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var attachmentTextStream = attachmentTextEntry.Open();
         attachmentTextStream.Write(PlaceholderFiles.ExtractedText);
     }
@@ -267,20 +277,20 @@ internal class ZipArchiveSink : IArchiveSink
     /// <summary>
     /// Writes an extracted text version of a Native File to the Archive. Fails if the entry path already exists.
     /// </summary>
-    private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths)
+    private static void WriteExtractedTextToArchive(ZipArchive archive, FileData fileData, FileGenerationRequest request, byte[] textContent, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
     {
         System.Diagnostics.Debug.Assert(request.Output.WithText, "Should only be called when WithText is true");
 
         var textFileName = LoadFiles.TextPathHelper.GetTextPath(fileData.WorkItem.FileName);
         var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{textFileName}";
-        var textEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths);
+        var textEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var textEntryStream = textEntry.Open();
 
         // O(1): write pre-computed byte[] directly, no string round-trip
         textEntryStream.Write(textContent);
     }
 
-    private static ZipArchiveEntry CreateTrackedEntry(ZipArchive archive, string rawPath, HashSet<string> usedEntryPaths)
+    private static ZipArchiveEntry CreateTrackedEntry(ZipArchive archive, string rawPath, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
     {
         var entryPath = rawPath.Replace('\\', '/');
         if (!usedEntryPaths.Add(entryPath))
@@ -288,6 +298,6 @@ internal class ZipArchiveSink : IArchiveSink
             throw new InvalidOperationException($"Archive entry path collision: '{entryPath}' conflicts with an existing entry.");
         }
 
-        return archive.CreateEntry(entryPath, CompressionLevel.Optimal);
+        return archive.CreateEntry(entryPath, compressionLevel);
     }
 }

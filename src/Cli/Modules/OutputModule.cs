@@ -17,11 +17,13 @@ public sealed class OutputModule : CliModule
     private string _distribution = "proportional";
     private string? _targetZipSize;
     private bool _includeLoadFile;
+    private string? _compression;
 
     public override IReadOnlyCollection<string> OwnedFlags { get; } = new[]
     {
         "--type", "--types", "--count", "--output-path", "--folders", "--with-text",
         "--distribution", "--encoding", "--target-zip-size", "--include-load-file",
+        "--compression",
     };
 
     public override bool TakesValue(string flag) => flag is not "--with-text" and not "--include-load-file";
@@ -111,6 +113,14 @@ public sealed class OutputModule : CliModule
             case "--include-load-file":
                 _includeLoadFile = true;
                 return true;
+            case "--compression":
+                if (value is null)
+                {
+                    Console.Error.WriteLine("Error: --compression requires a value.");
+                    return false;
+                }
+                _compression = value;
+                return true;
             default:
                 Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{flag}'");
                 return false;
@@ -134,6 +144,7 @@ public sealed class OutputModule : CliModule
     public bool IncludeLoadFile => _includeLoadFile;
     public int Folders => _folders;
     public bool WithText => _withText;
+    public string? Compression => _compression;
 
     internal bool TryBuild(IReadOnlyList<SourceInput.SourceRecord>? sourceRecords, out OutputConfig config)
     {
@@ -244,6 +255,27 @@ public sealed class OutputModule : CliModule
             fileType = parsedRatios[0].Type;
         }
 
+        var compressionMethod = ZipCompressionMethod.Deflate;
+        if (!string.IsNullOrEmpty(_compression))
+        {
+            var parsedCompression = ArgumentHelpers.GetCompressionMethodFromName(_compression);
+            if (parsedCompression is null)
+            {
+                Console.Error.WriteLine($"Error: Invalid compression method '{_compression}'. Supported values are store, deflate, deflate64, bzip2.");
+                config = default!;
+                return false;
+            }
+
+            if (parsedCompression is ZipCompressionMethod.Deflate64 or ZipCompressionMethod.BZip2)
+            {
+                Console.Error.WriteLine($"Error: Compression method '{_compression}' is not yet supported. Supported values: store, deflate.");
+                config = default!;
+                return false;
+            }
+
+            compressionMethod = parsedCompression.Value;
+        }
+
         config = new OutputConfig
         {
             OutputPath = resolved.FullName,
@@ -259,6 +291,7 @@ public sealed class OutputModule : CliModule
             WithText = _withText,
             TargetZipSize = parsedSize,
             IncludeLoadFile = _includeLoadFile,
+            CompressionMethod = compressionMethod,
         };
         return true;
     }

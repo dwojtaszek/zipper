@@ -446,4 +446,49 @@ public class OutputModuleTests
         Assert.Null(config.FileTypeRatios);
         Assert.Null(config.FileTypePlan);
     }
+
+    [Fact]
+    public void TryApply_Compression_NullValue_Fails()
+    {
+        var error = CaptureError(() => Assert.False(new OutputModule().TryApply("--compression", null)));
+        Assert.Contains("Error: --compression requires a value.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_Compression_InvalidValue_Fails()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--compression", "invalid" }, out _));
+        });
+        Assert.Contains("Error: Invalid compression method 'invalid'. Supported values are store, deflate, deflate64, bzip2.", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("deflate64")]
+    [InlineData("bzip2")]
+    public void TryBuild_Compression_UnsupportedMethods_Fails(string method)
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--compression", method }, out _));
+        });
+        Assert.Contains($"Error: Compression method '{method}' is not yet supported. Supported values: store, deflate.", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("store", ZipCompressionMethod.Store)]
+    [InlineData("deflate", ZipCompressionMethod.Deflate)]
+    public void TryBuild_Compression_ValidMethods_Succeeds(string method, ZipCompressionMethod expected)
+    {
+        Assert.True(TryBuild(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--compression", method }, out var config));
+        Assert.Equal(expected, config.CompressionMethod);
+    }
+
+    [Fact]
+    public void TryBuild_Compression_Omitted_DefaultsToDeflate()
+    {
+        Assert.True(TryBuild(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory() }, out var config));
+        Assert.Equal(ZipCompressionMethod.Deflate, config.CompressionMethod);
+    }
 }

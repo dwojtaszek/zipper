@@ -202,3 +202,8 @@ REQ-216	unit	ProgramTests.Main_WithArchiveTestSuite_PublishesPairsAndReturnsZero
 REQ-217	unit	ArchiveTestCaseSchemaTests.Load_SchemaFile_DeclaresDraft07Contract	Expectation File schema contract frozen; semantic checks in ArchiveTestCaseSchemaTests
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_Truncation_RemovesTailBytesAndRecordsThem	Mutation records with before-mutation offsets, before/after hashes/sizes, and declared values; ordered combined chains in ArchiveCombinedCaseTests prove each mutation consumes the previous result
 REQ-219	unit	ParallelFileGeneratorTests.GenerateFilesAsync_SequentialSameSecondCalls_AllocateDistinctBasenamesAndPreserveFirstArchive	Collision-resistant basenames, exclusive file creation, upfront Production Set collision rejection, and owned-artifact cleanup on fault/cancellation
+REQ-220	unit	OutputModuleTests.TryBuild_Compression_ValidMethods_Succeeds	--compression flag parsing and case-insensitive mapping for store, deflate, deflate64, bzip2
+REQ-221	unit	OutputModuleTests.TryBuild_Compression_Omitted_DefaultsToDeflate	Default compression method is deflate when --compression is omitted
+REQ-222	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithCompressionMethod_ProducesExpectedMethodEntries	Archive entries created with configured compression method (Store=0, Deflate=8)
+REQ-223	unit	OutputModuleTests.TryBuild_Compression_InvalidValue_Fails	Unrecognized and unsupported compression methods rejected with descriptive error
+REQ-224	unit	ParallelFileGeneratorTests.CalculatePaddingPerFile_WithStoreMethod_AccountsForNoCompressionRatio	Target zip size padding and size estimation use uncompressed ratio (1.0) with store compression

@@ -1,5 +1,21 @@
 namespace Zipper.Config;
 
+/// <summary>ZIP compression method codes as defined in the ZIP specification.</summary>
+public enum ZipCompressionMethod
+{
+    /// <summary>Method 0: no compression (Store). Fastest write, largest output.</summary>
+    Store = 0,
+
+    /// <summary>Method 8: standard DEFLATE. Default and backward-compatible.</summary>
+    Deflate = 8,
+
+    /// <summary>Method 9: Enhanced Deflate (64 KB window). Typically similar ratio to Deflate.</summary>
+    Deflate64 = 9,
+
+    /// <summary>Method 12: BZip2 block compression. Usually better ratio than Deflate.</summary>
+    BZip2 = 12,
+}
+
 public record OutputConfig
 {
     public string OutputPath { get; init; } = string.Empty;
@@ -34,6 +50,9 @@ public record OutputConfig
     public long? TargetZipSize { get; init; }
 
     public bool IncludeLoadFile { get; init; }
+
+    /// <summary>ZIP compression method for all output Archives. Defaults to Deflate (method 8) for backward compatibility.</summary>
+    public ZipCompressionMethod CompressionMethod { get; init; } = ZipCompressionMethod.Deflate;
 
     public string FileTypeLower => this.FileType.ToLowerInvariant();
 
