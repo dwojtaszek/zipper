@@ -142,7 +142,7 @@ public class DataSourceConfig
     public int Count { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the distribution pattern.
+    /// Gets or sets the distribution pattern (uniform, gaussian/normal, exponential, pareto, weighted).
     /// </summary>
     [JsonPropertyName("distribution")]
     public string Distribution { get; set; } = "uniform";

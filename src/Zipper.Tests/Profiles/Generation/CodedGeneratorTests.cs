@@ -292,4 +292,135 @@ public class CodedGeneratorTests
             }
         }
     }
+
+    [Fact]
+    public void Generate_CodedWithGaussianDistributionIndices_MultiValue_ReturnsDistinctValues()
+    {
+        var values = new[] { "Low", "MediumLow", "Medium", "MediumHigh", "High" };
+        // Center-heavy indices (Gaussian-like: index 2 "Medium" is dominant)
+        var indices = new[] { 2, 2, 2, 1, 3, 2, 0, 4, 2, 2 };
+        var col = MultiValueColumn(min: 2, max: 3);
+        var generator = new CodedGenerator(values, indices, col, DefaultSettings());
+
+        for (int i = 0; i < 20; i++)
+        {
+            var result = generator.Generate(MakeContext(i));
+            var parts = result.Split(';');
+            Assert.InRange(parts.Length, 2, 3);
+            Assert.Equal(parts.Length, parts.Distinct(StringComparer.Ordinal).Count());
+            foreach (var part in parts)
+            {
+                Assert.Contains(part, values);
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_CodedWithExponentialDistributionIndices_MultiValue_ReturnsDistinctValues()
+    {
+        var values = new[] { "Code1", "Code2", "Code3", "Code4", "Code5" };
+        // Low-end heavy indices (Exponential-like: index 0 "Code1" is dominant)
+        var indices = new[] { 0, 0, 0, 1, 0, 1, 2, 0, 3, 4 };
+        var col = MultiValueColumn(min: 2, max: 3);
+        var generator = new CodedGenerator(values, indices, col, DefaultSettings());
+
+        for (int i = 0; i < 20; i++)
+        {
+            var result = generator.Generate(MakeContext(i));
+            var parts = result.Split(';');
+            Assert.InRange(parts.Length, 2, 3);
+            Assert.Equal(parts.Length, parts.Distinct(StringComparer.Ordinal).Count());
+            foreach (var part in parts)
+            {
+                Assert.Contains(part, values);
+            }
+        }
+    }
+
+    [Fact(Timeout = 30000)]
+    public async Task Subprocess_DistributionProbeProfile_GaussianExponentialUniform_ProduceDifferentDATFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var assemblyPath = typeof(Zipper.Program).Assembly.Location;
+
+            async Task<string> RunProfileAsync(string distribution)
+            {
+                var profilePath = Path.Combine(tempDir, $"profile-{distribution}.json");
+                var profileJson = $$"""
+                {
+                  "name": "distribution-probe-{{distribution}}",
+                  "settings": {"emptyValuePercentage": 0},
+                  "dataSources": {
+                    "values": {"count": 100, "prefix": "V", "distribution": "{{distribution}}"}
+                  },
+                  "columns": [
+                    {"name": "DOCID", "type": "identifier", "required": true},
+                    {"name": "VALUE", "type": "text", "dataSource": "values", "required": true}
+                  ]
+                }
+                """;
+                await File.WriteAllTextAsync(profilePath, profileJson);
+
+                var outDir = Path.Combine(tempDir, $"out-{distribution}");
+                Directory.CreateDirectory(outDir);
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = $"\"{assemblyPath}\" --loadfile-only --count 1000 --column-profile \"{profilePath}\" --seed 42 --output-path \"{outDir}\"",
+                    WorkingDirectory = tempDir,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                };
+
+                using var process = System.Diagnostics.Process.Start(psi);
+                Assert.NotNull(process);
+
+                var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                var stderrTask = process.StandardError.ReadToEndAsync();
+
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await process.WaitForExitAsync(cts.Token);
+
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
+                Assert.True(process.ExitCode == 0, $"Process failed for {distribution} with exit code {process.ExitCode}. Stderr: {stderr}. Stdout: {stdout}");
+
+                var datFiles = Directory.GetFiles(outDir, "*.dat");
+                Assert.Single(datFiles);
+                return await File.ReadAllTextAsync(datFiles[0]);
+            }
+
+            var uniformDat = await RunProfileAsync("uniform");
+            var gaussianDat = await RunProfileAsync("gaussian");
+            var exponentialDat = await RunProfileAsync("exponential");
+
+            // Verify they are not byte-identical (fixing issue #829)
+            Assert.NotEqual(uniformDat, gaussianDat);
+            Assert.NotEqual(uniformDat, exponentialDat);
+            Assert.NotEqual(gaussianDat, exponentialDat);
+
+            // Compute SHA-256 hashes to explicitly assert uniqueness
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var uniformHash = Convert.ToHexString(sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(uniformDat)));
+            var gaussianHash = Convert.ToHexString(sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(gaussianDat)));
+            var exponentialHash = Convert.ToHexString(sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(exponentialDat)));
+
+            Assert.NotEqual(uniformHash, gaussianHash);
+            Assert.NotEqual(uniformHash, exponentialHash);
+            Assert.NotEqual(gaussianHash, exponentialHash);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+        }
+    }
 }
