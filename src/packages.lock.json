@@ -51,6 +51,12 @@
         "resolved": "4.16.1",
         "contentHash": "/ZJSaEux84qnviRHJysHGKufCO3+9TtHHijQMZCW+zVrd7c2lFI6Utbzxb2ddCZAJOZaCT4RgbAEeCsOPIf4uw=="
       },
+      "SharpZipLib": {
+        "type": "Direct",
+        "requested": "[1.4.2, )",
+        "resolved": "1.4.2",
+        "contentHash": "yjj+3zgz8zgXpiiC3ZdF/iyTBbz2fFvMxZFEBPUcwZjIvXOf37Ylm+K58hqMfIBt5JgU/Z2uoUS67JmTLe973A=="
+      },
       "SixLabors.ImageSharp": {
         "type": "Direct",
         "requested": "[3.1.12, )",

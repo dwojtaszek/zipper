@@ -142,6 +142,11 @@
         "resolved": "4.0.0",
         "contentHash": "aP5KQxL5RnFNGW1f0euYVBfCatkLw5iEzMRJcXKq8LWWP4Cp3+qoSq1tDDL2vvJ2rM0ychmVMa2VaEKLS6uX4w=="
       },
+      "SharpZipLib": {
+        "type": "Transitive",
+        "resolved": "1.4.2",
+        "contentHash": "yjj+3zgz8zgXpiiC3ZdF/iyTBbz2fFvMxZFEBPUcwZjIvXOf37Ylm+K58hqMfIBt5JgU/Z2uoUS67JmTLe973A=="
+      },
       "SixLabors.Fonts": {
         "type": "Transitive",
         "resolved": "1.0.0",
@@ -206,6 +211,7 @@
         "type": "Project",
         "dependencies": {
           "ClosedXML": "[0.105.1, )",
+          "SharpZipLib": "[1.4.2, )",
           "SixLabors.ImageSharp": "[3.1.12, )"
         }
       }
