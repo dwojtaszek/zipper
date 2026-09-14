@@ -823,4 +823,331 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
             Assert.Contains(row["TAG"], validValues);
         }
     }
+
+    /// <summary>
+    /// Test that a data source with Gaussian distribution exhibits central concentration and bell-curve characteristics.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_GaussianDataSource_ShowsCentralConcentration()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "gaussian-probe",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["values"] = new DataSourceConfig { Count = 100, Prefix = "V", Distribution = "gaussian" },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "VALUE", Type = "text", DataSource = "values", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        int sampleSize = 1000;
+        var indices = new List<int>();
+        var counts = new int[100];
+
+        for (int i = 1; i <= sampleSize; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            var val = row["VALUE"];
+            Assert.StartsWith("V", val, StringComparison.Ordinal);
+            int num = int.Parse(val.Substring(1), System.Globalization.CultureInfo.InvariantCulture); // 1-based: 1..100
+            int idx = num - 1; // 0..99
+            Assert.InRange(idx, 0, 99);
+            indices.Add(idx);
+            counts[idx]++;
+        }
+
+        // 1. Mean must be centered near 49.5 (middle of 0..99)
+        double mean = indices.Average();
+        Assert.InRange(mean, 44.0, 55.0);
+
+        // 2. Middle 40% (indices 30..69) must contain majority of values (> 60%),
+        //    while outer 40% (0..19 and 80..99) must contain very few values (< 20% combined).
+        int middleCount = counts.Skip(30).Take(40).Sum();
+        int outerCount = counts.Take(20).Sum() + counts.Skip(80).Take(20).Sum();
+
+        Assert.True(
+            middleCount > 600,
+            $"Middle 40% should have > 600 of 1000 items in Gaussian distribution, got {middleCount}");
+        Assert.True(
+            outerCount < 200,
+            $"Outer 40% (edges) should have < 200 of 1000 items in Gaussian distribution, got {outerCount}");
+        Assert.True(
+            middleCount > outerCount * 3,
+            $"Middle count ({middleCount}) should be at least 3x the edge count ({outerCount})");
+    }
+
+    /// <summary>
+    /// Test that a data source with Exponential distribution exhibits low-end bias and monotonic decline across quartiles.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_ExponentialDataSource_ShowsLowEndBias()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "exponential-probe",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["values"] = new DataSourceConfig { Count = 100, Prefix = "V", Distribution = "exponential" },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "VALUE", Type = "text", DataSource = "values", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        int sampleSize = 1000;
+        var counts = new int[100];
+
+        for (int i = 1; i <= sampleSize; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            var val = row["VALUE"];
+            Assert.StartsWith("V", val, StringComparison.Ordinal);
+            int num = int.Parse(val.Substring(1), System.Globalization.CultureInfo.InvariantCulture); // 1-based: 1..100
+            int idx = num - 1;
+            Assert.InRange(idx, 0, 99);
+            counts[idx]++;
+        }
+
+        // Quartiles (each 25 items: Q1=0..24, Q2=25..49, Q3=50..74, Q4=75..99)
+        int q1 = counts.Take(25).Sum();
+        int q2 = counts.Skip(25).Take(25).Sum();
+        int q3 = counts.Skip(50).Take(25).Sum();
+        int q4 = counts.Skip(75).Take(25).Sum();
+
+        // Monotonic decline across quartiles
+        Assert.True(q1 > q2, $"Q1 ({q1}) should be strictly greater than Q2 ({q2}) in exponential distribution");
+        Assert.True(q2 > q3, $"Q2 ({q2}) should be strictly greater than Q3 ({q3}) in exponential distribution");
+        Assert.True(q3 > q4, $"Q3 ({q3}) should be strictly greater than Q4 ({q4}) in exponential distribution");
+
+        // Q1 should hold ~45% of items, Q4 should hold ~10% of items
+        Assert.InRange(q1, 380, 520);
+        Assert.InRange(q4, 50, 160);
+
+        // First item (V1) should have more samples than the last item (V100) and no tail spike
+        Assert.True(counts[0] > counts[99], $"V1 count ({counts[0]}) should be greater than V100 count ({counts[99]})");
+    }
+
+    /// <summary>
+    /// Regression test for Issue #829: Uniform, Gaussian, and Exponential distributions
+    /// with the same seed must produce distinct outputs and not byte-identical content.
+    /// </summary>
+    [Fact]
+    public void GenerateRow_UniformGaussianExponential_ProduceDistinctOutputs()
+    {
+        var makeProfile = (string dist) => new ColumnProfile
+        {
+            Name = $"probe-{dist}",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["values"] = new DataSourceConfig { Count = 100, Prefix = "V", Distribution = dist },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "VALUE", Type = "text", DataSource = "values", Required = true },
+            },
+        };
+
+        var genUniform = new DataGenerator(makeProfile("uniform"), seed: 42);
+        var genGaussian = new DataGenerator(makeProfile("gaussian"), seed: 42);
+        var genExponential = new DataGenerator(makeProfile("exponential"), seed: 42);
+
+        var uniformValues = new List<string>();
+        var gaussianValues = new List<string>();
+        var exponentialValues = new List<string>();
+
+        for (int i = 1; i <= 1000; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+
+            uniformValues.Add(genUniform.GenerateRow(workItem, fileData)["VALUE"]);
+            gaussianValues.Add(genGaussian.GenerateRow(workItem, fileData)["VALUE"]);
+            exponentialValues.Add(genExponential.GenerateRow(workItem, fileData)["VALUE"]);
+        }
+
+        // None of the output streams should be identical
+        Assert.False(
+            uniformValues.SequenceEqual(gaussianValues),
+            "Uniform and Gaussian outputs must not be identical");
+        Assert.False(
+            uniformValues.SequenceEqual(exponentialValues),
+            "Uniform and Exponential outputs must not be identical");
+        Assert.False(
+            gaussianValues.SequenceEqual(exponentialValues),
+            "Gaussian and Exponential outputs must not be identical");
+    }
+
+    /// <summary>
+    /// Test singleton and small pool sizes for Gaussian and Exponential distributions.
+    /// </summary>
+    [Theory]
+    [InlineData("gaussian", 1)]
+    [InlineData("exponential", 1)]
+    [InlineData("gaussian", 2)]
+    [InlineData("exponential", 2)]
+    [InlineData("gaussian", 3)]
+    [InlineData("exponential", 3)]
+    public void GenerateRow_SmallPoolSizes_HandledGracefully(string distribution, int poolSize)
+    {
+        var profile = new ColumnProfile
+        {
+            Name = $"small-pool-{distribution}-{poolSize}",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["items"] = new DataSourceConfig { Count = poolSize, Prefix = "Item_", Distribution = distribution },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "ITEM", Type = "text", DataSource = "items", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        var allowed = Enumerable.Range(1, poolSize).Select(i => $"Item_{i}").ToHashSet(StringComparer.Ordinal);
+
+        for (int i = 1; i <= 100; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.Contains(row["ITEM"], allowed);
+        }
+    }
+
+    /// <summary>
+    /// Test coded column with explicit values and Gaussian/Exponential distributions.
+    /// </summary>
+    [Theory]
+    [InlineData("gaussian")]
+    [InlineData("exponential")]
+    [InlineData("normal")]
+    public void GenerateRow_CodedColumnWithExplicitValues_HonorsDistribution(string distribution)
+    {
+        var values = new List<string> { "Critical", "High", "Medium", "Low", "Info" };
+        var profile = new ColumnProfile
+        {
+            Name = $"coded-{distribution}",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["severities"] = new DataSourceConfig { Values = values, Distribution = distribution },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "SEVERITY", Type = "coded", DataSource = "severities", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.Contains(row["SEVERITY"], values);
+            seen.Add(row["SEVERITY"]);
+        }
+
+        Assert.True(seen.Count >= 2, "Expected multiple distinct values to be selected");
+    }
+
+    /// <summary>
+    /// Test that Gaussian and Exponential data sources produce reproducible results with the same seed.
+    /// </summary>
+    [Theory]
+    [InlineData("gaussian")]
+    [InlineData("exponential")]
+    public void GenerateRow_SeededReproducibility_GaussianAndExponential_ProducesIdenticalResults(string distribution)
+    {
+        var profile = new ColumnProfile
+        {
+            Name = $"seed-test-{distribution}",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["source"] = new DataSourceConfig { Count = 50, Prefix = "V", Distribution = distribution },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "VAL", Type = "text", DataSource = "source", Required = true },
+            },
+        };
+
+        var generator1 = new DataGenerator(profile, seed: 999);
+        var generator2 = new DataGenerator(profile, seed: 999);
+
+        for (int i = 1; i <= 100; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+
+            var row1 = generator1.GenerateRow(workItem, fileData);
+            var row2 = generator2.GenerateRow(workItem, fileData);
+
+            Assert.Equal(row1["VAL"], row2["VAL"]);
+        }
+    }
+
+    /// <summary>
+    /// Test that custodianCountOverride works on Gaussian and Exponential custodian data sources.
+    /// </summary>
+    [Theory]
+    [InlineData("gaussian")]
+    [InlineData("exponential")]
+    public void GenerateRow_WithCustodianCountOverride_GaussianAndExponential_LimitsDistinctValues(string distribution)
+    {
+        var profile = new ColumnProfile
+        {
+            Name = $"cust-override-{distribution}",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            DataSources = new Dictionary<string, DataSourceConfig>(StringComparer.Ordinal)
+            {
+                ["custodians"] = new DataSourceConfig { Count = 50, Prefix = "Cust_", Distribution = distribution },
+            },
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "DOCID", Type = "identifier", Required = true },
+                new() { Name = "CUSTODIAN", Type = "text", DataSource = "custodians", Required = true },
+            },
+        };
+
+        var generator = new DataGenerator(profile, seed: 42, custodianCountOverride: 3);
+        var allowed = new HashSet<string>(StringComparer.Ordinal) { "Cust_1", "Cust_2", "Cust_3" };
+
+        for (int i = 1; i <= 200; i++)
+        {
+            var workItem = new FileWorkItem { Index = i, FilePathInZip = $"Folder/doc{i}.pdf" };
+            var fileData = new FileData { Data = new byte[128], WorkItem = workItem };
+            var row = generator.GenerateRow(workItem, fileData);
+
+            Assert.Contains(row["CUSTODIAN"], allowed);
+        }
+    }
 }
+

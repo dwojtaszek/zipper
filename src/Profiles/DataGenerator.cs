@@ -150,7 +150,11 @@ internal class DataGenerator
                 ? cfg.Values
                 : Enumerable.Range(1, cfg.Count).Select(i => $"{cfg.Prefix}{i}")).ToArray();
             this.dataSources[name] = vals;
-            if (string.Equals(cfg.Distribution, "pareto", StringComparison.Ordinal) || string.Equals(cfg.Distribution, "weighted", StringComparison.Ordinal))
+            if (string.Equals(cfg.Distribution, "pareto", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cfg.Distribution, "weighted", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cfg.Distribution, "gaussian", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cfg.Distribution, "normal", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cfg.Distribution, "exponential", StringComparison.OrdinalIgnoreCase))
             {
                 this.distributionIndices[name] = this.PrecomputeIndices(vals.Length, cfg);
             }
@@ -205,7 +209,17 @@ internal class DataGenerator
     private int[] PrecomputeIndices(int count, DataSourceConfig cfg)
     {
         var indices = new int[1000];
-        if (string.Equals(cfg.Distribution, "weighted", StringComparison.Ordinal) && cfg.Weights?.Count > 0)
+        if (count <= 0)
+        {
+            return indices;
+        }
+
+        if (count == 1)
+        {
+            return indices;
+        }
+
+        if (string.Equals(cfg.Distribution, "weighted", StringComparison.OrdinalIgnoreCase) && cfg.Weights?.Count > 0)
         {
             var total = cfg.Weights.Take(count).Sum();
             if (total <= 0)
@@ -240,6 +254,35 @@ internal class DataGenerator
                 {
                     indices[i] = count - 1;
                 }
+            }
+        }
+        else if (string.Equals(cfg.Distribution, "gaussian", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cfg.Distribution, "normal", StringComparison.OrdinalIgnoreCase))
+        {
+            double mean = (count - 1) / 2.0;
+            double stdDev = (count - 1) / 6.0;
+
+            for (int i = 0; i < 1000; i++)
+            {
+                double u1 = 1.0 - this.random.NextDouble();
+                double u2 = 1.0 - this.random.NextDouble();
+                double z0 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+                int value = (int)Math.Round(mean + (z0 * stdDev));
+                indices[i] = Math.Clamp(value, 0, count - 1);
+            }
+        }
+        else if (string.Equals(cfg.Distribution, "exponential", StringComparison.OrdinalIgnoreCase))
+        {
+            double lambda = 2.0 / count;
+            double scale = 1.0 - Math.Exp(-2.0); // Truncated/normalized inverse CDF to [0, count]
+
+            for (int i = 0; i < 1000; i++)
+            {
+                double p = this.random.NextDouble();
+                double exponentialValue = -Math.Log(1.0 - (p * scale)) / lambda;
+                int value = (int)Math.Floor(exponentialValue);
+                indices[i] = Math.Clamp(value, 0, count - 1);
             }
         }
         else

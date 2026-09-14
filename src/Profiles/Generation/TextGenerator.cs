@@ -36,6 +36,11 @@ internal sealed class TextGenerator : IColumnValueGenerator
 
         if (this.dataSourceValues is not null)
         {
+            if (this.dataSourceValues.Length == 0)
+            {
+                return string.Empty;
+            }
+
             if (this.distributionIndices is not null)
             {
                 var idx = this.distributionIndices[context.DocumentIndex % this.distributionIndices.Length];
