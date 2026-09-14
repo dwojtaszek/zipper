@@ -57,10 +57,10 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `agy` | `default` | 1|
 | `agy` | `gemini-3.8-flash-high` | 1|
 | `agy` | `gemini-3.8-flash-medium` | 0|
-| `agy` | `gemini-3.8-flash-low` | 3|
+| `agy` | `gemini-3.8-flash-low` | 0|
 | `agy` | `gemini-3.7-flash-high` | 0|
-| `agy` | `gemini-3.7-flash-medium` | 3|
-| `agy` | `gemini-3.7-flash-low` | 3|
+| `agy` | `gemini-3.7-flash-medium` | 0|
+| `agy` | `gemini-3.7-flash-low` | 0|
 | `agy` | `gemini-3.1-pro-high` | 0|
 | `agy` | `gemini-3.1-pro-low` | 0|
 | `agy` | `gemini-3.5-flash-high` | 0|
