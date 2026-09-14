@@ -15,6 +15,15 @@ import subprocess
 from datetime import datetime, timezone
 
 # Configuration
+# Environment fallback for container execution
+if os.path.isdir("/opt/data") and (os.environ.get("HOME") == "/root" or not os.environ.get("HOME")):
+    os.environ["HOME"] = "/opt/data"
+if os.path.isdir("/opt/data/bin") and "/opt/data/bin" not in os.environ.get("PATH", "").split(":"):
+    os.environ["PATH"] = f"/opt/data/bin:{os.environ.get('PATH', '')}"
+if os.path.isdir("/opt/data/dotnet") and "/opt/data/dotnet" not in os.environ.get("PATH", "").split(":"):
+    os.environ["PATH"] = f"/opt/data/dotnet:{os.environ.get('PATH', '')}"
+    os.environ["DOTNET_ROOT"] = "/opt/data/dotnet"
+
 env_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(env_path):
     with open(env_path) as f:
@@ -319,14 +328,19 @@ def _model_key(model: str) -> str:
     return key
 
 
+PREFS_ORDER: dict[tuple[str, str], int] = {}
+
 def load_preferences() -> dict[tuple[str, str], int]:
+    global PREFS_ORDER
     prefs: dict[tuple[str, str], int] = {}
+    PREFS_ORDER = {}
     if not os.path.exists(PREFERENCES_PATH):
         print(f"WARNING: Preferences file not found at {PREFERENCES_PATH}")
         return prefs
 
     with open(PREFERENCES_PATH) as f:
         in_table = False
+        order_idx = 0
         for line in f:
             stripped = line.strip()
             if stripped.startswith("|") and stripped.endswith("|"):
@@ -343,7 +357,10 @@ def load_preferences() -> dict[tuple[str, str], int]:
                     prio = int(raw_prio) if raw_prio else 0
                 except ValueError:
                     prio = 0
-                prefs[(agent, model)] = prio
+                key = (agent, model)
+                prefs[key] = prio
+                PREFS_ORDER[key] = order_idx
+                order_idx += 1
     return prefs
 
 
@@ -412,7 +429,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
 
     if not candidates:
         print("[select] No healthy candidates found. Exiting.")
-        if _should_send_rate_limited("[Runner] All Agents Unhealthy"):
+        if not STATUS_ONLY and _should_send_rate_limited("[Runner] All Agents Unhealthy"):
             send_email(
                 "[Runner] All Agents Unhealthy",
                 "<h3>No agent has a working API token/credits at startup.</h3>"
@@ -420,7 +437,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             )
         sys.exit(0)
 
-    candidates.sort(key=lambda x: (x[0], x[1], x[2] or ""))
+    candidates.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[1], x[2] or ""))
 
     # If ACTIVE_AGENT hint is set, promote that agent's best candidate within
     # its priority tier to the front.
@@ -433,7 +450,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             else:
                 rest.append(c)
         if hint_tier:
-            hint_tier.sort(key=lambda x: (x[0], x[2] or ""))
+            hint_tier.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[2] or ""))
             candidates = hint_tier + rest
 
     result = [(name, model) for _, name, model in candidates]
