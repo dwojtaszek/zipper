@@ -337,10 +337,12 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(24, malformed.Count);
+        Assert.Equal(26, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
         Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
+        Assert.Contains(malformed, c => c.CaseKey == "deflate-invalid-btype");
+        Assert.Contains(malformed, c => c.CaseKey == "deflate-corrupt-huffman");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("prefix-unrebased").Classification);
@@ -361,6 +363,8 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("overlapping-entry-ranges")]
     [InlineData("orphan-local-header")]
     [InlineData("prefix-unrebased")]
+    [InlineData("deflate-invalid-btype")]
+    [InlineData("deflate-corrupt-huffman")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -504,10 +508,77 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_ValidDeflateDynamic_UsesDynamicHuffmanFirstBlock()
+    {
+        var control = BuildControl("valid-deflate-dynamic");
+
+        var entry = Assert.Single(control.Layout.Entries);
+        Assert.Equal((ushort)8, entry.Method);
+        Assert.Equal(0b10, (control.ArchiveBytes[(int)entry.DataOffset] >> 1) & 0x03);
+        Assert.Equal(control.Entries[0].Content, ReadEntryContent(control.ArchiveBytes, "dyn.txt"));
+    }
+
+    [Fact]
+    public void Apply_DeflateInvalidBtype_SetsReservedBlockType()
+    {
+        var control = BuildControl("valid-deflate");
+        var definition = ArchiveTestCatalog.GetCase("deflate-invalid-btype");
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.NotEqual(0b11, (control.ArchiveBytes[(int)entry.DataOffset] >> 1) & 0x03);
+        Assert.Equal(0b11, (mutated.ArchiveBytes[(int)entry.DataOffset] >> 1) & 0x03);
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.DataOffset, 1));
+
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.Single(archive.Entries);
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("deflate-invalid-btype", mutation.Code);
+        Assert.Equal(entry.DataOffset, mutation.Offset);
+        Assert.Contains("btype=3", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_DeflateCorruptHuffman_FlipsCodeLengthBitAndFailsDecode()
+    {
+        var control = BuildControl("valid-deflate-dynamic");
+        var definition = ArchiveTestCatalog.GetCase("deflate-corrupt-huffman");
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        // The documented dynamic header survives except the flipped order[0] bit.
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(0b10, (mutated.ArchiveBytes[(int)entry.DataOffset] >> 1) & 0x03);
+        Assert.Equal(
+            0x02,
+            control.ArchiveBytes[(int)entry.DataOffset + 2] ^ mutated.ArchiveBytes[(int)entry.DataOffset + 2]);
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.DataOffset + 2, 1));
+
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.Single(archive.Entries);
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal(entry.DataOffset + 2, mutation.Offset);
+        Assert.Contains("dynamic-hlit=", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains("dynamic-hdist=", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains("dynamic-hclen=", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(54, all.Count);
+        Assert.Equal(57, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -562,7 +633,9 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                         or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
                         or ArchiveTestMutationKind.OverlappingEntryRanges
                         or ArchiveTestMutationKind.OrphanLocalHeader
-                        or ArchiveTestMutationKind.PrefixUnrebased)
+                        or ArchiveTestMutationKind.PrefixUnrebased
+                        or ArchiveTestMutationKind.DeflateInvalidBtype
+                        or ArchiveTestMutationKind.DeflateCorruptHuffman)
                 {
                     Assert.All(testCase.Mutations, mutation => Assert.NotNull(mutation.DeclaredValue));
                 }

@@ -150,6 +150,27 @@ internal static class ArchiveTestCatalog
     /// builder so the layout reader locates the EOCD by length, never by search.</summary>
     internal const int SignatureCommentLength = 24;
 
+    /// <summary>
+    /// Varied 4 KiB text for the deflate-dynamic control's content (ticket #874).
+    /// Declared before <see cref="Cases"/> like <see cref="SignatureLikePrefix"/>:
+    /// the dynamic recipe reads it during static initialization, and C# static field
+    /// initializers run in textual order.
+    /// </summary>
+    private static readonly byte[] DeflateDynamicText = BuildDeflateDynamicText();
+
+    private static byte[] BuildDeflateDynamicText()
+    {
+        const string Sentence = "Lorem ipsum dolor sit amet, consectetur adipiscing elit; sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ";
+        var unit = Encoding.UTF8.GetBytes(Sentence);
+        var bytes = new byte[4096];
+        for (var i = 0; i < bytes.Length; i++)
+        {
+            bytes[i] = unit[i % unit.Length];
+        }
+
+        return bytes;
+    }
+
     private static readonly IReadOnlyDictionary<string, ArchiveTestCaseDefinition> Cases = new Dictionary<string, ArchiveTestCaseDefinition>(StringComparer.Ordinal)
     {
         ["valid-empty"] = new(
@@ -168,6 +189,13 @@ internal static class ArchiveTestCatalog
             "valid-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: ValidControlSuites,
             Recipe: DeflateControlRecipe),
+        // Ticket #874 dynamic-deflate control: a valid DEFLATE entry whose first block
+        // uses dynamic Huffman tables, giving the corrupt-huffman mutation its
+        // documented target.
+        ["valid-deflate-dynamic"] = new(
+            "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: DeflateDynamicRecipe),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -262,6 +290,10 @@ internal static class ArchiveTestCatalog
             suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
+        ["deflate-invalid-btype"] = MutatedDefinition(
+            ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
+        ["deflate-corrupt-huffman"] = MutatedDefinition(
+            ArchiveTestMutationKind.DeflateCorruptHuffman, controlCaseKey: DeflateDynamicControlCaseKey),
         ["orphan-local-header"] = MutatedDefinition(
             ArchiveTestMutationKind.OrphanLocalHeader,
             controlCaseKey: DeflateControlCaseKey,
@@ -340,6 +372,7 @@ internal static class ArchiveTestCatalog
     internal const byte UnixHostSystem = 3;
     private const string StoredControlCaseKey = "valid-stored";
     private const string DeflateControlCaseKey = "valid-deflate";
+    private const string DeflateDynamicControlCaseKey = "valid-deflate-dynamic";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
     private const string Zip64ControlCaseKey = "valid-zip64-small";
@@ -375,6 +408,7 @@ internal static class ArchiveTestCatalog
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
         DeflateControlCaseKey => DeflateControlRecipe,
+        DeflateDynamicControlCaseKey => DeflateDynamicRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
@@ -402,8 +436,17 @@ internal static class ArchiveTestCatalog
         .. Enumerable.Repeat(ArchiveTestRecipeEntry.File("shared.bin", 65536, "deflate"), 64),
     ]);
 
-    // The control for the declared-size-oversized mutation: one deflated entry whose
-    // compressed bytes are far smaller than its honest uncompressed size.
+    // The dynamic-deflate recipe (ticket #874): one DEFLATE entry over the varied
+    // text above, which makes the standard writer emit a dynamic Huffman first
+    // block (verified by the case test pinning BTYPE 10, never assumed).
+    private static ArchiveTestRecipe DeflateDynamicRecipe => new(
+    [
+        new ArchiveTestRecipeEntry("dyn.txt", 4096, "deflate", IsDirectory: false, PayloadPrefix: DeflateDynamicText),
+    ]);
+
+    // The deflate control for the declared-size-oversized, orphan-local-header,
+    // and deflate-invalid-btype mutations: one deflated entry whose compressed
+    // bytes are far smaller than its honest uncompressed size.
     private static ArchiveTestRecipe DeflateControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate"),

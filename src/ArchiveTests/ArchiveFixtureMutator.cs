@@ -62,6 +62,8 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
             ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
             ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
+            ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before),
+            ArchiveTestMutationKind.DeflateCorruptHuffman => CorruptDeflateHuffman(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -601,6 +603,85 @@ internal static class ArchiveFixtureMutator
         return Finalize(ArchiveTestMutationKind.PrefixUnrebased, before, after, [mutation]);
     }
 
+    /// Sets the first DEFLATE block's type to the reserved value 3 (ticket #874):
+    /// bits 1-2 of the first compressed byte become 11. Works on any block kind —
+    /// stored, fixed, or dynamic — since every block opens with the same 3-bit
+    /// header. The framing stays intact; only the decoder's block dispatch fails.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptDeflateBtype(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = DeflateEntry(control, ArchiveTestMutationKind.DeflateInvalidBtype);
+        if (entry.CompressedSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.DeflateInvalidBtype.ToCaseKey()}': the control's compressed payload is empty, no block header to corrupt.");
+        }
+
+        var blockOffset = entry.DataOffset;
+        var code = ArchiveTestMutationKind.DeflateInvalidBtype.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.DeflateInvalidBtype, before,
+        [
+            new MutationSpec(
+                code, "file-data", blockOffset,
+                $"Sets the first DEFLATE block's type bits to 11 (reserved): no decoder dispatches it, so entry reads fail while listing and structural walks still succeed.",
+                entry.Ordinal, 1, 1, DeclaredValue: "btype=3 (reserved)"),
+        ], after => after[(int)blockOffset] = (byte)((after[(int)blockOffset] & ~0x06) | 0x06));
+    }
+
+    /// <summary>
+    /// Flips a bit in the first code-length code length of a dynamic Huffman block
+    /// (ticket #874): bit 17 of the stream (byte 2, order[0] per RFC 1951 §3.2.7).
+    /// The header is parsed, not assumed — HLIT, HDIST, and HCLEN are read and the
+    /// pre-mutation BTYPE must be 10 (dynamic), otherwise the control no longer has
+    /// the documented layout and the recipe fails loudly instead of corrupting an
+    /// unknown field.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptDeflateHuffman(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = DeflateEntry(control, ArchiveTestMutationKind.DeflateCorruptHuffman);
+        if (entry.CompressedSize < 3)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.DeflateCorruptHuffman.ToCaseKey()}': the control's compressed payload is {entry.CompressedSize} bytes, too small for a dynamic-block header.");
+        }
+
+        var header = (long)before[(int)entry.DataOffset]
+            | ((long)before[checked((int)entry.DataOffset + 1)] << 8)
+            | ((long)before[checked((int)entry.DataOffset + 2)] << 16);
+        if (((header >> 1) & 0x03) != 0x02)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.DeflateCorruptHuffman.ToCaseKey()}': the control's first block is not dynamic (BTYPE {((header >> 1) & 0x03)}); refusing to corrupt an undocumented field.");
+        }
+
+        var hlit = ((header >> 3) & 0x1F) + 257;
+        var hdist = ((header >> 8) & 0x1F) + 1;
+        var hclen = ((header >> 13) & 0x0F) + 4;
+        var bitOffset = entry.DataOffset + 2;
+        var code = ArchiveTestMutationKind.DeflateCorruptHuffman.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.DeflateCorruptHuffman, before,
+        [
+            new MutationSpec(
+                code, "file-data", bitOffset,
+                $"Flips bit 1 of the first dynamic-block code-length code length (order[0]): the documented header reads HLIT {hlit}, HDIST {hdist}, HCLEN {hclen} with BTYPE 10, so decoders build corrupt Huffman tables and entry reads fail.",
+                entry.Ordinal, 1, 1, DeclaredValue: $"dynamic-hlit={hlit} dynamic-hdist={hdist} dynamic-hclen={hclen}"),
+        ], after => after[(int)bitOffset] ^= 0x02);
+    }
+
+    /// <summary>The control's first entry as a DEFLATE payload mutation target.</summary>
+    private static ArchiveFixtureEntryLayout DeflateEntry(ArchiveFixtureArtifact control, ArchiveTestMutationKind kind)
+    {
+        if (control.Layout.Entries.Count == 0 || control.Layout.Entries[0].Method != 8)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control's entry 0 must be a DEFLATE entry.");
+        }
+
+        return control.Layout.Entries[0];
+    }
+
     /// <summary>One intended field change: what changed, where, and how much.</summary>
     private sealed record MutationSpec(
         string Code,
@@ -728,6 +809,8 @@ internal enum ArchiveTestMutationKind
     DeclaredSizeOversized,
     OrphanLocalHeader,
     PrefixUnrebased,
+    DeflateInvalidBtype,
+    DeflateCorruptHuffman,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -758,6 +841,8 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
         ArchiveTestMutationKind.OrphanLocalHeader => "orphan-local-header",
         ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",
+        ArchiveTestMutationKind.DeflateInvalidBtype => "deflate-invalid-btype",
+        ArchiveTestMutationKind.DeflateCorruptHuffman => "deflate-corrupt-huffman",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }
