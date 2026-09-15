@@ -157,11 +157,11 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenFiftyFourCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenFiftySevenCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
-        // #872, +2 for #873): a case dropped from the catalogue or unlisted from
-        // every suite fails here.
-        Assert.Equal(54, AllKeys().Count);
+        // #872, +2 for #873, +3 for #874): a case dropped from the catalogue or
+        // unlisted from every suite fails here.
+        Assert.Equal(57, AllKeys().Count);
     }
 }

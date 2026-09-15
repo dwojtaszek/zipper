@@ -338,6 +338,20 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // DEFLATE bitstream corruption (ticket #874): framing and directory stay
+            // intact, so listing succeeds; no decoder reproduces verified content
+            // from the broken stream.
+            // Readers report the failure differently: zlib-based readers fail the
+            // entry read, while .NET rejects the entry at Open() as an unsupported
+            // compression method. The exact exception type is never contracted.
+            ArchiveTestMutationKind.DeflateInvalidBtype
+                or ArchiveTestMutationKind.DeflateCorruptHuffman =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation], capability: "deflate-bitstream"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Tail truncations (ticket #839): every operation fails at a defined stage.
             ArchiveTestMutationKind.TruncatePayloadTail
                 or ArchiveTestMutationKind.TruncateCentralTail
