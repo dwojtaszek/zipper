@@ -82,6 +82,10 @@ internal enum ArchiveControlConstruction
     /// discrepant Unicode name into entry 0's local and central headers (ticket #871).</summary>
     InfoZipUnicodePath,
 
+    /// <summary>Prepends the 64-byte non-Archive stub and rebases every central
+    /// relative-local-header offset and the EOCD offset past it (ticket #873).</summary>
+    PrefixedArchive,
+
     /// <summary>Writes through a non-seekable stream so the standard writer emits
     /// data descriptors with the signature (APPNOTE §4.3.9).</summary>
     NonSeekableDescriptor,
@@ -215,6 +219,15 @@ internal static class ArchiveTestCatalog
         // Malformed or policy-sensitive cases: built from the named valid control at the
         // same Seed by applying the recorded mutation. The control recipe is repeated so
         // a fixture is reconstructible from controlCaseKey + mutations alone.
+        // Ticket #873 prefixed cases: a valid 64-byte-prefixed Archive with rebased
+        // offsets (compatibility), and its intentionally unrebased malformed twin.
+        ["prefix-rebased"] = new(
+            "prefix-rebased", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: DeflateControlRecipe,
+            Construction: ArchiveControlConstruction.PrefixedArchive),
+        ["prefix-unrebased"] = MutatedDefinition(
+            ArchiveTestMutationKind.PrefixUnrebased, controlCaseKey: DeflateControlCaseKey),
         ["crc-local-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.CrcLocalMismatch),
         ["crc-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.CrcCentralMismatch),
         // The two reader-hostile smoke members frozen in #834: every consumer

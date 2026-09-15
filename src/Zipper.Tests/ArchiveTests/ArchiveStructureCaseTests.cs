@@ -337,11 +337,13 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(23, malformed.Count);
+        Assert.Equal(24, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
+        Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
+        Assert.Equal("malformed", ArchiveTestCatalog.GetCase("prefix-unrebased").Classification);
 
         var keys = malformed.Select(c => c.CaseKey).ToList();
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.Ordinal).Count());
@@ -358,6 +360,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("encryption-flag-with-plaintext")]
     [InlineData("overlapping-entry-ranges")]
     [InlineData("orphan-local-header")]
+    [InlineData("prefix-unrebased")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -418,10 +421,73 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_PrefixedArchive_RebasesOffsetsAndReads()
+    {
+        var plain = BuildControl("valid-deflate");
+        var artifact = ArchiveFixtureBuilder.BuildControl("prefix-rebased", 42, CancellationToken.None);
+
+        Assert.Equal("valid", ArchiveTestCatalog.GetCase("prefix-rebased").Classification);
+        Assert.Contains(ArchiveTestCatalog.CompatibilitySuite, ArchiveTestCatalog.GetCase("prefix-rebased").Suites);
+        Assert.Equal(plain.ArchiveBytes.Length + 64, artifact.ArchiveBytes.Length);
+        Assert.Equal(64, artifact.Layout.Entries[0].LocalHeaderOffset);
+        Assert.Equal(plain.Layout.CentralDirectoryOffset + 64, artifact.Layout.CentralDirectoryOffset);
+        Assert.Equal(plain.Layout.CentralDirectorySize, artifact.Layout.CentralDirectorySize);
+
+        // The stub is inert data: none of the structural signatures appear in it.
+        var stub = artifact.ArchiveBytes.AsSpan(0, 64);
+        Assert.Equal(-1, stub.IndexOf((ReadOnlySpan<byte>)[0x50, 0x4b, 0x03, 0x04]));
+        Assert.Equal(-1, stub.IndexOf((ReadOnlySpan<byte>)[0x50, 0x4b, 0x01, 0x02]));
+        Assert.Equal(-1, stub.IndexOf((ReadOnlySpan<byte>)[0x50, 0x4b, 0x05, 0x06]));
+        Assert.Equal(-1, stub.IndexOf((ReadOnlySpan<byte>)[0x50, 0x4b, 0x07, 0x08]));
+
+        using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
+        var sole = Assert.Single(archive.Entries);
+        Assert.Equal("doc.txt", sole.FullName);
+    }
+
+    [Fact]
+    public void Apply_PrefixUnrebased_LeavesStaleOffsets()
+    {
+        var control = BuildControl("valid-deflate");
+        var definition = ArchiveTestCatalog.GetCase("prefix-unrebased");
+        Assert.True(definition.IsMutation, "case 'prefix-unrebased' must be a mutation case");
+        Assert.Equal("malformed", definition.Classification);
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("prefix-unrebased", mutation.Code);
+        Assert.Equal(0, mutation.Offset);
+        Assert.Equal(64, mutation.InsertedLength);
+        Assert.Equal(control.ArchiveBytes.Length, mutation.BeforeSize);
+        Assert.Equal(control.ArchiveBytes.Length + 64, mutation.AfterSize);
+        Assert.Contains("prefix-length=64 rebased=false", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"eocd-central-directory-offset={control.Layout.CentralDirectoryOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
+
+        // Stale coordinates: the EOCD field still holds the pre-prefix central
+        // offset and the central entry still declares local header 0 (now the
+        // stub); the true central directory sits 64 bytes later.
+        var eocdField = ReadUInt32(mutated.ArchiveBytes, mutated.ArchiveBytes.Length - 22 + 16);
+        Assert.Equal((uint)control.Layout.CentralDirectoryOffset, eocdField);
+        Assert.NotEqual(
+            [0x50, 0x4b, 0x01, 0x02],
+            mutated.ArchiveBytes.AsSpan((int)eocdField, 4).ToArray());
+        Assert.Equal(
+            [0x50, 0x4b, 0x01, 0x02],
+            mutated.ArchiveBytes.AsSpan((int)eocdField + 64, 4).ToArray());
+        Assert.Equal(0u, ReadUInt32(mutated.ArchiveBytes, (int)eocdField + 64 + 42));
+
+        // Desynchronized: the central directory still starts at its pre-prefix file
+        // position, which now holds shifted payload bytes instead of central
+        // headers, so even listing fails on strict readers.
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.ThrowsAny<Exception>(() => archive.Entries.Count);
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(51, all.Count);
+        Assert.Equal(53, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -475,7 +541,8 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                         or ArchiveTestMutationKind.UnsupportedMethod
                         or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
                         or ArchiveTestMutationKind.OverlappingEntryRanges
-                        or ArchiveTestMutationKind.OrphanLocalHeader)
+                        or ArchiveTestMutationKind.OrphanLocalHeader
+                        or ArchiveTestMutationKind.PrefixUnrebased)
                 {
                     Assert.All(testCase.Mutations, mutation => Assert.NotNull(mutation.DeclaredValue));
                 }

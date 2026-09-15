@@ -61,6 +61,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
             ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
+            ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -559,6 +560,47 @@ internal static class ArchiveFixtureMutator
         return Finalize(ArchiveTestMutationKind.OrphanLocalHeader, before, after, [mutation]);
     }
 
+    /// <summary>
+    /// Inserts the 64-byte non-Archive stub at offset 0 without rebasing any offset
+    /// (ticket #873): every central relative-local-header offset and the EOCD offset
+    /// still point at their pre-prefix positions, so declared local headers land in
+    /// the stub or mid-structure. The offset-desynchronization counterpart to the
+    /// rebased prefixed-archive construction.
+    /// </summary>
+    private static MutatedArchiveFixture InsertPrefixWithoutRebase(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var prefix = ArchiveFixtureBuilder.ArchivePrefixStub;
+        if (control.Layout.Entries.Count == 0)
+        {
+            throw new InvalidOperationException("prefix-unrebased expects a control with at least one entry.");
+        }
+
+        var after = new byte[checked(before.Length + prefix.Length)];
+        prefix.CopyTo(after, 0);
+        before.CopyTo(after, prefix.Length);
+
+        var code = ArchiveTestMutationKind.PrefixUnrebased.ToCaseKey();
+        var staleLocals = string.Join(",", control.Layout.Entries.Select(e => e.LocalHeaderOffset));
+        var mutation = new ArchiveTestMutation(
+            Code: code,
+            Structure: "whole-archive",
+            OffsetBasis: "before-mutation",
+            Offset: 0,
+            Explanation: $"Inserts the {prefix.Length}-byte non-Archive stub at offset 0 without rebasing offsets: the EOCD central-directory offset still addresses its pre-prefix position (now shifted payload bytes, not central headers), so strict readers cannot even walk the directory; every central relative-local-header offset is likewise stale.",
+            Ordinal: null,
+            DeletedLength: 0,
+            InsertedLength: prefix.Length,
+            BeforeSize: before.Length,
+            AfterSize: after.Length,
+            BeforeSha256: Hash(before),
+            AfterSha256: Hash(after),
+            BeforeHex: null,
+            AfterHex: Convert.ToHexStringLower(prefix),
+            DeclaredValue: $"prefix-length={prefix.Length} rebased=false eocd-central-directory-offset={control.Layout.CentralDirectoryOffset} central-relative-local-header-offsets={staleLocals}");
+
+        return Finalize(ArchiveTestMutationKind.PrefixUnrebased, before, after, [mutation]);
+    }
+
     /// <summary>One intended field change: what changed, where, and how much.</summary>
     private sealed record MutationSpec(
         string Code,
@@ -685,6 +727,7 @@ internal enum ArchiveTestMutationKind
     Zip64TruncatedExtra,
     DeclaredSizeOversized,
     OrphanLocalHeader,
+    PrefixUnrebased,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -714,6 +757,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
         ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
         ArchiveTestMutationKind.OrphanLocalHeader => "orphan-local-header",
+        ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }
