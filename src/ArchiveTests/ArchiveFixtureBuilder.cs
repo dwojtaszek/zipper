@@ -218,6 +218,10 @@ internal static class ArchiveFixtureBuilder
         {
             archiveBytes = EnrichLocalExtraField(archiveBytes, definition.CaseKey);
         }
+        else if (definition.Construction is ArchiveControlConstruction.InfoZipUnicodePath)
+        {
+            archiveBytes = EnrichUnicodePath(archiveBytes, definition.CaseKey);
+        }
         else if (definition.Construction is ArchiveControlConstruction.StripDescriptorSignature)
         {
             archiveBytes = StripDescriptorSignature(archiveBytes, definition.CaseKey);
@@ -349,6 +353,82 @@ internal static class ArchiveFixtureBuilder
         var eocdOffset = (int)baseLayout.EocdOffset + ExtraLength;
         var centralDirectoryOffset = BinaryPrimitives.ReadUInt32LittleEndian(enriched.AsSpan(eocdOffset + 16, 4));
         BinaryPrimitives.WriteUInt32LittleEndian(enriched.AsSpan(eocdOffset + 16, 4), centralDirectoryOffset + ExtraLength);
+
+        return enriched;
+    }
+
+    /// <summary>
+    /// Baseline construction for the unicode-path-extra-mismatch case (ticket #871):
+    /// inserts an Info-ZIP Unicode Path subfield (0x7075, version 1, CRC-32 of the
+    /// standard name, discrepant UTF-8 Unicode name) into entry 0's local header and
+    /// central header. The local insert shifts every later physical offset by the
+    /// subfield length (re-linked like <see cref="EnrichLocalExtraField"/>); the
+    /// central insert grows the central directory by the same length. Entry 0's own
+    /// relative-local-header offset is unchanged; the EOCD central-directory offset
+    /// shifts by one subfield length and its size grows by one subfield length.
+    /// </summary>
+    private static byte[] EnrichUnicodePath(byte[] archiveBytes, string caseKey)
+    {
+        var unicodeName = Encoding.UTF8.GetBytes("../../escaped.txt");
+        var subfield = new byte[checked(4 + 1 + 4 + unicodeName.Length)];
+        BinaryPrimitives.WriteUInt16LittleEndian(subfield, 0x7075);
+        BinaryPrimitives.WriteUInt16LittleEndian(subfield.AsSpan(2), checked((ushort)(1 + 4 + unicodeName.Length)));
+        subfield[4] = 1;
+        var baseLayout = ArchiveFixtureLayout.Read(archiveBytes);
+        if (baseLayout.Entries.Count == 0 || baseLayout.Entries[0].LocalExtraLength != 0 || baseLayout.Entries[0].CentralExtraLength != 0)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the Unicode Path baseline expects at least one entry and no pre-existing extra fields.");
+        }
+
+        var first = baseLayout.Entries[0];
+        if (first.Name != "safe.txt")
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the Unicode Path baseline expects the standard name 'safe.txt'; found '{first.Name}'.");
+        }
+
+        BinaryPrimitives.WriteUInt32LittleEndian(subfield.AsSpan(5), Crc32(Convert.FromHexString(first.NameHex)));
+        unicodeName.CopyTo(subfield.AsSpan(9));
+
+        var localInsertAt = checked(first.LocalHeaderOffset + 30 + first.LocalNameLength);
+        var localEnriched = new byte[checked(archiveBytes.Length + subfield.Length)];
+        archiveBytes.AsSpan()[..(int)localInsertAt].CopyTo(localEnriched);
+        subfield.CopyTo(localEnriched.AsSpan((int)localInsertAt));
+        archiveBytes.AsSpan((int)localInsertAt).CopyTo(localEnriched.AsSpan((int)localInsertAt + subfield.Length));
+        BinaryPrimitives.WriteUInt16LittleEndian(localEnriched.AsSpan((int)first.LocalHeaderOffset + 28, 2), checked((ushort)subfield.Length));
+        foreach (var entry in baseLayout.Entries)
+        {
+            if (entry.Ordinal == 0)
+            {
+                continue;
+            }
+
+            var centralRelativeOffset = (int)entry.CentralDirectoryOffset + subfield.Length + 42;
+            var relative = BinaryPrimitives.ReadUInt32LittleEndian(localEnriched.AsSpan(centralRelativeOffset, 4));
+            BinaryPrimitives.WriteUInt32LittleEndian(localEnriched.AsSpan(centralRelativeOffset, 4), checked(relative + (uint)subfield.Length));
+        }
+
+        var localEocdOffset = (int)baseLayout.EocdOffset + subfield.Length;
+        var localCentralOffset = BinaryPrimitives.ReadUInt32LittleEndian(localEnriched.AsSpan(localEocdOffset + 16, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(localEnriched.AsSpan(localEocdOffset + 16, 4), checked(localCentralOffset + (uint)subfield.Length));
+
+        var relaidCentralOffset = checked(baseLayout.Entries[0].CentralDirectoryOffset + subfield.Length);
+        var relaidEocdOffset = checked(baseLayout.EocdOffset + subfield.Length);
+        var centralInsertAt = checked(relaidCentralOffset + 46 + first.LocalNameLength);
+        var enriched = new byte[checked(localEnriched.Length + subfield.Length)];
+        localEnriched.AsSpan()[..(int)centralInsertAt].CopyTo(enriched);
+        subfield.CopyTo(enriched.AsSpan((int)centralInsertAt));
+        localEnriched.AsSpan((int)centralInsertAt).CopyTo(enriched.AsSpan((int)centralInsertAt + subfield.Length));
+        BinaryPrimitives.WriteUInt16LittleEndian(enriched.AsSpan((int)relaidCentralOffset + 30, 2), checked((ushort)subfield.Length));
+
+        // The central insert lands inside the central directory, after its start: the
+        // EOCD shifts by one more subfield length and the central size grows, while
+        // the central-directory offset field (already rebased by the local insert)
+        // stays put.
+        var eocdOffset = (int)relaidEocdOffset + subfield.Length;
+        var centralSize = BinaryPrimitives.ReadUInt32LittleEndian(enriched.AsSpan(eocdOffset + 12, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(enriched.AsSpan(eocdOffset + 12, 4), checked(centralSize + (uint)subfield.Length));
 
         return enriched;
     }

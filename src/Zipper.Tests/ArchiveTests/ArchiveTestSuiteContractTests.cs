@@ -53,6 +53,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The malformed parser-differential case (ticket #869) housed in security.</summary>
     private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header"];
 
+    /// <summary>The Unicode name-policy case (ticket #871) housed in security.</summary>
+    private static readonly string[] UnicodePathSecurityCaseKeys = ["unicode-path-extra-mismatch"];
+
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
 
@@ -85,6 +88,7 @@ public class ArchiveTestSuiteContractTests
             UnsupportedFeatureSecurityCaseKeys
                 .Concat(BoundedResourceSecurityCaseKeys)
                 .Concat(ParserDifferentialSecurityCaseKeys)
+                .Concat(UnicodePathSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -152,10 +156,10 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenFiftyCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenFiftyOneCaseKeys()
     {
-        // The frozen complete-catalogue size (#834, +1 for #869): a case dropped from the
-        // catalogue or unlisted from every suite fails here, not only in E2E.
-        Assert.Equal(50, AllKeys().Count);
+        // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871): a case
+        // dropped from the catalogue or unlisted from every suite fails here.
+        Assert.Equal(51, AllKeys().Count);
     }
 }

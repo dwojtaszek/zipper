@@ -65,6 +65,54 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     private static uint ReadUInt32(byte[] bytes, long offset) =>
         BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan((int)offset, 4));
 
+    [Fact]
+    public void Build_UnicodePathExtraMismatch_Injects7075FieldInBothHeaders()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("unicode-path-extra-mismatch", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal("safe.txt", entry.Name);
+        Assert.Equal("2e2e2f2e2e2f657363617065642e747874", entry.UnicodePathNameHex);
+        Assert.NotEqual(entry.NameHex, entry.UnicodePathNameHex);
+
+        // Both headers carry the 25-byte subfield: tag 0x7075, version 1, CRC-32 of
+        // the standard name, discrepant Unicode name. Lengths come from the headers.
+        var unicodeName = Encoding.UTF8.GetBytes("../../escaped.txt");
+        var subfieldLength = 4 + 1 + 4 + unicodeName.Length;
+        Assert.Equal(subfieldLength, entry.LocalExtraLength);
+        Assert.Equal(subfieldLength, entry.CentralExtraLength);
+
+        var localExtraAt = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        Assert.Equal(0x7075, ReadUInt16(artifact.ArchiveBytes, localExtraAt));
+        Assert.Equal(1 + 4 + unicodeName.Length, ReadUInt16(artifact.ArchiveBytes, localExtraAt + 2));
+        Assert.Equal(1, artifact.ArchiveBytes[(int)localExtraAt + 4]);
+        Assert.Equal(0x46d8446bu, ReadUInt32(artifact.ArchiveBytes, localExtraAt + 5));
+
+        var centralExtraAt = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        Assert.Equal(0x7075, ReadUInt16(artifact.ArchiveBytes, centralExtraAt));
+        Assert.Equal(
+            artifact.ArchiveBytes.AsSpan((int)localExtraAt, subfieldLength).ToArray(),
+            artifact.ArchiveBytes.AsSpan((int)centralExtraAt, subfieldLength).ToArray());
+    }
+
+    [Fact]
+    public void Build_UnicodePathExtraMismatch_DotNetIgnoresExtraField()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("unicode-path-extra-mismatch", 42, CancellationToken.None);
+
+        // The verified differential: .NET resolves the standard header name and
+        // ignores the discrepant Unicode Path field, while 0x7075-honoring readers
+        // (Python zipfile, asserted by the independent verifier) resolve the
+        // traversal name. Both behaviors are recorded, neither assumed.
+        using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
+        var sole = Assert.Single(archive.Entries);
+        Assert.Equal("safe.txt", sole.FullName);
+        using var stream = sole.Open();
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        Assert.Equal(artifact.Entries[0].Content, copy.ToArray());
+    }
+
     private static ushort ReadUInt16(byte[] bytes, long offset) =>
         BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan((int)offset, 2));
 
@@ -374,16 +422,16 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllSeventeenMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllEighteenMembersWithSafeBasenames()
     {
         // The full security suite per #834 (eleven policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
-        // differential, not just the policy subset: every member publishes a
-        // safe Fixture ID pair.
+        // differential and the #871 Unicode Path policy case: every member
+        // publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(17, securityKeys.Count);
+        Assert.Equal(18, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

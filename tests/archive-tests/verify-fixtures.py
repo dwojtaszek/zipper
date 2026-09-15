@@ -318,6 +318,12 @@ class FixtureVerifier:
             orphan_note = verify_orphan_hidden(case, zip_bytes)
             checks.append({"check": "orphan-hidden", "status": "pass", "detail": orphan_note})
 
+        # Unicode Path extra field (ticket #871): a valid 0x7075 subfield in both
+        # headers whose CRC matches the standard name; readers ignore the field.
+        if case.get("caseKey") == "unicode-path-extra-mismatch":
+            unicode_note = verify_unicode_path_extra(case, zip_bytes)
+            checks.append({"check": "unicode-path", "status": "pass", "detail": unicode_note})
+
         return checks
 
     # ---- reader operations (normalized outcomes, never exception wording) ----
@@ -740,6 +746,65 @@ def verify_orphan_hidden(case, zip_bytes):
                                 % (len(names), len(case["entries"])))
 
     return "hidden=%d-bytes streaming-visible-only" % hidden_length
+
+
+def verify_unicode_path_extra(case, zip_bytes):
+    """Unicode Path audit (ticket #871): entry 0 carries a well-formed 0x7075
+    subfield in both headers (version 1, CRC-32 of the standard header name),
+    while the raw central-directory name stays the benign 'safe.txt'. The
+    verified differential: readers that honor 0x7075 (Python zipfile) resolve
+    the traversal name, readers that ignore it (.NET ZipArchive, covered by the
+    C# suite) list the benign name."""
+    import binascii
+    import struct
+
+    # Local header is first (offset 0 for this single-entry control).
+    if len(zip_bytes) < 30:
+        raise VerificationError("unicode-path", "archive too small for a local file header")
+    if zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("unicode-path", "offset 0 is not a local file header")
+    local_name_len = struct.unpack_from("<H", zip_bytes, 26)[0]
+    if zip_bytes[30:30 + local_name_len] != b"safe.txt":
+        raise VerificationError("unicode-path", "raw local name is not the benign 'safe.txt'")
+    local_extra_len = struct.unpack_from("<H", zip_bytes, 28)[0]
+    local_extra = zip_bytes[30 + local_name_len:30 + local_name_len + local_extra_len]
+    # Central directory location from the EOCD (comment-free control).
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("unicode-path", "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("unicode-path", "central directory missing at offset %d" % cd_offset)
+    central_name_len = struct.unpack_from("<H", zip_bytes, cd_offset + 28)[0]
+    central_extra_len = struct.unpack_from("<H", zip_bytes, cd_offset + 30)[0]
+    raw_central_name = zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_len]
+    if raw_central_name != b"safe.txt":
+        raise VerificationError("unicode-path", "raw central name is %r, expected b'safe.txt'" % raw_central_name)
+    central_extra = zip_bytes[cd_offset + 46 + central_name_len:cd_offset + 46 + central_name_len + central_extra_len]
+
+    for label, extra in (("local", local_extra), ("central", central_extra)):
+        if len(extra) < 4 or extra[0:2] != b"\x75\x70":
+            raise VerificationError("unicode-path", "%s header lacks the 0x7075 subfield" % label)
+        size = struct.unpack("<H", extra[2:4])[0]
+        if size + 4 != len(extra):
+            raise VerificationError("unicode-path",
+                                    "%s 0x7075 subfield is not the whole %d-byte extra area" % (label, len(extra)))
+        if extra[4] != 1:
+            raise VerificationError("unicode-path", "%s 0x7075 version is %d, expected 1" % (label, extra[4]))
+        if struct.unpack("<I", extra[5:9])[0] != (binascii.crc32(b"safe.txt") & 0xFFFFFFFF):
+            raise VerificationError("unicode-path", "%s 0x7075 CRC does not match the standard name" % label)
+        if extra[9:] != b"../../escaped.txt":
+            raise VerificationError("unicode-path", "%s 0x7075 Unicode name is %r" % (label, extra[9:]))
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        infos = zf.infolist()
+    if len(infos) != 1:
+        raise VerificationError("unicode-path", "central directory lists %d entries, expected 1" % len(infos))
+    if infos[0].filename != "../../escaped.txt":
+        raise VerificationError("unicode-path",
+                                "a 0x7075-honoring reader must resolve '../../escaped.txt', got %r"
+                                % infos[0].filename)
+
+    return "0x7075-valid differential-honored-vs-ignored"
 
 
 def verify_mutations(case, zip_bytes, actual_sha):
