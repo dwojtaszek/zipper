@@ -89,62 +89,95 @@ Inject 5% deliberate structural anomalies into a 100,000-record DAT Load File to
 zipper --loadfile-only --count 100000 --output-path ./chaos_ingest --chaos-mode --chaos-amount "5%" --seed 42
 ```
 
-### Recipe C: E-Mail & Attachment Family Simulation
-Generate 10,000 E-Mails with a 30% attachment rate and parent-child attachment relationship columns (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`):
+### Recipe C: Email & Attachment Family Simulation
+Generate 10,000 Emails with a 30% Attachment Rate and parent-child Attachment relationship Metadata columns (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`):
 
 ```bash
 zipper --type eml --count 10000 --output-path ./email_families --attachment-rate 30 --with-families --with-metadata
 ```
 
-### Recipe D: Realistic Document Mix Export
-Generate a multi-file-type archive (60% PDF, 20% E-Mail, 10% TIFF, 10% XLSX) with custom litigation metadata profile:
+### Recipe D: File Type Mix Archive Export
+Generate a File Type Mix Archive (60% PDF, 20% Email, 10% TIFF, 10% XLSX) of Native Files with default Metadata:
 
 ```bash
-zipper --types "pdf:60,eml:20,tiff:10,xlsx:10" --count 20000 --output-path ./mixed_archive --column-profile litigation
+zipper --types "pdf:60,eml:20,tiff:10,xlsx:10" --count 20000 --output-path ./mixed_archive
+```
+
+### Recipe E: Single-File-Type Column Profile Generation
+Generate an Archive of single-File-Type Native Files (PDF) with a litigation Column Profile and extracted text Metadata:
+
+```bash
+zipper --type pdf --count 20000 --output-path ./litigation_archive --column-profile litigation --with-text
 ```
 
 ---
 
 ## 4. Custom Column Profile Authoring Guide
 
-You can define custom JSON column profiles to generate domain-specific metadata schemas with up to 200 columns. Custom profiles must be saved within your working directory.
+You can define custom JSON Column Profiles to generate domain-specific Metadata schemas with up to 200 columns. Custom profiles must be saved within your working directory.
 
 ### Example Custom Profile (`custom-profile.json`)
 
 ```json
 {
-  "profileName": "custom-ediscovery",
+  "name": "custom-ediscovery",
   "description": "Custom review metadata profile with tailored date ranges and custodians",
+  "version": "1.0",
+  "fieldNamingConvention": "UPPERCASE",
+  "settings": {
+    "emptyValuePercentage": 0,
+    "dateFormat": "yyyy-MM-dd"
+  },
+  "dataSources": {
+    "custodians": {
+      "count": 10,
+      "distribution": "uniform",
+      "prefix": "Custodian_"
+    },
+    "confidentiality": {
+      "values": [
+        "Public",
+        "Confidential",
+        "Highly Confidential",
+        "Restricted"
+      ]
+    }
+  },
   "columns": [
     {
       "name": "CONTROL_NUMBER",
-      "generatorType": "identifier",
-      "generatorParams": { "prefix": "DOC", "digits": 8 }
+      "type": "identifier",
+      "required": true
     },
     {
       "name": "CUSTODIAN",
-      "generatorType": "text",
-      "generatorParams": { "source": "custodians" }
+      "type": "text",
+      "dataSource": "custodians"
     },
     {
       "name": "DOCUMENT_DATE",
-      "generatorType": "date",
-      "generatorParams": { "startDate": "2020-01-01", "endDate": "2026-12-31" }
+      "type": "date",
+      "dateRange": {
+        "min": "2020-01-01",
+        "max": "2026-12-31"
+      }
     },
     {
       "name": "CONFIDENTIALITY",
-      "generatorType": "coded",
-      "generatorParams": { "values": ["Public", "Confidential", "Highly Confidential", "Restricted"] }
+      "type": "coded",
+      "dataSource": "confidentiality"
     },
     {
       "name": "FILE_SIZE_BYTES",
-      "generatorType": "number",
-      "generatorParams": { "min": 1024, "max": 10485760 }
+      "type": "number",
+      "range": {
+        "min": 1024,
+        "max": 10485760
+      }
     },
     {
       "name": "REVIEW_NOTES",
-      "generatorType": "longtext",
-      "generatorParams": { "loremParagraphs": 2 }
+      "type": "longtext"
     }
   ]
 }
@@ -207,7 +240,7 @@ Generate rich, configurable metadata schemas with up to 200 columns using built-
 
 Example usage:
 ```bash
-zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation --seed 12345
+zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation --with-text --seed 12345
 ```
 
 ---
