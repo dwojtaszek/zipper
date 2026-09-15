@@ -332,6 +332,17 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Unrebased prefix (ticket #873): the stub shifts every true position while
+            // declared offsets stay stale. Prefix-tolerant readers (Python 3.12+, via
+            // prepended-data correction) list and read as if rebased; strict readers
+            // (.NET) cannot even walk the directory. Both sides are recorded.
+            ArchiveTestMutationKind.PrefixUnrebased =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-offsets-are-lies"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             _ => throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': no expectation set defined for mutation '{kind}'."),
         };

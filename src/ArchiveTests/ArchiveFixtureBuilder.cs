@@ -35,6 +35,28 @@ internal static class ArchiveFixtureBuilder
 {
     private static readonly DateTimeOffset FixedDosTimestamp = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// The 64-byte non-Archive prefix for the prefixed cases (ticket #873): ASCII text
+    /// carrying no ZIP signatures, so it is inert data, never a structure. Shared with
+    /// the unrebased mutation so both cases carry the identical prefix bytes.
+    /// </summary>
+    internal static byte[] ArchivePrefixStub { get; } = BuildPrefixStub();
+
+    private static byte[] BuildPrefixStub()
+    {
+        var stub = Encoding.ASCII.GetBytes("# zipper prefixed-archive stub (CD rebased past this line).");
+        if (stub.Length > 63)
+        {
+            throw new InvalidOperationException("The Archive prefix stub exceeds 63 bytes.");
+        }
+
+        var padded = new byte[64];
+        stub.CopyTo(padded, 0);
+        Array.Fill(padded, (byte)'.', stub.Length, 63 - stub.Length);
+        padded[63] = (byte)'\n';
+        return padded;
+    }
+
     internal static ArchiveFixtureArtifact BuildControl(string caseKey, int seed, CancellationToken cancellationToken) =>
         Build(ArchiveTestCatalog.GetCase(caseKey), seed, cancellationToken);
 
@@ -221,6 +243,10 @@ internal static class ArchiveFixtureBuilder
         else if (definition.Construction is ArchiveControlConstruction.InfoZipUnicodePath)
         {
             archiveBytes = EnrichUnicodePath(archiveBytes, definition.CaseKey);
+        }
+        else if (definition.Construction is ArchiveControlConstruction.PrefixedArchive)
+        {
+            archiveBytes = PrependPrefix(archiveBytes, definition.CaseKey);
         }
         else if (definition.Construction is ArchiveControlConstruction.StripDescriptorSignature)
         {
@@ -431,6 +457,45 @@ internal static class ArchiveFixtureBuilder
         BinaryPrimitives.WriteUInt32LittleEndian(enriched.AsSpan(eocdOffset + 12, 4), checked(centralSize + (uint)subfield.Length));
 
         return enriched;
+    }
+
+    /// <summary>
+    /// Baseline construction for the prefix-rebased case (ticket #873): prepends the
+    /// 64-byte stub before the control's bytes and rebases every central
+    /// relative-local-header offset and the EOCD central-directory offset past it.
+    /// Counts and sizes are unchanged; the result stays a readable Archive for
+    /// prefix-tolerant readers.
+    /// </summary>
+    private static byte[] PrependPrefix(byte[] archiveBytes, string caseKey)
+    {
+        var prefix = ArchivePrefixStub;
+        var baseLayout = ArchiveFixtureLayout.Read(archiveBytes);
+
+        // Pinned to a plain (non-Zip64, comment-free) control: Zip64 sentinels
+        // would need the Zip64 EOCD locator and extended fields rebased too.
+        if (baseLayout.CentralDirectoryOffset == ArchiveFixtureLayout.Zip64SizeSentinel
+            || baseLayout.Entries.Any(e => e.LocalHeaderOffset == ArchiveFixtureLayout.Zip64SizeSentinel))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the prefix baseline cannot rebase Zip64 sentinel offsets.");
+        }
+
+        var prefixed = new byte[checked(archiveBytes.Length + prefix.Length)];
+        prefix.CopyTo(prefixed, 0);
+        archiveBytes.CopyTo(prefixed, prefix.Length);
+
+        foreach (var entry in baseLayout.Entries)
+        {
+            var centralRelativeOffset = checked((int)entry.CentralDirectoryOffset + prefix.Length + 42);
+            var relative = BinaryPrimitives.ReadUInt32LittleEndian(prefixed.AsSpan(centralRelativeOffset, 4));
+            BinaryPrimitives.WriteUInt32LittleEndian(prefixed.AsSpan(centralRelativeOffset, 4), checked(relative + (uint)prefix.Length));
+        }
+
+        var eocdOffset = checked((int)baseLayout.EocdOffset + prefix.Length);
+        var centralDirectoryOffset = BinaryPrimitives.ReadUInt32LittleEndian(prefixed.AsSpan(eocdOffset + 16, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(prefixed.AsSpan(eocdOffset + 16, 4), checked(centralDirectoryOffset + (uint)prefix.Length));
+
+        return prefixed;
     }
 
     /// <summary>

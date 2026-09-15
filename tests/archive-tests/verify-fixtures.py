@@ -324,6 +324,13 @@ class FixtureVerifier:
             unicode_note = verify_unicode_path_extra(case, zip_bytes)
             checks.append({"check": "unicode-path", "status": "pass", "detail": unicode_note})
 
+        # Prefixed cases (ticket #873): a 64-byte signature-free stub precedes the
+        # Archive; the rebased twin shifts every offset past it, the unrebased twin
+        # leaves stale offsets behind.
+        if case.get("caseKey") in ("prefix-rebased", "prefix-unrebased"):
+            prefix_note = verify_prefix_model(case, zip_bytes)
+            checks.append({"check": "prefix-model", "status": "pass", "detail": prefix_note})
+
         return checks
 
     # ---- reader operations (normalized outcomes, never exception wording) ----
@@ -805,6 +812,57 @@ def verify_unicode_path_extra(case, zip_bytes):
                                 % infos[0].filename)
 
     return "0x7075-valid differential-honored-vs-ignored"
+
+
+def verify_prefix_model(case, zip_bytes):
+    """Prefix audit (ticket #873): the first 64 bytes carry no ZIP structural
+    signature. The rebased case addresses its local header past the stub; the
+    unrebased case still declares offset 0 inside the stub."""
+    import struct
+
+    stub = zip_bytes[:64]
+    if len(stub) != 64:
+        raise VerificationError("prefix-model", "archive smaller than the 64-byte stub")
+    for signature in (b"PK\x03\x04", b"PK\x01\x02", b"PK\x05\x06", b"PK\x07\x08"):
+        if signature in stub:
+            raise VerificationError("prefix-model", "stub contains a structural signature")
+
+    # Pinned to the comment-free deflate control: the EOCD is the final 22
+    # bytes, located by length, never by signature search. A future control
+    # with a comment must move these cases to a length-declared EOCD lookup.
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("prefix-model", "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+
+    if case["caseKey"] == "prefix-rebased":
+        if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+            raise VerificationError("prefix-model", "central directory missing at offset %d" % cd_offset)
+        local_offset = struct.unpack_from("<I", zip_bytes, cd_offset + 42)[0]
+        if local_offset != 64:
+            raise VerificationError("prefix-model",
+                                    "rebased local header offset is %d, expected 64" % local_offset)
+        if zip_bytes[64:68] != b"PK\x03\x04":
+            raise VerificationError("prefix-model", "no local header at the rebased offset 64")
+        return "prefix=64 rebased"
+    if cd_offset < 0 or cd_offset > len(zip_bytes):
+        raise VerificationError("prefix-model", "stale central directory offset %d outside the archive" % cd_offset)
+    if cd_offset + 4 <= len(zip_bytes) and zip_bytes[cd_offset:cd_offset + 4] == b"PK\x01\x02":
+        raise VerificationError("prefix-model", "stale central directory offset still parses at %d" % cd_offset)
+    # The true central directory sits one stub length later and still declares
+    # local header 0 (now inside the stub) — the desynchronization this case
+    # exists to pin.
+    true_cd = cd_offset + 64
+    if true_cd + 46 > len(zip_bytes) or zip_bytes[true_cd:true_cd + 4] != b"PK\x01\x02":
+        raise VerificationError("prefix-model", "shifted central directory missing at offset %d" % true_cd)
+    stale_local = struct.unpack_from("<I", zip_bytes, true_cd + 42)[0]
+    if stale_local != 0:
+        raise VerificationError("prefix-model",
+                                "stale local header offset is %d, expected 0" % stale_local)
+    mutations = case.get("mutations") or []
+    declared = mutations[0].get("declaredValue") if mutations else None
+    if not declared or "prefix-length=64" not in declared or "rebased=false" not in declared:
+        raise VerificationError("prefix-model", "mutation record must declare prefix-length=64 rebased=false")
+    return "prefix=64 stale-offsets"
 
 
 def verify_mutations(case, zip_bytes, actual_sha):
