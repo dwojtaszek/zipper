@@ -504,10 +504,47 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_DirectorySlashWithPayload_KeepsSlashNameAndContent()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("directory-slash-with-payload", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal("testdir/", entry.Name);
+        Assert.Equal((uint)"atc-dir-slash-payload".Length, entry.UncompressedSize);
+        Assert.False(artifact.Entries[0].IsDirectory);
+
+        // Central external attributes are deliberately not pinned: the standard
+        // writer synthesizes host-OS directory mode bits for trailing-slash names
+        // (Unix 0x41ED0000 on Linux), so the exact value varies by build host.
+        Assert.Equal(
+            "atc-dir-slash-payload",
+            Encoding.ASCII.GetString(ReadEntryContent(artifact.ArchiveBytes, "testdir/")));
+    }
+
+    [Fact]
+    public void Build_DirectoryAttributeWithPayload_SetsDosDirectoryAttribute()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("directory-attribute-with-payload", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal("testfile", entry.Name);
+        Assert.Equal((uint)"atc-dir-attr-payload".Length, entry.UncompressedSize);
+
+        // Raw value 0x10 in the central external attributes (central + 38); the local
+        // header carries no such field. The version-made-by host byte is deliberately
+        // not pinned: it is the writer's OS default (Unix on Linux), so whether an
+        // extractor reads 0x10 as a DOS directory attribute varies by build host.
+        Assert.Equal(0x10u, ReadUInt32(artifact.ArchiveBytes, entry.CentralDirectoryOffset + 38));
+        Assert.Equal(
+            "atc-dir-attr-payload",
+            Encoding.ASCII.GetString(ReadEntryContent(artifact.ArchiveBytes, "testfile")));
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(54, all.Count);
+        Assert.Equal(56, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
