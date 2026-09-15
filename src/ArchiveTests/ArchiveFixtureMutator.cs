@@ -60,6 +60,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Zip64MissingExtra => HideZip64Extra(control, before),
             ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
+            ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -474,6 +475,90 @@ internal static class ArchiveFixtureMutator
         ], after => BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralRelativeOffsetOffset, 4), declaredOffset));
     }
 
+    /// <summary>
+    /// Inserts a complete hidden stored Local File Header plus payload at offset 0 before
+    /// the control's bytes, with no Central Directory Header for the hidden entry (ticket
+    /// #869, ZipDiff Type c1: no_cdh_for_lfh). All central relative-local-header offsets
+    /// and the EOCD central-directory offset shift by the inserted length; EOCD entry
+    /// counts and central size stay unchanged (only visible entries are indexed).
+    /// Streaming readers see the hidden entry; CD-driven readers list only visibles.
+    /// </summary>
+    private static MutatedArchiveFixture InsertOrphanLocalHeader(ArchiveFixtureArtifact control, byte[] before)
+    {
+        byte[] hiddenName = "hidden.sh"u8.ToArray();
+        byte[] hiddenPayload = "atc-hidden-payload"u8.ToArray();
+        var hiddenLength = checked(30 + hiddenName.Length + hiddenPayload.Length);
+
+        if (control.Layout.Entries.Count == 0)
+        {
+            throw new InvalidOperationException("orphan-local-header expects a control with at least one entry.");
+        }
+
+        var eocdOffset = control.Layout.EocdOffset;
+        var thisDiskEntries = BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)eocdOffset + 8, 2));
+        var totalEntries = BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)eocdOffset + 10, 2));
+        var centralSize = BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)eocdOffset + 12, 4));
+        var centralOffset = BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)eocdOffset + 16, 4));
+        if (thisDiskEntries == 0xFFFF || totalEntries == 0xFFFF || centralSize == 0xFFFFFFFF || centralOffset == 0xFFFFFFFF)
+        {
+            throw new InvalidOperationException("orphan-local-header does not support Zip64 controls with sentinel EOCD fields.");
+        }
+
+        var hidden = new byte[hiddenLength];
+        Span<byte> h = hidden;
+        BinaryPrimitives.WriteUInt32LittleEndian(h, 0x04034b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(4), 20);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(6), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(8), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(10), 0x0000);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(12), 0x5821);
+        BinaryPrimitives.WriteUInt32LittleEndian(h.Slice(14), ArchiveFixtureBuilder.Crc32(hiddenPayload));
+        BinaryPrimitives.WriteUInt32LittleEndian(h.Slice(18), (uint)hiddenPayload.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(h.Slice(22), (uint)hiddenPayload.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(26), (ushort)hiddenName.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(h.Slice(28), 0);
+        hiddenName.CopyTo(h.Slice(30));
+        hiddenPayload.CopyTo(h.Slice(30 + hiddenName.Length));
+
+        var after = new byte[checked(before.Length + hiddenLength)];
+        hidden.CopyTo(after, 0);
+        before.CopyTo(after, hiddenLength);
+
+        foreach (var entry in control.Layout.Entries)
+        {
+            var centralRelativeOffset = (int)entry.CentralDirectoryOffset + hiddenLength + 42;
+            var relative = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(centralRelativeOffset, 4));
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan(centralRelativeOffset, 4), checked(relative + (uint)hiddenLength));
+        }
+
+        var newEocdOffset = (int)eocdOffset + hiddenLength;
+        var newCentralOffset = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(newEocdOffset + 16, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan(newEocdOffset + 16, 4), checked(newCentralOffset + (uint)hiddenLength));
+
+        var code = ArchiveTestMutationKind.OrphanLocalHeader.ToCaseKey();
+        var hiddenNameHex = Convert.ToHexStringLower(hiddenName);
+        var hiddenPayloadSha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(hiddenPayload));
+        var revisedCentralOffset = centralOffset + (uint)hiddenLength;
+        var mutation = new ArchiveTestMutation(
+            Code: code,
+            Structure: "local-header",
+            OffsetBasis: "before-mutation",
+            Offset: 0,
+            Explanation: $"Inserts a complete hidden stored LFH plus {hiddenPayload.Length}-byte payload for '{System.Text.Encoding.UTF8.GetString(hiddenName)}' at offset 0 with no Central Directory Header; all {control.Layout.Entries.Count} central relative-local-header offsets and the EOCD central-directory offset shift by +{hiddenLength} (counts stay {totalEntries}, central size stays {centralSize}). Streaming readers extract the hidden file; CD-driven readers list only the visible entries.",
+            Ordinal: null,
+            DeletedLength: 0,
+            InsertedLength: hiddenLength,
+            BeforeSize: before.Length,
+            AfterSize: after.Length,
+            BeforeSha256: Hash(before),
+            AfterSha256: Hash(after),
+            BeforeHex: null,
+            AfterHex: Convert.ToHexStringLower(hidden),
+            DeclaredValue: $"hidden-lfh-offset=0 hidden-name-hex={hiddenNameHex} hidden-payload-sha256={hiddenPayloadSha} eocd-central-directory-offset={revisedCentralOffset} eocd-entry-counts={totalEntries}");
+
+        return Finalize(ArchiveTestMutationKind.OrphanLocalHeader, before, after, [mutation]);
+    }
+
     /// <summary>One intended field change: what changed, where, and how much.</summary>
     private sealed record MutationSpec(
         string Code,
@@ -599,6 +684,7 @@ internal enum ArchiveTestMutationKind
     Zip64MissingExtra,
     Zip64TruncatedExtra,
     DeclaredSizeOversized,
+    OrphanLocalHeader,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -627,6 +713,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Zip64MissingExtra => "zip64-missing-extra",
         ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
         ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
+        ArchiveTestMutationKind.OrphanLocalHeader => "orphan-local-header",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

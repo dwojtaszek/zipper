@@ -337,9 +337,11 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(22, malformed.Count);
+        Assert.Equal(23, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
+        Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
+        Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
 
         var keys = malformed.Select(c => c.CaseKey).ToList();
         Assert.Equal(keys.Count, keys.Distinct(StringComparer.Ordinal).Count());
@@ -355,6 +357,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("unsupported-method")]
     [InlineData("encryption-flag-with-plaintext")]
     [InlineData("overlapping-entry-ranges")]
+    [InlineData("orphan-local-header")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -369,10 +372,56 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_OrphanLocalHeader_InsertsHiddenEntryBeforeVisible()
+    {
+        var control = BuildControl("valid-deflate");
+        var definition = ArchiveTestCatalog.GetCase("orphan-local-header");
+        Assert.True(definition.IsMutation, "case 'orphan-local-header' must be a mutation case");
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        // Hidden LFH at offset 0: signature, stored method, name hidden.sh.
+        // Lengths come from the header itself, never a duplicated constant.
+        Assert.Equal(0x04034b50u, ReadUInt32(mutated.ArchiveBytes, 0));
+        Assert.Equal(0, ReadUInt16(mutated.ArchiveBytes, 8));
+        var hiddenNameLength = ReadUInt16(mutated.ArchiveBytes, 26);
+        Assert.Equal("hidden.sh", Encoding.UTF8.GetString(mutated.ArchiveBytes.AsSpan(30, hiddenNameLength)));
+        var hiddenPayloadLength = ReadUInt32(mutated.ArchiveBytes, 18);
+        Assert.Equal(ReadUInt32(mutated.ArchiveBytes, 22), hiddenPayloadLength);
+        var hiddenLength = 30 + hiddenNameLength + (int)hiddenPayloadLength;
+        Assert.Equal(control.ArchiveBytes.Length + hiddenLength, mutated.ArchiveBytes.Length);
+
+        // Central directory still indexes only the visible entry; .NET lists one.
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        var sole = Assert.Single(archive.Entries);
+        Assert.Equal("doc.txt", sole.FullName);
+
+        // Linked shifts: visible LFH and central directory move by the hidden length.
+        var visibleLocalOffset = ReadUInt32(mutated.ArchiveBytes, control.Layout.Entries[0].CentralDirectoryOffset + hiddenLength + 42);
+        Assert.Equal((uint)hiddenLength, visibleLocalOffset);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("orphan-local-header", mutation.Code);
+        Assert.Equal(0, mutation.Offset);
+        Assert.Equal(0, mutation.DeletedLength);
+        Assert.Equal(hiddenLength, mutation.InsertedLength);
+        Assert.Contains("hidden-lfh-offset=0", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains("hidden-name-hex=68696464656e2e7368", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains(
+            "hidden-payload-sha256=" + Convert.ToHexStringLower(SHA256.HashData("atc-hidden-payload"u8.ToArray())),
+            mutation.DeclaredValue,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"eocd-central-directory-offset={control.Layout.CentralDirectoryOffset + hiddenLength}",
+            mutation.DeclaredValue,
+            StringComparison.Ordinal);
+        Assert.Contains("eocd-entry-counts=1", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(49, all.Count);
+        Assert.Equal(50, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -425,7 +474,8 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                         or ArchiveTestMutationKind.ExtraFieldLengthOverrun
                         or ArchiveTestMutationKind.UnsupportedMethod
                         or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
-                        or ArchiveTestMutationKind.OverlappingEntryRanges)
+                        or ArchiveTestMutationKind.OverlappingEntryRanges
+                        or ArchiveTestMutationKind.OrphanLocalHeader)
                 {
                     Assert.All(testCase.Mutations, mutation => Assert.NotNull(mutation.DeclaredValue));
                 }

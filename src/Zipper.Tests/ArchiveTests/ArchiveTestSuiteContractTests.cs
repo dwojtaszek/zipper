@@ -50,6 +50,9 @@ public class ArchiveTestSuiteContractTests
         "nested-archives-depth-two",
     ];
 
+    /// <summary>The malformed parser-differential case (ticket #869) housed in security.</summary>
+    private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header"];
+
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
 
@@ -81,6 +84,7 @@ public class ArchiveTestSuiteContractTests
         var expected =
             UnsupportedFeatureSecurityCaseKeys
                 .Concat(BoundedResourceSecurityCaseKeys)
+                .Concat(ParserDifferentialSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -148,10 +152,10 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenFortyNineCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenFiftyCaseKeys()
     {
-        // The frozen complete-catalogue size (#834): a case dropped from the
+        // The frozen complete-catalogue size (#834, +1 for #869): a case dropped from the
         // catalogue or unlisted from every suite fails here, not only in E2E.
-        Assert.Equal(49, AllKeys().Count);
+        Assert.Equal(50, AllKeys().Count);
     }
 }

@@ -241,10 +241,13 @@ internal static class ArchiveTestSuiteGenerator
             ],
             // Local-header lies with an intact central directory: lenient central-based
             // readers succeed; strict local-header validators reject (ticket #840).
+            // The orphan hidden entry (ticket #869) keeps the visible central directory
+            // intact: CD readers list and read visibles while streaming readers see more.
             ArchiveTestMutationKind.NameLocalCentralMismatch
                 or ArchiveTestMutationKind.MethodLocalCentralMismatch
                 or ArchiveTestMutationKind.SizeLocalCentralMismatch
-                or ArchiveTestMutationKind.ExtraFieldLengthOverrun =>
+                or ArchiveTestMutationKind.ExtraFieldLengthOverrun
+                or ArchiveTestMutationKind.OrphanLocalHeader =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),

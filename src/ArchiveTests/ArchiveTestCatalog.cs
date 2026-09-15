@@ -240,6 +240,10 @@ internal static class ArchiveTestCatalog
             suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
+        ["orphan-local-header"] = MutatedDefinition(
+            ArchiveTestMutationKind.OrphanLocalHeader,
+            controlCaseKey: DeflateControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
         ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
         ["zip64-missing-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),
