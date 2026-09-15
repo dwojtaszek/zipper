@@ -176,20 +176,19 @@ internal static class ArchiveTestSuiteGenerator
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
         // The shared-range resource case (ticket #872): structurally honest (valid),
-        // but all 64 entries share one name, so extraction policy varies by reader:
-        // overwriting readers succeed, strict readers that refuse duplicates fail.
-        // Both outcomes are recorded; the payload bytes never change. The extract
-        // invariant is payload-bytes-unchanged only: a successful overwrite writes
-        // one name 64 times, and a duplicate refusal can leave partial writes, so
-        // neither no-silent-overwrite nor no-partial-writes holds on both arms.
+        // but all 64 entries share one name and one physical compressed range, so
+        // both extraction and overlap policy vary by reader: overwriting readers
+        // succeed, duplicate-refusing readers fail extracts, and strict overlap
+        // checkers (Python 3.12 raises where 3.14 warns-and-continues) fail reads.
+        // Every observed variance is recorded; the payload bytes never change.
         if (definition.CaseKey == "zip-bomb-overlapping-deflate")
         {
             return
             [
                 Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites]),
-                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], [ExtractOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
             ];
         }
 
