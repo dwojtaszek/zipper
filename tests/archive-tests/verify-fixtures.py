@@ -330,6 +330,11 @@ class FixtureVerifier:
         if case.get("caseKey") in ("prefix-rebased", "prefix-unrebased"):
             prefix_note = verify_prefix_model(case, zip_bytes)
             checks.append({"check": "prefix-model", "status": "pass", "detail": prefix_note})
+        # Shared-range resource case (ticket #872): every central header points at
+        # the single local header; the declared expansion is honestly structured.
+        if case.get("caseKey") == "zip-bomb-overlapping-deflate":
+            shared_note = verify_shared_payload_range(case, zip_bytes)
+            checks.append({"check": "shared-range", "status": "pass", "detail": shared_note})
 
         return checks
 
@@ -863,6 +868,63 @@ def verify_prefix_model(case, zip_bytes):
     if not declared or "prefix-length=64" not in declared or "rebased=false" not in declared:
         raise VerificationError("prefix-model", "mutation record must declare prefix-length=64 rebased=false")
     return "prefix=64 stale-offsets"
+
+
+def verify_shared_payload_range(case, zip_bytes):
+    """Shared-range audit (ticket #872): every central header claims local header
+    offset 0, so N entries share one physical compressed range. The declared
+    expansion (entries x content size) must stay within the stated budget."""
+    import struct
+
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("shared-range", "EOCD signature missing at the expected offset")
+    this_count, total_count, cd_size, cd_offset = struct.unpack_from(
+        "<HHII", zip_bytes, len(zip_bytes) - 22 + 8)
+    if this_count != total_count or total_count != len(case["entries"]):
+        raise VerificationError("shared-range",
+                                "EOCD counts %d/%d do not match the %d declared entries"
+                                % (this_count, total_count, len(case["entries"])))
+    eocd_offset = len(zip_bytes) - 22
+    if cd_offset + cd_size != eocd_offset:
+        raise VerificationError("shared-range",
+                                "central directory span %d+%d does not end at the EOCD offset %d"
+                                % (cd_offset, cd_size, eocd_offset))
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("shared-range", "central directory missing at offset %d" % cd_offset)
+    if zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("shared-range", "offset 0 is not a local file header")
+    local_comp_size, local_uncomp_size = struct.unpack_from("<II", zip_bytes, 18)
+    local_name_len, local_extra_len = struct.unpack_from("<HH", zip_bytes, 26)
+
+    cursor = cd_offset
+    for ordinal in range(len(case["entries"])):
+        if cursor + 46 > len(zip_bytes) or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+            raise VerificationError("shared-range", "central entry missing at offset %d" % cursor)
+        local_offset = struct.unpack_from("<I", zip_bytes, cursor + 42)[0]
+        if local_offset != 0:
+            raise VerificationError("shared-range",
+                                    "entry %d claims local header at %d, expected the shared offset 0"
+                                    % (ordinal, local_offset))
+        comp_size, uncomp_size = struct.unpack_from("<II", zip_bytes, cursor + 20)
+        if comp_size != local_comp_size or uncomp_size != local_uncomp_size:
+            raise VerificationError("shared-range",
+                                    "entry %d sizes %d/%d disagree with the shared local header %d/%d"
+                                    % (ordinal, comp_size, uncomp_size, local_comp_size, local_uncomp_size))
+        name_len, extra_len, comment_len = struct.unpack_from("<HHH", zip_bytes, cursor + 28)
+        cursor += 46 + name_len + extra_len + comment_len
+    if cursor != cd_offset + cd_size:
+        raise VerificationError("shared-range",
+                                "central directory walk ends at %d, expected %d (cd_offset+cd_size)"
+                                % (cursor, cd_offset + cd_size))
+
+    declared = sum(entry.get("contentSize", 0) for entry in case["entries"])
+    budget = case["limits"]["expandedBytesBudget"]
+    if declared > budget:
+        raise VerificationError("shared-range",
+                                "declared expansion %d exceeds the budget %d" % (declared, budget))
+    factor = (declared // max(1, len(zip_bytes))) if zip_bytes else 0
+
+    return "%d-entries-share-offset-0 amplification=%dx" % (len(case["entries"]), factor)
 
 
 def verify_mutations(case, zip_bytes, actual_sha):

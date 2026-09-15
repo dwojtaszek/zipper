@@ -175,6 +175,24 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
+        // The shared-range resource case (ticket #872): structurally honest (valid),
+        // but all 64 entries share one name, so extraction policy varies by reader:
+        // overwriting readers succeed, strict readers that refuse duplicates fail.
+        // Both outcomes are recorded; the payload bytes never change. The extract
+        // invariant is payload-bytes-unchanged only: a successful overwrite writes
+        // one name 64 times, and a duplicate refusal can leave partial writes, so
+        // neither no-silent-overwrite nor no-partial-writes holds on both arms.
+        if (definition.CaseKey == "zip-bomb-overlapping-deflate")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], [ExtractOperation]),
+            ];
+        }
+
         if (!definition.IsMutation)
         {
             // Policy-sensitive direct recipes (ticket #842): valid ZIP syntax whose

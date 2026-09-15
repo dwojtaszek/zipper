@@ -105,6 +105,11 @@ internal enum ArchiveControlConstruction
     /// specification order, Zip64 EOCD and locator); the standard writer cannot select
     /// Zip64 for small Archives.</summary>
     Zip64HandBuilt,
+
+    /// <summary>Serializes one real DEFLATE stream with many identical central headers
+    /// all pointing at the single local header (ticket #872); the standard writer
+    /// cannot emit shared physical ranges.</summary>
+    OverlappingEntries,
 }
 
 /// <summary>
@@ -293,6 +298,11 @@ internal static class ArchiveTestCatalog
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
         // serve the security suite per #834 ("bounded resource cases").
+        ["zip-bomb-overlapping-deflate"] = new(
+            "zip-bomb-overlapping-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite, SecuritySuite],
+            Recipe: OverlappingBombRecipe,
+            Construction: ArchiveControlConstruction.OverlappingEntries),
         ["high-ratio-bounded"] = new(
             "high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
@@ -382,6 +392,14 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe SafeControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
+    ]);
+
+    // The recipe for the zip-bomb-overlapping-deflate case (ticket #872): 64
+    // identical deflate entries sharing one physical stream; 64 x 64 KiB = 4 MiB
+    // declared expansion, honestly structured and within the 32 MiB budget.
+    private static ArchiveTestRecipe OverlappingBombRecipe => new(
+    [
+        .. Enumerable.Repeat(ArchiveTestRecipeEntry.File("shared.bin", 65536, "deflate"), 64),
     ]);
 
     // The control for the declared-size-oversized mutation: one deflated entry whose
