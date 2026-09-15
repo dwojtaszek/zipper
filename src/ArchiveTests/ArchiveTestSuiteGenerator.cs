@@ -175,6 +175,23 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
+        // The shared-range resource case (ticket #872): structurally honest (valid),
+        // but all 64 entries share one name and one physical compressed range, so
+        // both extraction and overlap policy vary by reader: overwriting readers
+        // succeed, duplicate-refusing readers fail extracts, and strict overlap
+        // checkers (Python 3.12 raises where 3.14 warns-and-continues) fail reads.
+        // Every observed variance is recorded; the payload bytes never change.
+        if (definition.CaseKey == "zip-bomb-overlapping-deflate")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
         if (!definition.IsMutation)
         {
             // Policy-sensitive direct recipes (ticket #842): valid ZIP syntax whose

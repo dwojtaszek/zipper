@@ -484,10 +484,30 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_OverlappingBomb_AllCentralHeadersShareOneLocalHeader()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("zip-bomb-overlapping-deflate", 42, CancellationToken.None);
+
+        Assert.Equal(64, artifact.Layout.EntryCount);
+        Assert.All(artifact.Layout.Entries, entry => Assert.Equal(0, entry.LocalHeaderOffset));
+        Assert.All(artifact.Layout.Entries, entry => Assert.Equal((ushort)8, entry.Method));
+
+        // Amplification: tiny physical archive, 64 x 64 KiB declared expansion.
+        Assert.Equal(64 * 65536L, artifact.Entries.Sum(e => (long)e.Content.Length));
+        Assert.True(artifact.ArchiveBytes.Length < 16 * 1024 * 1024, "physical Archive exceeds the 16 MiB budget.");
+        Assert.Equal(
+            artifact.Layout.CentralDirectoryOffset + artifact.Layout.CentralDirectorySize,
+            artifact.Layout.EocdOffset);
+
+        using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.Equal(64, archive.Entries.Count);
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(53, all.Count);
+        Assert.Equal(54, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

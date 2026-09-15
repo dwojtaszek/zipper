@@ -160,6 +160,11 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltZip64(definition, seed, cancellationToken);
         }
 
+        if (definition.Construction is ArchiveControlConstruction.OverlappingEntries)
+        {
+            return BuildHandBuiltOverlapping(definition, seed, cancellationToken);
+        }
+
         var expectations = new List<ArchiveFixtureEntryExpectation>(definition.Recipe.Entries.Count);
         using var stream = new MemoryStream();
         // Non-seekable write target: the standard writer cannot patch the local header
@@ -718,6 +723,125 @@ internal static class ArchiveFixtureBuilder
                     Content: content,
                     ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content))),
             ],
+            Mutations: []);
+    }
+
+    /// <summary>
+    /// Baseline construction for the zip-bomb-overlapping-deflate case (ticket #872):
+    /// one real DEFLATE stream under a single local header at offset 0, with
+    /// one identical central header per recipe entry all pointing at that local
+    /// header. The shared physical range is the whole point (Fifield's overlapping
+    /// construction): a tiny physical Archive declares N times the payload's
+    /// expansion, honestly and within the 32 MiB expanded budget. All recipe entries
+    /// must share one deflate file entry; the content varies with the seed like
+    /// every other payload. The compressed bytes come from DeflateStream Optimal
+    /// and are deterministic per seed on one runtime but not frozen across
+    /// runtimes (same caveat as valid-deflate; only stored/header-only Fixture IDs
+    /// are byte goldens per #846).
+    /// </summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltOverlapping(
+        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var count = definition.Recipe.Entries.Count;
+        if (count < 2 || count > ArchiveTestCaseSemantics.MaxEntries)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the overlapping baseline expects 2 to {ArchiveTestCaseSemantics.MaxEntries} entries; found {count}.");
+        }
+
+        var recipeEntry = definition.Recipe.Entries[0];
+        if (recipeEntry.IsDirectory || recipeEntry.Method != "deflate"
+            || definition.Recipe.Entries.Any(e => e.Name != recipeEntry.Name || e.Length != recipeEntry.Length || e.Method != recipeEntry.Method || e.IsDirectory))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the overlapping baseline expects every entry to be the same deflate file.");
+        }
+
+        var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
+        byte[] compressed;
+        using (var squeezed = new MemoryStream())
+        {
+            using (var deflate = new DeflateStream(squeezed, CompressionLevel.Optimal, leaveOpen: true))
+            {
+                deflate.Write(content);
+            }
+
+            compressed = squeezed.ToArray();
+        }
+
+        var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
+        var crc = Crc32(content);
+        var localHeaderLength = checked(30 + name.Length);
+        var centralDirectoryOffset = checked(localHeaderLength + compressed.Length);
+        var centralHeaderLength = checked(46 + name.Length);
+        var eocdOffset = checked(centralDirectoryOffset + centralHeaderLength * count);
+
+        var bytes = new byte[checked(eocdOffset + 22)];
+        Span<byte> b = bytes;
+
+        BinaryPrimitives.WriteUInt32LittleEndian(b, 0x04034b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(4), 20);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(6), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(8), 8);
+        WriteDosTimestamp(b.Slice(10));
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(14), crc);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(18), (uint)compressed.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(22), (uint)content.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(26), (ushort)name.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(28), 0);
+        name.CopyTo(b.Slice(30));
+        compressed.CopyTo(b.Slice(localHeaderLength));
+
+        for (var ordinal = 0; ordinal < count; ordinal++)
+        {
+            var c = checked(centralDirectoryOffset + centralHeaderLength * ordinal);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c), 0x02014b50);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 4), 20);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 6), 20);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 8), 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 10), 8);
+            WriteDosTimestamp(b.Slice(c + 12));
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 16), crc);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 20), (uint)compressed.Length);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 24), (uint)content.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 28), (ushort)name.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 30), 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 32), 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 34), 0);
+            BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 36), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 38), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 42), 0);
+            name.CopyTo(b.Slice(c + 46));
+        }
+
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(eocdOffset), 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(eocdOffset + 4), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(eocdOffset + 6), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(eocdOffset + 8), (ushort)count);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(eocdOffset + 10), (ushort)count);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(eocdOffset + 12), (uint)(centralHeaderLength * count));
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(eocdOffset + 16), (uint)centralDirectoryOffset);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(eocdOffset + 20), 0);
+
+        if (bytes.Length > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+        {
+            throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' Archive is {bytes.Length} bytes, over the physical budget.");
+        }
+
+        var layout = ArchiveFixtureLayout.Read(bytes);
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: layout,
+            Entries: [.. definition.Recipe.Entries.Select((entry, ordinal) => new ArchiveFixtureEntryExpectation(
+                Ordinal: ordinal,
+                Name: entry.Name,
+                IsDirectory: false,
+                Method: 8,
+                Content: content,
+                ContentSha256: contentSha))],
             Mutations: []);
     }
 
