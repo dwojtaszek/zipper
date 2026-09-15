@@ -6,7 +6,7 @@ namespace Zipper.ArchiveTests;
 /// <summary>
 /// One recipe entry: a fixed name, a seed-varying payload of the given length (or a
 /// verbatim prefix for scenarios that need specific bytes), and the compression method.
-/// Directory entries end with '/' and carry no payload.
+/// Directory entries (via Directory()) end with '/' and carry no payload.
 /// </summary>
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
@@ -348,6 +348,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
         // serve the security suite per #834 ("bounded resource cases").
@@ -643,6 +644,20 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.PolicyFile("node", "atc-conflict-file"),
         ArchiveTestRecipeEntry.PolicyFile("node/child.txt", "atc-conflict-child"),
+    ]);
+
+    // Ticket #880 Azure directory markers: the slash-named file entry, the legacy
+    // $folder$ marker, and a genuine child. All three coexist without colliding in
+    // ZIP semantics; Blob flat-namespace migration is where they interact.
+    // Distinct from #875 (directory classification confusion): the trailing slash
+    // here is an Azure marker name, not a classifier probe — payloads stay distinct
+    // so overwrite choices remain observable by content hash at the artifact level
+    // (the sidecar records slash-suffixed names as Kind directory with null hash).
+    private static ArchiveTestRecipe AzureDirectoryMarkerRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
+        ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
+        ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text

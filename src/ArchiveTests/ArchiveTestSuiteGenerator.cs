@@ -424,6 +424,10 @@ internal static class ArchiveTestSuiteGenerator
             // must neither materialize OS links nor follow the target.
             "symlink-then-descendant" =>
                 new PolicyExpectationProfile(null, [LinksNeverMaterialized, EscapeTargetsNeverFollowed]),
+            // Azure directory markers (ticket #880): slash marker, $folder$ marker,
+            // and genuine child coexist; migration must not collapse them.
+            "azure-directory-marker-collision" =>
+                new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
             _ => throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': no policy expectation set defined for a policy-sensitive direct recipe."),
         };
