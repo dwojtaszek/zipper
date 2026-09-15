@@ -403,6 +403,11 @@ internal static class ArchiveTestSuiteGenerator
             // Containment hazards that exist on every platform.
             "path-parent-traversal" or "path-posix-absolute" or "unicode-path-extra-mismatch" =>
                 new PolicyExpectationProfile(null, []),
+            // Hostile filename bytes (ticket #876): NUL and C0 bytes in member
+            // names. Extraction stays contained and never materializes the raw
+            // bytes as ambient filenames on ordinary hosts.
+            "filename-null-byte" or "filename-c0-control" =>
+                new PolicyExpectationProfile(null, []),
             // Windows-only hazards: drive letters, UNC paths, reserved device names, and
             // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).
             "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" =>

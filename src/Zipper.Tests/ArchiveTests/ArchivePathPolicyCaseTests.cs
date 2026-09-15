@@ -66,6 +66,71 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan((int)offset, 4));
 
     [Fact]
+    public void Build_FilenameNullByte_EmbedsNulInBothHeaders()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("filename-null-byte", 42, CancellationToken.None);
+        var repeat = ArchiveFixtureBuilder.BuildControl("filename-null-byte", 42, CancellationToken.None);
+
+        Assert.Equal(repeat.ArchiveBytes, artifact.ArchiveBytes);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal("report.pdfX.exe".Length, entry.LocalNameLength);
+        Assert.Equal("7265706f72742e706466002e657865", entry.NameHex);
+
+        // The NUL sits at index 10 in both headers; neighbors are untouched.
+        var localNameAt = entry.LocalHeaderOffset + 30;
+        Assert.Equal(0x00, artifact.ArchiveBytes[(int)localNameAt + 10]);
+        Assert.Equal((byte)'f', artifact.ArchiveBytes[(int)localNameAt + 9]);
+        Assert.Equal((byte)'.', artifact.ArchiveBytes[(int)localNameAt + 11]);
+        var centralNameAt = entry.CentralDirectoryOffset + 46;
+        Assert.Equal(
+            artifact.ArchiveBytes.AsSpan((int)localNameAt, entry.LocalNameLength).ToArray(),
+            artifact.ArchiveBytes.AsSpan((int)centralNameAt, entry.CentralNameLength).ToArray());
+
+        Assert.Equal(
+            artifact.Entries[0].Content,
+            ReadEntryContent(artifact.ArchiveBytes, artifact.Layout.Entries[0].Name));
+    }
+
+    [Fact]
+    public void Build_FilenameC0Control_EmbedsControlRangeInBothHeaders()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("filename-c0-control", 42, CancellationToken.None);
+        var repeat = ArchiveFixtureBuilder.BuildControl("filename-c0-control", 42, CancellationToken.None);
+
+        Assert.Equal(repeat.ArchiveBytes, artifact.ArchiveBytes);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal("report.pdfX.exe".Length, entry.LocalNameLength);
+        Assert.Equal("0102036f72742e706466582e657865", entry.NameHex);
+
+        // The C0 bytes sit at indexes 0-2 in both headers; neighbors are untouched.
+        var localNameAt = entry.LocalHeaderOffset + 30;
+        Assert.Equal(0x01, artifact.ArchiveBytes[(int)localNameAt]);
+        Assert.Equal(0x02, artifact.ArchiveBytes[(int)localNameAt + 1]);
+        Assert.Equal(0x03, artifact.ArchiveBytes[(int)localNameAt + 2]);
+        Assert.Equal((byte)'o', artifact.ArchiveBytes[(int)localNameAt + 3]);
+        Assert.Equal((byte)'X', artifact.ArchiveBytes[(int)localNameAt + 10]);
+        var centralNameAt = entry.CentralDirectoryOffset + 46;
+        Assert.Equal(
+            artifact.ArchiveBytes.AsSpan((int)localNameAt, entry.LocalNameLength).ToArray(),
+            artifact.ArchiveBytes.AsSpan((int)centralNameAt, entry.CentralNameLength).ToArray());
+        Assert.Equal(
+            artifact.Entries[0].Content,
+            ReadEntryContent(artifact.ArchiveBytes, artifact.Layout.Entries[0].Name));
+    }
+
+    private static byte[] ReadEntryContent(byte[] archiveBytes, string entryName)
+    {
+        using var archive = new ZipArchive(new MemoryStream(archiveBytes), ZipArchiveMode.Read);
+        var entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException($"entry '{entryName}' not found");
+        using var stream = entry.Open();
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
+    }
+
+    [Fact]
     public void Build_UnicodePathExtraMismatch_Injects7075FieldInBothHeaders()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("unicode-path-extra-mismatch", 42, CancellationToken.None);
@@ -422,16 +487,17 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllNineteenMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyOneMembersWithSafeBasenames()
     {
-        // The full security suite per #834 (eleven policy recipes plus the
+        // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
-        // differential, the #871 Unicode Path policy case, and the #872 shared-range
-        // resource case: every member publishes a safe Fixture ID pair.
+        // differential, the #871 Unicode Path policy case, the #872 shared-range
+        // resource case, and the #876 hostile-name cases: every member publishes
+        // a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(19, securityKeys.Count);
+        Assert.Equal(21, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

@@ -86,6 +86,14 @@ internal enum ArchiveControlConstruction
     /// relative-local-header offset and the EOCD offset past it (ticket #873).</summary>
     PrefixedArchive,
 
+    /// <summary>Replaces the placeholder byte of the hostile-name recipe with a NUL
+    /// byte in both headers (ticket #876).</summary>
+    HostileNameNullByte,
+
+    /// <summary>Replaces the leading bytes of the hostile-name recipe with C0
+    /// control bytes in both headers (ticket #876).</summary>
+    HostileNameControlChars,
+
     /// <summary>Writes through a non-seekable stream so the standard writer emits
     /// data descriptors with the signature (APPNOTE §4.3.9).</summary>
     NonSeekableDescriptor,
@@ -326,6 +334,19 @@ internal static class ArchiveTestCatalog
         ["case-collision"] = PolicyDefinition("case-collision", CaseCollisionRecipe),
         ["unicode-normalization-collision"] = PolicyDefinition("unicode-normalization-collision", NormalizationCollisionRecipe),
         ["file-directory-conflict"] = PolicyDefinition("file-directory-conflict", FileDirectoryConflictRecipe),
+        // Ticket #876 hostile filename bytes: same policy-sensitive contract as the
+        // #842 recipes, but built by construction (the writer rejects NUL/C0 names,
+        // so the raw-name path rewrites a placeholder after standard generation).
+        ["filename-null-byte"] = new(
+            "filename-null-byte", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [SecuritySuite],
+            Recipe: HostileNameRecipe,
+            Construction: ArchiveControlConstruction.HostileNameNullByte),
+        ["filename-c0-control"] = new(
+            "filename-c0-control", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [SecuritySuite],
+            Recipe: HostileNameRecipe,
+            Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
@@ -426,6 +447,15 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe SafeControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
+    ]);
+
+    // The recipe for the hostile-name cases (ticket #876): one stored entry under
+    // the placeholder name the constructions rewrite to hostile bytes. The writer
+    // would reject NUL and C0 names, so the placeholder keeps standard generation
+    // intact while the raw-name path carries the hazard.
+    private static ArchiveTestRecipe HostileNameRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("report.pdfX.exe", 40, "stored"),
     ]);
 
     // The recipe for the zip-bomb-overlapping-deflate case (ticket #872): 64
