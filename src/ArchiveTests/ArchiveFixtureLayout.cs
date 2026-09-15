@@ -285,87 +285,91 @@ internal sealed record ArchiveFixtureLayout(
     /// </summary>
     private static string? ScanUnicodePathName(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry, long headerOffset, int nameLength, int extraLength)
     {
-        var ordinal = entry.Ordinal;
         const ushort UnicodePathTag = 0x7075;
-        var cursor = checked(headerOffset + 30 + nameLength);
-        var end = checked(cursor + extraLength);
         string? unicodeHex = null;
+        foreach (var subfield in EnumerateExtraSubfields(archive, entry.Ordinal, checked(headerOffset + 30 + nameLength), extraLength, "extra area"))
+        {
+            if (subfield.Tag == UnicodePathTag)
+            {
+                unicodeHex = ValidateUnicodePathData(archive, entry, subfield.DataStart, subfield.Size);
+            }
+        }
+
+        if (unicodeHex is not null && ScanCentralUnicodePathName(archive, entry) != unicodeHex)
+        {
+            throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path differs between local and central headers.");
+        }
+
+        return unicodeHex;
+    }
+
+    /// <summary>One extra-area subfield: tag, data start, and data size.</summary>
+    private sealed record ExtraSubfield(ushort Tag, long DataStart, int Size);
+
+    /// <summary>Walks an extra area's subfields with bounds checks; malformed areas fail loudly.</summary>
+    private static IReadOnlyList<ExtraSubfield> EnumerateExtraSubfields(ReadOnlySpan<byte> archive, int ordinal, long areaStart, int areaLength, string areaName)
+    {
+        var subfields = new List<ExtraSubfield>();
+        var cursor = areaStart;
+        var end = checked(areaStart + areaLength);
         while (cursor < end)
         {
             if (checked(cursor + 4) > end)
             {
-                throw new InvalidDataException($"Entry {ordinal} extra area ends with {end - cursor} trailing bytes, not a subfield header.");
+                throw new InvalidDataException($"Entry {ordinal} {areaName} ends with {end - cursor} trailing bytes, not a subfield header.");
             }
 
             var tag = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor, 2, $"entry {ordinal} extra field tag"));
             var size = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor + 2, 2, $"entry {ordinal} extra field size"));
             var dataStart = checked(cursor + 4);
-            var dataEnd = checked(dataStart + size);
-            if (dataEnd > end)
+            if (checked(dataStart + size) > end)
             {
-                throw new InvalidDataException($"Entry {ordinal} extra subfield 0x{tag:x4} claims {size} data bytes past the {extraLength}-byte extra area.");
+                throw new InvalidDataException($"Entry {ordinal} extra subfield 0x{tag:x4} claims {size} data bytes past the {areaLength}-byte {areaName}.");
             }
 
-            if (tag == UnicodePathTag)
-            {
-                const int PrefixLength = 5;
-                if (size < PrefixLength)
-                {
-                    throw new InvalidDataException($"Entry {ordinal} Unicode Path subfield is {size} bytes, smaller than the 5-byte version-plus-CRC prefix.");
-                }
-
-                if (archive[(int)dataStart] != 1)
-                {
-                    throw new InvalidDataException($"Entry {ordinal} Unicode Path version is {archive[(int)dataStart]}, expected 1.");
-                }
-
-                var standardName = Convert.FromHexString(entry.NameHex);
-                if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, dataStart + 1, 4, $"entry {ordinal} Unicode Path CRC")) != ArchiveFixtureBuilder.Crc32(standardName))
-                {
-                    throw new InvalidDataException($"Entry {ordinal} Unicode Path CRC does not match the standard header name.");
-                }
-
-                unicodeHex = Convert.ToHexStringLower(Slice(archive, dataStart + PrefixLength, size - PrefixLength, $"entry {ordinal} Unicode Path name").ToArray());
-            }
-
-            cursor = dataEnd;
+            subfields.Add(new ExtraSubfield(tag, dataStart, size));
+            cursor = checked(dataStart + size);
         }
 
-        if (unicodeHex is not null && ScanCentralUnicodePathName(archive, entry) != unicodeHex)
+        return subfields;
+    }
+
+    /// <summary>Validates a 0x7075 data area (version 1, CRC of the standard name) and returns the Unicode name hex.</summary>
+    private static string ValidateUnicodePathData(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry, long dataStart, int size)
+    {
+        const int PrefixLength = 5;
+        if (size < PrefixLength)
         {
-            throw new InvalidDataException($"Entry {ordinal} Unicode Path differs between local and central headers.");
+            throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path subfield is {size} bytes, smaller than the 5-byte version-plus-CRC prefix.");
         }
 
-        return unicodeHex;
+        if (archive[(int)dataStart] != 1)
+        {
+            throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path version is {archive[(int)dataStart]}, expected 1.");
+        }
+
+        var standardName = Convert.FromHexString(entry.NameHex);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, dataStart + 1, 4, $"entry {entry.Ordinal} Unicode Path CRC")) != ArchiveFixtureBuilder.Crc32(standardName))
+        {
+            throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path CRC does not match the standard header name.");
+        }
+
+        return Convert.ToHexStringLower(Slice(archive, dataStart + PrefixLength, size - PrefixLength, $"entry {entry.Ordinal} Unicode Path name").ToArray());
     }
 
     /// <summary>Reads the 0x7075 Unicode name from the central header, or null.</summary>
     private static string? ScanCentralUnicodePathName(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry)
     {
         const ushort UnicodePathTag = 0x7075;
-        var cursor = checked(entry.CentralDirectoryOffset + 46 + entry.CentralNameLength);
-        var end = checked(cursor + entry.CentralExtraLength);
-        while (cursor < end)
+        foreach (var subfield in EnumerateExtraSubfields(
+            archive, entry.Ordinal,
+            checked(entry.CentralDirectoryOffset + 46 + entry.CentralNameLength),
+            entry.CentralExtraLength, "central extra area"))
         {
-            if (checked(cursor + 4) > end)
+            if (subfield.Tag == UnicodePathTag && subfield.Size >= 5)
             {
-                throw new InvalidDataException($"Entry {entry.Ordinal} central extra area ends with {end - cursor} trailing bytes.");
+                return Convert.ToHexStringLower(Slice(archive, subfield.DataStart + 5, subfield.Size - 5, $"entry {entry.Ordinal} central Unicode Path name").ToArray());
             }
-
-            var tag = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor, 2, $"entry {entry.Ordinal} central extra field tag"));
-            var size = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor + 2, 2, $"entry {entry.Ordinal} central extra field size"));
-            var dataStart = checked(cursor + 4);
-            if (checked(dataStart + size) > end)
-            {
-                throw new InvalidDataException($"Entry {entry.Ordinal} central extra subfield 0x{tag:x4} overruns the extra area.");
-            }
-
-            if (tag == UnicodePathTag && size >= 5)
-            {
-                return Convert.ToHexStringLower(Slice(archive, dataStart + 5, size - 5, $"entry {entry.Ordinal} central Unicode Path name").ToArray());
-            }
-
-            cursor = checked(dataStart + size);
         }
 
         return null;
