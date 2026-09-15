@@ -8,7 +8,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `deepseek/deepseek-reasoner` | 0|
 | `opencode` | `deepseek/deepseek-v4-flash` | 0|
 | `opencode` | `deepseek/deepseek-v4-pro` | 0|
-| `opencode` | `opencode/big-pickle` | 0|
+| `opencode` | `opencode/big-pickle` | 2|
 | `opencode` | `opencode/claude-sonnet-4` | 0|
 | `opencode` | `opencode/claude-sonnet-4-5` | 0|
 | `opencode` | `opencode/claude-sonnet-4-6` | 0|
@@ -41,10 +41,11 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `opencode/grok-build-0.1` | 0|
 | `opencode` | `opencode/kimi-k2.5` | 0|
 | `opencode` | `opencode/kimi-k2.6` | 0|
-| `opencode` | `opencode/mimo-v2.5-free` | 0|
+| `opencode` | `opencode/mimo-v2.5-free` | 3|
 | `opencode` | `opencode/minimax-m2.5` | 0|
 | `opencode` | `opencode/minimax-m2.7` | 0|
-| `opencode` | `opencode/nemotron-3-ultra-free` | 0|
+| `opencode` | `opencode/nemotron-3-ultra-free` | 3|
+| `opencode` | `opencode/nemotron-3.5-lightning-free` | 3|
 | `opencode` | `opencode/north-mini-code-free` | 0|
 | `opencode` | `opencode/qwen3.5-plus` | 0|
 | `opencode` | `opencode/qwen3.6-plus` | 0|

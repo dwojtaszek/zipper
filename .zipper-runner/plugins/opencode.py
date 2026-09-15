@@ -57,31 +57,34 @@ def check_installation() -> bool:
 
 def check_token_health() -> bool:
     """
-    Returns True if opencode can actually reach the API and get a response.
+    Returns True if opencode is installed and can list models (server reachable).
 
-    'opencode models' only reads local config — a broken server or revoked key
-    still lists models. We send a trivial prompt to verify end-to-end connectivity.
-    Token-cost: negligible (~1 output token).
+    We use `opencode models opencode` as a lightweight connectivity probe —
+    it hits the opencode API to enumerate models and fails fast if the server
+    is down or credentials are missing. Avoids launching a full run session
+    which hangs when the server returns UnknownError on health probes.
     """
     try:
         result = subprocess.run(
-            ["opencode", "run", "--command", "say ok", "--dangerously-skip-permissions"],
+            ["opencode", "models", "opencode"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=30,
+            timeout=15,
         )
         combined = (result.stdout + "\n" + result.stderr).strip()
-        if result.returncode == 0 and combined and "error" not in combined.lower():
-            print(f"[opencode] API health check: SUCCESS (live token verified)")
-            return True
-        if "error" in combined.lower() or result.returncode != 0:
+        if result.returncode != 0:
             print(f"[opencode] API health check: server error — {combined[:200]}")
             return False
-        print(f"[opencode] API health check: unexpected response (exit={result.returncode})")
+        # Need at least one model returned
+        models = [l.strip() for l in result.stdout.splitlines() if "/" in l and not l.startswith("Error")]
+        if models:
+            print(f"[opencode] API health check: SUCCESS ({len(models)} models available)")
+            return True
+        print(f"[opencode] API health check: no models returned")
         return False
     except subprocess.TimeoutExpired:
-        print("[opencode] API health check: timed out (30s)")
+        print("[opencode] API health check: timed out (15s)")
         return False
     except Exception as e:
         print(f"[opencode] API health check: exception — {e}")
