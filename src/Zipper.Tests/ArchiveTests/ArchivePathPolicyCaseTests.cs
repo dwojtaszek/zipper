@@ -374,15 +374,16 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllSixteenMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllSeventeenMembersWithSafeBasenames()
     {
         // The full security suite per #834 (eleven policy recipes plus the
-        // unsupported-feature and bounded resource cases), not just the policy
-        // subset: every member publishes a safe Fixture ID pair.
+        // unsupported-feature and bounded resource cases) plus the #869 parser
+        // differential, not just the policy subset: every member publishes a
+        // safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(16, securityKeys.Count);
+        Assert.Equal(17, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

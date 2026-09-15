@@ -312,6 +312,12 @@ class FixtureVerifier:
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
 
+        # Orphan hidden entry (ticket #869): the hidden LFH at offset 0 has no CDH;
+        # CD-driven readers list only visibles while a forward LFH scan sees more.
+        if case.get("caseKey") == "orphan-local-header":
+            orphan_note = verify_orphan_hidden(case, zip_bytes)
+            checks.append({"check": "orphan-hidden", "status": "pass", "detail": orphan_note})
+
         return checks
 
     # ---- reader operations (normalized outcomes, never exception wording) ----
@@ -637,6 +643,103 @@ class FixtureVerifier:
             record["reason"] = ("observed outcome '%s' is outside the allowed outcomes"
                                 % observed)
         ops.append(record)
+
+
+def verify_orphan_hidden(case, zip_bytes):
+    """Orphan hidden LFH audit (ticket #869, ZipDiff c1): a valid stored LFH for
+    hidden.sh at offset 0 with no CDH; the central directory still indexes only
+    the visible entries at shifted offsets. Returns a detail note on success."""
+    import binascii
+    import struct
+
+    def need(length, what):
+        if len(zip_bytes) < length:
+            raise VerificationError("orphan-hidden", "archive too small for %s" % what)
+
+    need(30, "a hidden LFH")
+    if zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("orphan-hidden", "offset 0 is not a local file header")
+    flags = struct.unpack_from("<H", zip_bytes, 6)[0]
+    method = struct.unpack_from("<H", zip_bytes, 8)[0]
+    crc = struct.unpack_from("<I", zip_bytes, 14)[0]
+    name_len = struct.unpack_from("<H", zip_bytes, 26)[0]
+    extra_len = struct.unpack_from("<H", zip_bytes, 28)[0]
+    if flags != 0:
+        raise VerificationError("orphan-hidden", "hidden entry flags are 0x%04x, expected 0" % flags)
+    if method != 0:
+        raise VerificationError("orphan-hidden", "hidden entry method is %d, expected stored (0)" % method)
+    if extra_len != 0:
+        raise VerificationError("orphan-hidden", "hidden entry extra length is %d, expected 0" % extra_len)
+    need(30 + name_len, "the hidden name")
+    name_bytes = zip_bytes[30:30 + name_len]
+    if name_bytes != b"hidden.sh":
+        raise VerificationError("orphan-hidden", "hidden name is %r, expected b'hidden.sh'" % name_bytes)
+    comp_size, uncomp_size = struct.unpack_from("<II", zip_bytes, 18)
+    if comp_size != uncomp_size:
+        raise VerificationError("orphan-hidden", "hidden stored sizes disagree: %d vs %d" % (comp_size, uncomp_size))
+    hidden_length = 30 + name_len + comp_size
+    need(hidden_length, "the hidden payload")
+    payload = zip_bytes[30 + name_len:30 + name_len + comp_size]
+    if len(payload) != comp_size:
+        raise VerificationError("orphan-hidden", "hidden payload truncated")
+    if (binascii.crc32(payload) & 0xFFFFFFFF) != crc:
+        raise VerificationError("orphan-hidden", "hidden CRC32 0x%08x does not match the payload" % crc)
+
+    mutations = case.get("mutations") or []
+    declared = mutations[0].get("declaredValue") if mutations else None
+    if not declared or "hidden-lfh-offset=0" not in declared:
+        raise VerificationError("orphan-hidden", "mutation record must declare hidden-lfh-offset=0")
+    if ("hidden-name-hex=%s" % name_bytes.hex()) not in declared:
+        raise VerificationError("orphan-hidden", "mutation record must declare the hidden raw name bytes")
+    if ("hidden-payload-sha256=%s" % sha256_hex(payload)) not in declared:
+        raise VerificationError("orphan-hidden", "mutation record must declare the hidden payload hash")
+
+    # Pinned to the comment-free valid-deflate control: the EOCD is the final 22
+    # bytes, located by length, never by signature search (signature-like payload
+    # bytes are data). A future control with a comment must move this case to a
+    # length-declared EOCD lookup instead of changing this offset.
+    need(22, "an EOCD record")
+    if zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("orphan-hidden", "EOCD signature missing at the expected offset")
+    this_count, total_count, cd_size, cd_offset = struct.unpack_from("<HHII", zip_bytes, len(zip_bytes) - 22 + 8)
+    if this_count != total_count or total_count != len(case["entries"]):
+        raise VerificationError("orphan-hidden",
+                                "EOCD counts %d/%d do not match the %d visible entries"
+                                % (this_count, total_count, len(case["entries"])))
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("orphan-hidden", "central directory does not start at the declared offset %d" % cd_offset)
+    # Every CD-declared visible must point at a genuine LFH; the hidden offset
+    # must not be indexed (that non-membership is the orphan). A naive full
+    # signature scan is deliberately avoided: stored payloads may legally contain
+    # signature-like bytes that are data, not headers.
+    cursor = cd_offset
+    seen_local_offsets = set()
+    for _ in case["entries"]:
+        if cursor + 46 > len(zip_bytes) or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+            raise VerificationError("orphan-hidden", "central directory entry missing at offset %d" % cursor)
+        name_length, extra_length, comment_length = struct.unpack_from("<HHH", zip_bytes, cursor + 28)
+        local_offset = struct.unpack_from("<I", zip_bytes, cursor + 42)[0]
+        if local_offset + 4 > len(zip_bytes) or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+            raise VerificationError("orphan-hidden", "visible LFH missing at the declared offset %d" % local_offset)
+        seen_local_offsets.add(local_offset)
+        cursor += 46 + name_length + extra_length + comment_length
+    if 0 in seen_local_offsets:
+        raise VerificationError("orphan-hidden", "offset 0 is indexed by the central directory")
+    if hidden_length not in seen_local_offsets:
+        raise VerificationError("orphan-hidden",
+                                "no visible LFH at the hidden length %d; shifts not applied"
+                                % hidden_length)
+    # CD-driven readers list only the visible entries; the hidden name is absent.
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = [info.filename for info in zf.infolist()]
+    if "hidden.sh" in names:
+        raise VerificationError("orphan-hidden", "hidden.sh is indexed by the central directory")
+    if len(names) != len(case["entries"]):
+        raise VerificationError("orphan-hidden",
+                                "central directory lists %d entries, expected %d visible entries"
+                                % (len(names), len(case["entries"])))
+
+    return "hidden=%d-bytes streaming-visible-only" % hidden_length
 
 
 def verify_mutations(case, zip_bytes, actual_sha):

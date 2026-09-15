@@ -585,8 +585,9 @@ internal static class ArchiveFixtureBuilder
     }
 
     /// <summary>CRC-32 (IEEE, reflected, polynomial 0xEDB88320) over the payload; the
-    /// reference reader validates the same value on read.</summary>
-    private static uint Crc32(ReadOnlySpan<byte> data)
+    /// reference reader validates the same value on read. Internal so the orphan-hidden
+    /// mutation (ticket #869) builds a consistent hidden header without duplicating it.</summary>
+    internal static uint Crc32(ReadOnlySpan<byte> data)
     {
         var crc = 0xFFFF_FFFFu;
         foreach (var value in data)
