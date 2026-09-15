@@ -30,9 +30,11 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "unicode-normalization-collision",
         "file-directory-conflict",
         "symlink-then-descendant",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
-    /// <summary>The seven cases whose extract expectation is a containment policy.</summary>
+    /// <summary>The nine cases whose extract expectation is a containment policy.</summary>
     private static readonly string[] ContainmentCaseKeys =
     [
         "path-parent-traversal",
@@ -42,6 +44,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "path-reserved-device",
         "path-trailing-dot-space",
         "symlink-then-descendant",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
     /// <summary>The four collision cases that name a no-silent-overwrite policy.</summary>
@@ -153,7 +157,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the eleven policy-sensitive recipes directly.
+    // policy-case tests target the thirteen policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -395,6 +399,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Null(ExtractExpectationOf(cases["duplicate-name"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["file-directory-conflict"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["symlink-then-descendant"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-slash-with-payload"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-attribute-with-payload"]).Platform);
 
         Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-drive"]).Platform);
         Assert.Equal("windows", ExtractExpectationOf(cases["path-unc"]).Platform);
@@ -422,16 +428,17 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllNineteenMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyOneMembersWithSafeBasenames()
     {
         // The full security suite per #834 (eleven policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
-        // differential, the #871 Unicode Path policy case, and the #872 shared-range
-        // resource case: every member publishes a safe Fixture ID pair.
+        // differential, the #871 Unicode Path policy case, the #872 shared-range
+        // resource case, and the two #875 entry-type cases: every member publishes
+        // a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(19, securityKeys.Count);
+        Assert.Equal(21, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -450,8 +457,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the eleven policy-sensitive recipes (the path/collision subset of
-        // the security suite; the full suite membership is pinned by
+        // Publishes the thirteen policy-sensitive recipes (the path/collision/entry-type
+        // subset of the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
 

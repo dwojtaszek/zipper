@@ -6,7 +6,8 @@ namespace Zipper.ArchiveTests;
 /// <summary>
 /// One recipe entry: a fixed name, a seed-varying payload of the given length (or a
 /// verbatim prefix for scenarios that need specific bytes), and the compression method.
-/// Directory entries end with '/' and carry no payload.
+/// <see cref="Directory"/> entries end with '/' and carry no payload; slash-named
+/// policy entries (ticket #875) are files with a trailing-slash name and keep theirs.
 /// </summary>
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
@@ -294,6 +295,8 @@ internal static class ArchiveTestCatalog
         ["case-collision"] = PolicyDefinition("case-collision", CaseCollisionRecipe),
         ["unicode-normalization-collision"] = PolicyDefinition("unicode-normalization-collision", NormalizationCollisionRecipe),
         ["file-directory-conflict"] = PolicyDefinition("file-directory-conflict", FileDirectoryConflictRecipe),
+        ["directory-slash-with-payload"] = PolicyDefinition("directory-slash-with-payload", DirectorySlashWithPayloadRecipe),
+        ["directory-attribute-with-payload"] = PolicyDefinition("directory-attribute-with-payload", DirectoryAttributeWithPayloadRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
@@ -570,6 +573,21 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.PolicyFile("node", "atc-conflict-file"),
         ArchiveTestRecipeEntry.PolicyFile("node/child.txt", "atc-conflict-child"),
+    ]);
+
+    // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a
+    // payload, and a slash-less entry carrying the raw attribute value 0x10 (the DOS
+    // directory attribute under a DOS host; the writer's host byte stays its OS
+    // default) with a payload. Both are valid ZIP syntax; only extractor
+    // classification is in question.
+    private static ArchiveTestRecipe DirectorySlashWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testdir/", "atc-dir-slash-payload"),
+    ]);
+
+    private static ArchiveTestRecipe DirectoryAttributeWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testfile", "atc-dir-attr-payload", externalAttributes: 0x10),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text
