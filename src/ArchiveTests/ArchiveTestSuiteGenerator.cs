@@ -359,7 +359,7 @@ internal static class ArchiveTestSuiteGenerator
         var profile = definition.CaseKey switch
         {
             // Containment hazards that exist on every platform.
-            "path-parent-traversal" or "path-posix-absolute" =>
+            "path-parent-traversal" or "path-posix-absolute" or "unicode-path-extra-mismatch" =>
                 new PolicyExpectationProfile(null, []),
             // Windows-only hazards: drive letters, UNC paths, reserved device names, and
             // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).

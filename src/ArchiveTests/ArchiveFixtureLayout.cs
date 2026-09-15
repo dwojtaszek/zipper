@@ -32,7 +32,8 @@ internal sealed record ArchiveFixtureEntryLayout(
     bool HasDataDescriptor,
     long DataDescriptorOffset,
     string Name,
-    string NameHex);
+    string NameHex,
+    string? UnicodePathNameHex = null);
 
 internal sealed record ArchiveFixtureLayout(
     long EocdOffset,
@@ -268,7 +269,106 @@ internal sealed record ArchiveFixtureLayout(
             DataOffset = dataOffset,
             HasDataDescriptor = hasDescriptor,
             DataDescriptorOffset = descriptorOffset,
+            UnicodePathNameHex = ScanUnicodePathName(archive, entry, offset, nameLength, extraLength),
         };
+    }
+
+    /// <summary>
+    /// Scans one entry's local-header extra area for the Info-ZIP Unicode Path subfield
+    /// (0x7075, ticket #871): 2-byte tag, 2-byte data size, 1-byte version, 4-byte
+    /// CRC-32 of the standard name, then the UTF-8 Unicode name. Returns the Unicode
+    /// name bytes as lowercase hex, or null when the entry carries no 0x7075 field.
+    /// Owned Archives carry it only from the unicode-path construction, which writes
+    /// it well-formed and identically in both headers: a truncated area, trailing
+    /// garbage, a non-1 version, a CRC mismatch, or a central divergence is a
+    /// generator bug and fails loudly.
+    /// </summary>
+    private static string? ScanUnicodePathName(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry, long headerOffset, int nameLength, int extraLength)
+    {
+        var ordinal = entry.Ordinal;
+        const ushort UnicodePathTag = 0x7075;
+        var cursor = checked(headerOffset + 30 + nameLength);
+        var end = checked(cursor + extraLength);
+        string? unicodeHex = null;
+        while (cursor < end)
+        {
+            if (checked(cursor + 4) > end)
+            {
+                throw new InvalidDataException($"Entry {ordinal} extra area ends with {end - cursor} trailing bytes, not a subfield header.");
+            }
+
+            var tag = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor, 2, $"entry {ordinal} extra field tag"));
+            var size = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor + 2, 2, $"entry {ordinal} extra field size"));
+            var dataStart = checked(cursor + 4);
+            var dataEnd = checked(dataStart + size);
+            if (dataEnd > end)
+            {
+                throw new InvalidDataException($"Entry {ordinal} extra subfield 0x{tag:x4} claims {size} data bytes past the {extraLength}-byte extra area.");
+            }
+
+            if (tag == UnicodePathTag)
+            {
+                const int PrefixLength = 5;
+                if (size < PrefixLength)
+                {
+                    throw new InvalidDataException($"Entry {ordinal} Unicode Path subfield is {size} bytes, smaller than the 5-byte version-plus-CRC prefix.");
+                }
+
+                if (archive[(int)dataStart] != 1)
+                {
+                    throw new InvalidDataException($"Entry {ordinal} Unicode Path version is {archive[(int)dataStart]}, expected 1.");
+                }
+
+                var standardName = Convert.FromHexString(entry.NameHex);
+                if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, dataStart + 1, 4, $"entry {ordinal} Unicode Path CRC")) != ArchiveFixtureBuilder.Crc32(standardName))
+                {
+                    throw new InvalidDataException($"Entry {ordinal} Unicode Path CRC does not match the standard header name.");
+                }
+
+                unicodeHex = Convert.ToHexStringLower(Slice(archive, dataStart + PrefixLength, size - PrefixLength, $"entry {ordinal} Unicode Path name").ToArray());
+            }
+
+            cursor = dataEnd;
+        }
+
+        if (unicodeHex is not null && ScanCentralUnicodePathName(archive, entry) != unicodeHex)
+        {
+            throw new InvalidDataException($"Entry {ordinal} Unicode Path differs between local and central headers.");
+        }
+
+        return unicodeHex;
+    }
+
+    /// <summary>Reads the 0x7075 Unicode name from the central header, or null.</summary>
+    private static string? ScanCentralUnicodePathName(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry)
+    {
+        const ushort UnicodePathTag = 0x7075;
+        var cursor = checked(entry.CentralDirectoryOffset + 46 + entry.CentralNameLength);
+        var end = checked(cursor + entry.CentralExtraLength);
+        while (cursor < end)
+        {
+            if (checked(cursor + 4) > end)
+            {
+                throw new InvalidDataException($"Entry {entry.Ordinal} central extra area ends with {end - cursor} trailing bytes.");
+            }
+
+            var tag = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor, 2, $"entry {entry.Ordinal} central extra field tag"));
+            var size = BinaryPrimitives.ReadUInt16LittleEndian(Slice(archive, cursor + 2, 2, $"entry {entry.Ordinal} central extra field size"));
+            var dataStart = checked(cursor + 4);
+            if (checked(dataStart + size) > end)
+            {
+                throw new InvalidDataException($"Entry {entry.Ordinal} central extra subfield 0x{tag:x4} overruns the extra area.");
+            }
+
+            if (tag == UnicodePathTag && size >= 5)
+            {
+                return Convert.ToHexStringLower(Slice(archive, dataStart + 5, size - 5, $"entry {entry.Ordinal} central Unicode Path name").ToArray());
+            }
+
+            cursor = checked(dataStart + size);
+        }
+
+        return null;
     }
 
     private static ushort ReadUInt16(ReadOnlySpan<byte> archive, long offset, string field)

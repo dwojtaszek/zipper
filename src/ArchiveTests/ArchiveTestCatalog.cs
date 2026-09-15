@@ -78,6 +78,10 @@ internal enum ArchiveControlConstruction
     /// <summary>Inserts an 8-byte extra subfield into entry 0's local header.</summary>
     LocalExtraField,
 
+    /// <summary>Inserts an Info-ZIP Unicode Path (0x7075) subfield carrying a
+    /// discrepant Unicode name into entry 0's local and central headers (ticket #871).</summary>
+    InfoZipUnicodePath,
+
     /// <summary>Writes through a non-seekable stream so the standard writer emits
     /// data descriptors with the signature (APPNOTE §4.3.9).</summary>
     NonSeekableDescriptor,
@@ -254,6 +258,14 @@ internal static class ArchiveTestCatalog
         // bytes are exactly what the standard writer emits for these names. They are
         // valid ZIP syntax — classification policy-sensitive, suite security — so only
         // extraction policy, never ZIP validity, is in question.
+        // Ticket #871 unicode-path-extra-mismatch: same policy-sensitive contract, but
+        // built by construction (the 0x7075 subfield cannot come from the standard
+        // writer), so it is declared directly below instead of via PolicyDefinition.
+        ["unicode-path-extra-mismatch"] = new(
+            "unicode-path-extra-mismatch", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [SecuritySuite],
+            Recipe: SafeControlRecipe,
+            Construction: ArchiveControlConstruction.InfoZipUnicodePath),
         ["path-parent-traversal"] = PolicyDefinition("path-parent-traversal", ParentTraversalRecipe),
         ["path-posix-absolute"] = PolicyDefinition("path-posix-absolute", PosixAbsoluteRecipe),
         ["path-windows-drive"] = PolicyDefinition("path-windows-drive", WindowsDriveRecipe),
@@ -349,6 +361,14 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
         ArchiveTestRecipeEntry.File("b.bin", 40, "stored"),
+    ]);
+
+    // The control for the unicode-path-extra-mismatch case (ticket #871): one stored
+    // entry under a benign standard name; the construction injects the discrepant
+    // Info-ZIP Unicode Path subfield into both headers.
+    private static ArchiveTestRecipe SafeControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
     ]);
 
     // The control for the declared-size-oversized mutation: one deflated entry whose

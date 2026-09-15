@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=50     # the frozen complete-catalogue size (#834, +1 for #869): every unique Case Key
+ALL_CASES=51     # the frozen complete-catalogue size (#834, +1 for #869, +1 for #871): every unique Case Key
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
