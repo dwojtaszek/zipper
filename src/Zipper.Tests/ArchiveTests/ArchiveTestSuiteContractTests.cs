@@ -54,6 +54,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The malformed parser-differential case (ticket #869) housed in security.</summary>
     private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header"];
 
+    /// <summary>The hostile filename-byte cases (ticket #876) housed in security.</summary>
+    private static readonly string[] HostileNameSecurityCaseKeys = ["filename-null-byte", "filename-c0-control"];
+
     /// <summary>The Unicode name-policy case (ticket #871) housed in security.</summary>
     private static readonly string[] UnicodePathSecurityCaseKeys = ["unicode-path-extra-mismatch"];
 
@@ -90,6 +93,7 @@ public class ArchiveTestSuiteContractTests
                 .Concat(BoundedResourceSecurityCaseKeys)
                 .Concat(ParserDifferentialSecurityCaseKeys)
                 .Concat(UnicodePathSecurityCaseKeys)
+                .Concat(HostileNameSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -157,11 +161,11 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenFiftySevenCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenFiftyNineCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
-        // #872, +2 for #873, +3 for #874): a case dropped from the catalogue or
-        // unlisted from every suite fails here.
-        Assert.Equal(57, AllKeys().Count);
+        // #872, +2 for #873, +3 for #874, +2 for #876): a case dropped from the
+        // catalogue or unlisted from every suite fails here.
+        Assert.Equal(59, AllKeys().Count);
     }
 }

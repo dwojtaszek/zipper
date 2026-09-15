@@ -336,6 +336,13 @@ class FixtureVerifier:
             shared_note = verify_shared_payload_range(case, zip_bytes)
             checks.append({"check": "shared-range", "status": "pass", "detail": shared_note})
 
+        # Hostile filename bytes (ticket #876): the sidecar raw hex must equal
+        # the exact hostile bytes in both headers; reads stay ordinal-based so
+        # a Python NUL truncation never becomes a name-keyed lookup.
+        if case.get("caseKey") in ("filename-null-byte", "filename-c0-control"):
+            hostile_note = verify_hostile_name(case, zip_bytes)
+            checks.append({"check": "hostile-name", "status": "pass", "detail": hostile_note})
+
         return checks
 
     # ---- reader operations (normalized outcomes, never exception wording) ----
@@ -925,6 +932,38 @@ def verify_shared_payload_range(case, zip_bytes):
     factor = (declared // max(1, len(zip_bytes))) if zip_bytes else 0
 
     return "%d-entries-share-offset-0 amplification=%dx" % (len(case["entries"]), factor)
+
+
+def verify_hostile_name(case, zip_bytes):
+    """Hostile-name audit (ticket #876): one stored entry whose local and
+    central raw name bytes equal the exact hostile hex recorded in the
+    Expectation File. NUL truncates in Python list views; C0 bytes survive."""
+    import struct
+
+    expected = {
+        "filename-null-byte": "7265706f72742e706466002e657865",
+        "filename-c0-control": "0102036f72742e706466582e657865",
+    }[case["caseKey"]]
+    if len(case["entries"]) != 1:
+        raise VerificationError("hostile-name", "expected exactly one entry record")
+    record = case["entries"][0]
+    if record["localNameRaw"] != expected or record["centralNameRaw"] != expected:
+        raise VerificationError("hostile-name", "sidecar raw hex does not carry the hostile bytes")
+    raw = bytes.fromhex(expected)
+    if len(zip_bytes) < 30 or zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("hostile-name", "offset 0 is not a local file header")
+    local_name_len = struct.unpack_from("<H", zip_bytes, 26)[0]
+    if zip_bytes[30:30 + local_name_len] != raw:
+        raise VerificationError("hostile-name", "raw local name is not the hostile bytes")
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("hostile-name", "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("hostile-name", "central directory missing at offset %d" % cd_offset)
+    central_name_len = struct.unpack_from("<H", zip_bytes, cd_offset + 28)[0]
+    if zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_len] != raw:
+        raise VerificationError("hostile-name", "raw central name is not the hostile bytes")
+    return "hostile=%s local-central-equal" % case["caseKey"]
 
 
 def verify_mutations(case, zip_bytes, actual_sha):
