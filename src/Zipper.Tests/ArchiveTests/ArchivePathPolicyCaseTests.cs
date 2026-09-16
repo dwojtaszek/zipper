@@ -32,10 +32,13 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "symlink-then-descendant",
         "azure-directory-marker-collision",
         "filename-bidi-override",
+        "path-windows-illegal-chars",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
-    /// <summary>The eight cases whose extract expectation is a containment policy.</summary>
+    /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
     private static readonly string[] ContainmentCaseKeys =
     [
         "path-parent-traversal",
@@ -46,6 +49,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "path-trailing-dot-space",
         "symlink-then-descendant",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
     /// <summary>The five collision cases that name a no-silent-overwrite policy.</summary>
@@ -99,6 +104,16 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal(
             artifact.Entries[0].Content,
             ReadEntryContent(artifact.ArchiveBytes, artifact.Layout.Entries[0].Name));
+    }
+
+    [Fact]
+    public void Build_WindowsIllegalChars_KeepsExactRawNames()
+    {
+        var artifact = BuildControl("path-windows-illegal-chars");
+
+        Assert.Equal(
+            ["test.txt:hidden", "a<b.txt", "a>b.txt", "a\"b.txt", "a|b.txt", "a?b.txt", "a*b.txt", "folder./doc.txt", "a\\b.txt"],
+            artifact.Layout.Entries.Select(e => e.Name).ToList());
     }
 
     [Fact]
@@ -289,7 +304,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the thirteen policy-sensitive recipes directly.
+    // policy-case tests target the seventeen policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -533,11 +548,14 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Null(ExtractExpectationOf(cases["azure-directory-marker-collision"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["filename-bidi-override"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["symlink-then-descendant"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-slash-with-payload"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-attribute-with-payload"]).Platform);
 
         Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-drive"]).Platform);
         Assert.Equal("windows", ExtractExpectationOf(cases["path-unc"]).Platform);
         Assert.Equal("windows", ExtractExpectationOf(cases["path-reserved-device"]).Platform);
         Assert.Equal("windows", ExtractExpectationOf(cases["path-trailing-dot-space"]).Platform);
+        Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-illegal-chars"]).Platform);
         Assert.Equal("case-insensitive-filesystems", ExtractExpectationOf(cases["case-collision"]).Platform);
         Assert.Equal("normalizing-filesystems", ExtractExpectationOf(cases["unicode-normalization-collision"]).Platform);
     }
@@ -560,19 +578,20 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyFiveMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyEightMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
         // differential, the #871 Unicode Path policy case, the #872 shared-range
         // resource case, the #876 hostile-name cases, the #880 Azure marker
         // case, the #882 Azure-disallowed-Unicode case, the #877 Deflate64
-        // unsupported-method twin, and the #884 bidi override case: every member
-        // publishes a safe Fixture ID pair.
+        // unsupported-method twin, the consolidated #885/#886/#879 Windows-illegal-character
+        // matrix, the two #875 entry-type cases, and the #884 bidi override case:
+        // every member publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(25, securityKeys.Count);
+        Assert.Equal(28, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -591,8 +610,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the thirteen policy-sensitive recipes (the path/collision subset of
-        // the security suite; the full suite membership is pinned by
+        // Publishes the seventeen policy-sensitive recipes (the path/collision/entry-type
+        // subset of the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
 
