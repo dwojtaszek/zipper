@@ -20,8 +20,8 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The sixteen policy-sensitive path/collision/entry-type cases
-    /// (tickets #842, #880, #882, #885, and #875). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
+    /// <summary>The seventeen policy-sensitive path/collision/entry-type cases
+    /// (tickets #842, #880, #882, #885, #875, and #884). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
     /// both must change together; the exact security-suite assertion below fails if
     /// they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
@@ -38,6 +38,7 @@ public class ArchiveTestSuiteContractTests
         "symlink-then-descendant",
         "unicode-normalization-collision",
         "azure-directory-marker-collision",
+        "filename-bidi-override",
         "path-windows-illegal-chars",
         "path-azure-disallowed-unicode",
         "directory-slash-with-payload",
@@ -169,12 +170,13 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSixtySevenCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSixtyEightCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875): a case dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(67, AllKeys().Count);
+        // +2 for #875, +1 for #884): a case dropped from the catalogue or unlisted
+        // from every suite fails here.
+        Assert.Equal(68, AllKeys().Count);
     }
 }

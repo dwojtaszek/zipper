@@ -374,6 +374,7 @@ internal static class ArchiveTestCatalog
         ["directory-slash-with-payload"] = PolicyDefinition("directory-slash-with-payload", DirectorySlashWithPayloadRecipe),
         ["directory-attribute-with-payload"] = PolicyDefinition("directory-attribute-with-payload", DirectoryAttributeWithPayloadRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["filename-bidi-override"] = PolicyDefinition("filename-bidi-override", BidiOverrideRecipe),
         ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
@@ -686,6 +687,15 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
         ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
+    ]);
+
+    // Ticket #884 bidi override: the member name embeds a Unicode right-to-left
+    // override character. Valid Archive bytes; the hazard is display spoofing in
+    // review UIs — the control character must be preserved verbatim, never
+    // stripped or normalized. The frozen byte pin lives in the bidi test.
+    private static ArchiveTestRecipe BidiOverrideRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("payload", (char)0x202E, "txt.exe"), "atc-bidi-spoof"),
     ]);
 
     // Tickets #885, #886, and #879 consolidated Windows-illegal-character matrix:
