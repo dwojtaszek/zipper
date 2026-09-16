@@ -204,6 +204,15 @@ internal static class ArchiveTestCatalog
             "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateDynamicRecipe),
+        // Ticket #897 BZip2 Case Key: one entry with real BZip2-compressed data
+        // (method 12).
+        ["valid-bzip2"] = new(
+            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
+            ])),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
