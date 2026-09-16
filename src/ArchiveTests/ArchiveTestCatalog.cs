@@ -371,6 +371,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
@@ -682,6 +683,23 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
         ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
+    ]);
+
+    // Tickets #885, #886, and #879 consolidated Windows-illegal-character matrix:
+    // the colon ADS separator, angle/quotes/pipe/wildcard characters, an
+    // intermediate trailing-dot segment, and a raw backslash name. All are
+    // ordinary POSIX names; only Windows extractors must refuse or sanitize.
+    private static ArchiveTestRecipe WindowsIllegalCharsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("test.txt:hidden", "atc-illegal-colon"),
+        ArchiveTestRecipeEntry.PolicyFile("a<b.txt", "atc-illegal-angle-open"),
+        ArchiveTestRecipeEntry.PolicyFile("a>b.txt", "atc-illegal-angle-close"),
+        ArchiveTestRecipeEntry.PolicyFile("a\"b.txt", "atc-illegal-quote"),
+        ArchiveTestRecipeEntry.PolicyFile("a|b.txt", "atc-illegal-pipe"),
+        ArchiveTestRecipeEntry.PolicyFile("a?b.txt", "atc-illegal-question"),
+        ArchiveTestRecipeEntry.PolicyFile("a*b.txt", "atc-illegal-star"),
+        ArchiveTestRecipeEntry.PolicyFile("folder./doc.txt", "atc-illegal-intermediate-dot"),
+        ArchiveTestRecipeEntry.PolicyFile("a\\b.txt", "atc-illegal-backslash"),
     ]);
 
     // Ticket #882 Azure-disallowed Unicode: entry names carrying codepoints Azure
