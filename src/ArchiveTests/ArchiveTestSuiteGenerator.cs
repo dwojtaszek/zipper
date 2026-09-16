@@ -175,6 +175,20 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
+        // Valid BZip2 control (ticket #897): genuine method-12 bytes. Python
+        // zipfile decodes BZip2 fully while .NET ZipArchive rejects it at Open();
+        // full-codec readers (7-Zip) complete every operation.
+        if (definition.CaseKey == "valid-bzip2")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
         // The shared-range resource case (ticket #872): structurally honest (valid),
         // but all 64 entries share one name and one physical compressed range, so
         // both extraction and overlap policy vary by reader: overwriting readers

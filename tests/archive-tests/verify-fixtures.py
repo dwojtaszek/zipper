@@ -330,6 +330,12 @@ class FixtureVerifier:
         if case.get("caseKey") in ("prefix-rebased", "prefix-unrebased"):
             prefix_note = verify_prefix_model(case, zip_bytes)
             checks.append({"check": "prefix-model", "status": "pass", "detail": prefix_note})
+
+        # Coded valid controls (tickets #897/#898): the sidecar carries no method
+        # field, so the method codes are audited here from both headers instead.
+        if case.get("caseKey") == "valid-bzip2":
+            coded_note = verify_coded_method(case, zip_bytes, 12)
+            checks.append({"check": "coded-method", "status": "pass", "detail": coded_note})
         # Shared-range resource case (ticket #872): every central header points at
         # the single local header; the declared expansion is honestly structured.
         if case.get("caseKey") == "zip-bomb-overlapping-deflate":
@@ -964,6 +970,32 @@ def verify_hostile_name(case, zip_bytes):
     if zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_len] != raw:
         raise VerificationError("hostile-name", "raw central name is not the hostile bytes")
     return "hostile=%s local-central-equal" % case["caseKey"]
+
+
+def verify_coded_method(case, zip_bytes, expected):
+    """Method-code audit for coded valid controls (tickets #897/#898): every
+    entry declares the expected code in both its local and central headers."""
+    import struct
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        infos = zf.infolist()
+    if len(infos) != len(case["entries"]):
+        raise VerificationError("coded-method",
+                                "central directory lists %d entries, expected %d"
+                                % (len(infos), len(case["entries"])))
+    if zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("coded-method", "offset 0 is not a local file header")
+    if struct.unpack_from("<H", zip_bytes, 8)[0] != expected:
+        raise VerificationError("coded-method", "local header method is not %d" % expected)
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("coded-method", "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("coded-method", "central directory missing at offset %d" % cd_offset)
+    if struct.unpack_from("<H", zip_bytes, cd_offset + 10)[0] != expected:
+        raise VerificationError("coded-method", "central header method is not %d" % expected)
+
+    return "method=%d both-headers" % expected
 
 
 def verify_mutations(case, zip_bytes, actual_sha):

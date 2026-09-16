@@ -1,6 +1,9 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
+
+using ICSharpCode.SharpZipLib.BZip2;
+
 using Xunit;
 using Zipper.ArchiveTests;
 
@@ -185,6 +188,31 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
         // The standard ZipArchive reader (implementation two) round-trips the content;
         // it validates the hand-computed CRC-32 on read.
         Assert.Equal(control.Entries[0].Content, ReadEntryContent(bytes, "z64.txt"));
+    }
+
+    // ---- Real BZip2 control (method 12) ----
+
+    [Fact]
+    public void Build_ValidBzip2_EmitsMethodTwelveWithRealCompressedData()
+    {
+        var control = BuildControl("valid-bzip2");
+
+        var entry = Assert.Single(control.Layout.Entries);
+        Assert.Equal((ushort)12, entry.Method);
+        Assert.Equal("doc.bin", entry.Name);
+        Assert.Equal(46, ReadUInt16(control.ArchiveBytes, 4));
+        Assert.Equal(46, ReadUInt16(control.ArchiveBytes, entry.CentralDirectoryOffset + 6));
+
+        // The payload is a genuine bzip2 stream (BZh9 magic), decodable by a bzip2
+        // implementation back to the recipe content.
+        Assert.Equal(
+            [0x42, 0x5a, 0x68, 0x39],
+            control.ArchiveBytes.AsSpan((int)entry.DataOffset, 4).ToArray());
+        using var source = new MemoryStream(control.ArchiveBytes, (int)entry.DataOffset, (int)entry.CompressedSize, writable: false);
+        using var bz2 = new BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        Assert.Equal(control.Entries[0].Content, inflated.ToArray());
     }
 
     // ---- Paired malformed cases ----
