@@ -666,8 +666,8 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
     ]);
 
-    // Ticket #884 bidi override: a member name carrying U+202E RIGHT-TO-LEFT
-    // OVERRIDE (one code point, three UTF-8 bytes E2 80 AE). Valid Archive bytes;
+    // Ticket #884 bidi override: the member name embeds the Unicode right-to-left
+    // override character U+202E, three bytes E2 80 AE in UTF-8. Valid Archive bytes;
     // the hazard is display spoofing in review UIs — the control character must
     // be preserved verbatim, never stripped or normalized.
     private static ArchiveTestRecipe BidiOverrideRecipe => new(
