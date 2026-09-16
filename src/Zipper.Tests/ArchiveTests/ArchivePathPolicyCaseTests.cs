@@ -33,9 +33,11 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "azure-directory-marker-collision",
         "path-windows-illegal-chars",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
-    /// <summary>The eight cases whose extract expectation is a containment policy.</summary>
+    /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
     private static readonly string[] ContainmentCaseKeys =
     [
         "path-parent-traversal",
@@ -46,6 +48,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "path-trailing-dot-space",
         "symlink-then-descendant",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
     /// <summary>The five collision cases that name a no-silent-overwrite policy.</summary>
@@ -268,7 +272,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the fourteen policy-sensitive recipes directly.
+    // policy-case tests target the sixteen policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -511,6 +515,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Null(ExtractExpectationOf(cases["file-directory-conflict"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["azure-directory-marker-collision"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["symlink-then-descendant"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-slash-with-payload"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["directory-attribute-with-payload"]).Platform);
 
         Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-drive"]).Platform);
         Assert.Equal("windows", ExtractExpectationOf(cases["path-unc"]).Platform);
@@ -539,20 +545,20 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentySevenMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyNineMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
         // differential, the #871 Unicode Path policy case, the #872 shared-range
         // resource case, the #876 hostile-name cases, the #880 Azure marker
         // case, the #882 Azure-disallowed-Unicode case, the #877 Deflate64
-        // unsupported-method twin, and the consolidated #885/#886/#879 Windows-illegal-character
-        // matrix, and the two #899 method/data disagreement cases: every member
+        // unsupported-method twin, the consolidated #885/#886/#879 Windows-illegal-character
+        // matrix, the two #875 entry-type cases, and the two #899 method/data disagreement cases: every member
         // publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(27, securityKeys.Count);
+        Assert.Equal(29, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -571,8 +577,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the fourteen policy-sensitive recipes (the path/collision subset of
-        // the security suite; the full suite membership is pinned by
+        // Publishes the sixteen policy-sensitive recipes (the path/collision/entry-type
+        // subset of the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
 

@@ -443,6 +443,11 @@ internal static class ArchiveTestSuiteGenerator
             // bytes as ambient filenames on ordinary hosts.
             "filename-null-byte" or "filename-c0-control" =>
                 new PolicyExpectationProfile(null, []),
+            // Entry-type confusion (ticket #875): a directory marker or attribute
+            // carrying a payload. Extraction must stay contained; the directory/file
+            // verdict itself varies, so no payload-preservation invariant is named here.
+            "directory-slash-with-payload" or "directory-attribute-with-payload" =>
+                new PolicyExpectationProfile(null, []),
             // Windows-only hazards: drive letters, UNC paths, reserved device names,
             // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes),
             // and the consolidated illegal-character matrix (tickets #885, #886, #879).

@@ -20,9 +20,10 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The fourteen policy-sensitive path/collision cases (ticket #842).
-    /// Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys — both must change together;
-    /// the exact security-suite assertion below fails if they drift apart.</summary>
+    /// <summary>The sixteen policy-sensitive path/collision/entry-type cases
+    /// (tickets #842, #880, #882, #885, and #875). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
+    /// both must change together; the exact security-suite assertion below fails if
+    /// they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
     [
         "case-collision",
@@ -39,6 +40,8 @@ public class ArchiveTestSuiteContractTests
         "azure-directory-marker-collision",
         "path-windows-illegal-chars",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
     ];
 
     /// <summary>The unsupported-feature cases (ticket #840, plus Deflate64 #877) the contract houses in security.</summary>
@@ -170,13 +173,12 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSeventyCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSeventyTwoCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
-        // +1 for #877, +1 for #897, +1 for #898, +1 consolidated #885/#886/#879,
-        // +5 for #899): a case dropped from the catalogue or unlisted from every
-        // suite fails here.
-        Assert.Equal(70, AllKeys().Count);
+        // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
+        // +2 for #875, +5 for #899): a case dropped from the catalogue or unlisted from every suite fails here.
+        Assert.Equal(72, AllKeys().Count);
     }
 }
