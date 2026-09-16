@@ -175,6 +175,23 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
+        // Valid archives whose entries the reference readers cannot all decode
+        // (tickets #897 and #898): the bytes are genuine, but entry codecs vary in
+        // reader support — Python decodes BZip2 (12) but rejects method 9, while
+        // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
+        // Full-codec readers complete every operation; the arms below
+        // record each reference reader's honest outcome.
+        if (definition.CaseKey == "valid-bzip2" || definition.CaseKey == "valid-deflate64")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
         // The shared-range resource case (ticket #872): structurally honest (valid),
         // but all 64 entries share one name and one physical compressed range, so
         // both extraction and overlap policy vary by reader: overwriting readers
@@ -290,6 +307,17 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(ListOperation, StrictProfile, [ListSucceeds], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["unsupported-method-rejected", "unsupported-method-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-98-ppmd"),
                 Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
+            ],
+            // Deflate64 lie (ticket #877): same consistent-code shape, but readers
+            // report it differently — .NET fails the entry read (not the
+            // unsupported-method rejection method 98 gets), zlib readers fail too.
+            // ADF/Synapse-bound readers meet a method code with no usable codec.
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64 =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-9-deflate64"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
             ArchiveTestMutationKind.EncryptionFlagWithPlaintext =>
@@ -408,9 +436,10 @@ internal static class ArchiveTestSuiteGenerator
             // bytes as ambient filenames on ordinary hosts.
             "filename-null-byte" or "filename-c0-control" =>
                 new PolicyExpectationProfile(null, []),
-            // Windows-only hazards: drive letters, UNC paths, reserved device names, and
-            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).
-            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" =>
+            // Windows-only hazards: drive letters, UNC paths, reserved device names,
+            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes),
+            // and the consolidated illegal-character matrix (tickets #885, #886, #879).
+            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" or "path-windows-illegal-chars" =>
                 new PolicyExpectationProfile("windows", []),
             // Collisions: the entries are individually valid; the policy is that no
             // variant may silently overwrite another (reject or rename instead).

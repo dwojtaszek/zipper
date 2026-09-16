@@ -204,6 +204,25 @@ internal static class ArchiveTestCatalog
             "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateDynamicRecipe),
+        // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
+        // (method 12).
+        ["valid-bzip2"] = new(
+            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
+            ])),
+        // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
+        // labeled method 9, giving the method/data and corruption cases a genuine
+        // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
+        ["valid-deflate64"] = new(
+            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate64"),
+            ])),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -296,6 +315,10 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.UnsupportedMethod,
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite]),
+        ["unsupported-method-deflate64"] = MutatedDefinition(
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
         ["deflate-invalid-btype"] = MutatedDefinition(
@@ -348,6 +371,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["zero-width-collision"] = PolicyDefinition("zero-width-collision", ZeroWidthCollisionRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
@@ -660,6 +684,23 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
         ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
+    ]);
+
+    // Tickets #885, #886, and #879 consolidated Windows-illegal-character matrix:
+    // the colon ADS separator, angle/quotes/pipe/wildcard characters, an
+    // intermediate trailing-dot segment, and a raw backslash name. All are
+    // ordinary POSIX names; only Windows extractors must refuse or sanitize.
+    private static ArchiveTestRecipe WindowsIllegalCharsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("test.txt:hidden", "atc-illegal-colon"),
+        ArchiveTestRecipeEntry.PolicyFile("a<b.txt", "atc-illegal-angle-open"),
+        ArchiveTestRecipeEntry.PolicyFile("a>b.txt", "atc-illegal-angle-close"),
+        ArchiveTestRecipeEntry.PolicyFile("a\"b.txt", "atc-illegal-quote"),
+        ArchiveTestRecipeEntry.PolicyFile("a|b.txt", "atc-illegal-pipe"),
+        ArchiveTestRecipeEntry.PolicyFile("a?b.txt", "atc-illegal-question"),
+        ArchiveTestRecipeEntry.PolicyFile("a*b.txt", "atc-illegal-star"),
+        ArchiveTestRecipeEntry.PolicyFile("folder./doc.txt", "atc-illegal-intermediate-dot"),
+        ArchiveTestRecipeEntry.PolicyFile("a\\b.txt", "atc-illegal-backslash"),
     ]);
 
     // Ticket #882 Azure-disallowed Unicode: entry names carrying codepoints Azure
