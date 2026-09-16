@@ -348,6 +348,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["filename-bidi-override"] = PolicyDefinition("filename-bidi-override", BidiOverrideRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
@@ -658,6 +659,15 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
         ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
+    ]);
+
+    // Ticket #884 bidi override: a member name carrying U+202E RIGHT-TO-LEFT
+    // OVERRIDE (one code point, three UTF-8 bytes E2 80 AE). Valid Archive bytes;
+    // the hazard is display spoofing in review UIs — the control character must
+    // be preserved verbatim, never stripped or normalized.
+    private static ArchiveTestRecipe BidiOverrideRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("payload", (char)0x202E, "txt.exe"), "atc-bidi-spoof"),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text
