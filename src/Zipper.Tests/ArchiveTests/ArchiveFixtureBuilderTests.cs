@@ -1,5 +1,9 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
+
+using ICSharpCode.SharpZipLib.BZip2;
+
 using Xunit;
 using Zipper.ArchiveTests;
 
@@ -104,6 +108,121 @@ public class ArchiveFixtureBuilderTests
 
         Assert.NotEqual(first.ArchiveBytes, second.ArchiveBytes);
         Assert.NotEqual(first.Entries[0].Content, second.Entries[0].Content);
+    }
+
+    [Fact]
+    public void Build_UnknownRecipeMethod_ThrowsDescriptively()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "unknown-method", 1, 1, "valid", ["smoke"],
+            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("x.bin", 10, "shrink-wrap")]));
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None));
+
+        Assert.Contains("shrink-wrap", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_HandBuiltBzip2_EmitsMethodTwelveWithDecodablePayload()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "coded-bzip2", 1, 1, "valid", ["smoke"],
+            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2")]));
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal((ushort)12, entry.Method);
+        Assert.False(entry.HasDataDescriptor);
+        Assert.Equal(400u, entry.UncompressedSize);
+        Assert.Equal(artifact.Entries[0].Content.Length, (int)entry.UncompressedSize);
+        Assert.Equal(ArchiveFixtureBuilder.Crc32(artifact.Entries[0].Content), entry.Crc32);
+        Assert.Equal(artifact.Layout.CentralDirectoryOffset, entry.DataOffset + entry.CompressedSize);
+        Assert.Equal((ushort)46, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 4)));
+        Assert.Equal((ushort)46, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 6)));
+
+        using var source = new MemoryStream(artifact.ArchiveBytes, (int)entry.DataOffset, (int)entry.CompressedSize, writable: false);
+        using var bz2 = new BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        Assert.Equal(artifact.Entries[0].Content, inflated.ToArray());
+    }
+
+    [Fact]
+    public void Build_HandBuiltDeflate64_EmitsMethodNineAsDeflateSubset()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "coded-deflate64", 1, 1, "valid", ["smoke"],
+            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate64")]));
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal((ushort)9, entry.Method);
+        Assert.False(entry.HasDataDescriptor);
+        Assert.Equal(400u, entry.UncompressedSize);
+        Assert.Equal(ArchiveFixtureBuilder.Crc32(artifact.Entries[0].Content), entry.Crc32);
+        Assert.Equal(artifact.Layout.CentralDirectoryOffset, entry.DataOffset + entry.CompressedSize);
+        Assert.Equal((ushort)21, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 4)));
+        Assert.Equal((ushort)21, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 6)));
+
+        // Deflate-subset stream: any Deflate decoder — hence any Deflate64 one —
+        // restores the content.
+        Assert.Equal(artifact.Entries[0].Content, ReadEntryContent(artifact.ArchiveBytes, "doc.txt"));
+    }
+
+    [Fact]
+    public void Build_HandBuiltMixedMethods_KeepsPerEntryCodecs()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "coded-mixed", 1, 1, "valid", ["smoke"],
+            new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
+                ArchiveTestRecipeEntry.File("b.bin", 400, "deflate"),
+                ArchiveTestRecipeEntry.File("c.bz2", 400, "bzip2"),
+            ]));
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        Assert.Equal(3, artifact.Layout.EntryCount);
+        Assert.Equal([(ushort)0, (ushort)8, (ushort)12], artifact.Layout.Entries.Select(e => e.Method).ToList());
+        Assert.All(artifact.Layout.Entries, e => Assert.False(e.HasDataDescriptor));
+        Assert.Equal(
+            [(ushort)10, (ushort)20, (ushort)46],
+            artifact.Layout.Entries.Select(e => BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)e.LocalHeaderOffset + 4))).ToList());
+
+        Assert.Equal(artifact.Entries[0].Content, ReadEntryContent(artifact.ArchiveBytes, "a.txt"));
+        Assert.Equal(artifact.Entries[1].Content, ReadEntryContent(artifact.ArchiveBytes, "b.bin"));
+
+        var bz2Entry = artifact.Layout.Entries[2];
+        using var source = new MemoryStream(artifact.ArchiveBytes, (int)bz2Entry.DataOffset, (int)bz2Entry.CompressedSize, writable: false);
+        using var bz2 = new BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        Assert.Equal(artifact.Entries[2].Content, inflated.ToArray());
+    }
+
+    [Fact]
+    public void Build_HandBuiltCoded_SameSeed_ProducesIdenticalBytes()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "coded-determinism", 1, 1, "valid", ["smoke"],
+            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2")]));
+        var first = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var second = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        Assert.Equal(first.ArchiveBytes, second.ArchiveBytes);
+        Assert.Equal(first.ArchiveSha256, second.ArchiveSha256);
+    }
+
+    [Fact]
+    public void BuildControl_ValidStored_ProducesFrozenBytes()
+    {
+        // The stored control never enters the hand-built path, so its bytes are a
+        // golden: any routing change that moves it breaks this hash. Deflate has no
+        // frozen golden (codec bytes vary across runtimes, ticket #846).
+        var artifact = ArchiveFixtureBuilder.BuildControl("valid-stored", 42, CancellationToken.None);
+
+        Assert.Equal("275c4c4da2722c54625b2175a78898eb27c20e28878ac3948e9854c7fa3dc9a5", artifact.ArchiveSha256);
     }
 
     [Fact]
