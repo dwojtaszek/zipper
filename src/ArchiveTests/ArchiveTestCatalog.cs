@@ -210,10 +210,7 @@ internal static class ArchiveTestCatalog
         ["valid-bzip2"] = new(
             "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: new ArchiveTestRecipe(
-            [
-                ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
-            ])),
+            Recipe: Bzip2ControlRecipe),
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
@@ -322,6 +319,22 @@ internal static class ArchiveTestCatalog
             suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
+        ["method-cross-deflate64-deflate"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossDeflate64Deflate, controlCaseKey: DeflateControlCaseKey),
+        ["method-cross-bzip2-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossBzip2Stored, controlCaseKey: StoredControlCaseKey),
+        ["method-data-deflate-as-bzip2"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataDeflateAsBzip2,
+            controlCaseKey: Bzip2ControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["method-data-bzip2-as-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataBzip2AsStored,
+            controlCaseKey: StoredControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["valid-mixed-methods"] = new(
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: MixedMethodsRecipe),
         ["deflate-invalid-btype"] = MutatedDefinition(
             ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
         ["deflate-corrupt-huffman"] = MutatedDefinition(
@@ -423,6 +436,7 @@ internal static class ArchiveTestCatalog
     internal const byte UnixHostSystem = 3;
     private const string StoredControlCaseKey = "valid-stored";
     private const string DeflateControlCaseKey = "valid-deflate";
+    private const string Bzip2ControlCaseKey = "valid-bzip2";
     private const string DeflateDynamicControlCaseKey = "valid-deflate-dynamic";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
@@ -459,11 +473,19 @@ internal static class ArchiveTestCatalog
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
         DeflateControlCaseKey => DeflateControlRecipe,
+        Bzip2ControlCaseKey => Bzip2ControlRecipe,
         DeflateDynamicControlCaseKey => DeflateDynamicRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
     };
+
+    // The BZip2 control recipe (ticket #897), shared with the method-data case
+    // that needs BZip2 payload bytes under Deflate headers.
+    private static ArchiveTestRecipe Bzip2ControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
+    ]);
 
     private static ArchiveTestRecipe StoredControlRecipe => new(
     [
@@ -477,6 +499,15 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe SafeControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
+    ]);
+
+    // The recipe for the valid-mixed-methods case (ticket #899): one entry per
+    // codec family, all honest. The hand-built path encodes each member natively.
+    private static ArchiveTestRecipe MixedMethodsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
+        ArchiveTestRecipeEntry.File("b.bin", 400, "deflate"),
+        ArchiveTestRecipeEntry.File("c.bz2", 400, "bzip2"),
     ]);
 
     // The recipe for the hostile-name cases (ticket #876): one stored entry under

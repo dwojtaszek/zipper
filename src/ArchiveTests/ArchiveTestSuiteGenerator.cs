@@ -181,7 +181,7 @@ internal static class ArchiveTestSuiteGenerator
         // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
         // Full-codec readers complete every operation; the arms below
         // record each reference reader's honest outcome.
-        if (definition.CaseKey == "valid-bzip2" || definition.CaseKey == "valid-deflate64")
+        if (definition.CaseKey == "valid-bzip2" || definition.CaseKey == "valid-deflate64" || definition.CaseKey == "valid-mixed-methods")
         {
             return
             [
@@ -277,11 +277,15 @@ internal static class ArchiveTestSuiteGenerator
             // readers succeed; strict local-header validators reject (ticket #840).
             // The orphan hidden entry (ticket #869) keeps the visible central directory
             // intact: CD readers list and read visibles while streaming readers see more.
+            // Cross-method disagreements (ticket #899) are the same shape with
+            // non-Stored/Deflate codes.
             ArchiveTestMutationKind.NameLocalCentralMismatch
                 or ArchiveTestMutationKind.MethodLocalCentralMismatch
                 or ArchiveTestMutationKind.SizeLocalCentralMismatch
                 or ArchiveTestMutationKind.ExtraFieldLengthOverrun
-                or ArchiveTestMutationKind.OrphanLocalHeader =>
+                or ArchiveTestMutationKind.OrphanLocalHeader
+                or ArchiveTestMutationKind.MethodCrossDeflate64Deflate
+                or ArchiveTestMutationKind.MethodCrossBzip2Stored =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
@@ -309,11 +313,13 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
-            // Deflate64 lie (ticket #877): same consistent-code shape, but readers
-            // report it differently — .NET fails the entry read (not the
-            // unsupported-method rejection method 98 gets), zlib readers fail too.
+            // Deflate64 lie (ticket #877) and BZip2-labeled stored data (ticket #899):
+            // same consistent-code shape, but readers report it differently — .NET
+            // fails the entry read (not the unsupported-method rejection method 98
+            // gets), zlib readers fail too.
             // ADF/Synapse-bound readers meet a method code with no usable codec.
-            ArchiveTestMutationKind.UnsupportedMethodDeflate64 =>
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64
+                or ArchiveTestMutationKind.MethodDataBzip2AsStored =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-9-deflate64"),
@@ -373,7 +379,8 @@ internal static class ArchiveTestSuiteGenerator
             // entry read, while .NET rejects the entry at Open() as an unsupported
             // compression method. The exact exception type is never contracted.
             ArchiveTestMutationKind.DeflateInvalidBtype
-                or ArchiveTestMutationKind.DeflateCorruptHuffman =>
+                or ArchiveTestMutationKind.DeflateCorruptHuffman
+                or ArchiveTestMutationKind.MethodDataDeflateAsBzip2 =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation], capability: "deflate-bitstream"),
