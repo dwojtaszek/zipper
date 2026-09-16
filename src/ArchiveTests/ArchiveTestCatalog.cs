@@ -6,7 +6,8 @@ namespace Zipper.ArchiveTests;
 /// <summary>
 /// One recipe entry: a fixed name, a seed-varying payload of the given length (or a
 /// verbatim prefix for scenarios that need specific bytes), and the compression method.
-/// Directory entries (via Directory()) end with '/' and carry no payload.
+/// <see cref="Directory"/> entries end with '/' and carry no payload; slash-named
+/// policy entries (ticket #875) are files with a trailing-slash name and keep theirs.
 /// </summary>
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
@@ -370,7 +371,10 @@ internal static class ArchiveTestCatalog
             Suites: [SecuritySuite],
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
+        ["directory-slash-with-payload"] = PolicyDefinition("directory-slash-with-payload", DirectorySlashWithPayloadRecipe),
+        ["directory-attribute-with-payload"] = PolicyDefinition("directory-attribute-with-payload", DirectoryAttributeWithPayloadRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["filename-bidi-override"] = PolicyDefinition("filename-bidi-override", BidiOverrideRecipe),
         ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["zero-width-collision"] = PolicyDefinition("zero-width-collision", ZeroWidthCollisionRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
@@ -686,6 +690,15 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
     ]);
 
+    // Ticket #884 bidi override: the member name embeds a Unicode right-to-left
+    // override character. Valid Archive bytes; the hazard is display spoofing in
+    // review UIs — the control character must be preserved verbatim, never
+    // stripped or normalized. The frozen byte pin lives in the bidi test.
+    private static ArchiveTestRecipe BidiOverrideRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("payload", (char)0x202E, "txt.exe"), "atc-bidi-spoof"),
+    ]);
+
     // Tickets #885, #886, and #879 consolidated Windows-illegal-character matrix:
     // the colon ADS separator, angle/quotes/pipe/wildcard characters, an
     // intermediate trailing-dot segment, and a raw backslash name. All are
@@ -722,6 +735,21 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.PolicyFile("data.txt", "atc-zw-visible"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x200B, ".txt"), "atc-zw-hidden"),
+    ]);
+
+    // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a
+    // payload, and a slash-less entry carrying the raw attribute value 0x10 (the DOS
+    // directory attribute under a DOS host; the writer's host byte stays its OS
+    // default) with a payload. Both are valid ZIP syntax; only extractor
+    // classification is in question.
+    private static ArchiveTestRecipe DirectorySlashWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testdir/", "atc-dir-slash-payload"),
+    ]);
+
+    private static ArchiveTestRecipe DirectoryAttributeWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testfile", "atc-dir-attr-payload", externalAttributes: 0x10),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text

@@ -436,6 +436,11 @@ internal static class ArchiveTestSuiteGenerator
             // bytes as ambient filenames on ordinary hosts.
             "filename-null-byte" or "filename-c0-control" =>
                 new PolicyExpectationProfile(null, []),
+            // Entry-type confusion (ticket #875): a directory marker or attribute
+            // carrying a payload. Extraction must stay contained; the directory/file
+            // verdict itself varies, so no payload-preservation invariant is named here.
+            "directory-slash-with-payload" or "directory-attribute-with-payload" =>
+                new PolicyExpectationProfile(null, []),
             // Windows-only hazards: drive letters, UNC paths, reserved device names,
             // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes),
             // and the consolidated illegal-character matrix (tickets #885, #886, #879).
@@ -460,6 +465,11 @@ internal static class ArchiveTestSuiteGenerator
             // must neither materialize OS links nor follow the target.
             "symlink-then-descendant" =>
                 new PolicyExpectationProfile(null, [LinksNeverMaterialized, EscapeTargetsNeverFollowed]),
+            // Bidi override (ticket #884): the control character (U+202E, three
+            // UTF-8 bytes E2 80 AE) is data; the name must round-trip verbatim
+            // and extraction stays contained via the shared invariants below.
+            "filename-bidi-override" =>
+                new PolicyExpectationProfile(null, []),
             // Azure directory markers (ticket #880): slash marker, $folder$ marker,
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>

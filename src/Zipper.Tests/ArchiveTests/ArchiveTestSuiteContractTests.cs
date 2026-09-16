@@ -20,9 +20,10 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The fourteen policy-sensitive path/collision cases (ticket #842).
-    /// Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys — both must change together;
-    /// the exact security-suite assertion below fails if they drift apart.</summary>
+    /// <summary>The seventeen policy-sensitive path/collision/entry-type cases
+    /// (tickets #842, #880, #882, #885, #875, and #884). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
+    /// both must change together; the exact security-suite assertion below fails if
+    /// they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
     [
         "case-collision",
@@ -37,8 +38,11 @@ public class ArchiveTestSuiteContractTests
         "symlink-then-descendant",
         "unicode-normalization-collision",
         "azure-directory-marker-collision",
+        "filename-bidi-override",
         "path-windows-illegal-chars",
         "path-azure-disallowed-unicode",
+        "directory-slash-with-payload",
+        "directory-attribute-with-payload",
         "zero-width-collision",
     ];
 
@@ -167,13 +171,13 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSixtySixCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSixtyNineCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
-        // +1 for #877, +1 for #897, +1 for #898, +1 consolidated #885/#886/#879,
-        // +1 for #889): a case dropped from the catalogue or unlisted from every
-        // suite fails here.
-        Assert.Equal(66, AllKeys().Count);
+        // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
+        // +2 for #875, +1 for #884, +1 for #889): a case dropped from the catalogue
+        // or unlisted from every suite fails here.
+        Assert.Equal(69, AllKeys().Count);
     }
 }
