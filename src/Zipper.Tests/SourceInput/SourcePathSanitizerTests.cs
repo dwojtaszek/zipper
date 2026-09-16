@@ -1,3 +1,4 @@
+using System.Globalization;
 using Xunit;
 using Zipper.SourceInput;
 
@@ -167,5 +168,48 @@ public class SourcePathSanitizerTests
 
         Assert.False(ok);
         Assert.Contains("ends with a dot or space", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryNormalize_TurkishCulture_OrdinalBehaviorUnchanged()
+    {
+        // Ticket #890: dotted/dotless I (U+0130/U+0131) must not change sanitizer
+        // verdicts under tr-TR. The sanitizer compares with ordinal rules, so the
+        // same inputs normalize identically regardless of current culture.
+        string[] probes = ["file.txt", "FİLE.txt", "fıle.txt", "FILE.txt", "folder/DOSYA.pdf"];
+        Assert.False(string.Equals("file.txt", "FİLE.txt", StringComparison.OrdinalIgnoreCase));
+        Assert.All(probes, raw =>
+        {
+            Assert.True(SourcePathSanitizer.TryNormalize(raw, out var normalized, out var error));
+            Assert.Equal(raw, normalized);
+            Assert.Null(error);
+        });
+
+        CultureInfo turkish;
+        try
+        {
+            turkish = new CultureInfo("tr-TR");
+        }
+        catch (CultureNotFoundException)
+        {
+            return;
+        }
+
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = turkish;
+        try
+        {
+            Assert.False(string.Equals("file.txt", "FİLE.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.All(probes, raw =>
+            {
+                Assert.True(SourcePathSanitizer.TryNormalize(raw, out var normalized, out var error));
+                Assert.Equal(raw, normalized);
+                Assert.Null(error);
+            });
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 }
