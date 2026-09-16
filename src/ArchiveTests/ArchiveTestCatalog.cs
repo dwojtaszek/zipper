@@ -6,7 +6,8 @@ namespace Zipper.ArchiveTests;
 /// <summary>
 /// One recipe entry: a fixed name, a seed-varying payload of the given length (or a
 /// verbatim prefix for scenarios that need specific bytes), and the compression method.
-/// Directory entries (via Directory()) end with '/' and carry no payload.
+/// <see cref="Directory"/> entries end with '/' and carry no payload; slash-named
+/// policy entries (ticket #875) are files with a trailing-slash name and keep theirs.
 /// </summary>
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
@@ -329,6 +330,22 @@ internal static class ArchiveTestCatalog
             "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: HighRatioBzip2Recipe),
+        ["method-cross-deflate64-deflate"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossDeflate64Deflate, controlCaseKey: DeflateControlCaseKey),
+        ["method-cross-bzip2-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossBzip2Stored, controlCaseKey: StoredControlCaseKey),
+        ["method-data-deflate-as-bzip2"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataDeflateAsBzip2,
+            controlCaseKey: Bzip2ControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["method-data-bzip2-as-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataBzip2AsStored,
+            controlCaseKey: StoredControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["valid-mixed-methods"] = new(
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: MixedMethodsRecipe),
         ["deflate-invalid-btype"] = MutatedDefinition(
             ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
         ["deflate-corrupt-huffman"] = MutatedDefinition(
@@ -378,7 +395,11 @@ internal static class ArchiveTestCatalog
             Suites: [SecuritySuite],
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
+        ["directory-slash-with-payload"] = PolicyDefinition("directory-slash-with-payload", DirectorySlashWithPayloadRecipe),
+        ["directory-attribute-with-payload"] = PolicyDefinition("directory-attribute-with-payload", DirectoryAttributeWithPayloadRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["filename-bidi-override"] = PolicyDefinition("filename-bidi-override", BidiOverrideRecipe),
+        ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
@@ -502,6 +523,15 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe SafeControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
+    ]);
+
+    // The recipe for the valid-mixed-methods case (ticket #899): one entry per
+    // codec family, all honest. The hand-built path encodes each member natively.
+    private static ArchiveTestRecipe MixedMethodsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
+        ArchiveTestRecipeEntry.File("b.bin", 400, "deflate"),
+        ArchiveTestRecipeEntry.File("c.bz2", 400, "bzip2"),
     ]);
 
     // The recipe for the hostile-name cases (ticket #876): one stored entry under
@@ -714,6 +744,32 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
     ]);
 
+    // Ticket #884 bidi override: the member name embeds a Unicode right-to-left
+    // override character. Valid Archive bytes; the hazard is display spoofing in
+    // review UIs — the control character must be preserved verbatim, never
+    // stripped or normalized. The frozen byte pin lives in the bidi test.
+    private static ArchiveTestRecipe BidiOverrideRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("payload", (char)0x202E, "txt.exe"), "atc-bidi-spoof"),
+    ]);
+
+    // Tickets #885, #886, and #879 consolidated Windows-illegal-character matrix:
+    // the colon ADS separator, angle/quotes/pipe/wildcard characters, an
+    // intermediate trailing-dot segment, and a raw backslash name. All are
+    // ordinary POSIX names; only Windows extractors must refuse or sanitize.
+    private static ArchiveTestRecipe WindowsIllegalCharsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("test.txt:hidden", "atc-illegal-colon"),
+        ArchiveTestRecipeEntry.PolicyFile("a<b.txt", "atc-illegal-angle-open"),
+        ArchiveTestRecipeEntry.PolicyFile("a>b.txt", "atc-illegal-angle-close"),
+        ArchiveTestRecipeEntry.PolicyFile("a\"b.txt", "atc-illegal-quote"),
+        ArchiveTestRecipeEntry.PolicyFile("a|b.txt", "atc-illegal-pipe"),
+        ArchiveTestRecipeEntry.PolicyFile("a?b.txt", "atc-illegal-question"),
+        ArchiveTestRecipeEntry.PolicyFile("a*b.txt", "atc-illegal-star"),
+        ArchiveTestRecipeEntry.PolicyFile("folder./doc.txt", "atc-illegal-intermediate-dot"),
+        ArchiveTestRecipeEntry.PolicyFile("a\\b.txt", "atc-illegal-backslash"),
+    ]);
+
     // Ticket #882 Azure-disallowed Unicode: entry names carrying codepoints Azure
     // Storage rejects (non-characters U+FDD0 and U+FFFE, C1 control U+0085).
     // U+0085 (NEL, 133) not U+0005: SourcePathSanitizer rejects c < 32, so U+0005
@@ -724,6 +780,21 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFDD0, "file.txt"), "atc-azure-nonchar"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x85, "file.txt"), "atc-azure-c1ctrl"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFFFE, "file.txt"), "atc-azure-nonchar-fffe"),
+    ]);
+
+    // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a
+    // payload, and a slash-less entry carrying the raw attribute value 0x10 (the DOS
+    // directory attribute under a DOS host; the writer's host byte stays its OS
+    // default) with a payload. Both are valid ZIP syntax; only extractor
+    // classification is in question.
+    private static ArchiveTestRecipe DirectorySlashWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testdir/", "atc-dir-slash-payload"),
+    ]);
+
+    private static ArchiveTestRecipe DirectoryAttributeWithPayloadRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("testfile", "atc-dir-attr-payload", externalAttributes: 0x10),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text

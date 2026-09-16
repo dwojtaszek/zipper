@@ -73,6 +73,10 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Bzip2WrongCrc => CorruptBzip2Crc(control, before),
             ArchiveTestMutationKind.Deflate64CorruptStream => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.Deflate64CorruptStream),
             ArchiveTestMutationKind.Deflate64TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Deflate64TruncatedStream, 9),
+            ArchiveTestMutationKind.MethodCrossDeflate64Deflate => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossDeflate64Deflate, 9),
+            ArchiveTestMutationKind.MethodCrossBzip2Stored => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossBzip2Stored, 12),
+            ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, 8, "Deflate"),
+            ArchiveTestMutationKind.MethodDataBzip2AsStored => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataBzip2AsStored, 12, "BZip2"),
             ArchiveTestMutationKind.UnsupportedMethodDeflate64 => DeclareUnsupportedMethodDeflate64(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
@@ -870,6 +874,33 @@ internal static class ArchiveFixtureMutator
         return control.Layout.Entries[0];
     }
 
+    /// <summary>
+    /// Rewrites the local header's compression method to an arbitrary code while the
+    /// central header keeps the control's code (ticket #899): the payload bytes stay
+    /// exactly the control's real data for the central method, so central-based
+    /// readers succeed and local-strict readers fail. The declared code must differ
+    /// from the control's, otherwise there is no disagreement to record.
+    /// </summary>
+    private static MutatedArchiveFixture SetLocalMethodCode(
+        ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind, ushort declared)
+    {
+        var entry = control.Layout.Entries[0];
+        if (entry.Method == declared)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control already declares method {declared}; no cross-method disagreement.");
+        }
+
+        var localMethodOffset = entry.LocalHeaderOffset + 8;
+        return Patch(kind, before,
+        [
+            new MutationSpec(
+                kind.ToCaseKey(), "local-header", localMethodOffset,
+                $"Changes the local header's compression method from {entry.Method} to {declared} while the central header retains {entry.Method}; the payload bytes are unchanged, so a lenient central-method reader still reads them and a local-method reader fails to decode.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"local-method={declared} central-method={entry.Method}"),
+        ], after => BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localMethodOffset, 2), declared));
+    }
+
     /// <summary>One intended field change: what changed, where, and how much.</summary>
     private sealed record MutationSpec(
         string Code,
@@ -1005,6 +1036,10 @@ internal enum ArchiveTestMutationKind
     Bzip2WrongCrc,
     Deflate64CorruptStream,
     Deflate64TruncatedStream,
+    MethodCrossDeflate64Deflate,
+    MethodCrossBzip2Stored,
+    MethodDataDeflateAsBzip2,
+    MethodDataBzip2AsStored,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1037,6 +1072,10 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",
         ArchiveTestMutationKind.DeflateInvalidBtype => "deflate-invalid-btype",
         ArchiveTestMutationKind.DeflateCorruptHuffman => "deflate-corrupt-huffman",
+        ArchiveTestMutationKind.MethodCrossDeflate64Deflate => "method-cross-deflate64-deflate",
+        ArchiveTestMutationKind.MethodCrossBzip2Stored => "method-cross-bzip2-stored",
+        ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => "method-data-deflate-as-bzip2",
+        ArchiveTestMutationKind.MethodDataBzip2AsStored => "method-data-bzip2-as-stored",
         ArchiveTestMutationKind.UnsupportedMethodDeflate64 => "unsupported-method-deflate64",
         ArchiveTestMutationKind.Bzip2CorruptBlockMagic => "bzip2-corrupt-block-magic",
         ArchiveTestMutationKind.Bzip2TruncatedStream => "bzip2-truncated-stream",

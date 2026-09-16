@@ -181,7 +181,7 @@ internal static class ArchiveTestSuiteGenerator
         // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
         // Full-codec readers complete every operation; the arms below
         // record each reference reader's honest outcome.
-        if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "bzip2-high-ratio-bounded")
+        if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "valid-mixed-methods" or "bzip2-high-ratio-bounded")
         {
             return
             [
@@ -277,11 +277,15 @@ internal static class ArchiveTestSuiteGenerator
             // readers succeed; strict local-header validators reject (ticket #840).
             // The orphan hidden entry (ticket #869) keeps the visible central directory
             // intact: CD readers list and read visibles while streaming readers see more.
+            // Cross-method disagreements (ticket #899) are the same shape with
+            // non-Stored/Deflate codes.
             ArchiveTestMutationKind.NameLocalCentralMismatch
                 or ArchiveTestMutationKind.MethodLocalCentralMismatch
                 or ArchiveTestMutationKind.SizeLocalCentralMismatch
                 or ArchiveTestMutationKind.ExtraFieldLengthOverrun
-                or ArchiveTestMutationKind.OrphanLocalHeader =>
+                or ArchiveTestMutationKind.OrphanLocalHeader
+                or ArchiveTestMutationKind.MethodCrossDeflate64Deflate
+                or ArchiveTestMutationKind.MethodCrossBzip2Stored =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
@@ -309,11 +313,13 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
-            // Deflate64 lie (ticket #877): same consistent-code shape, but readers
-            // report it differently — .NET fails the entry read (not the
-            // unsupported-method rejection method 98 gets), zlib readers fail too.
+            // Deflate64 lie (ticket #877) and BZip2-labeled stored data (ticket #899):
+            // same consistent-code shape, but readers report it differently — .NET
+            // fails the entry read (not the unsupported-method rejection method 98
+            // gets), zlib readers fail too.
             // ADF/Synapse-bound readers meet a method code with no usable codec.
-            ArchiveTestMutationKind.UnsupportedMethodDeflate64 =>
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64
+                or ArchiveTestMutationKind.MethodDataBzip2AsStored =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-9-deflate64"),
@@ -371,7 +377,8 @@ internal static class ArchiveTestSuiteGenerator
             // verified content from the broken stream. BZip2 block-magic, truncation,
             // and CRC corruptions behave the same way through their own codecs.
             ArchiveTestMutationKind.DeflateInvalidBtype
-                or ArchiveTestMutationKind.DeflateCorruptHuffman =>
+                or ArchiveTestMutationKind.DeflateCorruptHuffman
+                or ArchiveTestMutationKind.MethodDataDeflateAsBzip2 =>
             // Readers report the failure differently: zlib-based readers fail the
             // entry read, while .NET rejects the entry at Open() as an unsupported
             // compression method. The exact exception type is never contracted.
@@ -451,9 +458,15 @@ internal static class ArchiveTestSuiteGenerator
             // bytes as ambient filenames on ordinary hosts.
             "filename-null-byte" or "filename-c0-control" =>
                 new PolicyExpectationProfile(null, []),
-            // Windows-only hazards: drive letters, UNC paths, reserved device names, and
-            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).
-            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" =>
+            // Entry-type confusion (ticket #875): a directory marker or attribute
+            // carrying a payload. Extraction must stay contained; the directory/file
+            // verdict itself varies, so no payload-preservation invariant is named here.
+            "directory-slash-with-payload" or "directory-attribute-with-payload" =>
+                new PolicyExpectationProfile(null, []),
+            // Windows-only hazards: drive letters, UNC paths, reserved device names,
+            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes),
+            // and the consolidated illegal-character matrix (tickets #885, #886, #879).
+            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" or "path-windows-illegal-chars" =>
                 new PolicyExpectationProfile("windows", []),
             // Collisions: the entries are individually valid; the policy is that no
             // variant may silently overwrite another (reject or rename instead).
@@ -467,6 +480,11 @@ internal static class ArchiveTestSuiteGenerator
             // must neither materialize OS links nor follow the target.
             "symlink-then-descendant" =>
                 new PolicyExpectationProfile(null, [LinksNeverMaterialized, EscapeTargetsNeverFollowed]),
+            // Bidi override (ticket #884): the control character (U+202E, three
+            // UTF-8 bytes E2 80 AE) is data; the name must round-trip verbatim
+            // and extraction stays contained via the shared invariants below.
+            "filename-bidi-override" =>
+                new PolicyExpectationProfile(null, []),
             // Azure directory markers (ticket #880): slash marker, $folder$ marker,
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>
