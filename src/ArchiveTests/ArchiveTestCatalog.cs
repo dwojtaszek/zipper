@@ -296,6 +296,10 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.UnsupportedMethod,
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite]),
+        ["unsupported-method-deflate64"] = MutatedDefinition(
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
         ["deflate-invalid-btype"] = MutatedDefinition(
