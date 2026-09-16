@@ -408,9 +408,10 @@ internal static class ArchiveTestSuiteGenerator
             // bytes as ambient filenames on ordinary hosts.
             "filename-null-byte" or "filename-c0-control" =>
                 new PolicyExpectationProfile(null, []),
-            // Windows-only hazards: drive letters, UNC paths, reserved device names, and
-            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes).
-            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" =>
+            // Windows-only hazards: drive letters, UNC paths, reserved device names,
+            // trailing dot/space (Win32 strips them; POSIX keeps them as literal bytes),
+            // and the consolidated illegal-character matrix (tickets #885, #886, #879).
+            "path-windows-drive" or "path-unc" or "path-reserved-device" or "path-trailing-dot-space" or "path-windows-illegal-chars" =>
                 new PolicyExpectationProfile("windows", []),
             // Collisions: the entries are individually valid; the policy is that no
             // variant may silently overwrite another (reject or rename instead).
