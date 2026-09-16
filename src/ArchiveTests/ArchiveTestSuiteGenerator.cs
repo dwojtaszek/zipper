@@ -175,10 +175,13 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
-        // Valid BZip2 control (ticket #897): genuine method-12 bytes. Python
-        // zipfile decodes BZip2 fully while .NET ZipArchive rejects it at Open();
-        // full-codec readers (7-Zip) complete every operation.
-        if (definition.CaseKey == "valid-bzip2")
+        // Valid archives whose entries the reference readers cannot all decode
+        // (tickets #897 and #898): the bytes are genuine, but entry codecs vary in
+        // reader support — Python decodes BZip2 (12) but rejects method 9, while
+        // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
+        // Full-codec readers complete every operation; the arms below
+        // record each reference reader's honest outcome.
+        if (definition.CaseKey == "valid-bzip2" || definition.CaseKey == "valid-deflate64")
         {
             return
             [

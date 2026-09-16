@@ -204,7 +204,7 @@ internal static class ArchiveTestCatalog
             "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateDynamicRecipe),
-        // Ticket #897 BZip2 Case Key: one entry with real BZip2-compressed data
+        // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
         // (method 12).
         ["valid-bzip2"] = new(
             "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
@@ -212,6 +212,16 @@ internal static class ArchiveTestCatalog
             Recipe: new ArchiveTestRecipe(
             [
                 ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
+            ])),
+        // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
+        // labeled method 9, giving the method/data and corruption cases a genuine
+        // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
+        ["valid-deflate64"] = new(
+            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate64"),
             ])),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
