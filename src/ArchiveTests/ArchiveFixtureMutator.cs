@@ -66,8 +66,13 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
             ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
             ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
-            ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before),
+            ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.DeflateInvalidBtype),
             ArchiveTestMutationKind.DeflateCorruptHuffman => CorruptDeflateHuffman(control, before),
+            ArchiveTestMutationKind.Bzip2CorruptBlockMagic => CorruptBzip2Magic(control, before),
+            ArchiveTestMutationKind.Bzip2TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Bzip2TruncatedStream, 12),
+            ArchiveTestMutationKind.Bzip2WrongCrc => CorruptBzip2Crc(control, before),
+            ArchiveTestMutationKind.Deflate64CorruptStream => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.Deflate64CorruptStream),
+            ArchiveTestMutationKind.Deflate64TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Deflate64TruncatedStream, 9),
             ArchiveTestMutationKind.MethodCrossDeflate64Deflate => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossDeflate64Deflate, 9),
             ArchiveTestMutationKind.MethodCrossBzip2Stored => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossBzip2Stored, 12),
             ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, 8, "Deflate"),
@@ -626,28 +631,31 @@ internal static class ArchiveFixtureMutator
         return Finalize(ArchiveTestMutationKind.PrefixUnrebased, before, after, [mutation]);
     }
 
-    /// Sets the first DEFLATE block's type to the reserved value 3 (ticket #874):
-    /// bits 1-2 of the first compressed byte become 11. Works on any block kind —
-    /// stored, fixed, or dynamic — since every block opens with the same 3-bit
-    /// header. The framing stays intact; only the decoder's block dispatch fails.
+    /// Sets the first DEFLATE-family block's type to the reserved value 3 (tickets
+    /// #874 and #900): bits 1-2 of the first compressed byte become 11. Works on any
+    /// block kind — stored, fixed, or dynamic — since every block opens with the same
+    /// 3-bit header. The framing stays intact; only the decoder's block dispatch fails.
     /// </summary>
-    private static MutatedArchiveFixture CorruptDeflateBtype(ArchiveFixtureArtifact control, byte[] before)
+    private static MutatedArchiveFixture CorruptDeflateBtype(ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind)
     {
-        var entry = DeflateEntry(control, ArchiveTestMutationKind.DeflateInvalidBtype);
+        var entry = DeflateEntry(control, kind);
         if (entry.CompressedSize < 1)
         {
             throw new InvalidOperationException(
-                $"Archive Test mutation '{ArchiveTestMutationKind.DeflateInvalidBtype.ToCaseKey()}': the control's compressed payload is empty, no block header to corrupt.");
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control's compressed payload is empty, no block header to corrupt.");
         }
 
         var blockOffset = entry.DataOffset;
-        var code = ArchiveTestMutationKind.DeflateInvalidBtype.ToCaseKey();
+        var code = kind.ToCaseKey();
+        var explanation = kind == ArchiveTestMutationKind.DeflateInvalidBtype
+            ? $"Sets the first DEFLATE block's type bits to 11 (reserved): no decoder dispatches it, so entry reads fail while listing and structural walks still succeed."
+            : $"Sets the first block's type bits to 11 (reserved): no decoder dispatches it, so entry reads fail while listing and structural walks still succeed.";
 
-        return Patch(ArchiveTestMutationKind.DeflateInvalidBtype, before,
+        return Patch(kind, before,
         [
             new MutationSpec(
                 code, "file-data", blockOffset,
-                $"Sets the first DEFLATE block's type bits to 11 (reserved): no decoder dispatches it, so entry reads fail while listing and structural walks still succeed.",
+                explanation,
                 entry.Ordinal, 1, 1, DeclaredValue: "btype=3 (reserved)"),
         ], after => after[(int)blockOffset] = (byte)((after[(int)blockOffset] & ~0x06) | 0x06));
     }
@@ -693,13 +701,174 @@ internal static class ArchiveFixtureMutator
         ], after => after[(int)bitOffset] ^= 0x02);
     }
 
-    /// <summary>The control's first entry as a DEFLATE payload mutation target.</summary>
+    /// <summary>The control's first entry as a DEFLATE-family payload mutation target
+    /// (methods 8 and 9 share the 3-bit block header the bit edits address).</summary>
     private static ArchiveFixtureEntryLayout DeflateEntry(ArchiveFixtureArtifact control, ArchiveTestMutationKind kind)
     {
-        if (control.Layout.Entries.Count == 0 || control.Layout.Entries[0].Method != 8)
+        if (control.Layout.Entries.Count == 0 || (control.Layout.Entries[0].Method != 8 && control.Layout.Entries[0].Method != 9))
         {
             throw new InvalidOperationException(
-                $"Archive Test mutation '{kind.ToCaseKey()}': the control's entry 0 must be a DEFLATE entry.");
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control's entry 0 must be a DEFLATE-family entry.");
+        }
+
+        return control.Layout.Entries[0];
+    }
+
+    /// <summary>
+    /// Flips a bit in the BZip2 block-header magic (ticket #900): the first block
+    /// magic byte ("1AY&SY" at stream offset +4, after the "BZh9" file magic). No
+    /// decoder starts a block without it; the ZIP framing stays intact.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptBzip2Magic(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2CorruptBlockMagic, 12);
+        if (entry.CompressedSize < 10
+            || before[(int)entry.DataOffset] != 0x42
+            || before[(int)entry.DataOffset + 1] != 0x5A
+            || before[(int)entry.DataOffset + 2] != 0x68
+            || before[(int)entry.DataOffset + 3] is < 0x31 or > 0x39
+            || before[(int)entry.DataOffset + 4] != 0x31
+            || before[(int)entry.DataOffset + 5] != 0x41
+            || before[(int)entry.DataOffset + 6] != 0x59
+            || before[(int)entry.DataOffset + 7] != 0x26
+            || before[(int)entry.DataOffset + 8] != 0x53
+            || before[(int)entry.DataOffset + 9] != 0x59)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.Bzip2CorruptBlockMagic.ToCaseKey()}': the control's payload is not a single-block BZip2 stream.");
+        }
+
+        var magicOffset = entry.DataOffset + 4;
+        var code = ArchiveTestMutationKind.Bzip2CorruptBlockMagic.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.Bzip2CorruptBlockMagic, before,
+        [
+            new MutationSpec(
+                code, "file-data", magicOffset,
+                "Flips a bit in the first BZip2 block-header magic: decoders reject the stream at block start while listing and structural walks still succeed.",
+                entry.Ordinal, 1, 1, DeclaredValue: "bzip2-block-magic-corrupt"),
+        ], after => after[magicOffset] ^= 0x01);
+    }
+
+    /// <summary>
+    /// Flips a bit in the BZip2 stored block CRC (ticket #900): the four bytes right
+    /// after the six-byte block magic. The magic pin above already guarantees the
+    /// layout; decoders comparing the computed CRC against this stored value reject
+    /// the block.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptBzip2Crc(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2WrongCrc, 12);
+        if (entry.CompressedSize < 10
+            || before[(int)entry.DataOffset + 4] != 0x31
+            || before[(int)entry.DataOffset + 5] != 0x41
+            || before[(int)entry.DataOffset + 6] != 0x59
+            || before[(int)entry.DataOffset + 7] != 0x26
+            || before[(int)entry.DataOffset + 8] != 0x53
+            || before[(int)entry.DataOffset + 9] != 0x59)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.Bzip2WrongCrc.ToCaseKey()}': the control's payload is not a single-block BZip2 stream.");
+        }
+
+        var crcOffset = checked(entry.DataOffset + 10);
+        var code = ArchiveTestMutationKind.Bzip2WrongCrc.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.Bzip2WrongCrc, before,
+        [
+            new MutationSpec(
+                code, "file-data", crcOffset,
+                "Flips a bit in the stored BZip2 block CRC right after the block magic: integrity-checking decoders reject the block.",
+                entry.Ordinal, 1, 1, DeclaredValue: "bzip2-block-crc-corrupt"),
+        ], after => after[crcOffset] ^= 0x01);
+    }
+
+    /// <summary>
+    /// Deletes the trailing 16 compressed bytes of a coded payload while keeping
+    /// header sizes (ticket #900): the stream ends mid-block and declared sizes
+    /// over-read into the shifted directory. Central offsets and the EOCD offset
+    /// are relinked past the deletion so the directory stays walkable; sizes and
+    /// CRCs stay as the lies under test.
+    /// </summary>
+    private static MutatedArchiveFixture TruncateCodedTail(ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind, ushort expected)
+    {
+        var entry = CodedEntry(control, kind, expected);
+        const int CutLength = 16;
+        if (entry.CompressedSize <= 32)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control's payload is {entry.CompressedSize} bytes, too small to truncate {CutLength} tail bytes from.");
+        }
+
+        var cutStart = checked(entry.DataOffset + entry.CompressedSize - CutLength);
+        var after = new byte[checked(before.Length - CutLength)];
+        before.AsSpan()[..(int)cutStart].CopyTo(after);
+        before.AsSpan((int)cutStart + CutLength).CopyTo(after.AsSpan((int)cutStart));
+
+        foreach (var layoutEntry in control.Layout.Entries)
+        {
+            var fieldAt = layoutEntry.CentralDirectoryOffset > cutStart
+                ? checked(layoutEntry.CentralDirectoryOffset - CutLength)
+                : layoutEntry.CentralDirectoryOffset;
+            if (BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan((int)fieldAt, 4)) != 0x02014b50)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': no central header at the relinked offset {fieldAt}.");
+            }
+
+            if (layoutEntry.LocalHeaderOffset > cutStart)
+            {
+                var centralRelativeOffset = checked(fieldAt + 42);
+                var relative = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan((int)centralRelativeOffset, 4));
+                BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralRelativeOffset, 4), checked(relative - (uint)CutLength));
+            }
+        }
+
+        if (control.Layout.EocdOffset <= cutStart)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the EOCD does not sit past the truncation point.");
+        }
+
+        var newEocdOffset = (int)control.Layout.EocdOffset - CutLength;
+        if (BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(newEocdOffset, 4)) != 0x06054b50)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': no EOCD at the relinked offset {newEocdOffset}.");
+        }
+
+        var centralDirectoryOffset = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan(newEocdOffset + 16, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan(newEocdOffset + 16, 4), checked(centralDirectoryOffset - (uint)CutLength));
+
+        var code = kind.ToCaseKey();
+        var removed = Convert.ToHexStringLower(before.AsSpan((int)cutStart, CutLength));
+        var mutation = new ArchiveTestMutation(
+            Code: code,
+            Structure: "file-data",
+            OffsetBasis: "before-mutation",
+            Offset: cutStart,
+            Explanation: $"Deletes the trailing {CutLength} compressed bytes of the coded payload while keeping header sizes: the stream ends mid-block and the declared compressed size over-reads into the relinked directory. Central offsets shift by -{CutLength}; sizes and CRCs stay as the lies under test.",
+            Ordinal: entry.Ordinal,
+            DeletedLength: CutLength,
+            InsertedLength: 0,
+            BeforeSize: before.Length,
+            AfterSize: after.Length,
+            BeforeSha256: Hash(before),
+            AfterSha256: Hash(after),
+            BeforeHex: removed,
+            AfterHex: null,
+            DeclaredValue: $"truncated-tail={CutLength} declared-compressed-size={entry.CompressedSize}");
+
+        return Finalize(kind, before, after, [mutation]);
+    }
+
+    /// <summary>The control's first entry as a coded-payload mutation target.</summary>
+    private static ArchiveFixtureEntryLayout CodedEntry(ArchiveFixtureArtifact control, ArchiveTestMutationKind kind, ushort code)
+    {
+        if (control.Layout.Entries.Count == 0 || control.Layout.Entries[0].Method != code)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control's entry 0 must be a method-{code} entry.");
         }
 
         return control.Layout.Entries[0];
@@ -862,6 +1031,11 @@ internal enum ArchiveTestMutationKind
     DeflateInvalidBtype,
     DeflateCorruptHuffman,
     UnsupportedMethodDeflate64,
+    Bzip2CorruptBlockMagic,
+    Bzip2TruncatedStream,
+    Bzip2WrongCrc,
+    Deflate64CorruptStream,
+    Deflate64TruncatedStream,
     MethodCrossDeflate64Deflate,
     MethodCrossBzip2Stored,
     MethodDataDeflateAsBzip2,
@@ -903,6 +1077,11 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => "method-data-deflate-as-bzip2",
         ArchiveTestMutationKind.MethodDataBzip2AsStored => "method-data-bzip2-as-stored",
         ArchiveTestMutationKind.UnsupportedMethodDeflate64 => "unsupported-method-deflate64",
+        ArchiveTestMutationKind.Bzip2CorruptBlockMagic => "bzip2-corrupt-block-magic",
+        ArchiveTestMutationKind.Bzip2TruncatedStream => "bzip2-truncated-stream",
+        ArchiveTestMutationKind.Bzip2WrongCrc => "bzip2-wrong-crc",
+        ArchiveTestMutationKind.Deflate64CorruptStream => "deflate64-corrupt-stream",
+        ArchiveTestMutationKind.Deflate64TruncatedStream => "deflate64-truncated-stream",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

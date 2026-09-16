@@ -181,7 +181,7 @@ internal static class ArchiveTestSuiteGenerator
         // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
         // Full-codec readers complete every operation; the arms below
         // record each reference reader's honest outcome.
-        if (definition.CaseKey == "valid-bzip2" || definition.CaseKey == "valid-deflate64" || definition.CaseKey == "valid-mixed-methods")
+        if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "valid-mixed-methods" or "bzip2-high-ratio-bounded")
         {
             return
             [
@@ -372,18 +372,33 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
-            // DEFLATE bitstream corruption (ticket #874): framing and directory stay
-            // intact, so listing succeeds; no decoder reproduces verified content
-            // from the broken stream.
-            // Readers report the failure differently: zlib-based readers fail the
-            // entry read, while .NET rejects the entry at Open() as an unsupported
-            // compression method. The exact exception type is never contracted.
+            // DEFLATE-family bitstream corruption (tickets #874 and #900): framing
+            // and directory stay intact, so listing succeeds; no decoder reproduces
+            // verified content from the broken stream. BZip2 block-magic, truncation,
+            // and CRC corruptions behave the same way through their own codecs.
             ArchiveTestMutationKind.DeflateInvalidBtype
                 or ArchiveTestMutationKind.DeflateCorruptHuffman
                 or ArchiveTestMutationKind.MethodDataDeflateAsBzip2 =>
+            // Readers report the failure differently: zlib-based readers fail the
+            // entry read, while .NET rejects the entry at Open() as an unsupported
+            // compression method. The exact exception type is never contracted.
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation], capability: "deflate-bitstream"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            // Coded bitstream corruption (ticket #900): same contract shape as the
+            // deflate arm for the BZip2 and Deflate64 payload defects, labeled with
+            // the codec-neutral capability.
+            ArchiveTestMutationKind.Bzip2CorruptBlockMagic
+                or ArchiveTestMutationKind.Bzip2TruncatedStream
+                or ArchiveTestMutationKind.Bzip2WrongCrc
+                or ArchiveTestMutationKind.Deflate64CorruptStream
+                or ArchiveTestMutationKind.Deflate64TruncatedStream =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation], capability: "coded-bitstream"),
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "unsupported-method-rejected"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],

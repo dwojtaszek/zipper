@@ -56,6 +56,7 @@ public class ArchiveTestSuiteContractTests
         "many-small-entries",
         "nested-archives-depth-two",
         "zip-bomb-overlapping-deflate",
+        "bzip2-high-ratio-bounded",
     ];
 
     /// <summary>The malformed parser-differential case (ticket #869) housed in security.</summary>
@@ -174,13 +175,13 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSeventyThreeCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSeventyNineCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875, +1 for #884, +5 for #899): a case dropped from the catalogue or unlisted
+        // +2 for #875, +1 for #884, +5 for #899, +6 for #900): a case dropped from the catalogue or unlisted
         // from every suite fails here.
-        Assert.Equal(73, AllKeys().Count);
+        Assert.Equal(79, AllKeys().Count);
     }
 }

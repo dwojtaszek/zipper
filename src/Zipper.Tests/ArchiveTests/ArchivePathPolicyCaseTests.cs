@@ -578,7 +578,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllThirtyMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllThirtyOneMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
@@ -586,12 +586,12 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         // resource case, the #876 hostile-name cases, the #880 Azure marker
         // case, the #882 Azure-disallowed-Unicode case, the #877 Deflate64
         // unsupported-method twin, the consolidated #885/#886/#879 Windows-illegal-character
-        // matrix, the two #875 entry-type cases, the #884 bidi override case, and the two #899 method/data disagreement cases:
-        // every member publishes a safe Fixture ID pair.
+        // matrix, the two #875 entry-type cases, the #884 bidi override case, the two #899 method/data disagreement cases,
+        // and the #900 high-ratio BZip2 case: every member publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(30, securityKeys.Count);
+        Assert.Equal(31, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
