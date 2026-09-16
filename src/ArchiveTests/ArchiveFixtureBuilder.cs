@@ -4,6 +4,8 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
+using ICSharpCode.SharpZipLib.BZip2;
+
 namespace Zipper.ArchiveTests;
 
 /// <summary>
@@ -27,12 +29,34 @@ internal sealed record ArchiveFixtureArtifact(
 
 /// <summary>
 /// Builds the valid baseline (control) Archives for Archive Test cases using the
-/// standard <see cref="ZipArchive"/> library only (never the Standard-mode pipeline),
-/// then captures the exact structure layout. Budgets (REQ-213) are enforced with
+/// standard <see cref="ZipArchive"/> library only for stored/deflate recipes (never
+/// the Standard-mode pipeline), then captures the exact structure layout. Recipes
+/// naming Deflate64 or BZip2 take the hand-built path, which serializes headers
+/// directly around real codec bytes. Budgets (REQ-213) are enforced with
 /// checked arithmetic during writes, one artifact at a time. No filesystem output.
 /// </summary>
 internal static class ArchiveFixtureBuilder
 {
+    /// <summary>The ZIP method codes shared by recipes, the hand-built path, and layout expectations.</summary>
+    internal static ushort MethodCode(string method) => method switch
+    {
+        "stored" => 0,
+        "deflate" => 8,
+        "deflate64" => 9,
+        "bzip2" => 12,
+        _ => throw new InvalidOperationException($"Unknown Archive Test recipe method \"{method}\"."),
+    };
+
+    /// <summary>The APPNOTE version-needed for each method code.</summary>
+    internal static ushort MethodVersion(ushort code) => code switch
+    {
+        0 => 10,
+        8 => 20,
+        9 => 21,
+        12 => 46,
+        _ => throw new InvalidOperationException($"Unknown Archive Test method code {code}."),
+    };
+
     private static readonly DateTimeOffset FixedDosTimestamp = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
@@ -81,6 +105,8 @@ internal static class ArchiveFixtureBuilder
         long totalExpanded = 0;
         foreach (var recipeEntry in definition.Recipe.Entries)
         {
+            // Unknown method strings fail here, never silently become deflate.
+            MethodCode(recipeEntry.Method);
             totalExpanded = checked(totalExpanded + recipeEntry.Length);
         }
 
@@ -165,6 +191,11 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltOverlapping(definition, seed, cancellationToken);
         }
 
+        if (definition.Recipe.Entries.Any(e => MethodCode(e.Method) is 9 or 12))
+        {
+            return BuildHandBuiltCoded(definition, seed, cancellationToken);
+        }
+
         var expectations = new List<ArchiveFixtureEntryExpectation>(definition.Recipe.Entries.Count);
         using var stream = new MemoryStream();
         // Non-seekable write target: the standard writer cannot patch the local header
@@ -209,7 +240,8 @@ internal static class ArchiveFixtureBuilder
                         $"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxArchivePhysicalBytes}-byte physical Archive budget.");
                 }
 
-                var level = recipeEntry.Method == "stored" ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
+                var code = MethodCode(recipeEntry.Method);
+                var level = code == 0 ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
                 var entry = archive.CreateEntry(recipeEntry.Name, level);
                 entry.LastWriteTime = FixedDosTimestamp;
                 if (recipeEntry.ExternalAttributes != 0)
@@ -227,7 +259,7 @@ internal static class ArchiveFixtureBuilder
                     Ordinal: ordinal,
                     Name: recipeEntry.Name,
                     IsDirectory: recipeEntry.IsDirectory,
-                    Method: recipeEntry.Method == "stored" ? (ushort)0 : (ushort)8,
+                    Method: code,
                     Content: content,
                     ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content))));
 
@@ -901,6 +933,179 @@ internal static class ArchiveFixtureBuilder
                 ContentSha256: contentSha))],
             Mutations: []);
     }
+
+    /// <summary>
+    /// Baseline construction for recipes naming Deflate64 or BZip2 entries (ticket
+    /// #896): every entry's headers are serialized directly around real codec bytes.
+    /// Stored and deflate members encode exactly as their names say; Deflate64 members
+    /// carry a Deflate-subset stream (all matches within 32 KiB, so any Deflate64
+    /// decoder accepts it) labeled 9; BZip2 members carry a SharpZipLib-encoded
+    /// stream labeled 12. No data descriptors: sizes are known before headers emit.
+    /// SharpZipLib cannot encode methods 9/12 into ZIP framing (verified: its ZIP
+    /// writer rejects both), so only its standalone BZip2 stream is reused here.
+    /// </summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltCoded(
+        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.Construction is not null)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the coded baseline does not apply {definition.Construction} construction steps.");
+        }
+
+        var count = definition.Recipe.Entries.Count;
+        if (count == 0 || count > ArchiveTestCaseSemantics.MaxEntries)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the coded baseline expects 1 to {ArchiveTestCaseSemantics.MaxEntries} entries; found {count}.");
+        }
+
+        var payloads = new List<(byte[] Name, byte[] Content, byte[] Encoded, ushort Code)>(count);
+        foreach (var recipeEntry in definition.Recipe.Entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var code = MethodCode(recipeEntry.Method);
+            if (recipeEntry.IsDirectory && code != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test case '{definition.CaseKey}': the coded baseline expects stored directories only; found directory '{recipeEntry.Name}' with method \"{recipeEntry.Method}\".");
+            }
+
+            if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test case '{definition.CaseKey}': the coded baseline drops Unix metadata; found entry '{recipeEntry.Name}' with external attributes or a host system.");
+            }
+
+            if (!recipeEntry.IsPolicyName)
+            {
+                ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
+            }
+
+            var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
+            payloads.Add((Encoding.UTF8.GetBytes(recipeEntry.Name), content, EncodePayload(code, content), code));
+        }
+
+        using var stream = new MemoryStream();
+        var localOffsets = new long[count];
+        for (var ordinal = 0; ordinal < count; ordinal++)
+        {
+            var (name, content, encoded, code) = payloads[ordinal];
+            var version = MethodVersion(code);
+            localOffsets[ordinal] = stream.Position;
+            WriteLocalHeader(stream, version, code, content, encoded, name);
+        }
+
+        var centralDirectoryOffset = stream.Position;
+        for (var ordinal = 0; ordinal < count; ordinal++)
+        {
+            var (name, content, encoded, code) = payloads[ordinal];
+            var version = MethodVersion(code);
+            WriteCentralHeader(stream, version, code, content, encoded, name, localOffsets[ordinal]);
+        }
+
+        var centralDirectorySize = checked((int)(stream.Position - centralDirectoryOffset));
+        var eocd = new byte[22];
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd, 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(8), (ushort)count);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(10), (ushort)count);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(12), (uint)centralDirectorySize);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(16), (uint)centralDirectoryOffset);
+        stream.Write(eocd);
+
+        var bytes = stream.ToArray();
+        if (bytes.Length > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+        {
+            throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' Archive is {bytes.Length} bytes, over the physical budget.");
+        }
+
+        var layout = ArchiveFixtureLayout.Read(bytes);
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: layout,
+            Entries: [.. definition.Recipe.Entries.Select((entry, ordinal) => new ArchiveFixtureEntryExpectation(
+                Ordinal: ordinal,
+                Name: entry.Name,
+                IsDirectory: entry.IsDirectory,
+                Method: MethodCode(entry.Method),
+                Content: payloads[ordinal].Content,
+                ContentSha256: Convert.ToHexStringLower(SHA256.HashData(payloads[ordinal].Content))))],
+            Mutations: []);
+    }
+
+    /// <summary>Encodes one entry's content for its method code.</summary>
+    private static byte[] EncodePayload(ushort code, byte[] content) => code switch
+    {
+        0 => content,
+        8 or 9 => Deflate(content),
+        12 => BZip2(content),
+        _ => throw new InvalidOperationException($"Unknown Archive Test method code {code}."),
+    };
+
+    private static byte[] Deflate(byte[] content)
+    {
+        using var squeezed = new MemoryStream();
+        using (var deflate = new DeflateStream(squeezed, CompressionLevel.Optimal, leaveOpen: true))
+        {
+            deflate.Write(content);
+        }
+
+        return squeezed.ToArray();
+    }
+
+    private static byte[] BZip2(byte[] content)
+    {
+        using var squeezed = new MemoryStream();
+        using (var bz2 = new BZip2OutputStream(squeezed, 9))
+        {
+            bz2.Write(content);
+        }
+
+        return squeezed.ToArray();
+    }
+
+    private static void WriteLocalHeader(Stream stream, ushort version, ushort code, byte[] content, byte[] encoded, byte[] name)
+    {
+        var header = new byte[checked(30 + name.Length)];
+        BinaryPrimitives.WriteUInt32LittleEndian(header, 0x04034b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(4), version);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(6), NameFlags(name));
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8), code);
+        WriteDosTimestamp(header.AsSpan(10));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(14), Crc32(content));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(18), (uint)encoded.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(22), (uint)content.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(26), (ushort)name.Length);
+        name.CopyTo(header.AsSpan(30));
+        stream.Write(header);
+        stream.Write(encoded);
+    }
+
+    private static void WriteCentralHeader(Stream stream, ushort version, ushort code, byte[] content, byte[] encoded, byte[] name, long localOffset)
+    {
+        var header = new byte[checked(46 + name.Length)];
+        BinaryPrimitives.WriteUInt32LittleEndian(header, 0x02014b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(4), version);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(6), version);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8), NameFlags(name));
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(10), code);
+        WriteDosTimestamp(header.AsSpan(12));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(16), Crc32(content));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(20), (uint)encoded.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(24), (uint)content.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(28), (ushort)name.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(42), (uint)localOffset);
+        name.CopyTo(header.AsSpan(46));
+        stream.Write(header);
+    }
+
+    /// <summary>General-purpose flags for a hand-built header: bit 11 (UTF-8) when the
+    /// name bytes are not pure ASCII, matching the standard writer; bit 3 (data
+    /// descriptor) is never set because sizes are known before headers emit.</summary>
+    private static ushort NameFlags(byte[] name) =>
+        Array.Exists(name, static b => b >= 0x80) ? (ushort)0x0800 : (ushort)0;
 
     /// <summary>The fixed DOS timestamp (2024-01-01 UTC) as the little-endian time+date words.</summary>
     private static void WriteDosTimestamp(Span<byte> timeAndDate)

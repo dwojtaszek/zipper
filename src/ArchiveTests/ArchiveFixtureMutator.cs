@@ -18,6 +18,10 @@ internal static class ArchiveFixtureMutator
     /// reference reader; used by the policy-sensitive unsupported-method case.</summary>
     private const ushort UnsupportedMethodCode = 98;
 
+    /// <summary>The Deflate64 method code (ticket #877): documented but undecodable by the
+    /// reference reader; used by the policy-sensitive unsupported-method-deflate64 case.</summary>
+    private const ushort UnsupportedMethodDeflate64Code = 9;
+
     /// <summary>The general-purpose bit 0: the "encrypted" flag.</summary>
     private const ushort EncryptionFlag = 0x0001;
 
@@ -64,6 +68,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
             ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before),
             ArchiveTestMutationKind.DeflateCorruptHuffman => CorruptDeflateHuffman(control, before),
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64 => DeclareUnsupportedMethodDeflate64(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -398,26 +403,40 @@ internal static class ArchiveFixtureMutator
     /// stored control bytes, and the reader simply has no codec for the declared method.
     /// Policy-sensitive, not universally malformed.
     /// </summary>
-    private static MutatedArchiveFixture DeclareUnsupportedMethod(ArchiveFixtureArtifact control, byte[] before)
+    private static MutatedArchiveFixture DeclareUnsupportedMethod(ArchiveFixtureArtifact control, byte[] before) =>
+        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethod, UnsupportedMethodCode, "PPMd");
+
+    /// <summary>
+    /// Rewrites the compression method in both headers to Deflate64 (9) over stored
+    /// payload bytes (ticket #877): consistent codes the reference reader cannot
+    /// decode, mirroring the PPMd unsupported-method case for the Azure Data
+    /// Factory / Synapse ingestion gap. A genuinely valid Deflate64 stream is the
+    /// separate valid-deflate64 control (ticket #898).
+    /// </summary>
+    private static MutatedArchiveFixture DeclareUnsupportedMethodDeflate64(ArchiveFixtureArtifact control, byte[] before) =>
+        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethodDeflate64, UnsupportedMethodDeflate64Code, "Deflate64");
+
+    private static MutatedArchiveFixture DeclareMethodCode(
+        ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind, ushort code, string name)
     {
         var entry = control.Layout.Entries[0];
         var localMethodOffset = entry.LocalHeaderOffset + 8;
         var centralMethodOffset = entry.CentralDirectoryOffset + 10;
 
-        return Patch(ArchiveTestMutationKind.UnsupportedMethod, before,
+        return Patch(kind, before,
         [
             new MutationSpec(
-                ArchiveTestMutationKind.UnsupportedMethod.ToCaseKey(), "local-header", localMethodOffset,
-                $"Rewrites the local header's compression method from {entry.Method} to {UnsupportedMethodCode} (PPMd), consistent with the central header; the payload bytes are unchanged stored data and no codec for the declared method is implemented. Applied in parallel with the central-header record, not chained.",
-                entry.Ordinal, 2, 2, DeclaredValue: $"method={UnsupportedMethodCode}"),
+                kind.ToCaseKey(), "local-header", localMethodOffset,
+                $"Rewrites the local header's compression method from {entry.Method} to {code} ({name}), consistent with the central header; the payload bytes are unchanged stored data and no codec for the declared method is implemented. Applied in parallel with the central-header record, not chained.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"method={code}"),
             new MutationSpec(
-                ArchiveTestMutationKind.UnsupportedMethod.ToCaseKey(), "central-header", centralMethodOffset,
-                $"Rewrites the central header's compression method from {entry.Method} to {UnsupportedMethodCode} (PPMd), consistent with the local header; the payload bytes are unchanged stored data and no codec for the declared method is implemented. Applied in parallel with the local-header record, not chained.",
-                entry.Ordinal, 2, 2, DeclaredValue: $"method={UnsupportedMethodCode}"),
+                kind.ToCaseKey(), "central-header", centralMethodOffset,
+                $"Rewrites the central header's compression method from {entry.Method} to {code} ({name}), consistent with the local header; the payload bytes are unchanged stored data and no codec for the declared method is implemented. Applied in parallel with the local-header record, not chained.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"method={code}"),
         ], after =>
         {
-            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localMethodOffset, 2), UnsupportedMethodCode);
-            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralMethodOffset, 2), UnsupportedMethodCode);
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localMethodOffset, 2), code);
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralMethodOffset, 2), code);
         });
     }
 
@@ -811,6 +830,7 @@ internal enum ArchiveTestMutationKind
     PrefixUnrebased,
     DeflateInvalidBtype,
     DeflateCorruptHuffman,
+    UnsupportedMethodDeflate64,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -843,6 +863,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",
         ArchiveTestMutationKind.DeflateInvalidBtype => "deflate-invalid-btype",
         ArchiveTestMutationKind.DeflateCorruptHuffman => "deflate-corrupt-huffman",
+        ArchiveTestMutationKind.UnsupportedMethodDeflate64 => "unsupported-method-deflate64",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

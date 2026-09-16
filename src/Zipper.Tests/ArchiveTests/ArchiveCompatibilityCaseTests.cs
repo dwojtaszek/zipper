@@ -1,6 +1,9 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
+
+using ICSharpCode.SharpZipLib.BZip2;
+
 using Xunit;
 using Zipper.ArchiveTests;
 
@@ -187,7 +190,48 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
         Assert.Equal(control.Entries[0].Content, ReadEntryContent(bytes, "z64.txt"));
     }
 
+    // ---- Real BZip2 control (method 12) ----
+
+    [Fact]
+    public void Build_ValidBzip2_EmitsMethodTwelveWithRealCompressedData()
+    {
+        var control = BuildControl("valid-bzip2");
+
+        var entry = Assert.Single(control.Layout.Entries);
+        Assert.Equal((ushort)12, entry.Method);
+        Assert.Equal("doc.bin", entry.Name);
+        Assert.Equal(46, ReadUInt16(control.ArchiveBytes, 4));
+        Assert.Equal(46, ReadUInt16(control.ArchiveBytes, entry.CentralDirectoryOffset + 6));
+
+        // The payload is a genuine bzip2 stream (BZh9 magic), decodable by a bzip2
+        // implementation back to the recipe content.
+        Assert.Equal(
+            [0x42, 0x5a, 0x68, 0x39],
+            control.ArchiveBytes.AsSpan((int)entry.DataOffset, 4).ToArray());
+        using var source = new MemoryStream(control.ArchiveBytes, (int)entry.DataOffset, (int)entry.CompressedSize, writable: false);
+        using var bz2 = new BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        Assert.Equal(control.Entries[0].Content, inflated.ToArray());
+    }
+
     // ---- Paired malformed cases ----
+
+    [Fact]
+    public void Build_ValidDeflate64_EmitsMethodNineAsDeflateSubset()
+    {
+        var control = BuildControl("valid-deflate64");
+
+        var entry = Assert.Single(control.Layout.Entries);
+        Assert.Equal((ushort)9, entry.Method);
+        Assert.Equal("doc.txt", entry.Name);
+        Assert.Equal(21, ReadUInt16(control.ArchiveBytes, 4));
+        Assert.Equal(21, ReadUInt16(control.ArchiveBytes, (int)entry.CentralDirectoryOffset + 6));
+
+        // Deflate-subset stream: any Deflate decoder — hence any Deflate64 one —
+        // restores the content, even though the headers declare method 9.
+        Assert.Equal(control.Entries[0].Content, ReadEntryContent(control.ArchiveBytes, "doc.txt"));
+    }
 
     [Fact]
     public void Apply_InvalidUtf8Name_SetsFlagWithFixedInvalidRawBytes()
@@ -299,6 +343,7 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
     [InlineData("invalid-utf8-name")]
     [InlineData("zip64-missing-extra")]
     [InlineData("zip64-truncated-extra")]
+    [InlineData("valid-deflate64")]
     public void Build_CompatibilityCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -319,6 +364,7 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
             "valid-descriptor-signature", "valid-descriptor-no-signature", "valid-utf8-name",
             "valid-cp437-name", "valid-signatures-in-comment", "valid-zip64-small",
             "invalid-utf8-name", "zip64-missing-extra", "zip64-truncated-extra",
+            "valid-deflate64",
         };
         var tempDir = Path.Combine(TempDir, "compat");
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(

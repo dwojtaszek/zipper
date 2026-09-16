@@ -32,9 +32,10 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "symlink-then-descendant",
         "azure-directory-marker-collision",
         "path-windows-illegal-chars",
+        "path-azure-disallowed-unicode",
     ];
 
-    /// <summary>The seven cases whose extract expectation is a containment policy.</summary>
+    /// <summary>The eight cases whose extract expectation is a containment policy.</summary>
     private static readonly string[] ContainmentCaseKeys =
     [
         "path-parent-traversal",
@@ -44,6 +45,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "path-reserved-device",
         "path-trailing-dot-space",
         "symlink-then-descendant",
+        "path-azure-disallowed-unicode",
     ];
 
     /// <summary>The five collision cases that name a no-silent-overwrite policy.</summary>
@@ -76,6 +78,23 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal(
             ["test.txt:hidden", "a<b.txt", "a>b.txt", "a\"b.txt", "a|b.txt", "a?b.txt", "a*b.txt", "folder./doc.txt", "a\\b.txt"],
             artifact.Layout.Entries.Select(e => e.Name).ToList());
+    }
+
+    [Fact]
+    public void Build_AzureDisallowedUnicode_KeepsExactCodepoints()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("path-azure-disallowed-unicode", 42, CancellationToken.None);
+
+        Assert.Equal(3, artifact.Layout.EntryCount);
+        Assert.Equal(Utf8Hex("data" + (char)0xFDD0 + "file.txt"), artifact.Layout.Entries[0].NameHex);
+        Assert.Equal(Utf8Hex("data" + (char)0x85 + "file.txt"), artifact.Layout.Entries[1].NameHex);
+        Assert.Equal(Utf8Hex("data" + (char)0xFFFE + "file.txt"), artifact.Layout.Entries[2].NameHex);
+
+        // Distinct payloads keep every member observable by content hash.
+        Assert.Equal(3, artifact.Entries.Select(e => e.ContentSha256).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("atc-azure-nonchar", Encoding.ASCII.GetString(artifact.Entries[0].Content));
+        Assert.Equal("atc-azure-c1ctrl", Encoding.ASCII.GetString(artifact.Entries[1].Content));
+        Assert.Equal("atc-azure-nonchar-fffe", Encoding.ASCII.GetString(artifact.Entries[2].Content));
     }
 
     [Fact]
@@ -249,7 +268,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the thirteen policy-sensitive recipes directly.
+    // policy-case tests target the fourteen policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -520,18 +539,19 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyThreeMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyFiveMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
         // differential, the #871 Unicode Path policy case, the #872 shared-range
         // resource case, the #876 hostile-name cases, the #880 Azure marker
-        // case, and the consolidated #885/#886/#879 Windows-illegal-character
+        // case, the #882 Azure-disallowed-Unicode case, the #877 Deflate64
+        // unsupported-method twin, and the consolidated #885/#886/#879 Windows-illegal-character
         // matrix: every member publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(23, securityKeys.Count);
+        Assert.Equal(25, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -550,7 +570,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the thirteen policy-sensitive recipes (the path/collision subset of
+        // Publishes the fourteen policy-sensitive recipes (the path/collision subset of
         // the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
