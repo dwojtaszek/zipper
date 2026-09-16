@@ -666,10 +666,10 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
     ]);
 
-    // Ticket #884 bidi override: the member name embeds the Unicode right-to-left
-    // override character U+202E, three bytes E2 80 AE in UTF-8. Valid Archive bytes;
-    // the hazard is display spoofing in review UIs — the control character must
-    // be preserved verbatim, never stripped or normalized.
+    // Ticket #884 bidi override: the member name embeds a Unicode right-to-left
+    // override character. Valid Archive bytes; the hazard is display spoofing in
+    // review UIs — the control character must be preserved verbatim, never
+    // stripped or normalized. The frozen byte pin lives in the bidi test.
     private static ArchiveTestRecipe BidiOverrideRecipe => new(
     [
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("payload", (char)0x202E, "txt.exe"), "atc-bidi-spoof"),
