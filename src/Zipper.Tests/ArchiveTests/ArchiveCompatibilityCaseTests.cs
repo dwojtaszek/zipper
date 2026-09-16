@@ -218,6 +218,22 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
     // ---- Paired malformed cases ----
 
     [Fact]
+    public void Build_ValidDeflate64_EmitsMethodNineAsDeflateSubset()
+    {
+        var control = BuildControl("valid-deflate64");
+
+        var entry = Assert.Single(control.Layout.Entries);
+        Assert.Equal((ushort)9, entry.Method);
+        Assert.Equal("doc.txt", entry.Name);
+        Assert.Equal(21, ReadUInt16(control.ArchiveBytes, 4));
+        Assert.Equal(21, ReadUInt16(control.ArchiveBytes, (int)entry.CentralDirectoryOffset + 6));
+
+        // Deflate-subset stream: any Deflate decoder — hence any Deflate64 one —
+        // restores the content, even though the headers declare method 9.
+        Assert.Equal(control.Entries[0].Content, ReadEntryContent(control.ArchiveBytes, "doc.txt"));
+    }
+
+    [Fact]
     public void Apply_InvalidUtf8Name_SetsFlagWithFixedInvalidRawBytes()
     {
         var control = BuildControl("valid-stored");
@@ -327,6 +343,7 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
     [InlineData("invalid-utf8-name")]
     [InlineData("zip64-missing-extra")]
     [InlineData("zip64-truncated-extra")]
+    [InlineData("valid-deflate64")]
     public void Build_CompatibilityCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -347,6 +364,7 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
             "valid-descriptor-signature", "valid-descriptor-no-signature", "valid-utf8-name",
             "valid-cp437-name", "valid-signatures-in-comment", "valid-zip64-small",
             "invalid-utf8-name", "zip64-missing-extra", "zip64-truncated-extra",
+            "valid-deflate64",
         };
         var tempDir = Path.Combine(TempDir, "compat");
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
