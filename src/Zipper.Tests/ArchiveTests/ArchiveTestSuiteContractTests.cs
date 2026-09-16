@@ -62,6 +62,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The Unicode name-policy case (ticket #871) housed in security.</summary>
     private static readonly string[] UnicodePathSecurityCaseKeys = ["unicode-path-extra-mismatch"];
 
+    /// <summary>The method/data disagreement cases (ticket #899) housed in security.</summary>
+    private static readonly string[] MethodDataSecurityCaseKeys = ["method-data-deflate-as-bzip2", "method-data-bzip2-as-stored"];
+
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
 
@@ -96,6 +99,7 @@ public class ArchiveTestSuiteContractTests
                 .Concat(ParserDifferentialSecurityCaseKeys)
                 .Concat(UnicodePathSecurityCaseKeys)
                 .Concat(HostileNameSecurityCaseKeys)
+                .Concat(MethodDataSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -165,12 +169,12 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSixtyFourCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSixtyNineCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898): a case dropped from the catalogue
         // or unlisted from every suite fails here.
-        Assert.Equal(64, AllKeys().Count);
+        Assert.Equal(69, AllKeys().Count);
     }
 }

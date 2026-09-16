@@ -355,7 +355,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(27, malformed.Count);
+        Assert.Equal(31, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
@@ -386,6 +386,10 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("prefix-unrebased")]
     [InlineData("deflate-invalid-btype")]
     [InlineData("deflate-corrupt-huffman")]
+    [InlineData("method-cross-deflate64-deflate")]
+    [InlineData("method-cross-bzip2-stored")]
+    [InlineData("method-data-deflate-as-bzip2")]
+    [InlineData("method-data-bzip2-as-stored")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -620,10 +624,86 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_MethodCrossDeflate64Deflate_SplitsLocalFromCentral()
+    {
+        var control = BuildControl("valid-deflate");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-deflate64-deflate"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(9, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.LocalHeaderOffset + 8, 2));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("local-method=9 central-method=8", mutation.DeclaredValue);
+    }
+
+    [Fact]
+    public void Apply_MethodCrossBzip2Stored_SplitsLocalFromCentral()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-bzip2-stored"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(0, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("local-method=12 central-method=0", mutation.DeclaredValue);
+    }
+
+    [Fact]
+    public void Apply_MethodDataDeflateAsBzip2_RelabelsBothHeadersToDeflate()
+    {
+        var control = BuildControl("valid-bzip2");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-deflate-as-bzip2"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var dataMutation = Assert.Single(mutated.Mutations, m => m.Structure == "local-header");
+        Assert.Equal("method-data-deflate-as-bzip2", dataMutation.Code);
+    }
+
+    [Fact]
+    public void Apply_MethodDataBzip2AsStored_RelabelsBothHeadersToBzip2()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-bzip2-as-stored"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var mutation = Assert.Single(mutated.Mutations, m => m.Structure == "local-header");
+        Assert.Equal("method-data-bzip2-as-stored", mutation.Code);
+        Assert.Contains("method=12", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ValidMixedMethods_KeepsPerEntryCodecs()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("valid-mixed-methods", 42, CancellationToken.None);
+
+        Assert.Equal(3, artifact.Layout.EntryCount);
+        Assert.Equal([(ushort)0, (ushort)8, (ushort)12], artifact.Layout.Entries.Select(e => e.Method).ToList());
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(64, all.Count);
+        Assert.Equal(69, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
