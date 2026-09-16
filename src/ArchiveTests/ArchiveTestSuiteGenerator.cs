@@ -292,6 +292,17 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
             ],
+            // Deflate64 lie (ticket #877): same consistent-code shape, but readers
+            // report it differently — .NET fails the entry read (not the
+            // unsupported-method rejection method 98 gets), zlib readers fail too.
+            // ADF/Synapse-bound readers meet a method code with no usable codec.
+            ArchiveTestMutationKind.UnsupportedMethodDeflate64 =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation], capability: "method-9-deflate64"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged], ["open", ExtractOperation]),
+            ],
             ArchiveTestMutationKind.EncryptionFlagWithPlaintext =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
@@ -433,6 +444,10 @@ internal static class ArchiveTestSuiteGenerator
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>
                 new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
+            // Azure-disallowed Unicode (ticket #882): non-characters and C1 controls
+            // in names. Valid Archive entries; only Azure upload rejects them.
+            "path-azure-disallowed-unicode" =>
+                new PolicyExpectationProfile(null, []),
             _ => throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': no policy expectation set defined for a policy-sensitive direct recipe."),
         };

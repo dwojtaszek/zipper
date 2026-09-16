@@ -38,10 +38,11 @@ public class ArchiveTestSuiteContractTests
         "unicode-normalization-collision",
         "azure-directory-marker-collision",
         "filename-bidi-override",
+        "path-azure-disallowed-unicode",
     ];
 
-    /// <summary>The unsupported-feature case (ticket #840) the contract houses in security.</summary>
-    private static readonly string[] UnsupportedFeatureSecurityCaseKeys = ["unsupported-method"];
+    /// <summary>The unsupported-feature cases (ticket #840, plus Deflate64 #877) the contract houses in security.</summary>
+    private static readonly string[] UnsupportedFeatureSecurityCaseKeys = ["unsupported-method", "unsupported-method-deflate64"];
 
     /// <summary>The bounded resource cases (ticket #843) the contract houses in security.</summary>
     private static readonly string[] BoundedResourceSecurityCaseKeys =
@@ -133,13 +134,15 @@ public class ArchiveTestSuiteContractTests
     {
         var malformed = SuiteKeys(ArchiveTestCatalog.MalformedSuite);
 
-        // Every malformed-classification case plus the one pinned structure case
-        // with a non-malformed classification (unsupported-method, policy-sensitive,
-        // housed in malformed since ticket #840; declared-size-oversized is already
+        // Every malformed-classification case plus the pinned structure cases
+        // with a non-malformed classification (unsupported-method and
+        // unsupported-method-deflate64, policy-sensitive, housed in malformed
+        // since ticket #840; declared-size-oversized is already
         // malformed-classified and arrives via the derived set).
         var expected = AllKeys()
             .Where(key => ArchiveTestCatalog.GetCase(key).Classification == "malformed")
             .Append("unsupported-method")
+            .Append("unsupported-method-deflate64")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
     }
@@ -163,11 +166,12 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenSixtyOneCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSixtyThreeCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
-        // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #884): a case dropped from the
-        // catalogue or unlisted from every suite fails here.
-        Assert.Equal(61, AllKeys().Count);
+        // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
+        // +1 for #877, +1 for #884): a case dropped from the catalogue or unlisted
+        // from every suite fails here.
+        Assert.Equal(63, AllKeys().Count);
     }
 }

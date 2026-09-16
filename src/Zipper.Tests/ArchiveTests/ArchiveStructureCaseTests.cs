@@ -16,6 +16,7 @@ namespace Zipper.Tests;
 public class ArchiveStructureCaseTests : TempDirectoryTestBase
 {
     private const ushort UnsupportedMethodCode = 98;
+    private const ushort UnsupportedMethodDeflate64Code = 9;
 
     private static ArchiveFixtureArtifact BuildControl(string caseKey) =>
         ArchiveFixtureBuilder.BuildControl(caseKey, 42, CancellationToken.None);
@@ -315,6 +316,23 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
             });
         }
 
+        // Deflate64 lie (ticket #877): same consistent-code shape, but the .NET
+        // reader fails the entry read with a data error, not the
+        // unsupported-method rejection method 98 gets — the verified split that
+        // justifies the dedicated expectation arm.
+        var deflate64 = Apply("unsupported-method-deflate64");
+        using (var archive = new ZipArchive(new MemoryStream(deflate64.ArchiveBytes), ZipArchiveMode.Read))
+        {
+            Assert.Equal(2, archive.Entries.Count);
+            var ex = Assert.ThrowsAny<Exception>(() =>
+            {
+                using var entry = archive.Entries[0].Open();
+                using var copy = new MemoryStream();
+                entry.CopyTo(copy);
+            });
+            Assert.DoesNotContain("unsupported compression method", ex.Message, StringComparison.Ordinal);
+        }
+
         // Corrupt local field with intact central directory: the lenient reference reader
         // (central-method based) still reads matching content; only local-trust readers fail.
         var methodMismatch = Apply("method-local-central-mismatch");
@@ -337,13 +355,15 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(26, malformed.Count);
+        Assert.Equal(27, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
+        Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
         Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-invalid-btype");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-corrupt-huffman");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
+        Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method-deflate64").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("prefix-unrebased").Classification);
 
@@ -359,6 +379,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("offset-into-payload")]
     [InlineData("extra-field-length-overrun")]
     [InlineData("unsupported-method")]
+    [InlineData("unsupported-method-deflate64")]
     [InlineData("encryption-flag-with-plaintext")]
     [InlineData("overlapping-entry-ranges")]
     [InlineData("orphan-local-header")]
@@ -575,10 +596,34 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_UnsupportedMethodDeflate64_SetsConsistentCodeNineInBothHeaders()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = Apply("unsupported-method-deflate64");
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(UnsupportedMethodDeflate64Code, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(UnsupportedMethodDeflate64Code, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+        AssertOnlyRangesChanged(
+            control.ArchiveBytes, mutated.ArchiveBytes,
+            (entry.LocalHeaderOffset + 8, 2), (entry.CentralDirectoryOffset + 10, 2));
+
+        // Two parallel field records (local + central), same transition.
+        Assert.Equal(2, mutated.Mutations.Count);
+        Assert.Equal("local-header", mutated.Mutations[0].Structure);
+        Assert.Equal("central-header", mutated.Mutations[1].Structure);
+        Assert.All(mutated.Mutations, mutation =>
+            Assert.Equal("method=9", mutation.DeclaredValue, StringComparer.Ordinal));
+
+        // The payload stays the stored control bytes: an unsupported codec, not corrupt data.
+        Assert.Equal(control.Entries[0].Content[..16], mutated.ArchiveBytes.AsSpan((int)entry.DataOffset, 16).ToArray());
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(61, all.Count);
+        Assert.Equal(63, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -630,6 +675,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                         or ArchiveTestMutationKind.OffsetIntoPayload
                         or ArchiveTestMutationKind.ExtraFieldLengthOverrun
                         or ArchiveTestMutationKind.UnsupportedMethod
+                        or ArchiveTestMutationKind.UnsupportedMethodDeflate64
                         or ArchiveTestMutationKind.EncryptionFlagWithPlaintext
                         or ArchiveTestMutationKind.OverlappingEntryRanges
                         or ArchiveTestMutationKind.OrphanLocalHeader
