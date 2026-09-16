@@ -348,6 +348,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
@@ -658,6 +659,18 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile("folder/", "atc-azure-dir-marker"),
         ArchiveTestRecipeEntry.PolicyFile("folder_$folder$", "atc-azure-folder"),
         ArchiveTestRecipeEntry.PolicyFile("folder/child.txt", "atc-azure-child"),
+    ]);
+
+    // Ticket #882 Azure-disallowed Unicode: entry names carrying codepoints Azure
+    // Storage rejects (non-characters U+FDD0 and U+FFFE, C1 control U+0085).
+    // U+0085 (NEL, 133) not U+0005: SourcePathSanitizer rejects c < 32, so U+0005
+    // needs hostile construction; U+0085 passes as standard PolicyFile. Valid
+    // Archive names; only the downstream upload contract is in question.
+    private static ArchiveTestRecipe AzureDisallowedUnicodeRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFDD0, "file.txt"), "atc-azure-nonchar"),
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x85, "file.txt"), "atc-azure-c1ctrl"),
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFFFE, "file.txt"), "atc-azure-nonchar-fffe"),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text

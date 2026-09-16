@@ -428,6 +428,10 @@ internal static class ArchiveTestSuiteGenerator
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>
                 new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
+            // Azure-disallowed Unicode (ticket #882): non-characters and C1 controls
+            // in names. Valid Archive entries; only Azure upload rejects them.
+            "path-azure-disallowed-unicode" =>
+                new PolicyExpectationProfile(null, []),
             _ => throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': no policy expectation set defined for a policy-sensitive direct recipe."),
         };
