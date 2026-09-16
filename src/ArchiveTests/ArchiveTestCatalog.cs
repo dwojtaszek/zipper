@@ -348,6 +348,7 @@ internal static class ArchiveTestCatalog
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
+        ["zero-width-collision"] = PolicyDefinition("zero-width-collision", ZeroWidthCollisionRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
@@ -671,6 +672,15 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFDD0, "file.txt"), "atc-azure-nonchar"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x85, "file.txt"), "atc-azure-c1ctrl"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0xFFFE, "file.txt"), "atc-azure-nonchar-fffe"),
+    ]);
+
+    // Ticket #889 zero-width collision: visually identical names distinguished
+    // only by a zero-width space (U+200B), with distinct payloads so overwrite
+    // choices stay observable by content hash.
+    private static ArchiveTestRecipe ZeroWidthCollisionRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("data.txt", "atc-zw-visible"),
+        ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x200B, ".txt"), "atc-zw-hidden"),
     ]);
 
     // A Unix symlink entry (S_IFLNK | 0777 mode bits, Unix host) whose inert text
