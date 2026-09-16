@@ -465,6 +465,11 @@ internal static class ArchiveTestSuiteGenerator
             // must neither materialize OS links nor follow the target.
             "symlink-then-descendant" =>
                 new PolicyExpectationProfile(null, [LinksNeverMaterialized, EscapeTargetsNeverFollowed]),
+            // Bidi override (ticket #884): the control character (U+202E, three
+            // UTF-8 bytes E2 80 AE) is data; the name must round-trip verbatim
+            // and extraction stays contained via the shared invariants below.
+            "filename-bidi-override" =>
+                new PolicyExpectationProfile(null, []),
             // Azure directory markers (ticket #880): slash marker, $folder$ marker,
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>
