@@ -20,7 +20,7 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The eleven policy-sensitive path/collision cases (ticket #842).
+    /// <summary>The twelve policy-sensitive path/collision cases (ticket #842).
     /// Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys — both must change together;
     /// the exact security-suite assertion below fails if they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
@@ -36,6 +36,7 @@ public class ArchiveTestSuiteContractTests
         "path-windows-drive",
         "symlink-then-descendant",
         "unicode-normalization-collision",
+        "azure-directory-marker-collision",
     ];
 
     /// <summary>The unsupported-feature case (ticket #840) the contract houses in security.</summary>
@@ -161,11 +162,11 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenFiftyNineCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenSixtyCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
-        // #872, +2 for #873, +3 for #874, +2 for #876): a case dropped from the
+        // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880): a case dropped from the
         // catalogue or unlisted from every suite fails here.
-        Assert.Equal(59, AllKeys().Count);
+        Assert.Equal(60, AllKeys().Count);
     }
 }

@@ -30,6 +30,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "unicode-normalization-collision",
         "file-directory-conflict",
         "symlink-then-descendant",
+        "azure-directory-marker-collision",
     ];
 
     /// <summary>The seven cases whose extract expectation is a containment policy.</summary>
@@ -44,13 +45,14 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "symlink-then-descendant",
     ];
 
-    /// <summary>The four collision cases that name a no-silent-overwrite policy.</summary>
+    /// <summary>The five collision cases that name a no-silent-overwrite policy.</summary>
     private static readonly string[] CollisionCaseKeys =
     [
         "duplicate-name",
         "case-collision",
         "unicode-normalization-collision",
         "file-directory-conflict",
+        "azure-directory-marker-collision",
     ];
 
     public static TheoryData<string> AllPolicyCaseKeys => new(PolicyCaseKeys);
@@ -64,6 +66,24 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     private static uint ReadUInt32(byte[] bytes, long offset) =>
         BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan((int)offset, 4));
+
+    [Fact]
+    public void Build_AzureDirectoryMarkerCollision_KeepsAllThreeMembersDistinct()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("azure-directory-marker-collision", 42, CancellationToken.None);
+
+        Assert.Equal(3, artifact.Layout.EntryCount);
+        Assert.Equal(
+            ["folder/", "folder_$folder$", "folder/child.txt"],
+            artifact.Layout.Entries.Select(e => e.Name).ToList());
+
+        // Distinct payloads keep every member observable by content hash: no silent
+        // collapse between the slash marker, the $folder$ marker, and the child.
+        Assert.Equal(3, artifact.Entries.Select(e => e.ContentSha256).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("atc-azure-dir-marker", Encoding.ASCII.GetString(artifact.Entries[0].Content));
+        Assert.Equal("atc-azure-folder", Encoding.ASCII.GetString(artifact.Entries[1].Content));
+        Assert.Equal("atc-azure-child", Encoding.ASCII.GetString(artifact.Entries[2].Content));
+    }
 
     [Fact]
     public void Build_FilenameNullByte_EmbedsNulInBothHeaders()
@@ -218,7 +238,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the eleven policy-sensitive recipes directly.
+    // policy-case tests target the twelve policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -459,6 +479,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Null(ExtractExpectationOf(cases["path-posix-absolute"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["duplicate-name"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["file-directory-conflict"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["azure-directory-marker-collision"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["symlink-then-descendant"]).Platform);
 
         Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-drive"]).Platform);
@@ -487,17 +508,17 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyOneMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllTwentyTwoMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
         // differential, the #871 Unicode Path policy case, the #872 shared-range
-        // resource case, and the #876 hostile-name cases: every member publishes
-        // a safe Fixture ID pair.
+        // resource case, the #876 hostile-name cases, and the #880 Azure marker
+        // case: every member publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(21, securityKeys.Count);
+        Assert.Equal(22, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -516,7 +537,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the eleven policy-sensitive recipes (the path/collision subset of
+        // Publishes the twelve policy-sensitive recipes (the path/collision subset of
         // the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");
