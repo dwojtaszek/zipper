@@ -18,7 +18,8 @@ internal sealed record ArchiveFixtureEntryExpectation(
     bool IsDirectory,
     ushort Method,
     byte[] Content,
-    string ContentSha256);
+    string ContentSha256,
+    string PayloadCodec);
 
 internal sealed record ArchiveFixtureArtifact(
     byte[] ArchiveBytes,
@@ -261,7 +262,8 @@ internal static class ArchiveFixtureBuilder
                     IsDirectory: recipeEntry.IsDirectory,
                     Method: code,
                     Content: content,
-                    ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content))));
+                    ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
+                    PayloadCodec: recipeEntry.Method));
 
                 ordinal++;
             }
@@ -810,7 +812,8 @@ internal static class ArchiveFixtureBuilder
                     IsDirectory: false,
                     Method: 0,
                     Content: content,
-                    ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content))),
+                    ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
+                    PayloadCodec: recipeEntry.Method),
             ],
             Mutations: []);
     }
@@ -930,7 +933,8 @@ internal static class ArchiveFixtureBuilder
                 IsDirectory: false,
                 Method: 8,
                 Content: content,
-                ContentSha256: contentSha))],
+                ContentSha256: contentSha,
+                PayloadCodec: entry.Method))],
             Mutations: []);
     }
 
@@ -1031,7 +1035,8 @@ internal static class ArchiveFixtureBuilder
                 IsDirectory: entry.IsDirectory,
                 Method: MethodCode(entry.Method),
                 Content: payloads[ordinal].Content,
-                ContentSha256: Convert.ToHexStringLower(SHA256.HashData(payloads[ordinal].Content))))],
+                ContentSha256: Convert.ToHexStringLower(SHA256.HashData(payloads[ordinal].Content)),
+                PayloadCodec: entry.Method))],
             Mutations: []);
     }
 

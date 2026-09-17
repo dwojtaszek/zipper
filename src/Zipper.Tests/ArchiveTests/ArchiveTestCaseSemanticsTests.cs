@@ -57,7 +57,8 @@ public class ArchiveTestCaseSemanticsTests
     public void Validate_DuplicateEntryOrdinal_IsRejected()
     {
         var entry = new ArchiveTestEntry(
-            0, "file", "612e747874", "612e747874", "a.txt", null, null, null, null, null);
+            0, "file", "612e747874", "612e747874", "a.txt",
+            LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: "stored");
         var duplicate = entry with { ReadableName = "b.txt" };
         var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
         {
@@ -221,5 +222,65 @@ public class ArchiveTestCaseSemanticsTests
         Assert.Contains(
             ArchiveTestCaseSemantics.Validate(none),
             error => error.Contains("at least one operation record", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(-1, 0, "localHeaderMethod must be between 0 and 65535")]
+    [InlineData(65536, 0, "localHeaderMethod must be between 0 and 65535")]
+    [InlineData(0, -1, "centralDirectoryMethod must be between 0 and 65535")]
+    [InlineData(0, 65536, "centralDirectoryMethod must be between 0 and 65535")]
+    public void Validate_CompressionMethodOutOfRange_IsRejected(int localMethod, int centralMethod, string expectedSubstring)
+    {
+        var entry = new ArchiveTestEntry(
+            0, "file", "612e747874", "612e747874", "a.txt",
+            LocalHeaderMethod: localMethod, CentralDirectoryMethod: centralMethod, PayloadCodec: "stored");
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Entries = [entry],
+            Limits = new ArchiveTestLimits(1, 0, 1048576, 10),
+        };
+
+        var errors = ArchiveTestCaseSemantics.Validate(testCase);
+        Assert.Contains(errors, error => error.Contains(expectedSubstring, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_PayloadCodecRules_AreEnforced()
+    {
+        var invalidCodecEntry = new ArchiveTestEntry(
+            0, "file", "612e747874", "612e747874", "a.txt",
+            LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: "invalid-codec");
+        var testCaseInvalidCodec = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Entries = [invalidCodecEntry],
+            Limits = new ArchiveTestLimits(1, 0, 1048576, 10),
+        };
+        Assert.Contains(
+            ArchiveTestCaseSemantics.Validate(testCaseInvalidCodec),
+            error => error.Contains("unknown payloadCodec 'invalid-codec'", StringComparison.Ordinal));
+
+        var dirWithCodec = new ArchiveTestEntry(
+            0, "directory", "6469722f", "6469722f", "dir/",
+            LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: "stored");
+        var testCaseDirWithCodec = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Entries = [dirWithCodec],
+            Limits = new ArchiveTestLimits(1, 0, 1048576, 10),
+        };
+        Assert.Contains(
+            ArchiveTestCaseSemantics.Validate(testCaseDirWithCodec),
+            error => error.Contains("directory entry must not declare a payloadCodec", StringComparison.Ordinal));
+
+        var fileWithoutCodec = new ArchiveTestEntry(
+            0, "file", "612e747874", "612e747874", "a.txt",
+            LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: null);
+        var testCaseFileWithoutCodec = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Entries = [fileWithoutCodec],
+            Limits = new ArchiveTestLimits(1, 0, 1048576, 10),
+        };
+        Assert.Contains(
+            ArchiveTestCaseSemantics.Validate(testCaseFileWithoutCodec),
+            error => error.Contains("file entry must declare a payloadCodec", StringComparison.Ordinal));
     }
 }

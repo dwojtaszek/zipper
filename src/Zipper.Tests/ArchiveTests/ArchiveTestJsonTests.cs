@@ -149,7 +149,8 @@ public class ArchiveTestJsonTests
     {
         var entry = new ArchiveTestEntry(
             Ordinal: 0, Kind: "file", LocalNameRaw: "612e747874", CentralNameRaw: "612e747874",
-            ReadableName: "a.txt", ContentSha256: null, ContentSize: null,
+            ReadableName: "a.txt", LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: "stored",
+            ContentSha256: null, ContentSize: null,
             LocalHeaderOffset: null, DataOffset: null, CentralDirectoryOffset: null);
         var duplicateName = entry with { Ordinal = 1 };
         var testCase = ValidEmptyCase() with

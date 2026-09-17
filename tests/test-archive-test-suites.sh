@@ -23,7 +23,7 @@ ALL_CASES=80     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +
 # every CI platform. Deflate has no cross-runtime promise; it is replay-checked
 # for same-run identity only. Golden mirrored in ArchiveTestSuiteReplayTests.cs,
 # tests/test-archive-test-suites.bat, and docs/archive-test-suites.md.
-FROZEN_VALID_STORED_ID=atc-662d70277000fd379d41c3d096e0ef7d3075b668f7a33860bdf52117ab2e04ca
+FROZEN_VALID_STORED_ID=atc-d4998f7846f15ca3c2d709a07579a0ba6723f5f7b524ca39953622407b90a24a
 FROZEN_VALID_EMPTY_ID=atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950
 
 failures=0

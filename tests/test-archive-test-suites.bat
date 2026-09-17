@@ -22,7 +22,7 @@ REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted 
 REM every CI platform. Deflate has no cross-runtime promise; replay-checked only.
 REM Golden mirrored in ArchiveTestSuiteReplayTests.cs, test-archive-test-suites.sh,
 REM and docs/archive-test-suites.md.
-set "FROZEN_VALID_STORED_ID=atc-662d70277000fd379d41c3d096e0ef7d3075b668f7a33860bdf52117ab2e04ca"
+set "FROZEN_VALID_STORED_ID=atc-d4998f7846f15ca3c2d709a07579a0ba6723f5f7b524ca39953622407b90a24a"
 set "FROZEN_VALID_EMPTY_ID=atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950"
 
 REM Shared Python logic: prefer 'python'; fall back to 'py -3'.
