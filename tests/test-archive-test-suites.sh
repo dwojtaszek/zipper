@@ -267,6 +267,67 @@ else
   check 1 "verifier self-test module must pass"
 fi
 
+# 13. Full-codec verification profile via 7-Zip (ticket #930): valid coded
+#     controls must extract with matching content hashes; coded-corruption
+#     fixtures must be rejected. Tested with `t` (no extraction) for malformed
+#     fixtures so malformed bytes are never extracted. Missing 7-Zip fails.
+SEVEN_ZIP=""
+if command -v 7zz >/dev/null 2>&1; then
+  SEVEN_ZIP="7zz"
+elif command -v 7z >/dev/null 2>&1; then
+  SEVEN_ZIP="7z"
+fi
+if [[ -z "$SEVEN_ZIP" ]]; then
+  check 1 "7-Zip (7zz/7z) must be installed for full-codec verification"
+else
+  SEVEN_VERSION=$("$SEVEN_ZIP" 2>&1 | grep -m1 '7-Zip' || true)
+  if [[ -z "$SEVEN_VERSION" ]]; then
+    check 1 "7-Zip adapter must report its version"
+  else
+    check 0 "7-Zip full-codec adapter present: $SEVEN_VERSION"
+  fi
+  if python3 - "$ALL_OUT" "$SEVEN_ZIP" <<'PYEOF' >/dev/null 2>&1; then
+import glob, hashlib, json, os, subprocess, sys, tempfile
+out, seven = sys.argv[1:3]
+for key in ("valid-bzip2", "valid-deflate64", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
+    jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
+    d = json.load(open(jp))
+    zp = jp[:-5] + ".zip"
+    files = [e for e in d["entries"] if e["kind"] == "file"]
+    if not files:
+        sys.exit(f"no file entries for {key}")
+    with tempfile.TemporaryDirectory() as td:
+        r = subprocess.run([seven, "x", zp, f"-o{td}", "-y"], capture_output=True)
+        if r.returncode != 0:
+            sys.exit(f"extract failed for {key}")
+        for e in files:
+            fp = os.path.join(td, e["readableName"])
+            if not os.path.isfile(fp):
+                sys.exit(f"missing extracted entry for {key}")
+            h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+            if h != e["contentSha256"]:
+                sys.exit(f"hash mismatch for {key}")
+PYEOF
+    check 0 "7-Zip extracted valid coded controls with matching content hashes"
+  else
+    check 1 "7-Zip must extract valid coded controls with matching hashes"
+  fi
+  CORRUPT_OK=1
+  for key in bzip2-corrupt-block-magic bzip2-truncated-stream bzip2-wrong-crc deflate64-corrupt-stream deflate64-truncated-stream; do
+    CZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]==sys.argv[2]), ""))' "$ALL_OUT" "$key" || true)
+    if [[ -z "$CZIP" ]] || [[ ! -f "$CZIP" ]]; then
+      CORRUPT_OK=0
+    elif "$SEVEN_ZIP" t "$CZIP" >/dev/null 2>&1; then
+      CORRUPT_OK=0
+    fi
+  done
+  if [[ "$CORRUPT_OK" -eq 1 ]]; then
+    check 0 "7-Zip rejected all #900 coded-corruption fixtures"
+  else
+    check 1 "7-Zip must reject all #900 coded-corruption fixtures"
+  fi
+fi
+
 if [[ "$failures" -ne 0 ]]; then
   echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors."
   exit 1

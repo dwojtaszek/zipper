@@ -583,8 +583,13 @@ class FixtureVerifier:
                         parent = os.path.dirname(target)
                         if parent:
                             os.makedirs(parent, exist_ok=True)
-                        with zf.open(info) as stream:
-                            data = self._read_stream(stream, budget, counter)
+                        try:
+                            with zf.open(info) as stream:
+                                data = self._read_stream(stream, budget, counter)
+                        except NotImplementedError:
+                            # A codec this reader cannot implement is rejected
+                            # outright (#930), never a generic extraction failure.
+                            return "unsupported-method-rejected", {"ordinal": ordinal}, "extract"
                         entry = entries_by_ordinal.get(ordinal)
                         if entry is not None and entry.get("contentSha256") is not None \
                                 and sha256_hex(data) != entry["contentSha256"]:

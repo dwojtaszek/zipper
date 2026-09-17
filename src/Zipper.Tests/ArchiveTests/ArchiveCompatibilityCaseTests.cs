@@ -383,4 +383,47 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
             Assert.Contains(testCase.CaseKey, caseKeys);
         }
     }
+
+    [Theory]
+    [InlineData("valid-bzip2")]
+    [InlineData("valid-deflate64")]
+    [InlineData("valid-mixed-methods")]
+    [InlineData("bzip2-high-ratio-bounded")]
+    public void Expectations_CodedControls_DefineFullCodecAndUnsupportedReaderProfiles(string caseKey)
+    {
+        var definition = ArchiveTestCatalog.GetCase(caseKey);
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var expectationFile = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        var fullCodecExpectations = expectationFile.Expectations.Where(e => e.Profile == "full-codec").ToList();
+        Assert.NotEmpty(fullCodecExpectations);
+
+        var readEntryFull = fullCodecExpectations.Single(e => e.Operation == "read-entry");
+        Assert.Equal(["read-entry-content-matches"], readEntryFull.AllowedOutcomes);
+        Assert.DoesNotContain("read-entry-fails", readEntryFull.AllowedOutcomes);
+        Assert.DoesNotContain("unsupported-method-rejected", readEntryFull.AllowedOutcomes);
+
+        var extractFull = fullCodecExpectations.Single(e => e.Operation == "extract");
+        Assert.Equal(["extract-completes"], extractFull.AllowedOutcomes);
+        Assert.DoesNotContain("extract-fails", extractFull.AllowedOutcomes);
+
+        var integrityFull = fullCodecExpectations.Single(e => e.Operation == "integrity-check");
+        Assert.Equal(["integrity-passes"], integrityFull.AllowedOutcomes);
+        Assert.DoesNotContain("integrity-fails", integrityFull.AllowedOutcomes);
+
+        var unsupportedExpectations = expectationFile.Expectations.Where(e => e.Profile == "unsupported-reader").ToList();
+        Assert.NotEmpty(unsupportedExpectations);
+
+        var readEntryUnsupported = unsupportedExpectations.Single(e => e.Operation == "read-entry");
+        Assert.Equal(["unsupported-method-rejected"], readEntryUnsupported.AllowedOutcomes);
+        Assert.DoesNotContain("read-entry-fails", readEntryUnsupported.AllowedOutcomes);
+
+        var integrityUnsupported = unsupportedExpectations.Single(e => e.Operation == "integrity-check");
+        Assert.Equal(["unsupported-method-rejected"], integrityUnsupported.AllowedOutcomes);
+        Assert.DoesNotContain("integrity-fails", integrityUnsupported.AllowedOutcomes);
+
+        var extractUnsupported = unsupportedExpectations.Single(e => e.Operation == "extract");
+        Assert.Equal(["unsupported-method-rejected"], extractUnsupported.AllowedOutcomes);
+        Assert.DoesNotContain("extract-fails", extractUnsupported.AllowedOutcomes);
+    }
 }
