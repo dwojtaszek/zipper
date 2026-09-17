@@ -98,6 +98,10 @@ public class ArchiveTestCaseSemanticsTests
         {
             Limits = new ArchiveTestLimits(0, 0, 1048576, ArchiveTestCaseSemantics.MaxDeadlineSeconds + 1),
         };
+        var overEntries = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Limits = new ArchiveTestLimits(ArchiveTestCaseSemantics.MaxEntries + 1, 0, 1048576, 10),
+        };
         var overPhysical = ArchiveTestJsonTests.ValidEmptyCase() with
         {
             Archive = new ArchiveTestArchive(
@@ -109,7 +113,42 @@ public class ArchiveTestCaseSemanticsTests
         Assert.Contains(ArchiveTestCaseSemantics.Validate(overExpanded), e => e.Contains("expandedBytesBudget", StringComparison.Ordinal));
         Assert.Contains(ArchiveTestCaseSemantics.Validate(overJson), e => e.Contains("jsonBytesBudget", StringComparison.Ordinal));
         Assert.Contains(ArchiveTestCaseSemantics.Validate(overDeadline), e => e.Contains("deadlineSeconds", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(overEntries), e => e.Contains("entryCount", StringComparison.Ordinal));
         Assert.Contains(ArchiveTestCaseSemantics.Validate(overPhysical), e => e.Contains("physicalSize", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_UnderBudgetLimits_AreRejected()
+    {
+        var underExpanded = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Limits = new ArchiveTestLimits(0, -1, 1048576, 10),
+        };
+        var underJson = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Limits = new ArchiveTestLimits(0, 0, 0, 10),
+        };
+        var underDeadline = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Limits = new ArchiveTestLimits(0, 0, 1048576, 0),
+        };
+        var underEntries = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Limits = new ArchiveTestLimits(-1, 0, 1048576, 10),
+        };
+        var underPhysical = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Archive = new ArchiveTestArchive(
+                ArchiveTestJsonTests.ValidEmptyCase().FixtureId + ".zip",
+                -1,
+                "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"),
+        };
+
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(underExpanded), e => e.Contains("expandedBytesBudget", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(underJson), e => e.Contains("jsonBytesBudget", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(underDeadline), e => e.Contains("deadlineSeconds", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(underEntries), e => e.Contains("entryCount", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(underPhysical), e => e.Contains("physicalSize", StringComparison.Ordinal));
     }
 
     [Fact]

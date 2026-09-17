@@ -55,6 +55,13 @@ DEFAULT_AJV = "npx --yes ajv-cli@5.0.0"
 AJV_TIMEOUT_SECONDS = 120
 READ_CHUNK = 64 * 1024
 
+MAX_ARCHIVE_PHYSICAL_BYTES = 16 * 1024 * 1024
+MAX_EXPANDED_BYTES_BUDGET = 32 * 1024 * 1024
+MAX_ENTRIES = 1_000
+MAX_JSON_BYTES = 1024 * 1024
+MAX_DEADLINE_SECONDS = 10
+MAX_FOLDER_TOTAL_BYTES = 256 * 1024 * 1024
+
 OPERATIONS = ("list", "read-entry", "integrity-check", "extract")
 FAILURE_TOKENS = {
     "list": "list-fails",
@@ -244,24 +251,75 @@ class FixtureVerifier:
     def _open(self, zip_bytes):
         return zipfile.ZipFile(io.BytesIO(zip_bytes))
 
+    def _validate_case_budgets(self, case):
+        """Validates REQ-213 fixed metadata budgets before reading fixture bytes."""
+        archive = case.get("archive")
+        if isinstance(archive, dict):
+            physical_size = archive.get("physicalSize")
+            if isinstance(physical_size, int) and physical_size > MAX_ARCHIVE_PHYSICAL_BYTES:
+                raise VerificationError(
+                    "archive-size-sha",
+                    "archive.physicalSize %d exceeds the 16 MiB physical budget" % physical_size)
+
+        limits = case.get("limits")
+        if isinstance(limits, dict):
+            json_budget = limits.get("jsonBytesBudget")
+            if isinstance(json_budget, int) and json_budget > MAX_JSON_BYTES:
+                raise VerificationError(
+                    "json-bytes-budget",
+                    "limits.jsonBytesBudget %d exceeds the 1 MiB budget" % json_budget)
+
+            entry_count = limits.get("entryCount")
+            if isinstance(entry_count, int) and entry_count > MAX_ENTRIES:
+                raise VerificationError(
+                    "entries-ordinals",
+                    "limits.entryCount %d exceeds the %d entry budget" % (entry_count, MAX_ENTRIES))
+
+            expanded_budget = limits.get("expandedBytesBudget")
+            if isinstance(expanded_budget, int) and expanded_budget > MAX_EXPANDED_BYTES_BUDGET:
+                raise VerificationError(
+                    "expanded-bytes-budget",
+                    "limits.expandedBytesBudget %d exceeds the 32 MiB budget" % expanded_budget)
+
+            deadline = limits.get("deadlineSeconds")
+            if isinstance(deadline, int) and deadline > MAX_DEADLINE_SECONDS:
+                raise VerificationError(
+                    "deadline",
+                    "limits.deadlineSeconds %d exceeds the 10-second budget" % deadline)
+
+        entries = case.get("entries")
+        if isinstance(entries, list) and len(entries) > MAX_ENTRIES:
+            raise VerificationError(
+                "entries-ordinals",
+                "entries count %d exceeds the %d entry budget" % (len(entries), MAX_ENTRIES))
+
     # ---- structure checks (required for every fixture) ----
 
     def verify_structure(self, case, zip_bytes):
         checks = []
 
+        # REQ-213 fixed maximum budget checks before Ajv:
+        self._validate_case_budgets(case)
+
+        json_size = os.path.getsize(self.json_path)
+        if json_size > MAX_JSON_BYTES or (isinstance(case.get("limits"), dict)
+                                          and json_size > case["limits"].get("jsonBytesBudget", MAX_JSON_BYTES)):
+            declared = case.get("limits", {}).get("jsonBytesBudget", MAX_JSON_BYTES)
+            raise VerificationError("json-bytes-budget",
+                                    "Expectation File is %d bytes, over the declared "
+                                    "%d-byte budget" % (json_size, declared))
+        checks.append({"check": "json-bytes-budget", "status": "pass"})
+
+        if len(zip_bytes) > MAX_ARCHIVE_PHYSICAL_BYTES:
+            raise VerificationError("archive-size-sha",
+                                    "published Archive is %d bytes, over the 16 MiB physical budget"
+                                    % len(zip_bytes))
+        checks.append({"check": "expanded-bytes-budget", "status": "pass"})
+
         # Ajv authoritative schema validation (subprocess, deadline-bounded).
         self.subprocess_count += 1
         self.ajv.validate(self.json_path)
         checks.append({"check": "schema", "status": "pass"})
-
-        # Expectation File size budget.
-        json_size = os.path.getsize(self.json_path)
-        if json_size > case["limits"]["jsonBytesBudget"]:
-            raise VerificationError("json-bytes-budget",
-                                    "Expectation File is %d bytes, over the declared "
-                                    "%d-byte budget" % (json_size,
-                                                        case["limits"]["jsonBytesBudget"]))
-        checks.append({"check": "json-bytes-budget", "status": "pass"})
 
         # Independent Archive length and SHA-256 recompute.
         if case["archive"]["physicalSize"] != len(zip_bytes):
@@ -588,30 +646,55 @@ class FixtureVerifier:
             "failure": None,
         }
         try:
-            with open(self.json_path, "rb") as handle:
-                case = parse_json_strict(handle.read().decode("utf-8"))
-            result["fixtureId"] = case.get("fixtureId")
-            result["caseKey"] = case.get("caseKey")
-
-            # Physical size pre-check before slurping: the schema imposes no
-            # maximum on archive.physicalSize, so a giant tampered Archive must
-            # be rejected on disk size, not after reading it into memory.
-            physical_cap = max(16 * 1024 * 1024, case["archive"]["physicalSize"])
-            if os.path.getsize(self.zip_path) > physical_cap:
+            # Fixed on-disk budget pre-checks (REQ-213) BEFORE reading fixture bytes:
+            # 1. Archive on-disk size: enforce fixed 16 MiB ceiling. A forged
+            # archive.physicalSize in metadata cannot increase this hard limit.
+            zip_size = os.path.getsize(self.zip_path)
+            if zip_size > MAX_ARCHIVE_PHYSICAL_BYTES:
                 raise VerificationError(
                     "archive-size-sha",
                     "published Archive is %d bytes on disk, over the 16 MiB physical "
-                    "budget" % os.path.getsize(self.zip_path))
+                    "budget" % zip_size)
+
+            # 2. Expectation File on-disk size (REQ-213: <= 1 MiB) before parsing.
+            json_size = os.path.getsize(self.json_path)
+            if json_size > MAX_JSON_BYTES:
+                raise VerificationError(
+                    "json-bytes-budget",
+                    "Expectation File is %d bytes on disk, over the 1 MiB budget"
+                    % json_size)
+
+            with open(self.json_path, "rb") as handle:
+                raw_json = handle.read(MAX_JSON_BYTES + 1)
+            if len(raw_json) > MAX_JSON_BYTES:
+                raise VerificationError(
+                    "json-bytes-budget",
+                    "Expectation File exceeds the 1 MiB budget")
+
+            case = parse_json_strict(raw_json.decode("utf-8"))
+            result["fixtureId"] = case.get("fixtureId")
+            result["caseKey"] = case.get("caseKey")
+
+            # Validate metadata budgets BEFORE opening/reading Archive bytes!
+            self._validate_case_budgets(case)
 
             with open(self.zip_path, "rb") as handle:
-                zip_bytes = handle.read()
+                zip_bytes = handle.read(MAX_ARCHIVE_PHYSICAL_BYTES + 1)
+            if len(zip_bytes) > MAX_ARCHIVE_PHYSICAL_BYTES:
+                raise VerificationError(
+                    "archive-size-sha",
+                    "published Archive exceeds the 16 MiB physical budget")
 
-            deadline = case["limits"]["deadlineSeconds"]
+            raw_deadline = case.get("limits", {}).get("deadlineSeconds", MAX_DEADLINE_SECONDS)
+            deadline = min(raw_deadline if isinstance(raw_deadline, int) and raw_deadline > 0 else MAX_DEADLINE_SECONDS,
+                           MAX_DEADLINE_SECONDS)
             self._check_deadline(deadline)
             result["structureChecks"] = self.verify_structure(case, zip_bytes)
 
-            classification = case["classification"]
-            budget = case["limits"]["expandedBytesBudget"]
+            classification = case.get("classification")
+            raw_budget = case.get("limits", {}).get("expandedBytesBudget", MAX_EXPANDED_BYTES_BUDGET)
+            budget = min(raw_budget if isinstance(raw_budget, int) and raw_budget >= 0 else MAX_EXPANDED_BYTES_BUDGET,
+                         MAX_EXPANDED_BYTES_BUDGET)
             expectations = self.applicable_expectations(case)
             ops = []
 
@@ -1122,15 +1205,21 @@ def verify_mutations(case, zip_bytes, actual_sha):
 
 
 def enumerate_pairs(directory):
-    """Exact flat pair enumeration; rejects unsafe names, orphans, and extras."""
+    """Exact flat pair enumeration; rejects unsafe names, orphans, extras, and over-budget folders."""
     problems = []
     entries = sorted(os.listdir(directory))
     json_ids = {}
     zip_ids = {}
+    total_folder_bytes = 0
     for name in entries:
-        if os.path.isdir(os.path.join(directory, name)):
+        path = os.path.join(directory, name)
+        if os.path.isdir(path):
             problems.append("unexpected subdirectory '%s' in the fixture folder" % name)
             continue
+        try:
+            total_folder_bytes += os.path.getsize(path)
+        except OSError:
+            pass
         if not PAIR_NAME_RE.match(name):
             problems.append("unsafe or unexpected file name '%s'" % name)
             continue
@@ -1139,7 +1228,11 @@ def enumerate_pairs(directory):
         if fixture_id in target:
             problems.append("duplicate %s pair member for Fixture ID %s"
                             % (extension, fixture_id))
-        target[fixture_id] = os.path.join(directory, name)
+        target[fixture_id] = path
+
+    if total_folder_bytes > MAX_FOLDER_TOTAL_BYTES:
+        problems.append("total fixture folder size is %d bytes, over the 256 MiB budget"
+                        % total_folder_bytes)
 
     for fixture_id in sorted(set(json_ids) | set(zip_ids)):
         if fixture_id not in json_ids:
@@ -1181,6 +1274,8 @@ def verify_directory(fixture_dir, schema_path, ajv_command, platforms):
     if not pairs and not problems:
         report["directoryProblems"].append("no Expectation Files found in %s"
                                            % fixture_dir)
+        return report, 1
+    if any("over the 256 MiB budget" in p for p in problems):
         return report, 1
 
     total_read = 0

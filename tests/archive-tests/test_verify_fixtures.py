@@ -394,6 +394,161 @@ class TamperTests(TempDirTest):
         self.assertTrue(any("missing prerequisite" in problem
                             for problem in report["directoryProblems"]))
 
+    def test_archive_over_16mib_fails_before_reading_file_contents(self):
+        case, _ = self.publish_valid()
+        zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")
+        with open(zip_path, "wb") as handle:
+            handle.truncate(16 * 1024 * 1024 + 1)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("archive-size-sha", fixture["failure"]["check"])
+        self.assertIn("over the 16 MiB physical budget", fixture["failure"]["message"])
+        self.assertEqual(0, fixture.get("bytesRead", 0))
+
+    def test_forged_physical_size_cannot_increase_hard_limit(self):
+        case, _ = self.publish_valid()
+        over_limit = 16 * 1024 * 1024 + 1
+        zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")
+        with open(zip_path, "wb") as handle:
+            handle.truncate(over_limit)
+        case, path = self.rewrite_case(case)
+        case["archive"]["physicalSize"] = over_limit
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("archive-size-sha", fixture["failure"]["check"])
+        self.assertIn("over the 16 MiB physical budget", fixture["failure"]["message"])
+        self.assertEqual(0, fixture.get("bytesRead", 0))
+
+    def test_archive_exact_16mib_pre_check_allowed(self):
+        case, _ = self.publish_valid()
+        zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")
+        with open(zip_path, "wb") as handle:
+            handle.truncate(16 * 1024 * 1024)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertNotIn("over the 16 MiB physical budget",
+                         str(fixture.get("failure", {}).get("message", "")))
+
+    def test_expectation_file_over_1mib_fails_on_disk_size(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(" " * (1024 * 1024))
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("json-bytes-budget", fixture["failure"]["check"])
+        self.assertIn("over the 1 MiB budget", fixture["failure"]["message"])
+
+    def test_tampered_json_bytes_budget_over_1mib_fails(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["limits"]["jsonBytesBudget"] = 1024 * 1024 + 1
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("json-bytes-budget", fixture["failure"]["check"])
+        self.assertIn("exceeds the 1 MiB budget", fixture["failure"]["message"])
+
+    def test_tampered_expanded_bytes_budget_over_32mib_fails(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["limits"]["expandedBytesBudget"] = 32 * 1024 * 1024 + 1
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("expanded-bytes-budget", fixture["failure"]["check"])
+        self.assertIn("exceeds the 32 MiB budget", fixture["failure"]["message"])
+
+    def test_tampered_entry_count_over_1000_fails(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["limits"]["entryCount"] = 1001
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("entries-ordinals", fixture["failure"]["check"])
+        self.assertIn("exceeds the 1000 entry budget", fixture["failure"]["message"])
+
+    def test_tampered_deadline_seconds_over_10_fails(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["limits"]["deadlineSeconds"] = 11
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("deadline", fixture["failure"]["check"])
+        self.assertIn("exceeds the 10-second budget", fixture["failure"]["message"])
+
+    def test_total_folder_over_256mib_fails_as_directory_problem(self):
+        case, _ = self.publish_valid()
+        zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")
+        with open(zip_path, "wb") as handle:
+            handle.truncate(256 * 1024 * 1024 + 1)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        self.assertTrue(any("over the 256 MiB budget" in problem
+                            for problem in report["directoryProblems"]))
+
+    def test_multiple_archives_under_16mib_over_256mib_folder_fails(self):
+        # 18 pairs each 15 MiB (< 16 MiB archive limit), totaling 270 MiB (> 256 MiB folder budget)
+        for i in range(18):
+            fid = "atc-" + f"{i:02x}" * 32
+            zip_path = os.path.join(self.dir, fid + ".zip")
+            json_path = os.path.join(self.dir, fid + ".json")
+            with open(zip_path, "wb") as h:
+                h.truncate(15 * 1024 * 1024)
+            with open(json_path, "w", encoding="utf-8") as h:
+                h.write("{}")
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        self.assertTrue(any("over the 256 MiB budget" in problem
+                            for problem in report["directoryProblems"]))
+        self.assertEqual(0, len(report["fixtures"]))
+
+    def test_metadata_over_limit_physical_size_rejects_without_reading_zip(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["archive"]["physicalSize"] = 16 * 1024 * 1024 + 1
+        self.persist(path, case)
+        zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")
+        os.chmod(zip_path, 0o000)
+        try:
+            report, exit_code = verify(self.dir)
+            self.assertEqual(1, exit_code)
+            self.assertEqual("archive-size-sha", report["fixtures"][0]["failure"]["check"])
+            self.assertIn("exceeds the 16 MiB physical budget", report["fixtures"][0]["failure"]["message"])
+        finally:
+            os.chmod(zip_path, 0o644)
+
 
 class CrcCorruptTests(TempDirTest):
     def test_crc_corrupt_pair_passes_with_rejected_integrity(self):
@@ -511,6 +666,53 @@ class DescriptorTests(unittest.TestCase):
             vf.compute_fixture_id(
                 "1", "valid-empty", 1, 1, 42,
                 "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"))
+
+
+class SchemaLimitsTests(TempDirTest):
+    def setUp(self):
+        super().setUp()
+        self.ajv = vf.AjvValidator(SCHEMA, DEFAULT_AJV)
+
+    def _validate_case(self, case):
+        path = os.path.join(self.dir, "test.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(case, handle)
+        return self.ajv.validate(path)
+
+    def test_schema_rejects_physical_size_over_16mib(self):
+        case, _ = self.publish_valid()
+        case["archive"]["physicalSize"] = 16 * 1024 * 1024 + 1
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_expanded_budget_over_32mib(self):
+        case, _ = self.publish_valid()
+        case["limits"]["expandedBytesBudget"] = 32 * 1024 * 1024 + 1
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_entry_count_over_1000(self):
+        case, _ = self.publish_valid()
+        case["limits"]["entryCount"] = 1001
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_json_budget_over_1mib(self):
+        case, _ = self.publish_valid()
+        case["limits"]["jsonBytesBudget"] = 1024 * 1024 + 1
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_deadline_over_10s(self):
+        case, _ = self.publish_valid()
+        case["limits"]["deadlineSeconds"] = 11
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
 
 
 if __name__ == "__main__":
