@@ -296,6 +296,66 @@ if errorlevel 1 (
     call :pass "verifier self-test module passed"
 )
 
+REM 13. Full-codec verification profile via 7-Zip (ticket #930): valid coded
+REM     controls must extract with matching content hashes; coded-corruption
+REM     fixtures must be rejected via `t` (no extraction). Missing 7-Zip fails.
+set "SEVEN_ZIP="
+where 7zz >nul 2>&1
+if not errorlevel 1 set "SEVEN_ZIP=7zz"
+if not defined SEVEN_ZIP (
+    where 7z >nul 2>&1
+    if not errorlevel 1 set "SEVEN_ZIP=7z"
+)
+if not defined SEVEN_ZIP (
+    call :fail "7-Zip (7zz/7z) must be installed for full-codec verification"
+) else (
+    call :pass "7-Zip full-codec adapter present"
+    set "FULLCODEC_PY=%TEMP%\atc-fullcodec-%RANDOM%.py"
+    > "!FULLCODEC_PY!" echo import glob, hashlib, json, os, subprocess, sys, tempfile
+    >> "!FULLCODEC_PY!" echo out, seven = sys.argv[1:3]
+    >> "!FULLCODEC_PY!" echo for key in ("valid-bzip2", "valid-deflate64", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
+    >> "!FULLCODEC_PY!" echo     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
+    >> "!FULLCODEC_PY!" echo     d = json.load(open(jp))
+    >> "!FULLCODEC_PY!" echo     zp = jp[:-5] + ".zip"
+    >> "!FULLCODEC_PY!" echo     files = [e for e in d["entries"] if e["kind"] == "file"]
+    >> "!FULLCODEC_PY!" echo     if not files: sys.exit(f"no file entries for {key}")
+    >> "!FULLCODEC_PY!" echo     with tempfile.TemporaryDirectory() as td:
+    >> "!FULLCODEC_PY!" echo         r = subprocess.run([seven, "x", zp, f"-o{td}", "-y"], capture_output=True)
+    >> "!FULLCODEC_PY!" echo         if r.returncode != 0: sys.exit(f"extract failed for {key}")
+    >> "!FULLCODEC_PY!" echo         for e in files:
+    >> "!FULLCODEC_PY!" echo             fp = os.path.join(td, e["readableName"])
+    >> "!FULLCODEC_PY!" echo             if not os.path.isfile(fp): sys.exit(f"missing extracted entry for {key}")
+    >> "!FULLCODEC_PY!" echo             h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+    >> "!FULLCODEC_PY!" echo             if h != e["contentSha256"]: sys.exit(f"hash mismatch for {key}")
+    %PYCMD% "!FULLCODEC_PY!" "%ALL_OUT%" "!SEVEN_ZIP!" >nul 2>&1
+    if errorlevel 1 (
+        call :fail "7-Zip must extract valid coded controls with matching hashes"
+    ) else (
+        call :pass "7-Zip extracted valid coded controls with matching content hashes"
+    )
+    del "!FULLCODEC_PY!" >nul 2>&1
+    set "CORRUPT_OK=1"
+    for %%K in (bzip2-corrupt-block-magic bzip2-truncated-stream bzip2-wrong-crc deflate64-corrupt-stream deflate64-truncated-stream) do (
+        set "CK_ZIP="
+        for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']==sys.argv[2]), ''))" "%ALL_OUT%" "%%K" 2^>nul') do set "CK_ZIP=%%P"
+        if not defined CK_ZIP (
+            set "CORRUPT_OK=0"
+        ) else (
+            if not exist "!CK_ZIP!" (
+                set "CORRUPT_OK=0"
+            ) else (
+                "!SEVEN_ZIP!" t "!CK_ZIP!" >nul 2>&1
+                if not errorlevel 1 set "CORRUPT_OK=0"
+            )
+        )
+    )
+    if !CORRUPT_OK! EQU 1 (
+        call :pass "7-Zip rejected all #900 coded-corruption fixtures"
+    ) else (
+        call :fail "7-Zip must reject all #900 coded-corruption fixtures"
+    )
+)
+
 :summary
 echo [ INFO ] Passed: %PASSED%, Failed: %FAILED%
 if %FAILED% GTR 0 (

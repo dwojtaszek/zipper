@@ -208,14 +208,14 @@ internal static class ArchiveTestCatalog
         // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
         // (method 12).
         ["valid-bzip2"] = new(
-            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
+            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Bzip2ControlRecipe),
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
         ["valid-deflate64"] = new(
-            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
+            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Deflate64ControlRecipe),
         ["valid-directories"] = new(
@@ -327,7 +327,7 @@ internal static class ArchiveTestCatalog
         ["deflate64-truncated-stream"] = MutatedDefinition(
             ArchiveTestMutationKind.Deflate64TruncatedStream, controlCaseKey: Deflate64ControlCaseKey),
         ["bzip2-high-ratio-bounded"] = new(
-            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
+            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: HighRatioBzip2Recipe),
         ["method-cross-deflate64-deflate"] = MutatedDefinition(
@@ -343,7 +343,7 @@ internal static class ArchiveTestCatalog
             controlCaseKey: StoredControlCaseKey,
             suites: [MalformedSuite, SecuritySuite]),
         ["valid-mixed-methods"] = new(
-            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: MixedMethodsRecipe),
         ["deflate-invalid-btype"] = MutatedDefinition(

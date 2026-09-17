@@ -126,9 +126,13 @@ public class ArchiveReferenceReaderTests : TempDirectoryTestBase
                     }
                 }
                 catch (System.IO.InvalidDataException ex)
-                    when (ex.Message.Contains("unsupported compression method", StringComparison.Ordinal))
+                    when ((ex.Message.Contains("unsupported compression method", StringComparison.OrdinalIgnoreCase)
+                           || ex.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase))
+                          && entry.LocalHeaderMethod is not (0 or 8))
                 {
                     // A codec the reader cannot implement is rejected outright.
+                    // Gated on the entry's wire method so a corrupt stored/deflate
+                    // stream can never be misreported as an unsupported codec.
                     return "unsupported-method-rejected";
                 }
             }
@@ -182,6 +186,14 @@ public class ArchiveReferenceReaderTests : TempDirectoryTestBase
             using var archive = new ZipArchive(
                 new MemoryStream(archiveBytes), ZipArchiveMode.Read);
             archive.ExtractToDirectory(destination);
+        }
+        catch (System.IO.InvalidDataException ex)
+            when (ex.Message.Contains("unsupported compression method", StringComparison.OrdinalIgnoreCase)
+                  || ex.Message.Contains("not supported", StringComparison.OrdinalIgnoreCase))
+        {
+            // A codec the reader cannot implement is rejected outright, never
+            // reported as a generic extraction failure.
+            return "unsupported-method-rejected";
         }
         catch (Exception)
         {

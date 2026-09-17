@@ -202,6 +202,8 @@ internal static class ArchiveTestSuiteGenerator
     /// stay unchanged; truncation fixtures may fail at any defined stage.
     /// </summary>
     private const string StrictProfile = "strict";
+    private const string FullCodecProfile = "full-codec";
+    private const string UnsupportedReaderProfile = "unsupported-reader";
     private const string ListOperation = "list";
     private const string ReadEntryOperation = "read-entry";
     private const string IntegrityCheckOperation = "integrity-check";
@@ -214,20 +216,23 @@ internal static class ArchiveTestSuiteGenerator
 
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
-        // Valid archives whose entries the reference readers cannot all decode
-        // (tickets #897 and #898): the bytes are genuine, but entry codecs vary in
-        // reader support — Python decodes BZip2 (12) but rejects method 9, while
-        // .NET decodes the Deflate-subset stream labeled 9 but rejects method 12.
-        // Full-codec readers complete every operation; the arms below
-        // record each reference reader's honest outcome.
+        // Valid archives whose entries require capability-specific verification profiles
+        // (tickets #897, #898, #930): full-codec readers (e.g. 7-Zip) must list, decode,
+        // hash-check, integrity-check, and extract successfully; readers without the codec
+        // must cleanly reject the unsupported method, never producing corrupt unverified bytes.
         if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "valid-mixed-methods" or "bzip2-high-ratio-bounded")
         {
             return
             [
-                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
-                Expectation(ExtractOperation, StrictProfile, ["extract-completes", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
+                Expectation(ListOperation, FullCodecProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, FullCodecProfile, ["read-entry-content-matches"], [NoPartialWrites]),
+                Expectation(IntegrityCheckOperation, FullCodecProfile, ["integrity-passes"], [NoPartialWrites]),
+                Expectation(ExtractOperation, FullCodecProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"]),
+
+                Expectation(ListOperation, UnsupportedReaderProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, UnsupportedReaderProfile, ["unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, UnsupportedReaderProfile, ["unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, UnsupportedReaderProfile, ["unsupported-method-rejected"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
             ];
         }
 
