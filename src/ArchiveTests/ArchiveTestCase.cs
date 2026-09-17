@@ -286,6 +286,11 @@ internal static class ArchiveTestCaseSemantics
         }
 
         var limits = testCase.Limits!;
+        if (limits.EntryCount is < 0 or > MaxEntries)
+        {
+            errors.Add($"limits.entryCount must be between 0 and {MaxEntries}");
+        }
+
         if (limits.EntryCount != testCase.Entries!.Count)
         {
             errors.Add($"limits.entryCount {limits.EntryCount} does not match {testCase.Entries.Count} entries");

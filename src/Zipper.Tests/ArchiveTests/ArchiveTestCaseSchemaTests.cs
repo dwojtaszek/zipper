@@ -174,6 +174,34 @@ public class ArchiveTestCaseSchemaTests
             }
         }
 
+        if (doc.TryGetProperty("limits", out var limits))
+        {
+            if (limits.TryGetProperty("entryCount", out var entryCount) && entryCount.GetInt32() > 1_000)
+            {
+                errors.Add("limits.entryCount exceeds the 1,000-entry budget");
+            }
+
+            if (limits.TryGetProperty("expandedBytesBudget", out var expanded) && expanded.GetInt64() > 32 * 1024 * 1024)
+            {
+                errors.Add("limits.expandedBytesBudget exceeds the 32 MiB budget");
+            }
+
+            if (limits.TryGetProperty("jsonBytesBudget", out var jsonBudget) && jsonBudget.GetInt64() > 1024 * 1024)
+            {
+                errors.Add("limits.jsonBytesBudget exceeds the 1 MiB budget");
+            }
+
+            if (limits.TryGetProperty("deadlineSeconds", out var deadline) && deadline.GetInt32() > 10)
+            {
+                errors.Add("limits.deadlineSeconds exceeds the 10-second budget");
+            }
+        }
+
+        if (archive.TryGetProperty("physicalSize", out var physSize) && physSize.GetInt64() > 16 * 1024 * 1024)
+        {
+            errors.Add("archive.physicalSize exceeds the 16 MiB budget");
+        }
+
         return errors;
     }
 
@@ -216,6 +244,24 @@ public class ArchiveTestCaseSchemaTests
         var mutationItem = root.GetProperty("properties").GetProperty("mutations").GetProperty("items");
         Assert.Equal(512, mutationItem.GetProperty("properties").GetProperty("beforeHex").GetProperty("maxLength").GetInt32());
         Assert.Equal(512, mutationItem.GetProperty("properties").GetProperty("afterHex").GetProperty("maxLength").GetInt32());
+    }
+
+    [Fact]
+    public void Load_SchemaFile_DeclaresFixedReq213Maxima()
+    {
+        using var schema = LoadJson("archive-test-case.schema.json");
+        var properties = schema.RootElement.GetProperty("properties");
+
+        var archiveProps = properties.GetProperty("archive").GetProperty("properties");
+        Assert.Equal(16 * 1024 * 1024, archiveProps.GetProperty("physicalSize").GetProperty("maximum").GetInt64());
+
+        Assert.Equal(1_000, properties.GetProperty("entries").GetProperty("maxItems").GetInt32());
+
+        var limitsProps = properties.GetProperty("limits").GetProperty("properties");
+        Assert.Equal(1_000, limitsProps.GetProperty("entryCount").GetProperty("maximum").GetInt32());
+        Assert.Equal(32 * 1024 * 1024, limitsProps.GetProperty("expandedBytesBudget").GetProperty("maximum").GetInt64());
+        Assert.Equal(1024 * 1024, limitsProps.GetProperty("jsonBytesBudget").GetProperty("maximum").GetInt64());
+        Assert.Equal(10, limitsProps.GetProperty("deadlineSeconds").GetProperty("maximum").GetInt32());
     }
 
     [Fact]

@@ -80,6 +80,7 @@
         "physicalSize": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 16777216,
           "description": "Physical byte size of the published Archive."
         },
         "sha256": {
@@ -91,6 +92,7 @@
     },
     "entries": {
       "type": "array",
+      "maxItems": 1000,
       "description": "Archive entries keyed by ordinal. Duplicate entry names are representable; duplicate ordinals are rejected semantically.",
       "items": {
         "type": "object",
@@ -279,21 +281,25 @@
         "entryCount": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 1000,
           "description": "Actual entry count in this fixture (budget: 1,000)."
         },
         "expandedBytesBudget": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 33554432,
           "description": "Declared expansion budget for this fixture (budget: 32 MiB), independent of adversarial declared sizes."
         },
         "jsonBytesBudget": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 1048576,
           "description": "Expectation File size budget (global: 1 MiB)."
         },
         "deadlineSeconds": {
           "type": "integer",
           "minimum": 1,
+          "maximum": 10,
           "description": "Per-fixture processing deadline (global: 10 s)."
         }
       }
