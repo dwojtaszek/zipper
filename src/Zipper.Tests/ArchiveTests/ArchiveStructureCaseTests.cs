@@ -355,7 +355,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(27, malformed.Count);
+        Assert.Equal(36, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
@@ -386,6 +386,15 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("prefix-unrebased")]
     [InlineData("deflate-invalid-btype")]
     [InlineData("deflate-corrupt-huffman")]
+    [InlineData("method-cross-deflate64-deflate")]
+    [InlineData("method-cross-bzip2-stored")]
+    [InlineData("method-data-deflate-as-bzip2")]
+    [InlineData("method-data-bzip2-as-stored")]
+    [InlineData("bzip2-corrupt-block-magic")]
+    [InlineData("bzip2-truncated-stream")]
+    [InlineData("bzip2-wrong-crc")]
+    [InlineData("deflate64-corrupt-stream")]
+    [InlineData("deflate64-truncated-stream")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -620,6 +629,235 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_Bzip2CorruptBlockMagic_RejectsAtDecode()
+    {
+        var control = BuildControl("valid-bzip2");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("bzip2-corrupt-block-magic"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.NotEqual(
+            control.ArchiveBytes[(int)entry.DataOffset + 4],
+            mutated.ArchiveBytes[(int)entry.DataOffset + 4]);
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.DataOffset + 4, 1));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("bzip2-corrupt-block-magic", mutation.Code);
+        Assert.Contains("block-magic", mutation.DeclaredValue, StringComparison.Ordinal);
+
+        // A bzip2 decoder rejects the stream at block start.
+        Assert.ThrowsAny<Exception>(() => DecodeBzip2(mutated.ArchiveBytes, mutated.Layout.Entries[0]));
+    }
+
+    [Fact]
+    public void Apply_Bzip2WrongCrc_FlipsStoredCrcByte()
+    {
+        var control = BuildControl("valid-bzip2");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("bzip2-wrong-crc"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        var crcOffset = entry.DataOffset + 10;
+        Assert.NotEqual(control.ArchiveBytes[(int)crcOffset], mutated.ArchiveBytes[(int)crcOffset]);
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (crcOffset, 1));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("bzip2-wrong-crc", mutation.Code);
+
+        // An integrity-checking decoder rejects the finished stream.
+        Assert.ThrowsAny<Exception>(() => DecodeBzip2(mutated.ArchiveBytes, mutated.Layout.Entries[0]));
+    }
+
+    private static byte[] DecodeBzip2(byte[] archiveBytes, ArchiveFixtureEntryLayout entry)
+    {
+        using var source = new MemoryStream(archiveBytes, (int)entry.DataOffset, (int)entry.CompressedSize, writable: false);
+        using var bz2 = new ICSharpCode.SharpZipLib.BZip2.BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        return inflated.ToArray();
+    }
+
+    [Fact]
+    public void Apply_Bzip2TruncatedStream_DeletesTailAndRelinksDirectory()
+    {
+        var control = BuildControl("valid-bzip2");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("bzip2-truncated-stream"), 42, CancellationToken.None);
+
+        Assert.Equal(control.ArchiveBytes.Length - 16, mutated.ArchiveBytes.Length);
+
+        // The artifact keeps before-mutation coordinates, so the relink is pinned
+        // from the final bytes: the EOCD sits 16 bytes earlier, its directory
+        // offset field is rebased by -16 onto a parseable central header, and the
+        // central size is unchanged while the entry sizes keep pre-truncation
+        // values (the lies under test).
+        var controlEntry = control.Layout.Entries[0];
+        var eocdAt = mutated.ArchiveBytes.Length - 22;
+        Assert.Equal(0x06054b50u, ReadUInt32(mutated.ArchiveBytes, eocdAt));
+        Assert.Equal((uint)(control.Layout.CentralDirectoryOffset - 16), ReadUInt32(mutated.ArchiveBytes, eocdAt + 16));
+        Assert.Equal(control.Layout.CentralDirectorySize, ReadUInt32(mutated.ArchiveBytes, eocdAt + 12));
+        var cdAt = control.Layout.CentralDirectoryOffset - 16;
+        Assert.Equal(0x02014b50u, ReadUInt32(mutated.ArchiveBytes, cdAt));
+        Assert.Equal(controlEntry.CompressedSize, ReadUInt32(mutated.ArchiveBytes, controlEntry.LocalHeaderOffset + 18));
+
+        // The truncated stream no longer decodes.
+        var truncated = controlEntry with { CompressedSize = controlEntry.CompressedSize - 16 };
+        Assert.ThrowsAny<Exception>(() => DecodeBzip2(mutated.ArchiveBytes, truncated));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal(16, mutation.DeletedLength);
+        Assert.Equal(0, mutation.InsertedLength);
+    }
+
+    [Fact]
+    public void Apply_Deflate64CorruptStream_SetsReservedBlockType()
+    {
+        var control = BuildControl("valid-deflate64");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("deflate64-corrupt-stream"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(0b11, (mutated.ArchiveBytes[(int)entry.DataOffset] >> 1) & 0x03);
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.DataOffset, 1));
+
+        // No decoder dispatches the reserved block type.
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("deflate64-corrupt-stream", mutation.Code);
+    }
+
+    [Fact]
+    public void Apply_MethodCrossDeflate64Deflate_SplitsLocalFromCentral()
+    {
+        var control = BuildControl("valid-deflate");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-deflate64-deflate"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(9, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+        AssertOnlyRangesChanged(control.ArchiveBytes, mutated.ArchiveBytes, (entry.LocalHeaderOffset + 8, 2));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("local-method=9 central-method=8", mutation.DeclaredValue);
+    }
+
+    [Fact]
+    public void Apply_MethodCrossBzip2Stored_SplitsLocalFromCentral()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-bzip2-stored"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(0, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("local-method=12 central-method=0", mutation.DeclaredValue);
+    }
+
+    [Fact]
+    public void Apply_MethodDataDeflateAsBzip2_RelabelsBothHeadersToDeflate()
+    {
+        var control = BuildControl("valid-bzip2");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-deflate-as-bzip2"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(8, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var dataMutation = Assert.Single(mutated.Mutations, m => m.Structure == "local-header");
+        Assert.Equal("method-data-deflate-as-bzip2", dataMutation.Code);
+    }
+
+    [Fact]
+    public void Apply_Deflate64TruncatedStream_DeletesTailAndRelinksDirectory()
+    {
+        var control = BuildControl("valid-deflate64");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("deflate64-truncated-stream"), 42, CancellationToken.None);
+
+        Assert.Equal(control.ArchiveBytes.Length - 16, mutated.ArchiveBytes.Length);
+
+        var controlEntry = control.Layout.Entries[0];
+        var eocdAt = mutated.ArchiveBytes.Length - 22;
+        Assert.Equal(0x06054b50u, ReadUInt32(mutated.ArchiveBytes, eocdAt));
+        Assert.Equal((uint)(control.Layout.CentralDirectoryOffset - 16), ReadUInt32(mutated.ArchiveBytes, eocdAt + 16));
+        Assert.Equal(controlEntry.CompressedSize, ReadUInt32(mutated.ArchiveBytes, controlEntry.LocalHeaderOffset + 18));
+
+        // The truncated stream never yields the true content: strict readers throw
+        // while lenient ones (.NET) stream short without error — either way the
+        // payload contract is broken.
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        try
+        {
+            using var stream = archive.Entries[0].Open();
+            using var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            Assert.NotEqual(control.Entries[0].Content, copy.ToArray());
+        }
+        catch (Exception ex) when (ex is not Xunit.Sdk.XunitException)
+        {
+        }
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("deflate64-truncated-stream", mutation.Code);
+    }
+
+    [Fact]
+    public void Build_Bzip2HighRatioBounded_DeclaresOneMebibyteHonestly()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("bzip2-high-ratio-bounded", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal((ushort)12, entry.Method);
+        Assert.Equal(1024u * 1024u, entry.UncompressedSize);
+        Assert.Equal(artifact.Entries[0].Content, ReadEntryContentRaw(artifact.ArchiveBytes, entry));
+    }
+
+    private static byte[] ReadEntryContentRaw(byte[] archiveBytes, ArchiveFixtureEntryLayout entry)
+    {
+        using var source = new MemoryStream(archiveBytes, (int)entry.DataOffset, (int)entry.CompressedSize, writable: false);
+        using var bz2 = new ICSharpCode.SharpZipLib.BZip2.BZip2InputStream(source);
+        using var inflated = new MemoryStream();
+        bz2.CopyTo(inflated);
+        return inflated.ToArray();
+    }
+
+    [Fact]
+    public void Apply_MethodDataBzip2AsStored_RelabelsBothHeadersToBzip2()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-bzip2-as-stored"), 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.LocalHeaderOffset + 8));
+        Assert.Equal(12, ReadUInt16(mutated.ArchiveBytes, entry.CentralDirectoryOffset + 10));
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var mutation = Assert.Single(mutated.Mutations, m => m.Structure == "local-header");
+        Assert.Equal("method-data-bzip2-as-stored", mutation.Code);
+        Assert.Contains("method=12", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ValidMixedMethods_KeepsPerEntryCodecs()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("valid-mixed-methods", 42, CancellationToken.None);
+
+        Assert.Equal(3, artifact.Layout.EntryCount);
+        Assert.Equal([(ushort)0, (ushort)8, (ushort)12], artifact.Layout.Entries.Select(e => e.Method).ToList());
+    }
+
+    [Fact]
     public void Build_DirectorySlashWithPayload_KeepsSlashNameAndContent()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("directory-slash-with-payload", 42, CancellationToken.None);
@@ -660,7 +898,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(69, all.Count);
+        Assert.Equal(80, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -718,7 +956,12 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
                         or ArchiveTestMutationKind.OrphanLocalHeader
                         or ArchiveTestMutationKind.PrefixUnrebased
                         or ArchiveTestMutationKind.DeflateInvalidBtype
-                        or ArchiveTestMutationKind.DeflateCorruptHuffman)
+                        or ArchiveTestMutationKind.DeflateCorruptHuffman
+                        or ArchiveTestMutationKind.Bzip2CorruptBlockMagic
+                        or ArchiveTestMutationKind.Bzip2TruncatedStream
+                        or ArchiveTestMutationKind.Bzip2WrongCrc
+                        or ArchiveTestMutationKind.Deflate64CorruptStream
+                        or ArchiveTestMutationKind.Deflate64TruncatedStream)
                 {
                     Assert.All(testCase.Mutations, mutation => Assert.NotNull(mutation.DeclaredValue));
                 }

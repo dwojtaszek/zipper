@@ -210,20 +210,14 @@ internal static class ArchiveTestCatalog
         ["valid-bzip2"] = new(
             "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: new ArchiveTestRecipe(
-            [
-                ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
-            ])),
+            Recipe: Bzip2ControlRecipe),
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
         ["valid-deflate64"] = new(
             "valid-deflate64", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: new ArchiveTestRecipe(
-            [
-                ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate64"),
-            ])),
+            Recipe: Deflate64ControlRecipe),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -322,6 +316,36 @@ internal static class ArchiveTestCatalog
             suites: [MalformedSuite, SecuritySuite]),
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
+        ["bzip2-corrupt-block-magic"] = MutatedDefinition(
+            ArchiveTestMutationKind.Bzip2CorruptBlockMagic, controlCaseKey: Bzip2ControlCaseKey),
+        ["bzip2-truncated-stream"] = MutatedDefinition(
+            ArchiveTestMutationKind.Bzip2TruncatedStream, controlCaseKey: Bzip2ControlCaseKey),
+        ["bzip2-wrong-crc"] = MutatedDefinition(
+            ArchiveTestMutationKind.Bzip2WrongCrc, controlCaseKey: Bzip2ControlCaseKey),
+        ["deflate64-corrupt-stream"] = MutatedDefinition(
+            ArchiveTestMutationKind.Deflate64CorruptStream, controlCaseKey: Deflate64ControlCaseKey),
+        ["deflate64-truncated-stream"] = MutatedDefinition(
+            ArchiveTestMutationKind.Deflate64TruncatedStream, controlCaseKey: Deflate64ControlCaseKey),
+        ["bzip2-high-ratio-bounded"] = new(
+            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite, SecuritySuite],
+            Recipe: HighRatioBzip2Recipe),
+        ["method-cross-deflate64-deflate"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossDeflate64Deflate, controlCaseKey: DeflateControlCaseKey),
+        ["method-cross-bzip2-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodCrossBzip2Stored, controlCaseKey: StoredControlCaseKey),
+        ["method-data-deflate-as-bzip2"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataDeflateAsBzip2,
+            controlCaseKey: Bzip2ControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["method-data-bzip2-as-stored"] = MutatedDefinition(
+            ArchiveTestMutationKind.MethodDataBzip2AsStored,
+            controlCaseKey: StoredControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["valid-mixed-methods"] = new(
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: MixedMethodsRecipe),
         ["deflate-invalid-btype"] = MutatedDefinition(
             ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
         ["deflate-corrupt-huffman"] = MutatedDefinition(
@@ -424,6 +448,8 @@ internal static class ArchiveTestCatalog
     internal const byte UnixHostSystem = 3;
     private const string StoredControlCaseKey = "valid-stored";
     private const string DeflateControlCaseKey = "valid-deflate";
+    private const string Bzip2ControlCaseKey = "valid-bzip2";
+    private const string Deflate64ControlCaseKey = "valid-deflate64";
     private const string DeflateDynamicControlCaseKey = "valid-deflate-dynamic";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
@@ -460,11 +486,20 @@ internal static class ArchiveTestCatalog
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
         DeflateControlCaseKey => DeflateControlRecipe,
+        Bzip2ControlCaseKey => Bzip2ControlRecipe,
         DeflateDynamicControlCaseKey => DeflateDynamicRecipe,
+        Deflate64ControlCaseKey => Deflate64ControlRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
     };
+
+    // The Deflate64 control recipe (tickets #898 and #900), shared with the cases
+    // that corrupt Deflate64 payload bytes.
+    private static ArchiveTestRecipe Deflate64ControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate64"),
+    ]);
 
     private static ArchiveTestRecipe StoredControlRecipe => new(
     [
@@ -472,12 +507,32 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.File("b.bin", 40, "stored"),
     ]);
 
+    // The BZip2 control recipe (tickets #897 and #900), shared with the cases
+    // that need BZip2 payload bytes under honest or relabeled headers.
+    private static ArchiveTestRecipe Bzip2ControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("doc.bin", 400, "bzip2"),
+    ]);
+
+    // One MiB of a single repeated byte under BZip2 (ticket #900): the bounded
+    // honest high-ratio counterpart to the corruption cases.
+    private static ArchiveTestRecipe HighRatioBzip2Recipe => HighRatioRecipe("hi-bz2.bin", "bzip2");
+
     // The control for the unicode-path-extra-mismatch case (ticket #871): one stored
     // entry under a benign standard name; the construction injects the discrepant
     // Info-ZIP Unicode Path subfield into both headers.
     private static ArchiveTestRecipe SafeControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("safe.txt", 60, "stored"),
+    ]);
+
+    // The recipe for the valid-mixed-methods case (ticket #899): one entry per
+    // codec family, all honest. The hand-built path encodes each member natively.
+    private static ArchiveTestRecipe MixedMethodsRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("a.txt", 100, "stored"),
+        ArchiveTestRecipeEntry.File("b.bin", 400, "deflate"),
+        ArchiveTestRecipeEntry.File("c.bz2", 400, "bzip2"),
     ]);
 
     // The recipe for the hostile-name cases (ticket #876): one stored entry under
@@ -555,20 +610,20 @@ internal static class ArchiveTestCatalog
     // Ticket #843 resource recipes: honest high compression, genuine depth-two
     // nesting, and the exact entry cap. All are valid Archives with true sizes.
 
-    // One MiB of a single repeated byte under deflate: an intentionally high, honest
-    // compression ratio — the bounded counterpart of a decompression bomb.
-    private static ArchiveTestRecipe HighRatioControlRecipe
+    // One MiB of a single repeated byte: an intentionally high, honest compression
+    // ratio — the bounded counterpart of a decompression bomb. The codec and member
+    // name vary per case (deflate for #843, BZip2 for #900).
+    private static ArchiveTestRecipe HighRatioControlRecipe => HighRatioRecipe("hi-ratio.bin", "deflate");
+
+    private static ArchiveTestRecipe HighRatioRecipe(string name, string method)
     {
-        get
-        {
-            const int ExpandedLength = 1024 * 1024;
-            var repeated = new byte[ExpandedLength];
-            Array.Fill(repeated, (byte)0x41);
-            return new ArchiveTestRecipe(
-            [
-                new ArchiveTestRecipeEntry("hi-ratio.bin", ExpandedLength, "deflate", IsDirectory: false, PayloadPrefix: repeated),
-            ]);
-        }
+        const int ExpandedLength = 1024 * 1024;
+        var repeated = new byte[ExpandedLength];
+        Array.Fill(repeated, (byte)0x41);
+        return new ArchiveTestRecipe(
+        [
+            new ArchiveTestRecipeEntry(name, ExpandedLength, method, IsDirectory: false, PayloadPrefix: repeated),
+        ]);
     }
 
     // A genuine depth-two nesting: the outer Archive carries a real inner Archive as
