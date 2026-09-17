@@ -366,6 +366,10 @@ class FixtureVerifier:
                                                  len(case["entries"])))
         checks.append({"check": "entries-ordinals", "status": "pass"})
 
+        # Independent compression method audit (ticket #929).
+        method_note = verify_compression_methods(case, zip_bytes)
+        checks.append({"check": "compression-methods", "status": "pass", "detail": method_note})
+
         # Mutation chain linkage, offset arithmetic, and raw byte comparison.
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
@@ -1095,6 +1099,109 @@ def verify_coded_method(case, zip_bytes, expected):
         raise VerificationError("coded-method", "central header version is not %d" % expected_version)
 
     return "method=%d both-headers" % expected
+
+
+def verify_compression_methods(case, zip_bytes):
+    """Audits wire compression method codes and generator payloadCodec (ticket #929).
+    Asserts localHeaderMethod and centralDirectoryMethod match wire bytes when
+    headers exist, and checks method/codec contracts for coded controls and mutations."""
+    import struct
+
+    # Scan central directory headers if EOCD is intact:
+    cd_entries = []
+    eocd_pos = zip_bytes.rfind(b"PK\x05\x06") if len(zip_bytes) >= 22 else -1
+    if eocd_pos != -1 and eocd_pos + 22 <= len(zip_bytes):
+        cd_start = struct.unpack_from("<I", zip_bytes, eocd_pos + 16)[0]
+        curr = cd_start
+        while curr + 46 <= len(zip_bytes) and zip_bytes[curr:curr + 4] == b"PK\x01\x02":
+            cd_method = struct.unpack_from("<H", zip_bytes, curr + 10)[0]
+            name_len = struct.unpack_from("<H", zip_bytes, curr + 28)[0]
+            extra_len = struct.unpack_from("<H", zip_bytes, curr + 30)[0]
+            comm_len = struct.unpack_from("<H", zip_bytes, curr + 32)[0]
+            lh_offset = struct.unpack_from("<I", zip_bytes, curr + 42)[0]
+            lh_method = None
+            if lh_offset + 10 <= len(zip_bytes) and zip_bytes[lh_offset:lh_offset + 4] == b"PK\x03\x04":
+                lh_method = struct.unpack_from("<H", zip_bytes, lh_offset + 8)[0]
+            cd_entries.append((cd_method, lh_method, curr, lh_offset))
+            curr += 46 + name_len + extra_len + comm_len
+
+    for entry in case.get("entries", []):
+        ordinal = entry.get("ordinal", -1)
+        loc_method = entry.get("localHeaderMethod")
+        cd_method = entry.get("centralDirectoryMethod")
+        if loc_method is None or isinstance(loc_method, bool) or not isinstance(loc_method, int) or loc_method < 0 or loc_method > 65535:
+            raise VerificationError("compression-methods",
+                                    "entry %d localHeaderMethod must be uint16 (0..65535)" % ordinal)
+        if cd_method is None or isinstance(cd_method, bool) or not isinstance(cd_method, int) or cd_method < 0 or cd_method > 65535:
+            raise VerificationError("compression-methods",
+                                    "entry %d centralDirectoryMethod must be uint16 (0..65535)" % ordinal)
+
+        codec = entry.get("payloadCodec")
+        kind = entry.get("kind")
+        if kind == "file":
+            if codec not in ("stored", "deflate", "deflate64", "bzip2", "unknown"):
+                raise VerificationError("compression-methods",
+                                        "entry %d file entry has invalid payloadCodec '%s'" % (ordinal, codec))
+        elif kind == "directory":
+            if codec is not None:
+                raise VerificationError("compression-methods",
+                                        "entry %d directory entry must not declare payloadCodec" % ordinal)
+
+        loc_offset = entry.get("localHeaderOffset")
+        if loc_offset is not None and isinstance(loc_offset, int) and 0 <= loc_offset and loc_offset + 10 <= len(zip_bytes):
+            if zip_bytes[loc_offset:loc_offset + 4] == b"PK\x03\x04":
+                wire_loc = struct.unpack_from("<H", zip_bytes, loc_offset + 8)[0]
+                if loc_method != wire_loc:
+                    raise VerificationError("compression-methods",
+                                            "entry %d localHeaderMethod %d does not match wire %d"
+                                            % (ordinal, loc_method, wire_loc))
+        elif loc_offset is None and 0 <= ordinal < len(cd_entries) and cd_entries[ordinal][1] is not None:
+            wire_loc = cd_entries[ordinal][1]
+            if loc_method != wire_loc:
+                raise VerificationError("compression-methods",
+                                        "entry %d localHeaderMethod %d does not match wire %d"
+                                        % (ordinal, loc_method, wire_loc))
+
+        cd_offset = entry.get("centralDirectoryOffset")
+        if cd_offset is not None and isinstance(cd_offset, int) and 0 <= cd_offset and cd_offset + 12 <= len(zip_bytes):
+            if zip_bytes[cd_offset:cd_offset + 4] == b"PK\x01\x02":
+                wire_cd = struct.unpack_from("<H", zip_bytes, cd_offset + 10)[0]
+                if cd_method != wire_cd:
+                    raise VerificationError("compression-methods",
+                                            "entry %d centralDirectoryMethod %d does not match wire %d"
+                                            % (ordinal, cd_method, wire_cd))
+        elif cd_offset is None and 0 <= ordinal < len(cd_entries):
+            wire_cd = cd_entries[ordinal][0]
+            if cd_method != wire_cd:
+                raise VerificationError("compression-methods",
+                                        "entry %d centralDirectoryMethod %d does not match wire %d"
+                                        % (ordinal, cd_method, wire_cd))
+
+    case_key = case.get("caseKey")
+    entries = case.get("entries", [])
+    if case_key == "valid-bzip2" and entries:
+        if entries[0]["localHeaderMethod"] != 12 or entries[0]["centralDirectoryMethod"] != 12 or entries[0]["payloadCodec"] != "bzip2":
+            raise VerificationError("compression-methods", "valid-bzip2 entry must declare method 12 and payloadCodec bzip2")
+    elif case_key == "valid-deflate64" and entries:
+        if entries[0]["localHeaderMethod"] != 9 or entries[0]["centralDirectoryMethod"] != 9 or entries[0]["payloadCodec"] != "deflate64":
+            raise VerificationError("compression-methods", "valid-deflate64 entry must declare method 9 and payloadCodec deflate64")
+    elif case_key == "method-cross-deflate64-deflate" and entries:
+        if entries[0]["localHeaderMethod"] != 9 or entries[0]["centralDirectoryMethod"] != 8 or entries[0]["payloadCodec"] != "deflate":
+            raise VerificationError("compression-methods", "method-cross-deflate64-deflate must have local 9, central 8, codec deflate")
+    elif case_key == "method-cross-bzip2-stored" and entries:
+        if entries[0]["localHeaderMethod"] != 12 or entries[0]["centralDirectoryMethod"] != 0 or entries[0]["payloadCodec"] != "stored":
+            raise VerificationError("compression-methods", "method-cross-bzip2-stored must have local 12, central 0, codec stored")
+    elif case_key == "method-data-deflate-as-bzip2" and entries:
+        if entries[0]["localHeaderMethod"] != 8 or entries[0]["centralDirectoryMethod"] != 8 or entries[0]["payloadCodec"] != "bzip2":
+            raise VerificationError("compression-methods", "method-data-deflate-as-bzip2 must have headers 8, codec bzip2")
+    elif case_key == "method-data-bzip2-as-stored" and entries:
+        if entries[0]["localHeaderMethod"] != 12 or entries[0]["centralDirectoryMethod"] != 12 or entries[0]["payloadCodec"] != "stored":
+            raise VerificationError("compression-methods", "method-data-bzip2-as-stored must have headers 12, codec stored")
+    elif case_key == "method-local-central-mismatch" and entries:
+        if entries[0]["localHeaderMethod"] != 8 or entries[0]["centralDirectoryMethod"] != 0 or entries[0]["payloadCodec"] != "stored":
+            raise VerificationError("compression-methods", "method-local-central-mismatch must have local 8, central 0, codec stored")
+
+    return "entries=%d" % len(entries)
 
 
 def verify_mutations(case, zip_bytes, actual_sha):

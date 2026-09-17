@@ -96,7 +96,15 @@
       "description": "Archive entries keyed by ordinal. Duplicate entry names are representable; duplicate ordinals are rejected semantically.",
       "items": {
         "type": "object",
-        "required": ["ordinal", "kind", "localNameRaw", "centralNameRaw", "readableName"],
+        "required": [
+          "ordinal",
+          "kind",
+          "localNameRaw",
+          "centralNameRaw",
+          "readableName",
+          "localHeaderMethod",
+          "centralDirectoryMethod"
+        ],
         "additionalProperties": false,
         "properties": {
           "ordinal": {
@@ -120,6 +128,23 @@
           "readableName": {
             "type": "string",
             "description": "Best-effort readable rendering of the name; lossless bytes live in the raw fields."
+          },
+          "localHeaderMethod": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535,
+            "description": "Compression method code declared in the local file header (APPNOTE §4.4.5)."
+          },
+          "centralDirectoryMethod": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535,
+            "description": "Compression method code declared in the central directory header (APPNOTE §4.4.5)."
+          },
+          "payloadCodec": {
+            "type": "string",
+            "enum": ["stored", "deflate", "deflate64", "bzip2", "unknown"],
+            "description": "Generator-known payload compression codec."
           },
           "contentSha256": {
             "type": "string",
@@ -145,6 +170,25 @@
             "type": "integer",
             "minimum": 0,
             "description": "Offset of the central-header record within the pre-mutation Archive."
+          }
+        },
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "file"
+            }
+          }
+        },
+        "then": {
+          "required": [
+            "payloadCodec"
+          ]
+        },
+        "else": {
+          "not": {
+            "required": [
+              "payloadCodec"
+            ]
           }
         }
       }

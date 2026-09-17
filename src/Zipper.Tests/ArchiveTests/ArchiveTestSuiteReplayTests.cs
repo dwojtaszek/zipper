@@ -18,7 +18,7 @@ public class ArchiveTestSuiteReplayTests : TempDirectoryTestBase
     /// Archive SHA-256 are frozen. Proven on the Linux/Windows/macOS E2E matrix.
     /// Golden mirrored in tests/test-archive-test-suites.sh, .bat, and
     /// docs/archive-test-suites.md — change all four together.</summary>
-    private const string FrozenValidStoredFixtureId = "atc-662d70277000fd379d41c3d096e0ef7d3075b668f7a33860bdf52117ab2e04ca";
+    private const string FrozenValidStoredFixtureId = "atc-d4998f7846f15ca3c2d709a07579a0ba6723f5f7b524ca39953622407b90a24a";
     private const string FrozenValidStoredArchiveSha256 = "275c4c4da2722c54625b2175a78898eb27c20e28878ac3948e9854c7fa3dc9a5";
 
     private static ArchiveTestRequest SmokeRequest(string outputDirectory) =>

@@ -970,4 +970,104 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
 
         Assert.Equal(all.Count, seenCaseKeys.Count);
     }
+
+    [Fact]
+    public void Build_CodedControls_RecordExpectedMethodsAndPayloadCodecs()
+    {
+        var stored = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.BuildControl("valid-stored", 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("valid-stored"));
+        Assert.Equal(2, stored.Entries.Count);
+        Assert.All(stored.Entries, e =>
+        {
+            Assert.Equal(0, e.LocalHeaderMethod);
+            Assert.Equal(0, e.CentralDirectoryMethod);
+            Assert.Equal("stored", e.PayloadCodec);
+        });
+
+        var deflate = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("valid-deflate"));
+        var deflateEntry = Assert.Single(deflate.Entries);
+        Assert.Equal(8, deflateEntry.LocalHeaderMethod);
+        Assert.Equal(8, deflateEntry.CentralDirectoryMethod);
+        Assert.Equal("deflate", deflateEntry.PayloadCodec);
+
+        var deflate64 = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.BuildControl("valid-deflate64", 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("valid-deflate64"));
+        var deflate64Entry = Assert.Single(deflate64.Entries);
+        Assert.Equal(9, deflate64Entry.LocalHeaderMethod);
+        Assert.Equal(9, deflate64Entry.CentralDirectoryMethod);
+        Assert.Equal("deflate64", deflate64Entry.PayloadCodec);
+
+        var bzip2 = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.BuildControl("valid-bzip2", 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("valid-bzip2"));
+        var bzip2Entry = Assert.Single(bzip2.Entries);
+        Assert.Equal(12, bzip2Entry.LocalHeaderMethod);
+        Assert.Equal(12, bzip2Entry.CentralDirectoryMethod);
+        Assert.Equal("bzip2", bzip2Entry.PayloadCodec);
+
+        var dirs = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.BuildControl("valid-directories", 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("valid-directories"));
+        Assert.Equal(3, dirs.Entries.Count);
+        var dirEntry = Assert.Single(dirs.Entries, e => e.Kind == "directory");
+        Assert.Null(dirEntry.PayloadCodec);
+        Assert.All(dirs.Entries.Where(e => e.Kind == "file"), e => Assert.Equal("stored", e.PayloadCodec));
+    }
+
+    [Fact]
+    public void Build_MethodMutationCases_RecordAccurateWireMethodsAndPayloadCodecs()
+    {
+        var crossDeflate64 = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-deflate64-deflate"), 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("method-cross-deflate64-deflate"));
+        var crossDeflate64Entry = Assert.Single(crossDeflate64.Entries);
+        Assert.Equal(9, crossDeflate64Entry.LocalHeaderMethod);
+        Assert.Equal(8, crossDeflate64Entry.CentralDirectoryMethod);
+        Assert.Equal("deflate", crossDeflate64Entry.PayloadCodec);
+
+        var crossBzip2 = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-cross-bzip2-stored"), 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("method-cross-bzip2-stored"));
+        Assert.Equal(2, crossBzip2.Entries.Count);
+        Assert.Equal(12, crossBzip2.Entries[0].LocalHeaderMethod);
+        Assert.Equal(0, crossBzip2.Entries[0].CentralDirectoryMethod);
+        Assert.Equal("stored", crossBzip2.Entries[0].PayloadCodec);
+        Assert.Equal(0, crossBzip2.Entries[1].LocalHeaderMethod);
+        Assert.Equal(0, crossBzip2.Entries[1].CentralDirectoryMethod);
+        Assert.Equal("stored", crossBzip2.Entries[1].PayloadCodec);
+
+        var dataDeflateAsBzip2 = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-deflate-as-bzip2"), 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("method-data-deflate-as-bzip2"));
+        var dataDeflateEntry = Assert.Single(dataDeflateAsBzip2.Entries);
+        Assert.Equal(8, dataDeflateEntry.LocalHeaderMethod);
+        Assert.Equal(8, dataDeflateEntry.CentralDirectoryMethod);
+        Assert.Equal("bzip2", dataDeflateEntry.PayloadCodec);
+
+        var dataBzip2AsStored = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-data-bzip2-as-stored"), 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("method-data-bzip2-as-stored"));
+        Assert.Equal(2, dataBzip2AsStored.Entries.Count);
+        Assert.Equal(12, dataBzip2AsStored.Entries[0].LocalHeaderMethod);
+        Assert.Equal(12, dataBzip2AsStored.Entries[0].CentralDirectoryMethod);
+        Assert.Equal("stored", dataBzip2AsStored.Entries[0].PayloadCodec);
+        Assert.Equal(0, dataBzip2AsStored.Entries[1].LocalHeaderMethod);
+        Assert.Equal(0, dataBzip2AsStored.Entries[1].CentralDirectoryMethod);
+        Assert.Equal("stored", dataBzip2AsStored.Entries[1].PayloadCodec);
+
+        var methodMismatch = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("method-local-central-mismatch"), 42, CancellationToken.None),
+            ArchiveTestCatalog.GetCase("method-local-central-mismatch"));
+        Assert.Equal(2, methodMismatch.Entries.Count);
+        Assert.Equal(8, methodMismatch.Entries[0].LocalHeaderMethod);
+        Assert.Equal(0, methodMismatch.Entries[0].CentralDirectoryMethod);
+        Assert.Equal("stored", methodMismatch.Entries[0].PayloadCodec);
+        Assert.Equal(0, methodMismatch.Entries[1].LocalHeaderMethod);
+        Assert.Equal(0, methodMismatch.Entries[1].CentralDirectoryMethod);
+        Assert.Equal("stored", methodMismatch.Entries[1].PayloadCodec);
+    }
 }

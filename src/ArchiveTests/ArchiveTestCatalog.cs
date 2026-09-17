@@ -191,35 +191,35 @@ internal static class ArchiveTestCatalog
             Suites: [CompatibilitySuite],
             Recipe: new ArchiveTestRecipe([])),
         ["valid-stored"] = new(
-            "valid-stored", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-stored", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: ValidControlSuites,
             Recipe: StoredControlRecipe),
         ["valid-deflate"] = new(
-            "valid-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-deflate", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: ValidControlSuites,
             Recipe: DeflateControlRecipe),
         // Ticket #874 dynamic-deflate control: a valid DEFLATE entry whose first block
         // uses dynamic Huffman tables, giving the corrupt-huffman mutation its
         // documented target.
         ["valid-deflate-dynamic"] = new(
-            "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateDynamicRecipe),
         // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
         // (method 12).
         ["valid-bzip2"] = new(
-            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Bzip2ControlRecipe),
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
         ["valid-deflate64"] = new(
-            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Deflate64ControlRecipe),
         ["valid-directories"] = new(
-            "valid-directories", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-directories", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: new ArchiveTestRecipe(
             [
@@ -230,44 +230,44 @@ internal static class ArchiveTestCatalog
         // A valid control whose stored payload begins with local-header-signature-like
         // bytes (PK\x03\x04): readers must treat them as data, never as a header.
         ["valid-signature-payload"] = new(
-            "valid-signature-payload", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-signature-payload", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: SignaturePayloadControlRecipe),
         // A valid control carrying a legal local-header extra subfield on entry 0; the
         // extra-field-length-overrun case mutates its subfield header (ticket #840 step 1).
         ["valid-extra-field"] = new(
-            "valid-extra-field", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-extra-field", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: StoredControlRecipe,
             Construction: ArchiveControlConstruction.LocalExtraField),
         // Ticket #841 compatibility controls: descriptors (APPNOTE §4.3.9), name encodings
         // (bit 11 / CP437), signature-like comment bytes, and a tiny genuine Zip64 Archive.
         ["valid-descriptor-signature"] = new(
-            "valid-descriptor-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-descriptor-signature", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DescriptorControlRecipe,
             Construction: ArchiveControlConstruction.NonSeekableDescriptor),
         ["valid-descriptor-no-signature"] = new(
-            "valid-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DescriptorControlRecipe,
             Construction: ArchiveControlConstruction.StripDescriptorSignature),
         ["valid-utf8-name"] = new(
-            "valid-utf8-name", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-utf8-name", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Utf8NameControlRecipe),
         ["valid-cp437-name"] = new(
-            "valid-cp437-name", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-cp437-name", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Cp437NameControlRecipe,
             Construction: ArchiveControlConstruction.Cp437Name),
         ["valid-signatures-in-comment"] = new(
-            "valid-signatures-in-comment", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-signatures-in-comment", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: SignatureCommentControlRecipe,
             Construction: ArchiveControlConstruction.ArchiveComment),
         ["valid-zip64-small"] = new(
-            "valid-zip64-small", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-zip64-small", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Zip64ControlRecipe,
             Construction: ArchiveControlConstruction.Zip64HandBuilt),
@@ -277,7 +277,7 @@ internal static class ArchiveTestCatalog
         // Ticket #873 prefixed cases: a valid 64-byte-prefixed Archive with rebased
         // offsets (compatibility), and its intentionally unrebased malformed twin.
         ["prefix-rebased"] = new(
-            "prefix-rebased", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "prefix-rebased", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateControlRecipe,
             Construction: ArchiveControlConstruction.PrefixedArchive),
@@ -327,7 +327,7 @@ internal static class ArchiveTestCatalog
         ["deflate64-truncated-stream"] = MutatedDefinition(
             ArchiveTestMutationKind.Deflate64TruncatedStream, controlCaseKey: Deflate64ControlCaseKey),
         ["bzip2-high-ratio-bounded"] = new(
-            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: HighRatioBzip2Recipe),
         ["method-cross-deflate64-deflate"] = MutatedDefinition(
@@ -343,7 +343,7 @@ internal static class ArchiveTestCatalog
             controlCaseKey: StoredControlCaseKey,
             suites: [MalformedSuite, SecuritySuite]),
         ["valid-mixed-methods"] = new(
-            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: MixedMethodsRecipe),
         ["deflate-invalid-btype"] = MutatedDefinition(
@@ -368,7 +368,7 @@ internal static class ArchiveTestCatalog
         // built by construction (the 0x7075 subfield cannot come from the standard
         // writer), so it is declared directly below instead of via PolicyDefinition.
         ["unicode-path-extra-mismatch"] = new(
-            "unicode-path-extra-mismatch", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            "unicode-path-extra-mismatch", CaseRevision: 1, ExpectationRevision: 2, Classification: PolicySensitiveClassification,
             Suites: [SecuritySuite],
             Recipe: SafeControlRecipe,
             Construction: ArchiveControlConstruction.InfoZipUnicodePath),
@@ -386,12 +386,12 @@ internal static class ArchiveTestCatalog
         // #842 recipes, but built by construction (the writer rejects NUL/C0 names,
         // so the raw-name path rewrites a placeholder after standard generation).
         ["filename-null-byte"] = new(
-            "filename-null-byte", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            "filename-null-byte", CaseRevision: 1, ExpectationRevision: 2, Classification: PolicySensitiveClassification,
             Suites: [SecuritySuite],
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameNullByte),
         ["filename-c0-control"] = new(
-            "filename-c0-control", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            "filename-c0-control", CaseRevision: 1, ExpectationRevision: 2, Classification: PolicySensitiveClassification,
             Suites: [SecuritySuite],
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
@@ -407,20 +407,20 @@ internal static class ArchiveTestCatalog
         // depth-two nesting, and the exact entry cap — all valid Archives that also
         // serve the security suite per #834 ("bounded resource cases").
         ["zip-bomb-overlapping-deflate"] = new(
-            "zip-bomb-overlapping-deflate", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "zip-bomb-overlapping-deflate", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: OverlappingBombRecipe,
             Construction: ArchiveControlConstruction.OverlappingEntries),
         ["high-ratio-bounded"] = new(
-            "high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: HighRatioControlRecipe),
         ["nested-archives-depth-two"] = new(
-            "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: NestedArchiveControlRecipe),
         ["many-small-entries"] = new(
-            "many-small-entries", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "many-small-entries", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: ManySmallEntriesRecipe),
         // A declared uncompressed size beyond the expanded budget over tiny physical
@@ -460,7 +460,7 @@ internal static class ArchiveTestCatalog
         string controlCaseKey = StoredControlCaseKey,
         string classification = MalformedClassification,
         IReadOnlyList<string>? suites = null) => new(
-        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 1, Classification: classification,
+        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 2, Classification: classification,
         Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
@@ -469,7 +469,7 @@ internal static class ArchiveTestCatalog
     /// <summary>An ordered mutation chain (ticket #843): a finite, explicit combination
     /// over the stored control; each mutation consumes the previous result.</summary>
     private static ArchiveTestCaseDefinition CombinedDefinition(string caseKey, params ArchiveTestMutationKind[] chain) => new(
-        caseKey, CaseRevision: 1, ExpectationRevision: 1, Classification: MalformedClassification,
+        caseKey, CaseRevision: 1, ExpectationRevision: 2, Classification: MalformedClassification,
         Suites: [MalformedSuite],
         Recipe: ControlRecipe(StoredControlCaseKey),
         ControlCaseKey: StoredControlCaseKey,
@@ -478,7 +478,7 @@ internal static class ArchiveTestCatalog
     /// <summary>A policy-sensitive direct recipe (ticket #842): suite security, no
     /// mutation, no construction — the standard writer's bytes for these names.</summary>
     private static ArchiveTestCaseDefinition PolicyDefinition(string caseKey, ArchiveTestRecipe recipe) => new(
-        caseKey, CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+        caseKey, CaseRevision: 1, ExpectationRevision: 2, Classification: PolicySensitiveClassification,
         Suites: [SecuritySuite],
         Recipe: recipe);
 

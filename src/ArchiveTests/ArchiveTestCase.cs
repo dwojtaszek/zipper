@@ -18,11 +18,14 @@ internal sealed record ArchiveTestEntry(
     [property: JsonPropertyName("localNameRaw")] string LocalNameRaw,
     [property: JsonPropertyName("centralNameRaw")] string CentralNameRaw,
     [property: JsonPropertyName("readableName")] string ReadableName,
-    [property: JsonPropertyName("contentSha256")] string? ContentSha256,
-    [property: JsonPropertyName("contentSize")] long? ContentSize,
-    [property: JsonPropertyName("localHeaderOffset")] long? LocalHeaderOffset,
-    [property: JsonPropertyName("dataOffset")] long? DataOffset,
-    [property: JsonPropertyName("centralDirectoryOffset")] long? CentralDirectoryOffset);
+    [property: JsonPropertyName("localHeaderMethod")] int LocalHeaderMethod,
+    [property: JsonPropertyName("centralDirectoryMethod")] int CentralDirectoryMethod,
+    [property: JsonPropertyName("payloadCodec")] string? PayloadCodec = null,
+    [property: JsonPropertyName("contentSha256")] string? ContentSha256 = null,
+    [property: JsonPropertyName("contentSize")] long? ContentSize = null,
+    [property: JsonPropertyName("localHeaderOffset")] long? LocalHeaderOffset = null,
+    [property: JsonPropertyName("dataOffset")] long? DataOffset = null,
+    [property: JsonPropertyName("centralDirectoryOffset")] long? CentralDirectoryOffset = null);
 
 internal sealed record ArchiveTestMutation(
     [property: JsonPropertyName("code")] string Code,
@@ -87,6 +90,7 @@ internal static class ArchiveTestCaseSemantics
 
     private static readonly string[] Classifications = ["valid", "malformed", "policy-sensitive"];
     private static readonly string[] Kinds = ["file", "directory"];
+    private static readonly string[] PayloadCodecs = ["stored", "deflate", "deflate64", "bzip2", "unknown"];
     private static readonly string[] Operations = ["list", "read-entry", "integrity-check", "extract"];
     private static readonly string[] Structures =
     [
@@ -190,6 +194,31 @@ internal static class ArchiveTestCaseSemantics
                 || !IsBoundedHex(entry.CentralNameRaw ?? string.Empty, int.MaxValue))
             {
                 errors.Add($"entry {entry.Ordinal}: name bytes must be lowercase hex with even length");
+            }
+
+            if (entry.LocalHeaderMethod is < 0 or > 65535)
+            {
+                errors.Add($"entry {entry.Ordinal}: localHeaderMethod must be between 0 and 65535");
+            }
+
+            if (entry.CentralDirectoryMethod is < 0 or > 65535)
+            {
+                errors.Add($"entry {entry.Ordinal}: centralDirectoryMethod must be between 0 and 65535");
+            }
+
+            if (entry.PayloadCodec is not null && !PayloadCodecs.Contains(entry.PayloadCodec, StringComparer.Ordinal))
+            {
+                errors.Add($"entry {entry.Ordinal}: unknown payloadCodec '{entry.PayloadCodec}'");
+            }
+
+            if (entry.Kind == "file" && entry.PayloadCodec is null)
+            {
+                errors.Add($"entry {entry.Ordinal}: file entry must declare a payloadCodec");
+            }
+
+            if (entry.Kind == "directory" && entry.PayloadCodec is not null)
+            {
+                errors.Add($"entry {entry.Ordinal}: directory entry must not declare a payloadCodec");
             }
         }
 

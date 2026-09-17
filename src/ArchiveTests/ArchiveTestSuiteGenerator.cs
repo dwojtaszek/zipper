@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace Zipper.ArchiveTests;
 
 internal sealed record ArchiveTestSuiteResult(
@@ -95,7 +97,16 @@ internal static class ArchiveTestSuiteGenerator
         }
     }
 
-    private static ArchiveTestCase BuildExpectationFile(
+    internal static ArchiveTestCase BuildExpectationFile(
+        ArchiveFixtureArtifact artifact, ArchiveTestCaseDefinition definition, int seed = 42)
+    {
+        var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
+            GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,
+            definition.ExpectationRevision, seed, artifact.ArchiveSha256);
+        return BuildExpectationFile(fixtureId, definition, seed, artifact);
+    }
+
+    internal static ArchiveTestCase BuildExpectationFile(
         string fixtureId, ArchiveTestCaseDefinition definition, int seed, ArchiveFixtureArtifact artifact)
     {
         // Layout ordinals and recipe expectations walk in the same recipe order;
@@ -110,13 +121,18 @@ internal static class ArchiveTestSuiteGenerator
             .Select(layout =>
             {
                 var recipe = artifact.Entries[layout.Ordinal];
-                var isDirectory = layout.Name.EndsWith('/');
+                var isDirectory = recipe.IsDirectory;
+                var (localMethod, centralMethod) = ResolveMethodCodes(artifact.ArchiveBytes, layout, recipe);
+                var payloadCodec = !isDirectory ? recipe.PayloadCodec : null;
                 return new ArchiveTestEntry(
                     Ordinal: layout.Ordinal,
                     Kind: isDirectory ? "directory" : "file",
                     LocalNameRaw: layout.NameHex,
                     CentralNameRaw: layout.NameHex,
                     ReadableName: layout.Name,
+                    LocalHeaderMethod: localMethod,
+                    CentralDirectoryMethod: centralMethod,
+                    PayloadCodec: payloadCodec,
                     ContentSha256: !isDirectory ? recipe.ContentSha256 : null,
                     ContentSize: !isDirectory ? recipe.Content.Length : null,
                     LocalHeaderOffset: layout.LocalHeaderOffset,
@@ -154,6 +170,29 @@ internal static class ArchiveTestSuiteGenerator
         }
 
         return testCase;
+    }
+
+    private static (int LocalMethod, int CentralMethod) ResolveMethodCodes(
+        ReadOnlySpan<byte> archiveBytes, ArchiveFixtureEntryLayout layout, ArchiveFixtureEntryExpectation recipe)
+    {
+        var localMethod = (int)recipe.Method;
+        var centralMethod = (int)recipe.Method;
+
+        if (layout.LocalHeaderOffset >= 0
+            && checked(layout.LocalHeaderOffset + 10) <= archiveBytes.Length
+            && BinaryPrimitives.ReadUInt32LittleEndian(archiveBytes.Slice((int)layout.LocalHeaderOffset, 4)) == ArchiveFixtureLayout.LocalHeaderSignature)
+        {
+            localMethod = BinaryPrimitives.ReadUInt16LittleEndian(archiveBytes.Slice((int)layout.LocalHeaderOffset + 8, 2));
+        }
+
+        if (layout.CentralDirectoryOffset >= 0
+            && checked(layout.CentralDirectoryOffset + 12) <= archiveBytes.Length
+            && BinaryPrimitives.ReadUInt32LittleEndian(archiveBytes.Slice((int)layout.CentralDirectoryOffset, 4)) == ArchiveFixtureLayout.CentralHeaderSignature)
+        {
+            centralMethod = BinaryPrimitives.ReadUInt16LittleEndian(archiveBytes.Slice((int)layout.CentralDirectoryOffset + 10, 2));
+        }
+
+        return (localMethod, centralMethod);
     }
 
     /// <summary>

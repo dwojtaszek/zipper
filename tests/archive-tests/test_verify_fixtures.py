@@ -52,13 +52,16 @@ def make_zip(entries, stored=True):
     return buf.getvalue()
 
 
-def entry_record(ordinal, name, content):
+def entry_record(ordinal, name, content, local_method=0, central_method=0, payload_codec="stored"):
     return {
         "ordinal": ordinal,
         "kind": "file",
         "localNameRaw": name.encode("utf-8").hex(),
         "centralNameRaw": name.encode("utf-8").hex(),
         "readableName": name,
+        "localHeaderMethod": local_method,
+        "centralDirectoryMethod": central_method,
+        "payloadCodec": payload_codec,
         "contentSha256": sha256_hex(content),
         "contentSize": len(content),
     }
@@ -549,6 +552,32 @@ class TamperTests(TempDirTest):
         finally:
             os.chmod(zip_path, 0o644)
 
+    def test_tampered_local_header_method_fails(self):
+        case, zip_bytes = self.publish_valid()
+        case_data, path = self.rewrite_case(case)
+        case_data["entries"][0]["localHeaderMethod"] = 8
+        self.persist(path, case_data)
+
+        report, exit_code = verify(self.dir)
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("fail", fixture["status"])
+        self.assertEqual("compression-methods", fixture["failure"]["check"])
+        self.assertIn("localHeaderMethod 8 does not match wire 0", fixture["failure"]["message"])
+
+    def test_tampered_central_directory_method_fails(self):
+        case, zip_bytes = self.publish_valid()
+        case_data, path = self.rewrite_case(case)
+        case_data["entries"][0]["centralDirectoryMethod"] = 8
+        self.persist(path, case_data)
+
+        report, exit_code = verify(self.dir)
+        self.assertEqual(1, exit_code)
+        fixture = report["fixtures"][0]
+        self.assertEqual("fail", fixture["status"])
+        self.assertEqual("compression-methods", fixture["failure"]["check"])
+        self.assertIn("centralDirectoryMethod 8 does not match wire 0", fixture["failure"]["message"])
+
 
 class CrcCorruptTests(TempDirTest):
     def test_crc_corrupt_pair_passes_with_rejected_integrity(self):
@@ -713,6 +742,64 @@ class SchemaLimitsTests(TempDirTest):
         with self.assertRaises(vf.VerificationError) as ctx:
             self._validate_case(case)
         self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_missing_compression_methods(self):
+        case, _ = self.publish_valid()
+        del case["entries"][0]["localHeaderMethod"]
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_out_of_range_method(self):
+        case, _ = self.publish_valid()
+        case["entries"][0]["localHeaderMethod"] = 65536
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_invalid_payload_codec(self):
+        case, _ = self.publish_valid()
+        case["entries"][0]["payloadCodec"] = "invalid-codec"
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_directory_with_payload_codec(self):
+        case, _ = self.publish_valid()
+        case["entries"][0]["kind"] = "directory"
+        case["entries"][0]["payloadCodec"] = "stored"
+        with self.assertRaises(vf.VerificationError) as ctx:
+            self._validate_case(case)
+        self.assertEqual("schema", ctx.exception.check)
+
+    def test_verifier_rejects_local_header_method_wire_mismatch(self):
+        case, zip_bytes = self.publish_valid()
+        case["entries"][0]["localHeaderMethod"] = 8  # wire is 0 (stored)
+        with self.assertRaises(vf.VerificationError) as ctx:
+            vf.verify_compression_methods(case, zip_bytes)
+        self.assertEqual("compression-methods", ctx.exception.check)
+
+    def test_verifier_rejects_central_directory_method_wire_mismatch(self):
+        case, zip_bytes = self.publish_valid()
+        case["entries"][0]["centralDirectoryMethod"] = 8  # wire is 0 (stored)
+        with self.assertRaises(vf.VerificationError) as ctx:
+            vf.verify_compression_methods(case, zip_bytes)
+        self.assertEqual("compression-methods", ctx.exception.check)
+
+    def test_verifier_rejects_boolean_method_code(self):
+        case, zip_bytes = self.publish_valid()
+        case["entries"][0]["localHeaderMethod"] = True
+        with self.assertRaises(vf.VerificationError) as ctx:
+            vf.verify_compression_methods(case, zip_bytes)
+        self.assertEqual("compression-methods", ctx.exception.check)
+
+    def test_verifier_rejects_case_contract_violation(self):
+        case, zip_bytes = self.publish_valid()
+        case["caseKey"] = "method-local-central-mismatch"
+        # valid-stored has local 0, central 0, so contract for method-local-central-mismatch fails
+        with self.assertRaises(vf.VerificationError) as ctx:
+            vf.verify_compression_methods(case, zip_bytes)
+        self.assertEqual("compression-methods", ctx.exception.check)
 
 
 if __name__ == "__main__":

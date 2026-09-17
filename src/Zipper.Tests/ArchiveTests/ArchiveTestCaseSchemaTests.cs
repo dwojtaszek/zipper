@@ -120,6 +120,31 @@ public class ArchiveTestCaseSchemaTests
                     errors.Add($"entry {ordinal}: {hexField} must be lowercase hex with even length");
                 }
             }
+
+            if (!entry.TryGetProperty("localHeaderMethod", out var lhm) || lhm.GetInt32() is < 0 or > 65535)
+            {
+                errors.Add($"entry {ordinal}: localHeaderMethod must be between 0 and 65535");
+            }
+
+            if (!entry.TryGetProperty("centralDirectoryMethod", out var cdm) || cdm.GetInt32() is < 0 or > 65535)
+            {
+                errors.Add($"entry {ordinal}: centralDirectoryMethod must be between 0 and 65535");
+            }
+
+            var hasCodec = entry.TryGetProperty("payloadCodec", out var codecProp);
+            var isFile = entry.GetProperty("kind").GetString() == "file";
+            if (isFile && !hasCodec)
+            {
+                errors.Add($"entry {ordinal}: file entry must declare a payloadCodec");
+            }
+            else if (!isFile && hasCodec)
+            {
+                errors.Add($"entry {ordinal}: directory entry must not declare a payloadCodec");
+            }
+            else if (hasCodec && codecProp.GetString() is not ("stored" or "deflate" or "deflate64" or "bzip2" or "unknown"))
+            {
+                errors.Add($"entry {ordinal}: unknown payloadCodec '{codecProp.GetString()}'");
+            }
         }
 
         foreach (var mutation in doc.GetProperty("mutations").EnumerateArray())
@@ -262,6 +287,37 @@ public class ArchiveTestCaseSchemaTests
         Assert.Equal(32 * 1024 * 1024, limitsProps.GetProperty("expandedBytesBudget").GetProperty("maximum").GetInt64());
         Assert.Equal(1024 * 1024, limitsProps.GetProperty("jsonBytesBudget").GetProperty("maximum").GetInt64());
         Assert.Equal(10, limitsProps.GetProperty("deadlineSeconds").GetProperty("maximum").GetInt32());
+    }
+
+    [Fact]
+    public void Load_SchemaFile_DeclaresCompressionMethodProperties()
+    {
+        using var schema = LoadJson("archive-test-case.schema.json");
+        var entryItem = schema.RootElement.GetProperty("properties").GetProperty("entries").GetProperty("items");
+        var required = entryItem.GetProperty("required").EnumerateArray().Select(s => s.GetString()).ToList();
+
+        Assert.Contains("localHeaderMethod", required);
+        Assert.Contains("centralDirectoryMethod", required);
+
+        var entryProps = entryItem.GetProperty("properties");
+        var localMethod = entryProps.GetProperty("localHeaderMethod");
+        Assert.Equal("integer", localMethod.GetProperty("type").GetString());
+        Assert.Equal(0, localMethod.GetProperty("minimum").GetInt32());
+        Assert.Equal(65535, localMethod.GetProperty("maximum").GetInt32());
+
+        var centralMethod = entryProps.GetProperty("centralDirectoryMethod");
+        Assert.Equal("integer", centralMethod.GetProperty("type").GetString());
+        Assert.Equal(0, centralMethod.GetProperty("minimum").GetInt32());
+        Assert.Equal(65535, centralMethod.GetProperty("maximum").GetInt32());
+
+        var payloadCodec = entryProps.GetProperty("payloadCodec");
+        Assert.Equal("string", payloadCodec.GetProperty("type").GetString());
+        var allowedCodecs = payloadCodec.GetProperty("enum").EnumerateArray().Select(v => v.GetString()).ToList();
+        Assert.Equal(["stored", "deflate", "deflate64", "bzip2", "unknown"], allowedCodecs);
+
+        Assert.Equal("file", entryItem.GetProperty("if").GetProperty("properties").GetProperty("kind").GetProperty("const").GetString());
+        Assert.Contains("payloadCodec", entryItem.GetProperty("then").GetProperty("required").EnumerateArray().Select(s => s.GetString()));
+        Assert.Contains("payloadCodec", entryItem.GetProperty("else").GetProperty("not").GetProperty("required").EnumerateArray().Select(s => s.GetString()));
     }
 
     [Fact]
