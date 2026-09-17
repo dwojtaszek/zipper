@@ -36,6 +36,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "path-azure-disallowed-unicode",
         "directory-slash-with-payload",
         "directory-attribute-with-payload",
+        "zero-width-collision",
     ];
 
     /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
@@ -53,7 +54,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "directory-attribute-with-payload",
     ];
 
-    /// <summary>The five collision cases that name a no-silent-overwrite policy.</summary>
+    /// <summary>The six collision cases that name a no-silent-overwrite policy.</summary>
     private static readonly string[] CollisionCaseKeys =
     [
         "duplicate-name",
@@ -61,6 +62,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "unicode-normalization-collision",
         "file-directory-conflict",
         "azure-directory-marker-collision",
+        "zero-width-collision",
     ];
 
     public static TheoryData<string> AllPolicyCaseKeys => new(PolicyCaseKeys);
@@ -114,6 +116,22 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal(
             ["test.txt:hidden", "a<b.txt", "a>b.txt", "a\"b.txt", "a|b.txt", "a?b.txt", "a*b.txt", "folder./doc.txt", "a\\b.txt"],
             artifact.Layout.Entries.Select(e => e.Name).ToList());
+    }
+
+    [Fact]
+    public void Build_ZeroWidthCollision_KeepsInvisibleDistinction()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("zero-width-collision", 42, CancellationToken.None);
+
+        Assert.Equal(2, artifact.Layout.EntryCount);
+        Assert.Equal("646174612e747874", artifact.Layout.Entries[0].NameHex);
+        Assert.Equal("64617461e2808b2e747874", artifact.Layout.Entries[1].NameHex);
+        Assert.NotEqual(artifact.Layout.Entries[0].NameHex, artifact.Layout.Entries[1].NameHex);
+        Assert.NotEqual(artifact.Layout.Entries[0].Name, artifact.Layout.Entries[1].Name);
+        Assert.Equal([0, 1], artifact.Layout.Entries.Select(e => e.Ordinal));
+        Assert.NotEqual(artifact.Entries[0].ContentSha256, artifact.Entries[1].ContentSha256);
+        Assert.Equal("atc-zw-visible", Encoding.ASCII.GetString(artifact.Entries[0].Content));
+        Assert.Equal("atc-zw-hidden", Encoding.ASCII.GetString(artifact.Entries[1].Content));
     }
 
     [Fact]
@@ -558,6 +576,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal("windows", ExtractExpectationOf(cases["path-windows-illegal-chars"]).Platform);
         Assert.Equal("case-insensitive-filesystems", ExtractExpectationOf(cases["case-collision"]).Platform);
         Assert.Equal("normalizing-filesystems", ExtractExpectationOf(cases["unicode-normalization-collision"]).Platform);
+        Assert.Equal("zero-width-collapsing-consumers", ExtractExpectationOf(cases["zero-width-collision"]).Platform);
     }
 
     [Fact]
@@ -578,20 +597,22 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllThirtyOneMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllThirtyTwoMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
         // differential, the #871 Unicode Path policy case, the #872 shared-range
         // resource case, the #876 hostile-name cases, the #880 Azure marker
         // case, the #882 Azure-disallowed-Unicode case, the #877 Deflate64
-        // unsupported-method twin, the consolidated #885/#886/#879 Windows-illegal-character
-        // matrix, the two #875 entry-type cases, the #884 bidi override case, the two #899 method/data disagreement cases,
-        // and the #900 high-ratio BZip2 case: every member publishes a safe Fixture ID pair.
+        // unsupported-method twin, the consolidated #885/#886/#879
+        // Windows-illegal-character matrix, the two #875 entry-type cases, the
+        // #884 bidi override case, the #889 zero-width collision case, the two
+        // #899 method/data disagreement cases, and the #900 high-ratio BZip2
+        // case: every member publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(31, securityKeys.Count);
+        Assert.Equal(32, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

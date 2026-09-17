@@ -472,6 +472,13 @@ internal static class ArchiveTestSuiteGenerator
             // variant may silently overwrite another (reject or rename instead).
             "duplicate-name" or "file-directory-conflict" =>
                 new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
+            // Zero-width collision (ticket #889): the names are distinct bytes on
+            // disk but collapse in stripping indexers and review UIs, so the
+            // no-silent-overwrite policy applies only on those collapsing
+            // consumers (ordinary extraction keeps both members; the verifier
+            // skips this platform unless the consumer opts in).
+            "zero-width-collision" =>
+                new PolicyExpectationProfile("zero-width-collapsing-consumers", [NoSilentOverwrite, DistinctContentHashes]),
             "case-collision" =>
                 new PolicyExpectationProfile("case-insensitive-filesystems", [NoSilentOverwrite, DistinctContentHashes]),
             "unicode-normalization-collision" =>
