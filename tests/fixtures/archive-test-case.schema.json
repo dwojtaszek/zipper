@@ -156,6 +156,21 @@
             "minimum": 0,
             "description": "Uncompressed payload byte size when knowable."
           },
+          "nameLengthUtf8Bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Raw name byte length (UTF-8 on the wire); the filesystem component limit counts these bytes."
+          },
+          "nameLengthUtf16Units": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Name length in UTF-16 code units (decoded readable-name basis; raw bytes authoritative)."
+          },
+          "nameLengthScalars": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Name length in Unicode scalar values (decoded readable-name basis; raw bytes authoritative)."
+          },
           "localHeaderOffset": {
             "type": "integer",
             "minimum": 0,

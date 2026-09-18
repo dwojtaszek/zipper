@@ -507,6 +507,12 @@ internal static class ArchiveTestCatalog
         ["filename-bidi-override"] = PolicyDefinition("filename-bidi-override", BidiOverrideRecipe),
         ["path-windows-illegal-chars"] = PolicyDefinition("path-windows-illegal-chars", WindowsIllegalCharsRecipe),
         ["zero-width-collision"] = PolicyDefinition("zero-width-collision", ZeroWidthCollisionRecipe),
+        // Ticket #888 emoji ZWJ NAME_MAX boundary: two stored entries whose names
+        // straddle the Linux 255-byte component limit while staying far under the
+        // Windows 255 UTF-16-unit limit. Valid ZIP syntax — classification
+        // policy-sensitive, suite security — so only extraction policy on Linux
+        // hosts, never ZIP validity, is in question.
+        ["path-emoji-zwj-namemax"] = PolicyDefinition("path-emoji-zwj-namemax", EmojiNameMaxRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
@@ -923,6 +929,21 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.PolicyFile("data.txt", "atc-zw-visible"),
         ArchiveTestRecipeEntry.PolicyFile(string.Concat("data", (char)0x200B, ".txt"), "atc-zw-hidden"),
+    ]);
+
+    // Ticket #888 emoji ZWJ NAME_MAX boundary: one family glyph (U+1F468 U+200D
+    // U+1F469 U+200D U+1F467 U+200D U+1F466) is 7 scalars, 11 UTF-16 code units,
+    // and 25 UTF-8 bytes. Ten glyphs plus ".txt" land on 254 bytes (legal on
+    // Linux); eleven glyphs plus ".txt" land on 279 bytes (ENAMETOOLONG on
+    // Linux ext4/XFS/btrfs, fine on Windows NTFS). No path separators, so the
+    // depth-two budget holds; PolicyFile bypasses path validation regardless.
+    private static string EmojiNameMaxName(int glyphs) =>
+        string.Concat(Enumerable.Repeat("\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466", glyphs)) + ".txt";
+
+    private static ArchiveTestRecipe EmojiNameMaxRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile(EmojiNameMaxName(10), "atc-emoji-boundary"),
+        ArchiveTestRecipeEntry.PolicyFile(EmojiNameMaxName(11), "atc-emoji-exceeded"),
     ]);
 
     // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a

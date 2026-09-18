@@ -135,6 +135,9 @@ internal static class ArchiveTestSuiteGenerator
                     PayloadCodec: payloadCodec,
                     ContentSha256: !isDirectory ? recipe.ContentSha256 : null,
                     ContentSize: !isDirectory ? recipe.Content.Length : null,
+                    NameLengthUtf8Bytes: layout.NameHex.Length / 2,
+                    NameLengthUtf16Units: layout.Name.Length,
+                    NameLengthScalars: layout.Name.EnumerateRunes().Count(),
                     LocalHeaderOffset: layout.LocalHeaderOffset,
                     DataOffset: layout.DataOffset,
                     CentralDirectoryOffset: layout.CentralDirectoryOffset);
@@ -592,6 +595,11 @@ internal static class ArchiveTestSuiteGenerator
                 new PolicyExpectationProfile("zero-width-collapsing-consumers", [NoSilentOverwrite, DistinctContentHashes]),
             "case-collision" =>
                 new PolicyExpectationProfile("case-insensitive-filesystems", [NoSilentOverwrite, DistinctContentHashes]),
+            // Emoji ZWJ NAME_MAX boundary (ticket #888): the exceeded member
+            // cannot materialize on Linux (ENAMETOOLONG) while the boundary
+            // member extracts everywhere; evaluated only by named Linux jobs.
+            "path-emoji-zwj-namemax" =>
+                new PolicyExpectationProfile("linux", []),
             "unicode-normalization-collision" =>
                 new PolicyExpectationProfile("normalizing-filesystems", [NoSilentOverwrite, DistinctContentHashes]),
             // Symlink metadata: the type bits and escape target are data; extraction
