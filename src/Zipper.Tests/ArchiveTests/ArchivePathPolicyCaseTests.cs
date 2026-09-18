@@ -608,12 +608,13 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         // Windows-illegal-character matrix, the two #875 entry-type cases, the
         // #884 bidi override case, the #889 zero-width collision case, the two
         // #899 method/data disagreement cases, the #900 high-ratio BZip2
-        // case, and the two #933 split-archive declaration cases: every member
-        // publishes a safe Fixture ID pair.
+        // case, the two #933 split-archive declaration cases, and the #935
+        // mixed one-unsupported-member case: every member publishes a safe
+        // Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(34, securityKeys.Count);
+        Assert.Equal(36, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

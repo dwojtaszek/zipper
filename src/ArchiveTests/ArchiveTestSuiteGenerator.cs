@@ -395,6 +395,26 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Mixed-method one-bad-member cases (ticket #935): the Store and
+            // Deflate siblings stay healthy while one member fails. A corrupt
+            // BZip2 member fails reads everywhere it decodes; readers without
+            // the codec report unsupported instead. A reserved-method member is
+            // cleanly unsupported under every profile. Aggregate integrity can
+            // never report success while a member fails.
+            ArchiveTestMutationKind.MixedMethodsOneCorruptMember =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "one-member-fails"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged, "one-member-fails"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "unsupported-method-rejected"], [PayloadBytesUnchanged, "one-member-fails"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged, "one-member-fails"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "one-member-unsupported"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["unsupported-method-rejected", "unsupported-method-unchecked"], [PayloadBytesUnchanged, "one-member-unsupported"], ["open", ReadEntryOperation], capability: "method-98-mixed"),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["unsupported-method-rejected", "integrity-unchecked"], [PayloadBytesUnchanged, "one-member-unsupported"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [PayloadBytesUnchanged, "one-member-unsupported"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Policy-sensitive: the method code is consistent but unimplemented; the
             // payload bytes stay the stored control bytes (ticket #840).
             ArchiveTestMutationKind.UnsupportedMethod =>

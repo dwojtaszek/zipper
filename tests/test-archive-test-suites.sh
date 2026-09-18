@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=96     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path): every unique Case Key
+ALL_CASES=99     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path, +1 #935 nested budget, +2 #935 mixed): every unique Case Key
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -343,6 +343,37 @@ PYEOF
   LOCATOR_ZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]=="zip64-locator-disk-mismatch"), ""))' "$ALL_OUT" || true)
   if [[ -z "$LOCATOR_ZIP" ]] || [[ ! -f "$LOCATOR_ZIP" ]]; then
     DISPUTE_OK=0
+  fi
+  # Ticket #935: mixed one-bad-member archives must fail as a whole (`t`
+  # rejects) while the healthy Store and Deflate siblings extract by name
+  # with matching hashes — the bad member's bytes are never decoded.
+  if python3 - "$ALL_OUT" "$SEVEN_ZIP" <<'PYEOF' >/dev/null 2>&1; then
+import glob, hashlib, json, os, subprocess, sys, tempfile
+out, seven = sys.argv[1:3]
+for key in ("mixed-methods-one-corrupt-member", "mixed-methods-one-unsupported-member"):
+    jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
+    d = json.load(open(jp))
+    zp = jp[:-5] + ".zip"
+    healthy = [e for e in d["entries"] if e["kind"] == "file" and e["readableName"] in ("a.txt", "b.bin")]
+    if len(healthy) != 2:
+        sys.exit(f"expected healthy siblings for {key}")
+    if subprocess.run([seven, "t", zp], capture_output=True).returncode == 0:
+        sys.exit(f"one-bad-member Archive must not verify as success: {key}")
+    with tempfile.TemporaryDirectory() as td:
+        names = [e["readableName"] for e in healthy]
+        r = subprocess.run([seven, "x", zp, f"-o{td}", "-y", *names], capture_output=True)
+        if r.returncode != 0:
+            sys.exit(f"healthy sibling extraction failed for {key}")
+        for e in healthy:
+            fp = os.path.join(td, e["readableName"])
+            if not os.path.isfile(fp):
+                sys.exit(f"healthy sibling missing for {key}")
+            if hashlib.sha256(open(fp, "rb").read()).hexdigest() != e["contentSha256"]:
+                sys.exit(f"healthy sibling hash mismatch for {key}")
+PYEOF
+    check 0 "7-Zip isolates the bad member while healthy siblings match"
+  else
+    check 1 "7-Zip must isolate the bad member while healthy siblings match"
   fi
   if [[ "$DISPUTE_OK" -eq 1 ]]; then
     check 0 "7-Zip rejected the #933 spanning and count-disagreement fixtures"
