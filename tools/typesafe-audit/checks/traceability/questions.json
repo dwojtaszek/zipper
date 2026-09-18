@@ -1,0 +1,30 @@
+{
+  "questions": {
+    "coverage": {
+      "type": "choice",
+      "instructions": "Judging only the supplied requirement text and the supplied resolved test source: how completely does the mapped test verify the requirement's stated behaviors?",
+      "criteria": {
+        "full": "Every material stated behavior has a direct outcome assertion",
+        "partial": "At least one material behavior is asserted and at least one is not",
+        "none": "The mapping does not meaningfully verify the requirement",
+        "ambiguous": "The requirement's meaning prevents a coverage decision"
+      }
+    },
+    "mocked_only": {
+      "type": "noul",
+      "instructions": "Judging only the supplied resolved test source: does the test verify only mocked or stubbed behavior rather than real outcomes?",
+      "criteria": {
+        "true": "Assertions target mocks/stubs or the test never exercises real behavior",
+        "false": "The test asserts real outcomes of real exercised behavior"
+      }
+    },
+    "execution_only": {
+      "type": "noul",
+      "instructions": "Judging only the supplied resolved test source: is the test assertion-free or does it merely execute code without asserting outcomes?",
+      "criteria": {
+        "true": "No outcome assertions; the test only runs code (line coverage is not behavioral coverage)",
+        "false": "The test asserts outcomes"
+      }
+    }
+  }
+}

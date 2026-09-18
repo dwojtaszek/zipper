@@ -117,6 +117,35 @@ jobs:
               exit 0
             }
 
+      - name: Run semantic traceability audit (advisory, #957)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          # Complements (never replaces) the deterministic strict traceability gate.
+          bash tests/validate-req-traceability.sh --strict
+          # PRs audit changed requirements/mappings/tests; schedule and manual
+          # dispatch run full mode over every active non-exempt requirement.
+          JSON_OUT=results/typesafe-audit/traceability.json
+          MD_OUT=results/typesafe-audit/traceability.md
+          if [ -n "${PR_BASE:-}" ]; then
+            MODE_ARGS=(--base "${PR_BASE}")
+          else
+            MODE_ARGS=(--full)
+          fi
+          python3 tools/typesafe-audit/checks/traceability/run_check.py \
+            --mode live \
+            "${MODE_ARGS[@]}" \
+            --json-out "$JSON_OUT" \
+            --md-out "$MD_OUT" \
+            --summary-out "$GITHUB_STEP_SUMMARY" || {
+              # Advisory: this check never blocks (see run_check.py exit-code contract).
+              echo "### Traceability audit advisory result (exit $?)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+
       - name: Upload audit artifacts
         if: steps.secret.outputs.available == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -127,5 +156,7 @@ jobs:
             results/typesafe-audit/report.md
             results/typesafe-audit/requirements.json
             results/typesafe-audit/requirements.md
+            results/typesafe-audit/traceability.json
+            results/typesafe-audit/traceability.md
           retention-days: 7
           if-no-files-found: ignore
