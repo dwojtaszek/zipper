@@ -78,6 +78,26 @@ Address blocking issues (required). Nitpicks are optional.
 
 Failures block merge — must fix.
 
+## TypeSafe Audit
+
+Advisory side check (issue #955): [`typesafe-audit.yml`](.github/workflows/typesafe-audit.yml) + `tools/typesafe-audit/`. **Never blocks merge** — findings, remote outages, rate limits, and low confidence are reported only.
+
+- **Secret setup:** repository Actions secret `TYPESAFE_API_KEY`. The runner reads it from the process environment only — never `.env`, files, or workflow `vars`. Fork PRs cannot access it and skip with a neutral summary (`pull_request_target` is forbidden).
+- **Model pinning:** `jev-1.13.0` is pinned in `tools/typesafe-audit/config.json`. Model upgrades require a reviewed PR with an evaluation comparison.
+- **Local run (no network):**
+  ```bash
+  mkdir -p /tmp/tsa-fixtures
+  python3 tools/typesafe-audit/record_sample_fixture.py /tmp/tsa-fixtures
+  python3 tools/typesafe-audit/runner.py --mode fixture --fixture-dir /tmp/tsa-fixtures \
+    --files tools/typesafe-audit/questions/files-sample.list \
+    --questions tools/typesafe-audit/questions/example.json \
+    --json-out report.json --md-out report.md
+  ```
+  Exit codes: `0` success/no gated finding, `1` policy finding (only with `--strict`/`blocking`), `2` config/input error, `3` remote service failure.
+- **Failure modes:** remote failure (HTTP 429/529/5xx, network) → exit 3, advisory, retryable; input/config error (bad paths, size limits, missing secret) → exit 2; findings → reported in JSON/Markdown/job summary.
+- **Rollout:** advisory until ≥30 labeled PR/full-audit outcomes meet documented precision/recall and confidence thresholds; blocking switches only in a later reviewed change. Deterministic gates are unaffected.
+- **Ownership:** repository maintainers; the workflow is path-filtered and runs `contents: read` with all third-party actions pinned to full commit SHAs.
+
 ## factory-droid
 
 Bot infra errors — retry, don't block merge.

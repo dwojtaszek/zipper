@@ -83,6 +83,7 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 
 - **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered only on `src/**` changes. Runs `measure.sh` 5×, takes the median, compares to `tests/perf/baselines.json`. **RSS ≤ 1.20× baseline is the hard gate**; `wall_s` is reported but informational (shared-runner timing is noise-dominated). Posts/updates a single PR comment.
 - **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL failures block merge. CodeRabbit blocking issues required, nitpicks optional.
+- **typesafe-audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), **advisory only** (never blocks). Path-filtered on PR (`Requirements.md`, `docs/`, `src/`, `tests/`, `tools/typesafe-audit/`), a weekly full audit (Monday 06:00 UTC), and manual `workflow_dispatch`. Foundation slice: the audited scope is fixed (`tools/typesafe-audit/questions/files-sample.list`); changed/full scoping arrives with follow-up tickets. Runs the Python audit runner in `tools/typesafe-audit/` against the TypeSafe System One endpoint with the `TYPESAFE_API_KEY` repository secret; fork PRs (no secret access) skip with a neutral summary. Uploads JSON/Markdown reports (7-day retention) and writes a job summary. Remote failures are always non-blocking. See [CI.md](../CI.md#typesafe-audit).
 
 ### 4. Build and Test (main) — [`build-and-test.yml`](../.github/workflows/build-and-test.yml)
 
@@ -114,6 +115,7 @@ Trigger: `push` → `main`, and tags `v*`.
 | SonarCloud BLOCKER/MAJOR | external | Yes (manual fetch) |
 | CodeQL | external | Yes |
 | CodeRabbit blocking | external | Yes (nitpicks optional) |
+| TypeSafe audit findings | typesafe-audit | No (advisory; never blocks) |
 
 ## Quick Reference for Agents
 

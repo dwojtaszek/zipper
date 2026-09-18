@@ -1,0 +1,19 @@
+{
+  "req179_example": {
+    "type": "choice",
+    "instructions": "Which follow-up audit category does the described requirement belong to?",
+    "criteria": {
+      "traceability": "Requirement-to-test mapping questions",
+      "consistency": "Requirement wording or cross-reference questions",
+      "none": "No category fits"
+    }
+  },
+  "noul_example": {
+    "type": "noul",
+    "instructions": "Does the described requirement mention a non-zero exit code?",
+    "criteria": {
+      "true": "The requirement text mentions exit codes or failure propagation",
+      "false": "No exit-code language present"
+    }
+  }
+}

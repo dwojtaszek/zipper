@@ -657,6 +657,14 @@ if errorlevel 1 (
 )
 call :print_success "run-tests.bat fatal error behavior meta-test passed."
 
+call :print_info "Running TypeSafe audit foundation tests..."
+call .\tests\test-typesafe-audit.bat
+if errorlevel 1 (
+    echo [ ERROR ] test-typesafe-audit.bat failed.
+    exit /b 1
+)
+call :print_success "TypeSafe audit foundation tests passed."
+
 
 :end_of_tests
 if %FAILED% gtr 0 (

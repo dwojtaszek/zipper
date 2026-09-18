@@ -680,6 +680,13 @@ print_info "Running performance measurement regression tests..."
 bash ./tests/test-perf-measure.sh || print_error "test-perf-measure.sh failed."
 print_success "Performance measurement regression tests passed."
 
+print_info "Running TypeSafe audit foundation tests..."
+if ! bash ./tests/test-typesafe-audit.sh; then
+    print_error "test-typesafe-audit.sh failed."
+    exit 1
+fi
+print_success "TypeSafe audit foundation tests passed."
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then

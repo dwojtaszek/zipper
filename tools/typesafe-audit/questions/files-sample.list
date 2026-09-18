@@ -1,0 +1,3 @@
+# TypeSafe audit input file list (explicit, repo-relative, one path per line).
+# Only these files are read and sent as shared state.
+Requirements.md
