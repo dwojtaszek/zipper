@@ -505,4 +505,45 @@ public class ComparisonTests
             }
         }
     }
+
+    [Fact]
+    public async Task Compare_CommandLineE2E_SummaryPathCollision_FailsWithoutPartialReport()
+    {
+        // REQ-178: unrecoverable comparison errors shall propagate as a non-zero exit
+        // code before a report is written — no lone JSON Comparison Report may remain.
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
+            var reportPath = Path.Combine(tempDir, "report_cli.json");
+            var summaryPath = Path.ChangeExtension(reportPath, ".summary.md");
+            var sentinelPath = Path.Combine(summaryPath, "sentinel.txt");
+            Directory.CreateDirectory(summaryPath);
+            await File.WriteAllTextAsync(sentinelPath, "pre-existing");
+
+            var args = new[]
+            {
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.False(File.Exists(reportPath), "No partial JSON Comparison Report may remain after summary publication failure.");
+            Assert.True(Directory.Exists(summaryPath), "Pre-existing directory must remain untouched.");
+            Assert.True(File.Exists(sentinelPath), "Pre-existing content must remain untouched.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

@@ -112,14 +112,90 @@ public static class ProductionManifestComparer
         // Perform Volume analysis
         VolumeAnalyzer.AnalyzeVolumes(priorRecords, newRecords, result.VolumeAnalysis);
 
-        // Write report
+        // Write report (REQ-178: unrecoverable errors must propagate before a report is written).
+        // Validate both destinations up front, stage both outputs in uniquely named sibling
+        // files, then publish with rollback. This is not a two-file filesystem transaction:
+        // a destination can still change between validation and publication, so the second
+        // publication failure rolls back the first — but only artifacts created by this run.
         var jsonReport = JsonSerializer.Serialize(result, SerializerOptions);
-        await File.WriteAllTextAsync(outputPath, jsonReport).ConfigureAwait(false);
-
-        // Write human-readable summary
         var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
         var summaryMarkdown = ComparisonReportWriter.GenerateMarkdownSummary(result, mode);
-        await File.WriteAllTextAsync(summaryPath, summaryMarkdown).ConfigureAwait(false);
+
+        foreach (var destination in new[] { outputPath, summaryPath })
+        {
+            if (Directory.Exists(destination))
+            {
+                throw new InvalidOperationException($"Comparison report destination is a directory: {destination}");
+            }
+        }
+
+        var outputStagingPath = $"{outputPath}.{Guid.NewGuid():N}.staging";
+        var summaryStagingPath = $"{summaryPath}.{Guid.NewGuid():N}.staging";
+        var outputBackupPath = $"{outputPath}.{Guid.NewGuid():N}.backup";
+        try
+        {
+            await File.WriteAllTextAsync(outputStagingPath, jsonReport).ConfigureAwait(false);
+            await File.WriteAllTextAsync(summaryStagingPath, summaryMarkdown).ConfigureAwait(false);
+
+            var outputPreExisted = File.Exists(outputPath);
+            if (outputPreExisted)
+            {
+                // Preserve the user's pre-existing report so a failed summary publication
+                // can restore it instead of leaving fresh JSON paired with a stale summary.
+                File.Move(outputPath, outputBackupPath);
+            }
+
+            try
+            {
+                File.Move(outputStagingPath, outputPath, overwrite: true);
+                File.Move(summaryStagingPath, summaryPath, overwrite: true);
+            }
+            catch (Exception publishEx)
+            {
+                try
+                {
+                    if (outputPreExisted)
+                    {
+                        File.Move(outputBackupPath, outputPath, overwrite: true);
+                    }
+                    else
+                    {
+                        File.Delete(outputPath);
+                    }
+                }
+                catch (Exception rollbackEx)
+                {
+                    throw new AggregateException(
+                        $"Comparison report rollback failed after a publication error; partial report may remain at '{outputPath}'.",
+                        publishEx, rollbackEx);
+                }
+                throw;
+            }
+        }
+        finally
+        {
+            // Cleanup removes staging/current-run artifacts only, never pre-existing user content.
+            try
+            {
+                if (File.Exists(outputStagingPath))
+                {
+                    File.Delete(outputStagingPath);
+                }
+                if (File.Exists(summaryStagingPath))
+                {
+                    File.Delete(summaryStagingPath);
+                }
+                if (File.Exists(outputBackupPath))
+                {
+                    File.Delete(outputBackupPath);
+                }
+            }
+            catch
+            {
+                // Best effort: a leftover staging/backup artifact is preferable to
+                // masking a successful publication or the original failure.
+            }
+        }
 
         // Print human-readable summary to console
         Console.WriteLine(ComparisonReportWriter.GenerateConsoleSummary(result, mode));
