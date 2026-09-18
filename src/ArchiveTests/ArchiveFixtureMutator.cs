@@ -78,8 +78,163 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, 8, "Deflate"),
             ArchiveTestMutationKind.MethodDataBzip2AsStored => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataBzip2AsStored, 12, "BZip2"),
             ArchiveTestMutationKind.UnsupportedMethodDeflate64 => DeclareUnsupportedMethodDeflate64(control, before),
+            ArchiveTestMutationKind.MultidiskEocdDeclared => DeclareMultidiskEocd(control, before),
+            ArchiveTestMutationKind.MultidiskCentralEntryDeclared => DeclareMultidiskCentralEntry(control, before),
+            ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
+            ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => DeclareZip64EocdEntryCountMismatch(control, before),
+            ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
+    }
+
+    /// <summary>
+    /// Declares a multi-disk/spanned Archive in the EOCD (ticket #933): the disk
+    /// number and the central-directory start disk both become 1 while the
+    /// physical Archive is one flat file. Readers that honor spanning refuse;
+    /// readers that ignore spanning read on.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareMultidiskEocd(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort SpannedDisk = 1;
+        var eocd = control.Layout.EocdOffset;
+        var diskOffset = eocd + 4;
+        var code = ArchiveTestMutationKind.MultidiskEocdDeclared.ToCaseKey();
+
+        // One 4-byte record covers both adjacent disk fields: parallel records
+        // would overlap their hex windows and break control reconstruction.
+        return Patch(ArchiveTestMutationKind.MultidiskEocdDeclared, before,
+        [
+            new MutationSpec(
+                code, "eocd", diskOffset,
+                "Rewrites the EOCD disk number and central-directory start disk from 0 to 1, declaring this Archive a later disk of a spanned set while the file is a complete single-disk Archive.",
+                null, 4, 4, DeclaredValue: "disk-number=1 central-directory-disk=1"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)diskOffset, 2), SpannedDisk);
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)diskOffset + 2, 2), SpannedDisk);
+        });
+    }
+
+    /// <summary>
+    /// Declares a multi-disk Archive in entry 0's central header (ticket #933):
+    /// the entry's disk-number-start becomes 1 while the EOCD still describes a
+    /// single disk. The EOCD/central disagreement isolates the parser decision
+    /// from the EOCD-level declaration above.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareMultidiskCentralEntry(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort SpannedDisk = 1;
+        var entry = control.Layout.Entries[0];
+        var diskOffset = entry.CentralDirectoryOffset + 34;
+        var code = ArchiveTestMutationKind.MultidiskCentralEntryDeclared.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.MultidiskCentralEntryDeclared, before,
+        [
+            new MutationSpec(
+                code, "central-header", diskOffset,
+                "Rewrites entry 0's central-header disk-number-start from 0 to 1, placing the entry on a second disk the EOCD never declares.",
+                entry.Ordinal, 2, 2, DeclaredValue: "entry-disk-number-start=1"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)diskOffset, 2), SpannedDisk);
+        });
+    }
+
+    /// <summary>
+    /// Makes the EOCD entry counts disagree (ticket #933): the this-disk count
+    /// becomes 1 while the total stays 2 and the central directory physically
+    /// holds 2 entries. One field, one parser decision.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareEocdEntryCountMismatch(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var eocd = control.Layout.EocdOffset;
+        var thisDiskOffset = eocd + 8;
+        var totalOffset = eocd + 10;
+        var total = BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)totalOffset, 2));
+        var code = ArchiveTestMutationKind.EocdEntryCountMismatch.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.EocdEntryCountMismatch, before,
+        [
+            new MutationSpec(
+                code, "eocd", thisDiskOffset,
+                $"Rewrites the EOCD this-disk entry count from {total} to {total - 1} while the total stays {total} and the central directory holds {total} entries.",
+                null, 2, 2, DeclaredValue: $"this-disk-entries={total - 1} total-entries={total}"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)thisDiskOffset, 2), (ushort)(total - 1));
+        });
+    }
+
+    /// <summary>
+    /// Locates the control's Zip64 EOCD through its locator (immediately before
+    /// the EOCD in owned Archives, never a signature search), verifying both
+    /// signatures on the before-mutation basis.
+    /// </summary>
+    private static long Zip64EocdOffset(ArchiveFixtureArtifact control, string caseKey)
+    {
+        var locatorOffset = control.Layout.EocdOffset - 20;
+        if (BinaryPrimitives.ReadUInt32LittleEndian(control.ArchiveBytes.AsSpan((int)locatorOffset, 4)) != ArchiveFixtureLayout.Zip64LocatorSignature)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': expected the Zip64 EOCD locator signature at offset {locatorOffset}.");
+        }
+
+        var zip64OffsetLong = (long)BinaryPrimitives.ReadUInt64LittleEndian(control.ArchiveBytes.AsSpan((int)locatorOffset + 8, 8));
+        if (zip64OffsetLong > int.MaxValue
+            || BinaryPrimitives.ReadUInt32LittleEndian(control.ArchiveBytes.AsSpan((int)zip64OffsetLong, 4)) != ArchiveFixtureLayout.Zip64EocdSignature)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': expected the Zip64 EOCD signature at offset {zip64OffsetLong}.");
+        }
+
+        return zip64OffsetLong;
+    }
+
+    /// <summary>
+    /// Makes the Zip64 EOCD entry counts disagree (ticket #933): the 8-byte
+    /// total becomes 2 while the this-disk count stays 1 and the central
+    /// directory physically holds 1 entry.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareZip64EocdEntryCountMismatch(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ulong DeclaredTotal = 2;
+        var code = ArchiveTestMutationKind.Zip64EocdEntryCountMismatch.ToCaseKey();
+        var totalOffset = Zip64EocdOffset(control, code) + 32;
+
+        return Patch(ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, before,
+        [
+            new MutationSpec(
+                code, "zip64-eocd", totalOffset,
+                "Rewrites the Zip64 EOCD 8-byte total entry count from 1 to 2 while the this-disk count stays 1 and the central directory holds 1 entry.",
+                null, 8, 8, DeclaredValue: "zip64-total-entries=2"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)totalOffset, 8), DeclaredTotal);
+        });
+    }
+
+    /// <summary>
+    /// Makes the Zip64 locator declare more disks than exist (ticket #933): the
+    /// total-disks field becomes 2 while every disk reference stays 0 in a
+    /// single flat file.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareZip64LocatorDiskMismatch(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const uint DeclaredDisks = 2;
+        var code = ArchiveTestMutationKind.Zip64LocatorDiskMismatch.ToCaseKey();
+        _ = Zip64EocdOffset(control, code);
+        var totalDisksOffset = control.Layout.EocdOffset - 20 + 16;
+
+        return Patch(ArchiveTestMutationKind.Zip64LocatorDiskMismatch, before,
+        [
+            new MutationSpec(
+                code, "zip64-locator", totalDisksOffset,
+                "Rewrites the Zip64 locator total-disks field from 1 to 2 while every disk reference stays 0 in a single flat file.",
+                null, 4, 4, DeclaredValue: "zip64-total-disks=2"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)totalDisksOffset, 4), DeclaredDisks);
+        });
     }
 
     /// <summary>
@@ -1040,6 +1195,11 @@ internal enum ArchiveTestMutationKind
     MethodCrossBzip2Stored,
     MethodDataDeflateAsBzip2,
     MethodDataBzip2AsStored,
+    MultidiskEocdDeclared,
+    MultidiskCentralEntryDeclared,
+    EocdEntryCountMismatch,
+    Zip64EocdEntryCountMismatch,
+    Zip64LocatorDiskMismatch,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1082,6 +1242,11 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Bzip2WrongCrc => "bzip2-wrong-crc",
         ArchiveTestMutationKind.Deflate64CorruptStream => "deflate64-corrupt-stream",
         ArchiveTestMutationKind.Deflate64TruncatedStream => "deflate64-truncated-stream",
+        ArchiveTestMutationKind.MultidiskEocdDeclared => "multidisk-eocd-declared",
+        ArchiveTestMutationKind.MultidiskCentralEntryDeclared => "multidisk-central-entry-declared",
+        ArchiveTestMutationKind.EocdEntryCountMismatch => "eocd-entry-count-mismatch",
+        ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => "zip64-eocd-entry-count-mismatch",
+        ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

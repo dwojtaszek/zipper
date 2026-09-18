@@ -319,6 +319,23 @@ internal static class ArchiveTestCatalog
         ["name-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.NameLocalCentralMismatch),
         ["method-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.MethodLocalCentralMismatch),
         ["size-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.SizeLocalCentralMismatch),
+        // Split-archive declarations and directory-count disagreements (ticket
+        // #933): each case mutates declarations only over a tiny physical
+        // Archive. Spanning declarations are unsupported (policy-sensitive,
+        // housed like unsupported-method); count disagreements are malformed.
+        ["multidisk-eocd-declared"] = MutatedDefinition(
+            ArchiveTestMutationKind.MultidiskEocdDeclared,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["multidisk-central-entry-declared"] = MutatedDefinition(
+            ArchiveTestMutationKind.MultidiskCentralEntryDeclared,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
+        ["eocd-entry-count-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.EocdEntryCountMismatch),
+        ["zip64-eocd-entry-count-mismatch"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, controlCaseKey: Zip64ControlCaseKey),
+        ["zip64-locator-disk-mismatch"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey),
         ["offset-outside-archive"] = MutatedDefinition(ArchiveTestMutationKind.OffsetOutsideArchive),
         ["offset-into-payload"] = MutatedDefinition(
             ArchiveTestMutationKind.OffsetIntoPayload, controlCaseKey: SignaturePayloadControlCaseKey),

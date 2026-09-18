@@ -348,6 +348,30 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Split-archive declarations (ticket #933): spanning is unsupported —
+            // readers that honor spanning refuse, readers that ignore spanning
+            // read on. Policy-sensitive like unsupported-method, distinguished
+            // from malformed count disagreement by classification and invariant.
+            ArchiveTestMutationKind.MultidiskEocdDeclared
+                or ArchiveTestMutationKind.MultidiskCentralEntryDeclared =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "spanning-declared-single-file"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged, "spanning-declared-single-file"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "spanning-declared-single-file"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "spanning-declared-single-file"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            // Directory-count disagreements (ticket #933): malformed declarations
+            // over intact bytes. One field disagrees per case; every observed
+            // reader variance is recorded.
+            ArchiveTestMutationKind.EocdEntryCountMismatch
+                or ArchiveTestMutationKind.Zip64EocdEntryCountMismatch
+                or ArchiveTestMutationKind.Zip64LocatorDiskMismatch =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Policy-sensitive: the method code is consistent but unimplemented; the
             // payload bytes stay the stored control bytes (ticket #840).
             ArchiveTestMutationKind.UnsupportedMethod =>

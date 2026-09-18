@@ -597,7 +597,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     // ---- Publication: safe basenames only, nothing materialized outside staging ----
 
     [Fact]
-    public async Task GenerateAsync_SecuritySuite_PublishesAllThirtyTwoMembersWithSafeBasenames()
+    public async Task GenerateAsync_SecuritySuite_PublishesAllMembersWithSafeBasenames()
     {
         // The full security suite per #834 (policy recipes plus the
         // unsupported-feature and bounded resource cases) plus the #869 parser
@@ -607,12 +607,13 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         // unsupported-method twin, the consolidated #885/#886/#879
         // Windows-illegal-character matrix, the two #875 entry-type cases, the
         // #884 bidi override case, the #889 zero-width collision case, the two
-        // #899 method/data disagreement cases, and the #900 high-ratio BZip2
-        // case: every member publishes a safe Fixture ID pair.
+        // #899 method/data disagreement cases, the #900 high-ratio BZip2
+        // case, and the two #933 split-archive declaration cases: every member
+        // publishes a safe Fixture ID pair.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(32, securityKeys.Count);
+        Assert.Equal(34, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

@@ -153,6 +153,85 @@ public class ArchiveFixtureMutationTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_MultidiskEocdDeclared_RecordsBothDiskFields()
+    {
+        var control = BuildControl();
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.MultidiskEocdDeclared, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("multidisk-eocd-declared", mutation.Code);
+        Assert.Equal("eocd", mutation.Structure);
+        Assert.Equal(control.Layout.EocdOffset + 4, mutation.Offset);
+        Assert.Equal((ushort)1, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset));
+        Assert.Equal((ushort)1, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset + 2));
+        Assert.Equal((ushort)0, BitConverter.ToUInt16(control.ArchiveBytes, (int)mutation.Offset));
+        Assert.Contains("disk-number=1", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains("central-directory-disk=1", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_MultidiskCentralEntryDeclared_RecordsEntryDiskField()
+    {
+        var control = BuildControl();
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.MultidiskCentralEntryDeclared, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("multidisk-central-entry-declared", mutation.Code);
+        Assert.Equal("central-header", mutation.Structure);
+        Assert.Equal(control.Layout.Entries[0].CentralDirectoryOffset + 34, mutation.Offset);
+        Assert.Equal((ushort)1, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset));
+    }
+
+    [Fact]
+    public void Apply_EocdEntryCountMismatch_RecordsThisDiskCount()
+    {
+        var control = BuildControl();
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.EocdEntryCountMismatch, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("eocd-entry-count-mismatch", mutation.Code);
+        Assert.Equal("eocd", mutation.Structure);
+        Assert.Equal(control.Layout.EocdOffset + 8, mutation.Offset);
+        Assert.Equal((ushort)1, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset));
+        Assert.Equal((ushort)2, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset + 2));
+    }
+
+    [Fact]
+    public void Apply_Zip64EocdEntryCountMismatch_RecordsTotalEntries()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-zip64-small", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("zip64-eocd-entry-count-mismatch", mutation.Code);
+        Assert.Equal("zip64-eocd", mutation.Structure);
+        var locatorOffset = control.Layout.EocdOffset - 20;
+        var zip64Offset = BitConverter.ToUInt32(control.ArchiveBytes, (int)locatorOffset + 8);
+        Assert.Equal(zip64Offset + 32, (uint)mutation.Offset);
+        Assert.Equal(2UL, BitConverter.ToUInt64(mutated.ArchiveBytes, (int)mutation.Offset));
+        Assert.Equal(1UL, BitConverter.ToUInt64(mutated.ArchiveBytes, (int)mutation.Offset - 8));
+    }
+
+    [Fact]
+    public void Apply_Zip64LocatorDiskMismatch_RecordsTotalDisks()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-zip64-small", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Zip64LocatorDiskMismatch, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("zip64-locator-disk-mismatch", mutation.Code);
+        Assert.Equal("zip64-locator", mutation.Structure);
+        var locatorOffset = control.Layout.EocdOffset - 20;
+        Assert.Equal(locatorOffset + 16, mutation.Offset);
+        Assert.Equal(2U, BitConverter.ToUInt32(mutated.ArchiveBytes, (int)mutation.Offset));
+    }
+
+    [Fact]
     public void Build_MutatedCases_AreDeterministicPerCaseAndSeed()
     {
         var first = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("truncate-eocd"), 42, CancellationToken.None);

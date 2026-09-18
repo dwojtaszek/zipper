@@ -15,7 +15,7 @@ set PASSED=0
 set FAILED=0
 set SMOKE_CASES=5
 set /a EXPECTED_FILES=%SMOKE_CASES%*2
-set ALL_CASES=81
+set ALL_CASES=86
 
 REM Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -353,6 +353,34 @@ if not defined SEVEN_ZIP (
         call :pass "7-Zip rejected all #900 coded-corruption fixtures"
     ) else (
         call :fail "7-Zip must reject all #900 coded-corruption fixtures"
+    )
+    REM Ticket #933: spanning declarations and count disagreements are tested
+    REM with `t` (never extracted). Four are rejected by 7-Zip; the locator
+    REM total-disks declaration is ignored by 7-Zip, so only its presence is
+    REM asserted, not a rejection.
+    set "DISPUTE_OK=1"
+    for %%K in (multidisk-eocd-declared multidisk-central-entry-declared eocd-entry-count-mismatch zip64-eocd-entry-count-mismatch) do (
+        set "D_ZIP="
+        for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']==sys.argv[2]), ''))" "%ALL_OUT%" "%%K" 2^>nul') do set "D_ZIP=%%P"
+        if not defined D_ZIP (
+            set "DISPUTE_OK=0"
+        ) else (
+            if not exist "!D_ZIP!" (
+                set "DISPUTE_OK=0"
+            ) else (
+                "!SEVEN_ZIP!" t "!D_ZIP!" >nul 2>&1
+                if not errorlevel 1 set "DISPUTE_OK=0"
+            )
+        )
+    )
+    set "LOC_ZIP="
+    for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']=='zip64-locator-disk-mismatch'), ''))" "%ALL_OUT%" 2^>nul') do set "LOC_ZIP=%%P"
+    if not defined LOC_ZIP set "DISPUTE_OK=0"
+    if defined LOC_ZIP if not exist "!LOC_ZIP!" set "DISPUTE_OK=0"
+    if !DISPUTE_OK! EQU 1 (
+        call :pass "7-Zip rejected the #933 spanning and count-disagreement fixtures"
+    ) else (
+        call :fail "7-Zip must reject the #933 spanning and count-disagreement fixtures"
     )
 )
 
