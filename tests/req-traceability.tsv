@@ -162,6 +162,9 @@ REQ-176	unit	ComparisonTests.Compare_CommandLineE2E_VerifiesSuccessfully	--compa
 REQ-177	unit	ComparisonModuleTests.TryBuild_ValidMode_ReturnsRequest	--comparison-mode replacement|supplemental|reproduction
 REQ-178	unit	ComparisonModuleTests.TryBuild_CompareManifests_WithoutComparisonOutput_ReturnsFalse	--comparison-output path
 REQ-179	unit	ComparisonModuleTests.TryBuild_ValidTrio_DoesNotTouchOtherModules	Comparison short-circuits type/count/output-path validation
+REQ-179	unit	CliModuleSetTests.Parse_WithComparisonTrigger_IgnoresInvalidGenerationValues	Comparison parse path skips generation value validation
+REQ-179	e2e	test-production-sets.sh Test Case 10b	Comparison ignores invalid --count/--rolling-count/--supplemental-gap-policy, order-independent
+REQ-179	e2e	ComparisonTests.Compare_CommandLineE2E_InvalidGenerationValue_IsIgnoredAndComparisonSucceeds	Program-level comparison dispatch before generation validation
 REQ-180	e2e	test-production-sets.sh	Comma list splitting/trimming cardinality
 REQ-181	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_IncludesCollectionMetadataColumns	--with-collection-metadata five columns
 REQ-182	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues	Synthetic Collection Metadata values

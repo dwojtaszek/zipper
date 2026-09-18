@@ -233,4 +233,70 @@ public class CliModuleSetTests
 
         Assert.All(owners, pair => Assert.Equal(1, pair.Value));
     }
+
+    // REQ-179: with --compare-production-manifests present, generation/Production
+    // arguments are syntactically consumed but never value-validated.
+    [Fact]
+    public void Parse_WithComparisonTrigger_IgnoresInvalidGenerationValues()
+    {
+        var modules = CliModules.Create();
+        var ok = modules.Parse(new[]
+        {
+            "--count", "not-a-number", "--folders", "notanumber", "--seed", "notanumber",
+            "--compare-production-manifests", "a.json,b.json",
+            "--comparison-mode", "replacement",
+            "--comparison-output", "report.json",
+        });
+
+        Assert.True(ok);
+        Assert.True(modules.Comparison.HasComparisonRequest);
+    }
+
+    [Fact]
+    public void Parse_WithComparisonTrigger_DoesNotConsumeFollowingFlagAsIgnoredValue()
+    {
+        var modules = CliModules.Create();
+        var ok = modules.Parse(new[]
+        {
+            "--compare-production-manifests", "a.json,b.json",
+            "--count", "--comparison-mode", "replacement",
+            "--comparison-output", "report.json",
+        });
+
+        Assert.True(ok);
+        Assert.True(modules.Comparison.HasComparisonRequest);
+    }
+
+    [Fact]
+    public void Parse_WithComparisonTrigger_UnknownFlagStillFails()
+    {
+        Assert.False(CliModules.Create().Parse(new[]
+        {
+            "--compare-production-manifests", "a.json,b.json",
+            "--comparison-mode", "replacement",
+            "--comparison-output", "report.json",
+            "--bogus-flag",
+        }));
+    }
+
+    [Fact]
+    public void Parse_WithComparisonTrigger_ArchiveTestFlagsStayStrict()
+    {
+        Assert.False(CliModules.Create().Parse(new[]
+        {
+            "--compare-production-manifests", "a.json,b.json",
+            "--comparison-mode", "replacement",
+            "--comparison-output", "report.json",
+            "--archive-test-suite",
+        }));
+    }
+
+    [Fact]
+    public void Parse_WithoutComparisonTrigger_StillValidatesAllValues()
+    {
+        Assert.False(CliModules.Create().Parse(new[]
+        {
+            "--type", "pdf", "--count", "not-a-number", "--output-path", Directory.GetCurrentDirectory(),
+        }));
+    }
 }

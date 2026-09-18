@@ -425,6 +425,84 @@ if exist "%BAD_REPORT%" (
 echo [ SUCCESS ] Test Case 10: Production Manifest Comparison invalid mode fails early passed
 
 
+:: --- Test Case 10b: REQ-179 — comparison ignores generation/Production args ---
+
+echo [ INFO ] Test Case 10b: Comparison short-circuits generation/Production argument validation
+
+set REQ179_REPORT=%TEST_OUTPUT_DIR%\test10b_report.json
+if exist "%REQ179_REPORT%" del /q "%REQ179_REPORT%"
+
+:: Invalid generation/Production values must not be evaluated in comparison mode.
+%ZIPPER_CMD% ^
+  --count not-a-number ^
+  --rolling-count not-a-number ^
+  --supplemental-gap-policy bogus-policy ^
+  --compare-production-manifests "%PRIOR_MANIFEST%,%SUPP_MANIFEST%" ^
+  --comparison-mode supplemental ^
+  --comparison-output "%REQ179_REPORT%"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 10b: Comparison with ignored invalid generation args failed
+  exit /b 1
+)
+
+if not exist "%REQ179_REPORT%" (
+  echo [ ERROR ] Test 10b: Comparison report was not written to %REQ179_REPORT%
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 10b (ignored invalid generation args): passed
+
+set REQ179_ORDER_REPORT=%TEST_OUTPUT_DIR%\test10b_order_report.json
+if exist "%REQ179_ORDER_REPORT%" del /q "%REQ179_ORDER_REPORT%"
+
+%ZIPPER_CMD% ^
+  --compare-production-manifests "%PRIOR_MANIFEST%,%SUPP_MANIFEST%" ^
+  --count not-a-number ^
+  --type pdf ^
+  --output-path "%TEST_OUTPUT_DIR%\test10b_never_generated" ^
+  --comparison-mode replacement ^
+  --comparison-output "%REQ179_ORDER_REPORT%"
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 10b: Order-independent comparison failed
+  exit /b 1
+)
+
+if not exist "%REQ179_ORDER_REPORT%" (
+  echo [ ERROR ] Test 10b: Order-independent comparison report was not written
+  exit /b 1
+)
+
+if exist "%TEST_OUTPUT_DIR%\test10b_never_generated" (
+  echo [ ERROR ] Test 10b: Comparison must not generate output
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 10b (flag order independence): passed
+
+set REQ179_BAD_MODE_REPORT=%TEST_OUTPUT_DIR%\test10b_bad_mode.json
+if exist "%REQ179_BAD_MODE_REPORT%" del /q "%REQ179_BAD_MODE_REPORT%"
+
+%ZIPPER_CMD% ^
+  --count not-a-number ^
+  --compare-production-manifests "%PRIOR_MANIFEST%,%SUPP_MANIFEST%" ^
+  --comparison-mode swap ^
+  --comparison-output "%REQ179_BAD_MODE_REPORT%" >nul 2>&1
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 10b: Invalid comparison mode must still fail when generation args are ignored.
+  exit /b 1
+)
+
+if exist "%REQ179_BAD_MODE_REPORT%" (
+  echo [ ERROR ] Test 10b: Report was written despite invalid --comparison-mode.
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 10b (comparison validation stays strict): passed
+
+
 :: --- Test Case 11: Source-driven production set with source path modes ---
 
 echo [ INFO ] Test Case 11: Source-driven production set with source path modes

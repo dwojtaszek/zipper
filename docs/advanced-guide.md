@@ -408,7 +408,7 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--supplemental-production` | Requires `--production-set` and `--prior-manifest` |
 | `--prior-manifest`, `--supplemental-gap-policy` | Require `--supplemental-production` |
 | `--rolling-count`, `--rolling-bates-mode`, `--production-id` | Require `--production-set` |
-| `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation. |
+| `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation (REQ-179): other registered generation/Production arguments are consumed but their values are never parsed or validated — invalid values (e.g. `--count not-a-number`) neither fail the run nor have any effect. Unknown flags still fail, and the three comparison flags remain strictly validated. |
 | `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
 | `--archive-test-suite` | Exclusive workflow: may only combine with `--archive-test-cases`, `--output-path` (required, new directory), and `--seed` (defaults to 42). Every other flag — including `--benchmark` and `--chaos-list` — is rejected, even at its default value. See [Archive Test Suites](archive-test-suites.md) and ADR-0008. |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |

@@ -26,6 +26,8 @@ public sealed class CliModuleSet
     /// The flags successfully applied by the last <see cref="Parse"/> (lowercase,
     /// "--"-prefixed). Presence-based on purpose: a flag explicitly set to its default
     /// value still counts as consumed, which the closed Archive Test flag set relies on.
+    /// In comparison mode (REQ-179), ignored generation flags are recorded here even
+    /// though their <c>TryApply</c> never ran.
     /// </summary>
     public IReadOnlyCollection<string> ConsumedFlags => _consumedFlags;
 
@@ -38,6 +40,15 @@ public sealed class CliModuleSet
     {
         ArgumentNullException.ThrowIfNull(args);
         _consumedFlags.Clear();
+
+        // REQ-179: Production Manifest Comparison short-circuits before generation and
+        // Production Set argument validation. When the trigger flag is present (anywhere
+        // on the command line), comparison and Archive Test flags parse strictly while
+        // every other registered flag is syntactically consumed — its value token is
+        // swallowed but TryApply is never called, so no value parser or module validation
+        // runs. Unknown flags still fail, and missing/invalid values on the comparison
+        // flags still fail (REQ-176/177/178).
+        var comparisonRequested = args.Any(a => string.Equals(a, "--compare-production-manifests", StringComparison.OrdinalIgnoreCase));
 
         var modules = All;
         int i = 0;
@@ -52,18 +63,28 @@ public sealed class CliModuleSet
                 return false;
             }
 
+            var strict = !comparisonRequested || module is ComparisonModule or ArchiveTestModule;
+
             string? value = null;
             if (module.TakesValue(arg))
             {
                 if (!TryGetValue(args, i, out value))
                 {
-                    Console.Error.WriteLine($"Error: {arg} requires a value.");
-                    return false;
+                    if (strict)
+                    {
+                        Console.Error.WriteLine($"Error: {arg} requires a value.");
+                        return false;
+                    }
+                    // Lenient: consume the flag without a value token (TryApply is skipped
+                    // below, so the unused `value` stays null).
                 }
-                i++;
+                else
+                {
+                    i++;
+                }
             }
 
-            if (!module.TryApply(arg, value))
+            if (strict && !module.TryApply(arg, value))
             {
                 return false;
             }
