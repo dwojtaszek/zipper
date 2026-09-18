@@ -1,0 +1,91 @@
+# TypeSafe audit side check (#955 foundation slice).
+# Advisory only: findings, outages, and rate limits never block merge and never
+# replace deterministic build/format/test/coverage/security gates.
+name: typesafe-audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "Requirements.md"
+      - "docs/**"
+      - "src/**"
+      - "tests/**"
+      - "tools/typesafe-audit/**"
+      - ".github/workflows/typesafe-audit.yml"
+  schedule:
+    # Weekly full audit, Mondays 06:00 UTC.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    # No mode input yet: the foundation slice audits the fixed sample scope.
+    # Follow-up tickets add changed/full scoping and real question definitions.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typesafe-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check secret availability (fork PRs skip neutrally)
+        id: secret
+        env:
+          HAS_KEY: ${{ secrets.TYPESAFE_API_KEY != '' }}
+        run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Neutral skip summary
+        if: steps.secret.outputs.available != 'true'
+        run: |
+          {
+            echo "## TypeSafe audit skipped"
+            echo ""
+            echo "TYPESAFE_API_KEY is not available in this context"
+            echo "(fork pull requests never receive repository secrets)."
+            echo "No audit was executed and nothing was uploaded."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run TypeSafe audit (advisory)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          # Foundation slice: audit the fixed sample scope with the example question
+          # definition. Follow-up tickets add real judgments and changed-file scoping.
+          python3 tools/typesafe-audit/runner.py \
+            --mode live \
+            --files tools/typesafe-audit/questions/files-sample.list \
+            --questions tools/typesafe-audit/questions/example.json \
+            --json-out results/typesafe-audit/report.json \
+            --md-out results/typesafe-audit/report.md \
+            --summary-out "$GITHUB_STEP_SUMMARY" || {
+              code=$?
+              # Advisory: remote failures (3) and input errors (2) never block.
+              if [ "$code" -eq 1 ]; then
+                echo "### TypeSafe audit findings (advisory)" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              echo "### TypeSafe audit unavailable (exit $code; advisory)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+
+      - name: Upload audit artifacts
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typesafe-audit-report
+          path: |
+            results/typesafe-audit/report.json
+            results/typesafe-audit/report.md
+          retention-days: 7
+          if-no-files-found: ignore

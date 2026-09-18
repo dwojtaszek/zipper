@@ -1,0 +1,11 @@
+{
+  "model": "jev-1.13.0",
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "runner_version": "1.0.0",
+  "max_file_bytes": 262144,
+  "max_total_bytes": 1048576,
+  "max_output_tokens": 4096,
+  "timeout_seconds": 60,
+  "blocking": false,
+  "confidence_threshold": 0.7
+}
