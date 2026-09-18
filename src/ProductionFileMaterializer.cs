@@ -24,11 +24,6 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
         return File.WriteAllTextAsync(path, text, encoding, cancellationToken);
     }
 
-    public Task<Stream> OpenWriteStreamAsync(string path, CancellationToken cancellationToken = default)
-    {
-        return Task.FromResult<Stream>(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true));
-    }
-
     public Stream OpenWriteStream(string path)
     {
         return new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);

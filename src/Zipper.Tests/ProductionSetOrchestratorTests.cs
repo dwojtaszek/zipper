@@ -279,11 +279,6 @@ public class ProductionSetOrchestratorTests
             return new FakeStream();
         }
 
-        public Task<Stream> OpenWriteStreamAsync(string path, CancellationToken cancellationToken = default)
-        {
-            return Task.FromResult<Stream>(new FakeStream());
-        }
-
         public void AddFileData(FileData data)
         {
             this.FileDataItems.Add(data);
