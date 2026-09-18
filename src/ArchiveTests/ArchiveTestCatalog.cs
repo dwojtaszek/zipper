@@ -137,6 +137,11 @@ internal enum ArchiveControlConstruction
     /// <summary>Serializes the same Zip64 data-descriptor Archive without the
     /// descriptor signature (ticket #934).</summary>
     Zip64DescriptorNoSignature,
+
+    /// <summary>Assembles the cumulative nested-budget Archive from the recipe's
+    /// declared inner expansions (ticket #935): inner Archives with deflated
+    /// zero content plus a pad sibling, with checked recursive accounting.</summary>
+    NestedCumulativeBudget,
 }
 
 /// <summary>
@@ -436,6 +441,17 @@ internal static class ArchiveTestCatalog
             "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: MixedMethodsRecipe),
+        // Ticket #935 one-bad-member cases over the mixed control: the Store
+        // and Deflate siblings stay healthy while one member fails. Corruption
+        // is malformed; a cleanly unsupported member is policy-sensitive,
+        // housed like unsupported-method.
+        ["mixed-methods-one-corrupt-member"] = MutatedDefinition(
+            ArchiveTestMutationKind.MixedMethodsOneCorruptMember, controlCaseKey: "valid-mixed-methods"),
+        ["mixed-methods-one-unsupported-member"] = MutatedDefinition(
+            ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember,
+            controlCaseKey: "valid-mixed-methods",
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["deflate-invalid-btype"] = MutatedDefinition(
             ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
         ["deflate-corrupt-huffman"] = MutatedDefinition(
@@ -509,6 +525,21 @@ internal static class ArchiveTestCatalog
             "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: NestedArchiveControlRecipe),
+        // Ticket #935 cumulative-budget boundary: two inner Archives with
+        // deflated zero content plus a pad sibling. The pad Length is an upper
+        // bound; the builder computes the exact pad landing the recursive
+        // expansion (outer content plus every nested expansion) on the 32 MiB
+        // budget. Seed-independent by construction.
+        ["nested-archives-cumulative-budget-boundary"] = new(
+            "nested-archives-cumulative-budget-boundary", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite, SecuritySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("inner-a.zip", 15728640, "stored"),
+                ArchiveTestRecipeEntry.File("inner-b.zip", 15728640, "stored"),
+                ArchiveTestRecipeEntry.File("pad.bin", 2097152, "stored"),
+            ]),
+            Construction: ArchiveControlConstruction.NestedCumulativeBudget),
         ["many-small-entries"] = new(
             "many-small-entries", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
@@ -584,6 +615,7 @@ internal static class ArchiveTestCatalog
         "valid-descriptor-signature" => DescriptorControlRecipe,
         "valid-unicode-path" => SafeControlRecipe,
         "valid-cp437-name" => Cp437NameControlRecipe,
+        "valid-mixed-methods" => MixedMethodsRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
     };
 

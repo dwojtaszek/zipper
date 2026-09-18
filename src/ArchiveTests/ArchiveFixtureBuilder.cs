@@ -197,6 +197,11 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
         }
 
+        if (definition.Construction is ArchiveControlConstruction.NestedCumulativeBudget)
+        {
+            return BuildHandBuiltNestedBudget(definition, cancellationToken);
+        }
+
         if (definition.Construction is ArchiveControlConstruction.Zip64Descriptor)
         {
             return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken);
@@ -1251,6 +1256,152 @@ internal static class ArchiveFixtureBuilder
                     PayloadCodec: recipeEntry.Method),
             ],
             Mutations: []);
+    }
+
+    /// <summary>
+    /// Sums one expansion level with checked arithmetic (ticket #935): every
+    /// member contributes its content length plus its nested expansion (zero
+    /// for regular files). Scope is one level: inner Archives in this catalog
+    /// hold only regular files, so a single level reaches every nested byte.
+    /// Overflow throws instead of wrapping past the budget.
+    /// </summary>
+    internal static long CumulativeNestedExpansion(IEnumerable<(long ContentLength, long NestedExpansion)> members)
+    {
+        long total = 0;
+        foreach (var (contentLength, nestedExpansion) in members)
+        {
+            total = checked(total + contentLength + nestedExpansion);
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// Baseline for the cumulative nested-budget boundary (ticket #935): the
+    /// recipe's inner entries declare their nested expansions; each becomes an
+    /// inner Archive with one deflated zero entry of exactly that size. The pad
+    /// entry declares an upper bound; the builder computes the exact pad that
+    /// lands the recursive total (outer content plus every nested expansion)
+    /// on the 32 MiB budget, so the boundary holds on every runtime. A recipe
+    /// whose needs exceed the bound, or whose total exceeds the budget, fails
+    /// here with checked arithmetic — before any publication.
+    /// Seed-independent by construction.
+    /// </summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltNestedBudget(
+        ArchiveTestCaseDefinition definition, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.Recipe.Entries.Count != 3
+            || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].Method != "stored"
+            || definition.Recipe.Entries[1].IsDirectory || definition.Recipe.Entries[1].Method != "stored"
+            || definition.Recipe.Entries[2].IsDirectory || definition.Recipe.Entries[2].Method != "stored")
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the nested-budget baseline expects two stored inner Archives and one stored pad entry.");
+        }
+
+        var inners = new List<(string Name, byte[] Archive, long Expanded)>(2);
+        foreach (var recipeEntry in definition.Recipe.Entries.Take(2))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var archive = BuildNestedInnerArchive(recipeEntry.Length);
+            inners.Add((recipeEntry.Name, archive, recipeEntry.Length));
+        }
+
+        var padBound = (long)definition.Recipe.Entries[2].Length;
+        var innerBytesTotal = inners.Sum(inner => (long)inner.Archive.Length);
+        var padLength = checked(ArchiveTestCaseSemantics.MaxExpandedBytesBudget
+            - inners.Sum(inner => inner.Expanded)
+            - innerBytesTotal);
+        if (padLength < 0 || padLength > padBound)
+        {
+            throw new InvalidDataException(
+                $"Archive Test case '{definition.CaseKey}' cumulative nested expansion needs a {padLength}-byte pad for the budget with a {padBound}-byte bound: over-limit recipes fail before publication.");
+        }
+
+        var total = CumulativeNestedExpansion(
+            inners.Select(inner => ((long)inner.Archive.Length, inner.Expanded)).Append((padLength, 0)));
+        if (total != ArchiveTestCaseSemantics.MaxExpandedBytesBudget)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': cumulative nested expansion is {total} bytes, expected exactly the {ArchiveTestCaseSemantics.MaxExpandedBytesBudget}-byte budget.");
+        }
+
+        using var stream = new MemoryStream();
+        var expectations = new List<ArchiveFixtureEntryExpectation>(3);
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var ordinal = 0;
+            foreach (var (name, innerBytes, _) in inners)
+            {
+                var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+                entry.LastWriteTime = FixedDosTimestamp;
+                using var entryStream = entry.Open();
+                entryStream.Write(innerBytes);
+                expectations.Add(new ArchiveFixtureEntryExpectation(
+                    Ordinal: ordinal++,
+                    Name: name,
+                    IsDirectory: false,
+                    Method: 0,
+                    Content: innerBytes,
+                    ContentSha256: Convert.ToHexStringLower(SHA256.HashData(innerBytes)),
+                    PayloadCodec: "stored"));
+            }
+
+            var pad = new byte[padLength];
+            var padEntry = archive.CreateEntry(definition.Recipe.Entries[2].Name, CompressionLevel.NoCompression);
+            padEntry.LastWriteTime = FixedDosTimestamp;
+            using (var entryStream = padEntry.Open())
+            {
+                entryStream.Write(pad);
+            }
+
+            expectations.Add(new ArchiveFixtureEntryExpectation(
+                Ordinal: ordinal,
+                Name: definition.Recipe.Entries[2].Name,
+                IsDirectory: false,
+                Method: 0,
+                Content: pad,
+                ContentSha256: Convert.ToHexStringLower(SHA256.HashData(pad)),
+                PayloadCodec: "stored"));
+        }
+
+        var bytes = stream.ToArray();
+        if (bytes.Length > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+        {
+            throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' Archive is {bytes.Length} bytes, over the physical budget.");
+        }
+
+        var layout = ArchiveFixtureLayout.Read(bytes);
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: layout,
+            Entries: [.. expectations],
+            Mutations: []);
+    }
+
+    /// <summary>Builds one deterministic inner Archive holding a single deflated
+    /// zero entry of the given expanded length.</summary>
+    private static byte[] BuildNestedInnerArchive(int expandedLength)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("big.bin", CompressionLevel.Optimal);
+            entry.LastWriteTime = FixedDosTimestamp;
+            using var entryStream = entry.Open();
+            var remaining = expandedLength;
+            var zeros = new byte[Math.Min(65536, remaining)];
+            while (remaining > 0)
+            {
+                var chunk = Math.Min(zeros.Length, remaining);
+                entryStream.Write(zeros, 0, chunk);
+                remaining -= chunk;
+            }
+        }
+
+        return stream.ToArray();
     }
 
     /// <summary>

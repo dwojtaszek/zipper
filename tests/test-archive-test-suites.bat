@@ -15,7 +15,7 @@ set PASSED=0
 set FAILED=0
 set SMOKE_CASES=5
 set /a EXPECTED_FILES=%SMOKE_CASES%*2
-set ALL_CASES=96
+set ALL_CASES=99
 
 REM Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -382,6 +382,35 @@ if not defined SEVEN_ZIP (
     ) else (
         call :fail "7-Zip must reject the #933 spanning and count-disagreement fixtures"
     )
+    REM Ticket #935: mixed one-bad-member archives must fail as a whole (`t`
+    REM rejects) while the healthy Store and Deflate siblings extract by name
+    REM with matching hashes — the bad member's bytes are never decoded.
+    set "MIXED_PY=%TEMP%\atc-mixed-%RANDOM%.py"
+    > "!MIXED_PY!" echo import glob, hashlib, json, os, subprocess, sys, tempfile
+    >> "!MIXED_PY!" echo out, seven = sys.argv[1:3]
+    >> "!MIXED_PY!" echo for key in ("mixed-methods-one-corrupt-member", "mixed-methods-one-unsupported-member"):
+    >> "!MIXED_PY!" echo     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
+    >> "!MIXED_PY!" echo     d = json.load(open(jp))
+    >> "!MIXED_PY!" echo     zp = jp[:-5] + ".zip"
+    >> "!MIXED_PY!" echo     healthy = [e for e in d["entries"] if e["kind"] == "file" and e["readableName"] in ("a.txt", "b.bin")]
+    >> "!MIXED_PY!" echo     if len(healthy) != 2: sys.exit(f"expected healthy siblings for {key}")
+    >> "!MIXED_PY!" echo     if subprocess.run([seven, "t", zp], capture_output=True).returncode == 0: sys.exit(f"one-bad-member Archive must not verify as success: {key}")
+    >> "!MIXED_PY!" echo     with tempfile.TemporaryDirectory() as td:
+    >> "!MIXED_PY!" echo         names = [e["readableName"] for e in healthy]
+    >> "!MIXED_PY!" echo         r = subprocess.run([seven, "x", zp, f"-o{td}", "-y", *names], capture_output=True)
+    >> "!MIXED_PY!" echo         if r.returncode != 0: sys.exit(f"healthy sibling extraction failed for {key}")
+    >> "!MIXED_PY!" echo         for e in healthy:
+    >> "!MIXED_PY!" echo             fp = os.path.join(td, e["readableName"])
+    >> "!MIXED_PY!" echo             if not os.path.isfile(fp): sys.exit(f"healthy sibling missing for {key}")
+    >> "!MIXED_PY!" echo             h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+    >> "!MIXED_PY!" echo             if h != e["contentSha256"]: sys.exit(f"healthy sibling hash mismatch for {key}")
+    %PYCMD% "!MIXED_PY!" "%ALL_OUT%" "!SEVEN_ZIP!" >nul 2>&1
+    if errorlevel 1 (
+        call :fail "7-Zip must isolate the bad member while healthy siblings match"
+    ) else (
+        call :pass "7-Zip isolates the bad member while healthy siblings match"
+    )
+    del "!MIXED_PY!" >nul 2>&1
 )
 
 :summary

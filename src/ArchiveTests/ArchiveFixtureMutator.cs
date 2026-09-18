@@ -78,6 +78,8 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, 8, "Deflate"),
             ArchiveTestMutationKind.MethodDataBzip2AsStored => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataBzip2AsStored, 12, "BZip2"),
             ArchiveTestMutationKind.UnsupportedMethodDeflate64 => DeclareUnsupportedMethodDeflate64(control, before),
+            ArchiveTestMutationKind.MixedMethodsOneCorruptMember => CorruptMixedBzip2Member(control, before),
+            ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember => DeclareMixedUnsupportedMember(control, before),
             ArchiveTestMutationKind.MultidiskEocdDeclared => DeclareMultidiskEocd(control, before),
             ArchiveTestMutationKind.MultidiskCentralEntryDeclared => DeclareMultidiskCentralEntry(control, before),
             ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
@@ -1176,14 +1178,11 @@ internal static class ArchiveFixtureMutator
         return control.Layout.Entries[0];
     }
 
-    /// <summary>
-    /// Flips a bit in the BZip2 block-header magic (ticket #900): the first block
-    /// magic byte ("1AY&SY" at stream offset +4, after the "BZh9" file magic). No
-    /// decoder starts a block without it; the ZIP framing stays intact.
-    /// </summary>
-    private static MutatedArchiveFixture CorruptBzip2Magic(ArchiveFixtureArtifact control, byte[] before)
+    /// <summary>Requires the entry's stream to open with single-block BZip2
+    /// magic ("BZh9" file magic, "1AY&amp;SY" block magic), returning nothing:
+    /// the shared pin for whole-stream and mixed-member BZip2 corruption.</summary>
+    private static void RequireBzip2Magic(byte[] before, ArchiveFixtureEntryLayout entry, ArchiveTestMutationKind kind)
     {
-        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2CorruptBlockMagic, 12);
         if (entry.CompressedSize < 10
             || before[(int)entry.DataOffset] != 0x42
             || before[(int)entry.DataOffset + 1] != 0x5A
@@ -1197,8 +1196,77 @@ internal static class ArchiveFixtureMutator
             || before[(int)entry.DataOffset + 9] != 0x59)
         {
             throw new InvalidOperationException(
-                $"Archive Test mutation '{ArchiveTestMutationKind.Bzip2CorruptBlockMagic.ToCaseKey()}': the control's payload is not a single-block BZip2 stream.");
+                $"Archive Test mutation '{kind.ToCaseKey()}': the entry's payload is not a single-block BZip2 stream.");
         }
+    }
+
+    /// <summary>
+    /// Corrupts the BZip2 member of a mixed-method Archive (ticket #935): the
+    /// same block-magic flip as the whole-stream case, addressed by method
+    /// instead of ordinal 0, so the Store and Deflate siblings stay healthy
+    /// and independently readable.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptMixedBzip2Member(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == 12)
+            ?? throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.MixedMethodsOneCorruptMember.ToCaseKey()}': the control has no method-12 member.");
+        RequireBzip2Magic(before, entry, ArchiveTestMutationKind.MixedMethodsOneCorruptMember);
+
+        var magicOffset = entry.DataOffset + 4;
+        var code = ArchiveTestMutationKind.MixedMethodsOneCorruptMember.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.MixedMethodsOneCorruptMember, before,
+        [
+            new MutationSpec(
+                code, "file-data", magicOffset,
+                $"Flips a bit in the BZip2 member's (ordinal {entry.Ordinal}) block-header magic; the Store and Deflate siblings decode untouched.",
+                entry.Ordinal, 1, 1, DeclaredValue: "bzip2-member-block-magic-corrupt"),
+        ], after => after[magicOffset] ^= 0x01);
+    }
+
+    /// <summary>
+    /// Declares the BZip2 member of a mixed-method Archive as reserved method
+    /// 98 in both headers (ticket #935): the Store and Deflate siblings stay
+    /// readable while the member is cleanly unsupported, distinct from
+    /// corruption under every reader profile.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareMixedUnsupportedMember(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort UnsupportedCode = 98;
+        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == 12)
+            ?? throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember.ToCaseKey()}': the control has no method-12 member.");
+        var localMethodOffset = entry.LocalHeaderOffset + 8;
+        var centralMethodOffset = entry.CentralDirectoryOffset + 10;
+        var code = ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember, before,
+        [
+            new MutationSpec(
+                code, "local-header", localMethodOffset,
+                $"Rewrites the BZip2 member's (ordinal {entry.Ordinal}) local method to {UnsupportedCode}; the Store and Deflate siblings stay readable.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"method={UnsupportedCode}"),
+            new MutationSpec(
+                code, "central-header", centralMethodOffset,
+                $"Rewrites the BZip2 member's (ordinal {entry.Ordinal}) central method to {UnsupportedCode} alongside the local header.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"method={UnsupportedCode}"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localMethodOffset, 2), UnsupportedCode);
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralMethodOffset, 2), UnsupportedCode);
+        });
+    }
+
+    /// <summary>
+    /// Flips a bit in the BZip2 block-header magic (ticket #900): the first block
+    /// magic byte ("1AY&SY" at stream offset +4, after the "BZh9" file magic). No
+    /// decoder starts a block without it; the ZIP framing stays intact.
+    /// </summary>
+    private static MutatedArchiveFixture CorruptBzip2Magic(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2CorruptBlockMagic, 12);
+        RequireBzip2Magic(before, entry, ArchiveTestMutationKind.Bzip2CorruptBlockMagic);
 
         var magicOffset = entry.DataOffset + 4;
         var code = ArchiveTestMutationKind.Bzip2CorruptBlockMagic.ToCaseKey();
@@ -1514,6 +1582,8 @@ internal enum ArchiveTestMutationKind
     Utf8FlagCp437Name,
     UnicodePathCrcMismatch,
     UnicodePathNameDivergence,
+    MixedMethodsOneCorruptMember,
+    MixedMethodsOneUnsupportedMember,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1568,6 +1638,8 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Utf8FlagCp437Name => "utf8-flag-cp437-name",
         ArchiveTestMutationKind.UnicodePathCrcMismatch => "unicode-path-crc-mismatch",
         ArchiveTestMutationKind.UnicodePathNameDivergence => "unicode-path-name-divergence",
+        ArchiveTestMutationKind.MixedMethodsOneCorruptMember => "mixed-methods-one-corrupt-member",
+        ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember => "mixed-methods-one-unsupported-member",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

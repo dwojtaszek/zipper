@@ -355,7 +355,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(48, malformed.Count);
+        Assert.Equal(50, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
@@ -407,6 +407,8 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     [InlineData("utf8-flag-cp437-name")]
     [InlineData("unicode-path-crc-mismatch")]
     [InlineData("unicode-path-name-divergence")]
+    [InlineData("mixed-methods-one-corrupt-member")]
+    [InlineData("mixed-methods-one-unsupported-member")]
     public void Build_StructureCases_AreDeterministicPerCaseAndSeed(string caseKey)
     {
         var definition = ArchiveTestCatalog.GetCase(caseKey);
@@ -910,7 +912,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(96, all.Count);
+        Assert.Equal(99, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

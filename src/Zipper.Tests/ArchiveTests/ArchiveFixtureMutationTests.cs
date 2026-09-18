@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using ICSharpCode.SharpZipLib.BZip2;
 using Xunit;
 using Zipper.ArchiveTests;
 
@@ -367,6 +368,59 @@ public class ArchiveFixtureMutationTests : TempDirectoryTestBase
         Assert.Equal(2, mutated.Mutations.Count);
         Assert.All(mutated.Mutations, mutation => Assert.Equal("unicode-path-name-divergence", mutation.Code));
         Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+    }
+
+    [Fact]
+    public void Apply_MixedMethodsOneCorruptMember_CorruptsOnlyBzip2MemberByOrdinal()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-mixed-methods", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.MixedMethodsOneCorruptMember, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("mixed-methods-one-corrupt-member", mutation.Code);
+        Assert.Equal("file-data", mutation.Structure);
+        Assert.Equal(2, mutation.Ordinal);
+        var bzip2 = control.Layout.Entries[2];
+        Assert.Equal((ushort)12, bzip2.Method);
+        Assert.Equal(bzip2.DataOffset + 4, mutation.Offset);
+
+        // Healthy members stay independently readable by ordinal with matching content.
+        Assert.Equal(control.Entries[0].Content, ReadEntryContent(mutated.ArchiveBytes, "a.txt"));
+        Assert.Equal(control.Entries[1].Content, ReadEntryContent(mutated.ArchiveBytes, "b.bin"));
+
+        // The corrupt member is genuinely undecodable, not just relabeled: a
+        // real BZip2 decoder (.NET has none) rejects the broken block magic.
+        var member = control.Layout.Entries[2];
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            using var raw = new MemoryStream(mutated.ArchiveBytes, (int)member.DataOffset, (int)member.CompressedSize, writable: false);
+            using var bz2 = new BZip2InputStream(raw);
+            using var copy = new MemoryStream();
+            bz2.CopyTo(copy);
+        });
+    }
+
+    [Fact]
+    public void Apply_MixedMethodsOneUnsupportedMember_Declares98OnBzip2MemberOnly()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-mixed-methods", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember, control);
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        Assert.All(mutated.Mutations, mutation => Assert.Equal("mixed-methods-one-unsupported-member", mutation.Code));
+        var bzip2 = control.Layout.Entries[2];
+        Assert.Equal(bzip2.LocalHeaderOffset + 8, mutated.Mutations[0].Offset);
+        Assert.Equal(bzip2.CentralDirectoryOffset + 10, mutated.Mutations[1].Offset);
+        Assert.Equal((ushort)98, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutated.Mutations[0].Offset));
+        Assert.Equal((ushort)98, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutated.Mutations[1].Offset));
+
+        // Healthy members stay independently readable; the 98 member is cleanly rejected.
+        Assert.Equal(control.Entries[0].Content, ReadEntryContent(mutated.ArchiveBytes, "a.txt"));
+        Assert.Equal(control.Entries[1].Content, ReadEntryContent(mutated.ArchiveBytes, "b.bin"));
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.Throws<System.IO.InvalidDataException>(() => archive.Entries[2].Open());
     }
 
     [Fact]

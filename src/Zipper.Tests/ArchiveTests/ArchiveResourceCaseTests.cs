@@ -127,6 +127,104 @@ public class ArchiveResourceCaseTests : TempDirectoryTestBase
         Assert.All(inner.Entries, entry => Assert.Equal("inner.txt", entry.Name));
     }
 
+    // ---- nested-archives-cumulative-budget-boundary ----
+
+    [Fact]
+    public void Build_NestedCumulativeBoundary_AggregateReachesBudgetExactly()
+    {
+        var artifact = BuildControl("nested-archives-cumulative-budget-boundary");
+
+        // Recursive expansion: outer content plus every nested expansion,
+        // measured from the bytes (inner Archives parsed, not trusted).
+        long nested = 0;
+        long outerContent = 0;
+        foreach (var entry in artifact.Entries)
+        {
+            outerContent += entry.Content.Length;
+            if (entry.Name.EndsWith(".zip", StringComparison.Ordinal))
+            {
+                using var inner = new ZipArchive(new MemoryStream(entry.Content), ZipArchiveMode.Read);
+                foreach (var innerEntry in inner.Entries)
+                {
+                    nested += innerEntry.Length;
+                }
+            }
+        }
+
+        Assert.Equal(ArchiveTestCaseSemantics.MaxExpandedBytesBudget, outerContent + nested);
+        Assert.True(artifact.ArchiveBytes.Length <= ArchiveTestCaseSemantics.MaxArchivePhysicalBytes);
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(99)]
+    public void Build_NestedCumulativeBoundary_IsSeedIndependent(int seed)
+    {
+        var first = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("nested-archives-cumulative-budget-boundary"), 42, CancellationToken.None);
+        var second = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("nested-archives-cumulative-budget-boundary"), seed, CancellationToken.None);
+
+        Assert.Equal(first.ArchiveBytes, second.ArchiveBytes);
+    }
+
+    [Fact]
+    public void Build_NestedCumulativeExceeded_ThrowsBeforePublication()
+    {
+        // One pad byte over the boundary bound. Build has no filesystem
+        // output, so throwing here means GenerateAsync can never stage it:
+        // rejection happens before destination publication by construction.
+        // This recipe trips the upfront budget pre-check.
+        var boundary = ArchiveTestCatalog.GetCase("nested-archives-cumulative-budget-boundary");
+        var over = boundary with
+        {
+            Recipe = new ArchiveTestRecipe(
+            [
+                boundary.Recipe.Entries[0],
+                boundary.Recipe.Entries[1],
+                boundary.Recipe.Entries[2] with { Length = boundary.Recipe.Entries[2].Length + 1 },
+            ]),
+        };
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            ArchiveFixtureBuilder.Build(over, 42, CancellationToken.None));
+        Assert.Contains("budget", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_NestedCumulativeBoundTooSmall_ThrowsBeforePublication()
+    {
+        // A pad bound below what the budget needs trips the builder's own
+        // checked accounting even though the upfront pre-check passes.
+        var boundary = ArchiveTestCatalog.GetCase("nested-archives-cumulative-budget-boundary");
+        var tight = boundary with
+        {
+            Recipe = new ArchiveTestRecipe(
+            [
+                boundary.Recipe.Entries[0],
+                boundary.Recipe.Entries[1],
+                boundary.Recipe.Entries[2] with { Length = 1000 },
+            ]),
+        };
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            ArchiveFixtureBuilder.Build(tight, 42, CancellationToken.None));
+        Assert.Contains("cumulative nested expansion", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(10L, 5L, 3L, 7L, 25L)]
+    [InlineData(0L, 0L, 0L, 0L, 0L)]
+    public void CumulativeNestedExpansion_SumsContentPlusNested(long contentA, long nestedA, long contentB, long nestedB, long expected)
+    {
+        Assert.Equal(expected, ArchiveFixtureBuilder.CumulativeNestedExpansion([(contentA, nestedA), (contentB, nestedB)]));
+    }
+
+    [Fact]
+    public void CumulativeNestedExpansion_Overflow_ThrowsInsteadOfWrapping()
+    {
+        Assert.Throws<OverflowException>(() =>
+            ArchiveFixtureBuilder.CumulativeNestedExpansion([(long.MaxValue, 0L), (1L, 0L)]));
+    }
+
     // ---- many-small-entries ----
 
     [Fact]
