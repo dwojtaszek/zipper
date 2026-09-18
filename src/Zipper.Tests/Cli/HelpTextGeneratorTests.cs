@@ -42,4 +42,31 @@ public class HelpTextGeneratorTests
             errorOutput.Dispose();
         }
     }
+
+    [Fact]
+    public void Show_MarksDeflate64Bzip2AsNotYetSupported()
+    {
+        var originalError = Console.Error;
+        var errorOutput = new StringWriter();
+        Console.SetError(errorOutput);
+
+        try
+        {
+            HelpTextGenerator.Show();
+
+            var output = errorOutput.ToString();
+            var compressionLine = output
+                .Split('\n')
+                .FirstOrDefault(l => l.IndexOf("--compression", StringComparison.Ordinal) >= 0);
+
+            Assert.NotNull(compressionLine);
+            Assert.True(compressionLine.IndexOf("not yet supported", StringComparison.OrdinalIgnoreCase) >= 0,
+                $"Expected deflate64/bzip2 marked not yet supported in help compression line: {compressionLine}");
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            errorOutput.Dispose();
+        }
+    }
 }

@@ -55,6 +55,25 @@ public class DocsDriftTests
     }
 
     [Fact]
+    public void README_CompressionRow_MarksDeflate64Bzip2AsNotYetSupported()
+    {
+        var readmePath = Path.Combine(RepoRoot, "README.md");
+        var lines = File.ReadAllLines(readmePath);
+
+        var compressionLine = lines
+            .FirstOrDefault(l => l.IndexOf("--compression", StringComparison.Ordinal) >= 0
+                              && l.IndexOf("store", StringComparison.Ordinal) >= 0);
+
+        Assert.NotNull(compressionLine);
+        var line = compressionLine;
+        Assert.True(line.IndexOf("deflate64", StringComparison.OrdinalIgnoreCase) >= 0, $"Expected 'deflate64' mentioned in README compression line: {line}");
+        Assert.True(line.IndexOf("bzip2", StringComparison.OrdinalIgnoreCase) >= 0, $"Expected 'bzip2' mentioned in README compression line: {line}");
+        Assert.True(line.IndexOf("planned", StringComparison.OrdinalIgnoreCase) >= 0
+            || line.IndexOf("not yet supported", StringComparison.OrdinalIgnoreCase) >= 0,
+            $"Expected deflate64/bzip2 marked planned/unsupported in README compression line: {line}");
+    }
+
+    [Fact]
     public void Architecture_ProductionSet_LoadFileDelegation_UsesOrchestrator()
     {
         var archPath = Path.Combine(RepoRoot, "docs", "architecture.md");
