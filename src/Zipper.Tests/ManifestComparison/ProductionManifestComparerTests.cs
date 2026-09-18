@@ -563,6 +563,86 @@ public class ProductionManifestComparerTests
         }
     }
 
+    // REQ-178: unrecoverable comparison errors shall propagate before a report is written.
+    [Fact]
+    public async Task CompareAndReportAsync_WhenSummaryPathIsDirectory_ShouldThrowWithoutLeavingReport()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_summary_collision_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+            var sentinelPath = Path.Combine(summaryPath, "sentinel.txt");
+            Directory.CreateDirectory(summaryPath);
+            await File.WriteAllTextAsync(sentinelPath, "pre-existing");
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath));
+
+            Assert.False(File.Exists(outputPath), "No partial JSON report may remain after summary publication failure.");
+            Assert.True(Directory.Exists(summaryPath), "Pre-existing directory must remain untouched.");
+            Assert.True(File.Exists(sentinelPath), "Pre-existing content must remain untouched.");
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    // REQ-178: pre-existing user files must be preserved when publication fails.
+    [Fact]
+    public async Task CompareAndReportAsync_WhenSummaryPathIsDirectory_ShouldPreservePreExistingReport()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_summary_collision_existing_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+            await File.WriteAllTextAsync(outputPath, "PRE-EXISTING-REPORT");
+            Directory.CreateDirectory(summaryPath);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath));
+
+            var preserved = await File.ReadAllTextAsync(outputPath);
+            Assert.Equal("PRE-EXISTING-REPORT", preserved);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    // REQ-178: staging artifacts must never leak after a successful comparison.
+    [Fact]
+    public async Task CompareAndReportAsync_OnSuccess_ShouldLeaveNoStagingFiles()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_staging_clean_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath);
+
+            Assert.True(success);
+            var leftovers = Directory.GetFiles(tempDir, "*.staging*");
+            Assert.Empty(leftovers);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
     private static string CreateTestProductionSet(string baseDir, string prodId, string volume, string[] batesNumbers)
     {
         return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
