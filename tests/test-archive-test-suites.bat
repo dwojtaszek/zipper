@@ -31,9 +31,26 @@ where python >nul 2>&1 || set "PYCMD=py -3"
 
 echo [ INFO ] === Archive Test Suite E2E ===
 
-REM 1. Pinned schema-validation prerequisite (ticket #846): install the frozen
-REM    Ajv explicitly and validate the committed frozen vector before anything
-REM    else — no network install per fixture, no skip-as-pass.
+REM 1. Pinned Ajv restore + prerequisite (tickets #846/#932): restore the
+REM    frozen Ajv CLI explicitly with `npm ci` when missing — the only network
+REM    step — then validate the committed frozen vector. Verification itself
+REM    runs the restored package via node directly and never downloads; a
+REM    missing restore fails instead of skipping.
+if exist "tests\archive-tests\node_modules\ajv-cli\dist\index.js" (
+    call :pass "pinned Ajv CLI already restored"
+) else (
+    where npm >nul 2>&1
+    if errorlevel 1 (
+        call :fail "npm must be installed to restore the pinned Ajv CLI"
+    ) else (
+        call npm ci --ignore-scripts --prefix tests/archive-tests >nul 2>&1
+        if errorlevel 1 (
+            call :fail "npm ci must restore the pinned Ajv CLI"
+        ) else (
+            call :pass "pinned Ajv CLI restored via npm ci"
+        )
+    )
+)
 %PYCMD% -c "import importlib.util, sys; spec = importlib.util.spec_from_file_location('vf', 'tests/archive-tests/verify-fixtures.py'); vf = importlib.util.module_from_spec(spec); spec.loader.exec_module(vf); v = vf.AjvValidator(vf.DEFAULT_SCHEMA, vf.DEFAULT_AJV); err = v.check_prerequisite(); sys.exit(1 if err else 0 if v.validate('tests/fixtures/archive-tests/valid-empty.json') else 1)" >nul 2>&1
 if errorlevel 1 (
     call :fail "pinned Ajv prerequisite must be installed and validate the frozen vector"
@@ -412,6 +429,25 @@ if not defined SEVEN_ZIP (
     )
     del "!MIXED_PY!" >nul 2>&1
 )
+
+REM 14. Offline verification (ticket #932): with an empty npm cache and an
+REM     unreachable registry, the full catalogue still verifies — proving
+REM     verification downloads nothing. The pinned CLI runs via node directly,
+REM     so these settings cannot affect it; they only turn any attempted
+REM     download into a loud failure.
+set "OFFLINE_CACHE=%TEST_OUTPUT_DIR%\npm-cache-empty"
+if exist "%OFFLINE_CACHE%" rmdir /s /q "%OFFLINE_CACHE%"
+mkdir "%OFFLINE_CACHE%" >nul 2>&1
+set "npm_config_cache=%OFFLINE_CACHE%"
+set "npm_config_registry=http://127.0.0.1:9/"
+%PYCMD% tests\archive-tests\verify-fixtures.py "%ALL_OUT%" --report "%TEST_OUTPUT_DIR%\all-offline-verification.json" >nul 2>&1
+if errorlevel 1 (
+    call :fail "offline verification must pass the complete catalogue without downloads"
+) else (
+    call :pass "offline verification passed the complete catalogue without downloads"
+)
+set "npm_config_cache="
+set "npm_config_registry="
 
 :summary
 echo [ INFO ] Passed: %PASSED%, Failed: %FAILED%

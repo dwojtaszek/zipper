@@ -397,6 +397,16 @@ class TamperTests(TempDirTest):
         self.assertTrue(any("missing prerequisite" in problem
                             for problem in report["directoryProblems"]))
 
+    def test_missing_restore_fails_with_restore_guidance(self):
+        """Ticket #932: an unrestored pinned CLI fails closed with the exact
+        restore step, without attempting any download (nothing is executed)."""
+        ajv = vf.AjvValidator(SCHEMA, "node /nonexistent/ajv-cli/dist/index.js")
+
+        problem = ajv.check_prerequisite()
+
+        self.assertIn("npm ci", problem)
+        self.assertIn("never downloads", problem)
+
     def test_archive_over_16mib_fails_before_reading_file_contents(self):
         case, _ = self.publish_valid()
         zip_path = os.path.join(self.dir, case["fixtureId"] + ".zip")

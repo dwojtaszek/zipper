@@ -51,7 +51,12 @@ PAIR_NAME_RE = re.compile(r"^atc-[0-9a-f]{64}\.(zip|json)$")
 
 DEFAULT_SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "..", "fixtures", "archive-test-case.schema.json")
-DEFAULT_AJV = "npx --yes ajv-cli@5.0.0"
+# Pinned local Ajv CLI (ticket #932): node runs the restored package directly —
+# never npx, never the network. Restore once with `npm ci` in this directory
+# (pinned by package-lock.json); verification itself downloads nothing.
+DEFAULT_AJV_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "node_modules", "ajv-cli", "dist", "index.js")
+DEFAULT_AJV = "node " + DEFAULT_AJV_SCRIPT
 AJV_TIMEOUT_SECONDS = 120
 READ_CHUNK = 64 * 1024
 
@@ -134,8 +139,8 @@ def run_checked(argv, timeout):
 
     Returns (returncode, stdout, stderr, timed_out). The parent is never
     terminated; a timeout is reported as a verification failure. The child is
-    started in its own session/process group so the kill reaches grandchildren
-    (npx spawns node), not just the launcher.
+    started in its own session/process group so the kill reaches the whole
+    child tree, not just the launcher.
     """
     popen_kwargs = {}
     if os.name == "posix":
@@ -171,13 +176,15 @@ def _kill_tree(proc):
 
 
 class AjvValidator:
-    """Authoritative draft-07 validation through the pinned Ajv CLI (npx)."""
+    """Authoritative draft-07 validation through the pinned local Ajv CLI (node)."""
 
     def __init__(self, schema_path, command):
         self.schema_path = os.path.abspath(schema_path)
-        self.command = shlex.split(command)
+        # posix=False on Windows: backslashes in the absolute script path are
+        # separators, not escapes (shlex would eat them with posix=True).
+        self.command = shlex.split(command, posix=os.name != "nt")
         self.resolved = self.command.copy()
-        # Windows cannot exec 'npx' directly (npx.cmd); resolve via PATH.
+        # Resolve the launcher via PATH (node, or npx.cmd for custom commands).
         self.resolved[0] = shutil.which(self.command[0]) or self.command[0]
 
     def check_prerequisite(self):
@@ -185,8 +192,13 @@ class AjvValidator:
             return "missing prerequisite: schema file %s" % self.schema_path
         if shutil.which(self.command[0]) is None and not os.path.isfile(self.command[0]):
             return ("missing prerequisite: Ajv launcher '%s' not found on PATH "
-                    "(expected the pinned Ajv CLI; a missing tool is a failure, "
+                    "(expected node for the pinned Ajv CLI; a missing tool is a failure, "
                     "not a skipped check)" % self.command[0])
+        if os.path.basename(self.command[0]).lower().startswith("node") and len(self.command) > 1 \
+                and not os.path.isfile(self.command[1]):
+            return ("missing prerequisite: pinned Ajv CLI not restored at %s "
+                    "(run `npm ci --ignore-scripts --prefix tests/archive-tests` once; verification never downloads, so a missing "
+                    "restore is a failure, not a skipped check)" % (self.command[1],))
         return None
 
     def validate(self, json_path):
@@ -1441,7 +1453,7 @@ def main(argv=None):
     parser.add_argument("--schema", default=DEFAULT_SCHEMA,
                         help="authoritative draft-07 JSON Schema path")
     parser.add_argument("--ajv", default=os.environ.get("ZIPPER_ATC_AJV", DEFAULT_AJV),
-                        help="Ajv CLI command (default: pinned npx ajv-cli; "
+                        help="Ajv CLI command (default: pinned local ajv-cli via node; "
                              "a missing tool is a failure, not a skip)")
     args = parser.parse_args(argv)
 
