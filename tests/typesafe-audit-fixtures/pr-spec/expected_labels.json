@@ -1,0 +1,48 @@
+{
+  "examples": [
+    {
+      "pr": 100,
+      "expected": {
+        "statuses": {
+          "implementation": "ok",
+          "real_outcome_test": "ok",
+          "unrelated_behavior": "ok",
+          "docs_sync": "ok"
+        }
+      }
+    },
+    {
+      "pr": 101,
+      "expected": {
+        "statuses": {
+          "implementation": "finding",
+          "real_outcome_test": "ok",
+          "unrelated_behavior": "ok",
+          "docs_sync": "finding"
+        }
+      }
+    },
+    {
+      "pr": 102,
+      "expected": {
+        "statuses": {
+          "implementation": "finding",
+          "real_outcome_test": "ok",
+          "unrelated_behavior": "finding",
+          "docs_sync": "finding"
+        }
+      }
+    },
+    {
+      "pr": 103,
+      "expected": {
+        "statuses": {
+          "implementation": "needs-human-review",
+          "real_outcome_test": "needs-human-review",
+          "unrelated_behavior": "needs-human-review",
+          "docs_sync": "needs-human-review"
+        }
+      }
+    }
+  ]
+}

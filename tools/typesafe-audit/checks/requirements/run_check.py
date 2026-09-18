@@ -32,6 +32,7 @@ sys.path.insert(0, str(CHECK_DIR))
 
 import runner  # noqa: E402
 import prechecks  # noqa: E402
+import checks_common  # noqa: E402
 from extract_sections import extract_sections, group_by_requirement  # noqa: E402
 
 EXIT_OK = runner.EXIT_OK
@@ -40,16 +41,11 @@ EXIT_REMOTE_ERROR = runner.EXIT_REMOTE_ERROR
 
 QUESTIONS_PATH = CHECK_DIR / "questions.json"
 POLICY_PATH = CHECK_DIR / "policy.json"
-SPAN_SEPARATOR = "#"
+SPAN_SEPARATOR = checks_common.SPAN_SEPARATOR
 
 
 def load_json(path: Path) -> dict:
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"requirements-audit: input error: cannot read {path}: {exc}", file=sys.stderr)
-        sys.exit(EXIT_INPUT_ERROR)
+    return checks_common.load_json(path, label="requirements-audit")
 
 
 def span_id(section: dict) -> str:
@@ -114,30 +110,7 @@ def build_state(section: dict, context: list[dict], glossary_terms: list[str], m
 
 
 def status_for(question_id: str, row: dict, policy: dict) -> str:
-    """needs-human-review on low confidence or mid-range noul; else finding/ok."""
-    answer = row.get("answer")
-    confidence = row.get("confidence")
-    low, high = policy["noul_finding_range"]
-
-    if row["type"] == "noul":
-        if answer is None or not isinstance(answer, (int, float)):
-            return "needs-human-review"
-        if low < answer < high:
-            return "needs-human-review"
-        return "finding" if answer >= high else "ok"
-
-    if row["type"] == "choice":
-        if answer not in policy["choice_good_values"].get(question_id, []):
-            # Bad or partial outcome: confidence decides finding vs review.
-            if confidence is None or confidence < policy["confidence_threshold"]:
-                return "needs-human-review"
-            return "finding"
-        # Good outcome: only low confidence demotes it to review.
-        if confidence is not None and confidence < policy["confidence_threshold"]:
-            return "needs-human-review"
-        return "ok"
-
-    return "needs-human-review"
+    return checks_common.status_for(question_id, row, policy)
 
 
 def build_batch_request(batch: list[dict], all_sections: list[dict], corpus_mode: bool, questions: dict, policy: dict) -> tuple[dict, dict]:

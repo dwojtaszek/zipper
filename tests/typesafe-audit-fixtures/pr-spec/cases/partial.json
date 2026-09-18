@@ -1,0 +1,17 @@
+{
+  "pr": 101,
+  "base": "cccccccccccccccccccccccccccccccccccccccc",
+  "head": "dddddddddddddddddddddddddddddddddddddddd",
+  "body": "Fixes #901\n\n## Summary\nPartial implementation of the delimiter hardening spec.",
+  "files": [
+    {"path": "src/LoadFiles/DatSerializer.cs", "additions": 12, "patch": "+ if (value.Contains(delimiter)) throw new FormatException(value)"},
+    {"path": "src/Zipper.Tests/LoadFiles/DatSerializerTests.cs", "additions": 10, "patch": "+ Serialize_WithDelimiterInValue_ShouldThrow\n+ Assert.Throws<FormatException>(() => serializer.Serialize(record));"}
+  ],
+  "issues": {
+    "901": {
+      "number": 901,
+      "body": "Harden delimiter handling: (1) reject delimiter characters in values, (2) support an escaped alternative form, (3) document the behavior in README and add the interaction to the argument table.",
+      "comments": []
+    }
+  }
+}

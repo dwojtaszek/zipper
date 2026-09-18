@@ -1,0 +1,13 @@
+{
+  "max_files": 40,
+  "max_state_bytes": 262144,
+  "per_file_policy_bytes": 8192,
+  "evidence_excerpt_bytes": 6144,
+  "batch_size": 8,
+  "confidence_threshold": 0.7,
+  "noul_finding_range": [0.25, 0.75],
+  "choice_good_values": {
+    "implementation": ["implemented"],
+    "docs_sync": ["docs_synchronized", "docs_not_required"]
+  }
+}

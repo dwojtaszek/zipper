@@ -1,0 +1,19 @@
+{
+  "pr": 103,
+  "base": "1111111111111111111111111111111111111111",
+  "head": "2222222222222222222222222222222222222222",
+  "body": "Fixes #903\n\n## Summary\nExperimental take on the archive sizing spec; intent unclear.",
+  "files": [
+    {"path": "src/ZipArchiveSink.cs", "additions": 22, "patch": "+ targetSize = size * factor; // adjust heuristic"},
+    {"path": "src/Zipper.Tests/ZipArchiveSinkTests.cs", "additions": 14, "patch": "+ Archive_WithSizing_ShouldRespectTarget\n+ var sink = Substitute.For<IArchiveSink>();\n+ sink.Received().Append(Arg.Any<Stream>());"}
+  ],
+  "issues": {
+    "903": {
+      "number": 903,
+      "body": "Archive sizing should hit the target size within 10% and be covered by a test asserting the produced archive byte size.",
+      "comments": [
+        {"order": 0, "author": "maintainer", "body": "Possibly also relevant for the volume split path; decide after measuring."}
+      ]
+    }
+  }
+}

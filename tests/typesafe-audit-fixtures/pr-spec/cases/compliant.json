@@ -1,0 +1,19 @@
+{
+  "pr": 100,
+  "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "body": "Fixes #900\n\n## Summary\nAdds the --redact-emails flag as specified.\n\n## Release Notes\nAdds --redact-emails.",
+  "files": [
+    {"path": "src/Cli/Modules/EmailModule.cs", "additions": 24, "patch": "+ OwnedFlags.Add(\"--redact-emails\")\n+ TryApply sets RedactEmails = true\n+ TryBuild wires EmailRedactionConfig"},
+    {"path": "src/Emails/EmailRedactor.cs", "additions": 30, "patch": "+ public static string Redact(string body) => body.Replace(email, \"[REDACTED]\")"},
+    {"path": "src/Zipper.Tests/Emails/EmailRedactorTests.cs", "additions": 18, "patch": "+ Redact_WithFakeEmail_ShouldWriteRedactedOutput\n+ var result = EmailRedactor.Redact(\"a@b.c\");\n+ Assert.Equal(\"[REDACTED]\", result);"},
+    {"path": "README.md", "additions": 4, "patch": "+ `--redact-emails` | Replace email addresses with [REDACTED] in generated files."}
+  ],
+  "issues": {
+    "900": {
+      "number": 900,
+      "body": "Add a `--redact-emails` flag that replaces email addresses in generated output with `[REDACTED]`. Update README. Add a test that asserts the redacted bytes of a generated file.",
+      "comments": []
+    }
+  }
+}

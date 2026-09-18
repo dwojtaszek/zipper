@@ -1,0 +1,20 @@
+{
+  "pr": 102,
+  "base": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "head": "ffffffffffffffffffffffffffffffffffffffff",
+  "body": "Fixes #902\n\n## Summary"
+  ,
+  "files": [
+    {"path": "src/Utils/NamingConventionHelper.cs", "additions": 40, "patch": "+ public static string Slugify(string name) => name.ToLowerInvariant().Replace(' ', '-');\n+ internal static void PurgeCache() => Cache.Clear();"},
+    {"path": "src/Zipper.Tests/Utils/NamingConventionHelperTests.cs", "additions": 8, "patch": "+ Slugify_WithName_ShouldLowercase\n+ Assert.Equal(\"a-b\", helper.Slugify(\"A B\"));"}
+  ],
+  "issues": {
+    "902": {
+      "number": 902,
+      "body": "Normalize file naming by slugifying with the existing shared helper in `src/Profiles/Slug.cs` so all modes agree. Do not introduce a second slug implementation.",
+      "comments": [
+        {"order": 0, "author": "maintainer", "body": "Correction: the newest decision is to keep `Slug.Slugify` as the single implementation and delete any local copies. Requirements.md must gain a REQ for naming normalization."}
+      ]
+    }
+  }
+}
