@@ -83,6 +83,11 @@ internal enum ArchiveControlConstruction
     /// discrepant Unicode name into entry 0's local and central headers (ticket #871).</summary>
     InfoZipUnicodePath,
 
+    /// <summary>Inserts an Info-ZIP Unicode Path (0x7075) subfield whose Unicode
+    /// name equals the standard name (ticket #934): the clean baseline for the
+    /// CRC/name conflict matrix.</summary>
+    UnicodePathClean,
+
     /// <summary>Prepends the 64-byte non-Archive stub and rebases every central
     /// relative-local-header offset and the EOCD offset past it (ticket #873).</summary>
     PrefixedArchive,
@@ -124,6 +129,14 @@ internal enum ArchiveControlConstruction
     /// stream of the Deflate64-specific control (ticket #931); the hand-built
     /// coded path can only emit Deflate-subset streams for method 9.</summary>
     PinnedDeflate64LongMatch,
+
+    /// <summary>Serializes a tiny genuine Zip64 Archive whose single deflate
+    /// entry uses a data descriptor with the signature (ticket #934).</summary>
+    Zip64Descriptor,
+
+    /// <summary>Serializes the same Zip64 data-descriptor Archive without the
+    /// descriptor signature (ticket #934).</summary>
+    Zip64DescriptorNoSignature,
 }
 
 /// <summary>
@@ -277,6 +290,14 @@ internal static class ArchiveTestCatalog
             "valid-utf8-name", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Utf8NameControlRecipe),
+        // Ticket #934 clean Unicode Path control: the 0x7075 Unicode name
+        // equals the standard name with a valid CRC — the conflict matrix
+        // mutates this baseline so each case isolates one parser decision.
+        ["valid-unicode-path"] = new(
+            "valid-unicode-path", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: SafeControlRecipe,
+            Construction: ArchiveControlConstruction.UnicodePathClean),
         ["valid-cp437-name"] = new(
             "valid-cp437-name", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -292,6 +313,20 @@ internal static class ArchiveTestCatalog
             Suites: [CompatibilitySuite],
             Recipe: Zip64ControlRecipe,
             Construction: ArchiveControlConstruction.Zip64HandBuilt),
+        // Ticket #934 Zip64 data-descriptor controls: tiny genuine Zip64
+        // Archives whose single deflate entry streams through a data
+        // descriptor, one per descriptor form. Both round-trip with capable
+        // decoders; the signature presence is the isolated parser decision.
+        ["valid-zip64-descriptor-signature"] = new(
+            "valid-zip64-descriptor-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: Zip64DescriptorControlRecipe,
+            Construction: ArchiveControlConstruction.Zip64Descriptor),
+        ["valid-zip64-descriptor-no-signature"] = new(
+            "valid-zip64-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: Zip64DescriptorControlRecipe,
+            Construction: ArchiveControlConstruction.Zip64DescriptorNoSignature),
         // Malformed or policy-sensitive cases: built from the named valid control at the
         // same Seed by applying the recorded mutation. The control recipe is repeated so
         // a fixture is reconstructible from controlCaseKey + mutations alone.
@@ -336,6 +371,23 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, controlCaseKey: Zip64ControlCaseKey),
         ["zip64-locator-disk-mismatch"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey),
+        // Descriptor, extra-field, and encoding conflict matrix (ticket #934):
+        // one Case Key isolates one parser decision; each mutates declarations
+        // or flags only over a tiny physical Archive.
+        ["descriptor-crc-disagreement"] = MutatedDefinition(
+            ArchiveTestMutationKind.DescriptorCrcDisagreement, controlCaseKey: "valid-descriptor-signature"),
+        ["descriptor-size-disagreement"] = MutatedDefinition(
+            ArchiveTestMutationKind.DescriptorSizeDisagreement, controlCaseKey: "valid-descriptor-signature"),
+        ["duplicate-zip64-extra"] = MutatedDefinition(
+            ArchiveTestMutationKind.DuplicateZip64Extra, controlCaseKey: Zip64ControlCaseKey),
+        ["duplicate-unicode-path"] = MutatedDefinition(
+            ArchiveTestMutationKind.DuplicateUnicodePath, controlCaseKey: "valid-unicode-path"),
+        ["utf8-flag-cp437-name"] = MutatedDefinition(
+            ArchiveTestMutationKind.Utf8FlagCp437Name, controlCaseKey: "valid-cp437-name"),
+        ["unicode-path-crc-mismatch"] = MutatedDefinition(
+            ArchiveTestMutationKind.UnicodePathCrcMismatch, controlCaseKey: "valid-unicode-path"),
+        ["unicode-path-name-divergence"] = MutatedDefinition(
+            ArchiveTestMutationKind.UnicodePathNameDivergence, controlCaseKey: "valid-unicode-path"),
         ["offset-outside-archive"] = MutatedDefinition(ArchiveTestMutationKind.OffsetOutsideArchive),
         ["offset-into-payload"] = MutatedDefinition(
             ArchiveTestMutationKind.OffsetIntoPayload, controlCaseKey: SignaturePayloadControlCaseKey),
@@ -529,6 +581,9 @@ internal static class ArchiveTestCatalog
         Deflate64ControlCaseKey => Deflate64ControlRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
+        "valid-descriptor-signature" => DescriptorControlRecipe,
+        "valid-unicode-path" => SafeControlRecipe,
+        "valid-cp437-name" => Cp437NameControlRecipe,
         _ => throw new InvalidOperationException($"Unknown Archive Test control Case Key '{controlCaseKey}'."),
     };
 
@@ -643,6 +698,14 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe Zip64ControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("z64.txt", 30, "stored"),
+    ]);
+
+    // The recipe for the Zip64 data-descriptor controls (ticket #934): one
+    // deflate entry streamed through a descriptor; the builder selects the
+    // descriptor form.
+    private static ArchiveTestRecipe Zip64DescriptorControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("zd.txt", 400, "deflate"),
     ]);
 
     // Ticket #843 resource recipes: honest high compression, genuine depth-two

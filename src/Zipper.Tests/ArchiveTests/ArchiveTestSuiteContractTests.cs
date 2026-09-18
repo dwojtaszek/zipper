@@ -188,8 +188,8 @@ public class ArchiveTestSuiteContractTests
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933): a case
+        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix, +1 for the #934 clean Unicode Path control): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(86, AllKeys().Count);
+        Assert.Equal(96, AllKeys().Count);
     }
 }

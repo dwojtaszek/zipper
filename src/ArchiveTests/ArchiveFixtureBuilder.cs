@@ -197,6 +197,16 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
         }
 
+        if (definition.Construction is ArchiveControlConstruction.Zip64Descriptor)
+        {
+            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken);
+        }
+
+        if (definition.Construction is ArchiveControlConstruction.Zip64DescriptorNoSignature)
+        {
+            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken);
+        }
+
         if (definition.Recipe.Entries.Any(e => MethodCode(e.Method) is 9 or 12))
         {
             return BuildHandBuiltCoded(definition, seed, cancellationToken);
@@ -286,7 +296,11 @@ internal static class ArchiveFixtureBuilder
         }
         else if (definition.Construction is ArchiveControlConstruction.InfoZipUnicodePath)
         {
-            archiveBytes = EnrichUnicodePath(archiveBytes, definition.CaseKey);
+            archiveBytes = EnrichUnicodePath(archiveBytes, definition.CaseKey, Encoding.UTF8.GetBytes("../../escaped.txt"));
+        }
+        else if (definition.Construction is ArchiveControlConstruction.UnicodePathClean)
+        {
+            archiveBytes = EnrichUnicodePath(archiveBytes, definition.CaseKey, Encoding.UTF8.GetBytes("safe.txt"));
         }
         else if (definition.Construction is ArchiveControlConstruction.PrefixedArchive)
         {
@@ -454,18 +468,18 @@ internal static class ArchiveFixtureBuilder
     }
 
     /// <summary>
-    /// Baseline construction for the unicode-path-extra-mismatch case (ticket #871):
-    /// inserts an Info-ZIP Unicode Path subfield (0x7075, version 1, CRC-32 of the
-    /// standard name, discrepant UTF-8 Unicode name) into entry 0's local header and
-    /// central header. The local insert shifts every later physical offset by the
+    /// Baseline construction for the unicode-path-extra-mismatch case (ticket #871)
+    /// and the clean Unicode Path control (ticket #934): inserts an Info-ZIP
+    /// Unicode Path subfield (0x7075, version 1, CRC-32 of the standard name,
+    /// given UTF-8 Unicode name) into entry 0's local header and central
+    /// header. The local insert shifts every later physical offset by the
     /// subfield length (re-linked like <see cref="EnrichLocalExtraField"/>); the
     /// central insert grows the central directory by the same length. Entry 0's own
     /// relative-local-header offset is unchanged; the EOCD central-directory offset
     /// shifts by one subfield length and its size grows by one subfield length.
     /// </summary>
-    private static byte[] EnrichUnicodePath(byte[] archiveBytes, string caseKey)
+    private static byte[] EnrichUnicodePath(byte[] archiveBytes, string caseKey, byte[] unicodeName)
     {
-        var unicodeName = Encoding.UTF8.GetBytes("../../escaped.txt");
         var subfield = new byte[checked(4 + 1 + 4 + unicodeName.Length)];
         BinaryPrimitives.WriteUInt16LittleEndian(subfield, 0x7075);
         BinaryPrimitives.WriteUInt16LittleEndian(subfield.AsSpan(2), checked((ushort)(1 + 4 + unicodeName.Length)));
@@ -1077,6 +1091,161 @@ internal static class ArchiveFixtureBuilder
                     Name: recipeEntry.Name,
                     IsDirectory: false,
                     Method: code,
+                    Content: content,
+                    ContentSha256: contentSha,
+                    PayloadCodec: recipeEntry.Method),
+            ],
+            Mutations: []);
+    }
+
+    /// <summary>
+    /// Baseline for the Zip64 data-descriptor controls (ticket #934): a tiny
+    /// genuine Zip64 Archive whose single deflate entry streams through a data
+    /// descriptor (24 bytes with the signature, 20 without: CRC-32 then 8-byte
+    /// sizes), because the standard writer never selects Zip64 for small
+    /// Archives. Local sizes are sentinels resolved by a 16-byte Zip64 extra;
+    /// the central header resolves through a 24-byte extra. Serialized in one
+    /// pass at computed offsets: nothing relinks.
+    /// </summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltZip64Descriptor(
+        ArchiveTestCaseDefinition definition, int seed, bool withSignature, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].Method != "deflate")
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the Zip64 descriptor baseline expects exactly one deflate file entry.");
+        }
+
+        var recipeEntry = definition.Recipe.Entries[0];
+        var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
+        var encoded = Deflate(content);
+        var crc = Crc32(content);
+        var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
+        checked
+        {
+            if ((long)content.Length > ArchiveTestCaseSemantics.MaxExpandedBytesBudget)
+            {
+                throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' exceeds the expanded budget.");
+            }
+        }
+
+        const ushort Code = 8;
+        const ushort Version = 45;
+        var flags = (ushort)(NameFlags(name) | 0x0008);
+        var descriptorLength = withSignature ? 24 : 20;
+        var localExtraLength = 20;
+        var centralExtraLength = 28;
+        var localHeaderLength = 30 + name.Length + localExtraLength;
+        var dataLength = encoded.Length;
+        var centralDirectoryOffset = localHeaderLength + dataLength + descriptorLength;
+        var centralHeaderLength = 46 + name.Length + centralExtraLength;
+        var zip64EocdOffset = centralDirectoryOffset + centralHeaderLength;
+        var totalLength = zip64EocdOffset + 56 + 20 + 22;
+        if (totalLength > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+        {
+            throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' exceeds the physical Archive budget.");
+        }
+
+        var bytes = new byte[totalLength];
+        Span<byte> b = bytes;
+
+        // Local header with Zip64 sentinels and a 16-byte Zip64 extra.
+        BinaryPrimitives.WriteUInt32LittleEndian(b, 0x04034b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(4), Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(6), flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(8), Code);
+        WriteDosTimestamp(b.Slice(10));
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(14), crc);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(18), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(22), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(26), (ushort)name.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(28), (ushort)localExtraLength);
+        name.CopyTo(b.Slice(30));
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(30 + name.Length), 0x0001);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(30 + name.Length + 2), 16);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(30 + name.Length + 4), (ulong)content.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(30 + name.Length + 12), (ulong)encoded.Length);
+        encoded.CopyTo(b.Slice(localHeaderLength));
+
+        // Data descriptor with 8-byte sizes.
+        var d = localHeaderLength + dataLength;
+        var cursor = d;
+        if (withSignature)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(cursor), 0x08074b50);
+            cursor += 4;
+        }
+
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(cursor), crc);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(cursor + 4), (ulong)encoded.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(cursor + 12), (ulong)content.Length);
+
+        // Central header with sentinels and a 24-byte Zip64 extra.
+        var c = centralDirectoryOffset;
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c), 0x02014b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 4), Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 6), Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 8), flags);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 10), Code);
+        WriteDosTimestamp(b.Slice(c + 12));
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 16), crc);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 20), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 24), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 28), (ushort)name.Length);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 30), (ushort)centralExtraLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 32), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 34), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 36), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 38), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(c + 42), 0xFFFFFFFF);
+        name.CopyTo(b.Slice(c + 46));
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 46 + name.Length), 0x0001);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(c + 46 + name.Length + 2), 24);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(c + 46 + name.Length + 4), (ulong)content.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(c + 46 + name.Length + 12), (ulong)encoded.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(c + 46 + name.Length + 20), 0);
+
+        // Zip64 EOCD (56 bytes), locator (20 bytes), and EOCD with sentinels.
+        var z = zip64EocdOffset;
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(z), 0x06064b50);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(z + 4), 44);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(z + 12), Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(z + 14), Version);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(z + 16), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(z + 20), 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(z + 24), 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(z + 32), 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(z + 40), (ulong)centralHeaderLength);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(z + 48), (ulong)centralDirectoryOffset);
+        var l = z + 56;
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(l), 0x07064b50);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(l + 4), 0);
+        BinaryPrimitives.WriteUInt64LittleEndian(b.Slice(l + 8), (ulong)z);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(l + 16), 1);
+        var e = l + 20;
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(e), 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 4), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 6), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 8), 0xFFFF);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 10), 0xFFFF);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(e + 12), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt32LittleEndian(b.Slice(e + 16), 0xFFFFFFFF);
+        BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 20), 0);
+
+        var layout = ArchiveFixtureLayout.Read(bytes);
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: layout,
+            Entries:
+            [
+                new ArchiveFixtureEntryExpectation(
+                    Ordinal: 0,
+                    Name: recipeEntry.Name,
+                    IsDirectory: false,
+                    Method: Code,
                     Content: content,
                     ContentSha256: contentSha,
                     PayloadCodec: recipeEntry.Method),

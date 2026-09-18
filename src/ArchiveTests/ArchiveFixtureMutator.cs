@@ -83,6 +83,13 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => DeclareZip64EocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
+            ArchiveTestMutationKind.DescriptorCrcDisagreement => DisagreeDescriptorCrc(control, before),
+            ArchiveTestMutationKind.DescriptorSizeDisagreement => DisagreeDescriptorSize(control, before),
+            ArchiveTestMutationKind.DuplicateZip64Extra => DuplicateZip64ExtraField(control, before),
+            ArchiveTestMutationKind.DuplicateUnicodePath => DuplicateUnicodePathField(control, before),
+            ArchiveTestMutationKind.Utf8FlagCp437Name => SetUtf8FlagOnCp437Name(control, before),
+            ArchiveTestMutationKind.UnicodePathCrcMismatch => MismatchUnicodePathCrc(control, before),
+            ArchiveTestMutationKind.UnicodePathNameDivergence => DivergeUnicodePathName(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -234,6 +241,306 @@ internal static class ArchiveFixtureMutator
         ], after =>
         {
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)totalDisksOffset, 4), DeclaredDisks);
+        });
+    }
+
+    /// <summary>
+    /// Flips a bit in the data descriptor CRC (ticket #934): the descriptor
+    /// disagrees with both headers, which still carry the true CRC. Readers
+    /// that verify CRC reject; streaming readers that never check pass on.
+    /// </summary>
+    private static MutatedArchiveFixture DisagreeDescriptorCrc(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var descriptorOffset = DescriptorOffset(control, nameof(ArchiveTestMutationKind.DescriptorCrcDisagreement));
+        var crcOffset = descriptorOffset + 4;
+        var code = ArchiveTestMutationKind.DescriptorCrcDisagreement.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.DescriptorCrcDisagreement, before,
+        [
+            new MutationSpec(
+                code, "data-descriptor", crcOffset,
+                "Flips a bit in the data descriptor CRC while both headers keep the true CRC; the descriptor is the lone liar.",
+                control.Layout.Entries[0].Ordinal, 1, 1, DeclaredValue: "descriptor-crc-corrupt"),
+        ], after => after[crcOffset] ^= 0x01);
+    }
+
+    /// <summary>
+    /// Rewrites the data descriptor compressed size (ticket #934): the
+    /// descriptor disagrees with both headers over framing-critical bytes.
+    /// </summary>
+    private static MutatedArchiveFixture DisagreeDescriptorSize(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var descriptorOffset = DescriptorOffset(control, nameof(ArchiveTestMutationKind.DescriptorSizeDisagreement));
+        var sizeOffset = descriptorOffset + 8;
+        var actual = BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)sizeOffset, 4));
+        const uint Declared = 16;
+        var code = ArchiveTestMutationKind.DescriptorSizeDisagreement.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.DescriptorSizeDisagreement, before,
+        [
+            new MutationSpec(
+                code, "data-descriptor", sizeOffset,
+                $"Rewrites the data descriptor compressed size from {actual} to {actual + Declared} while both headers keep the true size.",
+                control.Layout.Entries[0].Ordinal, 4, 4, DeclaredValue: $"descriptor-compressed-size={actual + Declared} actual-compressed-size={actual}"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)sizeOffset, 4), actual + Declared);
+        });
+    }
+
+    /// <summary>Requires the control's single entry to carry a data descriptor
+    /// with the 4-byte signature, returning its offset.</summary>
+    private static long DescriptorOffset(ArchiveFixtureArtifact control, string caller)
+    {
+        if (control.Layout.Entries.Count != 1 || !control.Layout.Entries[0].HasDataDescriptor)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{caller}': the control must carry exactly one entry with a data descriptor.");
+        }
+
+        var offset = control.Layout.Entries[0].DataDescriptorOffset;
+        if (BinaryPrimitives.ReadUInt32LittleEndian(control.ArchiveBytes.AsSpan((int)offset, 4)) != 0x08074b50)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{caller}': expected the data descriptor signature at offset {offset}.");
+        }
+
+        return offset;
+    }
+
+    /// <summary>
+    /// Appends a second Zip64 extra subfield with a conflicting uncompressed
+    /// size to entry 0's central header (ticket #934): duplicate 0x0001 ids
+    /// isolate the first-wins versus last-wins parser decision. The central
+    /// header grows 12 bytes; the Zip64 EOCD span and locator offset relink.
+    /// </summary>
+    private static MutatedArchiveFixture DuplicateZip64ExtraField(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries[0];
+        var insertOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + entry.CentralExtraLength;
+        var extraLengthOffset = entry.CentralDirectoryOffset + 30;
+        var conflicting = checked((ulong)control.Entries[0].Content.Length + 64);
+        var code = ArchiveTestMutationKind.DuplicateZip64Extra.ToCaseKey();
+
+        var zip64Offset = Zip64EocdOffset(control, code);
+        var locatorOffset = control.Layout.EocdOffset - 20;
+        var after = new byte[checked(before.Length + 12)];
+        before.AsSpan()[..(int)insertOffset].CopyTo(after);
+        BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)insertOffset, 2), 0x0001);
+        BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)insertOffset + 2, 2), 8);
+        BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)insertOffset + 4, 8), conflicting);
+        before.AsSpan((int)insertOffset).CopyTo(after.AsSpan((int)insertOffset + 12));
+
+        // Linked changes: the central extra length, the Zip64 EOCD span, and
+        // the locator's Zip64 offset all move past the insertion.
+        var extraLength = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)extraLengthOffset, 2));
+        BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)extraLengthOffset, 2), checked((ushort)(extraLength + 12)));
+        var spanOffset = zip64Offset + 40 + 12;
+        var span = BinaryPrimitives.ReadUInt64LittleEndian(after.AsSpan((int)spanOffset, 8));
+        BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)spanOffset, 8), span + 12);
+        var locatorTarget = locatorOffset + 8 + 12;
+        var target = BinaryPrimitives.ReadUInt64LittleEndian(after.AsSpan((int)locatorTarget, 8));
+        BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)locatorTarget, 8), target + 12);
+
+        var mutation = Record(
+            new MutationSpec(
+                code, "central-header", insertOffset,
+                $"Appends a second Zip64 extra subfield declaring uncompressed size {conflicting} while the first declares {control.Entries[0].Content.Length}; duplicate ids isolate first-wins versus last-wins.",
+                entry.Ordinal, 0, 12, DeclaredValue: $"duplicate-zip64-uncompressed-size={conflicting} actual-content-length={control.Entries[0].Content.Length}"),
+            before, after);
+        return Finalize(ArchiveTestMutationKind.DuplicateZip64Extra, before, after, [mutation]);
+    }
+
+    /// <summary>
+    /// Appends a second Info-ZIP Unicode Path subfield with a conflicting name
+    /// in both headers (ticket #934): the CRC stays valid over the standard
+    /// name, so only name priority is under test. Each header grows by the
+    /// subfield length; the data shifts past the local insert and the EOCD
+    /// span relinks past both.
+    /// </summary>
+    private static MutatedArchiveFixture DuplicateUnicodePathField(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries[0];
+        var localExtraStart = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        var centralExtraStart = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var (_, localSize) = UnicodePathData(control, localExtraStart, "local", nameof(ArchiveTestMutationKind.DuplicateUnicodePath));
+        var (_, centralSize) = UnicodePathData(control, centralExtraStart, "central", nameof(ArchiveTestMutationKind.DuplicateUnicodePath));
+        if (localSize != centralSize)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{nameof(ArchiveTestMutationKind.DuplicateUnicodePath)}': the local and central Unicode Path sizes disagree.");
+        }
+
+        var growth = checked(4 + localSize);
+        var localInsert = localExtraStart + 4 + localSize;
+        var centralInsert = centralExtraStart + 4 + centralSize;
+        var code = ArchiveTestMutationKind.DuplicateUnicodePath.ToCaseKey();
+
+        // Divergent first name byte in each duplicate: the duplicate carries a
+        // different name while its CRC stays valid over the standard name.
+        var middle = new byte[checked(before.Length + growth)];
+        before.AsSpan()[..(int)localInsert].CopyTo(middle);
+        before.AsSpan((int)localExtraStart, growth).CopyTo(middle.AsSpan((int)localInsert));
+        middle[(int)localInsert + 9] ^= 0x20;
+        before.AsSpan((int)localInsert).CopyTo(middle.AsSpan((int)localInsert + growth));
+
+        var after = new byte[checked(middle.Length + growth)];
+        var centralShifted = centralInsert + growth;
+        middle.AsSpan()[..(int)centralShifted].CopyTo(after);
+        // Source is the duplicate just inserted locally: middle positions past
+        // the local insert are shifted, so the before-basis slice would copy
+        // neighbors instead of the subfield. Its first name byte already diverges.
+        middle.AsSpan((int)localInsert, growth).CopyTo(after.AsSpan((int)centralShifted));
+        middle.AsSpan((int)centralShifted).CopyTo(after.AsSpan((int)centralShifted + growth));
+
+        var localExtraLengthOffset = entry.LocalHeaderOffset + 28;
+        var localExtraLength = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)localExtraLengthOffset, 2));
+        BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localExtraLengthOffset, 2), checked((ushort)(localExtraLength + growth)));
+        var centralExtraLengthOffset = entry.CentralDirectoryOffset + growth + 30;
+        var centralExtraLength = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)centralExtraLengthOffset, 2));
+        BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralExtraLengthOffset, 2), checked((ushort)(centralExtraLength + growth)));
+        var eocdBase = control.Layout.EocdOffset + 2 * growth;
+        var eocdOffset = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan((int)eocdBase + 16, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)eocdBase + 16, 4), checked(eocdOffset + (uint)growth));
+        var eocdSize = BinaryPrimitives.ReadUInt32LittleEndian(after.AsSpan((int)eocdBase + 12, 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)eocdBase + 12, 4), checked(eocdSize + (uint)growth));
+
+        // One record for both inserts (parallel views must not overlap, and the
+        // verifier spot-checks the final record's afterHex at its offset): the
+        // local insert sits at the record offset, so its afterHex window is the
+        // duplicate subfield header; the explanation carries both offsets.
+        var mutation = Record(
+            new MutationSpec(
+                code, "whole-archive", localInsert,
+                $"Appends a second Unicode Path subfield with a one-byte-divergent name in both headers (local at {localInsert}, central at {centralInsert}) while each CRC stays valid over the standard name; no header-asymmetry decision pollutes name priority.",
+                entry.Ordinal, 0, 2 * growth, DeclaredValue: "duplicate-unicode-path-name-divergent"),
+            before, after);
+        return Finalize(ArchiveTestMutationKind.DuplicateUnicodePath, before, after, [mutation]);
+    }
+
+    /// <summary>
+    /// Sets the UTF-8 flag (bit 11) in both headers over CP437 name bytes
+    /// (ticket #934): the flag disagrees with the raw name, which is not valid
+    /// UTF-8. In place; nothing moves.
+    /// </summary>
+    private static MutatedArchiveFixture SetUtf8FlagOnCp437Name(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort Utf8Flag = 0x0800;
+        var entry = control.Layout.Entries[0];
+        var localFlagsOffset = entry.LocalHeaderOffset + 6;
+        var centralFlagsOffset = entry.CentralDirectoryOffset + 8;
+        var code = ArchiveTestMutationKind.Utf8FlagCp437Name.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.Utf8FlagCp437Name, before,
+        [
+            new MutationSpec(
+                code, "local-header", localFlagsOffset,
+                "Sets the local header UTF-8 flag over CP437 name bytes that are not valid UTF-8; the raw name still carries 0x82.",
+                entry.Ordinal, 2, 2, DeclaredValue: "utf-8-flag-set-over-cp437-name"),
+            new MutationSpec(
+                code, "central-header", centralFlagsOffset,
+                "Sets the central header UTF-8 flag alongside the local header; the disagreement is flag versus bytes, not header versus header.",
+                entry.Ordinal, 2, 2, DeclaredValue: "utf-8-flag-set-over-cp437-name"),
+        ], after =>
+        {
+            var local = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)localFlagsOffset, 2));
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localFlagsOffset, 2), (ushort)(local | Utf8Flag));
+            var central = BinaryPrimitives.ReadUInt16LittleEndian(after.AsSpan((int)centralFlagsOffset, 2));
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralFlagsOffset, 2), (ushort)(central | Utf8Flag));
+        });
+    }
+
+    /// <summary>Locates the 0x7075 subfield data in the given header's extra
+    /// area, verifying the tag; returns the data start and size.</summary>
+    private static (long DataStart, int Size) UnicodePathData(ArchiveFixtureArtifact control, long extraStart, string header, string caller)
+    {
+        var tagOffset = extraStart;
+        if (BinaryPrimitives.ReadUInt16LittleEndian(control.ArchiveBytes.AsSpan((int)tagOffset, 2)) != 0x7075)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{caller}': expected the Unicode Path subfield first in the {header} extra area.");
+        }
+
+        var size = BinaryPrimitives.ReadUInt16LittleEndian(control.ArchiveBytes.AsSpan((int)tagOffset + 2, 2));
+        if (size < 5 + 1)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{caller}': the Unicode Path subfield is {size} bytes, too small to mutate.");
+        }
+
+        return (tagOffset + 4, size);
+    }
+
+    /// <summary>
+    /// Flips a bit in the Unicode Path CRC in both headers (ticket #934): the
+    /// CRC lies while every name agrees, isolating CRC verification from name
+    /// priority. In place; nothing moves.
+    /// </summary>
+    private static MutatedArchiveFixture MismatchUnicodePathCrc(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries[0];
+        var localExtraStart = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        var centralExtraStart = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var (localData, _) = UnicodePathData(control, localExtraStart, "local", nameof(ArchiveTestMutationKind.UnicodePathCrcMismatch));
+        var (centralData, _) = UnicodePathData(control, centralExtraStart, "central", nameof(ArchiveTestMutationKind.UnicodePathCrcMismatch));
+        var localCrcOffset = localData + 1;
+        var centralCrcOffset = centralData + 1;
+        var code = ArchiveTestMutationKind.UnicodePathCrcMismatch.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.UnicodePathCrcMismatch, before,
+        [
+            new MutationSpec(
+                code, "local-header", localCrcOffset,
+                "Flips a bit in the local Unicode Path CRC while the standard and Unicode names agree everywhere; only CRC verification is under test.",
+                entry.Ordinal, 1, 1, DeclaredValue: "unicode-path-crc-corrupt"),
+            new MutationSpec(
+                code, "central-header", centralCrcOffset,
+                "Flips the same bit in the central Unicode Path CRC alongside the local header.",
+                entry.Ordinal, 1, 1, DeclaredValue: "unicode-path-crc-corrupt"),
+        ], after =>
+        {
+            after[localCrcOffset] ^= 0x01;
+            after[centralCrcOffset] ^= 0x01;
+        });
+    }
+
+    /// <summary>
+    /// Changes one byte of the Unicode name in both headers (ticket #934): the
+    /// CRC stays valid over the standard name while the Unicode names diverge
+    /// from it, isolating name priority from CRC verification. Same length;
+    /// nothing moves.
+    /// </summary>
+    private static MutatedArchiveFixture DivergeUnicodePathName(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var entry = control.Layout.Entries[0];
+        var localExtraStart = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        var centralExtraStart = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var (localData, localSize) = UnicodePathData(control, localExtraStart, "local", nameof(ArchiveTestMutationKind.UnicodePathNameDivergence));
+        var (centralData, centralSize) = UnicodePathData(control, centralExtraStart, "central", nameof(ArchiveTestMutationKind.UnicodePathNameDivergence));
+        if (localSize != centralSize)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{nameof(ArchiveTestMutationKind.UnicodePathNameDivergence)}': the local and central Unicode Path sizes disagree.");
+        }
+
+        var localNameOffset = localData + 5;
+        var centralNameOffset = centralData + 5;
+        var code = ArchiveTestMutationKind.UnicodePathNameDivergence.ToCaseKey();
+
+        return Patch(ArchiveTestMutationKind.UnicodePathNameDivergence, before,
+        [
+            new MutationSpec(
+                code, "local-header", localNameOffset,
+                "Changes the first byte of the local Unicode name while its length and CRC stay consistent with the standard name.",
+                entry.Ordinal, 1, 1, DeclaredValue: "unicode-path-name-divergent"),
+            new MutationSpec(
+                code, "central-header", centralNameOffset,
+                "Changes the first byte of the central Unicode name alongside the local header.",
+                entry.Ordinal, 1, 1, DeclaredValue: "unicode-path-name-divergent"),
+        ], after =>
+        {
+            after[localNameOffset] ^= 0x20;
+            after[centralNameOffset] ^= 0x20;
         });
     }
 
@@ -1200,6 +1507,13 @@ internal enum ArchiveTestMutationKind
     EocdEntryCountMismatch,
     Zip64EocdEntryCountMismatch,
     Zip64LocatorDiskMismatch,
+    DescriptorCrcDisagreement,
+    DescriptorSizeDisagreement,
+    DuplicateZip64Extra,
+    DuplicateUnicodePath,
+    Utf8FlagCp437Name,
+    UnicodePathCrcMismatch,
+    UnicodePathNameDivergence,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1247,6 +1561,13 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.EocdEntryCountMismatch => "eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => "zip64-eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
+        ArchiveTestMutationKind.DescriptorCrcDisagreement => "descriptor-crc-disagreement",
+        ArchiveTestMutationKind.DescriptorSizeDisagreement => "descriptor-size-disagreement",
+        ArchiveTestMutationKind.DuplicateZip64Extra => "duplicate-zip64-extra",
+        ArchiveTestMutationKind.DuplicateUnicodePath => "duplicate-unicode-path",
+        ArchiveTestMutationKind.Utf8FlagCp437Name => "utf8-flag-cp437-name",
+        ArchiveTestMutationKind.UnicodePathCrcMismatch => "unicode-path-crc-mismatch",
+        ArchiveTestMutationKind.UnicodePathNameDivergence => "unicode-path-name-divergence",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }
