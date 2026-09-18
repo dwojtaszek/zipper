@@ -119,6 +119,11 @@ internal enum ArchiveControlConstruction
     /// all pointing at the single local header (ticket #872); the standard writer
     /// cannot emit shared physical ranges.</summary>
     OverlappingEntries,
+
+    /// <summary>Serializes headers directly around the pinned genuine Deflate64
+    /// stream of the Deflate64-specific control (ticket #931); the hand-built
+    /// coded path can only emit Deflate-subset streams for method 9.</summary>
+    PinnedDeflate64LongMatch,
 }
 
 /// <summary>
@@ -214,10 +219,26 @@ internal static class ArchiveTestCatalog
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
+        // Compatibility role (ticket #931): this stays the subset control an
+        // ordinary DEFLATE decoder can still decode; the Deflate64-only behavior
+        // lives in valid-deflate64-long-match.
         ["valid-deflate64"] = new(
             "valid-deflate64", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Deflate64ControlRecipe),
+        // Ticket #931 Deflate64-specific control: one entry with a genuine
+        // Deflate64-only stream (a 38,000-byte match distance from the 64 KiB
+        // window). The stream is pinned 7-Zip output (provenance in the builder);
+        // the content recipe is seed-independent so the pinned stream matches
+        // the content at every seed.
+        ["valid-deflate64-long-match"] = new(
+            "valid-deflate64-long-match", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("long-match.bin", 42000, "deflate64"),
+            ]),
+            Construction: ArchiveControlConstruction.PinnedDeflate64LongMatch),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],

@@ -192,6 +192,11 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltOverlapping(definition, seed, cancellationToken);
         }
 
+        if (definition.Construction is ArchiveControlConstruction.PinnedDeflate64LongMatch)
+        {
+            return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
+        }
+
         if (definition.Recipe.Entries.Any(e => MethodCode(e.Method) is 9 or 12))
         {
             return BuildHandBuiltCoded(definition, seed, cancellationToken);
@@ -935,6 +940,147 @@ internal static class ArchiveFixtureBuilder
                 Content: content,
                 ContentSha256: contentSha,
                 PayloadCodec: entry.Method))],
+            Mutations: []);
+    }
+
+    /// <summary>
+    /// The pinned genuine Deflate64 stream for the Deflate64-specific control
+    /// (ticket #931): the <see cref="LongMatchContent"/> bytes compressed with
+    /// <c>7zz a -tzip -mm=Deflate64 -mx=9</c> (7-Zip 26.03, linux-x64).
+    /// Uncompressed SHA-256
+    /// 92267b4cc99ade8b536e3c1794cabf9cd795d5a9c766993086d8caa17cdbce5e
+    /// (42,000 bytes); stream SHA-256
+    /// 06e2a48e75ea96db139fb5e448143c0fe00def40c3c2ce9113d1fb290861517a
+    /// (2,233 bytes). The bytes encode our own content, carrying no
+    /// third-party license.
+    /// </summary>
+    private const string PinnedDeflate64LongMatchStream =
+        "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";
+
+    /// <summary>
+    /// The seed-independent content for the Deflate64-specific control: a
+    /// 2,000-byte hash-chained chunk, 36,000 filler bytes, the chunk again
+    /// (at a 38,000-byte distance, only reachable with a 64 KiB window), and
+    /// 2,000 closing bytes. Fixed so the pinned stream matches at every seed.
+    /// </summary>
+    private static byte[] LongMatchContent()
+    {
+        var chunk = new byte[2000];
+        var prefix = Encoding.UTF8.GetBytes("zipper-deflate64-long-match\n");
+        var filled = 0;
+        var counter = 0;
+        var counterBytes = new byte[4];
+        while (filled < chunk.Length)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(counterBytes, counter);
+            var block = SHA256.HashData([.. prefix, .. counterBytes]);
+            var copyLength = Math.Min(block.Length, chunk.Length - filled);
+            block.AsSpan(0, copyLength).CopyTo(chunk.AsSpan(filled));
+            filled += copyLength;
+            counter++;
+        }
+
+        var content = new byte[42000];
+        chunk.CopyTo(content, 0);
+        Array.Fill(content, (byte)'X', 2000, 36000);
+        chunk.CopyTo(content, 38000);
+        Array.Fill(content, (byte)'Y', 40000, 2000);
+        return content;
+    }
+
+    /// <summary>
+    /// Baseline for the Deflate64-specific control (ticket #931): headers
+    /// serialized directly around the pinned genuine Deflate64 stream. The
+    /// content hash is verified against provenance before any byte is written,
+    /// so recipe drift fails fast instead of publishing a corrupt control.
+    /// </summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltPinnedDeflate64(
+        ArchiveTestCaseDefinition definition, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 baseline expects exactly one file entry.");
+        }
+
+        var recipeEntry = definition.Recipe.Entries[0];
+        var code = MethodCode(recipeEntry.Method);
+        if (code != 9)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 baseline expects method \"deflate64\"; found \"{recipeEntry.Method}\".");
+        }
+
+        var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
+        var content = LongMatchContent();
+        if (content.Length != recipeEntry.Length)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 content is {content.Length} bytes; the recipe declares {recipeEntry.Length}.");
+        }
+
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        if (!contentSha.Equals("92267b4cc99ade8b536e3c1794cabf9cd795d5a9c766993086d8caa17cdbce5e", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the Deflate64 content no longer matches its pinned provenance hash.");
+        }
+
+        var encoded = Convert.FromBase64String(PinnedDeflate64LongMatchStream);
+        var encodedSha = Convert.ToHexStringLower(SHA256.HashData(encoded));
+        if (!encodedSha.Equals("06e2a48e75ea96db139fb5e448143c0fe00def40c3c2ce9113d1fb290861517a", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 stream no longer matches its provenance hash.");
+        }
+        checked
+        {
+            if ((long)content.Length > ArchiveTestCaseSemantics.MaxExpandedBytesBudget)
+            {
+                throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' exceeds the expanded budget.");
+            }
+
+            if (30L + name.Length + encoded.Length + 46L + name.Length + 22 > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+            {
+                throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' exceeds the physical Archive budget.");
+            }
+        }
+
+        using var stream = new MemoryStream();
+        var version = MethodVersion(code);
+        WriteLocalHeader(stream, version, code, content, encoded, name);
+        var centralDirectoryOffset = stream.Position;
+        WriteCentralHeader(stream, version, code, content, encoded, name, 0);
+        var centralDirectorySize = checked((int)(stream.Position - centralDirectoryOffset));
+        var eocd = new byte[22];
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd, 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(8), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(10), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(12), (uint)centralDirectorySize);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(16), (uint)centralDirectoryOffset);
+        stream.Write(eocd);
+
+        var bytes = stream.ToArray();
+        var layout = ArchiveFixtureLayout.Read(bytes);
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: layout,
+            Entries:
+            [
+                new ArchiveFixtureEntryExpectation(
+                    Ordinal: 0,
+                    Name: recipeEntry.Name,
+                    IsDirectory: false,
+                    Method: code,
+                    Content: content,
+                    ContentSha256: contentSha,
+                    PayloadCodec: recipeEntry.Method),
+            ],
             Mutations: []);
     }
 

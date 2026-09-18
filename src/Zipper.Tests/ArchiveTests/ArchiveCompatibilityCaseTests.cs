@@ -387,6 +387,7 @@ public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
     [Theory]
     [InlineData("valid-bzip2")]
     [InlineData("valid-deflate64")]
+    [InlineData("valid-deflate64-long-match")]
     [InlineData("valid-mixed-methods")]
     [InlineData("bzip2-high-ratio-bounded")]
     public void Expectations_CodedControls_DefineFullCodecAndUnsupportedReaderProfiles(string caseKey)

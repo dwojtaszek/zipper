@@ -217,10 +217,10 @@ internal static class ArchiveTestSuiteGenerator
     private static IReadOnlyList<ArchiveTestExpectation> BuildExpectations(ArchiveTestCaseDefinition definition)
     {
         // Valid archives whose entries require capability-specific verification profiles
-        // (tickets #897, #898, #930): full-codec readers (e.g. 7-Zip) must list, decode,
+        // (tickets #897, #898, #930, #931): full-codec readers (e.g. 7-Zip) must list, decode,
         // hash-check, integrity-check, and extract successfully; readers without the codec
         // must cleanly reject the unsupported method, never producing corrupt unverified bytes.
-        if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "valid-mixed-methods" or "bzip2-high-ratio-bounded")
+        if (definition.CaseKey is "valid-bzip2" or "valid-deflate64" or "valid-deflate64-long-match" or "valid-mixed-methods" or "bzip2-high-ratio-bounded")
         {
             return
             [
