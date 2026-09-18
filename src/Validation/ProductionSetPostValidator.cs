@@ -45,296 +45,337 @@ internal sealed class ProductionSetPostValidator
 {
     public static ProductionSetValidationReport Validate(string productionPath, FileGenerationRequest request)
     {
-        var report = new ProductionSetValidationReport();
-        var findings = report.Findings;
-
-        var datRelPath = "DATA/loadfile.dat";
-        var optRelPath = "DATA/loadfile.opt";
-        var datPath = Path.Combine(productionPath, "DATA", "loadfile.dat");
-        var optPath = Path.Combine(productionPath, "DATA", "loadfile.opt");
-
-        int datRowsChecked = 0;
-        int optRowsChecked = 0;
-
-        int checkedNativesCount = 0;
-        int checkedTextsCount = 0;
-        int checkedImagesCount = 0;
-
-        var seenDocIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenBatesNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var seenOptBates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var parentBatesList = new List<string>();
-
-        // 1. Verify DAT load file existence and contents
-        if (!File.Exists(datPath))
+        var state = new ValidationState
         {
-            findings.Add(new ValidationReportFinding
+            Request = request,
+            ProductionPath = productionPath,
+            DatPath = Path.Combine(productionPath, "DATA", "loadfile.dat"),
+            OptPath = Path.Combine(productionPath, "DATA", "loadfile.opt"),
+            SkipNativePathValidation = string.Equals(request.Production.WithheldNativePolicy, "replace-with-placeholder", StringComparison.OrdinalIgnoreCase),
+        };
+
+        ValidateDatLoadFile(state);
+        ValidateManifest(state);
+        ValidateBatesContinuity(state);
+        ValidateOptLoadFile(state);
+        FinalizeReport(state);
+
+        return state.Report;
+    }
+
+    /// <summary>Mutable per-run accumulator threaded through the per-concern validation steps.</summary>
+    private sealed class ValidationState
+    {
+        public required FileGenerationRequest Request { get; init; }
+        public required string ProductionPath { get; init; }
+        public required string DatPath { get; init; }
+        public required string OptPath { get; init; }
+        public required bool SkipNativePathValidation { get; init; }
+        public ProductionSetValidationReport Report { get; } = new();
+        public List<ValidationReportFinding> Findings => Report.Findings;
+        public string DatRelPath { get; } = "DATA/loadfile.dat";
+        public string OptRelPath { get; } = "DATA/loadfile.opt";
+        public int DatRowsChecked { get; set; }
+        public int OptRowsChecked { get; set; }
+        public int CheckedNativesCount { get; set; }
+        public int CheckedTextsCount { get; set; }
+        public int CheckedImagesCount { get; set; }
+        public HashSet<string> SeenDocIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SeenBatesNumbers { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SeenOptBates { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> ParentBatesList { get; } = [];
+        public string? ManifestStart { get; set; }
+        public string? ManifestEnd { get; set; }
+        public int? RollingSeqNum { get; set; }
+    }
+
+    /// <summary>Resolved DAT header column positions (-1 when the column is absent).</summary>
+    private sealed record DatColumnIndexes(
+        int DocId,
+        int Bates,
+        int Native,
+        int Text,
+        int Image,
+        int ParentId,
+        int RedactedImage,
+        int RedactedText,
+        int NativeWithheld);
+
+    private static DatColumnIndexes ResolveDatColumnIndexes(List<string> headers)
+    {
+        return new DatColumnIndexes(
+            headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "REDACTED_IMAGE_PATH", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "REDACTED_TEXT_PATH", StringComparison.OrdinalIgnoreCase)),
+            headers.FindIndex(h => string.Equals(h, "NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static void AddReferencedFileFinding(ValidationState state, string relPath, long line, string kindLabel, string referencedPath, string fullPath)
+    {
+        if (!File.Exists(fullPath))
+        {
+            state.Findings.Add(new ValidationReportFinding
             {
                 Code = "PathExistence",
                 Severity = "error",
-                Path = datRelPath,
+                Path = relPath,
+                Line = line,
+                Message = $"Referenced {kindLabel} file '{referencedPath}' does not exist."
+            });
+        }
+    }
+
+    private static void ValidateDatLoadFile(ValidationState state)
+    {
+        // 1. Verify DAT load file existence and contents
+        if (!File.Exists(state.DatPath))
+        {
+            state.Findings.Add(new ValidationReportFinding
+            {
+                Code = "PathExistence",
+                Severity = "error",
+                Path = state.DatRelPath,
                 Message = "DAT load file does not exist."
             });
         }
         else
         {
-            var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
-            var datLines = File.ReadLines(datPath, encoding);
-            var skipNativePathValidation = string.Equals(request.Production.WithheldNativePolicy, "replace-with-placeholder", StringComparison.OrdinalIgnoreCase);
+            var encoding = EncodingHelper.GetEncodingOrDefault(state.Request.LoadFile?.Encoding);
+            var datLines = File.ReadLines(state.DatPath, encoding);
 
             using (var enumerator = datLines.GetEnumerator())
             {
                 if (enumerator.MoveNext())
                 {
-                    datRowsChecked++;
+                    state.DatRowsChecked++;
                     var headerLine = enumerator.Current;
-                    var colDelimChar = request.Delimiters?.GetColumnChar() ?? '\x14';
-                    var quoteDelimChar = request.Delimiters?.GetQuoteChar() ?? '\xfe';
+                    var colDelimChar = state.Request.Delimiters?.GetColumnChar() ?? '\x14';
+                    var quoteDelimChar = state.Request.Delimiters?.GetQuoteChar() ?? '\xfe';
 
                     var headers = ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
-                    int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
-                    int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase));
-                    int nativeIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase));
-                    int textIdx = headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase));
-                    int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase));
-                    int parentIdIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase));
-                    int redactedImageIdx = headers.FindIndex(h => string.Equals(h, "REDACTED_IMAGE_PATH", StringComparison.OrdinalIgnoreCase));
-                    int redactedTextIdx = headers.FindIndex(h => string.Equals(h, "REDACTED_TEXT_PATH", StringComparison.OrdinalIgnoreCase));
-                    int nativeWithheldIdx = headers.FindIndex(h => string.Equals(h, "NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase));
+                    var columns = ResolveDatColumnIndexes(headers);
 
                     int i = 0;
                     while (enumerator.MoveNext())
                     {
                         i++;
-                        datRowsChecked++;
+                        state.DatRowsChecked++;
                         var line = enumerator.Current;
                         if (string.IsNullOrEmpty(line))
                             continue;
 
                         var fields = ParseDatLine(line, colDelimChar, quoteDelimChar);
-                        if (fields.Count != headers.Count)
-                        {
-                            findings.Add(new ValidationReportFinding
-                            {
-                                Code = "ColumnCount",
-                                Severity = "error",
-                                Path = datRelPath,
-                                Line = i + 1,
-                                Message = $"Expected {headers.Count} columns, got {fields.Count} on line {i + 1}"
-                            });
-                        }
-
-                        // DOCID uniqueness
-                        if (docIdIdx >= 0 && docIdIdx < fields.Count)
-                        {
-                            var docId = fields[docIdIdx];
-                            if (!string.IsNullOrEmpty(docId))
-                            {
-                                if (!seenDocIds.Add(docId))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "UniqueId",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Duplicate DOCID: '{docId}'"
-                                    });
-                                }
-                            }
-                        }
-
-                        // BATES_NUMBER uniqueness and consistency
-                        string batesVal = string.Empty;
-                        if (batesIdx >= 0 && batesIdx < fields.Count)
-                        {
-                            batesVal = fields[batesIdx];
-                            if (!string.IsNullOrEmpty(batesVal))
-                            {
-                                if (!seenBatesNumbers.Add(batesVal))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "UniqueId",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Duplicate Bates Number: '{batesVal}'"
-                                    });
-                                }
-                            }
-                        }
-
-                        // Parent/Child Bates range consistency check
-                        if (!string.IsNullOrEmpty(batesVal))
-                        {
-                            bool isParent = parentIdIdx == -1 || parentIdIdx >= fields.Count || string.IsNullOrEmpty(fields[parentIdIdx]);
-                            if (isParent)
-                            {
-                                parentBatesList.Add(batesVal);
-                            }
-                            else
-                            {
-                                var parentDocId = fields[parentIdIdx];
-                                if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "BatesConsistency",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'"
-                                    });
-                                }
-                            }
-                        }
-
-                        // Native path existence
-                        if (nativeIdx >= 0 && nativeIdx < fields.Count && !skipNativePathValidation)
-                        {
-                            var nativePath = fields[nativeIdx];
-                            if (!string.IsNullOrEmpty(nativePath))
-                            {
-                                checkedNativesCount++;
-                                var fullNativePath = Path.Combine(productionPath, nativePath.Replace('\\', '/'));
-                                if (!File.Exists(fullNativePath))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "PathExistence",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Referenced native file '{nativePath}' does not exist."
-                                    });
-                                }
-                            }
-                        }
-
-                        // Text path existence
-                        if (textIdx >= 0 && textIdx < fields.Count)
-                        {
-                            var textPath = fields[textIdx];
-                            if (!string.IsNullOrEmpty(textPath))
-                            {
-                                checkedTextsCount++;
-                                var fullTextPath = Path.Combine(productionPath, textPath.Replace('\\', '/'));
-                                if (!File.Exists(fullTextPath))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "PathExistence",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Referenced text file '{textPath}' does not exist."
-                                    });
-                                }
-                            }
-                        }
-
-                        // Image path existence
-                        if (imageIdx >= 0 && imageIdx < fields.Count)
-                        {
-                            var imagePath = fields[imageIdx];
-                            if (!string.IsNullOrEmpty(imagePath))
-                            {
-                                checkedImagesCount++;
-                                var fullImagePath = Path.Combine(productionPath, imagePath.Replace('\\', '/'));
-                                if (!File.Exists(fullImagePath))
-                                {
-                                    var dir = Path.GetDirectoryName(fullImagePath) ?? string.Empty;
-                                    var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fullImagePath);
-                                    var ext = Path.GetExtension(fullImagePath);
-                                    var pageOnePath = Path.Combine(dir, $"{fileNameWithoutExt}_001{ext}");
-
-                                    if (!File.Exists(pageOnePath))
-                                    {
-                                        findings.Add(new ValidationReportFinding
-                                        {
-                                            Code = "PathExistence",
-                                            Severity = "error",
-                                            Path = datRelPath,
-                                            Line = i + 1,
-                                            Message = $"Referenced image file '{imagePath}' does not exist."
-                                        });
-                                    }
-                                }
-                            }
-                        }
-
-                        // Redacted image path existence
-                        if (redactedImageIdx >= 0 && redactedImageIdx < fields.Count)
-                        {
-                            var redactedImagePath = fields[redactedImageIdx];
-                            if (!string.IsNullOrEmpty(redactedImagePath))
-                            {
-                                var fullRedactedImagePath = Path.Combine(productionPath, redactedImagePath.Replace('\\', '/'));
-                                if (!File.Exists(fullRedactedImagePath))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "PathExistence",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Referenced redacted image file '{redactedImagePath}' does not exist."
-                                    });
-                                }
-                            }
-                        }
-
-                        // Redacted text path existence
-                        if (redactedTextIdx >= 0 && redactedTextIdx < fields.Count)
-                        {
-                            var redactedTextPath = fields[redactedTextIdx];
-                            if (!string.IsNullOrEmpty(redactedTextPath))
-                            {
-                                var fullRedactedTextPath = Path.Combine(productionPath, redactedTextPath.Replace('\\', '/'));
-                                if (!File.Exists(fullRedactedTextPath))
-                                {
-                                    findings.Add(new ValidationReportFinding
-                                    {
-                                        Code = "PathExistence",
-                                        Severity = "error",
-                                        Path = datRelPath,
-                                        Line = i + 1,
-                                        Message = $"Referenced redacted text file '{redactedTextPath}' does not exist."
-                                    });
-                                }
-                            }
-                        }
-
-                        // NATIVE_WITHHELD value validation
-                        if (nativeWithheldIdx >= 0 && nativeWithheldIdx < fields.Count)
-                        {
-                            var withheldVal = fields[nativeWithheldIdx];
-                            if (string.IsNullOrEmpty(withheldVal) ||
-                                (!string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
-                                 !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase)))
-                            {
-                                findings.Add(new ValidationReportFinding
-                                {
-                                    Code = "InvalidValue",
-                                    Severity = "error",
-                                    Path = datRelPath,
-                                    Line = i + 1,
-                                    Message = $"NATIVE_WITHHELD must be 'YES' or 'NO', got '{withheldVal}'"
-                                });
-                            }
-                        }
+                        ValidateDatRow(state, columns, headers.Count, fields, i + 1);
                     }
                 }
             }
         }
+    }
 
+    private static void ValidateDatRow(ValidationState state, DatColumnIndexes columns, int headerCount, List<string> fields, long lineNumber)
+    {
+        if (fields.Count != headerCount)
+        {
+            state.Findings.Add(new ValidationReportFinding
+            {
+                Code = "ColumnCount",
+                Severity = "error",
+                Path = state.DatRelPath,
+                Line = lineNumber,
+                Message = $"Expected {headerCount} columns, got {fields.Count} on line {lineNumber}"
+            });
+        }
+
+        ValidateDatDocId(state, columns.DocId, fields, lineNumber);
+        ValidateDatBates(state, columns, fields, lineNumber);
+        ValidateDatNativePath(state, columns.Native, fields, lineNumber);
+        ValidateDatTextPath(state, columns.Text, fields, lineNumber);
+        ValidateDatImagePath(state, columns.Image, fields, lineNumber);
+        ValidateDatRedactedPath(state, columns.RedactedImage, fields, lineNumber, "redacted image");
+        ValidateDatRedactedPath(state, columns.RedactedText, fields, lineNumber, "redacted text");
+        ValidateDatNativeWithheld(state, columns.NativeWithheld, fields, lineNumber);
+    }
+
+    private static void ValidateDatDocId(ValidationState state, int docIdIdx, List<string> fields, long lineNumber)
+    {
+        // DOCID uniqueness
+        if (docIdIdx >= 0 && docIdIdx < fields.Count)
+        {
+            var docId = fields[docIdIdx];
+            if (!string.IsNullOrEmpty(docId))
+            {
+                if (!state.SeenDocIds.Add(docId))
+                {
+                    state.Findings.Add(new ValidationReportFinding
+                    {
+                        Code = "UniqueId",
+                        Severity = "error",
+                        Path = state.DatRelPath,
+                        Line = lineNumber,
+                        Message = $"Duplicate DOCID: '{docId}'"
+                    });
+                }
+            }
+        }
+    }
+
+    private static void ValidateDatBates(ValidationState state, DatColumnIndexes columns, List<string> fields, long lineNumber)
+    {
+        // BATES_NUMBER uniqueness and consistency
+        string batesVal = string.Empty;
+        if (columns.Bates >= 0 && columns.Bates < fields.Count)
+        {
+            batesVal = fields[columns.Bates];
+            if (!string.IsNullOrEmpty(batesVal))
+            {
+                if (!state.SeenBatesNumbers.Add(batesVal))
+                {
+                    state.Findings.Add(new ValidationReportFinding
+                    {
+                        Code = "UniqueId",
+                        Severity = "error",
+                        Path = state.DatRelPath,
+                        Line = lineNumber,
+                        Message = $"Duplicate Bates Number: '{batesVal}'"
+                    });
+                }
+            }
+        }
+
+        // Parent/Child Bates range consistency check
+        if (!string.IsNullOrEmpty(batesVal))
+        {
+            bool isParent = columns.ParentId == -1 || columns.ParentId >= fields.Count || string.IsNullOrEmpty(fields[columns.ParentId]);
+            if (isParent)
+            {
+                state.ParentBatesList.Add(batesVal);
+            }
+            else
+            {
+                var parentDocId = fields[columns.ParentId];
+                if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
+                {
+                    state.Findings.Add(new ValidationReportFinding
+                    {
+                        Code = "BatesConsistency",
+                        Severity = "error",
+                        Path = state.DatRelPath,
+                        Line = lineNumber,
+                        Message = $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'"
+                    });
+                }
+            }
+        }
+    }
+
+    private static void ValidateDatNativePath(ValidationState state, int nativeIdx, List<string> fields, long lineNumber)
+    {
+        // Native path existence
+        if (nativeIdx >= 0 && nativeIdx < fields.Count && !state.SkipNativePathValidation)
+        {
+            var nativePath = fields[nativeIdx];
+            if (!string.IsNullOrEmpty(nativePath))
+            {
+                state.CheckedNativesCount++;
+                var fullNativePath = Path.Combine(state.ProductionPath, nativePath.Replace('\\', '/'));
+                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, "native", nativePath, fullNativePath);
+            }
+        }
+    }
+
+    private static void ValidateDatTextPath(ValidationState state, int textIdx, List<string> fields, long lineNumber)
+    {
+        // Text path existence
+        if (textIdx >= 0 && textIdx < fields.Count)
+        {
+            var textPath = fields[textIdx];
+            if (!string.IsNullOrEmpty(textPath))
+            {
+                state.CheckedTextsCount++;
+                var fullTextPath = Path.Combine(state.ProductionPath, textPath.Replace('\\', '/'));
+                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, "text", textPath, fullTextPath);
+            }
+        }
+    }
+
+    private static void ValidateDatImagePath(ValidationState state, int imageIdx, List<string> fields, long lineNumber)
+    {
+        // Image path existence
+        if (imageIdx >= 0 && imageIdx < fields.Count)
+        {
+            var imagePath = fields[imageIdx];
+            if (!string.IsNullOrEmpty(imagePath))
+            {
+                state.CheckedImagesCount++;
+                var fullImagePath = Path.Combine(state.ProductionPath, imagePath.Replace('\\', '/'));
+                if (!File.Exists(fullImagePath))
+                {
+                    var dir = Path.GetDirectoryName(fullImagePath) ?? string.Empty;
+                    var fileNameWithoutExt = Path.GetFileNameWithoutExtension(fullImagePath);
+                    var ext = Path.GetExtension(fullImagePath);
+                    var pageOnePath = Path.Combine(dir, $"{fileNameWithoutExt}_001{ext}");
+
+                    if (!File.Exists(pageOnePath))
+                    {
+                        state.Findings.Add(new ValidationReportFinding
+                        {
+                            Code = "PathExistence",
+                            Severity = "error",
+                            Path = state.DatRelPath,
+                            Line = lineNumber,
+                            Message = $"Referenced image file '{imagePath}' does not exist."
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    private static void ValidateDatRedactedPath(ValidationState state, int redactedIdx, List<string> fields, long lineNumber, string kindLabel)
+    {
+        // Redacted image/text path existence
+        if (redactedIdx >= 0 && redactedIdx < fields.Count)
+        {
+            var redactedPath = fields[redactedIdx];
+            if (!string.IsNullOrEmpty(redactedPath))
+            {
+                var fullRedactedPath = Path.Combine(state.ProductionPath, redactedPath.Replace('\\', '/'));
+                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, kindLabel, redactedPath, fullRedactedPath);
+            }
+        }
+    }
+
+    private static void ValidateDatNativeWithheld(ValidationState state, int nativeWithheldIdx, List<string> fields, long lineNumber)
+    {
+        // NATIVE_WITHHELD value validation
+        if (nativeWithheldIdx >= 0 && nativeWithheldIdx < fields.Count)
+        {
+            var withheldVal = fields[nativeWithheldIdx];
+            if (string.IsNullOrEmpty(withheldVal) ||
+                (!string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase)))
+            {
+                state.Findings.Add(new ValidationReportFinding
+                {
+                    Code = "InvalidValue",
+                    Severity = "error",
+                    Path = state.DatRelPath,
+                    Line = lineNumber,
+                    Message = $"NATIVE_WITHHELD must be 'YES' or 'NO', got '{withheldVal}'"
+                });
+            }
+        }
+    }
+
+    private static void ValidateManifest(ValidationState state)
+    {
         // Manifest Bates range consistency
-        var manifestPath = Path.Combine(productionPath, "_manifest.json");
-        string? mStart = null;
-        string? mEnd = null;
-        int? rollingSeqNum = null;
+        var manifestPath = Path.Combine(state.ProductionPath, "_manifest.json");
         if (File.Exists(manifestPath))
         {
             try
@@ -342,45 +383,45 @@ internal sealed class ProductionSetPostValidator
                 using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath));
                 if (doc.RootElement.TryGetProperty("batesNumberStart", out var startElem))
                 {
-                    mStart = startElem.GetString();
+                    state.ManifestStart = startElem.GetString();
                 }
                 if (doc.RootElement.TryGetProperty("batesNumberEnd", out var endElem))
                 {
-                    mEnd = endElem.GetString();
+                    state.ManifestEnd = endElem.GetString();
                 }
                 if (doc.RootElement.TryGetProperty("rollingSequenceNumber", out var seqElem) &&
                     seqElem.TryGetInt32(out var sNum))
                 {
-                    rollingSeqNum = sNum;
+                    state.RollingSeqNum = sNum;
                 }
 
-                if (parentBatesList.Count > 0)
+                if (state.ParentBatesList.Count > 0)
                 {
-                    if (!string.IsNullOrEmpty(mStart) && !string.Equals(parentBatesList[0], mStart, StringComparison.Ordinal))
+                    if (!string.IsNullOrEmpty(state.ManifestStart) && !string.Equals(state.ParentBatesList[0], state.ManifestStart, StringComparison.Ordinal))
                     {
-                        findings.Add(new ValidationReportFinding
+                        state.Findings.Add(new ValidationReportFinding
                         {
                             Code = "BatesConsistency",
                             Severity = "error",
-                            Path = datRelPath,
-                            Message = $"DAT first Bates number '{parentBatesList[0]}' does not match manifest start '{mStart}'"
+                            Path = state.DatRelPath,
+                            Message = $"DAT first Bates number '{state.ParentBatesList[0]}' does not match manifest start '{state.ManifestStart}'"
                         });
                     }
-                    if (!string.IsNullOrEmpty(mEnd) && !string.Equals(parentBatesList[^1], mEnd, StringComparison.Ordinal))
+                    if (!string.IsNullOrEmpty(state.ManifestEnd) && !string.Equals(state.ParentBatesList[^1], state.ManifestEnd, StringComparison.Ordinal))
                     {
-                        findings.Add(new ValidationReportFinding
+                        state.Findings.Add(new ValidationReportFinding
                         {
                             Code = "BatesConsistency",
                             Severity = "error",
-                            Path = datRelPath,
-                            Message = $"DAT last Bates number '{parentBatesList[^1]}' does not match manifest end '{mEnd}'"
+                            Path = state.DatRelPath,
+                            Message = $"DAT last Bates number '{state.ParentBatesList[^1]}' does not match manifest end '{state.ManifestEnd}'"
                         });
                     }
                 }
             }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or System.IO.IOException)
             {
-                findings.Add(new ValidationReportFinding
+                state.Findings.Add(new ValidationReportFinding
                 {
                     Code = "ManifestSyntax",
                     Severity = "error",
@@ -389,132 +430,139 @@ internal sealed class ProductionSetPostValidator
                 });
             }
         }
+    }
 
+    private static void ValidateBatesContinuity(ValidationState state)
+    {
         // Bates range continuity/sequence check
-        if (request.Bates != null && parentBatesList.Count > 0)
+        if (state.Request.Bates != null && state.ParentBatesList.Count > 0)
         {
-            var effectiveBates = ResolveEffectiveBates(request, rollingSeqNum, mStart);
+            var effectiveBates = ResolveEffectiveBates(state.Request, state.RollingSeqNum, state.ManifestStart);
             var batesSequence = BatesSequence.FromConfig(effectiveBates);
-            for (int i = 0; i < parentBatesList.Count; i++)
+            for (int i = 0; i < state.ParentBatesList.Count; i++)
             {
                 var expectedBates = batesSequence.Format(i).ToString();
-                var actualBates = parentBatesList[i];
+                var actualBates = state.ParentBatesList[i];
                 if (!string.Equals(actualBates, expectedBates, StringComparison.Ordinal))
                 {
-                    findings.Add(new ValidationReportFinding
+                    state.Findings.Add(new ValidationReportFinding
                     {
                         Code = "BatesConsistency",
                         Severity = "error",
-                        Path = datRelPath,
+                        Path = state.DatRelPath,
                         Message = $"Bates range inconsistency: expected '{expectedBates}' at parent index {i}, but got '{actualBates}'"
                     });
                 }
             }
         }
+    }
 
+    private static void ValidateOptLoadFile(ValidationState state)
+    {
         // 2. Verify OPT load file existence and contents
-        if (!File.Exists(optPath))
+        if (!File.Exists(state.OptPath))
         {
-            findings.Add(new ValidationReportFinding
+            state.Findings.Add(new ValidationReportFinding
             {
                 Code = "PathExistence",
                 Severity = "error",
-                Path = optRelPath,
+                Path = state.OptRelPath,
                 Message = "OPT load file does not exist."
             });
         }
         else
         {
-            var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
+            var optEncoding = EncodingHelper.GetEncodingOrDefault(state.Request.LoadFile?.Encoding);
             int i = -1;
             string? firstOptBates = null;
             string? lastOptBates = null;
-            foreach (var line in File.ReadLines(optPath, optEncoding))
+            foreach (var line in File.ReadLines(state.OptPath, optEncoding))
             {
                 i++;
-                optRowsChecked++;
+                state.OptRowsChecked++;
                 if (string.IsNullOrEmpty(line))
                     continue;
 
                 var columns = line.Split(',');
-                if (columns.Length != 7)
-                {
-                    findings.Add(new ValidationReportFinding
-                    {
-                        Code = "OptBoundary",
-                        Severity = "error",
-                        Path = optRelPath,
-                        Line = i + 1,
-                        Message = $"OPT line {i + 1} has {columns.Length} columns, expected 7"
-                    });
-                }
-
-                // OPT Bates uniqueness
-                if (columns.Length > 0)
-                {
-                    var optBates = columns[0];
-                    if (!string.IsNullOrEmpty(optBates))
-                    {
-                        firstOptBates ??= optBates;
-                        lastOptBates = optBates;
-                        if (!seenOptBates.Add(optBates))
-                        {
-                            findings.Add(new ValidationReportFinding
-                            {
-                                Code = "UniqueId",
-                                Severity = "error",
-                                Path = optRelPath,
-                                Line = i + 1,
-                                Message = $"Duplicate Bates Number in OPT: '{optBates}'"
-                            });
-                        }
-                    }
-                }
-
-                // OPT Image path existence
-                if (columns.Length > 2)
-                {
-                    var imagePath = columns[2];
-                    if (!string.IsNullOrEmpty(imagePath))
-                    {
-                        var fullImagePath = Path.Combine(productionPath, imagePath.Replace('\\', '/'));
-                        if (!File.Exists(fullImagePath))
-                        {
-                            findings.Add(new ValidationReportFinding
-                            {
-                                Code = "PathExistence",
-                                Severity = "error",
-                                Path = optRelPath,
-                                Line = i + 1,
-                                Message = $"Referenced image file '{imagePath}' does not exist."
-                            });
-                        }
-                    }
-                }
+                ValidateOptRow(state, columns, i + 1, ref firstOptBates, ref lastOptBates);
             }
 
             // OPT Bates boundaries consistency with manifest
-            if (!string.IsNullOrEmpty(firstOptBates) && !string.IsNullOrEmpty(mStart) && !firstOptBates.StartsWith(mStart, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(firstOptBates) && !string.IsNullOrEmpty(state.ManifestStart) && !firstOptBates.StartsWith(state.ManifestStart, StringComparison.Ordinal))
             {
-                findings.Add(new ValidationReportFinding
+                state.Findings.Add(new ValidationReportFinding
                 {
                     Code = "BatesConsistency",
                     Severity = "error",
-                    Path = optRelPath,
-                    Message = $"OPT first Bates number '{firstOptBates}' does not match manifest start '{mStart}'"
+                    Path = state.OptRelPath,
+                    Message = $"OPT first Bates number '{firstOptBates}' does not match manifest start '{state.ManifestStart}'"
                 });
             }
-            if (!string.IsNullOrEmpty(lastOptBates) && !string.IsNullOrEmpty(mEnd) && !lastOptBates.StartsWith(mEnd, StringComparison.Ordinal))
+            if (!string.IsNullOrEmpty(lastOptBates) && !string.IsNullOrEmpty(state.ManifestEnd) && !lastOptBates.StartsWith(state.ManifestEnd, StringComparison.Ordinal))
             {
-                findings.Add(new ValidationReportFinding
+                state.Findings.Add(new ValidationReportFinding
                 {
                     Code = "BatesConsistency",
                     Severity = "error",
-                    Path = optRelPath,
-                    Message = $"OPT last Bates number '{lastOptBates}' does not match manifest end '{mEnd}'"
+                    Path = state.OptRelPath,
+                    Message = $"OPT last Bates number '{lastOptBates}' does not match manifest end '{state.ManifestEnd}'"
                 });
             }
         }
+    }
+
+    private static void ValidateOptRow(ValidationState state, string[] columns, long lineNumber, ref string? firstOptBates, ref string? lastOptBates)
+    {
+        if (columns.Length != 7)
+        {
+            state.Findings.Add(new ValidationReportFinding
+            {
+                Code = "OptBoundary",
+                Severity = "error",
+                Path = state.OptRelPath,
+                Line = lineNumber,
+                Message = $"OPT line {lineNumber} has {columns.Length} columns, expected 7"
+            });
+        }
+
+        // OPT Bates uniqueness
+        if (columns.Length > 0)
+        {
+            var optBates = columns[0];
+            if (!string.IsNullOrEmpty(optBates))
+            {
+                firstOptBates ??= optBates;
+                lastOptBates = optBates;
+                if (!state.SeenOptBates.Add(optBates))
+                {
+                    state.Findings.Add(new ValidationReportFinding
+                    {
+                        Code = "UniqueId",
+                        Severity = "error",
+                        Path = state.OptRelPath,
+                        Line = lineNumber,
+                        Message = $"Duplicate Bates Number in OPT: '{optBates}'"
+                    });
+                }
+            }
+        }
+
+        // OPT Image path existence
+        if (columns.Length > 2)
+        {
+            var imagePath = columns[2];
+            if (!string.IsNullOrEmpty(imagePath))
+            {
+                var fullImagePath = Path.Combine(state.ProductionPath, imagePath.Replace('\\', '/'));
+                AddReferencedFileFinding(state, state.OptRelPath, lineNumber, "image", imagePath, fullImagePath);
+            }
+        }
+    }
+
+    private static void FinalizeReport(ValidationState state)
+    {
+        var report = state.Report;
+        var findings = state.Findings;
 
         // Set counts and status
         report.ErrorCount = findings.Count(f => string.Equals(f.Severity, "error", StringComparison.OrdinalIgnoreCase));
@@ -523,20 +571,18 @@ internal sealed class ProductionSetPostValidator
 
         report.CheckedFileCounts = new Dictionary<string, int>
         {
-            ["dat"] = File.Exists(datPath) ? 1 : 0,
-            ["opt"] = File.Exists(optPath) ? 1 : 0,
-            ["native"] = checkedNativesCount,
-            ["text"] = checkedTextsCount,
-            ["image"] = checkedImagesCount
+            ["dat"] = File.Exists(state.DatPath) ? 1 : 0,
+            ["opt"] = File.Exists(state.OptPath) ? 1 : 0,
+            ["native"] = state.CheckedNativesCount,
+            ["text"] = state.CheckedTextsCount,
+            ["image"] = state.CheckedImagesCount
         };
 
         report.CheckedLoadFileRowCounts = new Dictionary<string, int>
         {
-            ["dat"] = datRowsChecked,
-            ["opt"] = optRowsChecked
+            ["dat"] = state.DatRowsChecked,
+            ["opt"] = state.OptRowsChecked
         };
-
-        return report;
     }
 
     private static Config.BatesNumberConfig ResolveEffectiveBates(FileGenerationRequest request, int? rollingSeqNum, string? manifestStart)
