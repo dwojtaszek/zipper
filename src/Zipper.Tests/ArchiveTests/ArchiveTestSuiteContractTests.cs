@@ -72,6 +72,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The method/data disagreement cases (ticket #899) housed in security.</summary>
     private static readonly string[] MethodDataSecurityCaseKeys = ["method-data-deflate-as-bzip2", "method-data-bzip2-as-stored"];
 
+    /// <summary>The split-archive declaration cases (ticket #933) housed in security.</summary>
+    private static readonly string[] SplitArchiveSecurityCaseKeys = ["multidisk-eocd-declared", "multidisk-central-entry-declared"];
+
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
 
@@ -107,6 +110,7 @@ public class ArchiveTestSuiteContractTests
                 .Concat(UnicodePathSecurityCaseKeys)
                 .Concat(HostileNameSecurityCaseKeys)
                 .Concat(MethodDataSecurityCaseKeys)
+                .Concat(SplitArchiveSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -145,14 +149,17 @@ public class ArchiveTestSuiteContractTests
         var malformed = SuiteKeys(ArchiveTestCatalog.MalformedSuite);
 
         // Every malformed-classification case plus the pinned structure cases
-        // with a non-malformed classification (unsupported-method and
-        // unsupported-method-deflate64, policy-sensitive, housed in malformed
-        // since ticket #840; declared-size-oversized is already
-        // malformed-classified and arrives via the derived set).
+        // with a non-malformed classification (unsupported-method,
+        // unsupported-method-deflate64, and the #933 split-archive declarations,
+        // all policy-sensitive, housed in malformed since ticket #840;
+        // declared-size-oversized is already malformed-classified and arrives
+        // via the derived set).
         var expected = AllKeys()
             .Where(key => ArchiveTestCatalog.GetCase(key).Classification == "malformed")
             .Append("unsupported-method")
             .Append("unsupported-method-deflate64")
+            .Append("multidisk-eocd-declared")
+            .Append("multidisk-central-entry-declared")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
     }
@@ -176,13 +183,13 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void Catalogue_ContainsExactlyTheFrozenEightyCaseKeys()
+    public void Catalogue_ContainsExactlyTheFrozenCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931): a case
+        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(81, AllKeys().Count);
+        Assert.Equal(86, AllKeys().Count);
     }
 }

@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=81     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931): every unique Case Key
+ALL_CASES=86     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933): every unique Case Key
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -325,6 +325,29 @@ PYEOF
     check 0 "7-Zip rejected all #900 coded-corruption fixtures"
   else
     check 1 "7-Zip must reject all #900 coded-corruption fixtures"
+  fi
+  # Ticket #933: split-archive declarations and count disagreements are
+  # malformed/unsupported declarations tested with `t` (never extracted).
+  # Four are rejected by 7-Zip; the locator total-disks declaration is
+  # ignored by 7-Zip (while Python's reader refuses it), so only its
+  # presence is asserted, not a rejection.
+  DISPUTE_OK=1
+  for key in multidisk-eocd-declared multidisk-central-entry-declared eocd-entry-count-mismatch zip64-eocd-entry-count-mismatch; do
+    DZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]==sys.argv[2]), ""))' "$ALL_OUT" "$key" || true)
+    if [[ -z "$DZIP" ]] || [[ ! -f "$DZIP" ]]; then
+      DISPUTE_OK=0
+    elif "$SEVEN_ZIP" t "$DZIP" >/dev/null 2>&1; then
+      DISPUTE_OK=0
+    fi
+  done
+  LOCATOR_ZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]=="zip64-locator-disk-mismatch"), ""))' "$ALL_OUT" || true)
+  if [[ -z "$LOCATOR_ZIP" ]] || [[ ! -f "$LOCATOR_ZIP" ]]; then
+    DISPUTE_OK=0
+  fi
+  if [[ "$DISPUTE_OK" -eq 1 ]]; then
+    check 0 "7-Zip rejected the #933 spanning and count-disagreement fixtures"
+  else
+    check 1 "7-Zip must reject the #933 spanning and count-disagreement fixtures"
   fi
 fi
 

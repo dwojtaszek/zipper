@@ -48,8 +48,8 @@ zipper --archive-test-suite <smoke|compatibility|malformed|security|all>
 - `--archive-test-suite` selects a predefined suite (the catalogue explicitly owns membership; the frozen contract is #834):
   - `smoke` — exactly the five frozen Case Keys: `valid-empty`, `valid-stored`, `valid-deflate`, `crc-both-mismatch`, `missing-eocd` (healthy controls plus the two reader-hostile cases every consumer pipeline must survive).
   - `compatibility` — every valid control/compatibility case.
-  - `malformed` — malformed atomic/combined cases (plus the pinned structure cases `unsupported-method`, `unsupported-method-deflate64`, and `declared-size-oversized`).
-  - `security` — policy-sensitive path and collision cases, the unsupported-feature cases (`unsupported-method`, `unsupported-method-deflate64`), and the bounded resource cases (`high-ratio-bounded`, `nested-archives-depth-two`, `many-small-entries`, `declared-size-oversized`, `zip-bomb-overlapping-deflate`, `bzip2-high-ratio-bounded`).
+  - `malformed` — malformed atomic/combined cases (plus the pinned structure cases `unsupported-method`, `unsupported-method-deflate64`, `multidisk-eocd-declared`, `multidisk-central-entry-declared`, and `declared-size-oversized`).
+  - `security` — policy-sensitive path and collision cases, the unsupported-feature cases (`unsupported-method`, `unsupported-method-deflate64`), the split-archive declaration cases (`multidisk-eocd-declared`, `multidisk-central-entry-declared`), and the bounded resource cases (`high-ratio-bounded`, `nested-archives-depth-two`, `many-small-entries`, `declared-size-oversized`, `zip-bomb-overlapping-deflate`, `bzip2-high-ratio-bounded`).
   - `all` — the distinct union of every case.
 - Generation order is ordinal Case Key. `--archive-test-cases` filters to named Case Keys; unknown, empty, duplicate, or out-of-suite keys fail validation.
 - `--seed` defaults to 42.

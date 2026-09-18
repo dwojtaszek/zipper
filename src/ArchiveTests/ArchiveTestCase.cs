@@ -94,7 +94,7 @@ internal static class ArchiveTestCaseSemantics
     private static readonly string[] Operations = ["list", "read-entry", "integrity-check", "extract"];
     private static readonly string[] Structures =
     [
-        "local-header", "file-data", "data-descriptor", "central-header", "central-directory", "eocd", "comment", "whole-archive"
+        "local-header", "file-data", "data-descriptor", "central-header", "central-directory", "eocd", "zip64-eocd", "zip64-locator", "comment", "whole-archive"
     ];
 
     internal static IReadOnlyList<string> Validate(ArchiveTestCase testCase)
