@@ -170,6 +170,8 @@ Run the built-in micro-benchmark suite:
 zipper --benchmark
 ```
 
+The scalability verdict fails when the worst later-vs-prior-peak throughput ratio across increasing file counts falls below 0.25 (tolerates up to 4x machine noise; independent from the CI Perf Guard historical baseline).
+
 ---
 
 ## Contributing & Developer Setup

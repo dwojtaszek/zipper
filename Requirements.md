@@ -692,8 +692,8 @@ This section clarifies behavior when multiple arguments interact:
 
 - **REQ-102**: A new command-line argument `--benchmark` shall be introduced.
 - **REQ-103**: When `--benchmark` is specified, the application shall run a built-in performance benchmark suite and exit, bypassing normal file generation.
-- **REQ-104**: The benchmark suite shall measure: parallel vs sequential generation throughput, memory pool effectiveness, scalability across file counts, and allocation overhead.
-- **REQ-105**: Benchmark results shall be printed to stdout with pass/fail indicators.
+- **REQ-104**: The benchmark suite shall measure: parallel vs sequential generation throughput, memory pool effectiveness, scalability across file counts, and allocation overhead. The scalability verdict shall fail when the worst later-vs-prior-peak throughput ratio across strictly increasing file counts falls below 0.25; steps with non-positive, non-finite, or zero-duration measurements are invalid and fail.
+- **REQ-105**: Benchmark results shall be printed to stdout with pass/fail indicators, including the measured throughput ratio and threshold for the scalability verdict.
 
 ---
 
