@@ -98,6 +98,212 @@ public class PerformanceBenchmarkRunnerTests
     }
 
     [Fact]
+    public void EvaluateScalability_WithThroughputCollapse_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 100, 1000, 1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(2000, 2000000, 1, 1000),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("ratio", verdict.Details, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithThroughputImprovement_ShouldReturnPass()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10000, 10, 100),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(2000, 2000, 1000, 1),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.True(verdict.Passed);
+    }
+
+    [Fact]
+    public void EvaluateScalability_AtThroughputRatioThreshold_ShouldReturnPass()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 1000, 100, 10),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(200, 8000, 25, 40),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.True(verdict.Passed);
+    }
+
+    [Fact]
+    public void EvaluateScalability_BelowThroughputRatioThreshold_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 1000, 100, 10),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(200, 8032, 24.9, 40.16),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("ratio", verdict.Details, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithMiddleDip_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 1000, 100, 10),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(200, 16000, 12.5, 80),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 5000, 100, 10),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithNonIncreasingFileCounts_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithDuplicateFileCounts_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithZeroDurationStep_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 0, 10000.0, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithNonPositiveFileCount_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(0, 10, 10000.0, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithInvalidAvgTime_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, double.NaN),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithNonFiniteThroughput_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, double.PositiveInfinity, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithNonPositiveThroughput_ShouldReturnFail()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.False(verdict.Passed);
+        Assert.Contains("Invalid", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvaluateScalability_WithSingleValidStep_ShouldReturnPass()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.True(verdict.Passed);
+    }
+
+    [Fact]
+    public void EvaluateScalability_Details_ShouldReportRatioAndThreshold()
+    {
+        var steps = new[]
+        {
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(100, 10, 10000.0, 0.1),
+            new PerformanceBenchmarkRunner.ScalabilityStepResult(500, 40, 12500.0, 0.08),
+        };
+
+        var verdict = PerformanceBenchmarkRunner.EvaluateScalability(steps);
+
+        Assert.Contains("ratio", verdict.Details, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("0.25", verdict.Details, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EvaluateScalability_WithEmptySteps_ShouldReturnFail()
     {
         var verdict = PerformanceBenchmarkRunner.EvaluateScalability(Array.Empty<PerformanceBenchmarkRunner.ScalabilityStepResult>());

@@ -74,14 +74,85 @@ public static class PerformanceBenchmarkRunner
         return new BenchmarkMetricResult("Memory Pool Effectiveness", passed, details);
     }
 
+    /// <summary>
+    /// Minimum accepted throughput ratio for later steps versus the prior peak
+    /// (later files/sec / max earlier files/sec) across strictly increasing file
+    /// counts. Directional: throughput improvements pass, drops beyond 4x fail.
+    /// Tolerates machine noise while failing genuine collapses (e.g. 1000x).
+    /// Independent from the CI Perf Guard historical-baseline comparison
+    /// (.github/workflows/perf-guard.yml). The evaluator trusts the reported
+    /// FilesPerSecond (high-resolution inner clock) rather than recomputing
+    /// from millisecond-truncated ElapsedMs.
+    /// </summary>
+    public const double ScalabilityMinThroughputRatio = 0.25;
+
     public static BenchmarkMetricResult EvaluateScalability(IReadOnlyList<ScalabilityStepResult> steps)
     {
+        const string metricName = "Scalability Across File Counts";
         ArgumentNullException.ThrowIfNull(steps);
-        bool passed = steps.Count > 0 && steps.All(s => s.FilesPerSecond > 0);
-        string details = steps.Count > 0
-            ? string.Join("; ", steps.Select(s => $"{s.FileCount} files: {s.ElapsedMs}ms ({s.FilesPerSecond:F1} files/sec)"))
-            : "No steps recorded";
-        return new BenchmarkMetricResult("Scalability Across File Counts", passed, details);
+        if (steps.Count == 0)
+        {
+            return new BenchmarkMetricResult(metricName, false, "No steps recorded");
+        }
+
+        string perStep = string.Join("; ", steps.Select(s => $"{s.FileCount} files: {s.ElapsedMs}ms ({s.FilesPerSecond:F1} files/sec)"));
+        string? invalid = ValidateScalabilitySteps(steps);
+        if (invalid is not null)
+        {
+            return new BenchmarkMetricResult(metricName, false, $"{perStep}; Invalid: {invalid}");
+        }
+
+        if (steps.Count == 1)
+        {
+            return new BenchmarkMetricResult(metricName, true, perStep);
+        }
+
+        double peak = steps[0].FilesPerSecond;
+        double worstRatio = double.MaxValue;
+        for (int i = 1; i < steps.Count; i++)
+        {
+            worstRatio = Math.Min(worstRatio, steps[i].FilesPerSecond / peak);
+            peak = Math.Max(peak, steps[i].FilesPerSecond);
+        }
+
+        bool passed = worstRatio >= ScalabilityMinThroughputRatio;
+        string details = $"{perStep}; Throughput ratio (worst later vs prior peak): {worstRatio:F3} (threshold ≥ {ScalabilityMinThroughputRatio:F2})";
+        return new BenchmarkMetricResult(metricName, passed, details);
+    }
+
+    private static string? ValidateScalabilitySteps(IReadOnlyList<ScalabilityStepResult> steps)
+    {
+        for (int i = 0; i < steps.Count; i++)
+        {
+            var s = steps[i];
+            if (s.FileCount <= 0)
+            {
+                return $"step {i} has non-positive FileCount ({s.FileCount})";
+            }
+
+            // Zero-duration timings are noise (millisecond resolution); throughput cannot be trusted.
+            if (s.ElapsedMs <= 0)
+            {
+                return $"step {i} has non-positive ElapsedMs ({s.ElapsedMs}ms)";
+            }
+
+            if (!double.IsFinite(s.FilesPerSecond) || s.FilesPerSecond <= 0)
+            {
+                return $"step {i} has invalid FilesPerSecond ({s.FilesPerSecond})";
+            }
+
+            if (!double.IsFinite(s.AvgTimePerFileMs) || s.AvgTimePerFileMs <= 0)
+            {
+                return $"step {i} has invalid AvgTimePerFileMs ({s.AvgTimePerFileMs})";
+            }
+
+            if (i > 0 && s.FileCount <= steps[i - 1].FileCount)
+            {
+                return $"step {i} FileCount ({s.FileCount}) is not greater than prior ({steps[i - 1].FileCount})";
+            }
+        }
+
+        return null;
     }
 
     public static BenchmarkMetricResult EvaluateAllocation(int fileCount, long totalAllocatedBytes)
@@ -298,6 +369,7 @@ public static class PerformanceBenchmarkRunner
         }
 
         var verdict = EvaluateScalability(stepResults);
+        await writer.WriteLineAsync($"  {verdict.Details}").ConfigureAwait(false);
         await writer.WriteLineAsync($"  Status:          {(verdict.Passed ? "✓ PASS" : "✗ FAIL")} (scalability verified)").ConfigureAwait(false);
         await writer.WriteLineAsync().ConfigureAwait(false);
 
