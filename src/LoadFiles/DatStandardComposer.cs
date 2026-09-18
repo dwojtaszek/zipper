@@ -50,6 +50,11 @@ internal sealed class DatStandardComposer
             cols.AddRange(new[] { "Custodian", "Date Sent", "Author", "File Size" });
         }
 
+        if (request.Metadata.ShouldIncludeCompressionColumn(request.Output))
+        {
+            cols.Add("Compression Method");
+        }
+
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             cols.AddRange(new[] { "To", "From", "CC", "Subject", "Sent Date", "Attachment" });
@@ -286,6 +291,11 @@ internal sealed class DatStandardComposer
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("DATESENT") ?? string.Empty));
             v.Add(ctx.IsChild ? string.Empty : (profileValues?.GetValueOrDefault("AUTHOR") ?? string.Empty));
             v.Add(ctx.FileSizeOverride ?? (profileValues?.GetValueOrDefault("FILESIZE") ?? fileData.DataLength.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        if (this.request.Metadata.ShouldIncludeCompressionColumn(this.request.Output))
+        {
+            v.Add(SyntheticRowValues.CompressionMethod(this.request));
         }
 
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))

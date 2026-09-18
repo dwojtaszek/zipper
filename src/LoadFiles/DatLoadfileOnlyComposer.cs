@@ -30,6 +30,10 @@ internal sealed class DatLoadfileOnlyComposer
             "Control Number", "File Path", "Custodian", "Date Sent", "Author", "File Size",
             "EmailSubject", "EmailFrom", "EmailTo", "EmailCC", "EmailSentDate", "ExtractedText",
         };
+        if (request.Metadata.ShouldIncludeCompressionColumn(request.Output))
+        {
+            lfCols.Insert(6, "Compression Method");
+        }
         if (request.Metadata.WithFamilies)
         {
             lfCols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
@@ -70,6 +74,10 @@ internal sealed class DatLoadfileOnlyComposer
                 parentId, filePath, custodian, dateSent, author, fileSize,
                 subjLine, senderAddr, recipientAddr, ccAddr, sentTime, extractedText,
             };
+            if (this.request.Metadata.ShouldIncludeCompressionColumn(this.request.Output))
+            {
+                parentRecordValues.Insert(6, SyntheticRowValues.CompressionMethod(this.request));
+            }
 
             if (this.request.Metadata.WithFamilies)
             {
@@ -89,6 +97,10 @@ internal sealed class DatLoadfileOnlyComposer
                     childId, childPath, custodian, string.Empty, string.Empty, childFileSize,
                     string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, childExtractedText,
                 };
+                if (this.request.Metadata.ShouldIncludeCompressionColumn(this.request.Output))
+                {
+                    childRecordValues.Insert(6, SyntheticRowValues.CompressionMethod(this.request));
+                }
 
                 if (this.request.Metadata.WithFamilies)
                 {

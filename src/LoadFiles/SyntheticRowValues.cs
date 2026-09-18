@@ -20,6 +20,14 @@ internal static class SyntheticRowValues
         return (custodian, dateSent, author, fileSize);
     }
 
+    /// <summary>
+    /// The Archive-wide compression method name (e.g. Deflate, Store) for the
+    /// COMPRESSION_METHOD column. Deterministic: no random draw, so seeded draw
+    /// order elsewhere is undisturbed.
+    /// </summary>
+    internal static string CompressionMethod(FileGenerationRequest request)
+        => request.Output.CompressionMethod.ToString();
+
     internal static (string To, string From, string Cc, string Subject, string SentDate, string Attachment) Eml(
         FileWorkItem workItem,
         FileData fileData,

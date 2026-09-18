@@ -279,6 +279,18 @@ assert_dat_contains "--with-collection-metadata + --with-metadata both column se
 assert_dat_contains "--with-collection-metadata + --with-metadata both column sets present" "De-Nisted" \
     --type pdf --count 5 --with-metadata --with-collection-metadata
 
+assert_dat_contains "--with-metadata includes Compression Method column" "Compression Method" \
+    --type pdf --count 5 --with-metadata
+
+assert_dat_contains "--with-metadata defaults Compression Method to Deflate" "Deflate" \
+    --type pdf --count 5 --with-metadata
+
+assert_dat_contains "--with-metadata --compression store writes Store value" "Store" \
+    --type pdf --count 5 --with-metadata --compression store
+
+assert_dat_not_contains "--without --with-metadata omits Compression Method column" "Compression Method" \
+    --type pdf --count 5
+
 assert_dat_not_contains "--with-collection-metadata in Production Set silently ignored" "Data Source" \
     --production-set --count 5 --bates-prefix TEST --type pdf --with-collection-metadata
 

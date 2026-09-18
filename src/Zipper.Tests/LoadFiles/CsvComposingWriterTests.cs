@@ -147,6 +147,30 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task CsvWriter_WithMetadata_ContainsCompressionMethodInHeaderAndRow()
+    {
+        var request = this.CreateTestRequest();
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var files = this.CreateTestFileData(1);
+        var content = await this.CaptureCsvOutput(request, files);
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("COMPRESSION METHOD", lines[0], StringComparison.Ordinal);
+        Assert.Contains("Deflate", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CsvWriter_WithoutMetadata_OmitsCompressionMethod()
+    {
+        var request = this.CreateTestRequest();
+        request.Metadata = request.Metadata with { WithMetadata = false };
+        var files = this.CreateTestFileData(1);
+        var content = await this.CaptureCsvOutput(request, files);
+
+        Assert.DoesNotContain("COMPRESSION METHOD", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CsvWriter_WithBatesConfig_WritesCorrectBatesNumber()
     {
         var request = this.CreateTestRequest();

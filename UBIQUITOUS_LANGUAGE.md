@@ -11,7 +11,7 @@
 | **Archive** | A compressed `.zip` file containing zero or more generated **Native Files** organized into **Folders**. Each **Archive** corresponds to one **Load File dataset** (which may be exported in multiple formats: DAT, OPT, CSV, XML). | ZIP file, package |
 | **Native File** | A single placeholder document (PDF, JPG, TIFF, DOCX, XLSX, or EML) added to the **Archive**. Each **Native File** has a unique identity tracked in the **Load File**. | File, document, item |
 | **Load File** | A delimited text record (DAT, OPT, CSV, or XML) that maps **Native Files** to metadata. One record per **Native File**, with two exceptions: OPT emits one record per page (a multipage TIFF expands to `_NNN`-suffixed page records), and with `--with-families` each **Attachment** adds one family child record (keyed `{parent}_A001`). | Manifest, index, metadata file |
-| **Metadata** | Column values in the **Load File** describing a **Native File** (e.g., Custodian, Date Sent, Author, File Size). | Attributes, properties, fields |
+| **Metadata** | Column values in the **Load File** describing a **Native File** (e.g., Custodian, Date Sent, Author, File Size, Compression Method). | Attributes, properties, fields |
 | **Folder** | A logical directory within the **Archive** (used only during regular **Archive** generation via `--folders`) to distribute **Native Files** across a directory structure. The number of **Folders** is configurable; defaults to 1. | Directory, bucket, container |
 | **Distribution** | The pattern by which **Native Files** are assigned to **Folders**. Supported patterns: `proportional`, `gaussian`, `exponential`. | Assignment strategy, allocation |
 | **File Type** | The format of generated **Native Files**: `pdf`, `jpg`, `tiff`, `eml`, `docx`, `xlsx`. | Format, extension, kind |
@@ -258,7 +258,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 3. **"Metadata" scope**:
    - **Metadata** can mean all columns in the **Load File** (broad definition).
-   - But `--with-metadata` adds only specific columns (Custodian, Author, Date Sent, File Size)—not all columns.
+    - But `--with-metadata` adds only specific columns (Custodian, Author, Date Sent, File Size, Compression Method)—not all columns.
    - Use "**Load File** columns" for breadth; "**with-metadata** columns" for the specific flag's columns.
 
 4. **"Encoding" vs "Line Ending"**:

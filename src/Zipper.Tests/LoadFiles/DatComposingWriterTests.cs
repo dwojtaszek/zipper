@@ -104,6 +104,43 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_WithMetadata_IncludesCompressionMethodColumn()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.Contains("Compression Method", lines[0], StringComparison.Ordinal);
+        Assert.Contains("Deflate", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutMetadata_OmitsCompressionMethodColumn()
+    {
+        var request = DefaultRequest();
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.DoesNotContain("Compression Method", lines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithStoreCompression_WritesStoreValue()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        request.Output = request.Output with { CompressionMethod = Zipper.Config.ZipCompressionMethod.Store };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.Contains("Store", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_WithMetadata_WritesMetadataValues()
     {
         var request = DefaultRequest();

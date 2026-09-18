@@ -14,6 +14,56 @@ public class DatComposingWriterLoadFileTests : TempDirectoryTestBase
 
 
     [Fact]
+    public async Task LoadfileOnlyDatWriter_WithMetadata_IncludesCompressionMethodColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 2,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithMetadata = true },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("Compression Method", lines[0], StringComparison.Ordinal);
+        Assert.Contains("Deflate", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadfileOnlyDatWriter_WithoutMetadata_OmitsCompressionMethodColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 2,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+        };
+        var writer = new DatComposingWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.DoesNotContain("Compression Method", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LoadfileOnlyDatWriter_ProducesCorrectFormat()
     {
         var request = new FileGenerationRequest

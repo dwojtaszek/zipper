@@ -26,6 +26,7 @@ internal sealed class ConcordanceComposer : StandardRowComposer
         "DATESENT" => "DATESENT",
         "AUTHOR" => "AUTHOR",
         "FILESIZE" => "FILESIZE",
+        "COMPRESSIONMETHOD" => "COMPRESSION_METHOD",
         "TO" => "TO",
         "FROM" => "FROM",
         "CC" => "CC",

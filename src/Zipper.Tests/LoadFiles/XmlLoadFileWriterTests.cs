@@ -94,6 +94,38 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_WithMetadata_WritesCompressionMethodTag()
+    {
+        var request = this.CreateTestRequest();
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var fileData = this.CreateTestFileData(1);
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.EdrmXml);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, fileData);
+
+        stream.Position = 0;
+        var content = await new StreamReader(stream).ReadToEndAsync();
+
+        Assert.Contains("<Tag TagName=\"CompressionMethod\" TagValue=\"Deflate\" />", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutMetadata_OmitsCompressionMethodTag()
+    {
+        var request = this.CreateTestRequest();
+        request.Metadata = request.Metadata with { WithMetadata = false };
+        var fileData = this.CreateTestFileData(1);
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.EdrmXml);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, fileData);
+
+        stream.Position = 0;
+        var content = await new StreamReader(stream).ReadToEndAsync();
+
+        Assert.DoesNotContain("CompressionMethod", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
 #pragma warning disable S4426 // Weak cryptographic algorithms are tested for correctness
     public async Task WriteAsync_WithHashModeActual_WritesAlgorithmSpecificHashAttributes()
     {

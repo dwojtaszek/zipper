@@ -31,6 +31,7 @@ internal sealed class CsvComposer : StandardRowComposer
         "DATESENT" => "Date Sent",
         "AUTHOR" => "Author",
         "FILESIZE" => "File Size",
+        "COMPRESSIONMETHOD" => "Compression Method",
         "TO" => "To",
         "FROM" => "From",
         "CC" => "CC",

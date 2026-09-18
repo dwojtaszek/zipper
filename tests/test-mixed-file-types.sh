@@ -153,10 +153,19 @@ if ! echo "$header" | grep -q "Subject"; then
   print_error "Test 3: Email Metadata columns not found in .dat header (eml in mix)"
 fi
 
-# Columns: Control Number, File Path, File Type, Custodian, Date Sent, Author, File Size, To, From, CC, Subject, Sent Date, Attachment
+# Columns: Control Number, File Path, File Type, Custodian, Date Sent, Author, File Size, Compression Method, To, From, CC, Subject, Sent Date, Attachment
 # count 4 with pdf:1,eml:1 -> data rows 2-3 are PDF, rows 4-5 are EML
-pdf_to=$(awk -F'\024' 'NR==2 {print $8}' "$dat_file" | tr -d 'þ\r')
-eml_to=$(awk -F'\024' 'NR==4 {print $8}' "$dat_file" | tr -d 'þ\r')
+pdf_comp=$(awk -F'\024' 'NR==2 {print $8}' "$dat_file" | tr -d 'þ\r')
+eml_comp=$(awk -F'\024' 'NR==4 {print $8}' "$dat_file" | tr -d 'þ\r')
+if [[ "$pdf_comp" != "Deflate" ]]; then
+  print_error "Test 3: PDF record 'Compression Method' should be 'Deflate', found '$pdf_comp'"
+fi
+if [[ "$eml_comp" != "Deflate" ]]; then
+  print_error "Test 3: EML record 'Compression Method' should be 'Deflate', found '$eml_comp'"
+fi
+
+pdf_to=$(awk -F'\024' 'NR==2 {print $9}' "$dat_file" | tr -d 'þ\r')
+eml_to=$(awk -F'\024' 'NR==4 {print $9}' "$dat_file" | tr -d 'þ\r')
 if [[ -n "$pdf_to" ]]; then
   print_error "Test 3: PDF record 'To' should be blank, found '$pdf_to'"
 fi

@@ -37,4 +37,19 @@ public class MetadataConfigTests
         // Act & Assert
         Assert.Equal(expected, metadata.ShouldIncludeMetadataColumns(output));
     }
+
+    [Theory]
+    [InlineData(true, "pdf", true)]
+    [InlineData(false, "pdf", false)]
+    [InlineData(false, "eml", true)]
+    [InlineData(true, "eml", true)]
+    public void ShouldIncludeCompressionColumn_ReturnsExpected(bool withMetadata, string fileType, bool expected)
+    {
+        // Arrange
+        var metadata = new MetadataConfig { WithMetadata = withMetadata };
+        var output = new OutputConfig { FileType = fileType };
+
+        // Act & Assert
+        Assert.Equal(expected, metadata.ShouldIncludeCompressionColumn(output));
+    }
 }

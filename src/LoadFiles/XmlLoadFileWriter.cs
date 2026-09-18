@@ -319,6 +319,11 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             AddTag(tagsElement, "FileSize", isChild ? fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture) : meta.FileSize, namingConvention);
         }
 
+        if (request.Metadata.ShouldIncludeCompressionColumn(request.Output))
+        {
+            AddTag(tagsElement, "CompressionMethod", SyntheticRowValues.CompressionMethod(request), namingConvention);
+        }
+
         if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
         {
             // In a File Type mix, Email Metadata appears only on Email records.
