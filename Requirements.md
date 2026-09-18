@@ -42,7 +42,7 @@ The application operates in three distinct generation modes:
 
 ### FR-000: Automatic Metadata Generation
 - **REQ-000**: A new optional command-line argument `--with-metadata` shall be introduced.
-- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, and `File Size`. Note: For the Email File Type, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to Emails.
+- **REQ-001**: When `--with-metadata` is specified, the output `.dat` file must include the additional columns: `Custodian`, `Date Sent`, `Author`, `File Size`, and `Compression Method` (the Archive-wide `--compression` setting: `Store`, `Deflate`, `Deflate64`, or `BZip2`). Note: For the Email File Type, email-specific metadata columns are always included regardless of this flag, as these are intrinsic to Emails.
 - **REQ-002**: In the default (standard Archive) generation mode, the `Custodian` field shall be linked to the Folder structure. The tool will generate a unique custodian name for each Folder (e.g., "Custodian 1"). All Native Files within a given Folder will be assigned that Folder's custodian. If no Folders are specified, a single default custodian name will be assigned to all Native Files. This applies to both non-Email and Email standard output (via the built-in `LegacyWithMetadata`/`LegacyEml` profiles). The following modes use a **different** custodian model and are NOT folder-linked:
   - `--production-set`: custodians are drawn randomly from a pool of size `--custodian-count` (default 10, max 1000), independent of Folders.
   - `--loadfile-only` (DAT): custodians use an index-based assignment (`Custodian {(index % 10) + 1}`).
@@ -132,7 +132,7 @@ The application operates in three distinct generation modes:
 - `--folders <number>`: (Optional) The number of Folders to distribute Native Files into. Defaults to 1. Must be between 1 and 100.
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the Load File. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for Native Files across Folders. Defaults to `proportional`.
-- `--with-metadata`: (Optional) Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size).
+- `--with-metadata`: (Optional) Generates a Load File with additional metadata columns (Custodian, Date Sent, Author, File Size, Compression Method).
 - `--with-text`: (Optional) Generates a corresponding extracted text file for each document and adds the path to the Load File.
 - `--attachment-rate <number>`: (Optional) When type is `eml`, specifies the percentage of Emails (0-100) that will receive a random Native File as an Attachment. Defaults to 0.
 - `--target-zip-size <size>`: (Optional, Requires --count) Specifies a target size for the final Archive (e.g., 500MB, 10GB).

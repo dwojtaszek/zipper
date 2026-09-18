@@ -24,5 +24,7 @@ public record MetadataConfig
 
     internal bool ShouldIncludeMetadataColumns(OutputConfig output) => this.WithMetadata || output.HasFileType("eml");
 
+    internal bool ShouldIncludeCompressionColumn(OutputConfig output) => this.ShouldIncludeMetadataColumns(output);
+
     internal bool ShouldIncludeCollectionMetadataColumns() => this.WithCollectionMetadata;
 }

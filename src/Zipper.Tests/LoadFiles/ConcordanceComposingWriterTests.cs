@@ -48,6 +48,78 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_WithMetadata_ContainsCompressionMethodColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "ANSI" },
+            Metadata = new MetadataConfig { WithMetadata = true, Seed = 42 }
+        };
+
+        var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FileName = "doc1.pdf",
+                        FilePathInZip = "folder/doc1.pdf"
+                    },
+                    DataLength = 1234
+                }
+            };
+
+        var writer = new ConcordanceComposingWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        var content = System.Text.Encoding.GetEncoding(1252).GetString(stream.ToArray());
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("\u00feCOMPRESSION_METHOD\u00fe", lines[0], StringComparison.Ordinal);
+        Assert.Contains("\u00feDeflate\u00fe", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutMetadata_OmitsCompressionMethodColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "ANSI" },
+            Metadata = new MetadataConfig { WithMetadata = false, Seed = 42 }
+        };
+
+        var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FileName = "doc1.pdf",
+                        FilePathInZip = "folder/doc1.pdf"
+                    },
+                    DataLength = 1234
+                }
+            };
+
+        var writer = new ConcordanceComposingWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        var content = System.Text.Encoding.GetEncoding(1252).GetString(stream.ToArray());
+
+        Assert.DoesNotContain("COMPRESSION_METHOD", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ConcordanceWriter_ShouldUseDatEscapingForQuoteDelimiter()
     {
         var request = this.CreateTestRequest();

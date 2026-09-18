@@ -93,7 +93,7 @@ All command-line flags recognized by Zipper:
 | `--folders` | `1` | `1` to `100` | Number of subfolders for file distribution |
 | `--encoding` | `UTF-8` | `UTF-8`, `UTF-16`, `ANSI` | Text encoding for Load Files |
 | `--distribution` | `proportional` | `proportional`, `gaussian`, `exponential` | Folder distribution algorithm |
-| `--with-metadata` | `false` | flag | Include standard metadata columns |
+| `--with-metadata` | `false` | flag | Include standard metadata columns (incl. Compression Method reflecting `--compression`) |
 | `--with-collection-metadata` | `false` | flag | Include e-discovery collection metadata columns |
 | `--with-text` | `false` | flag | Generate companion extracted text files |
 | `--attachment-rate` | `0` | `0` to `100` | Percentage of Emails containing attachments |

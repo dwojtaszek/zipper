@@ -431,12 +431,12 @@ print_success "Test Case 5 passed."
 
 # Test Case 6: PDF generation with metadata
 run_test_case "Test Case 6: PDF generation with metadata" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_metadata" --with-metadata
-verify_output "$TEST_OUTPUT_DIR/pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false" "UTF-8"
+verify_output "$TEST_OUTPUT_DIR/pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "pdf" "false" "UTF-8"
 print_success "Test Case 6 passed."
 
 # Test Case 7: All options combined
 run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "$TEST_OUTPUT_DIR/all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
-verify_output "$TEST_OUTPUT_DIR/all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false" "ANSI"
+verify_output "$TEST_OUTPUT_DIR/all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false" "ANSI"
 print_success "Test Case 7 passed."
 
 # Test Case 8: With text
@@ -446,7 +446,7 @@ print_success "Test Case 8 passed."
 
 # Test Case 9: With text and metadata
 run_test_case "Test Case 9: With text and metadata" --type pdf --count 10 --output-path "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" --with-text --with-metadata
-verify_output "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true" "UTF-8"
+verify_output "$TEST_OUTPUT_DIR/pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method,Extracted Text" "pdf" "true" "UTF-8"
 print_success "Test Case 9 passed."
 
 # Test Case 10: EML generation with attachments
@@ -456,7 +456,7 @@ print_success "Test Case 10 passed."
 
 # Test Case 11: EML generation with metadata
 run_test_case "Test Case 11: EML generation with metadata" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata" --with-metadata
-verify_output "$TEST_OUTPUT_DIR/eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false" "UTF-8"
+verify_output "$TEST_OUTPUT_DIR/eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment" "eml" "false" "UTF-8"
 print_success "Test Case 11 passed."
 
 # Test Case 12: EML generation with text
@@ -466,7 +466,7 @@ print_success "Test Case 12 passed."
 
 # Test Case 13: EML generation with metadata and text
 run_test_case "Test Case 13: EML generation with metadata and text" --type eml --count 10 --output-path "$TEST_OUTPUT_DIR/eml_metadata_text" --with-metadata --with-text
-verify_output "$TEST_OUTPUT_DIR/eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+verify_output "$TEST_OUTPUT_DIR/eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8"
 print_success "Test Case 13 passed."
 
 # Test Case 14: Target zip size
@@ -481,7 +481,7 @@ print_success "Test Case 15 passed."
 
 # Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "$TEST_OUTPUT_DIR/eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
+verify_eml_output "$TEST_OUTPUT_DIR/eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
 print_success "Test Case 16 passed."
 
 # Test Case 17: Maximum folders edge case (100 folders)

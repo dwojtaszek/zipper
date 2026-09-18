@@ -352,12 +352,12 @@ call :print_success "Test Case 5 passed."
 
 REM Test Case 6: PDF generation with metadata
 call :run_test_case "Test Case 6: PDF generation with metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_metadata" --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "pdf" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "pdf" "false"
 call :print_success "Test Case 6 passed."
 
 REM Test Case 7: All options combined
 call :run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size" "tiff" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false"
 call :print_success "Test Case 7 passed."
 
 REM Test Case 8: With text
@@ -367,7 +367,7 @@ call :print_success "Test Case 8 passed."
 
 REM Test Case 9: With text and metadata
 call :run_test_case "Test Case 9: With text and metadata" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" --with-text --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Extracted Text" "pdf" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\pdf_with_text_and_metadata" 10 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method,Extracted Text" "pdf" "true"
 call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
@@ -377,7 +377,7 @@ call :print_success "Test Case 10 passed."
 
 REM Test Case 11: EML generation with metadata
 call :run_test_case "Test Case 11: EML generation with metadata" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata" --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment" "eml" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment" "eml" "false"
 call :print_success "Test Case 11 passed."
 
 REM Test Case 12: EML generation with text
@@ -387,7 +387,7 @@ call :print_success "Test Case 12 passed."
 
 REM Test Case 13: EML generation with metadata and text
 call :run_test_case "Test Case 13: EML generation with metadata and text" --type eml --count 10 --output-path "%TEST_OUTPUT_DIR%\eml_metadata_text" --with-metadata --with-text
-call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true"
+call :verify_output "%TEST_OUTPUT_DIR%\eml_metadata_text" 10 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true"
 call :print_success "Test Case 13 passed."
 
 REM Test Case 14: Target zip size
@@ -402,7 +402,7 @@ call :print_success "Test Case 15 passed."
 
 REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8"
 call :print_success "Test Case 16 passed."
 
 REM Test Case 17: Maximum folders edge case (100 folders)

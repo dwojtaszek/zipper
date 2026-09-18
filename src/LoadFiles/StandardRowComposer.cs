@@ -135,6 +135,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             keys.AddRange(new[] { "CUSTODIAN", "DATESENT", "AUTHOR", "FILESIZE" });
         }
 
+        if (this.request.Metadata.ShouldIncludeCompressionColumn(this.request.Output))
+        {
+            keys.Add("COMPRESSIONMETHOD");
+        }
+
         if (this.request.Metadata.ShouldIncludeEmlColumns(this.request.Output))
         {
             keys.AddRange(new[] { "TO", "FROM", "CC", "SUBJECT", "SENTDATE", "ATTACHMENT" });
@@ -194,6 +199,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "DATESENT" => ctx.IsChild ? string.Empty : meta.DateSent,
             "AUTHOR" => ctx.IsChild ? string.Empty : meta.Author,
             "FILESIZE" => ctx.FileSizeOverride ?? meta.FileSize,
+            "COMPRESSIONMETHOD" => SyntheticRowValues.CompressionMethod(this.request),
             "TO" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.To,
             "FROM" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.From,
             "CC" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : eml.Cc,
