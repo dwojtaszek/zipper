@@ -1,0 +1,18 @@
+{
+  "confidence_threshold": 0.7,
+  "noul_finding_range": [0.25, 0.75],
+  "full_mode_batch_size": 10,
+  "full_mode_max_requests": 40,
+  "glossary_term_cap": 200,
+  "max_state_bytes": 262144,
+  "advisory_categories": ["testability", "contradiction", "non_canonical_term", "completeness", "doc_sync"],
+  "choice_good_values": {
+    "testability": ["testable", "partially-testable"],
+    "completeness": ["complete-behavior"],
+    "doc_sync": ["synchronized"]
+  },
+  "evaluation_targets": {
+    "corpus_accuracy": 1.0,
+    "note": "With recorded synthetic responses, extraction + policy must reproduce every expected corpus label exactly."
+  }
+}

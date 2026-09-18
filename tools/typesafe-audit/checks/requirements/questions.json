@@ -1,0 +1,52 @@
+{
+  "questions": {
+    "testability": {
+      "type": "choice",
+      "instructions": "Judging only the supplied changed requirement/doc section (including its referenced requirement definitions): is the changed statement testable?",
+      "criteria": {
+        "testable": "Deterministic, observable behavior a test can verify as written",
+        "partially-testable": "Some verifiable behavior, but parts are subjective or unspecified",
+        "non-testable": "No observable behavior to verify (aspiration, commentary, or pure description)",
+        "ambiguous": "Wording permits materially different implementations, so no single test could verify it"
+      }
+    },
+    "contradiction": {
+      "type": "noul",
+      "instructions": "Judging only the supplied changed section against the other supplied contract excerpts: does the changed statement contradict another supplied contract?",
+      "criteria": {
+        "true": "The changed statement and another supplied excerpt cannot both hold",
+        "false": "No supplied excerpt conflicts with the changed statement"
+      }
+    },
+    "non_canonical_term": {
+      "type": "noul",
+      "instructions": "Judging only the supplied changed section and the supplied canonical glossary headings: does the changed statement use a domain term that is not canonical in the supplied glossary terms?",
+      "criteria": {
+        "true": "A domain concept is named with a term absent from the supplied canonical glossary terms",
+        "false": "All domain terms used are canonical or the section introduces and defines its term"
+      }
+    },
+    "completeness": {
+      "type": "choice",
+      "instructions": "Judging only the supplied changed requirement/doc section: what completeness gap does it have?",
+      "criteria": {
+        "complete-behavior": "Success, failure, and boundary behavior are all specified",
+        "missing-success-case": "A success-path behavior is not specified",
+        "missing-failure-case": "Failure/error behavior is not specified",
+        "missing-boundary": "Edge or boundary behavior is not specified",
+        "scope-unclear": "The statement's applicability (what it covers) is unclear"
+      }
+    },
+    "doc_sync": {
+      "type": "choice",
+      "instructions": "Judging only the supplied changed section together with the other supplied contract excerpts (README, glossary, architecture): is the documentation synchronized?",
+      "criteria": {
+        "synchronized": "Other supplied excerpts agree with the changed statement",
+        "implementation-only-drift": "The change exists only in implementation-facing docs and user docs were not updated",
+        "readme-drift": "The supplied README excerpt contradicts the change",
+        "glossary-drift": "The supplied glossary excerpt contradicts the change",
+        "architecture-drift": "The supplied architecture excerpt contradicts the change"
+      }
+    }
+  }
+}

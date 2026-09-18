@@ -1,0 +1,44 @@
+{
+  "examples": [
+    {
+      "file": "clear.md",
+      "expected": {
+        "testability": "testable",
+        "contradiction": false,
+        "non_canonical_term": false,
+        "completeness": "complete-behavior",
+        "doc_sync": "synchronized"
+      }
+    },
+    {
+      "file": "ambiguous.md",
+      "expected": {
+        "testability": "ambiguous",
+        "contradiction": false,
+        "non_canonical_term": false,
+        "completeness": "scope-unclear",
+        "doc_sync": "synchronized"
+      }
+    },
+    {
+      "file": "contradictory.md",
+      "expected": {
+        "testability": "partially-testable",
+        "contradiction": true,
+        "non_canonical_term": false,
+        "completeness": "missing-boundary",
+        "doc_sync": "synchronized"
+      }
+    },
+    {
+      "file": "incomplete.md",
+      "expected": {
+        "testability": "partially-testable",
+        "contradiction": false,
+        "non_canonical_term": true,
+        "completeness": "missing-failure-case",
+        "doc_sync": "implementation-only-drift"
+      }
+    }
+  ]
+}
