@@ -53,9 +53,22 @@ function assert_eq() {
   fi
 }
 
-# 1. Pinned schema-validation prerequisite (ticket #846): install the frozen Ajv
-#    explicitly and validate the committed frozen vector before anything else —
-#    no network install per fixture, and a missing tool fails instead of skipping.
+# 1. Pinned Ajv restore + prerequisite (tickets #846/#932): restore the frozen
+#    Ajv CLI explicitly with `npm ci` when missing — the only network step —
+#    then validate the committed frozen vector. Verification itself runs the
+#    restored package via node directly and never downloads; a missing restore
+#    fails instead of skipping.
+if [[ ! -f tests/archive-tests/node_modules/ajv-cli/dist/index.js ]]; then
+  if ! command -v npm >/dev/null 2>&1; then
+    check 1 "npm must be installed to restore the pinned Ajv CLI"
+  elif ! npm ci --ignore-scripts --prefix tests/archive-tests >/dev/null 2>&1; then
+    check 1 "npm ci must restore the pinned Ajv CLI"
+  else
+    check 0 "pinned Ajv CLI restored via npm ci"
+  fi
+else
+  check 0 "pinned Ajv CLI already restored"
+fi
 if python3 -c 'import importlib.util, sys
 spec = importlib.util.spec_from_file_location("vf", "tests/archive-tests/verify-fixtures.py")
 vf = importlib.util.module_from_spec(spec)
@@ -344,6 +357,11 @@ PYEOF
   if [[ -z "$LOCATOR_ZIP" ]] || [[ ! -f "$LOCATOR_ZIP" ]]; then
     DISPUTE_OK=0
   fi
+  if [[ "$DISPUTE_OK" -eq 1 ]]; then
+    check 0 "7-Zip rejected the #933 spanning and count-disagreement fixtures"
+  else
+    check 1 "7-Zip must reject the #933 spanning and count-disagreement fixtures"
+  fi
   # Ticket #935: mixed one-bad-member archives must fail as a whole (`t`
   # rejects) while the healthy Store and Deflate siblings extract by name
   # with matching hashes — the bad member's bytes are never decoded.
@@ -375,11 +393,21 @@ PYEOF
   else
     check 1 "7-Zip must isolate the bad member while healthy siblings match"
   fi
-  if [[ "$DISPUTE_OK" -eq 1 ]]; then
-    check 0 "7-Zip rejected the #933 spanning and count-disagreement fixtures"
-  else
-    check 1 "7-Zip must reject the #933 spanning and count-disagreement fixtures"
-  fi
+fi
+
+# 14. Offline verification (ticket #932): with an empty npm cache and an
+#     unreachable registry, the full catalogue still verifies — proving
+#     verification downloads nothing. The pinned CLI runs via node directly,
+#     so these settings cannot affect it; they only turn any attempted
+#     download into a loud failure.
+OFFLINE_CACHE="$TEST_OUTPUT_DIR/npm-cache-empty"
+rm -rf "$OFFLINE_CACHE"
+mkdir -p "$OFFLINE_CACHE"
+if npm_config_cache="$OFFLINE_CACHE" npm_config_registry=http://127.0.0.1:9/ python3 tests/archive-tests/verify-fixtures.py "$ALL_OUT" \
+     --report "$TEST_OUTPUT_DIR/all-offline-verification.json" >/dev/null 2>&1; then
+  check 0 "offline verification passed the complete catalogue without downloads"
+else
+  check 1 "offline verification must pass the complete catalogue without downloads"
 fi
 
 if [[ "$failures" -ne 0 ]]; then
