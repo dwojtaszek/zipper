@@ -15,7 +15,7 @@ set PASSED=0
 set FAILED=0
 set SMOKE_CASES=5
 set /a EXPECTED_FILES=%SMOKE_CASES%*2
-set ALL_CASES=80
+set ALL_CASES=81
 
 REM Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -313,7 +313,7 @@ if not defined SEVEN_ZIP (
     set "FULLCODEC_PY=%TEMP%\atc-fullcodec-%RANDOM%.py"
     > "!FULLCODEC_PY!" echo import glob, hashlib, json, os, subprocess, sys, tempfile
     >> "!FULLCODEC_PY!" echo out, seven = sys.argv[1:3]
-    >> "!FULLCODEC_PY!" echo for key in ("valid-bzip2", "valid-deflate64", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
+    >> "!FULLCODEC_PY!" echo for key in ("valid-bzip2", "valid-deflate64", "valid-deflate64-long-match", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
     >> "!FULLCODEC_PY!" echo     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
     >> "!FULLCODEC_PY!" echo     d = json.load(open(jp))
     >> "!FULLCODEC_PY!" echo     zp = jp[:-5] + ".zip"

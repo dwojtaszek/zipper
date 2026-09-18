@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=80     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900): every unique Case Key
+ALL_CASES=81     # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931): every unique Case Key
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -289,7 +289,7 @@ else
   if python3 - "$ALL_OUT" "$SEVEN_ZIP" <<'PYEOF' >/dev/null 2>&1; then
 import glob, hashlib, json, os, subprocess, sys, tempfile
 out, seven = sys.argv[1:3]
-for key in ("valid-bzip2", "valid-deflate64", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
+for key in ("valid-bzip2", "valid-deflate64", "valid-deflate64-long-match", "valid-mixed-methods", "bzip2-high-ratio-bounded"):
     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
     d = json.load(open(jp))
     zp = jp[:-5] + ".zip"

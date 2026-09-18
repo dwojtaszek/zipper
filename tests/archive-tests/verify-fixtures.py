@@ -404,9 +404,10 @@ class FixtureVerifier:
             shared_note = verify_shared_payload_range(case, zip_bytes)
             checks.append({"check": "shared-range", "status": "pass", "detail": shared_note})
 
-        # Coded valid controls (ticket #898; #897 adds BZip2): the sidecar carries
-        # no method field, so the method codes are audited here from both headers.
-        if case.get("caseKey") == "valid-deflate64":
+        # Coded valid controls (ticket #898; #897 adds BZip2; #931 adds the
+        # Deflate64-specific control): the sidecar carries no method field,
+        # so the method codes are audited here from both headers.
+        if case.get("caseKey") in ("valid-deflate64", "valid-deflate64-long-match"):
             coded_note = verify_coded_method(case, zip_bytes, 9)
             checks.append({"check": "coded-method", "status": "pass", "detail": coded_note})
 
@@ -1190,6 +1191,9 @@ def verify_compression_methods(case, zip_bytes):
     elif case_key == "valid-deflate64" and entries:
         if entries[0]["localHeaderMethod"] != 9 or entries[0]["centralDirectoryMethod"] != 9 or entries[0]["payloadCodec"] != "deflate64":
             raise VerificationError("compression-methods", "valid-deflate64 entry must declare method 9 and payloadCodec deflate64")
+    elif case_key == "valid-deflate64-long-match" and entries:
+        if entries[0]["localHeaderMethod"] != 9 or entries[0]["centralDirectoryMethod"] != 9 or entries[0]["payloadCodec"] != "deflate64":
+            raise VerificationError("compression-methods", "valid-deflate64-long-match entry must declare method 9 and payloadCodec deflate64")
     elif case_key == "method-cross-deflate64-deflate" and entries:
         if entries[0]["localHeaderMethod"] != 9 or entries[0]["centralDirectoryMethod"] != 8 or entries[0]["payloadCodec"] != "deflate":
             raise VerificationError("compression-methods", "method-cross-deflate64-deflate must have local 9, central 8, codec deflate")
