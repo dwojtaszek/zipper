@@ -232,6 +232,144 @@ public class ArchiveFixtureMutationTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_DescriptorCrcDisagreement_FlipsDescriptorCrcOnly()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-descriptor-signature", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DescriptorCrcDisagreement, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("descriptor-crc-disagreement", mutation.Code);
+        Assert.Equal("data-descriptor", mutation.Structure);
+        var descriptorOffset = control.Layout.Entries[0].DataDescriptorOffset;
+        Assert.True(descriptorOffset > 0, "control must carry a data descriptor");
+        Assert.Equal(descriptorOffset + 4, mutation.Offset);
+        Assert.NotEqual(
+            control.ArchiveBytes[(int)mutation.Offset],
+            mutated.ArchiveBytes[(int)mutation.Offset]);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+    }
+
+    [Fact]
+    public void Apply_DescriptorSizeDisagreement_RewritesDescriptorCompressedSize()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-descriptor-signature", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DescriptorSizeDisagreement, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("descriptor-size-disagreement", mutation.Code);
+        Assert.Equal("data-descriptor", mutation.Structure);
+        var descriptorOffset = control.Layout.Entries[0].DataDescriptorOffset;
+        Assert.Equal(descriptorOffset + 8, mutation.Offset);
+        var declared = BitConverter.ToUInt32(mutated.ArchiveBytes, (int)mutation.Offset);
+        Assert.NotEqual((uint)control.Entries[0].Content.Length, declared);
+        Assert.Contains("descriptor-compressed-size=", mutation.DeclaredValue, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_DuplicateZip64Extra_AppendsConflictingSubfieldAndRelinks()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-zip64-small", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DuplicateZip64Extra, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("duplicate-zip64-extra", mutation.Code);
+        Assert.Equal("central-header", mutation.Structure);
+        // The central extra grows by one 12-byte subfield; the EOCD span and
+        // the Zip64 records move with it.
+        Assert.Equal(control.ArchiveBytes.Length + 12, mutated.ArchiveBytes.Length);
+        var entry = control.Layout.Entries[0];
+        var extraEnd = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + entry.CentralExtraLength;
+        Assert.Equal(extraEnd, mutation.Offset);
+        Assert.Equal(0x0001, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset));
+        var first = BitConverter.ToUInt64(mutated.ArchiveBytes, (int)entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + 4);
+        var second = BitConverter.ToUInt64(mutated.ArchiveBytes, (int)mutation.Offset + 4);
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void Apply_DuplicateUnicodePath_AppendsConflictingNameInBothHeaders()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-unicode-path", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DuplicateUnicodePath, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("duplicate-unicode-path", mutation.Code);
+        // The clean control's Unicode name equals "safe.txt": each duplicate
+        // subfield is 4 + (1 + 4 + 8) = 17 bytes, one per header.
+        Assert.Equal(control.ArchiveBytes.Length + 34, mutated.ArchiveBytes.Length);
+        Assert.Equal(0, mutation.DeletedLength);
+        Assert.Equal(34, mutation.InsertedLength);
+        Assert.Equal(0x7075, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)mutation.Offset));
+
+        // Both extra areas walk as two well-formed 0x7075 subfields with equal
+        // sizes and CRCs but a divergent first name byte: a corrupt splice
+        // (shifted neighbors instead of the duplicate) cannot pass this walk.
+        var layoutEntry = control.Layout.Entries[0];
+        AssertDuplicateUnicodePathExtra(mutated.ArchiveBytes, (int)layoutEntry.LocalHeaderOffset + 30 + layoutEntry.LocalNameLength);
+        var centralShift = mutated.ArchiveBytes.Length - control.ArchiveBytes.Length - 17;
+        AssertDuplicateUnicodePathExtra(mutated.ArchiveBytes, (int)layoutEntry.CentralDirectoryOffset + centralShift + 46 + layoutEntry.CentralNameLength);
+    }
+
+    private static void AssertDuplicateUnicodePathExtra(byte[] archive, int extraStart)
+    {
+        Assert.Equal(0x7075, BitConverter.ToUInt16(archive, extraStart));
+        var firstSize = BitConverter.ToUInt16(archive, extraStart + 2);
+        Assert.Equal(0x7075, BitConverter.ToUInt16(archive, extraStart + 4 + firstSize));
+        var secondSize = BitConverter.ToUInt16(archive, extraStart + 4 + firstSize + 2);
+        Assert.Equal(firstSize, secondSize);
+        var first = archive.AsSpan(extraStart + 4, firstSize);
+        var second = archive.AsSpan(extraStart + 4 + firstSize + 4, secondSize);
+        Assert.True(first[..5].SequenceEqual(second[..5]), "version and CRC must agree; only the name diverges");
+        Assert.Equal(8, firstSize - 5);
+        Assert.NotEqual(first[5], second[5]);
+        Assert.True(first[6..].SequenceEqual(second[6..]), "only the first name byte diverges");
+    }
+
+    [Fact]
+    public void Apply_Utf8FlagCp437Name_SetsBit11InBothHeaders()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-cp437-name", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Utf8FlagCp437Name, control);
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var local = mutated.Mutations[0];
+        var central = mutated.Mutations[1];
+        Assert.Equal(control.Layout.Entries[0].LocalHeaderOffset + 6, local.Offset);
+        Assert.Equal(control.Layout.Entries[0].CentralDirectoryOffset + 8, central.Offset);
+        Assert.Equal(0x0800, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)local.Offset) & 0x0800);
+        Assert.Equal(0x0800, BitConverter.ToUInt16(mutated.ArchiveBytes, (int)central.Offset) & 0x0800);
+        Assert.Equal(0x82, mutated.ArchiveBytes[(int)control.Layout.Entries[0].LocalHeaderOffset + 30 + 3]);
+    }
+
+    [Fact]
+    public void Apply_UnicodePathCrcMismatch_FlipsSubfieldCrcInBothHeaders()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-unicode-path", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UnicodePathCrcMismatch, control);
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        Assert.All(mutated.Mutations, mutation => Assert.Equal("unicode-path-crc-mismatch", mutation.Code));
+    }
+
+    [Fact]
+    public void Apply_UnicodePathNameDivergence_ChangesUnicodeNameOnly()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-unicode-path", 42, CancellationToken.None);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UnicodePathNameDivergence, control);
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        Assert.All(mutated.Mutations, mutation => Assert.Equal("unicode-path-name-divergence", mutation.Code));
+        Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+    }
+
+    [Fact]
     public void Build_MutatedCases_AreDeterministicPerCaseAndSeed()
     {
         var first = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("truncate-eocd"), 42, CancellationToken.None);

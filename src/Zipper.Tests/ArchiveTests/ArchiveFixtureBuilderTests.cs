@@ -123,6 +123,60 @@ public class ArchiveFixtureBuilderTests
         Assert.Contains("shrink-wrap", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("valid-zip64-descriptor-signature", true)]
+    [InlineData("valid-zip64-descriptor-no-signature", false)]
+    public void Build_HandBuiltZip64Descriptor_EmitsDescriptorFormsWithSentinels(string caseKey, bool withSignature)
+    {
+        var definition = ArchiveTestCatalog.GetCase(caseKey);
+        var first = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var second = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        Assert.Equal(first.ArchiveBytes, second.ArchiveBytes);
+
+        var entry = Assert.Single(first.Layout.Entries);
+        Assert.Equal((ushort)8, entry.Method);
+        Assert.True(entry.HasDataDescriptor);
+        Assert.Equal(first.Entries[0].Content, ReadEntryContent(first.ArchiveBytes, "zd.txt"));
+
+        // Zip64 sentinels in both headers; the descriptor carries the truth.
+        var descriptorOffset = (int)entry.DataDescriptorOffset;
+        if (withSignature)
+        {
+            Assert.Equal(0x08074b50u, BinaryPrimitives.ReadUInt32LittleEndian(first.ArchiveBytes.AsSpan(descriptorOffset, 4)));
+        }
+
+        var sizesAt = descriptorOffset + (withSignature ? 4 : 0);
+        Assert.Equal(ArchiveFixtureBuilder.Crc32(first.Entries[0].Content), BinaryPrimitives.ReadUInt32LittleEndian(first.ArchiveBytes.AsSpan(sizesAt, 4)));
+        Assert.Equal(0xFFFFFFFFu, BinaryPrimitives.ReadUInt32LittleEndian(first.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 18, 4)));
+        Assert.Equal(0xFFFFFFFFu, BinaryPrimitives.ReadUInt32LittleEndian(first.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 20, 4)));
+    }
+
+    [Fact]
+    public void Build_Zip64DescriptorForms_DifferOnlyBySignature()
+    {
+        // The two forms differ only by the 4-byte descriptor signature; each
+        // control carries its own case-keyed content of the same length.
+        var sig = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("valid-zip64-descriptor-signature"), 42, CancellationToken.None);
+        var nosig = ArchiveFixtureBuilder.Build(ArchiveTestCatalog.GetCase("valid-zip64-descriptor-no-signature"), 42, CancellationToken.None);
+        Assert.Equal(sig.ArchiveBytes.Length, nosig.ArchiveBytes.Length + 4);
+        Assert.Equal(sig.Entries[0].Content.Length, nosig.Entries[0].Content.Length);
+    }
+
+    [Fact]
+    public void Build_UnicodePathClean_EmitsMatchingUnicodeName()
+    {
+        var definition = ArchiveTestCatalog.GetCase("valid-unicode-path");
+        var first = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var second = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        Assert.Equal(first.ArchiveBytes, second.ArchiveBytes);
+
+        var entry = Assert.Single(first.Layout.Entries);
+        Assert.Equal("safe.txt", entry.Name);
+        Assert.NotNull(entry.UnicodePathNameHex);
+        Assert.Equal(entry.NameHex, entry.UnicodePathNameHex);
+        Assert.Equal(first.Entries[0].Content, ReadEntryContent(first.ArchiveBytes, "safe.txt"));
+    }
+
     [Fact]
     public void Build_HandBuiltBzip2_EmitsMethodTwelveWithDecodablePayload()
     {

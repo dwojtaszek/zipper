@@ -372,6 +372,29 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Descriptor, extra-field, and encoding conflicts (ticket #934): one
+            // metadata source disagrees while each structure looks plausible and
+            // the payload bytes stay intact. CRC lies report through the CRC
+            // vocabulary; the rest admit no CRC outcome they cannot produce.
+            ArchiveTestMutationKind.DescriptorCrcDisagreement
+                or ArchiveTestMutationKind.UnicodePathCrcMismatch =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "crc-mismatch-rejected", "crc-mismatch-unchecked"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
+            ArchiveTestMutationKind.DescriptorSizeDisagreement
+                or ArchiveTestMutationKind.DuplicateZip64Extra
+                or ArchiveTestMutationKind.DuplicateUnicodePath
+                or ArchiveTestMutationKind.Utf8FlagCp437Name
+                or ArchiveTestMutationKind.UnicodePathNameDivergence =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "metadata-sources-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Policy-sensitive: the method code is consistent but unimplemented; the
             // payload bytes stay the stored control bytes (ticket #840).
             ArchiveTestMutationKind.UnsupportedMethod =>
