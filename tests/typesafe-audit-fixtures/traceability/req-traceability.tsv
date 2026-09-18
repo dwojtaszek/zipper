@@ -1,0 +1,9 @@
+req_id	coverage	reference	notes
+REQ-910	unit	FixtureTests.Full	direct outcome assertions on every stated behavior
+REQ-911	unit	FixtureTests.Partial	one behavior asserted, another not
+REQ-912	unit	FixtureTests.None	mapping exercises unrelated code only
+REQ-913	unit	FixtureTests.Ambiguous	requirement wording prevents a coverage decision
+REQ-914	exemption	-	process-level behavior; no unit test is meaningful
+REQ-915	unit	FixtureTests.MockedOnly	test asserts mocked interactions only
+REQ-916	unit	FixtureTests.ExecutionOnly	test runs code without assertions
+REQ-917	e2e	sample.sh full-scenario	end-to-end scenario asserts both outputs

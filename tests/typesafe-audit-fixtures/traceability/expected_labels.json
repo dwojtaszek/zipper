@@ -1,0 +1,11 @@
+{
+  "examples": [
+    {"file": "REQ-910", "expected": {"coverage": "full", "mocked_only": false, "execution_only": false}},
+    {"file": "REQ-911", "expected": {"coverage": "partial", "mocked_only": false, "execution_only": false}},
+    {"file": "REQ-912", "expected": {"coverage": "none", "mocked_only": false, "execution_only": false}},
+    {"file": "REQ-913", "expected": {"coverage": "ambiguous", "mocked_only": false, "execution_only": false}},
+    {"file": "REQ-915", "expected": {"coverage": "partial", "mocked_only": true, "execution_only": false}},
+    {"file": "REQ-916", "expected": {"coverage": "none", "mocked_only": false, "execution_only": true}},
+    {"file": "REQ-917", "expected": {"coverage": "full", "mocked_only": false, "execution_only": false}}
+  ]
+}

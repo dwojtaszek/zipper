@@ -1,0 +1,12 @@
+{
+  "confidence_threshold": 0.7,
+  "noul_finding_range": [0.25, 0.75],
+  "batch_size": 10,
+  "max_requests": 40,
+  "max_evidence_bytes": 65536,
+  "advisory_categories": ["coverage", "mocked_only", "execution_only"],
+  "evaluation_targets": {
+    "corpus_accuracy": 1.0,
+    "note": "With recorded synthetic responses, parsing + policy must reproduce every expected corpus label exactly."
+  }
+}

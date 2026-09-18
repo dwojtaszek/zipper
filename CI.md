@@ -103,6 +103,7 @@ Advisory side check (issue #955): [`typesafe-audit.yml`](.github/workflows/types
     --corpus tests/typesafe-audit-fixtures --mode fixture --fixture-dir /tmp/tsa-fx \
     --json-out req.json --md-out req.md
   ```
+- **Semantic traceability audit (#957):** `tools/typesafe-audit/checks/traceability/run_check.py` runs AFTER `tests/validate-req-traceability.sh --strict` (which remains the blocking row-presence gate) and judges whether each mapped test actually verifies its requirement: `full` / `partial` / `none` / `ambiguous`, plus separate `mocked_only` and `execution_only` signals (line coverage and method invocation are not behavioral coverage). Deterministic preparation parses Requirements.md + the TSV, resolves `Class.Method` unit refs and `script.sh Scenario` e2e refs to exact source, and fails (exit 2) on malformed rows, unresolved, ambiguous, or oversized evidence BEFORE any model call — an API outage never weakens the strict gate. PR mode: changed requirements, changed mappings, and mappings whose referenced tests changed. Full mode (schedule/dispatch): every active non-exempt requirement in bounded batches. Every result carries raw probabilities, confidence, model, and stable source hashes. Advisory only; blocking may come later only for high-confidence `none` on newly changed requirements. Corpus: `tests/typesafe-audit-fixtures/traceability/`.
 - **Ownership:** repository maintainers; the workflow is path-filtered and runs `contents: read` with all third-party actions pinned to full commit SHAs.
 
 ## factory-droid
