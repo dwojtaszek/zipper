@@ -27,7 +27,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --attachment-rate <n>    EML attachment percentage (0-100, default: 0)");
         Console.Error.WriteLine("  --target-zip-size <size> Target ZIP size (e.g., 500MB, 10GB)");
         Console.Error.WriteLine("  --include-load-file      Include load file in ZIP archive");
-        Console.Error.WriteLine("  --compression <method>   ZIP compression method: store, deflate, deflate64, bzip2 (default: deflate)");
+        Console.Error.WriteLine("  --compression <method>   ZIP compression method: store, deflate (default: deflate; deflate64, bzip2 not yet supported)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Source-Driven Generation Options:");
         Console.Error.WriteLine("  --input-csv <path>       Drive records from a Source CSV (FilePath and FileType columns required;");
