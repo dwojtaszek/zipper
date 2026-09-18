@@ -451,6 +451,64 @@ else
   print_success "Test Case 10: Production Manifest Comparison invalid mode fails early passed"
 fi
 
+# --- Test Case 10b: REQ-179 — comparison ignores generation/Production args ---
+
+print_info "Test Case 10b: Comparison short-circuits generation/Production argument validation"
+
+req179_report="$TEST_OUTPUT_DIR/test10b_report.json"
+rm -f "$req179_report"
+
+# Invalid generation/Production values must not be evaluated in comparison mode,
+# and flag order must not matter.
+zipper \
+  --count not-a-number \
+  --rolling-count not-a-number \
+  --supplemental-gap-policy bogus-policy \
+  --compare-production-manifests "$prior_manifest,$supp_manifest" \
+  --comparison-mode supplemental \
+  --comparison-output "$req179_report"
+
+if [[ ! -f "$req179_report" ]]; then
+  print_error "Test 10b: Comparison report was not written to $req179_report"
+else
+  print_success "Test Case 10b (ignored invalid generation args): passed"
+fi
+
+req179_order_report="$TEST_OUTPUT_DIR/test10b_order_report.json"
+rm -f "$req179_order_report"
+
+zipper \
+  --compare-production-manifests "$prior_manifest,$supp_manifest" \
+  --count not-a-number \
+  --type pdf \
+  --output-path "$TEST_OUTPUT_DIR/test10b_never_generated" \
+  --comparison-mode replacement \
+  --comparison-output "$req179_order_report"
+
+if [[ ! -f "$req179_order_report" ]]; then
+  print_error "Test 10b: Order-independent comparison report was not written"
+elif [[ -e "$TEST_OUTPUT_DIR/test10b_never_generated" ]]; then
+  print_error "Test 10b: Comparison must not generate output"
+else
+  print_success "Test Case 10b (flag order independence): passed"
+fi
+
+bad_mode_report="$TEST_OUTPUT_DIR/test10b_bad_mode.json"
+rm -f "$bad_mode_report"
+
+if zipper \
+  --count not-a-number \
+  --compare-production-manifests "$prior_manifest,$supp_manifest" \
+  --comparison-mode swap \
+  --comparison-output "$bad_mode_report" 2>/dev/null; then
+  print_error "Test 10b: Invalid comparison mode must still fail when generation args are ignored."
+else
+  if [[ -f "$bad_mode_report" ]]; then
+    print_error "Test 10b: Report was written despite invalid --comparison-mode."
+  fi
+  print_success "Test Case 10b (comparison validation stays strict): passed"
+fi
+
 # --- Test Case 11: Source-driven production set with source path modes ---
 
 print_info "Test Case 11: Source-driven production set with source path modes"

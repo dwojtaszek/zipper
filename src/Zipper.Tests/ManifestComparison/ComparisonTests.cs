@@ -546,4 +546,155 @@ public class ComparisonTests
             }
         }
     }
+
+    // REQ-179: comparison short-circuits before --type/--count/--output-path and
+    // Production Set argument validation — ignored args must not fail the run.
+    [Fact]
+    public async Task Compare_CommandLineE2E_InvalidGenerationValue_IsIgnoredAndComparisonSucceeds()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
+            var reportPath = Path.Combine(tempDir, "report_ignored.json");
+
+            var args = new[]
+            {
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath,
+                "--count", "not-a-number",
+                "--type", "pdf",
+                "--output-path", Path.Combine(tempDir, "never-generated"),
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(reportPath));
+            Assert.False(Directory.Exists(Path.Combine(tempDir, "never-generated")), "Comparison must not generate output.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    // REQ-179: Rolling, supplemental, and redacted Production arguments must not be evaluated.
+    [Fact]
+    public async Task Compare_CommandLineE2E_ProductionArgs_AreIgnoredWithoutSideEffects()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
+            var reportPath = Path.Combine(tempDir, "report_prod_ignored.json");
+
+            var args = new[]
+            {
+                "--rolling-count", "not-a-number",
+                "--supplemental-gap-policy", "bogus-policy",
+                "--supplemental-production",
+                "--redacted-production",
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
+                "--comparison-mode", "supplemental",
+                "--comparison-output", reportPath,
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(reportPath));
+            var manifests = Directory.GetFiles(tempDir, "_manifest.json", SearchOption.AllDirectories);
+            Assert.Equal(2, manifests.Length);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    // REQ-179: the comparison parse path must be selected from flag presence,
+    // independent of argument order.
+    [Fact]
+    public async Task Compare_CommandLineE2E_IgnoredGenerationValues_BeforeComparisonAreOrderIndependent()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
+            var reportPath = Path.Combine(tempDir, "report_order.json");
+
+            var args = new[]
+            {
+                "--count", "not-a-number",
+                "--type", "pdf",
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath,
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.Equal(0, exitCode);
+            Assert.True(File.Exists(reportPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    // REQ-176/179: comparison flag validation stays strict even when generation args are ignored.
+    [Fact]
+    public async Task Compare_CommandLineE2E_InvalidMode_StillFailsWithIgnoredGenerationArgs()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var manifestA = await GenerateProductionSetAsync(tempDir, "SetA", 2, "PRODA");
+            var manifestB = await GenerateProductionSetAsync(tempDir, "SetB", 2, "PRODB");
+            var reportPath = Path.Combine(tempDir, "report_bad_mode.json");
+
+            var args = new[]
+            {
+                "--count", "not-a-number",
+                "--compare-production-manifests", $"{manifestA},{manifestB}",
+                "--comparison-mode", "bogus-mode",
+                "--comparison-output", reportPath,
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.False(File.Exists(reportPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
