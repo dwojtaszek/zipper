@@ -153,10 +153,10 @@ if ! echo "$header" | grep -q "Subject"; then
   print_error "Test 3: Email Metadata columns not found in .dat header (eml in mix)"
 fi
 
-# Columns: Control Number, File Path, File Type, Custodian, Date Sent, Author, File Size, To, From, CC, Subject, Sent Date, Attachment
+# Columns: Control Number, File Path, File Type, Custodian, Date Sent, Author, File Size, Compression Method, To, From, CC, Subject, Sent Date, Attachment
 # count 4 with pdf:1,eml:1 -> data rows 2-3 are PDF, rows 4-5 are EML
-pdf_to=$(awk -F'\024' 'NR==2 {print $8}' "$dat_file" | tr -d 'þ\r')
-eml_to=$(awk -F'\024' 'NR==4 {print $8}' "$dat_file" | tr -d 'þ\r')
+pdf_to=$(awk -F'\024' 'NR==2 {print $9}' "$dat_file" | tr -d 'þ\r')
+eml_to=$(awk -F'\024' 'NR==4 {print $9}' "$dat_file" | tr -d 'þ\r')
 if [[ -n "$pdf_to" ]]; then
   print_error "Test 3: PDF record 'To' should be blank, found '$pdf_to'"
 fi
