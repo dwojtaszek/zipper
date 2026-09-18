@@ -37,6 +37,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "directory-slash-with-payload",
         "directory-attribute-with-payload",
         "zero-width-collision",
+        "path-emoji-zwj-namemax",
     ];
 
     /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
@@ -116,6 +117,46 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal(
             ["test.txt:hidden", "a<b.txt", "a>b.txt", "a\"b.txt", "a|b.txt", "a?b.txt", "a*b.txt", "folder./doc.txt", "a\\b.txt"],
             artifact.Layout.Entries.Select(e => e.Name).ToList());
+    }
+
+    [Fact]
+    public void Build_EmojiNameMax_EntriesStraddleLinuxNameMax()
+    {
+        const string glyph = "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466";
+        var artifact = BuildControl("path-emoji-zwj-namemax");
+
+        Assert.Equal(2, artifact.Layout.EntryCount);
+        var boundary = artifact.Layout.Entries[0];
+        var exceeded = artifact.Layout.Entries[1];
+
+        // One family glyph is 7 scalars, 11 UTF-16 units, 25 UTF-8 bytes;
+        // ".txt" adds 4 of each.
+        Assert.Equal(string.Concat(Enumerable.Repeat(glyph, 10)) + ".txt", boundary.Name);
+        Assert.Equal(string.Concat(Enumerable.Repeat(glyph, 11)) + ".txt", exceeded.Name);
+        Assert.Equal(254, Encoding.UTF8.GetByteCount(boundary.Name));
+        Assert.Equal(279, Encoding.UTF8.GetByteCount(exceeded.Name));
+        Assert.Equal(254, boundary.NameHex.Length / 2);
+        Assert.Equal(279, exceeded.NameHex.Length / 2);
+        Assert.Equal(70 + 4, boundary.Name.EnumerateRunes().Count());
+        Assert.Equal(77 + 4, exceeded.Name.EnumerateRunes().Count());
+        Assert.Equal(114, boundary.Name.Length);
+        Assert.Equal(125, exceeded.Name.Length);
+
+        Assert.Equal([0, 1], artifact.Layout.Entries.Select(e => e.Ordinal));
+        Assert.NotEqual(artifact.Entries[0].ContentSha256, artifact.Entries[1].ContentSha256);
+        Assert.Equal("atc-emoji-boundary", Encoding.ASCII.GetString(artifact.Entries[0].Content));
+        Assert.Equal("atc-emoji-exceeded", Encoding.ASCII.GetString(artifact.Entries[1].Content));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EmojiNameMax_SidecarRecordsNameLengths()
+    {
+        var cases = await PublishPolicyCasesAsync();
+        var entries = cases["path-emoji-zwj-namemax"].Entries;
+
+        Assert.Equal([254, 279], entries.Select(e => e.NameLengthUtf8Bytes).ToList());
+        Assert.Equal([114, 125], entries.Select(e => e.NameLengthUtf16Units).ToList());
+        Assert.Equal([74, 81], entries.Select(e => e.NameLengthScalars).ToList());
     }
 
     [Fact]
@@ -322,7 +363,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the seventeen policy-sensitive recipes directly.
+    // policy-case tests target the eighteen policy-sensitive recipes directly.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -577,6 +618,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         Assert.Equal("case-insensitive-filesystems", ExtractExpectationOf(cases["case-collision"]).Platform);
         Assert.Equal("normalizing-filesystems", ExtractExpectationOf(cases["unicode-normalization-collision"]).Platform);
         Assert.Equal("zero-width-collapsing-consumers", ExtractExpectationOf(cases["zero-width-collision"]).Platform);
+        Assert.Equal("linux", ExtractExpectationOf(cases["path-emoji-zwj-namemax"]).Platform);
     }
 
     [Fact]
@@ -614,7 +656,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(36, securityKeys.Count);
+        Assert.Equal(37, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -633,7 +675,7 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the seventeen policy-sensitive recipes (the path/collision/entry-type
+        // Publishes the eighteen policy-sensitive recipes (the path/collision/entry-type
         // subset of the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");

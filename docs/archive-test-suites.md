@@ -88,7 +88,7 @@ The machine-readable contract lives at `tests/fixtures/archive-test-case.schema.
 
 Structural rules the schema and its semantic companion checks enforce:
 
-- `entries` are keyed by `ordinal` and carry raw local/central name bytes (hex), a readable name, expected content hash/size when knowable, `kind` (`file`/`directory`), and structure offsets. Duplicate entry names must remain representable; duplicate `ordinal`s are rejected.
+- `entries` are keyed by `ordinal` and carry raw local/central name bytes (hex), a readable name, name lengths in UTF-8 bytes / UTF-16 code units / Unicode scalars, expected content hash/size when knowable, `kind` (`file`/`directory`), and structure offsets. Duplicate entry names must remain representable; duplicate `ordinal`s are rejected.
 - `mutations` record code, structure, offset basis (`before-mutation` — all offsets refer to the pre-mutation Archive), offset, deleted/inserted lengths, before/after sizes and SHA-256 hashes, an explanation, and — for adversarial declared sizes — a string `declaredValue`. Inline `beforeHex`/`afterHex` is capped at 256 bytes (512 hex characters); larger removed ranges are referenced by hash instead.
 - Semantic equalities a JSON Schema cannot express (filename ↔ Fixture ID, ordinal uniqueness) are verified by the test suite in `src/Zipper.Tests/ArchiveTests/`.
 

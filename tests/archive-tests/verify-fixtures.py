@@ -1438,6 +1438,11 @@ def host_platforms():
     platforms = set()
     if os.name == "nt":
         platforms.add("windows")
+    if sys.platform.startswith("linux"):
+        # Ticket #888: the emoji ZWJ NAME_MAX case is evaluated on Linux hosts
+        # (ext4/XFS/btrfs enforce the 255-byte component limit), mirroring the
+        # Windows auto-detect above. macOS stays opt-in via ZIPPER_ATC_PLATFORMS.
+        platforms.add("linux")
     platforms.update(p.strip() for p in
                      os.environ.get("ZIPPER_ATC_PLATFORMS", "").split(",") if p.strip())
     return platforms

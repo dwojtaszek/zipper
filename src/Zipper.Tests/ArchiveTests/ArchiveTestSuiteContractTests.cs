@@ -20,8 +20,8 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The seventeen policy-sensitive path/collision/entry-type cases
-    /// (tickets #842, #880, #882, #885, #875, and #884). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
+    /// <summary>The eighteen policy-sensitive path/collision/entry-type cases
+    /// (tickets #842, #880, #882, #885, #875, #884, and #888). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
     /// both must change together; the exact security-suite assertion below fails if
     /// they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
@@ -44,6 +44,7 @@ public class ArchiveTestSuiteContractTests
         "directory-slash-with-payload",
         "directory-attribute-with-payload",
         "zero-width-collision",
+        "path-emoji-zwj-namemax",
     ];
 
     /// <summary>The unsupported-feature cases (ticket #840, plus Deflate64 #877) the contract houses in security.</summary>
@@ -195,8 +196,8 @@ public class ArchiveTestSuiteContractTests
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix, +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary, +2 for the #935 mixed one-bad-member cases): a case
+        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix, +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary, +2 for the #935 mixed one-bad-member cases, +1 for #888): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(99, AllKeys().Count);
+        Assert.Equal(100, AllKeys().Count);
     }
 }

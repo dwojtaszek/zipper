@@ -23,6 +23,9 @@ internal sealed record ArchiveTestEntry(
     [property: JsonPropertyName("payloadCodec")] string? PayloadCodec = null,
     [property: JsonPropertyName("contentSha256")] string? ContentSha256 = null,
     [property: JsonPropertyName("contentSize")] long? ContentSize = null,
+    [property: JsonPropertyName("nameLengthUtf8Bytes")] int? NameLengthUtf8Bytes = null,
+    [property: JsonPropertyName("nameLengthUtf16Units")] int? NameLengthUtf16Units = null,
+    [property: JsonPropertyName("nameLengthScalars")] int? NameLengthScalars = null,
     [property: JsonPropertyName("localHeaderOffset")] long? LocalHeaderOffset = null,
     [property: JsonPropertyName("dataOffset")] long? DataOffset = null,
     [property: JsonPropertyName("centralDirectoryOffset")] long? CentralDirectoryOffset = null);
@@ -219,6 +222,11 @@ internal static class ArchiveTestCaseSemantics
             if (entry.Kind == "directory" && entry.PayloadCodec is not null)
             {
                 errors.Add($"entry {entry.Ordinal}: directory entry must not declare a payloadCodec");
+            }
+
+            if (entry.NameLengthUtf8Bytes is < 0 || entry.NameLengthUtf16Units is < 0 || entry.NameLengthScalars is < 0)
+            {
+                errors.Add($"entry {entry.Ordinal}: name lengths must not be negative");
             }
         }
 
