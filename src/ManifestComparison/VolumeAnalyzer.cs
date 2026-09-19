@@ -17,6 +17,17 @@ internal static class VolumeAnalyzer
 
         var newVols = newRecords.GroupBy(r => r.Volume, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var newVolumeRecords = newVols.ToDictionary(
+            kvp => kvp.Key,
+            kvp => GroupVolumeRecords(kvp.Value),
+            StringComparer.OrdinalIgnoreCase);
+        var newVolumeRanges = newVols.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Count > 0
+                ? $"{kvp.Value.Min(r => r.BatesNumber)} - {kvp.Value.Max(r => r.BatesNumber)}"
+                : string.Empty,
+            StringComparer.OrdinalIgnoreCase);
+        var priorVolumeNames = priorRecords.Select(r => r.Volume).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var priorKvp in priorGroups)
         {
@@ -37,8 +48,8 @@ internal static class VolumeAnalyzer
                     ? $"{priorList.Min(r => r.BatesNumber)} - {priorList.Max(r => r.BatesNumber)}"
                     : string.Empty;
 
-                var newRange = inNew && newList is not null && newList.Count > 0
-                    ? $"{newList.Min(r => r.BatesNumber)} - {newList.Max(r => r.BatesNumber)}"
+                var newRange = inNew
+                    ? newVolumeRanges[vol]
                     : string.Empty;
 
                 var status = "unchanged";
@@ -46,35 +57,13 @@ internal static class VolumeAnalyzer
                 {
                     status = "removed";
                 }
-                else if (newList is not null)
+                else if (newList is not null && VolumeRecordsChanged(
+                    priorList.Count,
+                    newList.Count,
+                    GroupVolumeRecords(priorList),
+                    newVolumeRecords[vol]))
                 {
-                    var priorSet = new Dictionary<string, ComparisonRecord>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var r in priorList)
-                    {
-                        if (!string.IsNullOrEmpty(r.BatesNumber))
-                        {
-                            priorSet[r.BatesNumber] = r;
-                        }
-                    }
-
-                    bool hasChanges = false;
-                    foreach (var nr in newList)
-                    {
-                        if (priorSet.TryGetValue(nr.BatesNumber, out var pr))
-                        {
-                            if (!string.Equals(nr.FilePath, pr.FilePath, StringComparison.OrdinalIgnoreCase) ||
-                                (!string.IsNullOrEmpty(nr.Hash) && !string.IsNullOrEmpty(pr.Hash) && !string.Equals(nr.Hash, pr.Hash, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                hasChanges = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (hasChanges || priorList.Count != newList.Count)
-                    {
-                        status = "changed";
-                    }
+                    status = "changed";
                 }
 
                 volumeAnalysis.Add(new VolumeResult
@@ -88,23 +77,105 @@ internal static class VolumeAnalyzer
             }
         }
 
-        // Also identify volumes in the new set that do not exist in ANY prior set
-        var newVolsOnly = newVols.Keys.Where(v => !priorRecords.Any(r => string.Equals(r.Volume, v, StringComparison.OrdinalIgnoreCase))).OrderBy(v => v).ToList();
+        // Also identify Volumes in the New Production Manifest that do not exist in any Prior Production Manifest
+        var newVolsOnly = newVols.Keys.Where(v => !priorVolumeNames.Contains(v)).OrderBy(v => v).ToList();
         foreach (var vol in newVolsOnly)
         {
-            var newList = newVols[vol];
-            var newRange = newList.Count > 0
-                ? $"{newList.Min(r => r.BatesNumber)} - {newList.Max(r => r.BatesNumber)}"
-                : string.Empty;
-
             volumeAnalysis.Add(new VolumeResult
             {
                 ProductionId = newRecords.FirstOrDefault()?.ProductionId ?? "NewSet",
                 VolumeName = vol,
                 PriorBatesRange = string.Empty,
-                NewBatesRange = newRange,
+                NewBatesRange = newVolumeRanges[vol],
                 Status = "added"
             });
         }
+    }
+
+    private static Dictionary<string, Dictionary<string, List<string>>> GroupVolumeRecords(
+        IEnumerable<ComparisonRecord> records)
+    {
+        var grouped = new Dictionary<string, Dictionary<string, List<string>>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in records)
+        {
+            if (!grouped.TryGetValue(record.BatesNumber, out var paths))
+            {
+                paths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                grouped[record.BatesNumber] = paths;
+            }
+
+            if (!paths.TryGetValue(record.FilePath, out var hashes))
+            {
+                hashes = [];
+                paths[record.FilePath] = hashes;
+            }
+
+            hashes.Add(record.Hash);
+        }
+
+        return grouped;
+    }
+
+    private static bool VolumeRecordsChanged(
+        int priorCount,
+        int newCount,
+        Dictionary<string, Dictionary<string, List<string>>> priorRecords,
+        Dictionary<string, Dictionary<string, List<string>>> newRecords)
+    {
+        if (priorCount != newCount || priorRecords.Count != newRecords.Count)
+        {
+            return true;
+        }
+
+        foreach (var (batesNumber, priorPaths) in priorRecords)
+        {
+            if (!newRecords.TryGetValue(batesNumber, out var newPaths) || priorPaths.Count != newPaths.Count)
+            {
+                return true;
+            }
+
+            foreach (var (path, priorHashes) in priorPaths)
+            {
+                if (!newPaths.TryGetValue(path, out var newHashes) || !HashesMatch(priorHashes, newHashes))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HashesMatch(List<string> priorHashes, List<string> newHashes)
+    {
+        if (priorHashes.Count != newHashes.Count)
+        {
+            return false;
+        }
+
+        var priorCounts = CountNonEmptyHashes(priorHashes, out var priorEmptyCount);
+        var newCounts = CountNonEmptyHashes(newHashes, out var newEmptyCount);
+        var unmatchedPrior = priorCounts.Sum(pair => Math.Max(0, pair.Value - newCounts.GetValueOrDefault(pair.Key)));
+        var unmatchedNew = newCounts.Sum(pair => Math.Max(0, pair.Value - priorCounts.GetValueOrDefault(pair.Key)));
+        return unmatchedPrior <= newEmptyCount && unmatchedNew <= priorEmptyCount;
+    }
+
+    private static Dictionary<string, int> CountNonEmptyHashes(List<string> hashes, out int emptyCount)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        emptyCount = 0;
+        foreach (var hash in hashes)
+        {
+            if (string.IsNullOrEmpty(hash))
+            {
+                emptyCount++;
+            }
+            else
+            {
+                counts[hash] = counts.GetValueOrDefault(hash) + 1;
+            }
+        }
+
+        return counts;
     }
 }

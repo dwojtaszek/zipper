@@ -738,6 +738,33 @@ public class ProductionManifestComparerTests
         }
     }
 
+    [Fact]
+    public async Task CompareAndReportAsync_WithFullyRenumberedVolume_ShouldReportChangedInJsonAndMarkdown()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_volume_status_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001", "ABC00000002" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000003", "ABC00000004" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath);
+
+            Assert.True(success);
+            using var report = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath));
+            var volume = Assert.Single(report.RootElement.GetProperty("volumeAnalysis").EnumerateArray());
+            Assert.Equal("changed", volume.GetProperty("status").GetString());
+
+            var markdown = await File.ReadAllTextAsync(Path.ChangeExtension(outputPath, ".summary.md"));
+            Assert.Contains("| PROD001 | VOL001 | ABC00000001 - ABC00000002 | ABC00000003 - ABC00000004 | changed |", markdown, StringComparison.Ordinal);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
     private static string CreateTestProductionSet(string baseDir, string prodId, string volume, string[] batesNumbers)
     {
         return CreateTestProductionSetWithCustomDatHeader(baseDir, prodId, volume, batesNumbers, "þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
