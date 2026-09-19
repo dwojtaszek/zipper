@@ -124,6 +124,11 @@ internal enum ArchiveControlConstruction
     /// <summary>Swaps one ASCII name byte for its legacy CP437 byte with bit 11 clear.</summary>
     Cp437Name,
 
+    /// <summary>Replaces the leading placeholder bytes with a legacy-codec
+    /// (CP932/Big5/GBK) character whose trail byte is 0x5C, bit 11 clear; the
+    /// decoded name must survive separator handling (ticket #887).</summary>
+    EncodingTrailByteName,
+
     /// <summary>Appends an archive comment containing signature-like bytes; the comment
     /// length field, not a signature search, determines the layout.</summary>
     ArchiveComment,
@@ -168,6 +173,7 @@ internal static class ArchiveTestCatalog
     internal const string CompatibilitySuite = "compatibility";
     internal const string MalformedSuite = "malformed";
     internal const string SecuritySuite = "security";
+    internal const string EncodingSuite = "encoding";
     internal const string AllSuites = "all";
 
     internal static readonly IReadOnlyList<string> ValidControlSuites = [SmokeSuite, CompatibilitySuite];
@@ -321,6 +327,27 @@ internal static class ArchiveTestCatalog
             Suites: [CompatibilitySuite],
             Recipe: Cp437NameControlRecipe,
             Construction: ArchiveControlConstruction.Cp437Name),
+        // Legacy-codec trail-byte 0x5C controls (ticket #887): valid single-entry
+        // Archives whose raw name bytes carry 0x5C only as a CP932/Big5/GBK
+        // character's trail byte with bit 11 clear. Policy-sensitive (the hazard
+        // is a reader splitting on the raw byte) and housed in their own encoding
+        // suite — kept out of the default compatibility suite per the triage note
+        // until a CP932-configured external reader joins a test job.
+        ["encoding-cp932-trail-backslash"] = new(
+            "encoding-cp932-trail-backslash", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [EncodingSuite],
+            Recipe: EncodingTrailByteControlRecipe,
+            Construction: ArchiveControlConstruction.EncodingTrailByteName),
+        ["encoding-big5-trail-backslash"] = new(
+            "encoding-big5-trail-backslash", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [EncodingSuite],
+            Recipe: EncodingTrailByteControlRecipe,
+            Construction: ArchiveControlConstruction.EncodingTrailByteName),
+        ["encoding-gbk-trail-backslash"] = new(
+            "encoding-gbk-trail-backslash", CaseRevision: 1, ExpectationRevision: 1, Classification: PolicySensitiveClassification,
+            Suites: [EncodingSuite],
+            Recipe: EncodingTrailByteControlRecipe,
+            Construction: ArchiveControlConstruction.EncodingTrailByteName),
         ["valid-signatures-in-comment"] = new(
             "valid-signatures-in-comment", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -747,6 +774,15 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.File("cafx.txt", 60, "stored"),
     ]);
 
+    // An ASCII placeholder name of the same byte length as its legacy-codec
+    // targets ("ab\x5C.txt" with a two-byte trail character): the
+    // EncodingTrailByteName construction swaps the leading two bytes, no offsets
+    // shift (ticket #887).
+    private static ArchiveTestRecipe EncodingTrailByteControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("ab.txt", 60, "stored"),
+    ]);
+
     // The entry payload itself begins with signature-like bytes (pure data), and the
     // archive comment adds more signature-like bytes after the EOCD.
     private static ArchiveTestRecipe SignatureCommentControlRecipe => new(
@@ -1023,6 +1059,7 @@ internal static class ArchiveTestCatalog
         CompatibilitySuite => [.. Cases.Values.Where(c => c.Suites.Contains(CompatibilitySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         MalformedSuite => [.. Cases.Values.Where(c => c.Suites.Contains(MalformedSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         SecuritySuite => [.. Cases.Values.Where(c => c.Suites.Contains(SecuritySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
+        EncodingSuite => [.. Cases.Values.Where(c => c.Suites.Contains(EncodingSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
         _ => throw new ArgumentException($"Unknown Archive Test suite '{suite}'."),
     };
 }

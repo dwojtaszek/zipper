@@ -15,7 +15,7 @@ set PASSED=0
 set FAILED=0
 set SMOKE_CASES=5
 set /a EXPECTED_FILES=%SMOKE_CASES%*2
-set ALL_CASES=103
+set ALL_CASES=106
 
 REM Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -234,6 +234,35 @@ if errorlevel 1 (
     call :fail "independent verifier must pass the malformed selection"
 ) else (
     call :pass "independent verifier passed the malformed selection"
+)
+
+REM Encoding suite (ticket #887): the three legacy-codec 0x5C trail-byte
+REM controls, verified by the named CP932/Big5/GBK consumer oracle.
+set "ENCODING_OUT=%TEST_OUTPUT_DIR%\encoding"
+%ZIPPER_CMD% --archive-test-suite encoding --seed 42 --output-path "%ENCODING_OUT%"
+if errorlevel 1 (
+    call :fail "encoding suite run exited non-zero"
+    goto :summary
+)
+set ENCODING_ZIPS=0
+for %%Z in ("%ENCODING_OUT%\*.zip") do set /a ENCODING_ZIPS+=1
+set ENCODING_JSONS=0
+for %%J in ("%ENCODING_OUT%\*.json") do set /a ENCODING_JSONS+=1
+if !ENCODING_ZIPS! EQU 3 (
+    call :pass "encoding suite published 3 archives"
+) else (
+    call :fail "encoding suite published !ENCODING_ZIPS! archives (expected 3)"
+)
+if !ENCODING_JSONS! EQU 3 (
+    call :pass "encoding suite published 3 sidecars"
+) else (
+    call :fail "encoding suite published !ENCODING_JSONS! sidecars (expected 3)"
+)
+%PYCMD% tests\archive-tests\verify-fixtures.py "%ENCODING_OUT%" --report "%TEST_OUTPUT_DIR%\encoding-verification.json" >nul 2>&1
+if errorlevel 1 (
+    call :fail "independent verifier must pass the encoding pairs (named CP932/Big5/GBK consumer)"
+) else (
+    call :pass "independent verifier passed the encoding pairs"
 )
 
 set "ALL_OUT=%TEST_OUTPUT_DIR%\all"

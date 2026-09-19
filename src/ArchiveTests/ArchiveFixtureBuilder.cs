@@ -350,6 +350,10 @@ internal static class ArchiveFixtureBuilder
         {
             archiveBytes = SwapCp437NameByte(archiveBytes, definition.CaseKey);
         }
+        else if (definition.Construction is ArchiveControlConstruction.EncodingTrailByteName)
+        {
+            archiveBytes = SwapEncodingNameTrailByte(archiveBytes, definition.CaseKey);
+        }
         else if (definition.Construction is ArchiveControlConstruction.ArchiveComment)
         {
             archiveBytes = AppendSignatureComment(archiveBytes, definition.CaseKey);
@@ -379,6 +383,17 @@ internal static class ArchiveFixtureBuilder
             layout = layout with
             {
                 Entries = [.. layout.Entries.Select(e => e.Ordinal == 0 ? e with { Name = "café.txt" } : e)],
+            };
+        }
+        if (definition.Construction is ArchiveControlConstruction.EncodingTrailByteName)
+        {
+            // The raw name bytes are the legacy codec's physical bytes: record the
+            // codec-decoded readable name while the hex stays the physical bytes
+            // (ticket #887).
+            var decoded = EncodingTrailByteCases[definition.CaseKey].DecodedName;
+            layout = layout with
+            {
+                Entries = [.. layout.Entries.Select(e => e.Ordinal == 0 ? e with { Name = decoded } : e)],
             };
         }
         return new ArchiveFixtureArtifact(
@@ -685,6 +700,53 @@ internal static class ArchiveFixtureBuilder
 
         archiveBytes[(int)first.LocalHeaderOffset + 30 + SwapIndex] = Cp437EAcute;
         archiveBytes[(int)first.CentralDirectoryOffset + 46 + SwapIndex] = Cp437EAcute;
+        return archiveBytes;
+    }
+
+    /// <summary>The legacy-codec trail-byte cases (ticket #887): the lead byte and
+    /// codec-decoded readable name per Case Key. Each character encodes to exactly
+    /// two bytes whose trail byte is 0x5C — CP932 表 (0x95 0x5C), Big5 許 (0xB3 0x5C),
+    /// GBK 乗 (0x81 0x5C) — so the six-byte placeholder "ab.txt" becomes the
+    /// six-byte raw name "\xNN\x5C.txt" with no offsets shifted.</summary>
+    internal static readonly IReadOnlyDictionary<string, (byte LeadByte, string DecodedName)> EncodingTrailByteCases =
+        new Dictionary<string, (byte, string)>
+        {
+            ["encoding-cp932-trail-backslash"] = (0x95, "表.txt"),
+            ["encoding-big5-trail-backslash"] = (0xB3, "許.txt"),
+            ["encoding-gbk-trail-backslash"] = (0x81, "乗.txt"),
+        };
+
+    /// <summary>
+    /// Baseline construction for the encoding-cp932/big5/gbk-trail-backslash controls
+    /// (ticket #887): swaps the leading two ASCII name bytes for the case's legacy-codec
+    /// character (lead byte plus the 0x5C trail byte) in both the local and the central
+    /// header. The byte length is unchanged, so no other structure moves; bit 11 stays
+    /// clear (the known-raw-bytes approach, never an OS default code page).
+    /// </summary>
+    private static byte[] SwapEncodingNameTrailByte(byte[] archiveBytes, string caseKey)
+    {
+        if (!EncodingTrailByteCases.TryGetValue(caseKey, out var spec))
+        {
+            throw new InvalidOperationException($"Archive Test case '{caseKey}': no legacy-codec name is defined for the EncodingTrailByteName construction.");
+        }
+
+        var layout = ArchiveFixtureLayout.Read(archiveBytes);
+        if (layout.Entries.Count == 0)
+        {
+            throw new InvalidOperationException($"Archive Test case '{caseKey}': the encoding baseline expects at least one entry.");
+        }
+
+        var first = layout.Entries[0];
+        if (first.LocalNameLength != 6 || first.NameHex != Convert.ToHexStringLower("ab.txt"u8))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the encoding baseline expects the 6-byte placeholder name 'ab.txt'; found '{first.Name}'.");
+        }
+
+        archiveBytes[(int)first.LocalHeaderOffset + 30] = spec.LeadByte;
+        archiveBytes[(int)first.LocalHeaderOffset + 31] = 0x5C;
+        archiveBytes[(int)first.CentralDirectoryOffset + 46] = spec.LeadByte;
+        archiveBytes[(int)first.CentralDirectoryOffset + 47] = 0x5C;
         return archiveBytes;
     }
 

@@ -147,7 +147,7 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
-| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `all` | Publish an Archive Test Fixture suite (exclusive workflow; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (exclusive workflow; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases |
 | `--version` | `false` | flag | Print version string and exit |
 
