@@ -30,7 +30,7 @@ import runner  # noqa: E402
 def _load_module(name: str, path: Path):
     # Explicit-path loading: sibling packages ship same-named modules (collect)
     # that would collide through the sys.modules cache.
-    import importlib
+    import importlib.util
 
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
