@@ -53,20 +53,34 @@ Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
 
-Server-side enforcement: `main` has branch protection with **required conversation resolution** — GitHub refuses the merge while any review thread is unresolved. One-time setup (admin):
+Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`lint`, the three `build-and-test` matrix legs running the full E2E suite, `goldens`) failed or was cancelled — so a red E2E leg always blocks the merge, and the required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
 
 ```bash
 gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
   --input - <<'JSON'
 {
-  "required_status_checks": null,
-  "enforce_admins": false,
+  "required_status_checks": {
+    "strict": false,
+    "checks": [
+      { "context": "ci-gate" }
+    ]
+  },
+  "enforce_admins": true,
   "required_pull_request_reviews": null,
   "restrictions": null,
-  "required_conversation_resolution": true
+  "required_conversation_resolution": true,
+  "allow_force_pushes": false,
+  "allow_deletions": false,
+  "block_creations": false,
+  "lock_branch": false,
+  "allow_fork_syncing": false,
+  "required_signatures": false,
+  "required_linear_history": false
 }
 JSON
 ```
+
+Note: `gh pr checks --watch` exits 0 even when checks fail — always pass `--exit-status` (or verify every check's conclusion explicitly) before merging. PR #968–#972 merged with red ubuntu/macos E2E jobs because no checks were required and the watch exit code was trusted without it.
 
 ## CodeRabbit
 
