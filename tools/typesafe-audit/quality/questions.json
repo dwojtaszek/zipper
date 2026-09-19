@@ -2,19 +2,35 @@
   "questions": {
     "correctness": {
       "type": "score",
-      "prompt": "Score from 0 to 1 how likely the supplied uncovered code or surviving mutant is to change Zipper's observable correctness (produced files, archives, manifests, exit codes). Base the score only on the supplied source and description."
+      "instructions": "Score how likely the supplied uncovered code or surviving mutant is to change Zipper's observable correctness (produced files, archives, manifests, exit codes). Base the score only on the supplied source and description.",
+      "criteria": [
+        "No observable correctness risk: the supplied gap or mutant cannot change produced files, archives, manifests, or exit codes",
+        "High correctness risk: the supplied gap or mutant can plausibly produce wrong output, corrupted archives, or wrong exit codes"
+      ]
     },
     "data_loss": {
       "type": "score",
-      "prompt": "Score from 0 to 1 the risk that the supplied gap or surviving mutant causes data loss, output corruption, or wrong file content. Base the score only on the supplied source and description."
+      "instructions": "Score the risk that the supplied gap or surviving mutant causes data loss, output corruption, or wrong file content. Base the score only on the supplied source and description.",
+      "criteria": [
+        "No data-loss risk: the supplied gap or mutant cannot corrupt or lose file content",
+        "High data-loss risk: the supplied gap or mutant can plausibly corrupt output or lose file content"
+      ]
     },
     "security": {
       "type": "score",
-      "prompt": "Score from 0 to 1 the security relevance of the supplied gap or surviving mutant (path handling, validation, injection, unsafe output). Base the score only on the supplied source and description."
+      "instructions": "Score the security relevance of the supplied gap or surviving mutant (path handling, validation, injection, unsafe output). Base the score only on the supplied source and description.",
+      "criteria": [
+        "No security relevance: the supplied gap or mutant does not touch path handling, validation, injection surface, or unsafe output",
+        "Security relevant: the supplied gap or mutant touches path handling, validation, injection surface, or unsafe output"
+      ]
     },
     "regression": {
       "type": "score",
-      "prompt": "Score from 0 to 1 how likely the supplied gap or surviving mutant would regress real user workflows (frequently executed paths, core pipeline steps). Base the score only on the supplied source and description."
+      "instructions": "Score how likely the supplied gap or surviving mutant would regress real user workflows (frequently executed paths, core pipeline steps). Base the score only on the supplied source and description.",
+      "criteria": [
+        "Unlikely to regress real user workflows: the supplied gap or mutant sits on a rarely executed path",
+        "Likely to regress real user workflows: the supplied gap or mutant sits on a frequently executed, core pipeline path"
+      ]
     }
   }
 }
