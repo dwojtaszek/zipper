@@ -1,0 +1,7 @@
+{
+  "confidence_threshold": 0.7,
+  "noul_finding_range": [0.25, 0.75],
+  "max_file_diff_bytes": 16384,
+  "max_total_diff_bytes": 65536,
+  "max_doc_bytes": 32768
+}

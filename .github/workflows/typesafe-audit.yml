@@ -146,6 +146,31 @@ jobs:
               exit 0
             }
 
+      - name: Run architecture seam lint (advisory)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          # Critical Rule 5 seam judgments: only runs a model call when the
+          # diff touches src/LoadFiles/** or docs/architecture.md.
+          if [ -n "${PR_BASE:-}" ]; then
+            BASE_ARGS=(--base "${PR_BASE}")
+          else
+            BASE_ARGS=(--base HEAD~1)
+          fi
+          python3 tools/typesafe-audit/checks/architecture/run_check.py \
+            --mode live \
+            "${BASE_ARGS[@]}" \
+            --json-out results/typesafe-audit/architecture.json \
+            --md-out results/typesafe-audit/architecture.md \
+            --summary-out "$GITHUB_STEP_SUMMARY" || {
+              # Advisory: this check never blocks (see run_check.py exit-code contract).
+              echo "### Architecture lint advisory result (exit $?)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+
       - name: Upload audit artifacts
         if: steps.secret.outputs.available == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -158,6 +183,8 @@ jobs:
             results/typesafe-audit/requirements.md
             results/typesafe-audit/traceability.json
             results/typesafe-audit/traceability.md
+            results/typesafe-audit/architecture.json
+            results/typesafe-audit/architecture.md
             results/typesafe-audit/pr-spec.json
             results/typesafe-audit/pr-spec.md
           retention-days: 7
