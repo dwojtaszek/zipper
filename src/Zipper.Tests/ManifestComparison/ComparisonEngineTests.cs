@@ -26,6 +26,118 @@ public class ComparisonEngineTests
         Assert.Equal(1, result.Summary.TotalNewRecords);
     }
 
+    // REQ-158/REQ-160: replacement and reproduction share identical matching and
+    // classification; only the reported Comparison Mode differs. The same
+    // fixture matrix must produce identical detail/count results in both modes.
+    public static TheoryData<string> ReplacementEquivalenceModes => new() { "replacement", "reproduction" };
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_IdenticalClassification(string mode)
+    {
+        // Same Bates + everything equal -> unchanged.
+        var prior = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Equal(mode, result.ComparisonMode);
+        Assert.Single(result.Details.Unchanged);
+        Assert.Empty(result.Details.Changed);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_SameBatesChangedHash_ClassifiesChanged(string mode)
+    {
+        var prior = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1-modified", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Single(result.Details.Changed);
+        Assert.Equal("h1", result.Details.Changed[0].PriorHash);
+        Assert.Equal("h1-modified", result.Details.Changed[0].NewHash);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_SameControlDifferentBates_ClassifiesReplaced(string mode)
+    {
+        var prior = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000099", "DOC001", "n1.pdf", "h1", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Single(result.Details.Replaced);
+        Assert.Equal("PR000001", result.Details.Replaced[0].PriorBatesNumber);
+        Assert.Equal("PR000099", result.Details.Replaced[0].NewBatesNumber);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_OnlyInPriorOrNew_ClassifiesRemovedAndAdded(string mode)
+    {
+        var prior = new List<ComparisonRecord>
+        {
+            Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001"),
+            Rec("PR000002", "DOC002", "n2.pdf", "h2", "VOL001")
+        };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000010", "DOC010", "n10.pdf", "h10", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Single(result.Details.Added);
+        Assert.Equal(2, result.Details.Removed.Count);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_MissingHashOnEitherSide_StillUnchanged(string mode)
+    {
+        var prior = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "", "VOL001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        // Empty hash values never block an unchanged classification (REQ-158).
+        Assert.Single(result.Details.Unchanged);
+        Assert.Empty(result.Details.Changed);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_DuplicateBatesInPrior_ClassifiesDuplicated(string mode)
+    {
+        var prior = new List<ComparisonRecord>
+        {
+            Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001", line: 2),
+            Rec("PR000001", "DOC002", "n2.pdf", "h2", "VOL001", line: 5)
+        };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+        var priorDuplicates = ComparisonEngine.FindDuplicates(prior, "prior");
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, priorDuplicates, new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Single(result.Details.Duplicates);
+        Assert.Contains("Duplicate Bates Number 'PR000001'", result.Details.Duplicates[0].Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [MemberData(nameof(ReplacementEquivalenceModes))]
+    public void PerformComparison_ReplacementAndReproduction_CaseInsensitiveMatches_ClassifiesUnchanged(string mode)
+    {
+        // Case-insensitive Volume and Bates Number matching is pinned behavior.
+        var prior = new List<ComparisonRecord> { Rec("pr000001", "doc001", "NATIVES/vol001/n1.pdf", "H1", "vol001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "natives/VOL001/n1.pdf", "h1", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(prior, newRecs, mode, new List<DuplicateDetail>(), new List<DuplicateDetail>(), new List<string> { "/p" }, "/n");
+
+        Assert.Single(result.Details.Unchanged);
+        Assert.Empty(result.Details.Changed);
+        Assert.Empty(result.Details.Replaced);
+    }
+
     [Fact]
     public void PerformComparison_ReplacementMode_ClassifiesAddedAndRemoved()
     {
