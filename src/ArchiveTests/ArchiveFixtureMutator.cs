@@ -85,6 +85,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => DeclareZip64EocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
+            ArchiveTestMutationKind.EocdAmbiguityComment => InjectEocdAmbiguityComment(control, before),
             ArchiveTestMutationKind.DescriptorCrcDisagreement => DisagreeDescriptorCrc(control, before),
             ArchiveTestMutationKind.DescriptorSizeDisagreement => DisagreeDescriptorSize(control, before),
             ArchiveTestMutationKind.DuplicateZip64Extra => DuplicateZip64ExtraField(control, before),
@@ -94,6 +95,91 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.UnicodePathNameDivergence => DivergeUnicodePathName(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
+    }
+
+    /// <summary>
+    /// Replaces the two-entry control's tail with two complete central-directory/EOCD
+    /// pairs (ticket #870). The authentic EOCD selects entry 0 and declares the shadow
+    /// pair as its comment; the trailing zero-comment EOCD selects entry 1. A
+    /// length-anchored reader selects the authentic record while backward scanners
+    /// select the shadow record.
+    /// </summary>
+    private static MutatedArchiveFixture InjectEocdAmbiguityComment(
+        ArchiveFixtureArtifact control,
+        byte[] before)
+    {
+        if (control.Layout.Entries.Count != 2)
+        {
+            throw new InvalidOperationException(
+                "The EOCD ambiguity recipe requires exactly two control entries.");
+        }
+
+        var first = control.Layout.Entries[0];
+        var second = control.Layout.Entries[1];
+        var tailOffset = checked((int)control.Layout.CentralDirectoryOffset);
+        var firstCentralLength = checked(46 + first.CentralNameLength + first.CentralExtraLength + first.CentralCommentLength);
+        var secondCentralLength = checked(46 + second.CentralNameLength + second.CentralExtraLength + second.CentralCommentLength);
+        var authenticEocdOffset = checked(tailOffset + firstCentralLength);
+        var shadowCentralOffset = checked(authenticEocdOffset + 22);
+        var shadowEocdOffset = checked(shadowCentralOffset + secondCentralLength);
+        if (secondCentralLength + 22 > ushort.MaxValue)
+        {
+            throw new InvalidOperationException(
+                "The EOCD ambiguity recipe requires the shadow central directory to fit in a 64 KiB ZIP comment.");
+        }
+        var authenticCommentLength = checked((ushort)(secondCentralLength + 22));
+        var after = new byte[checked(shadowEocdOffset + 22)];
+
+        before.AsSpan(0, tailOffset).CopyTo(after);
+        before.AsSpan(tailOffset, firstCentralLength)
+            .CopyTo(after.AsSpan(tailOffset));
+        WriteEocd(
+            after.AsSpan(authenticEocdOffset, 22),
+            entryCount: 1,
+            centralDirectorySize: checked((uint)firstCentralLength),
+            centralDirectoryOffset: checked((uint)tailOffset),
+            commentLength: authenticCommentLength);
+        before.AsSpan((int)second.CentralDirectoryOffset, secondCentralLength)
+            .CopyTo(after.AsSpan(shadowCentralOffset));
+        WriteEocd(
+            after.AsSpan(shadowEocdOffset, 22),
+            entryCount: 1,
+            centralDirectorySize: checked((uint)secondCentralLength),
+            centralDirectoryOffset: checked((uint)shadowCentralOffset),
+            commentLength: 0);
+
+        var code = ArchiveTestMutationKind.EocdAmbiguityComment.ToCaseKey();
+        var mutation = Record(
+            new MutationSpec(
+                code,
+                "whole-archive",
+                tailOffset,
+                "Replaces the control tail with an authentic one-entry central directory and EOCD whose comment contains a structurally complete shadow central directory and trailing EOCD selecting the other entry.",
+                null,
+                before.Length - tailOffset,
+                after.Length - tailOffset,
+                DeclaredValue:
+                    $"authentic-eocd-offset={authenticEocdOffset} authentic-comment-length={authenticCommentLength} shadow-central-directory-offset={shadowCentralOffset} shadow-eocd-offset={shadowEocdOffset}"),
+            before,
+            after);
+        return Finalize(ArchiveTestMutationKind.EocdAmbiguityComment, before, after, [mutation]);
+    }
+
+    private static void WriteEocd(
+        Span<byte> destination,
+        ushort entryCount,
+        uint centralDirectorySize,
+        uint centralDirectoryOffset,
+        ushort commentLength)
+    {
+        BinaryPrimitives.WriteUInt32LittleEndian(destination, ArchiveFixtureLayout.EocdSignature);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[4..], 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[6..], 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[8..], entryCount);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[10..], entryCount);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination[12..], centralDirectorySize);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination[16..], centralDirectoryOffset);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[20..], commentLength);
     }
 
     /// <summary>
@@ -1575,6 +1661,7 @@ internal enum ArchiveTestMutationKind
     EocdEntryCountMismatch,
     Zip64EocdEntryCountMismatch,
     Zip64LocatorDiskMismatch,
+    EocdAmbiguityComment,
     DescriptorCrcDisagreement,
     DescriptorSizeDisagreement,
     DuplicateZip64Extra,
@@ -1631,6 +1718,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.EocdEntryCountMismatch => "eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => "zip64-eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
+        ArchiveTestMutationKind.EocdAmbiguityComment => "eocdr-ambiguity-comment",
         ArchiveTestMutationKind.DescriptorCrcDisagreement => "descriptor-crc-disagreement",
         ArchiveTestMutationKind.DescriptorSizeDisagreement => "descriptor-size-disagreement",
         ArchiveTestMutationKind.DuplicateZip64Extra => "duplicate-zip64-extra",

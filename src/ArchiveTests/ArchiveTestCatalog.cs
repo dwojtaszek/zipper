@@ -460,6 +460,10 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.OrphanLocalHeader,
             controlCaseKey: DeflateControlCaseKey,
             suites: [MalformedSuite, SecuritySuite]),
+        ["eocdr-ambiguity-comment"] = MutatedDefinition(
+            ArchiveTestMutationKind.EocdAmbiguityComment,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
         ["zip64-missing-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),

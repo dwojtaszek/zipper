@@ -392,6 +392,13 @@ class FixtureVerifier:
             orphan_note = verify_orphan_hidden(case, zip_bytes)
             checks.append({"check": "orphan-hidden", "status": "pass", "detail": orphan_note})
 
+        # EOCD ambiguity (ticket #870): two complete central-directory/EOCD pairs
+        # select disjoint entries. Python's backward scan must select the trailing
+        # shadow pair while the authentic EOCD's declared comment spans to EOF.
+        if case.get("caseKey") == "eocdr-ambiguity-comment":
+            eocd_note = verify_eocd_ambiguity(case, zip_bytes)
+            checks.append({"check": "eocd-ambiguity", "status": "pass", "detail": eocd_note})
+
         # Unicode Path extra field (ticket #871): a valid 0x7075 subfield in both
         # headers whose CRC matches the standard name; readers ignore the field.
         if case.get("caseKey") == "unicode-path-extra-mismatch":
@@ -882,6 +889,160 @@ def verify_orphan_hidden(case, zip_bytes):
                                 % (len(names), len(case["entries"])))
 
     return "hidden=%d-bytes streaming-visible-only" % hidden_length
+
+
+def verify_eocd_ambiguity(case, zip_bytes):
+    """EOCD-selection audit (ticket #870): exactly two structurally complete
+    central-directory/EOCD pairs select a.txt and b.bin respectively. The first
+    EOCD's declared comment reaches EOF; Python's backward scan selects the
+    trailing zero-comment shadow EOCD and reads b.bin."""
+    import struct
+
+    offsets = []
+    cursor = 0
+    while True:
+        cursor = zip_bytes.find(b"PK\x05\x06", cursor)
+        if cursor < 0:
+            break
+        offsets.append(cursor)
+        cursor += 4
+        if len(offsets) > 2:
+            raise VerificationError("eocd-ambiguity",
+                                    "expected exactly two EOCD signatures, found more")
+    if len(offsets) != 2:
+        raise VerificationError("eocd-ambiguity",
+                                "expected exactly two EOCD signatures, found %d" % len(offsets))
+
+    authentic_eocd, shadow_eocd = offsets
+    if authentic_eocd >= shadow_eocd:
+        raise VerificationError("eocd-ambiguity",
+                                "the authentic EOCD must precede the shadow EOCD")
+
+    def parse_pair(eocd_offset, label):
+        if eocd_offset + 22 > len(zip_bytes):
+            raise VerificationError("eocd-ambiguity", "%s EOCD is truncated" % label)
+        disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length = \
+            struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+        if (disk, cd_disk, disk_entries, total_entries) != (0, 0, 1, 1):
+            raise VerificationError("eocd-ambiguity",
+                                    "%s EOCD fields are not single-disk one-entry values" % label)
+        if cd_offset + cd_size != eocd_offset:
+            raise VerificationError("eocd-ambiguity",
+                                    "%s central directory does not end at its EOCD" % label)
+        if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+            raise VerificationError("eocd-ambiguity",
+                                    "%s central header missing at offset %d" % (label, cd_offset))
+        name_length, extra_length, entry_comment_length = struct.unpack_from("<HHH", zip_bytes, cd_offset + 28)
+        if 46 + name_length + extra_length + entry_comment_length != cd_size:
+            raise VerificationError("eocd-ambiguity",
+                                    "%s central-directory size does not match its one header" % label)
+        central_name = zip_bytes[cd_offset + 46:cd_offset + 46 + name_length]
+
+        # The pair is only complete when its central entry references a genuine
+        # local header carrying the same name and the same method/CRC/sizes.
+        local_offset = struct.unpack_from("<I", zip_bytes, cd_offset + 42)[0]
+        if local_offset + 30 > len(zip_bytes) or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+            raise VerificationError("eocd-ambiguity",
+                                    "%s central entry references no local header at offset %d"
+                                    % (label, local_offset))
+        local_name_length, local_extra_length = struct.unpack_from("<HH", zip_bytes, local_offset + 26)
+        if zip_bytes[local_offset + 30:local_offset + 30 + local_name_length] != central_name:
+            raise VerificationError("eocd-ambiguity",
+                                    "%s local and central names disagree" % label)
+        method = struct.unpack_from("<H", zip_bytes, local_offset + 8)[0]
+        central_method = struct.unpack_from("<H", zip_bytes, cd_offset + 10)[0]
+        crc, compressed_size = struct.unpack_from("<II", zip_bytes, local_offset + 14)
+        central_crc, central_compressed = struct.unpack_from("<II", zip_bytes, cd_offset + 16)
+        if (method, crc, compressed_size) != (central_method, central_crc, central_compressed):
+            raise VerificationError("eocd-ambiguity",
+                                    "%s local header disagrees with its central header" % label)
+        data_offset = local_offset + 30 + local_name_length + local_extra_length
+        if data_offset + compressed_size > len(zip_bytes):
+            raise VerificationError("eocd-ambiguity",
+                                    "%s payload runs past the end of the Archive" % label)
+        try:
+            name = central_name.decode("utf-8")
+        except UnicodeDecodeError:
+            raise VerificationError("eocd-ambiguity",
+                                    "%s central name is not valid UTF-8" % label) from None
+        if method == 0:
+            # Stored payload: bind the pair to the sidecar's content hash so a
+            # retargeted central header cannot masquerade as the named entry.
+            # (Deflated controls never reach this pinned stored case.)
+            payload = zip_bytes[data_offset:data_offset + compressed_size]
+            sidecar = next((e for e in case["entries"] if e["readableName"] == name), None)
+            if sidecar is None:
+                raise VerificationError("eocd-ambiguity",
+                                        "%s pair names entry %r missing from the sidecar"
+                                        % (label, name))
+            if sha256_hex(payload) != sidecar.get("contentSha256"):
+                raise VerificationError("eocd-ambiguity",
+                                        "%s pair payload does not match sidecar %r" % (label, name))
+        return cd_offset, comment_length, name
+
+    authentic_cd, authentic_comment, authentic_name = parse_pair(authentic_eocd, "authentic")
+    shadow_cd, shadow_comment, shadow_name = parse_pair(shadow_eocd, "shadow")
+    if authentic_eocd + 22 + authentic_comment != len(zip_bytes):
+        raise VerificationError("eocd-ambiguity",
+                                "authentic EOCD comment does not end at EOF")
+    if shadow_comment != 0 or shadow_eocd + 22 != len(zip_bytes):
+        raise VerificationError("eocd-ambiguity",
+                                "shadow EOCD must have zero comment and end at EOF")
+    if (authentic_name, shadow_name) != ("a.txt", "b.bin"):
+        raise VerificationError("eocd-ambiguity",
+                                "EOCD pairs select %r/%r, expected a.txt/b.bin"
+                                % (authentic_name, shadow_name))
+
+    mutations = [m for m in case.get("mutations", [])
+                 if m.get("code") == "eocdr-ambiguity-comment"]
+    if len(mutations) != 1:
+        raise VerificationError("eocd-ambiguity",
+                                "expected one eocdr-ambiguity-comment mutation record")
+    declared = {}
+    for token in mutations[0].get("declaredValue", "").split():
+        if "=" in token:
+            key, value = token.split("=", 1)
+            declared[key] = value
+    expected_offsets = {
+        "authentic-eocd-offset": authentic_eocd,
+        "authentic-comment-length": authentic_comment,
+        "shadow-central-directory-offset": shadow_cd,
+        "shadow-eocd-offset": shadow_eocd,
+    }
+    for key, value in expected_offsets.items():
+        if declared.get(key) != str(value):
+            raise VerificationError("eocd-ambiguity",
+                                    "mutation %s is %r, expected %d"
+                                    % (key, declared.get(key), value))
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        infos = zf.infolist()
+        if len(infos) != 1 or infos[0].filename != "b.bin":
+            raise VerificationError("eocd-ambiguity",
+                                    "Python zipfile must select only shadow entry b.bin")
+        budget = case.get("limits", {}).get("expandedBytesBudget", MAX_EXPANDED_BYTES_BUDGET)
+        chunks = []
+        total = 0
+        with zf.open(infos[0]) as stream:
+            while True:
+                chunk = stream.read(65536)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > budget:
+                    raise VerificationError("eocd-ambiguity",
+                                            "shadow payload exceeds the expanded-bytes budget")
+                chunks.append(chunk)
+        shadow_bytes = b"".join(chunks)
+    shadow_entry = next((entry for entry in case["entries"]
+                         if entry["readableName"] == "b.bin"), None)
+    if shadow_entry is None or sha256_hex(shadow_bytes) != shadow_entry.get("contentSha256"):
+        raise VerificationError("eocd-ambiguity",
+                                "Python zipfile shadow payload does not match b.bin")
+
+    return ("authentic-eocd=%d authentic-cd=%d shadow-eocd=%d shadow-cd=%d "
+            "python-selects=b.bin" %
+            (authentic_eocd, authentic_cd, shadow_eocd, shadow_cd))
 
 
 def verify_unicode_path_extra(case, zip_bytes):

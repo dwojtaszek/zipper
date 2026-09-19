@@ -256,6 +256,17 @@ internal static class ArchiveTestSuiteGenerator
             ];
         }
 
+        if (definition.CaseKey == "eocdr-ambiguity-comment")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, [ListFails], [PayloadBytesUnchanged, "two-structurally-plausible-eocd-records"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [PayloadBytesUnchanged, "shadow-eocd-selects-b-bin"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails"], [PayloadBytesUnchanged, "shadow-eocd-selects-b-bin"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [PayloadBytesUnchanged, "shadow-eocd-selects-b-bin"], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
         if (!definition.IsMutation)
         {
             // Policy-sensitive direct recipes (ticket #842): valid ZIP syntax whose

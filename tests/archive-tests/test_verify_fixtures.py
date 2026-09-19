@@ -16,6 +16,7 @@ import io
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,48 @@ def make_zip(entries, stored=True):
             info = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
             zf.writestr(info, data)
     return buf.getvalue()
+
+def make_eocd_ambiguity_zip():
+    """Two local entries plus disjoint authentic/shadow central tails (#870)."""
+    import binascii
+
+    def local(name, data):
+        raw_name = name.encode()
+        crc = binascii.crc32(data) & 0xFFFFFFFF
+        return struct.pack("<IHHHHHIIIHH", 0x04034B50, 20, 0, 0, 0, 0,
+                           crc, len(data), len(data), len(raw_name), 0) + raw_name + data
+
+    def central(name, data, local_offset):
+        raw_name = name.encode()
+        crc = binascii.crc32(data) & 0xFFFFFFFF
+        return struct.pack("<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0, 0, 0, 0,
+                           crc, len(data), len(data), len(raw_name), 0, 0, 0, 0, 0,
+                           local_offset) + raw_name
+
+    def eocd(cd_offset, cd_size, comment_length):
+        return struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 1, 1, cd_size,
+                           cd_offset, comment_length)
+
+    a_data, b_data = b"A", b"B"
+    a_local = local("a.txt", a_data)
+    b_local = local("b.bin", b_data)
+    authentic_cd = central("a.txt", a_data, 0)
+    authentic_cd_offset = len(a_local) + len(b_local)
+    authentic_eocd_offset = authentic_cd_offset + len(authentic_cd)
+    shadow_cd = central("b.bin", b_data, len(a_local))
+    shadow_cd_offset = authentic_eocd_offset + 22
+    shadow_eocd_offset = shadow_cd_offset + len(shadow_cd)
+    comment_length = len(shadow_cd) + 22
+    archive = (a_local + b_local + authentic_cd
+               + eocd(authentic_cd_offset, len(authentic_cd), comment_length)
+               + shadow_cd + eocd(shadow_cd_offset, len(shadow_cd), 0))
+    offsets = {
+        "authentic-eocd-offset": authentic_eocd_offset,
+        "authentic-comment-length": comment_length,
+        "shadow-central-directory-offset": shadow_cd_offset,
+        "shadow-eocd-offset": shadow_eocd_offset,
+    }
+    return archive, offsets, a_data, b_data
 
 
 def entry_record(ordinal, name, content, local_method=0, central_method=0, payload_codec="stored"):
@@ -225,6 +268,111 @@ class TempDirTest(unittest.TestCase):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(case, handle, separators=(",", ":"))
             handle.write("\n")
+
+
+class EocdAmbiguityTests(TempDirTest):
+    @staticmethod
+    def make_case():
+        zip_bytes, offsets, a_data, b_data = make_eocd_ambiguity_zip()
+        declared = " ".join("%s=%d" % item for item in offsets.items())
+        mutation = {
+            "code": "eocdr-ambiguity-comment",
+            "structure": "whole-archive",
+            "offsetBasis": "before-mutation",
+            "offset": 0,
+            "explanation": "synthetic two-EOCD differential",
+            "declaredValue": declared,
+        }
+        case = case_for(
+            "eocdr-ambiguity-comment",
+            "policy-sensitive",
+            zip_bytes,
+            [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)],
+            [mutation],
+            CRC_EXPECTATIONS)
+        return case, zip_bytes, offsets
+
+    def test_two_plausible_eocds_select_shadow_entry(self):
+        case, zip_bytes, offsets = self.make_case()
+
+        detail = vf.verify_eocd_ambiguity(case, zip_bytes)
+
+        self.assertIn("python-selects=b.bin", detail)
+        self.assertIn("authentic-eocd=%d" % offsets["authentic-eocd-offset"], detail)
+        self.assertIn("shadow-eocd=%d" % offsets["shadow-eocd-offset"], detail)
+
+    def test_shadow_eocd_with_wrong_central_offset_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        tampered = bytearray(zip_bytes)
+        struct.pack_into("<I", tampered, offsets["shadow-eocd-offset"] + 16, 0)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, bytes(tampered))
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_authentic_eocd_with_wrong_comment_length_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        tampered = bytearray(zip_bytes)
+        struct.pack_into("<H", tampered, offsets["authentic-eocd-offset"] + 20, 0)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, bytes(tampered))
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_wrong_declared_shadow_eocd_offset_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        declared = " ".join(
+            "%s=%d" % item
+            for item in offsets.items()
+            if item[0] != "shadow-eocd-offset")
+        declared += " shadow-eocd-offset=%d" % (offsets["shadow-eocd-offset"] + 1)
+        case["mutations"][0]["declaredValue"] = declared
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, zip_bytes)
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_local_central_method_disagreement_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        tampered = bytearray(zip_bytes)
+        struct.pack_into("<H", tampered, 8, 8)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, bytes(tampered))
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_authentic_payload_hash_mismatch_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        tampered = bytearray(zip_bytes)
+        tampered[35] ^= 0xFF
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, bytes(tampered))
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_third_eocd_signature_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        injected = offsets["shadow-eocd-offset"]
+        tampered = zip_bytes[:injected] + b"PK\x05\x06" + zip_bytes[injected:]
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, tampered)
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
+
+    def test_shadow_payload_over_budget_is_rejected(self):
+        case, zip_bytes, offsets = self.make_case()
+        case.setdefault("limits", {})["expandedBytesBudget"] = 0
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_eocd_ambiguity(case, zip_bytes)
+
+        self.assertEqual("eocd-ambiguity", caught.exception.check)
 
 
 class PositiveControlTests(TempDirTest):
