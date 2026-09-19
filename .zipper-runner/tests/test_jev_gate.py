@@ -165,24 +165,26 @@ class CiTriageTests(unittest.TestCase):
 
 class CompletionTests(unittest.TestCase):
     def test_verify_completion_high_score_and_confidence_completes(self):
-        answers = {"requirements_met": _score_answer(0.95, confidence=0.9)}
+        # Score answers are positions on COMPLETION_LEVELS (0..2); 2.0 -> 1.0 normalized.
+        answers = {"requirements_met": _score_answer(2.0, confidence=0.9)}
         fake = _fake_audit_module(answers)
         with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
                 mock.patch.object(jev_gate, "_audit", fake):
             verdict = jev_gate.verify_completion("issue text", "diff text")
-        self.assertEqual(verdict["requirements_met"], 0.95)
+        self.assertEqual(verdict["requirements_met"], 1.0)
         self.assertTrue(verdict["completed"])
 
     def test_verify_completion_low_score_not_completed(self):
-        answers = {"requirements_met": _score_answer(0.2, confidence=0.9)}
+        answers = {"requirements_met": _score_answer(0.0, confidence=0.9)}
         fake = _fake_audit_module(answers)
         with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
                 mock.patch.object(jev_gate, "_audit", fake):
             verdict = jev_gate.verify_completion("issue text", "diff text")
         self.assertFalse(verdict["completed"])
+        self.assertEqual(verdict["requirements_met"], 0.0)
 
     def test_verify_completion_low_confidence_returns_none(self):
-        answers = {"requirements_met": _score_answer(0.95, confidence=0.4)}
+        answers = {"requirements_met": _score_answer(2.0, confidence=0.4)}
         fake = _fake_audit_module(answers)
         with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
                 mock.patch.object(jev_gate, "_audit", fake):

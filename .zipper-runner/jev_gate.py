@@ -24,13 +24,33 @@ MAX_TEXT_CHARS = 20000  # per-input truncation before any model call
 
 CI_CATEGORIES = ("real_regression", "flaky", "environment", "dependency", "unrelated")
 CI_RETRYABLE = ("flaky", "environment", "dependency", "unrelated")
+CI_CATEGORY_CRITERIA = {
+    "real_regression": "The PR's own change broke this check",
+    "flaky": "Passes on rerun; timing/ordering dependence",
+    "environment": "Runner/infra/network failure",
+    "dependency": "External service or package failure",
+    "unrelated": "Pre-existing failure on main, or documentation-only",
+}
 
 PROGRESS_CLASSES = ("progressing", "repeating", "blocked", "wrong_direction")
+PROGRESS_CRITERIA = {
+    "progressing": "New evidence each step, moving toward done",
+    "repeating": "Same actions or errors re-occurring without change",
+    "blocked": "Waiting on something it cannot get, or hitting a wall",
+    "wrong_direction": "Actively working against the task",
+}
 
 INJECTION_BLOCK_ABOVE = 0.75
 INJECTION_ALERT_ABOVE = 0.25
 
-COMPLETED_ABOVE = 0.7  # requirements_met score (and confidence) needed to call a claim complete
+COMPLETED_ABOVE = 0.75  # normalized requirements_met (and confidence) needed to call a claim complete
+# Ordered Score levels (low -> high) for requirements_met; the API returns a
+# position on this list, so it is normalized by len-1 in verify_completion.
+COMPLETION_LEVELS = [
+    "None of the issue's requested behavior appears in the diff",
+    "Some of the requested behavior is implemented, but parts are missing or incomplete",
+    "All of the issue's requested behavior is implemented in the diff",
+]
 
 _audit = None
 
@@ -124,13 +144,10 @@ def classify_ci_failures(failed_checks, log_excerpt):
         f"check{i}": {
             "type": "choice",
             "instructions": (
-                f"Classify CI check #{i} of the failed run. Categories: "
-                "real_regression (the PR's own change broke it), flaky (passes on rerun, "
-                "timing/ordering dependence), environment (runner/infra/network failure), "
-                "dependency (external service or package failure), unrelated (pre-existing "
-                "failure on main or documentation-only). Judge only from the supplied "
+                f"Classify CI check #{i} of the failed run. Judge only from the supplied "
                 "check name and log excerpt."
             ),
+            "criteria": CI_CATEGORY_CRITERIA,
         }
         for i in range(len(failed_checks))
     }
@@ -164,9 +181,11 @@ def decide_ci_action(triage, rerun_count, max_reruns=1):
 def verify_completion(issue_text, diff_text):
     """Score whether the branch diff actually satisfies the issue text.
 
-    Returns {"requirements_met": float, "completed": bool} or None. completed
-    requires both the score and the answer confidence above COMPLETED_ABOVE;
-    the caller only uses a low score to send an advisory email, never to block.
+    The Score answer is a position on COMPLETION_LEVELS (0..2), normalized
+    here to 0..1. Returns {"requirements_met": float, "completed": bool} or
+    None. completed requires both the normalized score and the answer
+    confidence above COMPLETED_ABOVE; the caller only uses a low score to
+    send an advisory email, never to block.
     """
     issue_text = _truncate(issue_text or "")
     diff_text = _truncate(diff_text or "")
@@ -178,10 +197,10 @@ def verify_completion(issue_text, diff_text):
             "requirements_met": {
                 "type": "score",
                 "instructions": (
-                    "Judge only from the supplied issue text and branch diff: to what "
-                    "degree does the diff implement the issue's requested behavior? "
-                    "1.0 = every requested behavior is implemented, 0.0 = none of it is."
+                    "Judging only from the supplied issue text and branch diff: how much "
+                    "of the behavior requested in the issue text does the diff implement?"
                 ),
+                "criteria": COMPLETION_LEVELS,
             }
         },
     )
@@ -190,9 +209,10 @@ def verify_completion(issue_text, diff_text):
     score = rows["requirements_met"]["answer"]
     if not isinstance(score, (int, float)):
         return None
+    requirements_met = float(score) / (len(COMPLETION_LEVELS) - 1)
     return {
-        "requirements_met": float(score),
-        "completed": float(score) >= COMPLETED_ABOVE,
+        "requirements_met": requirements_met,
+        "completed": requirements_met >= COMPLETED_ABOVE,
     }
 
 
@@ -212,12 +232,9 @@ def classify_progress(tail_lines):
             "progress": {
                 "type": "choice",
                 "instructions": (
-                    "Classify this coding-agent output tail: progressing (new evidence "
-                    "each step, moving toward done), repeating (same actions or errors "
-                    "re-occurring without change), blocked (waiting on something it "
-                    "cannot get, or hitting a wall), wrong_direction (actively working "
-                    "against the task). Judge only from the supplied output tail."
+                    "Classify this coding-agent output tail. Judge only from the supplied output tail."
                 ),
+                "criteria": PROGRESS_CRITERIA,
             }
         },
     )
