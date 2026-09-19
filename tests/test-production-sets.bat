@@ -62,6 +62,28 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Verify manifest metadata block (Azure-safe contract, REQ-225)
+powershell -NoProfile -Command ^
+  "$metadata = (Get-Content (Join-Path '%PROD_DIR%' '_manifest.json') -Raw | ConvertFrom-Json).metadata;" ^
+  "if (-not $metadata) { throw 'manifest metadata block missing' }" ^
+  "foreach ($key in @('production_id','bates_number_start','bates_number_end','volume_count'))" ^
+  "{ if (-not $metadata.PSObject.Properties[$key]) { throw \"manifest metadata missing key: $key\" } }" ^
+  "$total = 0;" ^
+  "foreach ($pair in $metadata.PSObject.Properties)" ^
+  "{" ^
+  "  $total += [Text.Encoding]::UTF8.GetByteCount($pair.Name) + [Text.Encoding]::UTF8.GetByteCount([string]$pair.Value);" ^
+  "  foreach ($c in ([string]$pair.Value).ToCharArray())" ^
+  "  {" ^
+  "    if ([int]$c -gt 127) { throw \"metadata value for '$($pair.Name)' contains non-ASCII characters\" }" ^
+  "    if ($c -eq \"\`r\" -or $c -eq \"\`n\") { throw \"metadata value for '$($pair.Name)' contains CR/LF\" }" ^
+  "  }" ^
+  "}" ^
+  "if ($total -gt 8192) { throw \"metadata block exceeds 8,192 bytes: $total\" }"
+if errorlevel 1 (
+  echo [ ERROR ] Test 1: manifest metadata block validation failed
+  exit /b 1
+)
+
 echo [ SUCCESS ] Test Case 1: Basic production set passed
 
 :: --- Test Case 2: Production ZIP ---

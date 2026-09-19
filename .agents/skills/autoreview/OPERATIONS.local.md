@@ -140,3 +140,11 @@
 - **telemetry**: host=droid mode=local specialists=6+1fast bundle=25280c
 - **lessons**: Decision-driven work: maintainer block comments on #878 named exactly the two product decisions (budget route, segment basis); user AskUser answers translated directly into the exempt-recipe design. Placeholder-token bug recurred once (DIFF_878_PLACEHOLDER) — caught after single dispatch, stopped and relaunched; inline the diff into every subagent prompt.
 - **suppressions**: none
+
+### 2026-09-19 droid:local:#881-manifest-metadata-contract
+
+- **findings**: 0 ACTION, 16 INFO across 7 specialists (correctness 3, adversarial 3, security 2, testing 6, maintainability 3, performance 3, api-contract 3) — unanimous "patch is correct", confidence 8–9. Merged to 10 fingerprints: 5 accepted (non-object metadata silently skipped — 4-source agreement, 8192 named constant, lossy-derivative doc clause, release-note callout, boundary/empty/multi-violation tests), 5 rejected (control-chars-beyond-CRLF = user-decided contract boundary, non-string size-accounting moot since type error fails report, key-literal duplication = convention, .bat errorlevel = existing pattern, E2E negative case = unit-covered).
+- **outcome**: accepted — all fixes applied (validator else-branch finding, MaxAzureMetadataBytes const, README clause, +6 tests). Fast-pass rerun clean (0 ACTION, 4 self-resolving INFO, confidence 9). Gates green: 2,665 unit, 60 analyzer, format, production-sets E2E, 62 Python verifier.
+- **telemetry**: host=droid mode=local specialists=7+1fast bundle=20150c
+- **lessons**: Security specialist notification showed "No output available" but TaskOutput block=false retrieved the full JSON — always fetch via TaskOutput, never trust the empty-notification shape. MA0009 (regex DoS) bans runtime Regex in this repo — character-loop validation avoids the analyzer and is simpler. Accepting the 4-source INFO (non-object skip) closed a real contract hole the user decision didn't name explicitly.
+- **suppressions**: none

@@ -395,6 +395,26 @@ internal sealed class ProductionSetPostValidator
                     state.RollingSeqNum = sNum;
                 }
 
+                // Azure Blob custom metadata constraints (ticket #881, REQ-225/REQ-226)
+                if (doc.RootElement.TryGetProperty("metadata", out var metadataElem))
+                {
+                    if (metadataElem.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        ValidateProductionMetadata(state, metadataElem);
+                    }
+                    else
+                    {
+                        // Present but not an object (e.g. hand-edited): report rather than silently skipping.
+                        state.Findings.Add(new ValidationReportFinding
+                        {
+                            Code = "MetadataAzureConstraint",
+                            Severity = "error",
+                            Path = "_manifest.json",
+                            Message = $"Manifest 'metadata' must be an object of string key/value pairs, but it is a {metadataElem.ValueKind}."
+                        });
+                    }
+                }
+
                 if (state.ParentBatesList.Count > 0)
                 {
                     if (!string.IsNullOrEmpty(state.ManifestStart) && !string.Equals(state.ParentBatesList[0], state.ManifestStart, StringComparison.Ordinal))
@@ -429,6 +449,106 @@ internal sealed class ProductionSetPostValidator
                     Message = $"Manifest file '_manifest.json' could not be read or parsed: {ex.Message}"
                 });
             }
+        }
+    }
+
+    /// <summary>Azure Blob caps an upload's custom metadata at 8 KB across all keys and values (ticket #881).</summary>
+    private const int MaxAzureMetadataBytes = 8192;
+
+    /// <summary>Azure Blob metadata keys follow the C# identifier rule: start with a letter or underscore, then ASCII letters, digits, or underscores (ticket #881).</summary>
+    private static bool IsAzureSafeKey(string key)
+    {
+        if (key.Length == 0 || !(char.IsAsciiLetter(key[0]) || key[0] == '_'))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < key.Length; i++)
+        {
+            if (!(char.IsAsciiLetterOrDigit(key[i]) || key[i] == '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Enforces the Azure Blob custom-metadata constraints on the manifest's
+    /// <c>metadata</c> block (ticket #881, REQ-226): keys must match the Azure
+    /// C#-identifier rule (start with a letter or underscore, then ASCII
+    /// letters, digits, or underscores), values must be ASCII-only with no
+    /// CR/LF (header-injection hazard), and the combined size of all keys and
+    /// values must stay within the 8,192-byte Azure metadata budget. The
+    /// generator emits normalized values (REQ-225); this guards the artifact
+    /// contract for pipeline-edited manifests and future metadata sources.
+    /// </summary>
+    private static void ValidateProductionMetadata(ValidationState state, System.Text.Json.JsonElement metadata)
+    {
+        long totalBytes = 0;
+        foreach (var pair in metadata.EnumerateObject())
+        {
+            if (!IsAzureSafeKey(pair.Name))
+            {
+                state.Findings.Add(new ValidationReportFinding
+                {
+                    Code = "MetadataAzureConstraint",
+                    Severity = "error",
+                    Path = "_manifest.json",
+                    Message = $"Metadata key '{pair.Name}' violates the Azure Blob naming rule: keys must start with a letter or underscore and contain only ASCII letters, digits, or underscores."
+                });
+            }
+
+            totalBytes += System.Text.Encoding.UTF8.GetByteCount(pair.Name);
+
+            if (pair.Value.ValueKind != System.Text.Json.JsonValueKind.String)
+            {
+                state.Findings.Add(new ValidationReportFinding
+                {
+                    Code = "MetadataAzureConstraint",
+                    Severity = "error",
+                    Path = "_manifest.json",
+                    Message = $"Metadata value for '{pair.Name}' must be a string."
+                });
+                continue;
+            }
+
+            var value = pair.Value.GetString() ?? string.Empty;
+            if (value.Any(c => c > '\u007f'))
+            {
+                state.Findings.Add(new ValidationReportFinding
+                {
+                    Code = "MetadataAzureConstraint",
+                    Severity = "error",
+                    Path = "_manifest.json",
+                    Message = $"Metadata value for '{pair.Name}' contains non-ASCII characters; Azure Blob metadata values must be ASCII-only."
+                });
+            }
+
+            if (value.Contains('\r') || value.Contains('\n'))
+            {
+                state.Findings.Add(new ValidationReportFinding
+                {
+                    Code = "MetadataAzureConstraint",
+                    Severity = "error",
+                    Path = "_manifest.json",
+                    Message = $"Metadata value for '{pair.Name}' contains CR/LF; newlines in metadata values enable HTTP response-splitting and are rejected."
+                });
+            }
+
+            totalBytes += System.Text.Encoding.UTF8.GetByteCount(value);
+        }
+
+        if (totalBytes > MaxAzureMetadataBytes)
+        {
+            state.Findings.Add(new ValidationReportFinding
+            {
+                Code = "MetadataAzureConstraint",
+                Severity = "error",
+                Path = "_manifest.json",
+                Message = $"Metadata block is {totalBytes} bytes across all keys and values; the Azure Blob metadata budget is {MaxAzureMetadataBytes:N0} bytes."
+            });
         }
     }
 

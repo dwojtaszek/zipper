@@ -197,4 +197,91 @@ public class ProductionManifestWriterTests
             }
         }
     }
+
+    [Fact]
+    public async Task WriteAsync_EmitsDerivedAzureMetadataBlock()
+    {
+        // Arrange
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        var request = new FileGenerationRequest();
+
+        try
+        {
+            // Act
+            var path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                request,
+                "PROD00000001",
+                "PROD00000010",
+                2,
+                TimeSpan.Zero);
+
+            // Assert
+            var jsonContent = await File.ReadAllTextAsync(path);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var metadata = doc.RootElement.GetProperty("metadata");
+
+            Assert.Equal(4, metadata.EnumerateObject().Count());
+            Assert.Equal(Path.GetFileName(tempDir), metadata.GetProperty("production_id").GetString());
+            Assert.Equal("PROD00000001", metadata.GetProperty("bates_number_start").GetString());
+            Assert.Equal("PROD00000010", metadata.GetProperty("bates_number_end").GetString());
+            Assert.Equal("2", metadata.GetProperty("volume_count").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithNonAsciiAndCrlfValues_NormalizesMetadataToAzureSafe()
+    {
+        // Arrange: production folder name and Bates range carry non-ASCII and
+        // CR/LF characters; the emitted metadata block must be Azure-safe.
+        var productionName = $"meta_{Path.GetRandomFileName()}_café";
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), productionName);
+        Directory.CreateDirectory(tempDir);
+
+        var request = new FileGenerationRequest();
+
+        try
+        {
+            // Act
+            var path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                request,
+                "PRÉF\r\n00000001",
+                "PROD00000010",
+                1,
+                TimeSpan.Zero);
+
+            // Assert
+            var jsonContent = await File.ReadAllTextAsync(path);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var metadata = doc.RootElement.GetProperty("metadata");
+
+            foreach (var pair in metadata.EnumerateObject())
+            {
+                var value = pair.Value.GetString() ?? string.Empty;
+                Assert.True(value.All(c => c <= '\u007f'), $"Metadata value for '{pair.Name}' is not ASCII-only: '{value}'");
+                Assert.DoesNotContain("\r", value, StringComparison.Ordinal);
+                Assert.DoesNotContain("\n", value, StringComparison.Ordinal);
+            }
+
+            Assert.EndsWith("caf_", metadata.GetProperty("production_id").GetString(), StringComparison.Ordinal);
+            Assert.Equal("PR_F  00000001", metadata.GetProperty("bates_number_start").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

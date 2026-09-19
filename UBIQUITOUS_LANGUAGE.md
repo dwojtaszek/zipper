@@ -142,7 +142,8 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
 | **Production Set** | A structured directory hierarchy (`--production-set`) containing **Native Files** organized into `DATA`, `IMAGES`, `NATIVES`, `TEXT` subdirectories with accompanying **Load Files**. | Production, deliverable, structured output |
-| **Production Manifest** | The `_manifest.json` file at the root of a **Production Set**, documenting **Volume** structure, document counts, and **Bates Number** ranges. | Manifest, metadata file |
+| **Production Manifest** | The `_manifest.json` file at the root of a **Production Set**, documenting **Volume** structure, document counts, and **Bates Number** ranges. Carries an Azure-safe **Production Metadata** block (`metadata`): derived key/value pairs an upload client maps onto `x-ms-meta-<key>` headers. | Manifest, metadata file |
+| **Production Metadata** | The Azure Blob custom-metadata block of the **Production Manifest**: ASCII-only keys (C#-identifier rule) and values without CR/LF, sized within the 8,192-byte Azure budget. Emitted derived by the generator; enforced by post-generation validation (REQ-225, REQ-226). | Azure metadata, x-ms-meta |
 | **Production Zip** | An **Archive** containing the entire **Production Set** directory structure, created when `--production-zip` is specified with `--production-set`. | Production archive, wrapped delivery |
 | **Redacted Production** | A Production Set mode (`--redacted-production`) that generates redacted image/text placeholders under `REDACTED/IMAGES/` and `REDACTED/TEXT/`, and optionally withholds Native Files. | Redacted mode, redaction mode |
 | **Redacted Image** | A placeholder TIFF file in `REDACTED/IMAGES/` representing a redacted version of a **Native File**'s visual content. | Redacted visual, redacted page |

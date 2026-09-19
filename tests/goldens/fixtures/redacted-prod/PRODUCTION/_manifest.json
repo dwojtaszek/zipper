@@ -41,5 +41,11 @@
     "Settlement Communication": 10,
     "Trade Secret": 10,
     "Personal Privacy": 10
+  },
+  "metadata": {
+    "production_id": "PRODUCTION",
+    "bates_number_start": "CLIENT00000001",
+    "bates_number_end": "CLIENT00000050",
+    "volume_count": "1"
   }
 }
