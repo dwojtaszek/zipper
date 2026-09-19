@@ -473,6 +473,74 @@ public class ComparisonTests
         return result.ManifestPath;
     }
 
+    // REQ-157/REQ-176: with three or more manifests, the final resolved manifest
+    // is the new input, every preceding manifest is prior input, and the report
+    // preserves the supplied manifest order.
+    [Fact]
+    public async Task Compare_MultiManifest_LastIsNew_PriorsCombined_OrderPreserved()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var prior1Records = new List<(string, string, string, string, string)>
+            {
+                ("PR000001", "DOC001", "NATIVES/VOL001/doc1.pdf", "hash1", "VOL001"),
+                ("PR000002", "DOC002", "NATIVES/VOL001/doc2.pdf", "hash2", "VOL001")
+            };
+            var prior2Records = new List<(string, string, string, string, string)>
+            {
+                ("PR000101", "DOC101", "NATIVES/VOL001/doc101.pdf", "hash101", "VOL001"),
+                ("PR000102", "DOC102", "NATIVES/VOL001/doc102.pdf", "hash102", "VOL001")
+            };
+            var newRecords = new List<(string, string, string, string, string)>
+            {
+                ("PR000201", "DOC201", "NATIVES/VOL001/doc201.pdf", "hash201", "VOL001"),
+                ("PR000202", "DOC202", "NATIVES/VOL001/doc202.pdf", "hash202", "VOL001")
+            };
+
+            var prior1 = CreateTempProductionSet(tempDir, "ProdPrior1", "PR000001", "PR000002", "PR", 6, prior1Records);
+            var prior2 = CreateTempProductionSet(tempDir, "ProdPrior2", "PR000101", "PR000102", "PR", 6, prior2Records);
+            var newManifest = CreateTempProductionSet(tempDir, "ProdNew", "PR000201", "PR000202", "PR", 6, newRecords);
+            var reportPath = Path.Combine(tempDir, "report_multi.json");
+
+            var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
+                $"{prior1},{prior2},{newManifest}",
+                "replacement",
+                reportPath);
+
+            // Assert
+            Assert.True(success);
+            Assert.True(File.Exists(reportPath));
+
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var root = doc.RootElement;
+
+            // Report preserves normalized input order: prior1, prior2, new.
+            var manifests = root.GetProperty("manifests");
+            Assert.Equal(3, manifests.GetArrayLength());
+            Assert.Equal(prior1, manifests[0].GetString());
+            Assert.Equal(prior2, manifests[1].GetString());
+            Assert.Equal(newManifest, manifests[2].GetString());
+
+            // Both prior manifests feed prior totals; only the last feeds new.
+            var summary = root.GetProperty("summary");
+            Assert.Equal(4, summary.GetProperty("totalPriorRecords").GetInt32());
+            Assert.Equal(2, summary.GetProperty("totalNewRecords").GetInt32());
+            Assert.Equal(2, summary.GetProperty("addedCount").GetInt32());
+            Assert.Equal(4, summary.GetProperty("removedCount").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
     [Fact]
     public async Task Compare_CommandLineE2E_SingleManifestPath_FailsBeforeOutput()
     {

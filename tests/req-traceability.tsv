@@ -158,6 +158,8 @@ REQ-172	unit	ProductionSetTests.ProductionSet_RollingBatesModeInvalid_FailsValid
 REQ-173	unit	ProductionModuleTests.TryBuild_SupplementalWithoutSet_ReturnsFalse	--supplemental-production requires production-set + prior-manifest
 REQ-174	unit	ProductionModuleTests.TryBuild_PriorManifestWithoutSupplemental_ReturnsFalse	--prior-manifest requires supplemental-production
 REQ-175	unit	ProductionModuleTests.TryBuild_ValidFlags_MatchesRequestBuilderAssembly	--supplemental-gap-policy reject|allow
+REQ-157	unit	ComparisonTests.Compare_MultiManifest_LastIsNew_PriorsCombined_OrderPreserved	Last manifest is new; priors combined; report order preserved
+REQ-157	unit	ComparisonEngineTests.PerformComparison_MultiplePriors_BuildsManifestListInInputOrder	Comparison Report preserves supplied manifest order
 REQ-176	unit	ComparisonTests.Compare_CommandLineE2E_VerifiesSuccessfully	--compare-production-manifests list
 REQ-177	unit	ComparisonModuleTests.TryBuild_ValidMode_ReturnsRequest	--comparison-mode replacement|supplemental|reproduction
 REQ-178	unit	ComparisonModuleTests.TryBuild_CompareManifests_WithoutComparisonOutput_ReturnsFalse	--comparison-output path
