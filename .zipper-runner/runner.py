@@ -82,6 +82,24 @@ def _load_plugins() -> None:
 
 _load_plugins()
 
+# ---------------------------------------------------------------------------
+# Jev gate — optional TypeSafe reflex layer (.zipper-runner/jev_gate.py).
+# jev is None when the module cannot load; every jev_gate judgment returns
+# None when TYPESAFE_API_KEY is absent or the remote call fails, so the
+# runner falls back to its deterministic behavior without the gate.
+# ---------------------------------------------------------------------------
+def _load_optional_module(name: str, path: str):
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    except Exception as exc:
+        print(f"WARNING: Could not load {name!r} from {path}: {exc}")
+        return None
+
+jev = _load_optional_module("zipper_runner_jev_gate", os.path.join(RUNNER_BASE, "jev_gate.py"))
+
 # Parse command line flags
 DRY_RUN = "--dry-run" in sys.argv
 if DRY_RUN:
@@ -608,6 +626,50 @@ def _clear_pr_state(issue_number: str) -> None:
             print(f"[state] Failed to clear state for issue #{issue_number}: {e}")
 
 
+def _rerun_count_path(pr_number: int) -> str:
+    return os.path.join(STATE_DIR, f"pr-{pr_number}-rerun.json")
+
+
+def _get_rerun_count(pr_number: int) -> int:
+    path = _rerun_count_path(pr_number)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                return int(json.load(f).get("count", 0))
+        except Exception:
+            return 0
+    return 0
+
+
+def _bump_rerun_count(pr_number: int) -> int:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    count = _get_rerun_count(pr_number) + 1
+    with open(_rerun_count_path(pr_number), "w") as f:
+        json.dump({"count": count}, f)
+    return count
+
+
+def _failed_run_log_excerpt(branch: str, limit: int = 20000) -> tuple[str, object]:
+    """Best-effort log excerpt of the latest failed run on the branch.
+
+    Returns (excerpt, run_id); ('', None) on any failure — advisory only, so
+    the caller just proceeds without a Jev triage.
+    """
+    code, out, _ = run_cmd(
+        ["gh", "run", "list", "--branch", branch, "--status", "failure", "--limit", "1", "--json", "databaseId"],
+        cwd=REPO_PATH,
+    )
+    if code != 0 or not out.strip():
+        return "", None
+    try:
+        run_id = json.loads(out)[0].get("databaseId")
+    except (json.JSONDecodeError, IndexError, AttributeError):
+        return "", None
+    log_code, log_out, _ = run_cmd(["gh", "run", "view", str(run_id), "--log-failed"], cwd=REPO_PATH)
+    excerpt = (log_out or "")[:limit] if log_code == 0 else ""
+    return excerpt, run_id
+
+
 def _count_review_threads(pr_number: int) -> int:
     """Return number of unresolved review threads on PR."""
     code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
@@ -966,9 +1028,23 @@ def babysit_active_worktrees():
                 print(f"PR #{pr_number} checks are still pending. Waiting for completion.")
                 continue
         else:
-            print(f"CI FAILED for PR #{pr_number}. Triggering babysit...")
+            print(f"CI FAILED for PR #{pr_number}. Evaluating Jev triage...")
+            rerun_count = _get_rerun_count(pr_number)
+            triage, run_id = None, None
+            if jev is not None:
+                excerpt, run_id = _failed_run_log_excerpt(branch)
+                triage = jev.classify_ci_failures(ci_failures, excerpt)
+            if triage is not None and run_id is not None and jev.decide_ci_action(triage, rerun_count) == "rerun":
+                print(f"[jev] All CI failures classified flaky/infra {triage} — rerunning failed jobs (attempt {rerun_count + 1}).")
+                rr_code, _, rr_err = run_cmd(["gh", "run", "rerun", str(run_id), "--failed"], cwd=REPO_PATH)
+                if rr_code == 0:
+                    _bump_rerun_count(pr_number)
+                    continue
+                print(f"[jev] gh run rerun failed: {rr_err} — dispatching babysit instead.")
+            triage_note = f"Jev triage (advisory): {json.dumps(triage, sort_keys=True)}. " if triage else ""
             prompt = (
                 f"babysit. CI checks failed. "
+                f"{triage_note}"
                 f"Investigate the failures, fix them, and push the updates. "
                 f"You must run completely autonomously, do not ask any questions, and make all technical decisions yourself."
             )
