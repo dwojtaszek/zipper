@@ -1,0 +1,22 @@
+{
+  "questions": {
+    "implementation": {
+      "type": "choice",
+      "prompt": "For the scoped obligation, judge the supplied diff evidence only. Choose 'implemented' if the obligation is fully satisfied, 'partial' if some part is missing or incomplete, 'contradicted' if the diff does the opposite or violates the obligation, 'not_addressed' if no supplied change addresses it, or 'ambiguous' if the supplied evidence is insufficient to decide. The newest item marked supersedes_older wins when spec texts conflict. Repository policy excerpts describe deliberate patterns that are not findings.",
+      "choices": ["implemented", "partial", "contradicted", "not_addressed", "ambiguous"]
+    },
+    "real_outcome_test": {
+      "type": "noul",
+      "prompt": "Judge whether a changed test in the supplied diff asserts the requested real outcome (actual output files, exit codes, written bytes, observable behavior) rather than only verifying mocked or internal calls. Return the probability that this judgment is NOUL (the test does NOT assert a real outcome)."
+    },
+    "unrelated_behavior": {
+      "type": "noul",
+      "prompt": "Judge whether the supplied diff introduces behavior changes outside the scope of the explicit spec obligations (ignoring docs, formatting, and mechanical refactors the spec itself requires). Return the probability that this judgment is NOUL (the diff DOES introduce unrelated behavior)."
+    },
+    "docs_sync": {
+      "type": "choice",
+      "prompt": "For the scoped obligation, judge documentation synchronization from the supplied diff evidence only. Choose 'docs_synchronized' when affected docs are updated, 'docs_not_required' when the obligation cannot affect user-facing docs, 'readme_missing' when README.md should have been updated, 'requirements_missing' when Requirements.md should have been updated, 'glossary_missing' when UBIQUITOUS_LANGUAGE.md should have been updated, or 'architecture_approval_missing' when an architecture-diagram deviation lacks approval. The newest item marked supersedes_older wins when spec texts conflict.",
+      "choices": ["docs_synchronized", "docs_not_required", "readme_missing", "requirements_missing", "glossary_missing", "architecture_approval_missing"]
+    }
+  }
+}

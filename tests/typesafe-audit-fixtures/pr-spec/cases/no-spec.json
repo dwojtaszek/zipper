@@ -1,0 +1,10 @@
+{
+  "pr": 104,
+  "base": "3333333333333333333333333333333333333333",
+  "head": "4444444444444444444444444444444444444444",
+  "body": "## Summary\nRoutine CI chore with no explicit issue reference.",
+  "files": [
+    {"path": ".github/workflows/build-and-test.yml", "additions": 6, "patch": "+ timeout-minutes: 30"}
+  ],
+  "issues": {}
+}

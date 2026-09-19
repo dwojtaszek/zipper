@@ -158,5 +158,88 @@ jobs:
             results/typesafe-audit/requirements.md
             results/typesafe-audit/traceability.json
             results/typesafe-audit/traceability.md
+            results/typesafe-audit/pr-spec.json
+            results/typesafe-audit/pr-spec.md
+          retention-days: 7
+          if-no-files-found: ignore
+
+  pr-spec-review:
+    # PR specification compliance side check (#958). Independent job: a TypeSafe
+    # service failure here can never cancel build/test or other audits.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Check secret availability (skips neutrally when absent)
+        id: secret
+        env:
+          HAS_KEY: ${{ secrets.TYPESAFE_API_KEY != '' }}
+        run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Neutral skip summary
+        if: steps.secret.outputs.available != 'true'
+        run: |
+          {
+            echo "## PR spec review skipped"
+            echo ""
+            echo "TYPESAFE_API_KEY is not available in this context; nothing was executed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Offline corpus evaluation (recorded responses)
+        if: steps.secret.outputs.available == 'true'
+        run: |
+          set -o pipefail
+          FIXTURES=$(mktemp -d)
+          python3 tools/typesafe-audit/checks/pr-spec/record_corpus_fixtures.py "$FIXTURES"
+          python3 tools/typesafe-audit/checks/pr-spec/run_check.py \
+            --corpus tests/typesafe-audit-fixtures/pr-spec \
+            --mode fixture --fixture-dir "$FIXTURES" \
+            --json-out results/typesafe-audit/pr-spec-corpus.json \
+            --md-out results/typesafe-audit/pr-spec-corpus.md
+
+      - name: Collect PR context
+        if: steps.secret.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          python3 tools/typesafe-audit/checks/pr-spec/collect_pr.py \
+            "$PR_NUMBER" results/typesafe-audit/pr-spec-input.json
+
+      - name: Run PR spec review (advisory)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          python3 tools/typesafe-audit/checks/pr-spec/run_check.py \
+            --mode live \
+            --pr-json results/typesafe-audit/pr-spec-input.json \
+            --json-out results/typesafe-audit/pr-spec.json \
+            --md-out results/typesafe-audit/pr-spec.md \
+            --summary-out "$GITHUB_STEP_SUMMARY" || {
+              # Advisory: this check never blocks (see run_check.py exit-code contract).
+              echo "### PR spec review advisory result (exit $?)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+
+      - name: Upload PR spec review artifacts
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr-spec-review-report
+          path: |
+            results/typesafe-audit/pr-spec-corpus.json
+            results/typesafe-audit/pr-spec-corpus.md
+            results/typesafe-audit/pr-spec.json
+            results/typesafe-audit/pr-spec.md
           retention-days: 7
           if-no-files-found: ignore

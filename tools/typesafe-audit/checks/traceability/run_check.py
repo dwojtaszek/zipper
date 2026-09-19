@@ -39,6 +39,7 @@ def _load_module(name: str, path: Path):
 
 
 runner = _load_module("tsa_runner", TOOL_DIR / "runner.py")
+checks_common = _load_module("tsa_checks_common", TOOL_DIR / "checks_common.py")
 requirement_prechecks = _load_module("tsa_req_prechecks", REQUIREMENTS_CHECK_DIR / "prechecks.py")
 _extract_sections_mod = _load_module("tsa_extract_sections", REQUIREMENTS_CHECK_DIR / "extract_sections.py")
 
@@ -59,16 +60,11 @@ QUESTIONS_PATH = CHECK_DIR / "questions.json"
 POLICY_PATH = CHECK_DIR / "policy.json"
 DEFAULT_TSV = REPO_ROOT / "tests/req-traceability.tsv"
 DEFAULT_TESTS_ROOT = REPO_ROOT
-SPAN_SEPARATOR = "#"
+SPAN_SEPARATOR = checks_common.SPAN_SEPARATOR
 
 
 def load_json(path: Path) -> dict:
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"traceability-audit: input error: cannot read {path}: {exc}", file=sys.stderr)
-        sys.exit(EXIT_INPUT_ERROR)
+    return checks_common.load_json(path, label="traceability-audit")
 
 
 def build_evidence(row: dict, resolved: dict | None, requirements: dict[str, tuple[int, str]], max_evidence_bytes: int) -> dict:
