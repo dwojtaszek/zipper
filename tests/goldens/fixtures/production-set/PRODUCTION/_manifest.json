@@ -32,5 +32,11 @@
     "seed": 42
   },
   "validationReport": "_validation_report.json",
-  "generationTime": "NORMALIZED"
+  "generationTime": "NORMALIZED",
+  "metadata": {
+    "production_id": "PRODUCTION",
+    "bates_number_start": "CLIENT00000001",
+    "bates_number_end": "CLIENT00001500",
+    "volume_count": "3"
+  }
 }
