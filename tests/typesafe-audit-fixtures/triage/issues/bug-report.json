@@ -1,0 +1,7 @@
+{
+  "number": 800,
+  "title": "Path traversal in archive extraction via entry names",
+  "body": "A crafted ZIP archive with `../` entry names escapes the destination. Extract files safely: reject entries outside the destination (path traversal, security). Repro: extract [evil.zip](https://example/evil.zip) attachment contents listed below.\n\n```\nentry: ../../Windows/system32/evil.dll\n```",
+  "labels": [],
+  "comments": []
+}

@@ -1,0 +1,31 @@
+{
+  "examples": [
+    {
+      "issue": 800,
+      "expected": {
+        "type": "security",
+        "subsystem": "archive",
+        "priority": "P1",
+        "missing_info": "no"
+      }
+    },
+    {
+      "issue": 801,
+      "expected": {
+        "type": "unclear",
+        "subsystem": "unknown",
+        "priority": "insufficient-evidence",
+        "missing_info": "yes"
+      }
+    },
+    {
+      "issue": 802,
+      "expected": {
+        "type": "bug",
+        "subsystem": "archive",
+        "priority": "P1",
+        "missing_info": "yes"
+      }
+    }
+  ]
+}

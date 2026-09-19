@@ -1,0 +1,7 @@
+{
+  "number": 801,
+  "title": "Something is wrong with files maybe",
+  "body": "A user reported the tool did not work on their machine. No command line, no files, no error text, no version, no readme output. We should probably look into it.",
+  "labels": [],
+  "comments": []
+}

@@ -1,0 +1,94 @@
+# TypeSafe issue triage (#960) — DRY-RUN ONLY.
+# Advisory: suggests subsystem, requirement IDs, issue type, priority evidence,
+# and duplicate candidates in a report. Never labels, comments, closes,
+# assigns, or creates issues; write-mode promotion is a separate reviewed PR.
+name: typesafe-issue-triage
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Triage a single issue number (dry run)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: typesafe-issue-triage-${{ github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check secret availability (skips neutrally when absent)
+        id: secret
+        env:
+          HAS_KEY: ${{ secrets.TYPESAFE_API_KEY != '' }}
+        run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Neutral skip summary
+        if: steps.secret.outputs.available != 'true'
+        run: |
+          {
+            echo "## Issue triage skipped (dry run)"
+            echo ""
+            echo "TYPESAFE_API_KEY is not available in this context."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout (trusted default-branch code only)
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Collect issue context
+        # Issue content is untrusted DATA: only the issue NUMBER crosses the
+        # shell boundary (env var); bodies/comments are read via gh API JSON.
+        if: steps.secret.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: |
+          python3 tools/typesafe-audit/triage/collect_issue.py \
+            "$ISSUE_NUMBER" results/typesafe-triage/issue-input.json
+
+      - name: Run TypeSafe triage (dry run, advisory)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          python3 tools/typesafe-audit/triage/run_check.py \
+            --mode live \
+            --issue-json results/typesafe-triage/issue-input.json \
+            --json-out results/typesafe-triage/triage.json \
+            --md-out results/typesafe-triage/triage.md \
+            --summary-out "$GITHUB_STEP_SUMMARY"
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "$rc" -eq 3 ]; then
+            # Advisory: API/remote failure is a neutral result.
+            echo "### Issue triage unavailable (remote failure; advisory)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$rc"
+
+      - name: Upload triage artifacts
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typesafe-triage-report
+          path: |
+            results/typesafe-triage/triage.json
+            results/typesafe-triage/triage.md
+          retention-days: 7
+          if-no-files-found: ignore
