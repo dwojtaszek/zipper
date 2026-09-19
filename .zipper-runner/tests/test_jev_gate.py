@@ -54,6 +54,34 @@ class AskTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertIsNone(jev_gate._ask({}, {}))
 
+    def test_audit_runner_loads_real_module(self):
+        # No mock: verifies the real tools/typesafe-audit/runner.py loads and
+        # honors the call contract the fake in other tests imitates.
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True):
+            audit = jev_gate._audit_runner()
+        self.assertTrue(callable(audit.load_config))
+        self.assertTrue(callable(audit.run_live))
+        self.assertTrue(hasattr(audit, "DEFAULT_CONFIG"))
+
+    def test_ask_with_malformed_raw_response_returns_none(self):
+        fake = _fake_audit_module({})
+        fake.run_live.return_value = ["not", "a", "dict"]
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            self.assertIsNone(jev_gate._ask({}, {"q": {"type": "noul", "instructions": "i"}}))
+
+    def test_ask_with_malformed_answer_returns_none(self):
+        fake = _fake_audit_module({"q": "not-a-dict"})
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            self.assertIsNone(jev_gate._ask({}, {"q": {"type": "noul", "instructions": "i"}}))
+
+    def test_ask_without_api_key_enabled_is_false(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(jev_gate.enabled())
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True):
+            self.assertTrue(jev_gate.enabled())
+
     def test_ask_normalizes_answers_by_type(self):
         answers = {
             "q_choice": _choice_answer("flaky"),
@@ -87,6 +115,19 @@ class AskTests(unittest.TestCase):
 
 
 class CiTriageTests(unittest.TestCase):
+    def test_classify_withEmptyCheckList_ExpectedNone(self):
+        self.assertIsNone(jev_gate.classify_ci_failures([], "log"))
+
+    def test_classify_passes_failed_checks_in_state(self):
+        answers = {"check0": _choice_answer("flaky")}
+        fake = _fake_audit_module(answers)
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            jev_gate.classify_ci_failures(["build (FAILURE)"], "log")
+        request = fake.run_live.call_args[0][0]
+        self.assertEqual(request["state"]["failed_checks"], ["build (FAILURE)"])
+        self.assertEqual(request["state"]["log_excerpt"], "log")
+
     def test_classify_returns_categories_per_check(self):
         answers = {
             "check0": _choice_answer("flaky"),
@@ -189,7 +230,9 @@ class InjectionTests(unittest.TestCase):
 
     def test_injection_verdict_boundaries(self):
         self.assertEqual(jev_gate.injection_verdict(0.95), "block")
+        self.assertEqual(jev_gate.injection_verdict(0.75), "block")
         self.assertEqual(jev_gate.injection_verdict(0.5), "alert")
+        self.assertIsNone(jev_gate.injection_verdict(0.25))
         self.assertIsNone(jev_gate.injection_verdict(0.1))
         self.assertIsNone(jev_gate.injection_verdict(None))
 

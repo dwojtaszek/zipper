@@ -649,25 +649,38 @@ def _bump_rerun_count(pr_number: int) -> int:
     return count
 
 
-def _failed_run_log_excerpt(branch: str, limit: int = 20000) -> tuple[str, object]:
+def _failed_run_log_excerpt(branch: str, limit: int = 20000) -> tuple[str, object, str]:
     """Best-effort log excerpt of the latest failed run on the branch.
 
-    Returns (excerpt, run_id); ('', None) on any failure — advisory only, so
-    the caller just proceeds without a Jev triage.
+    Returns (excerpt, run_id, run_head_sha); ('', None, '') on any failure —
+    advisory only, so the caller just proceeds without a Jev triage. The head
+    SHA lets the caller reject stale runs (an older commit's failure) before
+    classifying or rerunning.
     """
     code, out, _ = run_cmd(
-        ["gh", "run", "list", "--branch", branch, "--status", "failure", "--limit", "1", "--json", "databaseId"],
+        ["gh", "run", "list", "--branch", branch, "--status", "failure", "--limit", "1", "--json", "databaseId,headSha"],
         cwd=REPO_PATH,
     )
     if code != 0 or not out.strip():
-        return "", None
+        return "", None, ""
     try:
-        run_id = json.loads(out)[0].get("databaseId")
+        entry = json.loads(out)[0]
+        run_id = entry.get("databaseId")
+        head_sha = entry.get("headSha", "") or ""
     except (json.JSONDecodeError, IndexError, AttributeError):
-        return "", None
+        return "", None, ""
     log_code, log_out, _ = run_cmd(["gh", "run", "view", str(run_id), "--log-failed"], cwd=REPO_PATH)
     excerpt = (log_out or "")[:limit] if log_code == 0 else ""
-    return excerpt, run_id
+    return excerpt, run_id, head_sha
+
+
+def _clear_rerun_count(pr_number: int) -> None:
+    path = _rerun_count_path(pr_number)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _jev_verify_completion(wt_path: str, branch: str, issue_number: int) -> None:
@@ -934,6 +947,7 @@ def babysit_active_worktrees():
         if pr_state in ("MERGED", "CLOSED"):
             print(f"PR #{pr_number} is {pr_state}. Cleaning up worktree.")
             _clear_pr_state(issue_number)
+            _clear_rerun_count(pr_number)
             wt_rc, _, _ = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
             if wt_rc == 0:
                 run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
@@ -1010,6 +1024,7 @@ def babysit_active_worktrees():
 
                 if is_merged:
                     _clear_pr_state(issue_number)
+                    _clear_rerun_count(pr_number)
                     _remove_worktree(wt_path, branch)
                     run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
                     send_email(
@@ -1059,12 +1074,30 @@ def babysit_active_worktrees():
                 print(f"PR #{pr_number} checks are still pending. Waiting for completion.")
                 continue
         else:
-            print(f"CI FAILED for PR #{pr_number}. Evaluating Jev triage...")
             rerun_count = _get_rerun_count(pr_number)
             triage, run_id = None, None
-            if jev is not None:
-                excerpt, run_id = _failed_run_log_excerpt(branch)
-                triage = jev.classify_ci_failures(ci_failures, excerpt)
+            if jev is not None and jev.enabled():
+                print(f"CI FAILED for PR #{pr_number}. Evaluating Jev triage...")
+                head_code, head_out, _ = run_cmd(
+                    ["gh", "pr", "view", str(pr_number), "--json", "headRefOid", "--jq", ".headRefOid"],
+                    cwd=REPO_PATH,
+                )
+                excerpt, run_id, run_head = _failed_run_log_excerpt(branch)
+                run_is_current = (
+                    head_code == 0
+                    and head_out.strip()
+                    and run_head
+                    and run_head == head_out.strip()
+                )
+                if not run_is_current:
+                    # The latest failed run is from an older commit (or another
+                    # workflow): classifying or rerunning it would spend the
+                    # rerun budget on evidence that does not match the PR head.
+                    print("[jev] Latest failed run is not on the PR head — skipping stale-run triage.")
+                else:
+                    triage = jev.classify_ci_failures(ci_failures, excerpt)
+            else:
+                print(f"CI FAILED for PR #{pr_number}. Triggering babysit...")
             if triage is not None and run_id is not None and jev.decide_ci_action(triage, rerun_count) == "rerun":
                 print(f"[jev] All CI failures classified flaky/infra {triage} — rerunning failed jobs (attempt {rerun_count + 1}).")
                 rr_code, _, rr_err = run_cmd(["gh", "run", "rerun", str(run_id), "--failed"], cwd=REPO_PATH)
@@ -1348,6 +1381,10 @@ def select_next_issue():
 
         if author not in TRUSTED_AUTHORS:
             print(f"Skipping issue #{num}: filed by '{author}', not an approved author")
+            continue
+
+        if os.path.exists(os.path.join(STATE_DIR, f"issue-{num}-injection.json")):
+            print(f"Skipping issue #{num}: previously flagged for suspected prompt injection")
             continue
 
         slug = slugify(title)

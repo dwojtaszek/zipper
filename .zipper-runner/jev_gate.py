@@ -47,42 +47,62 @@ def _audit_runner():
     return _audit
 
 
+def enabled() -> bool:
+    """True when a live judgment is possible at all (key present). Lets the
+    runner skip evidence-gathering subprocesses entirely on the no-key path."""
+    return bool(os.environ.get("TYPESAFE_API_KEY"))
+
+
+_load_warned = False
+
+
 def _ask(state, questions):
     """One live Jev request. Returns {qid: {"answer", "confidence"}} or None.
 
     None is the universal "no judgment available" outcome: no key, remote
-    failure, missing answer. Advisory contract: callers treat None as
-    "carry on with the existing deterministic behavior".
+    failure, malformed response, missing answer. Advisory contract: callers
+    treat None as "carry on with the existing deterministic behavior".
     """
     api_key = os.environ.get("TYPESAFE_API_KEY", "")
     if not api_key:
         return None
+    global _load_warned
     try:
         audit = _audit_runner()
         config = audit.load_config(audit.DEFAULT_CONFIG)
         request = {"state": state, "model": config["model"], "questions": questions}
         raw = audit.run_live(request, config, api_key, [api_key])
+        # Shape-guard the remote payload end to end: any malformed response
+        # is a None judgment, never an exception into the cron loop.
+        if not isinstance(raw, dict):
+            return None
+        rows = {}
+        for qid, question in questions.items():
+            answer = raw.get("answers", {}).get(qid)
+            if not isinstance(answer, dict):
+                return None
+            if question["type"] == "choice":
+                value = answer.get("choice")
+            elif question["type"] == "noul":
+                value = answer.get("noul")
+            else:
+                value = answer.get("score")
+            confidence = answer.get("confidence")
+            if confidence is not None and confidence < CONFIDENCE_THRESHOLD:
+                return None
+            rows[qid] = {"answer": value, "confidence": confidence}
+        return rows
     except SystemExit:
-        # run_live exits on remote failure; advisory means we swallow it.
+        # run_live exits on remote failure; advisory means we swallow it
+        # (run_live already printed the redacted error itself).
         return None
-    except Exception:
+    except Exception as exc:
+        # Persistent misconfiguration (missing module/config) must be
+        # observable once, then silent — the gate stays advisory.
+        if not _load_warned:
+            print(f"jev-gate: judgment unavailable ({exc}); using deterministic fallback.")
+            _load_warned = True
         return None
-    rows = {}
-    for qid, question in questions.items():
-        answer = raw.get("answers", {}).get(qid)
-        if answer is None:
-            return None
-        if question["type"] == "choice":
-            value = answer.get("choice")
-        elif question["type"] == "noul":
-            value = answer.get("noul")
-        else:
-            value = answer.get("score")
-        confidence = answer.get("confidence")
-        if confidence is not None and confidence < CONFIDENCE_THRESHOLD:
-            return None
-        rows[qid] = {"answer": value, "confidence": confidence}
-    return rows
 
 
 def _truncate(text, limit=MAX_TEXT_CHARS):
