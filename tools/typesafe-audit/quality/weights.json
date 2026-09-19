@@ -1,0 +1,11 @@
+{
+  "weights": {
+    "correctness": 0.35,
+    "data_loss": 0.3,
+    "security": 0.15,
+    "regression": 0.2
+  },
+  "max_state_bytes": 131072,
+  "batch_size": 10,
+  "max_gaps": 200
+}

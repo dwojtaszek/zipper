@@ -1,0 +1,20 @@
+{
+  "questions": {
+    "correctness": {
+      "type": "score",
+      "prompt": "Score from 0 to 1 how likely the supplied uncovered code or surviving mutant is to change Zipper's observable correctness (produced files, archives, manifests, exit codes). Base the score only on the supplied source and description."
+    },
+    "data_loss": {
+      "type": "score",
+      "prompt": "Score from 0 to 1 the risk that the supplied gap or surviving mutant causes data loss, output corruption, or wrong file content. Base the score only on the supplied source and description."
+    },
+    "security": {
+      "type": "score",
+      "prompt": "Score from 0 to 1 the security relevance of the supplied gap or surviving mutant (path handling, validation, injection, unsafe output). Base the score only on the supplied source and description."
+    },
+    "regression": {
+      "type": "score",
+      "prompt": "Score from 0 to 1 how likely the supplied gap or surviving mutant would regress real user workflows (frequently executed paths, core pipeline steps). Base the score only on the supplied source and description."
+    }
+  }
+}
