@@ -507,6 +507,41 @@ public class ComparisonTests
     }
 
     [Fact]
+    public async Task Compare_CommandLineE2E_WhitespaceOnlyEntries_FailBeforeOutput()
+    {
+        // REQ-180: after trimming, whitespace-only comma-list entries normalize
+        // to zero entries — the request fails as a non-zero exit before any
+        // JSON or Markdown report is written.
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var reportPath = Path.Combine(tempDir, "report_ws.json");
+
+            var args = new[]
+            {
+                "--compare-production-manifests", ", ,",
+                "--comparison-mode", "replacement",
+                "--comparison-output", reportPath
+            };
+
+            var exitCode = await Program.Main(args);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.False(File.Exists(reportPath));
+            Assert.False(File.Exists(Path.ChangeExtension(reportPath, ".summary.md")));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Compare_CommandLineE2E_SummaryPathCollision_FailsWithoutPartialReport()
     {
         // REQ-178: unrecoverable comparison errors shall propagate as a non-zero exit

@@ -563,6 +563,101 @@ public class ProductionManifestComparerTests
         }
     }
 
+    // REQ-180: comma-list entries are trimmed; comparison succeeds with both
+    // paths resolved despite surrounding whitespace.
+    [Fact]
+    public async Task CompareAndReportAsync_WithSurroundingWhitespaceInList_TrimsPathsAndSucceeds()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_req180_trim_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"  {p1}  ,  {p2}  ", "replacement", outputPath);
+
+            Assert.True(success);
+            Assert.True(File.Exists(outputPath), "Trimmed entries must resolve to real manifests.");
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    // REQ-180: empty entries are removed before the cardinality check.
+    [Fact]
+    public async Task CompareAndReportAsync_WithEmptyEntriesInList_RemovesEmptiesAndSucceeds()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_req180_empty_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{p1},,{p2},", "replacement", outputPath);
+
+            Assert.True(success);
+            Assert.True(File.Exists(outputPath));
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    // REQ-180: a single surviving entry fails the minimum-two rule after
+    // normalization — before output generation, so no report files appear.
+    [Fact]
+    public async Task CompareAndReportAsync_WithOnlyOneNonEmptyEntry_ThrowsWithoutLeavingReport()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_req180_one_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync("prior.json,,", "replacement", outputPath));
+
+            Assert.False(File.Exists(outputPath), "No JSON report may be written on cardinality failure.");
+            Assert.False(File.Exists(summaryPath), "No Markdown summary may be written on cardinality failure.");
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    // REQ-180: whitespace-only entries normalize to zero entries and fail
+    // before output generation.
+    [Fact]
+    public async Task CompareAndReportAsync_WithWhitespaceOnlyEntries_ThrowsWithoutLeavingReport()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_req180_ws_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync(", ,", "replacement", outputPath));
+
+            Assert.False(File.Exists(outputPath), "No JSON report may be written when zero entries survive.");
+            Assert.False(File.Exists(summaryPath), "No Markdown summary may be written when zero entries survive.");
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
     // REQ-178: unrecoverable comparison errors shall propagate before a report is written.
     [Fact]
     public async Task CompareAndReportAsync_WhenSummaryPathIsDirectory_ShouldThrowWithoutLeavingReport()
