@@ -2,6 +2,19 @@
 
 This directory contains the autonomous runner pipeline that manages GitHub issues, triggers the AI agent, and creates pull requests.
 
+## Jev gate (TypeSafe reflex layer)
+
+`.zipper-runner/jev_gate.py` adds advisory TypeSafe (Jev) judgments to the runner loop. Set `TYPESAFE_API_KEY` in `.zipper-runner/.env` to enable; without it every judgment returns `None` and the runner keeps its deterministic behavior.
+
+- **CI failure triage:** failed checks are classified real_regression / flaky / environment / dependency / unrelated (one bounded Jev request per PR failure). All-flaky/infra failures with rerun budget left auto-rerun the failed jobs (`gh run rerun --failed`) instead of burning agent tokens; anything else goes to babysit with the triage attached. Rerun budget: 1 per PR (state file `state/pr-<N>-rerun.json`).
+- **Completion verification:** after a babysit success, Jev scores the branch diff against the issue body; a low score sends a rate-limited advisory email (never blocks).
+- **Stuck classification:** on agent failure, Jev classifies the output tail (progressing / repeating / blocked / wrong_direction); stuck classes trigger the same fallback path as the repeated-line heuristic, and the retry prompt says what the previous attempt looked like.
+- **Prompt-injection gate:** before dispatching a new issue, Jev scores the issue text for injection/jailbreak attempts. High confidence blocks pickup (marker file `state/issue-<N>-injection.json`, rate-limited email; delete the marker to re-enable pickup). Uncertain signals proceed with an advisory email. Fails open — existing mitigations (trusted-author comment filter, `<issue-data>` wrapper in the mission prompt) stay in place.
+
+The gate never writes to GitHub and never grants permissions; `runner.py` owns every enforcement decision.
+
+Tests: `cd .zipper-runner && python3 tests/test_jev_gate.py`
+
 ## Architecture: Why two files?
 
 The pipeline is split into a shell script (`.sh`) and a Python script (`.py`) to enforce a strict **Separation of Concerns**.
