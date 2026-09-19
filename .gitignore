@@ -51,6 +51,8 @@ coverage*
 !.github/actions/coverage-gate/
 !.github/actions/coverage-gate/**
 !.github/coverage-file-allowlist.txt
+# ...and the audit module whose file name collides with coverage*
+!tools/typesafe-audit/quality/coverage_gaps.py
 publish-bin/
 
 # OS files
