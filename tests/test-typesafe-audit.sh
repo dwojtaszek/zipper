@@ -20,7 +20,7 @@ WORKFLOW_FILE="$SCRIPT_DIR/../.github/workflows/typesafe-audit.yml"
 
 # --- Part 1: Python unit tests (no network) ---
 
-python3 -m unittest discover -s "$TOOL_DIR/tests" > /dev/null 2>&1 || {
+python3 -m unittest discover -s "$TOOL_DIR/tests" 2>&1 || {
     print_error "TypeSafe runner unit tests failed."
     exit 1
 }
