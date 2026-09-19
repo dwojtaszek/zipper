@@ -969,10 +969,46 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_AdlSegmentDepthControls_PinContainerRelativeSegmentCounts()
+    {
+        // Ticket #878: the cloud-compat recipes carry container-relative member
+        // paths of exactly 63 segments (the ADLS Gen2 hierarchical-namespace
+        // boundary, legal) and 64 (the first violation). The depth-2 recipe
+        // budget (REQ-213) is untouched; the dedicated 64-segment cloud-compat
+        // guard is the only exemption.
+        var boundary = ArchiveFixtureBuilder.BuildControl("path-adls-segments-boundary", 42, CancellationToken.None);
+        var exceeded = ArchiveFixtureBuilder.BuildControl("path-adls-segments-exceeded", 42, CancellationToken.None);
+
+        Assert.Equal(63, Assert.Single(boundary.Entries).Name.Split('/').Length);
+        Assert.Equal(64, Assert.Single(exceeded.Entries).Name.Split('/').Length);
+        Assert.Equal("target.txt", boundary.Entries[0].Name.Split('/')[^1]);
+
+        // Both archives are structurally valid: a reader lists one entry whose
+        // bytes round-trip.
+        using var archive = new ZipArchive(new MemoryStream(exceeded.ArchiveBytes), ZipArchiveMode.Read);
+        Assert.Single(archive.Entries);
+    }
+
+    [Fact]
+    public void ValidateAdlsSegmentBudget_WithOverrunOrRelativeSegments_ShouldReject()
+    {
+        // The guard caps construction one past the violated platform limit (64 is
+        // deliberately constructible for the exceeded fixture); 65+ and relative
+        // markers must throw.
+        Assert.Throws<InvalidDataException>(
+            () => ArchiveFixtureBuilder.ValidateAdlsSegmentBudget(
+                "path-adls-segments-boundary",
+                string.Join("/", Enumerable.Range(0, 65).Select(index => $"d{index:00}")) + "/target.txt"));
+        Assert.Throws<InvalidDataException>(
+            () => ArchiveFixtureBuilder.ValidateAdlsSegmentBudget(
+                "path-adls-segments-boundary", "d01/../target.txt"));
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(101, all.Count);
+        Assert.Equal(103, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

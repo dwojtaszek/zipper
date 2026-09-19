@@ -20,8 +20,9 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
-    /// <summary>The eighteen policy-sensitive path/collision/entry-type cases
-    /// (tickets #842, #880, #882, #885, #875, #884, and #888). Twin of ArchivePathPolicyCaseTests.PolicyCaseKeys —
+    /// <summary>The twenty-one policy-sensitive path/collision/entry-type cases
+    /// (tickets #842, #880, #882, #885, #875, #884, #888, and #878). Twin of
+    /// ArchivePathPolicyCaseTests.PolicyCaseKeys —
     /// both must change together; the exact security-suite assertion below fails if
     /// they drift apart.</summary>
     private static readonly string[] PolicySecurityCaseKeys =
@@ -45,6 +46,8 @@ public class ArchiveTestSuiteContractTests
         "directory-attribute-with-payload",
         "zero-width-collision",
         "path-emoji-zwj-namemax",
+        "path-adls-segments-boundary",
+        "path-adls-segments-exceeded",
     ];
 
     /// <summary>The unsupported-feature cases (ticket #840, plus Deflate64 #877) the contract houses in security.</summary>
@@ -200,8 +203,9 @@ public class ArchiveTestSuiteContractTests
         // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931,
         // +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix,
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
-        // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870): a case
+        // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
+        // +2 for #878): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(101, AllKeys().Count);
+        Assert.Equal(103, AllKeys().Count);
     }
 }

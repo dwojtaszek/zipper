@@ -405,6 +405,13 @@ class FixtureVerifier:
             unicode_note = verify_unicode_path_extra(case, zip_bytes)
             checks.append({"check": "unicode-path", "status": "pass", "detail": unicode_note})
 
+        # ADLS Gen2 segment depth (ticket #878): the single member's
+        # container-relative path pins the hierarchical-namespace boundary
+        # (63 segments, legal) or the first violation (64).
+        if case.get("caseKey") in ("path-adls-segments-boundary", "path-adls-segments-exceeded"):
+            adls_note = verify_adls_segments(case)
+            checks.append({"check": "adls-segments", "status": "pass", "detail": adls_note})
+
         # Prefixed cases (ticket #873): a 64-byte signature-free stub precedes the
         # Archive; the rebased twin shifts every offset past it, the unrebased twin
         # leaves stale offsets behind.
@@ -1043,6 +1050,36 @@ def verify_eocd_ambiguity(case, zip_bytes):
     return ("authentic-eocd=%d authentic-cd=%d shadow-eocd=%d shadow-cd=%d "
             "python-selects=b.bin" %
             (authentic_eocd, authentic_cd, shadow_eocd, shadow_cd))
+
+
+def verify_adls_segments(case):
+    """ADLS Gen2 segment-depth audit (ticket #878): the single member's
+    container-relative path carries exactly 63 segments (the legal
+    hierarchical-namespace boundary) or 64 (the first violation); every
+    segment is non-empty and free of relative markers. ADLS Gen2 counts the
+    account and container on the wire, so account-relative depth is +2."""
+    expected = {"path-adls-segments-boundary": 63,
+                "path-adls-segments-exceeded": 64}.get(case["caseKey"])
+    if expected is None:
+        raise VerificationError("adls-segments",
+                                "unexpected case key %r" % case["caseKey"])
+    entries = case["entries"]
+    if len(entries) != 1:
+        raise VerificationError("adls-segments",
+                                "expected exactly one entry, found %d" % len(entries))
+    name = entries[0]["readableName"]
+    segments = name.strip("/").split("/")
+    if len(segments) != expected:
+        raise VerificationError("adls-segments",
+                                "entry name carries %d segments, expected %d"
+                                % (len(segments), expected))
+    for segment in segments:
+        if not segment or segment in (".", ".."):
+            raise VerificationError("adls-segments",
+                                    "entry name has an empty or relative segment %r"
+                                    % segment)
+    return ("segments=%d container-relative (account-relative=%d on ADLS Gen2)"
+            % (expected, expected + 2))
 
 
 def verify_unicode_path_extra(case, zip_bytes):

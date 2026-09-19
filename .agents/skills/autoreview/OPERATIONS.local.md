@@ -132,3 +132,11 @@
 - **telemetry**: host=droid mode=local specialists=7 bundle=40263c
 - **lessons**: ApplyPatch tool unavailable in this environment (authorization error) — use Edit with exact strings. Task-subagent prompts must inline the diff explicitly; a placeholder token ships an empty review bundle. Multi-source agreement (budget default, deflate binding) converged on the same fix from 3/2 specialists independently — good fingerprinting signal.
 - **suppressions**: none
+
+### 2026-09-19 droid:local:#878-adls-segment-depth
+
+- **findings**: cycle 1: 0 ACTION, 13 INFO across 6 specialists (unanimous "patch is correct"). Merged: 3 accepted fixes (guard internalized + C# guard test, guard violation+1 semantics documented, verifier dict lookup), 8 rejected with reasons (deliberate duplication, unevaluated platform mark per REQ-212, convention literals, unreachable degenerate cases).
+- **outcome**: accepted — all fixes applied, gates green (62 Python, 2,651 unit, 60 analyzer, format, archive E2E 103 pairs). Fast-pass rerun clean (0 findings, confidence 9).
+- **telemetry**: host=droid mode=local specialists=6+1fast bundle=25280c
+- **lessons**: Decision-driven work: maintainer block comments on #878 named exactly the two product decisions (budget route, segment basis); user AskUser answers translated directly into the exempt-recipe design. Placeholder-token bug recurred once (DIFF_878_PLACEHOLDER) — caught after single dispatch, stopped and relaunched; inline the diff into every subagent prompt.
+- **suppressions**: none

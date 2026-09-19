@@ -38,6 +38,8 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         "directory-attribute-with-payload",
         "zero-width-collision",
         "path-emoji-zwj-namemax",
+        "path-adls-segments-boundary",
+        "path-adls-segments-exceeded",
     ];
 
     /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
@@ -652,11 +654,12 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         // #899 method/data disagreement cases, the #900 high-ratio BZip2
         // case, the two #933 split-archive declaration cases, and the #935
         // mixed one-unsupported-member case: every member publishes a safe
-        // Fixture ID pair. The #870 EOCD parser differential is also included.
+        // Fixture ID pair. The #870 EOCD parser differential and the two #878
+        // ADLS Gen2 segment-depth cases are also included.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(38, securityKeys.Count);
+        Assert.Equal(40, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
