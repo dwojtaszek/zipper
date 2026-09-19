@@ -169,7 +169,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Production Manifest Comparison** | A workflow (`--compare-production-manifests`) that compares two or more **Production Manifests** and writes a machine-readable JSON report with a human-readable summary. Bypasses normal **Native File** generation. | Manifest comparison, comparison |
+| **Production Manifest Comparison** | A workflow (`--compare-production-manifests`) that compares two or more **Production Manifests** and writes a machine-readable JSON report with a human-readable summary. Bypasses normal **Native File** generation. Entries are positional: the final resolved manifest is the **New Production Manifest**, every preceding resolved manifest is a **Prior Production Manifest**, and the report preserves the supplied manifest order. | Manifest comparison, comparison |
 | **Comparison Mode** | The ruleset applied by **Production Manifest Comparison**, controlled by `--comparison-mode`: `replacement`, `supplemental`, or `reproduction`. | Comparison ruleset |
 | **Replacement Workflow** | A **Comparison Mode** (`replacement`) comparing a prior **Production Set** against a new one that replaces it. | Replacement mode |
 | **Supplemental Workflow** | A **Comparison Mode** (`supplemental`) comparing prior **Production Manifests** against a new **Supplemental Production**. | Supplemental comparison mode |

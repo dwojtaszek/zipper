@@ -273,6 +273,14 @@ zipper --compare-production-manifests "/path/to/prior/_manifest.json,/path/to/ne
     --comparison-output "/path/to/report.json"
 ```
 
+**Manifest order is positional (REQ-157/REQ-176):** entries are processed in supplied order after trimming and empty-entry removal; the **last** resolved manifest is the new Production Manifest, every preceding resolved manifest is prior input, and the Comparison Report's `manifests` array preserves the supplied order. Comparing two priors against one new set:
+
+```bash
+zipper --compare-production-manifests "/path/to/prior1/_manifest.json,/path/to/prior2/_manifest.json,/path/to/new/_manifest.json" \
+    --comparison-mode replacement \
+    --comparison-output "/path/to/report.json"
+```
+
 ---
 
 ## 6. Audit & Manifest File Schemas

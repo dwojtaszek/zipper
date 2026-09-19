@@ -9,6 +9,24 @@ public class ComparisonEngineTests
         new() { BatesNumber = bates, ControlNumber = control, FilePath = path, Hash = hash, Volume = volume, SourceLine = line };
 
     [Fact]
+    public void PerformComparison_MultiplePriors_BuildsManifestListInInputOrder()
+    {
+        // REQ-157: the Comparison Report preserves the supplied manifest order —
+        // every prior path in order, then the new manifest last.
+        var prior = new List<ComparisonRecord> { Rec("PR000001", "DOC001", "n1.pdf", "h1", "VOL001") };
+        var newRecs = new List<ComparisonRecord> { Rec("PR000010", "DOC010", "n10.pdf", "h10", "VOL001") };
+
+        var result = ComparisonEngine.PerformComparison(
+            prior, newRecs, "replacement",
+            new List<DuplicateDetail>(), new List<DuplicateDetail>(),
+            new List<string> { "/prior1/_manifest.json", "/prior2/_manifest.json" }, "/new/_manifest.json");
+
+        Assert.Equal(new[] { "/prior1/_manifest.json", "/prior2/_manifest.json", "/new/_manifest.json" }, result.Manifests);
+        Assert.Equal(1, result.Summary.TotalPriorRecords);
+        Assert.Equal(1, result.Summary.TotalNewRecords);
+    }
+
+    [Fact]
     public void PerformComparison_ReplacementMode_ClassifiesAddedAndRemoved()
     {
         var prior = new List<ComparisonRecord>

@@ -141,7 +141,7 @@ All command-line flags recognized by Zipper:
 | `--supplemental-production` | `false` | flag | Supplemental Production Set generation |
 | `--prior-manifest` | none | comma-separated paths | Paths to prior production `_manifest.json` files |
 | `--supplemental-gap-policy` | `reject` | `reject`, `allow` | Gap validation policy for supplemental sets |
-| `--compare-production-manifests` | none | comma-separated paths | Compare Production Set manifests |
+| `--compare-production-manifests` | none | comma-separated paths | Compare Production Set manifests; the last path is the new Production Manifest, earlier paths are prior input |
 | `--comparison-mode` | none | `replacement`, `supplemental`, `reproduction` | Production Manifest comparison ruleset |
 | `--comparison-output` | none | file path | Report JSON output path |
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
