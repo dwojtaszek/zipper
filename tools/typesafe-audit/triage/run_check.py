@@ -159,7 +159,7 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
     # Closed-set enforcement: a selection outside the supplied candidates is
     # demoted to a neutral needs-human-review, never applied.
     allowed = prepared["allowed"]
-    if judgments["type"]["value"] not in questions["questions"]["type"]["choices"]:
+    if judgments["type"]["value"] not in questions["questions"]["type"]["criteria"]:
         judgments["type"] = {"value": None, "confidence": judgments["type"]["confidence"], "status": "needs-human-review"}
     if judgments["subsystem"]["value"] not in allowed["subsystems"]:
         judgments["subsystem"] = {"value": None, "confidence": judgments["subsystem"]["confidence"], "status": "needs-human-review"}
@@ -178,7 +178,7 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
             continue
         confidence = answer.get("confidence")
         value = answer.get("choice")
-        if value not in questions["duplicate_question"]["choices"]:
+        if value not in questions["duplicate_question"]["criteria"]:
             value = "uncertain"
         entry = {"candidate": candidate["number"], "candidate_url": candidate["url"], "value": value, "confidence": confidence}
         # Duplicate suggestions require retrieval + high-confidence judgment.
