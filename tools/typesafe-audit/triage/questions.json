@@ -1,0 +1,32 @@
+{
+  "questions": {
+    "type": {
+      "type": "choice",
+      "prompt": "Classify the supplied issue from its stripped text and retrieved duplicate candidates only. Choose the single best-fitting issue type, or 'unclear' when the supplied evidence is insufficient.",
+      "choices": ["bug", "testing", "requirements", "documentation", "performance", "security", "refactor", "enhancement", "unclear"]
+    },
+    "subsystem": {
+      "type": "choice",
+      "prompt": "Choose the owning subsystem of the supplied issue from the supplied closed set only, or 'unknown' when no supplied subsystem fits. Never invent a subsystem.",
+      "choices": ["load-files", "cli", "production", "archive", "comparison", "validation", "emails", "profiles", "config", "ci-infra", "docs", "unknown"]
+    },
+    "priority": {
+      "type": "choice",
+      "prompt": "Choose P0 (blocker/production broken/data loss), P1 (high: security, correctness, coverage holes on critical code), P2 (medium: this iteration), P3 (low: nice to have) using the repository priority definitions supplied, or 'insufficient-evidence' when the supplied text cannot support a priority.",
+      "choices": ["P0", "P1", "P2", "P3", "insufficient-evidence"]
+    },
+    "missing_info": {
+      "type": "noul",
+      "prompt": "Judge whether essential reproduction or specification information is missing from the supplied issue text. Return the probability that this judgment is NOUL (information is NOT missing)."
+    }
+  },
+  "duplicate_question": {
+    "type": "choice",
+    "prompt": "For the supplied retrieved candidate issue only, judge its relationship to the triaged issue: 'duplicate' (same underlying defect/request), 'related' (adjacent area, different defect), 'unrelated', or 'uncertain'.",
+    "choices": ["duplicate", "related", "unrelated", "uncertain"]
+  },
+  "req_question": {
+    "type": "noul",
+    "prompt": "Judge whether the supplied issue materially concerns the supplied requirement (it changes, violates, or clarifies the requirement's behavior). Return the probability that this judgment is NOUL (the issue does NOT materially concern this requirement)."
+  }
+}

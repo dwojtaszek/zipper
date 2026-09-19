@@ -1,0 +1,20 @@
+{
+  "issues": [
+    {
+      "number": 700,
+      "title": "Archive extraction ignores directory entries",
+      "state": "open",
+      "labels": ["bug", "P1"],
+      "url": "issues/700",
+      "body": "ZIP archive directory entries are skipped, so empty folders disappear from the output tree."
+    },
+    {
+      "number": 701,
+      "title": "Compression README table drifts from CLI help",
+      "state": "open",
+      "labels": ["documentation"],
+      "url": "issues/701",
+      "body": "The README arguments quick reference disagrees with --compression help output."
+    }
+  ]
+}

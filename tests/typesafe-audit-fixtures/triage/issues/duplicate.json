@@ -1,0 +1,7 @@
+{
+  "number": 802,
+  "title": "Archive extraction skips directory entries",
+  "body": "ZIP archive directory entries are skipped, so empty folders disappear from the output tree.",
+  "labels": [],
+  "comments": []
+}
