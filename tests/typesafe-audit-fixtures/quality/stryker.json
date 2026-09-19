@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "4",
+  "files": {
+    "Validation/ProductionSetPostValidator.cs": {
+      "language": "csharp",
+      "mutants": [
+        {
+          "id": 1,
+          "mutatorName": "Arithmetic",
+          "description": "Path.Combine(baseDir, name) changed to Path.Combine(baseDir, name + 1)",
+          "location": { "start": { "line": 12, "column": 20 }, "end": { "line": 12, "column": 44 } },
+          "status": "Survived"
+        },
+        {
+          "id": 2,
+          "mutatorName": "Boolean",
+          "description": "condition negated",
+          "location": { "start": { "line": 15, "column": 8 }, "end": { "line": 15, "column": 20 } },
+          "status": "Killed"
+        },
+        {
+          "id": 3,
+          "mutatorName": "String",
+          "description": "empty string replaced",
+          "location": { "start": { "line": 61, "column": 4 }, "end": { "line": 61, "column": 12 } },
+          "status": "NoCoverage"
+        }
+      ]
+    },
+    "Validation/Generated.cs": {
+      "language": "csharp",
+      "mutants": [
+        {
+          "id": 4,
+          "mutatorName": "Statement",
+          "description": "statement removed",
+          "location": { "start": { "line": 3, "column": 1 }, "end": { "line": 3, "column": 9 } },
+          "status": "CompileError"
+        },
+        {
+          "id": 5,
+          "mutatorName": "Block",
+          "description": "block removed",
+          "location": { "start": { "line": 8, "column": 1 }, "end": { "line": 8, "column": 4 } },
+          "status": "Timeout"
+        }
+      ]
+    }
+  }
+}

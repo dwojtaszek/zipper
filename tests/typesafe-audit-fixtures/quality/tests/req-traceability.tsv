@@ -1,0 +1,3 @@
+req_id	coverage	reference	notes
+REQ-171	unit	ProductionSetPostValidatorTests.ValidateDestination_MissingDirectory_ShouldThrow	destination validation
+REQ-171	e2e	validate-production-sets.sh Missing destination directory fails	destination validation

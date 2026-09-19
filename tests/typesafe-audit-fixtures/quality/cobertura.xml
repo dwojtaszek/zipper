@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE coverage SYSTEM "https://coveralls.io/xml/coverage.dtd">
+<coverage line-rate="0.71" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="Validation/ProductionSetPostValidator.cs">
+          <methods>
+            <method name="ValidateDestination" signature="(System.String)">
+              <lines>
+                <line number="10" hits="12" branch="False" />
+                <line number="12" hits="0" branch="True" condition-coverage="50% (1/2)" />
+                <line number="13" hits="0" branch="False" />
+                <line number="15" hits="6" branch="False" />
+              </lines>
+            </method>
+            <method name="get_Priority" signature="()">
+              <lines>
+                <line number="40" hits="0" branch="False" />
+              </lines>
+            </method>
+            <method name="NormalizeArchiveName" signature="(System.String)">
+              <lines>
+                <line number="60" hits="3" branch="False" />
+                <line number="62" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+          <lines>
+            <line number="10" hits="12" branch="False" />
+            <line number="12" hits="0" branch="True" condition-coverage="50% (1/2)" />
+            <line number="13" hits="0" branch="False" />
+            <line number="15" hits="6" branch="False" />
+            <line number="40" hits="0" branch="False" />
+            <line number="60" hits="3" branch="False" />
+            <line number="62" hits="0" branch="False" />
+          </lines>
+        </class>
+        <class name="Zipper.Generated.Designer" filename="obj/generated/Some.Designer.cs">
+          <methods>
+            <method name="InitializeComponent" signature="()">
+              <lines>
+                <line number="5" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+          <lines>
+            <line number="5" hits="0" branch="False" />
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>

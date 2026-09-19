@@ -1,0 +1,142 @@
+# TypeSafe quality prioritization (#959): coverage gaps + surviving mutants.
+# Advisory ranking only — deterministic tools (coverlet, Stryker) stay the
+# source of truth for coverage and survivor status; TypeSafe never decides
+# those. Scheduled weekly and manual dispatch; never on PRs.
+name: typesafe-quality-audit
+
+on:
+  schedule:
+    # Weekly full run, Mondays 08:00 UTC (after the requirements full audit).
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "Mutation shard scope (--mutate glob, stable directory/class selection)"
+        required: false
+        default: "src/LoadFiles/**"
+      shard:
+        description: "Per-shard mutation timeout in minutes"
+        required: false
+        default: "45"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typesafe-quality-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check secret availability (skips neutrally when absent)
+        id: secret
+        env:
+          HAS_KEY: ${{ secrets.TYPESAFE_API_KEY != '' }}
+        run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Neutral skip summary
+        if: steps.secret.outputs.available != 'true'
+        run: |
+          {
+            echo "## Quality audit skipped"
+            echo ""
+            echo "TYPESAFE_API_KEY is not available in this context."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/setup-dotnet@d4c94342e560b34958e1fc9a20821cb6cf2a4f51 # v5.0.1
+
+      - name: Cache NuGet packages (tools only; never TypeSafe responses)
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '.config/dotnet-tools.json') }}
+
+      - name: Restore pinned tools
+        if: steps.secret.outputs.available == 'true'
+        run: dotnet tool restore
+
+      - name: Run tests with Cobertura coverage (Phase 1)
+        if: steps.secret.outputs.available == 'true'
+        run: |
+          dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+            --collect:"XPlat Code Coverage" \
+            --results-directory results/coverage \
+            -- DataCollectionRunParameters=CoverageFormats=Cobertura
+
+      - name: Locate Cobertura report
+        if: steps.secret.outputs.available == 'true'
+        run: |
+          COVERAGE_FILE=$(find results/coverage -name 'coverage.cobertura.xml' | head -1)
+          echo "coverage_file=$COVERAGE_FILE" >> "$GITHUB_OUTPUT"
+          test -n "$COVERAGE_FILE"
+        id: coverage
+
+      - name: Mutation testing shard (Phase 2)
+        if: steps.secret.outputs.available == 'true'
+        timeout-minutes: 45
+        env:
+          SCOPE: ${{ github.event.inputs.scope || 'src/LoadFiles/**' }}
+          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
+        run: |
+          # Runtime/cost budget: one bounded shard per run until measured
+          # runtimes justify widening (issue #959 Phase 2).
+          cd src && dotnet stryker \
+            --project Zipper.csproj \
+            --test-project Zipper.Tests/Zipper.Tests.csproj \
+            --mutate "$SCOPE" \
+            --reporter json \
+            --output "../results/mutation/mutation-report.json" \
+            --break-at 0 \
+            --max-concurrent-test-runs 4
+
+      - name: Run TypeSafe quality ranking (advisory)
+        if: steps.secret.outputs.available == 'true'
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          set -o pipefail
+          MUTATION_ARG=()
+          if [ -f results/mutation/mutation-report.json ]; then
+            MUTATION_ARG=(--mutation results/mutation/mutation-report.json)
+          fi
+          python3 tools/typesafe-audit/quality/run_check.py \
+            --mode live \
+            --coverage "${{ steps.coverage.outputs.coverage_file }}" \
+            "${MUTATION_ARG[@]}" \
+            --json-out results/typesafe-quality/ranking.json \
+            --md-out results/typesafe-quality/ranking.md \
+            --summary-out "$GITHUB_STEP_SUMMARY"
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "$rc" -eq 3 ]; then
+            # Advisory: API/remote failure never gates; raw artifacts are kept.
+            echo "### Quality ranking unavailable (remote failure; advisory)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # Input/config errors (2) and anything else fail the job per spec.
+          exit "$rc"
+
+      - name: Upload quality artifacts
+        if: steps.secret.outputs.available == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: typesafe-quality-report
+          path: |
+            results/coverage/**/coverage.cobertura.xml
+            results/mutation/mutation-report.json
+            results/typesafe-quality/ranking.json
+            results/typesafe-quality/ranking.md
+          retention-days: 7
+          if-no-files-found: ignore
