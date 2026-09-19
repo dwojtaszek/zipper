@@ -1,0 +1,20 @@
+{
+  "questions": {
+    "seam_bypass": {
+      "type": "noul",
+      "instructions": "Judging only the supplied changed-file list, diff hunks, and architecture excerpt: does the diff make a load-file format produce or render output outside the composer -> serializer -> emitter seam (for example reintroducing a fat writer that renders records directly, or bypassing LoadFileEmitter), or move format dispatch out of LoadFileOrchestrator? The EDRM-XML carve-out (XmlLoadFileWriter) is the only sanctioned exception.",
+      "criteria": {
+        "true": "The diff bypasses the seam for a non-XML format or breaks the orchestrator's dispatch ownership",
+        "false": "The diff stays within the seam (or only touches the sanctioned EDRM-XML carve-out)"
+      }
+    },
+    "diagram_stale": {
+      "type": "noul",
+      "instructions": "Judging only the supplied changed-file list, diff hunks, and architecture excerpt: does the diff change component structure or data flow such that the docs/architecture.md diagrams or invariants are now inaccurate (stale), without the diff itself updating docs/architecture.md?",
+      "criteria": {
+        "true": "Structure changed and docs/architecture.md was not updated in the same diff",
+        "false": "No structural change, or docs/architecture.md was updated in the same diff"
+      }
+    }
+  }
+}
