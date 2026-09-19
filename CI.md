@@ -53,7 +53,7 @@ Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
 
-Server-side enforcement: `main` has branch protection with **required conversation resolution** and **required status checks** — GitHub refuses the merge while any review thread is unresolved or any required check is red. Required checks: the three `build-and-test` matrix legs (`ubuntu-latest/linux-x64` with coverage, `windows-latest/win-x64`, `macos-latest/osx-arm64`), which run the full E2E suite. Checks skipped by the docs-only fast path count as satisfied. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
+Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`lint`, the three `build-and-test` matrix legs running the full E2E suite, `goldens`) failed or was cancelled — so a red E2E leg always blocks the merge, and the required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
 
 ```bash
 gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
@@ -62,9 +62,7 @@ gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
   "required_status_checks": {
     "strict": false,
     "checks": [
-      { "context": "build-and-test (ubuntu-latest, linux-x64, true)" },
-      { "context": "build-and-test (windows-latest, win-x64, false)" },
-      { "context": "build-and-test (macos-latest, osx-arm64, false)" }
+      { "context": "ci-gate" }
     ]
   },
   "enforce_admins": true,

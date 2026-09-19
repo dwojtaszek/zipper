@@ -250,3 +250,26 @@ jobs:
           chmod +x ./publish-bin/Zipper ./tests/goldens/run-goldens.sh
           ZIPPER_CLI="$(pwd)/publish-bin/Zipper" bash ./tests/goldens/run-goldens.sh
 
+  # Aggregate merge gate. Branch protection requires exactly this check.
+  # It always runs (even on docs-only PRs where the other jobs are
+  # skipped), so the required check context is always posted; it fails
+  # if any needed job failed or was cancelled. Skipped jobs (docs-only
+  # fast path) do not fail the gate.
+  ci-gate:
+    needs: [docs-only, lint, build-and-test, goldens]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Evaluate required jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          results='${{ toJSON(needs.*.result) }}'
+          echo "Job results: $results"
+          if echo "$results" | grep -qE '"(failure|cancelled)"'; then
+            echo "::error::A required PR job failed or was cancelled — merge blocked."
+            exit 1
+          fi
+          echo "All required jobs passed or were skipped (docs-only)."
+
