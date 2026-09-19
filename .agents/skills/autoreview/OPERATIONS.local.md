@@ -124,3 +124,11 @@
 - **telemetry**: host=antigravity mode=branch specialists=6 bundle=18830c
 - **lessons**: Using checked scalar arithmetic over gap boundaries ((v2 - v1) + 1) preserves exact O(1) space and time per gap without enumerating identifiers, while safely scaling beyond 32-bit integer limits.
 - **suppressions**: none
+
+### 2026-09-19 droid:local:#870-eocd-ambiguity
+
+- **findings**: cycle 1: 4 ACTION (verifier accepts forged authentic pair; unbounded zf.read; unbounded signature-scan list; false invariant name + stale docs) + 3 INFO. cycle 2 (after fixes): 0 ACTION, 11 INFO across 7 specialists (2 multi-source budget-default, 2 multi-source deflate-binding, 2 multi-source ushort ceiling, pairing-order, sidecar-missing message, UTF-8 decode, 5 testing breadth, span reuse, literal/docs/perf no-actions).
+- **outcome**: accepted — cycle 1 findings all fixed (local/central cross-validation + sidecar hash binding, bounded chunked shadow read, >2-signature early abort, invariant renamed shadow-eocd-selects-b-bin, docs synced, +5 tests). Cycle 2: fixed 6 INFO one-liners + 4 tamper tests; rejected 5 as consistent-with-practice/bounded (documented above). All gates green: 58 Python, 2,643 unit, 60 analyzer, format, archive E2E.
+- **telemetry**: host=droid mode=local specialists=7 bundle=40263c
+- **lessons**: ApplyPatch tool unavailable in this environment (authorization error) — use Edit with exact strings. Task-subagent prompts must inline the diff explicitly; a placeholder token ships an empty review bundle. Multi-source agreement (budget default, deflate binding) converged on the same fix from 3/2 specialists independently — good fingerprinting signal.
+- **suppressions**: none

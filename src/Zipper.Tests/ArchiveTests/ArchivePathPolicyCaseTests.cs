@@ -652,11 +652,11 @@ public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
         // #899 method/data disagreement cases, the #900 high-ratio BZip2
         // case, the two #933 split-archive declaration cases, and the #935
         // mixed one-unsupported-member case: every member publishes a safe
-        // Fixture ID pair.
+        // Fixture ID pair. The #870 EOCD parser differential is also included.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(37, securityKeys.Count);
+        Assert.Equal(38, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

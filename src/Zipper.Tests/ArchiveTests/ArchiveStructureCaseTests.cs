@@ -69,6 +69,16 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
         return ArchiveFixtureMutator.Apply(definition.Mutations![0], BuildControl(definition.ControlCaseKey!));
     }
 
+    [Fact]
+    public void Apply_EocdAmbiguityComment_WithNonTwoEntryControl_ShouldReject()
+    {
+        var definition = ArchiveTestCatalog.GetCase("eocdr-ambiguity-comment");
+        var singleEntry = BuildControl("valid-empty");
+
+        Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureMutator.Apply(definition.Mutations![0], singleEntry));
+    }
+
     // ---- New valid controls (ticket #840 step 1) ----
 
     [Fact]
@@ -112,6 +122,54 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
         Assert.Equal(
             control.Entries[0].Content,
             ReadEntryContent(control.ArchiveBytes, "sig.txt"));
+    }
+
+    [Fact]
+    public void Apply_EocdAmbiguityComment_PinsTwoPlausibleEndRecordsAndReaderSelection()
+    {
+        var control = BuildControl("valid-stored");
+        var mutated = Apply("eocdr-ambiguity-comment");
+        var mutation = Assert.Single(mutated.Mutations);
+        var trueCentral = control.Layout.CentralDirectoryOffset;
+        var trueCentralSize = 46 + control.Layout.Entries[0].CentralNameLength
+            + control.Layout.Entries[0].CentralExtraLength + control.Layout.Entries[0].CentralCommentLength;
+        var shadowCentralSize = 46 + control.Layout.Entries[1].CentralNameLength
+            + control.Layout.Entries[1].CentralExtraLength + control.Layout.Entries[1].CentralCommentLength;
+        var trueEocd = trueCentral + trueCentralSize;
+        var shadowCentral = trueEocd + 22;
+        var shadowEocd = shadowCentral + shadowCentralSize;
+        var authenticCommentLength = checked((int)(mutated.ArchiveBytes.Length - trueEocd - 22));
+
+        Assert.Equal(ArchiveFixtureLayout.EocdSignature, ReadUInt32(mutated.ArchiveBytes, trueEocd));
+        Assert.Equal(ArchiveFixtureLayout.EocdSignature, ReadUInt32(mutated.ArchiveBytes, shadowEocd));
+        Assert.Equal(mutated.ArchiveBytes.Length, shadowEocd + 22);
+        Assert.Equal(authenticCommentLength, ReadUInt16(mutated.ArchiveBytes, trueEocd + 20));
+        Assert.Equal(0, ReadUInt16(mutated.ArchiveBytes, shadowEocd + 20));
+        Assert.Equal((uint)trueCentral, ReadUInt32(mutated.ArchiveBytes, trueEocd + 16));
+        Assert.Equal((uint)shadowCentral, ReadUInt32(mutated.ArchiveBytes, shadowEocd + 16));
+
+        var signatures = Enumerable.Range(0, mutated.ArchiveBytes.Length - 3)
+            .Where(offset => ReadUInt32(mutated.ArchiveBytes, offset) == ArchiveFixtureLayout.EocdSignature)
+            .Select(offset => (long)offset)
+            .ToArray();
+        Assert.Equal([trueEocd, shadowEocd], signatures);
+
+        var lengthAnchored = ArchiveFixtureLayout.Read(mutated.ArchiveBytes, authenticCommentLength);
+        Assert.Equal("a.txt", Assert.Single(lengthAnchored.Entries).Name);
+
+        using var archive = new ZipArchive(new MemoryStream(mutated.ArchiveBytes), ZipArchiveMode.Read);
+        var shadowEntry = Assert.Single(archive.Entries);
+        Assert.Equal("b.bin", shadowEntry.FullName);
+        using var stream = shadowEntry.Open();
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        Assert.Equal(control.Entries[1].Content, copy.ToArray());
+
+        Assert.Equal(trueCentral, mutation.Offset);
+        Assert.Contains($"authentic-eocd-offset={trueEocd}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"authentic-comment-length={authenticCommentLength}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"shadow-central-directory-offset={shadowCentral}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"shadow-eocd-offset={shadowEocd}", mutation.DeclaredValue, StringComparison.Ordinal);
     }
 
     // ---- Byte-level mutation assertions ----
@@ -355,16 +413,18 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(50, malformed.Count);
+        Assert.Equal(51, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
+        Assert.Contains(malformed, c => c.CaseKey == "eocdr-ambiguity-comment");
         Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-invalid-btype");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-corrupt-huffman");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method-deflate64").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
+        Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("eocdr-ambiguity-comment").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("prefix-unrebased").Classification);
 
         var keys = malformed.Select(c => c.CaseKey).ToList();
@@ -912,7 +972,7 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(100, all.Count);
+        Assert.Equal(101, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

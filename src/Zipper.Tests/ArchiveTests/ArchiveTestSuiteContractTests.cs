@@ -62,8 +62,8 @@ public class ArchiveTestSuiteContractTests
         "bzip2-high-ratio-bounded",
     ];
 
-    /// <summary>The malformed parser-differential case (ticket #869) housed in security.</summary>
-    private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header"];
+    /// <summary>The malformed parser-differential cases (tickets #869 and #870) housed in security.</summary>
+    private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header", "eocdr-ambiguity-comment"];
 
     /// <summary>The hostile filename-byte cases (ticket #876) housed in security.</summary>
     private static readonly string[] HostileNameSecurityCaseKeys = ["filename-null-byte", "filename-c0-control"];
@@ -168,6 +168,7 @@ public class ArchiveTestSuiteContractTests
             .Append("multidisk-eocd-declared")
             .Append("multidisk-central-entry-declared")
             .Append("mixed-methods-one-unsupported-member")
+            .Append("eocdr-ambiguity-comment")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
     }
@@ -196,8 +197,11 @@ public class ArchiveTestSuiteContractTests
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
         // #872, +2 for #873, +3 for #874, +2 for #876, +1 for #880, +1 for #882,
         // +1 for #877, +1 for #897, +1 for #898, +1 for the consolidated #885/#886/#879 matrix,
-        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931, +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix, +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary, +2 for the #935 mixed one-bad-member cases, +1 for #888): a case
+        // +2 for #875, +1 for #884, +1 for #889, +5 for #899, +6 for #900, +1 for #931,
+        // +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix,
+        // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
+        // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(100, AllKeys().Count);
+        Assert.Equal(101, AllKeys().Count);
     }
 }
