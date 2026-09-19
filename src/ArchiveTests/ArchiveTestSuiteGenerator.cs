@@ -626,6 +626,14 @@ internal static class ArchiveTestSuiteGenerator
             // and genuine child coexist; migration must not collapse them.
             "azure-directory-marker-collision" =>
                 new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
+            // ADLS Gen2 segment depth (ticket #878): container-relative 63/64
+            // segment members. The boundary member is legal everywhere; the
+            // exceeded member only violates the hierarchical-namespace limit,
+            // so only named ADLS jobs evaluate its extraction verdict.
+            "path-adls-segments-boundary" =>
+                new PolicyExpectationProfile(null, []),
+            "path-adls-segments-exceeded" =>
+                new PolicyExpectationProfile("adls-gen2", []),
             // Azure-disallowed Unicode (ticket #882): non-characters and C1 controls
             // in names. Valid Archive entries; only Azure upload rejects them.
             "path-azure-disallowed-unicode" =>

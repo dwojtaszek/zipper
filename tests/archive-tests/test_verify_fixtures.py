@@ -375,6 +375,50 @@ class EocdAmbiguityTests(TempDirTest):
         self.assertEqual("eocd-ambiguity", caught.exception.check)
 
 
+class AdlsSegmentTests(unittest.TestCase):
+    @staticmethod
+    def make_case(case_key, segments):
+        name = "/".join("d%02d" % index for index in range(1, segments)) + "/target.txt"
+        case = {
+            "caseKey": case_key,
+            "entries": [entry_record(0, name, b"x")],
+        }
+        return case, name
+
+    def test_boundary_carries_exactly_63_segments(self):
+        case, name = self.make_case("path-adls-segments-boundary", 63)
+
+        detail = vf.verify_adls_segments(case)
+
+        self.assertIn("segments=63", detail)
+        self.assertIn("account-relative=65", detail)
+
+    def test_exceeded_carries_exactly_64_segments(self):
+        case, name = self.make_case("path-adls-segments-exceeded", 64)
+
+        detail = vf.verify_adls_segments(case)
+
+        self.assertIn("segments=64", detail)
+        self.assertIn("account-relative=66", detail)
+
+    def test_wrong_segment_count_is_rejected(self):
+        case, name = self.make_case("path-adls-segments-boundary", 62)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_adls_segments(case)
+
+        self.assertEqual("adls-segments", caught.exception.check)
+
+    def test_relative_marker_segment_is_rejected(self):
+        case, name = self.make_case("path-adls-segments-boundary", 63)
+        case["entries"][0]["readableName"] = name.replace("d01", "..", 1)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_adls_segments(case)
+
+        self.assertEqual("adls-segments", caught.exception.check)
+
+
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):
         with open(os.path.join(VECTOR_DIR, "valid-empty.json"), "r", encoding="utf-8") as handle:

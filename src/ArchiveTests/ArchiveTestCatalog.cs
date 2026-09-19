@@ -16,6 +16,7 @@ internal sealed record ArchiveTestRecipeEntry(
     bool IsDirectory,
     byte[]? PayloadPrefix,
     bool IsPolicyName = false,
+    bool IsCloudCompatName = false,
     uint ExternalAttributes = 0,
     byte HostSystem = 0)
 {
@@ -39,6 +40,18 @@ internal sealed record ArchiveTestRecipeEntry(
         new(
             name, text.Length, "stored", IsDirectory: false, PayloadPrefix: Encoding.ASCII.GetBytes(text),
             IsPolicyName: true, ExternalAttributes: externalAttributes, HostSystem: hostSystem);
+
+    /// <summary>
+    /// A cloud-compatibility entry (ticket #878): a valid deep member path whose
+    /// segment depth is governed by a consumer platform limit (ADLS Gen2: 63
+    /// hierarchical-namespace segments), not by the depth-2 recipe budget. The
+    /// dedicated ValidateAdlsSegmentBudget guard in the builder is the only
+    /// exemption from ValidatePathDepth; REQ-213 stays untouched.
+    /// </summary>
+    internal static ArchiveTestRecipeEntry CloudCompatFile(string name, string text) =>
+        new(
+            name, text.Length, "stored", IsDirectory: false, PayloadPrefix: Encoding.ASCII.GetBytes(text),
+            IsCloudCompatName: true);
 }
 
 internal sealed record ArchiveTestRecipe(IReadOnlyList<ArchiveTestRecipeEntry> Entries);
@@ -519,6 +532,11 @@ internal static class ArchiveTestCatalog
         ["path-emoji-zwj-namemax"] = PolicyDefinition("path-emoji-zwj-namemax", EmojiNameMaxRecipe),
         ["path-azure-disallowed-unicode"] = PolicyDefinition("path-azure-disallowed-unicode", AzureDisallowedUnicodeRecipe),
         ["azure-directory-marker-collision"] = PolicyDefinition("azure-directory-marker-collision", AzureDirectoryMarkerRecipe),
+        // Ticket #878 ADLS Gen2 segment depth: container-relative 63-segment
+        // boundary (legal on the hierarchical namespace) and 64-segment first
+        // violation. Valid Archives; only extraction policy on ADLS is in question.
+        ["path-adls-segments-boundary"] = PolicyDefinition("path-adls-segments-boundary", AdlsSegmentBoundaryRecipe),
+        ["path-adls-segments-exceeded"] = PolicyDefinition("path-adls-segments-exceeded", AdlsSegmentExceededRecipe),
         // Ticket #843 bounded resource cases: honest high compression, genuine
         // depth-two nesting, and the exact entry cap — all valid Archives that also
         // serve the security suite per #834 ("bounded resource cases").
@@ -948,6 +966,25 @@ internal static class ArchiveTestCatalog
     [
         ArchiveTestRecipeEntry.PolicyFile(EmojiNameMaxName(10), "atc-emoji-boundary"),
         ArchiveTestRecipeEntry.PolicyFile(EmojiNameMaxName(11), "atc-emoji-exceeded"),
+    ]);
+
+    // Ticket #878 ADLS Gen2 segment depth: container-relative member paths of
+    // exactly 63 segments (the hierarchical-namespace boundary, legal) and 64
+    // (the first violation). Built with the dedicated CloudCompatFile entry whose
+    // own 64-segment guard replaces the depth-2 recipe budget (REQ-213 untouched);
+    // ADLS Gen2 counts account and container on the wire, so account-relative
+    // depth is the segment count + 2.
+    private static string AdlsPath(int segments) =>
+        string.Join("/", Enumerable.Range(1, segments - 1).Select(index => $"d{index:00}")) + "/target.txt";
+
+    private static ArchiveTestRecipe AdlsSegmentBoundaryRecipe => new(
+    [
+        ArchiveTestRecipeEntry.CloudCompatFile(AdlsPath(63), "atc-adls-boundary"),
+    ]);
+
+    private static ArchiveTestRecipe AdlsSegmentExceededRecipe => new(
+    [
+        ArchiveTestRecipeEntry.CloudCompatFile(AdlsPath(64), "atc-adls-exceeded"),
     ]);
 
     // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a

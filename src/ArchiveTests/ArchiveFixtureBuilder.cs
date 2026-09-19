@@ -240,9 +240,14 @@ internal static class ArchiveFixtureBuilder
 
                 // Policy-sensitive entries (ticket #842) keep their names verbatim: the
                 // name bytes are the hazard under test, so the generation-time guard is
-                // bypassed for them alone. This builder never materializes member paths;
-                // it only writes Archive bytes to memory.
-                if (!recipeEntry.IsPolicyName)
+                // bypassed for them alone. Cloud-compat entries (ticket #878) trade the
+                // depth-2 budget for the dedicated ADLS segment guard. This builder
+                // never materializes member paths; it only writes Archive bytes to memory.
+                if (recipeEntry.IsCloudCompatName)
+                {
+                    ValidateAdlsSegmentBudget(definition.CaseKey, recipeEntry.Name);
+                }
+                else if (!recipeEntry.IsPolicyName)
                 {
                     ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
                 }
@@ -1448,7 +1453,11 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': the coded baseline drops Unix metadata; found entry '{recipeEntry.Name}' with external attributes or a host system.");
             }
 
-            if (!recipeEntry.IsPolicyName)
+            if (recipeEntry.IsCloudCompatName)
+            {
+                ValidateAdlsSegmentBudget(definition.CaseKey, recipeEntry.Name);
+            }
+            else if (!recipeEntry.IsPolicyName)
             {
                 ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
             }
@@ -1683,6 +1692,33 @@ internal static class ArchiveFixtureBuilder
         if (segments.Length > 2)
         {
             throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' exceeds the depth-2 entry path budget.");
+        }
+
+        foreach (var segment in segments)
+        {
+            if (segment.Length == 0 || segment is "." or "..")
+            {
+                throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' has an empty or relative path segment.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cloud-compatibility segment budget (ticket #878): ADLS Gen2's hierarchical
+    /// namespace rejects member paths with more than 63 segments (account and
+    /// container included on the wire). Fixtures are container-relative, so the
+    /// published recipes pin 63 (legal boundary) and 64 (first violation). The
+    /// cap below is deliberately violation+1 — exactly 64 segments must stay
+    /// constructible so the exceeded fixture can be generated; the platform's
+    /// legal limit is evaluated by named <c>adls-gen2</c> jobs, not here. This is
+    /// the only exemption from the depth-2 recipe budget (REQ-213 stays untouched).
+    /// </summary>
+    internal static void ValidateAdlsSegmentBudget(string caseKey, string name)
+    {
+        var segments = name.TrimEnd('/').Split('/');
+        if (segments.Length > 64)
+        {
+            throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' exceeds the 64-segment cloud-compatibility budget.");
         }
 
         foreach (var segment in segments)
