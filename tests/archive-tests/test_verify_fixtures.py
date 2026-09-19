@@ -419,6 +419,150 @@ class AdlsSegmentTests(unittest.TestCase):
         self.assertEqual("adls-segments", caught.exception.check)
 
 
+class EncodingTrailByteTests(unittest.TestCase):
+    @staticmethod
+    def make_zip(case_key):
+        """A minimal single-entry stored archive with 'ab.txt' patched to the
+        case's legacy-codec trail-byte name in both headers."""
+        import io
+        import struct
+        import zipfile
+
+        _, expected_hex, _ = vf.ENCODING_TRAIL_BYTE_CASES[case_key]
+        lead = int(expected_hex[:2], 16)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr(zipfile.ZipInfo("ab.txt"), b"x")
+        zip_bytes = bytearray(buf.getvalue())
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        zip_bytes[30] = lead
+        zip_bytes[31] = 0x5C
+        zip_bytes[cd_offset + 46] = lead
+        zip_bytes[cd_offset + 47] = 0x5C
+        return bytes(zip_bytes)
+
+    @staticmethod
+    def make_case(case_key, zip_bytes=None):
+        _, expected_hex, expected_name = vf.ENCODING_TRAIL_BYTE_CASES[case_key]
+        return {
+            "caseKey": case_key,
+            "entries": [{
+                "ordinal": 0,
+                "kind": "file",
+                "localNameRaw": expected_hex,
+                "centralNameRaw": expected_hex,
+                "readableName": expected_name,
+            }],
+        }
+
+    def test_named_consumer_decodes_each_codec_without_split(self):
+        for case_key in vf.ENCODING_TRAIL_BYTE_CASES:
+            with self.subTest(caseKey=case_key):
+                codec = vf.ENCODING_TRAIL_BYTE_CASES[case_key][0]
+                detail = vf.verify_encoding_trail_bytes(self.make_case(case_key), self.make_zip(case_key))
+                self.assertIn(codec, detail)
+                self.assertIn("no-spurious-split", detail)
+
+    def test_decode_failure_fails_closed(self):
+        case = self.make_case("encoding-cp932-trail-backslash")
+        zip_bytes = self.make_zip("encoding-cp932-trail-backslash")
+        overrides = {
+            "encoding-cp932-trail-backslash": ("cp932", "ef5c2e747874", "表.txt"),
+            "encoding-big5-trail-backslash": ("not-a-codec", "b35c2e747874", "許.txt"),
+        }
+        original = dict(vf.ENCODING_TRAIL_BYTE_CASES)
+        try:
+            vf.ENCODING_TRAIL_BYTE_CASES.update(overrides)
+            # Invalid CP932 lead byte: UnicodeDecodeError arm.
+            case["entries"][0]["localNameRaw"] = overrides["encoding-cp932-trail-backslash"][1]
+            case["entries"][0]["centralNameRaw"] = overrides["encoding-cp932-trail-backslash"][1]
+            with self.assertRaises(vf.VerificationError) as caught:
+                vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-cp932-trail-backslash"))
+            self.assertIn("failed to decode", str(caught.exception))
+
+            # Unknown codec name: LookupError arm.
+            case = self.make_case("encoding-big5-trail-backslash")
+            with self.assertRaises(vf.VerificationError) as caught:
+                vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-big5-trail-backslash"))
+            self.assertIn("failed to decode", str(caught.exception))
+        finally:
+            vf.ENCODING_TRAIL_BYTE_CASES.clear()
+            vf.ENCODING_TRAIL_BYTE_CASES.update(original)
+
+    def test_local_raw_name_mismatch_is_rejected(self):
+        case_key = "encoding-cp932-trail-backslash"
+        case = self.make_case(case_key)
+        zip_bytes = bytearray(self.make_zip(case_key))
+        zip_bytes[31] = 0x2E
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, bytes(zip_bytes))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_unknown_case_key_is_rejected(self):
+        case = self.make_case("encoding-cp932-trail-backslash")
+        case["caseKey"] = "encoding-some-other-codec"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-cp932-trail-backslash"))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_multi_entry_case_is_rejected(self):
+        case = self.make_case("encoding-cp932-trail-backslash")
+        case["entries"].append(dict(case["entries"][0], ordinal=1))
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-cp932-trail-backslash"))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_sidecar_raw_hex_mismatch_is_rejected(self):
+        case = self.make_case("encoding-cp932-trail-backslash")
+        case["entries"][0]["localNameRaw"] = "ab2e747874"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-cp932-trail-backslash"))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_central_raw_name_mismatch_is_rejected(self):
+        case_key = "encoding-big5-trail-backslash"
+        case = self.make_case(case_key)
+        zip_bytes = bytearray(self.make_zip(case_key))
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        zip_bytes[cd_offset + 47] = 0x2E
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, bytes(zip_bytes))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_bit11_set_is_rejected(self):
+        case_key = "encoding-gbk-trail-backslash"
+        case = self.make_case(case_key)
+        zip_bytes = bytearray(self.make_zip(case_key))
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        struct.pack_into("<H", zip_bytes, cd_offset + 8, 0x0800)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, bytes(zip_bytes))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+    def test_readable_name_mismatch_is_rejected(self):
+        case = self.make_case("encoding-cp932-trail-backslash")
+        case["entries"][0]["readableName"] = "ab.txt"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_trail_bytes(case, self.make_zip("encoding-cp932-trail-backslash"))
+
+        self.assertEqual("encoding-trail-byte", caught.exception.check)
+
+
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):
         with open(os.path.join(VECTOR_DIR, "valid-empty.json"), "r", encoding="utf-8") as handle:

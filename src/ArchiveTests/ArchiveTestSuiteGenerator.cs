@@ -267,6 +267,27 @@ internal static class ArchiveTestSuiteGenerator
             ];
         }
 
+        // Legacy-codec trail-byte 0x5C names (ticket #887): valid single entries
+        // whose raw name bytes contain 0x5C only as a CP932/Big5/GBK character's
+        // trail byte. Decoding-aware readers keep one member; separator-normalizing
+        // readers may split or reject — every observed outcome is recorded, and the
+        // named encoding-consumer verifier asserts the decode-level no-split property.
+        if (definition.CaseKey is "encoding-cp932-trail-backslash" or "encoding-big5-trail-backslash" or "encoding-gbk-trail-backslash")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, [ListedCountMatchesEntries], [NoPartialWrites, "listed-count == entry-count"]),
+                Expectation(ReadEntryOperation, StrictProfile, [ReadEntryContentMatches], [NoPartialWrites]),
+                Expectation(IntegrityCheckOperation, StrictProfile, [IntegrityPasses], [NoPartialWrites]),
+                Expectation(
+                    ExtractOperation,
+                    StrictProfile,
+                    ["extract-completes", "entry-rejected", "entry-renamed-by-policy", "extract-fails"],
+                    [NoWritesOutsideRoot, ContainmentRequired],
+                    [ExtractOperation]),
+            ];
+        }
+
         if (!definition.IsMutation)
         {
             // Policy-sensitive direct recipes (ticket #842): valid ZIP syntax whose

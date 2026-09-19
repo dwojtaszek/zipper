@@ -1005,10 +1005,38 @@ public class ArchiveStructureCaseTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void Build_EncodingTrailByteControls_PinLegacyCodecNames()
+    {
+        // Ticket #887: the legacy-codec controls carry raw name bytes whose 0x5C
+        // is only a CP932/Big5/GBK trail byte, with bit 11 clear. The layout
+        // records the codec-decoded readable name; the archive stays a valid
+        // single-entry Archive.
+        foreach (var (caseKey, expectedName) in new[]
+                 {
+                     ("encoding-cp932-trail-backslash", "表.txt"),
+                     ("encoding-big5-trail-backslash", "許.txt"),
+                     ("encoding-gbk-trail-backslash", "乗.txt"),
+                 })
+        {
+            var built = ArchiveFixtureBuilder.BuildControl(caseKey, 42, CancellationToken.None);
+            var entry = Assert.Single(built.Layout.Entries);
+            Assert.Equal(expectedName, entry.Name);
+            var raw = Convert.FromHexString(entry.NameHex);
+            Assert.Equal(6, raw.Length);
+            Assert.Equal(ArchiveFixtureBuilder.EncodingTrailByteCases[caseKey].LeadByte, raw[0]);
+            Assert.Equal(0x5C, raw[1]);
+            Assert.Equal(0u, ReadUInt32(built.ArchiveBytes, entry.CentralDirectoryOffset + 8) & 0x0800u);
+
+            using var archive = new ZipArchive(new MemoryStream(built.ArchiveBytes), ZipArchiveMode.Read);
+            Assert.Single(archive.Entries);
+        }
+    }
+
+    [Fact]
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(103, all.Count);
+        Assert.Equal(106, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

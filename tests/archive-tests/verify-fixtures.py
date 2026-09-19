@@ -412,6 +412,12 @@ class FixtureVerifier:
             adls_note = verify_adls_segments(case)
             checks.append({"check": "adls-segments", "status": "pass", "detail": adls_note})
 
+        # Legacy-codec trail-byte names (ticket #887): the named CP932/Big5/GBK
+        # consumer decodes the raw name bytes and asserts no spurious split.
+        if case.get("caseKey") in ENCODING_TRAIL_BYTE_CASES:
+            encoding_note = verify_encoding_trail_bytes(case, zip_bytes)
+            checks.append({"check": "encoding-trail-byte", "status": "pass", "detail": encoding_note})
+
         # Prefixed cases (ticket #873): a 64-byte signature-free stub precedes the
         # Archive; the rebased twin shifts every offset past it, the unrebased twin
         # leaves stale offsets behind.
@@ -1080,6 +1086,90 @@ def verify_adls_segments(case):
                                     % segment)
     return ("segments=%d container-relative (account-relative=%d on ADLS Gen2)"
             % (expected, expected + 2))
+
+
+# Legacy-codec trail-byte cases (ticket #887): the exact raw name bytes, the
+# named codec that decodes them, and the expected decoded name. The named
+# encoding consumer is this verifier: it decodes the raw bytes with the codec
+# and asserts separator handling only after decoding — the maintainer triage
+# contract for keeping the suite out of the default compatibility set.
+ENCODING_TRAIL_BYTE_CASES = {
+    "encoding-cp932-trail-backslash": ("cp932", "955c2e747874", "表.txt"),
+    "encoding-big5-trail-backslash": ("big5", "b35c2e747874", "許.txt"),
+    "encoding-gbk-trail-backslash": ("gbk", "815c2e747874", "乗.txt"),
+}
+
+
+def verify_encoding_trail_bytes(case, zip_bytes):
+    """Legacy-codec 0x5C trail-byte audit (ticket #887): the single member's
+    raw name bytes carry 0x5C only as the named codec character's trail byte,
+    bit 11 stays clear, and decoding the raw bytes with the named codec
+    reproduces the expected name with no spurious directory split — separator
+    handling is asserted after decoding, never on the raw bytes."""
+    import codecs
+    import struct
+
+    spec = ENCODING_TRAIL_BYTE_CASES.get(case["caseKey"])
+    if spec is None:
+        raise VerificationError("encoding-trail-byte",
+                                "unexpected case key %r" % case["caseKey"])
+    codec, expected_hex, expected_name = spec
+    entries = case["entries"]
+    if len(entries) != 1:
+        raise VerificationError("encoding-trail-byte",
+                                "expected exactly one entry, found %d" % len(entries))
+    record = entries[0]
+    if record["localNameRaw"] != expected_hex or record["centralNameRaw"] != expected_hex:
+        raise VerificationError("encoding-trail-byte",
+                                "sidecar raw hex does not carry the %s trail-byte name" % codec)
+    raw = bytes.fromhex(expected_hex)
+    if raw[-4:] != b".txt" or raw[1:2] != b"\x5c":
+        raise VerificationError("encoding-trail-byte",
+                                "raw name bytes do not carry the 0x5C trail-byte shape")
+
+    # Both headers carry the exact raw bytes (single-entry control: local at
+    # offset 0, central located from the comment-free EOCD).
+    if len(zip_bytes) < 30 or zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError("encoding-trail-byte", "offset 0 is not a local file header")
+    local_name_len = struct.unpack_from("<H", zip_bytes, 26)[0]
+    if zip_bytes[30:30 + local_name_len] != raw:
+        raise VerificationError("encoding-trail-byte", "raw local name is not the codec bytes")
+    local_general_purpose_flag = struct.unpack_from("<H", zip_bytes, 6)[0]
+    if local_general_purpose_flag & 0x0800:
+        raise VerificationError("encoding-trail-byte", "bit 11 must stay clear in the local header")
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError("encoding-trail-byte", "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError("encoding-trail-byte",
+                                "central directory missing at offset %d" % cd_offset)
+    general_purpose_flag = struct.unpack_from("<H", zip_bytes, cd_offset + 8)[0]
+    if general_purpose_flag & 0x0800:
+        raise VerificationError("encoding-trail-byte", "bit 11 must stay clear for the legacy-codec name")
+    central_name_len = struct.unpack_from("<H", zip_bytes, cd_offset + 28)[0]
+    if zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_len] != raw:
+        raise VerificationError("encoding-trail-byte", "raw central name is not the codec bytes")
+
+    # Named-consumer oracle: decode the raw bytes with the codec, then assert
+    # separator handling on the DECODED name (ticket #887 triage contract).
+    try:
+        decoded = codecs.decode(raw, codec)
+    except (UnicodeDecodeError, LookupError) as error:
+        raise VerificationError("encoding-trail-byte",
+                                "the named %s consumer failed to decode the raw name: %s"
+                                % (codec, error)) from error
+    if decoded != expected_name:
+        raise VerificationError("encoding-trail-byte",
+                                "%s decoding produced %r, expected %r"
+                                % (codec, decoded, expected_name))
+    if "\\" in decoded:
+        raise VerificationError("encoding-trail-byte",
+                                "decoded name %r splits on the 0x5C trail byte" % decoded)
+    if record["readableName"] != decoded:
+        raise VerificationError("encoding-trail-byte",
+                                "sidecar readableName %r does not equal the decoded %s name"
+                                % (record["readableName"], codec))
+    return ("%s decoded=%s no-spurious-split" % (codec, expected_name))
 
 
 def verify_unicode_path_extra(case, zip_bytes):

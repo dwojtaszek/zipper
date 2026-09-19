@@ -148,3 +148,11 @@
 - **telemetry**: host=droid mode=local specialists=7+1fast bundle=20150c
 - **lessons**: Security specialist notification showed "No output available" but TaskOutput block=false retrieved the full JSON — always fetch via TaskOutput, never trust the empty-notification shape. MA0009 (regex DoS) bans runtime Regex in this repo — character-loop validation avoids the analyzer and is simpler. Accepting the 4-source INFO (non-object skip) closed a real contract hole the user decision didn't name explicitly.
 - **suppressions**: none
+
+### 2026-09-19 droid:local:#887-encoding-trail-byte-suite
+
+- **findings**: 0 ACTION, 12 INFO across 7 specialists (correctness 2, adversarial 5, security 2, testing 6, maintainability 2, performance 1, api-contract 1) — unanimous "patch is correct", confidence 8–9. Merged to 10 fingerprints: 6 accepted (local-header bit-11 check — 3-source agreement, C# lead-byte + central bit-11 asserts, decode-failure test, local-raw mismatch test, unknown-key + multi-entry tests, `case_key and` idiom cleanup), 4 rejected (EOCD-at-−22 and offset-literal conventions, Cp437 post-patch shape duplication, codec tuple in four places — all established independent-oracle patterns).
+- **outcome**: accepted — all fixes applied (verifier local bit-11 check + 4 Python tests + C# assert hardening). Fast-pass rerun clean (0 ACTION, 3 self-resolving INFO, confidence 8). Gates green: 71 Python, 2,671 unit, 60 analyzer, format, archive E2E (encoding suite verified by named-codec consumer), basic smoke.
+- **telemetry**: host=droid mode=local specialists=7+1fast bundle=36905c
+- **lessons**: Python's strict cp932 codec maps invalid leads to private-use error chars (U+F8F0–U+F8F3) instead of raising — UnicodeDecodeError needs a genuinely invalid sequence (0xEF 0x5C raises, 0xFF 0x5C does not). VerificationError has no .message attr — the message is str(exception). ListSuite output is ordinal Case-Key order — contract-test arrays must match that order, not declaration order.
+- **suppressions**: none

@@ -83,6 +83,14 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The mixed-method one-unsupported-member case (ticket #935) housed in security.</summary>
     private static readonly string[] MixedUnsupportedSecurityCaseKeys = ["mixed-methods-one-unsupported-member"];
 
+    /// <summary>The three legacy-codec trail-byte cases (ticket #887) housed in the encoding suite, in ordinal Case Key order.</summary>
+    private static readonly string[] EncodingTrailByteCaseKeys =
+    [
+        "encoding-big5-trail-backslash",
+        "encoding-cp932-trail-backslash",
+        "encoding-gbk-trail-backslash",
+    ];
+
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
 
@@ -143,6 +151,28 @@ public class ArchiveTestSuiteContractTests
     // ---- compatibility and malformed: classification-based, plus pinned structure cases ----
 
     [Fact]
+    public void ListSuite_Encoding_ContainsExactlyTheLegacyCodecTrailByteCases()
+    {
+        Assert.Equal(EncodingTrailByteCaseKeys, SuiteKeys(ArchiveTestCatalog.EncodingSuite));
+    }
+
+    [Fact]
+    public void ListSuite_Encoding_MembersStayOutOfDefaultSuites()
+    {
+        // The triage note on #887 keeps the legacy-codec controls out of the
+        // default compatibility and security suites: only named encoding
+        // consumers evaluate the decode-level behavior.
+        var encoding = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.EncodingSuite);
+        Assert.All(encoding, c =>
+        {
+            Assert.Equal("policy-sensitive", c.Classification);
+            Assert.False(c.IsMutation);
+            Assert.Single(c.Suites);
+            Assert.Equal(ArchiveTestCatalog.EncodingSuite, c.Suites[0]);
+        });
+    }
+
+    [Fact]
     public void ListSuite_Compatibility_ContainsExactlyEveryValidClassificationCase()
     {
         var expected = AllKeys()
@@ -185,6 +215,7 @@ public class ArchiveTestSuiteContractTests
             .Concat(SuiteKeys(ArchiveTestCatalog.CompatibilitySuite))
             .Concat(SuiteKeys(ArchiveTestCatalog.MalformedSuite))
             .Concat(SuiteKeys(ArchiveTestCatalog.SecuritySuite))
+            .Concat(SuiteKeys(ArchiveTestCatalog.EncodingSuite))
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
@@ -204,8 +235,8 @@ public class ArchiveTestSuiteContractTests
         // +5 for #933, +2 for #934 Zip64 descriptors, +7 for the #934 conflict matrix,
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
-        // +2 for #878): a case
+        // +2 for #878, +3 for the #887 legacy-codec encoding controls): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(103, AllKeys().Count);
+        Assert.Equal(106, AllKeys().Count);
     }
 }

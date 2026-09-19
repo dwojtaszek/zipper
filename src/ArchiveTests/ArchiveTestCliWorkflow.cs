@@ -137,6 +137,7 @@ internal static class ArchiveTestCliWorkflow
         "compatibility" => ArchiveTestCatalog.CompatibilitySuite,
         "malformed" => ArchiveTestCatalog.MalformedSuite,
         "security" => ArchiveTestCatalog.SecuritySuite,
+        "encoding" => ArchiveTestCatalog.EncodingSuite,
         "all" => ArchiveTestCatalog.AllSuites,
         _ => null,
     };
