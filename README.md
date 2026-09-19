@@ -71,7 +71,7 @@ zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 - **Load File Formats**: DAT (Concordance), OPT (Opticon), CSV (RFC 4180), EDRM-XML (v1.2), Concordance (quote-wrapped)
 - **Generation Modes**:
   - **Standard Mode**: Zip Archive + Load File
-  - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`)
+  - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`). The manifest carries an Azure-safe `metadata` block (`production_id`, `bates_number_start`, `bates_number_end`, `volume_count`) whose values are normalized (lossy) derivatives of the manifest's own fields, mapped onto `x-ms-meta-<key>` headers by upload clients; post-generation validation rejects non-ASCII keys/values, CR/LF, and blocks over the 8,192-byte Azure budget.
   - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
 - **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and chaos anomaly injection (`--chaos-mode`).
 - **Output Safety & Preservation**: Collision-resistant base naming with incremental suffixes (`_1`, `_2`, …) and atomic creation (`FileMode.CreateNew`) prevent overwriting existing Archives or Load Files. In Standard mode, entry path collisions across Native Files, generated Attachments, Extracted Text, and included Load Files/Audit Files fail descriptively rather than silently dropping or renaming records. Production Set mode rejects existing output directories and zip archives upfront before generation, and cleanup routines delete only artifacts created during the failed run.

@@ -74,6 +74,30 @@ if ! grep -q "PROD00000001" "$prod_dir/DATA/loadfile.dat"; then
   print_error "Bates start not found in DAT"
 fi
 
+# Verify manifest metadata block (Azure-safe contract, REQ-225)
+python3 - "$prod_dir" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+metadata = json.loads((root / "_manifest.json").read_text()).get("metadata")
+if not isinstance(metadata, dict):
+    raise SystemExit("manifest metadata block missing or not an object")
+for key in ("production_id", "bates_number_start", "bates_number_end", "volume_count"):
+    if key not in metadata:
+        raise SystemExit(f"manifest metadata missing key: {key}")
+total = 0
+for key, value in metadata.items():
+    total += len(key.encode()) + len(value.encode())
+    if any(c > "\x7f" for c in key) or any(c > "\x7f" for c in value):
+        raise SystemExit(f"metadata pair '{key}' contains non-ASCII characters")
+    if "\r" in value or "\n" in value:
+        raise SystemExit(f"metadata value for '{key}' contains CR/LF")
+if total > 8192:
+    raise SystemExit(f"metadata block exceeds 8,192 bytes: {total}")
+PY
+
 print_success "Test Case 1: Basic production set passed"
 
 

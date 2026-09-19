@@ -104,6 +104,17 @@ internal static class ProductionManifestWriter
             SupplementalValidation = supplementalValidation,
         };
 
+        // Azure Blob custom metadata (ticket #881): the derived block an upload
+        // client maps onto x-ms-meta-<key>. Keys are fixed Azure-safe literals;
+        // values are normalized to ASCII without CR/LF (REQ-225).
+        manifest.Metadata = new Dictionary<string, string>
+        {
+            ["production_id"] = NormalizeMetadataValue(manifest.ProductionId),
+            ["bates_number_start"] = NormalizeMetadataValue(manifest.BatesNumberStart),
+            ["bates_number_end"] = NormalizeMetadataValue(manifest.BatesNumberEnd),
+            ["volume_count"] = volumeCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+
         // Redaction stats
         if (request.Production.RedactedProduction && fileDataList.Count > 0)
         {
@@ -156,6 +167,28 @@ internal static class ProductionManifestWriter
         }
 
         return $"char:{delimiter}";
+    }
+
+    /// <summary>
+    /// Normalizes a derived metadata value for Azure Blob custom metadata
+    /// (ticket #881): values must be ASCII-only and free of CR/LF (the
+    /// header-injection hazard). Non-ASCII characters become '_' and CR/LF
+    /// become ' '.
+    /// </summary>
+    private static string NormalizeMetadataValue(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var c in value)
+        {
+            builder.Append(c switch
+            {
+                '\r' or '\n' => ' ',
+                > '\u007f' => '_',
+                _ => c,
+            });
+        }
+
+        return builder.ToString();
     }
 }
 
@@ -229,6 +262,9 @@ internal class ProductionManifest
 
     [JsonPropertyName("redactionReasons")]
     public System.Collections.Generic.IReadOnlyDictionary<string, long>? RedactionReasons { get; set; }
+
+    [JsonPropertyName("metadata")]
+    public System.Collections.Generic.IReadOnlyDictionary<string, string>? Metadata { get; set; }
 }
 
 internal class BatesRange
