@@ -877,9 +877,12 @@ def _jev_verify_completion(wt_path: str, branch: str, issue_number: int) -> None
         )
 
 
-def _count_review_threads(pr_number: int) -> int:
+def _count_review_threads(pr_number: int, review_output: str | None = None) -> int:
     """Return number of unresolved review threads on PR."""
-    code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
+    if review_output is not None:
+        out = review_output
+    else:
+        code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
     for line in out.splitlines():
         if "unresolved review thread" in line:
             import re
@@ -889,12 +892,19 @@ def _count_review_threads(pr_number: int) -> int:
     return -1
 
 
-def _babysit_with_fallback(prompt: str, wt_path: str, branch: str, issue_number: int, pr_number: int = 0) -> None:
+def _babysit_with_fallback(
+    prompt: str,
+    wt_path: str,
+    branch: str,
+    issue_number: int,
+    pr_number: int = 0,
+    before_review_output: str | None = None,
+) -> None:
     """Try babysit with each agent candidate until one succeeds.
     Verifies PR state or local commit changed after exit 0 to catch agents that
     run out of credits mid-mission and exit 0 without pushing anything.
     """
-    before_threads = _count_review_threads(pr_number) if pr_number else -1
+    before_threads = _count_review_threads(pr_number, review_output=before_review_output) if pr_number else -1
     before_code, before_out, _ = run_cmd(
         ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
         cwd=REPO_PATH
@@ -1139,6 +1149,7 @@ def babysit_active_worktrees():
 
         print(f"PR #{pr_number} is open. Evaluating checks...")
 
+        before_review_out: str | None = None
         rollup = pr_data.get("statusCheckRollup", [])
         ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
@@ -1154,6 +1165,7 @@ def babysit_active_worktrees():
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
                 review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=wt_path)
                 if review_code != 0:
+                    before_review_out = review_out
                     print(
                         f"Review gate failed for PR #{pr_number}. Triggering babysit.\n"
                         f"stdout:\n{review_out}\n"
@@ -1277,7 +1289,7 @@ def babysit_active_worktrees():
             )
 
         wait_for_tokens()
-        _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
+        _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number, before_review_output=before_review_out)
 
     babysit_orphaned_issue_prs()
     babysit_dependabot_prs()
