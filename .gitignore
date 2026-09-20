@@ -101,5 +101,8 @@ _parity.sh
 diff.txt
 *.diff
 
+# QA skill output
+qa-results/
+
 # Node
 node_modules/
