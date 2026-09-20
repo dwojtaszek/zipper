@@ -634,6 +634,44 @@ def _injection_marker_path(issue_number: int) -> str:
     return os.path.join(STATE_DIR, f"issue-{issue_number}-injection.json")
 
 
+def _ci_status_from_rollup(rollup):
+    """Derive (ci_status, ci_failures) from a PR's statusCheckRollup.
+
+    Shared by the babysit, orphan-PR, and dependabot passes. Any completed
+    check outside (SUCCESS, NEUTRAL, SKIPPED) or a failed/errored status
+    context makes CI FAILED; otherwise SUCCESS only when the rollup is
+    non-empty and every check completed successfully; PENDING otherwise.
+    The failure-string format feeds the Jev CI triage prompt.
+    """
+    ci_failures = []
+    all_passed = True
+    for check in rollup:
+        typename = check.get("__typename")
+        if typename == "CheckRun":
+            status = check.get("status")
+            conclusion = check.get("conclusion")
+            name = check.get("name")
+            if status == "COMPLETED":
+                if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
+                    ci_failures.append(f"{name} ({conclusion})")
+            else:
+                all_passed = False
+        elif typename == "StatusContext":
+            state = check.get("state")
+            context = check.get("context")
+            if state in ("FAILURE", "ERROR"):
+                ci_failures.append(f"{context} ({state})")
+            elif state in ("PENDING", "EXPECTED"):
+                # PENDING is in progress; EXPECTED is a required context that
+                # has not started — neither counts as passed (CodeRabbit, #988).
+                all_passed = False
+    if ci_failures:
+        return "FAILED", ci_failures
+    if all_passed and rollup:
+        return "SUCCESS", ci_failures
+    return "PENDING", ci_failures
+
+
 def _get_rerun_count(pr_number: int, head_sha: str = "") -> int:
     """Reruns used for this PR. The budget is bound to the PR head: a new
     head (the agent pushed a fix) resets it, so one flaky rerun per commit."""
@@ -985,33 +1023,7 @@ def babysit_active_worktrees():
         print(f"PR #{pr_number} is open. Evaluating checks...")
 
         rollup = pr_data.get("statusCheckRollup", [])
-        ci_status = "PENDING"
-        ci_failures = []
-        all_passed = True
-
-        for check in rollup:
-            typename = check.get("__typename")
-            if typename == "CheckRun":
-                status = check.get("status")
-                conclusion = check.get("conclusion")
-                name = check.get("name")
-                if status == "COMPLETED":
-                    if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
-                        ci_failures.append(f"{name} ({conclusion})")
-                else:
-                    all_passed = False
-            elif typename == "StatusContext":
-                state = check.get("state")
-                context = check.get("context")
-                if state in ("FAILURE", "ERROR"):
-                    ci_failures.append(f"{context} ({state})")
-                elif state == "PENDING":
-                    all_passed = False
-
-        if ci_failures:
-            ci_status = "FAILED"
-        elif all_passed and rollup:
-            ci_status = "SUCCESS"
+        ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
         if ci_status == "SUCCESS":
             print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
@@ -1193,33 +1205,7 @@ def babysit_orphaned_issue_prs():
 
         print(f"[orphan-pr] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
         rollup = pr.get("statusCheckRollup", [])
-        ci_status = "PENDING"
-        ci_failures = []
-        all_passed = True
-
-        for check in rollup:
-            typename = check.get("__typename")
-            if typename == "CheckRun":
-                status = check.get("status")
-                conclusion = check.get("conclusion")
-                name = check.get("name")
-                if status == "COMPLETED":
-                    if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
-                        ci_failures.append(f"{name} ({conclusion})")
-                else:
-                    all_passed = False
-            elif typename == "StatusContext":
-                state = check.get("state")
-                context = check.get("context")
-                if state in ("FAILURE", "ERROR"):
-                    ci_failures.append(f"{context} ({state})")
-                elif state == "PENDING":
-                    all_passed = False
-
-        if ci_failures:
-            ci_status = "FAILED"
-        elif all_passed and rollup:
-            ci_status = "SUCCESS"
+        ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
         if ci_status == "SUCCESS":
             print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
@@ -1287,33 +1273,7 @@ def babysit_dependabot_prs():
 
         print(f"[dependabot] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
         rollup = pr.get("statusCheckRollup", [])
-        ci_status = "PENDING"
-        ci_failures = []
-        all_passed = True
-
-        for check in rollup:
-            typename = check.get("__typename")
-            if typename == "CheckRun":
-                status = check.get("status")
-                conclusion = check.get("conclusion")
-                name = check.get("name")
-                if status == "COMPLETED":
-                    if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
-                        ci_failures.append(f"{name} ({conclusion})")
-                else:
-                    all_passed = False
-            elif typename == "StatusContext":
-                state = check.get("state")
-                context = check.get("context")
-                if state in ("FAILURE", "ERROR"):
-                    ci_failures.append(f"{context} ({state})")
-                elif state == "PENDING":
-                    all_passed = False
-
-        if ci_failures:
-            ci_status = "FAILED"
-        elif all_passed and rollup:
-            ci_status = "SUCCESS"
+        ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
         if ci_status == "SUCCESS":
             print(f"[dependabot] CI is SUCCESS for Dependabot PR #{pr_num}. Checking robot review gate...")
