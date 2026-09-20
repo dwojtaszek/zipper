@@ -26,6 +26,12 @@ python3 -m unittest discover -s "$TOOL_DIR/tests" 2>&1 || {
 }
 print_success "TypeSafe runner unit tests passed."
 
+python3 -m unittest discover -s "$SCRIPT_DIR/../.zipper-runner/tests" 2>&1 || {
+    print_error "Zipper runner unit tests failed."
+    exit 1
+}
+print_success "Zipper runner unit tests passed."
+
 # --- Part 2: fixture-mode audit end to end (no credential, no network) ---
 
 # Record a deterministic fixture for the current sample inputs, then replay it.

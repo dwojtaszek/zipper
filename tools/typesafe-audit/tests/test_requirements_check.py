@@ -222,5 +222,28 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertEqual(EXIT_INPUT_ERROR, code)
 
 
+class EmptySectionsTests(unittest.TestCase):
+    def test_empty_sections_diff_returns_ok_without_crash(self):
+        out_dir = Path(tempfile.mkdtemp())
+        json_out = out_dir / "report.json"
+        md_out = out_dir / "report.md"
+        summary_out = out_dir / "summary.md"
+        import run_check
+        with mock.patch.object(run_check, "extract_sections", return_value=[]):
+            code = run_check_main([
+                "--base", "HEAD",
+                "--mode", "fixture",
+                "--json-out", str(json_out),
+                "--md-out", str(md_out),
+                "--summary-out", str(summary_out),
+            ])
+        self.assertEqual(0, code)
+        report = json.loads(json_out.read_text(encoding="utf-8"))
+        self.assertEqual([], report["results"])
+        self.assertEqual([], report["precheck_findings"])
+        self.assertFalse(report["needs_human_review"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

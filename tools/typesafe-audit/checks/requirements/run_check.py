@@ -250,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         if not corpus_mode else []
     )
 
-    batch_size = len(sections) if not args.full else policy["full_mode_batch_size"]
+    batch_size = policy["full_mode_batch_size"] if args.full else (len(sections) or 1)
     results: list[dict] = []
     for batch_start in range(0, len(sections), batch_size):
         batch = sections[batch_start:batch_start + batch_size]

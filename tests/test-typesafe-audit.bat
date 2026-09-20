@@ -17,6 +17,14 @@ if errorlevel 1 (
 )
 echo [ SUCCESS ] TypeSafe runner unit tests passed.
 
+echo Running Zipper runner unit tests...
+python3 -m unittest discover -s "%SCRIPT_DIR%..\.zipper-runner\tests" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Zipper runner unit tests failed.
+    exit /b 1
+)
+echo [ SUCCESS ] Zipper runner unit tests passed.
+
 set FIXTURE_DIR=%TEMP_DIR%\fixtures
 mkdir "%FIXTURE_DIR%" >nul 2>&1
 
