@@ -23,9 +23,9 @@ EXPECTED_BOTS=(
     "coderabbitai[bot]"
     "chatgpt-codex-connector[bot]"
 )
-# Matches both explicit skip declarations (rate limits) and CodeRabbit's
-# walkthrough-only responses, which carry no formal review object.
-SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Review available on request|Walkthrough'
+# Matches both explicit skip declarations (rate limits, repo star threshold) and
+# CodeRabbit's walkthrough-only responses, which carry no formal review object.
+SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Review available on request|Walkthrough|fewer than 10 stars|does not receive automatic reviews'
 POLL_SECONDS=30
 
 # --- Prerequisites ---

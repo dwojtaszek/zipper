@@ -86,6 +86,8 @@ Note: `gh pr checks --watch` exits 0 even when checks fail — always pass `--ex
 
 Address blocking issues (required). Nitpicks are optional.
 
+**Repository Star Threshold (< 10 stars):** On public repositories with fewer than 10 stars, the CodeRabbit GitHub App skips automatic reviews on PR creation/update (posting an informational skip comment and marking the check skipped). The local CLI gate (`coderabbit review --committed --base main --agent`) is therefore the primary and required review gate before pushing. To trigger a remote GitHub App review on a specific PR, comment `@coderabbitai review` on the PR.
+
 **Stale reviews after force-push:** CodeRabbit and other bots review the commit at push time. After amending and force-pushing, their comments may reference code that no longer exists. Verify comments still apply to current code before acting on them. Skip already-addressed comments — but reply acknowledging them.
 
 ## CodeQL

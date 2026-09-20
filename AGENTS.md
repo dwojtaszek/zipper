@@ -289,7 +289,7 @@ Run the autoreview skill before creating a PR. This is mandatory for any change 
 
 ## CodeRabbit Local Pre-PR Review
 
-The `coderabbit` CLI (installed at `~/.local/bin/coderabbit`, already authenticated) reviews a branch locally **before** it is pushed to GitHub, so findings are fixed while they are still cheap. A local review is required before initial PR submission and before pushing any updates to an existing PR. Run it after autoreview and after committing, right before pushing:
+The `coderabbit` CLI (installed at `~/.local/bin/coderabbit`, already authenticated) reviews a branch locally **before** it is pushed to GitHub, so findings are fixed while they are still cheap. On public repositories with fewer than 10 stars, the remote CodeRabbit GitHub App skips automatic reviews on push, making this local CLI gate the primary review check. A local review is required before initial PR submission and before pushing any updates to an existing PR. Run it after autoreview and after committing, right before pushing:
 
 ```bash
 coderabbit review --committed --base main --agent
@@ -310,7 +310,7 @@ All reported issues/findings must be addressed (fixed or documented skip reason)
 
 Costs review credits; skip only for docs-only changes where a self-review already sufficed (same exemption as autoreview).
 
-The skill runs entirely inside the current coding agent (Claude Code or Cursor): it produces the diff with git, then dispatches parallel review subagents via the `Agent` tool. No external reviewer CLI. Default target is local/uncommitted work; point it at a branch or commit diff for pushed/PR work.
+The autoreview skill runs entirely inside the current coding agent (Claude Code or Cursor): it produces the diff with git, then dispatches parallel review subagents via the `Agent` tool. No external reviewer CLI. Default target is local/uncommitted work; point it at a branch or commit diff for pushed/PR work.
 
 See `.agents/skills/autoreview/SKILL.md` for full methodology (target selection, two-pass review, specialist dispatch, confidence calibration, adversarial patterns).
 
