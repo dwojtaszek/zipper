@@ -62,6 +62,74 @@ class RerunBudgetTests(unittest.TestCase):
         self.assertFalse(os.path.exists(runner._rerun_count_path(5)))
 
 
+class CiRollupTests(unittest.TestCase):
+    """_ci_status_from_rollup: shared rollup walk for all three babysit passes."""
+
+    @staticmethod
+    def _check_run(name, status, conclusion):
+        return {"__typename": "CheckRun", "name": name, "status": status, "conclusion": conclusion}
+
+    @staticmethod
+    def _status_context(context, state):
+        return {"__typename": "StatusContext", "context": context, "state": state}
+
+    def test_rollup_withAnyFailedCheck_ExpectedFailed(self):
+        rollup = [
+            self._check_run("build", "COMPLETED", "FAILURE"),
+            self._check_run("lint", "COMPLETED", "SUCCESS"),
+        ]
+        status, failures = runner._ci_status_from_rollup(rollup)
+        self.assertEqual(status, "FAILED")
+        self.assertEqual(failures, ["build (FAILURE)"])
+
+    def test_rollup_withAllChecksPassed_ExpectedSuccess(self):
+        rollup = [
+            self._check_run("build", "COMPLETED", "SUCCESS"),
+            self._check_run("lint", "COMPLETED", "NEUTRAL"),
+            self._check_run("goldens", "COMPLETED", "SKIPPED"),
+        ]
+        self.assertEqual(runner._ci_status_from_rollup(rollup), ("SUCCESS", []))
+
+    def test_rollup_withPendingCheck_ExpectedPending(self):
+        rollup = [
+            self._check_run("build", "COMPLETED", "SUCCESS"),
+            self._check_run("goldens", "IN_PROGRESS", None),
+        ]
+        self.assertEqual(runner._ci_status_from_rollup(rollup), ("PENDING", []))
+
+    def test_rollup_empty_ExpectedPending(self):
+        self.assertEqual(runner._ci_status_from_rollup([]), ("PENDING", []))
+
+    def test_rollup_withFailedStatusContext_ExpectedFailedWithContext(self):
+        rollup = [
+            self._status_context("ci-gate", "FAILURE"),
+            self._status_context("other", "PENDING"),
+            self._check_run("build", "COMPLETED", "SUCCESS"),
+        ]
+        status, failures = runner._ci_status_from_rollup(rollup)
+        self.assertEqual(status, "FAILED")
+        self.assertEqual(failures, ["ci-gate (FAILURE)"])
+
+    def test_rollup_withErroredStatusContext_ExpectedFailed(self):
+        rollup = [self._status_context("sonar", "ERROR")]
+        status, failures = runner._ci_status_from_rollup(rollup)
+        self.assertEqual(status, "FAILED")
+        self.assertEqual(failures, ["sonar (ERROR)"])
+
+    def test_rollup_withOnlyPendingStatusContext_ExpectedPending(self):
+        rollup = [self._status_context("ci-gate", "PENDING")]
+        self.assertEqual(runner._ci_status_from_rollup(rollup), ("PENDING", []))
+
+    def test_rollup_withExpectedStatusContext_ExpectedPendingNotSuccess(self):
+        # EXPECTED = a required context that has not started; it must not
+        # count as passed (CodeRabbit finding, #988).
+        rollup = [
+            self._check_run("build", "COMPLETED", "SUCCESS"),
+            self._status_context("ci-gate", "EXPECTED"),
+        ]
+        self.assertEqual(runner._ci_status_from_rollup(rollup), ("PENDING", []))
+
+
 class InjectionMarkerTests(unittest.TestCase):
     def test_marker_path_UsesStateDir(self):
         self.assertEqual(
