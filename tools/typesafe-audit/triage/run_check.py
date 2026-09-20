@@ -166,7 +166,7 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
         confidence = answer.get("confidence")
         value = answer.get("choice")
         if value not in questions["duplicate_question"]["criteria"]:
-            value = "uncertain"
+            value = "insufficient-evidence"
         entry = {"candidate": candidate["number"], "candidate_url": candidate["url"], "value": value, "confidence": confidence}
         # Duplicate suggestions require retrieval + high-confidence judgment.
         entry["status"] = "duplicate-suggestion" if value == "duplicate" and confidence is not None and confidence >= policy["confidence_threshold"] else status_for(value, confidence, policy)

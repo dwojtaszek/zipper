@@ -12,7 +12,7 @@
     {
       "issue": 801,
       "expected": {
-        "type": "unclear",
+        "type": "insufficient-evidence",
         "subsystem": "unknown",
         "priority": "insufficient-evidence",
         "missing_info": "yes"
