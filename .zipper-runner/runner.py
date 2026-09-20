@@ -12,6 +12,7 @@ import json
 import fcntl
 import re
 import subprocess
+import signal
 from datetime import datetime, timezone
 
 # Configuration
@@ -165,10 +166,31 @@ def _rate_key(subject: str) -> str:
     """Stable key for rate-limiting by subject prefix."""
     return re.sub(r"[^a-z]", "-", subject.lower())[:60]
 
+def _prune_rate_files(cooldown_hours: int) -> None:
+    """Delete rate-limit state files older than the cooldown window (#989):
+    no file older than the window can matter to a rate decision, so pruning
+    keeps STATE_DIR bounded (one file accumulates per distinct email subject)."""
+    cutoff = time.time() - cooldown_hours * 3600
+    try:
+        names = os.listdir(STATE_DIR)
+    except OSError:
+        return
+    for name in names:
+        if not (name.startswith("rate-") and name.endswith(".json")):
+            continue
+        path = os.path.join(STATE_DIR, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.remove(path)
+        except OSError:
+            pass
+
+
 def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldown_hours: int = 24) -> bool:
     """Rate-limit repeated emails. First min_consecutive always send.
     After that, only one per cooldown_hours window."""
     os.makedirs(STATE_DIR, exist_ok=True)
+    _prune_rate_files(cooldown_hours)
     key = _rate_key(subject)
     path = os.path.join(STATE_DIR, f"rate-{key}.json")
     now = datetime.now(timezone.utc)
@@ -204,7 +226,7 @@ def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldow
         json.dump(state, f)
     return True
 
-def run_cmd(args, cwd=None):
+def run_cmd(args, cwd=None, timeout=None):
     """Runs a system command, returning exit code, stdout, and stderr."""
     print(f"Running command: {' '.join(args)} (cwd: {cwd})")
 
@@ -247,9 +269,17 @@ def run_cmd(args, cwd=None):
 
     custom_env = os.environ.copy()
     try:
-        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd, env=custom_env)
-        stdout, stderr = p.communicate()
-        return p.returncode, stdout, stderr
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd, env=custom_env, start_new_session=True)
+        try:
+            stdout, stderr = p.communicate(timeout=timeout)
+            return p.returncode, stdout, stderr
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                p.kill()
+            p.communicate()
+            return -1, "", f"Command timed out after {timeout}s: {' '.join(args)}"
     except Exception as e:
         return -1, "", str(e)
 
@@ -570,15 +600,95 @@ def _worktree_is_clean(wt_path: str) -> bool:
     return code == 0 and not out.strip()
 
 
-def _create_pr_for_branch(branch: str, issue_number: str, issue_title: str) -> tuple[str, str, str]:
-    push_code, push_out, push_err = run_cmd(["git", "push", "-u", "origin", branch], cwd=REPO_PATH)
+def _coderabbit_bin() -> str | None:
+    path = shutil.which("coderabbit")
+    if path:
+        return path
+    fallback = os.path.expanduser("~/.local/bin/coderabbit")
+    if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+        return fallback
+    return None
+
+
+def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
+    """Run local coderabbit review before PR submit or update, ensuring issues are addressed first."""
+    cr_bin = _coderabbit_bin()
+    if not cr_bin:
+        return False, "coderabbit CLI not found on PATH or ~/.local/bin/coderabbit"
+
+    code, out, err = run_cmd([cr_bin, "review", "--committed", "--base", "main", "--agent"], cwd=cwd, timeout=600)
+    if code != 0:
+        return False, f"coderabbit review failed (exit {code}):\n{err or out}"
+
+    completed = False
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+            if data.get("type") == "finding":
+                return False, f"coderabbit review reported unresolved finding:\n{line}"
+            if data.get("type") == "complete":
+                if data.get("status") == "review_completed" and data.get("findings", 0) == 0:
+                    completed = True
+                else:
+                    return False, f"coderabbit review completed with status {data.get('status')!r} and {data.get('findings')} findings"
+        except json.JSONDecodeError:
+            continue
+
+    if not completed:
+        return False, "coderabbit review did not produce a valid completion record with 0 findings"
+    return True, ""
+
+
+def _coderabbit_gate_path(pr_number: int) -> str:
+    return os.path.join(STATE_DIR, f"pr-{pr_number}-coderabbit-gate.json")
+
+
+def _record_coderabbit_gate_failure(pr_number: int, branch: str, error: str) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    state = {
+        "pr_number": pr_number,
+        "branch": branch,
+        "error": error,
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        with open(_coderabbit_gate_path(pr_number), "w") as f:
+            json.dump(state, f)
+        print(f"[state] Recorded CodeRabbit gate failure for PR #{pr_number}")
+    except OSError as e:
+        print(f"[state] Failed to record CodeRabbit gate failure for PR #{pr_number}: {e}")
+
+
+def _clear_coderabbit_gate_failure(pr_number: int) -> None:
+    path = _coderabbit_gate_path(pr_number)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+            print(f"[state] Cleared CodeRabbit gate failure for PR #{pr_number}")
+        except OSError as e:
+            print(f"[state] Failed to clear CodeRabbit gate failure for PR #{pr_number}: {e}")
+
+
+def _is_coderabbit_gate_failed(pr_number: int) -> bool:
+    return os.path.exists(_coderabbit_gate_path(pr_number))
+
+
+def _create_pr_for_branch(branch: str, issue_number: str, issue_title: str, cwd: str = REPO_PATH) -> tuple[str, str, str]:
+    cr_ok, cr_err = _run_coderabbit_pre_pr_check(cwd)
+    if not cr_ok:
+        return "", "", f"Pre-PR CodeRabbit review failed:\n{cr_err}"
+
+    push_code, push_out, push_err = run_cmd(["git", "push", "-u", "origin", branch], cwd=cwd)
     if push_code != 0:
         return "", "", f"git push failed\nstdout:\n{push_out}\nstderr:\n{push_err}"
 
     body = f"Closes #{issue_number}\n\n## Release Notes\n_Auto-generated by CI._\n"
     create_code, create_out, create_err = run_cmd(
         ["gh", "pr", "create", "--head", branch, "--base", "main", "--title", issue_title, "--body", body],
-        cwd=REPO_PATH,
+        cwd=cwd,
     )
     if create_code != 0:
         return "", "", f"gh pr create failed\nstdout:\n{create_out}\nstderr:\n{create_err}"
@@ -938,7 +1048,7 @@ def babysit_active_worktrees():
             issue_title, safe_body = _fetch_issue_body(issue_number)
             if _branch_has_commits(branch) and _worktree_is_clean(wt_path):
                 print(f"No open PR found for completed branch '{branch}'. Creating PR directly.")
-                pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title)
+                pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
                 if pr_num_val:
                     _save_pr_state(issue_number, pr_num_val, branch)
                     print(f"PR #{pr_num_val} created for issue #{issue_number}.")
@@ -960,9 +1070,9 @@ def babysit_active_worktrees():
                 f"  2. Check GitHub for an open PR on this branch and any unresolved review comments, CI failures, or bot feedback.\n"
                 f"Act on what you find:\n"
                 f"  - If implementation is incomplete: finish it (write failing tests first if missing, then implement), commit.\n"
-                f"  - If implementation is complete but no PR exists: open one now.\n"
+                f"  - If implementation is complete but no PR exists: run local CodeRabbit review ('coderabbit review --committed --base main --agent'), address all issues/findings first, then open PR now.\n"
                 f"  - If a PR is already open: your primary job is to resolve every unresolved comment, CI failure, "
-                f"and bot finding — push fixes until the PR is fully green.\n"
+                f"and bot finding — before pushing any update, run local CodeRabbit review ('coderabbit review --committed --base main --agent'), address all issues first, and push fixes until the PR is fully green.\n"
                 f"When opening a PR, you MUST include 'Closes #{issue_number}' in the PR body.\n"
                 f"Run completely autonomously. Do not ask questions or wait for input. Make all technical decisions yourself."
             )
@@ -978,11 +1088,17 @@ def babysit_active_worktrees():
             had_prior_work = _branch_has_commits(branch)
             pr_create_err = ""
             if agy_code == 0 and not pr_num_val and had_prior_work and _worktree_is_clean(wt_path):
-                pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title)
+                pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
 
             if agy_code == 0 and pr_num_val:
-                _save_pr_state(issue_number, pr_num_val, branch)
-                print(f"PR #{pr_num_val} created for issue #{issue_number}.")
+                cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
+                if not cr_ok:
+                    print(f"Agent created PR #{pr_num_val} but failed CodeRabbit pre-PR gate: {cr_err}")
+                    _record_coderabbit_gate_failure(int(pr_num_val), branch, cr_err)
+                else:
+                    _clear_coderabbit_gate_failure(int(pr_num_val))
+                    _save_pr_state(issue_number, pr_num_val, branch)
+                    print(f"PR #{pr_num_val} created for issue #{issue_number}.")
             elif agy_code == 0 and pr_create_err:
                 print(f"PR creation failed: {pr_create_err}")
             elif agy_code == 0 and not had_prior_work:
@@ -1002,6 +1118,7 @@ def babysit_active_worktrees():
             print(f"PR #{pr_number} is {pr_state}. Cleaning up worktree.")
             _clear_pr_state(issue_number)
             _clear_rerun_count(pr_number)
+            _clear_coderabbit_gate_failure(pr_number)
             wt_rc, _, _ = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
             if wt_rc == 0:
                 run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
@@ -1026,58 +1143,76 @@ def babysit_active_worktrees():
         ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
         if ci_status == "SUCCESS":
-            print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=wt_path)
-            if review_code != 0:
-                print(
-                    f"Review gate failed for PR #{pr_number}. Triggering babysit.\n"
-                    f"stdout:\n{review_out}\n"
-                    f"stderr:\n{review_err}"
-                )
+            if _is_coderabbit_gate_failed(pr_number):
+                print(f"Local CodeRabbit review gate is FAILED for PR #{pr_number}. Triggering babysit.")
                 prompt = (
-                    f"babysit. CI is passing, but `bash tests/wait-for-reviews.sh {pr_number}` failed. "
-                    f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
-                    f"push fixes if needed, and rerun the script until it exits 0.\n\n"
-                    f"stdout:\n{review_out}\n"
-                    f"stderr:\n{review_err}"
+                    f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
+                    f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
+                    f"resolve all findings, commit, and push updates.\n"
                 )
             else:
-                print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
-                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_number), "--squash", "--admin"], cwd=REPO_PATH)
-                is_merged = (merge_code == 0)
-                if not is_merged:
-                    st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
-                    if st_code == 0 and st_out.strip() == "MERGED":
-                        is_merged = True
-
-                if is_merged:
-                    _clear_pr_state(issue_number)
-                    _clear_rerun_count(pr_number)
-                    _remove_worktree(wt_path, branch)
-                    run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
-                    send_email(
-                        f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
-                        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> was fully green and has been automatically merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
-                        f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
-                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
-                        f"<p><b>Branch:</b> {branch}</p>"
-                        f"<p>The local worktree and branch have been cleaned up.</p>"
-                    )
-                    continue
-                else:
+                print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
+                review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=wt_path)
+                if review_code != 0:
                     print(
-                        f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
-                        f"stdout:\n{merge_out}\n"
-                        f"stderr:\n{merge_err}"
+                        f"Review gate failed for PR #{pr_number}. Triggering babysit.\n"
+                        f"stdout:\n{review_out}\n"
+                        f"stderr:\n{review_err}"
                     )
                     prompt = (
-                        f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet. "
-                        f"Common causes: the branch is behind main, required status checks pending, or branch protection rules. "
-                        f"Run `git fetch origin && git log main..HEAD --oneline` to check if behind. "
-                        f"Fix the blocker and push updates.\n\n"
-                        f"merge stdout:\n{merge_out}\n"
-                        f"merge stderr:\n{merge_err}"
+                        f"babysit. CI is passing, but `bash tests/wait-for-reviews.sh {pr_number}` failed. "
+                        f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
+                        f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
+                        f"stdout:\n{review_out}\n"
+                        f"stderr:\n{review_err}"
                     )
+                else:
+                    cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
+                    if not cr_ok:
+                        print(f"Robot review gate passed but local CodeRabbit check failed for PR #{pr_number}: {cr_err}")
+                        _record_coderabbit_gate_failure(pr_number, branch, cr_err)
+                        prompt = (
+                            f"babysit. Robot reviews passed, but local CodeRabbit review failed for PR #{pr_number}:\n{cr_err}\n"
+                            f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
+                            f"resolve all findings, commit, and push updates.\n"
+                        )
+                    else:
+                        _clear_coderabbit_gate_failure(pr_number)
+                        print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
+                        merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_number), "--squash", "--admin"], cwd=REPO_PATH)
+                        is_merged = (merge_code == 0)
+                        if not is_merged:
+                            st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
+                            if st_code == 0 and st_out.strip() == "MERGED":
+                                is_merged = True
+
+                        if is_merged:
+                            _clear_pr_state(issue_number)
+                            _clear_rerun_count(pr_number)
+                            _clear_coderabbit_gate_failure(pr_number)
+                            _remove_worktree(wt_path, branch)
+                            run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+                            send_email(
+                                f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
+                                f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
+                                f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
+                                f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
+                                f"<p><b>Branch:</b> {branch}</p>"
+                                f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
+                            )
+                            continue
+                        else:
+                            print(
+                                f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
+                                f"stdout:\n{merge_out}\n"
+                                f"stderr:\n{merge_err}"
+                            )
+                            prompt = (
+                                f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet. "
+                                f"The merge command failed with:\n{merge_err or merge_out}\n"
+                                f"Fix the blocker and push updates.\n\n"
+                                f"Branch is: '{branch}'. Do NOT checkout any other branch."
+                            )
         elif ci_status == "PENDING":
             updated_at = pr_data.get("updatedAt", "")
             is_hanging = False
@@ -1137,7 +1272,7 @@ def babysit_active_worktrees():
             prompt = (
                 f"babysit. CI checks failed. "
                 f"{triage_note}"
-                f"Investigate the failures, fix them, and push the updates. "
+                f"Investigate the failures, fix them, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, and push the updates. "
                 f"You must run completely autonomously, do not ask any questions, and make all technical decisions yourself."
             )
 
@@ -1657,6 +1792,7 @@ def main():
                 f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                 f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
                 f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
+                f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
                 f"Only after all review findings are resolved, open a PR. "
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
@@ -1690,20 +1826,27 @@ def main():
 
                 if agy_code == 0 and not pr_num_val and has_commits and _worktree_is_clean(wt_path):
                     print(f"Agent exited successfully with committed work but no PR. Creating PR for '{branch_name}' directly.")
-                    pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch_name, str(num), title)
+                    pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch_name, str(num), title, cwd=wt_path)
                     work_done = bool(pr_num_val) or work_done
 
                 if agy_code == 0 and pr_num_val:
-                    send_email(
-                        f"[Runner] PR #{pr_num_val} Created: Issue #{num}",
-                        f"<h3>PR <a href=\"{pr_url}\">#{pr_num_val}</a> successfully created for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>!</h3>"
-                        f"<p><b>PR Link:</b> <a href=\"{pr_url}\">{pr_url}</a></p>"
-                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                        f"<p><b>Title:</b> {title}</p>"
-                        f"<p><b>Branch:</b> {branch_name}</p>"
-                        f"<p>It will be babysat during the next cron cycles.</p>"
-                    )
-                    break
+                    cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
+                    if not cr_ok:
+                        print(f"Agent created PR #{pr_num_val} but failed CodeRabbit pre-PR gate: {cr_err}")
+                        _record_coderabbit_gate_failure(int(pr_num_val), branch_name, cr_err)
+                        pr_create_err = f"Agent created PR #{pr_num_val} but failed CodeRabbit pre-PR gate:\n{cr_err}"
+                    else:
+                        _clear_coderabbit_gate_failure(int(pr_num_val))
+                        send_email(
+                            f"[Runner] PR #{pr_num_val} Created: Issue #{num}",
+                            f"<h3>PR <a href=\"{pr_url}\">#{pr_num_val}</a> successfully created for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>!</h3>"
+                            f"<p><b>PR Link:</b> <a href=\"{pr_url}\">{pr_url}</a></p>"
+                            f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                            f"<p><b>Title:</b> {title}</p>"
+                            f"<p><b>Branch:</b> {branch_name}</p>"
+                            f"<p>It will be babysat during the next cron cycles.</p>"
+                        )
+                        break
                 elif agy_code == 0 and pr_create_err:
                     print(pr_create_err)
                     send_email(
@@ -1791,6 +1934,7 @@ def main():
                         f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                         f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
                         f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
+                        f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
                         f"Only after all review findings are resolved, open a PR. "
                         f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                         f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
