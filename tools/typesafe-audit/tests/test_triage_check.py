@@ -199,6 +199,15 @@ class RunCheckTests(unittest.TestCase):
             self.assertIsNone(judgments["type"]["value"])
             self.assertEqual(judgments["type"]["status"], "needs-human-review")
 
+    def test_no_candidate_neutral_result_renders_markdown(self):
+        # Regression: a case with no candidates and no REQ ties produces a
+        # neutral result with empty judgments; rendering must not KeyError.
+        report = {"mode": "fixture", "runner_version": "x", "dry_run": True,
+                  "results": [{"issue": 42, "judgments": {}, "neutral": "no-candidates"}]}
+        markdown = self.run_check.render_markdown(report)
+        self.assertIn("Neutral: no-candidates", markdown)
+        self.assertIn("Issue #42", markdown)
+
 
 class WorkflowSecurityTests(unittest.TestCase):
     """Dry-run workflow cannot write and never interpolates untrusted text."""

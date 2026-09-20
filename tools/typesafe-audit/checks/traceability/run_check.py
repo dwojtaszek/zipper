@@ -30,23 +30,20 @@ REPO_ROOT = TOOL_DIR.parents[1]
 sys.path.insert(0, str(TOOL_DIR))
 
 
-def _load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+# Bootstrap: checks_common must load inline before its helpers are available.
+_spec = importlib.util.spec_from_file_location("tsa_checks_common", TOOL_DIR / "checks_common.py")
+checks_common = importlib.util.module_from_spec(_spec)
+sys.modules["tsa_checks_common"] = checks_common
+_spec.loader.exec_module(checks_common)
 
-
-runner = _load_module("tsa_runner", TOOL_DIR / "runner.py")
-checks_common = _load_module("tsa_checks_common", TOOL_DIR / "checks_common.py")
-requirement_prechecks = _load_module("tsa_req_prechecks", REQUIREMENTS_CHECK_DIR / "prechecks.py")
-_extract_sections_mod = _load_module("tsa_extract_sections", REQUIREMENTS_CHECK_DIR / "extract_sections.py")
+runner = checks_common.load_module("tsa_runner", TOOL_DIR / "runner.py")
+requirement_prechecks = checks_common.load_module("tsa_req_prechecks", REQUIREMENTS_CHECK_DIR / "prechecks.py")
+_extract_sections_mod = checks_common.load_module("tsa_extract_sections", REQUIREMENTS_CHECK_DIR / "extract_sections.py")
 
 ParseError = type("ParseError", (Exception,), {})
 extract_sections = _extract_sections_mod.extract_sections
 group_by_requirement = _extract_sections_mod.group_by_requirement
-_parse_mod = _load_module("tsa_trace_parse_internal", CHECK_DIR / "parse.py")
+_parse_mod = checks_common.load_module("tsa_trace_parse_internal", CHECK_DIR / "parse.py")
 ParseError = _parse_mod.ParseError
 parse_tsv = _parse_mod.parse_tsv
 resolve_reference = _parse_mod.resolve_reference
@@ -257,13 +254,7 @@ def main(argv: list[str] | None = None) -> int:
         "needs_human_review": any(r["status"] == "needs-human-review" for r in results),
     }
 
-    args.json_out.parent.mkdir(parents=True, exist_ok=True)
-    args.json_out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    markdown = render_markdown(report)
-    args.md_out.write_text(markdown, encoding="utf-8")
-    if args.summary_out:
-        with open(args.summary_out, "a", encoding="utf-8") as fh:
-            fh.write(markdown)
+    checks_common.write_outputs(args.json_out, args.md_out, args.summary_out, report, render_markdown(report))
 
     print(
         f"traceability-audit: {len(results)} judgment(s), "

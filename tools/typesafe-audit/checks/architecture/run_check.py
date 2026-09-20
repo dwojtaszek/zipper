@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
-import json
 import os
 import subprocess
 import sys
@@ -34,18 +33,13 @@ CHECK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
 sys.path.insert(0, str(TOOL_DIR))
 
+# Bootstrap: checks_common must load inline before its helpers are available.
+_spec = importlib.util.spec_from_file_location("tsa_checks_common", TOOL_DIR / "checks_common.py")
+checks_common = importlib.util.module_from_spec(_spec)
+sys.modules["tsa_checks_common"] = checks_common
+_spec.loader.exec_module(checks_common)
 
-def _load_module(name: str, path: Path):
-    # Explicit-path loading: sibling modules share names through sys.modules.
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-runner = _load_module("tsa_runner", TOOL_DIR / "runner.py")
-checks_common = _load_module("tsa_checks_common", TOOL_DIR / "checks_common.py")
+runner = checks_common.load_module("tsa_runner", TOOL_DIR / "runner.py")
 
 EXIT_OK = runner.EXIT_OK
 EXIT_INPUT_ERROR = runner.EXIT_INPUT_ERROR
@@ -142,15 +136,34 @@ def build_questions(questions: dict, evidence_key: str) -> dict:
     return namespaced
 
 
-def _write_outputs(json_out: Path, md_out: Path, summary_out: Path | None, report: dict, markdown: str) -> None:
-    """Write the JSON/Markdown report and optionally append the job summary."""
-    json_out.parent.mkdir(parents=True, exist_ok=True)
-    md_out.parent.mkdir(parents=True, exist_ok=True)
-    json_out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    md_out.write_text(markdown, encoding="utf-8")
-    if summary_out:
-        with open(summary_out, "a", encoding="utf-8") as fh:
-            fh.write(markdown)
+def _answer_value(answer: dict, qtype: str):
+    """Extract the answer value for the question type (choice/noul/score)."""
+    if qtype == "choice":
+        return answer.get("choice")
+    if qtype == "score":
+        return answer.get("score")
+    return answer.get("noul")
+
+
+def _build_rows(questions: dict, raw: dict, evidence_key: str, policy: dict) -> list[dict] | None:
+    """Answer rows with the shared status policy; None on a missing answer."""
+    rows = []
+    for qid in questions:
+        answer = raw.get("answers", {}).get(f"{evidence_key}#{qid}")
+        if answer is None:
+            print(f"architecture-lint: input error: response missing answer '{evidence_key}#{qid}'.", file=sys.stderr)
+            return None
+        qtype = questions[qid]["type"]
+        row = {
+            "question": qid,
+            "type": qtype,
+            "answer": _answer_value(answer, qtype),
+            "probabilities": answer.get("probabilities"),
+            "confidence": answer.get("confidence"),
+        }
+        row["status"] = checks_common.status_for(qid, row, policy)
+        rows.append(row)
+    return rows
 
 
 def render_markdown(rows: list[dict], watched: list[str], carve_out_review: bool) -> str:
@@ -207,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             "No load-file seam files (`src/LoadFiles/**` or `docs/architecture.md`) "
             "touched by this diff — no judgment needed, no model call made.\n"
         )
-        _write_outputs(
+        checks_common.write_outputs(
             args.json_out, args.md_out, args.summary_out,
             {"mode": "neutral", "watched_files": []}, summary,
         )
@@ -227,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
             "answers": [],
         }
         markdown = render_markdown([], watched, True)
-        _write_outputs(args.json_out, args.md_out, args.summary_out, report, markdown)
+        checks_common.write_outputs(args.json_out, args.md_out, args.summary_out, report, markdown)
         print("architecture-lint: carve-out without same-diff architecture.md update — needs-human-review (advisory only; no model call).")
         return EXIT_OK
 
@@ -249,21 +262,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         raw = dict(runner.run_live(request, config, api_key, [api_key]))
 
-    rows = []
-    for qid in questions:
-        answer = raw.get("answers", {}).get(f"{evidence_key}#{qid}")
-        if answer is None:
-            print(f"architecture-lint: input error: response missing answer '{evidence_key}#{qid}'.", file=sys.stderr)
-            return EXIT_INPUT_ERROR
-        row = {
-            "question": qid,
-            "type": questions[qid]["type"],
-            "answer": answer.get("noul"),
-            "probabilities": answer.get("probabilities"),
-            "confidence": answer.get("confidence"),
-        }
-        row["status"] = checks_common.status_for(qid, row, policy)
-        rows.append(row)
+    rows = _build_rows(questions, raw, evidence_key, policy)
+    if rows is None:
+        return EXIT_INPUT_ERROR
 
     report = {
         "mode": raw.get("_mode", args.mode),
@@ -272,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         "answers": rows,
     }
     markdown = render_markdown(rows, watched, carve_out_review)
-    _write_outputs(args.json_out, args.md_out, args.summary_out, report, markdown)
+    checks_common.write_outputs(args.json_out, args.md_out, args.summary_out, report, markdown)
 
     findings = [r for r in rows if r["status"] == "finding"]
     reviews = [r for r in rows if r["status"] == "needs-human-review"] + ([{"question": "carve_out_update"}] if carve_out_review else [])

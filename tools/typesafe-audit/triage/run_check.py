@@ -26,20 +26,7 @@ sys.path.insert(0, str(TOOL_DIR))
 import checks_common  # noqa: E402
 import runner  # noqa: E402
 
-
-def _load_module(name: str, path: Path):
-    # Explicit-path loading: sibling packages ship same-named modules (collect)
-    # that would collide through the sys.modules cache.
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-collect = _load_module("tsa_triage_collect", TRIAGE_DIR / "collect.py")
+collect = checks_common.load_module("tsa_triage_collect", TRIAGE_DIR / "collect.py")
 
 EXIT_OK = runner.EXIT_OK
 EXIT_INPUT_ERROR = runner.EXIT_INPUT_ERROR
@@ -204,6 +191,11 @@ def render_markdown(report: dict) -> str:
     for result in report["results"]:
         lines.append(f"## Issue #{result['issue']}")
         lines.append("")
+        if result.get("neutral"):
+            # Nothing to judge (no candidates, no REQ ties): no judgment keys exist.
+            lines.append(f"- Neutral: {result['neutral']} (nothing to judge).")
+            lines.append("")
+            continue
         j = result["judgments"]
         lines.append(f"- Type: {j['type']['value']} ({j['type']['status']})")
         lines.append(f"- Subsystem: {j['subsystem']['value']} ({j['subsystem']['status']})")
@@ -277,13 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         "dry_run": True,
         "results": results,
     }
-    args.json_out.parent.mkdir(parents=True, exist_ok=True)
-    args.json_out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    markdown = render_markdown(report)
-    args.md_out.write_text(markdown, encoding="utf-8")
-    if args.summary_out:
-        with open(args.summary_out, "a", encoding="utf-8") as fh:
-            fh.write(markdown)
+    checks_common.write_outputs(args.json_out, args.md_out, args.summary_out, report, render_markdown(report))
 
     print(f"triage-audit: {len(results)} issue(s) triaged (dry-run, advisory only).")
     return EXIT_OK

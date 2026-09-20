@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import jev_gate  # noqa: E402
 
 
-def _fake_audit_module(answers=None, exit_on_live=False):
+def _fake_audit_module(answers=None, exit_on_live=False, confidence_threshold=0.7):
     """Minimal stand-in for tools/typesafe-audit/runner.py."""
     config = {
         "model": "jev-test",
@@ -25,7 +25,7 @@ def _fake_audit_module(answers=None, exit_on_live=False):
         "max_file_bytes": 262144,
         "max_total_bytes": 1048576,
         "timeout_seconds": 60,
-        "confidence_threshold": 0.7,
+        "confidence_threshold": confidence_threshold,
     }
     module = mock.MagicMock()
     module.DEFAULT_CONFIG = Path("/dev/null")
@@ -113,6 +113,19 @@ class AskTests(unittest.TestCase):
                 mock.patch.object(jev_gate, "_audit", fake):
             self.assertIsNone(jev_gate._ask({}, {"q": {"type": "noul", "instructions": "i"}}))
 
+    def test_ask_threshold_comes_from_config(self):
+        # config.json owns the threshold; the module constant is only a fallback.
+        answers = {"q": _noul_answer(0.9, confidence=0.8)}
+        fake = _fake_audit_module(answers, confidence_threshold=0.9)
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            self.assertIsNone(jev_gate._ask({}, {"q": {"type": "noul", "instructions": "i"}}))
+        fake = _fake_audit_module(answers, confidence_threshold=0.7)
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            rows = jev_gate._ask({}, {"q": {"type": "noul", "instructions": "i"}})
+        self.assertEqual(rows["q"]["answer"], 0.9)
+
 
 class CiTriageTests(unittest.TestCase):
     def test_classify_withEmptyCheckList_ExpectedNone(self):
@@ -189,6 +202,18 @@ class CompletionTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
                 mock.patch.object(jev_gate, "_audit", fake):
             self.assertIsNone(jev_gate.verify_completion("issue text", "diff text"))
+
+    def test_verify_completion_high_score_below_completed_confidence_not_completed(self):
+        # Confidence 0.72 clears the _ask threshold (0.7) but not
+        # COMPLETED_ABOVE (0.75): the claim is judged, but not "completed".
+        answers = {"requirements_met": _score_answer(2.0, confidence=0.72)}
+        fake = _fake_audit_module(answers)
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            verdict = jev_gate.verify_completion("issue text", "diff text")
+        self.assertIsNotNone(verdict)
+        self.assertEqual(verdict["requirements_met"], 1.0)
+        self.assertFalse(verdict["completed"])
 
     def test_verify_completion_empty_inputs_return_none(self):
         self.assertIsNone(jev_gate.verify_completion("", "diff"))

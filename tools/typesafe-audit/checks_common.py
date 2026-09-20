@@ -8,12 +8,35 @@ install.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from pathlib import Path
 
 # One request key namespace per obligation/span across all checks.
 SPAN_SEPARATOR = "#"
+
+
+def load_module(name: str, path: Path):
+    """Explicit-path module loading: sibling check packages ship same-named
+    modules (collect, runner) that would collide through the sys.modules
+    cache."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def write_outputs(json_out: Path, md_out: Path, summary_out: Path | None, report: dict, markdown: str) -> None:
+    """Write the JSON/Markdown report and optionally append the job summary."""
+    json_out.parent.mkdir(parents=True, exist_ok=True)
+    md_out.parent.mkdir(parents=True, exist_ok=True)
+    json_out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    md_out.write_text(markdown, encoding="utf-8")
+    if summary_out:
+        with open(summary_out, "a", encoding="utf-8") as fh:
+            fh.write(markdown)
 
 
 def load_json(path: Path, label: str = "check") -> dict:

@@ -19,7 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TOOL_DIR = REPO_ROOT / "tools" / "typesafe-audit"
 
-CONFIDENCE_THRESHOLD = 0.7  # mirrors tools/typesafe-audit/config.json
+CONFIDENCE_THRESHOLD = 0.7  # fallback when config.json omits confidence_threshold
 MAX_TEXT_CHARS = 20000  # per-input truncation before any model call
 
 CI_CATEGORIES = ("real_regression", "flaky", "environment", "dependency", "unrelated")
@@ -92,6 +92,7 @@ def _ask(state, questions):
         config = audit.load_config(audit.DEFAULT_CONFIG)
         request = {"state": state, "model": config["model"], "questions": questions}
         raw = audit.run_live(request, config, api_key, [api_key])
+        threshold = config.get("confidence_threshold", CONFIDENCE_THRESHOLD)
         # Shape-guard the remote payload end to end: any malformed response
         # is a None judgment, never an exception into the cron loop.
         if not isinstance(raw, dict):
@@ -108,7 +109,7 @@ def _ask(state, questions):
             else:
                 value = answer.get("score")
             confidence = answer.get("confidence")
-            if confidence is not None and confidence < CONFIDENCE_THRESHOLD:
+            if confidence is not None and confidence < threshold:
                 return None
             rows[qid] = {"answer": value, "confidence": confidence}
         return rows
@@ -210,9 +211,10 @@ def verify_completion(issue_text, diff_text):
     if not isinstance(score, (int, float)):
         return None
     requirements_met = float(score) / (len(COMPLETION_LEVELS) - 1)
+    confidence = rows["requirements_met"]["confidence"]
     return {
         "requirements_met": requirements_met,
-        "completed": requirements_met >= COMPLETED_ABOVE,
+        "completed": requirements_met >= COMPLETED_ABOVE and confidence is not None and confidence >= COMPLETED_ABOVE,
     }
 
 
