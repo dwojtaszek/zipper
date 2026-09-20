@@ -28,7 +28,7 @@
         "emails": "Email domain model",
         "profiles": "Column profile system",
         "config": "Nested request configuration",
-        "ci-infra": "CI/CD pipeline and hooks",
+        "ci-infra": "CI/CD pipelines, workflows, hooks, autonomous runner (.zipper-runner), and audit tooling",
         "docs": "Documentation only",
         "unknown": "No supplied subsystem fits the issue"
       }

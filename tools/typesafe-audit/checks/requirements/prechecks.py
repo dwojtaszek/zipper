@@ -73,7 +73,7 @@ def check_immutable_ids(repo_root: Path, base: str, head: str = "HEAD") -> list[
     """A REQ ID present in base must still exist with content in head (no renumbering)."""
     findings: list[dict] = []
     base_text = _run_git(["show", f"{base}:Requirements.md"], repo_root)
-    base_ids = set(REQ_ID_PATTERN.findall(base_text))
+    base_ids = {m.group(1).upper() for m in REQ_DEFINITION_PATTERN.finditer(base_text)}
     head_requirements = load_requirements(repo_root)
     for req_id in sorted(base_ids):
         if req_id.upper() not in head_requirements:

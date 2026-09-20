@@ -233,6 +233,19 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("unresolved", err)
 
+    def test_whenCoderabbitHasMultipleFindings_aggregatesAllFindings(self):
+        output = (
+            'echo \'{"type":"finding","ruleId":"bug1","message":"first bad code"}\'\n'
+            'echo \'{"type":"finding","ruleId":"bug2","message":"second bad code"}\'\n'
+            'echo \'{"type":"complete","status":"review_completed","findings":2}\''
+        )
+        self._create_fake_cr(output, exit_code=0)
+        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(ok)
+        self.assertIn("2 unresolved finding(s)", err)
+        self.assertIn("bug1", err)
+        self.assertIn("bug2", err)
+
     def test_whenCoderabbitMissingCompleteRecord_returnsFalse(self):
         output = 'echo \'{"type":"review_context","reviewType":"committed"}\''
         self._create_fake_cr(output, exit_code=0)

@@ -620,7 +620,10 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
     if code != 0:
         return False, f"coderabbit review failed (exit {code}):\n{err or out}"
 
+    findings = []
     completed = False
+    complete_status = None
+    complete_findings = None
     for line in out.splitlines():
         line = line.strip()
         if not line:
@@ -628,16 +631,21 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
         try:
             data = json.loads(line)
             if data.get("type") == "finding":
-                return False, f"coderabbit review reported unresolved finding:\n{line}"
-            if data.get("type") == "complete":
-                if data.get("status") == "review_completed" and data.get("findings", 0) == 0:
+                findings.append(line)
+            elif data.get("type") == "complete":
+                complete_status = data.get("status")
+                complete_findings = data.get("findings")
+                if complete_status == "review_completed" and complete_findings == 0:
                     completed = True
-                else:
-                    return False, f"coderabbit review completed with status {data.get('status')!r} and {data.get('findings')} findings"
         except json.JSONDecodeError:
             continue
 
+    if findings:
+        return False, f"coderabbit review reported {len(findings)} unresolved finding(s):\n" + "\n".join(findings)
+
     if not completed:
+        if complete_status is not None:
+            return False, f"coderabbit review completed with status {complete_status!r} and {complete_findings} findings"
         return False, "coderabbit review did not produce a valid completion record with 0 findings"
     return True, ""
 
