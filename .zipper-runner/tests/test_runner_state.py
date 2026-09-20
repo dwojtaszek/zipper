@@ -283,6 +283,29 @@ class RunCmdTimeoutTests(unittest.TestCase):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+class CountReviewThreadsTests(unittest.TestCase):
+    def test_whenReviewOutputProvided_doesNotRunCommand(self):
+        output = "[ WARNING ] 3 unresolved review threads on PR #42"
+        with patch("runner.run_cmd") as mock_run_cmd:
+            threads = runner._count_review_threads(42, review_output=output)
+            self.assertEqual(threads, 3)
+            mock_run_cmd.assert_not_called()
+
+    def test_whenReviewOutputNone_runsCommand(self):
+        output = "[ WARNING ] 2 unresolved review threads on PR #42"
+        with patch("runner.run_cmd", return_value=(1, output, "")) as mock_run_cmd:
+            threads = runner._count_review_threads(42, review_output=None)
+            self.assertEqual(threads, 2)
+            mock_run_cmd.assert_called_once()
+            args = mock_run_cmd.call_args[0][0]
+            self.assertEqual(args, ["bash", "tests/wait-for-reviews.sh", "42"])
+
+    def test_whenNoUnresolvedThreadsInOutput_returnsMinusOne(self):
+        output = "[ OK ] No unresolved review threads on PR #42"
+        threads = runner._count_review_threads(42, review_output=output)
+        self.assertEqual(threads, -1)
+
+
 if __name__ == "__main__":
     unittest.main()
 
