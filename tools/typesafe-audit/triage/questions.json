@@ -2,7 +2,7 @@
   "questions": {
     "type": {
       "type": "choice",
-      "instructions": "Classify the supplied issue from its stripped text and retrieved duplicate candidates only. Choose the single best-fitting issue type, or 'unclear' when the supplied evidence is insufficient.",
+      "instructions": "Classify the supplied issue from its stripped text and retrieved duplicate candidates only. Choose the single best-fitting issue type, or 'insufficient-evidence' when the supplied evidence is insufficient.",
       "criteria": {
         "bug": "Incorrect behavior or a silent failure",
         "testing": "Missing or inadequate tests",
@@ -12,7 +12,7 @@
         "security": "Path traversal, injection, or unsafe paths",
         "refactor": "Structure change without behavior change",
         "enhancement": "Product feature request",
-        "unclear": "The supplied evidence is insufficient to classify the type"
+        "insufficient-evidence": "The supplied evidence is insufficient to classify the type"
       }
     },
     "subsystem": {
@@ -55,12 +55,12 @@
   },
   "duplicate_question": {
     "type": "choice",
-    "instructions": "For the supplied retrieved candidate issue only, judge its relationship to the triaged issue: 'duplicate' (same underlying defect/request), 'related' (adjacent area, different defect), 'unrelated', or 'uncertain'.",
+    "instructions": "For the supplied retrieved candidate issue only, judge its relationship to the triaged issue: 'duplicate' (same underlying defect/request), 'related' (adjacent area, different defect), 'unrelated', or 'insufficient-evidence'.",
     "criteria": {
       "duplicate": "Same underlying defect or request",
       "related": "Adjacent area, different defect",
       "unrelated": "No underlying relationship",
-      "uncertain": "The supplied evidence is insufficient to decide"
+      "insufficient-evidence": "The supplied evidence is insufficient to decide"
     }
   },
   "req_question": {

@@ -109,7 +109,7 @@ class RunCheckTests(unittest.TestCase):
             report = json.loads((tmp / "r.json").read_text())
             policy = json.loads((TRIAGE_DIR / "policy.json").read_text())
             for result in report["results"]:
-                self.assertIn(result["judgments"]["type"]["value"], policy["types"] + ["unclear"])
+                self.assertIn(result["judgments"]["type"]["value"], policy["types"])
                 self.assertIn(result["judgments"]["subsystem"]["value"], policy["subsystems"])
                 self.assertIn(result["judgments"]["priority"]["value"], policy["priorities"] + ["insufficient-evidence"])
 

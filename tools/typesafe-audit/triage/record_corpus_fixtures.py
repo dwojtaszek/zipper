@@ -30,7 +30,7 @@ HIGH = 0.95
 # Maintainer-labeled judgments per corpus issue.
 LABELS = {
     800: {"type": "security", "subsystem": "archive", "priority": "P1", "missing_info": 0.98},
-    801: {"type": "unclear", "subsystem": "unknown", "priority": "insufficient-evidence", "missing_info": 0.02},
+    801: {"type": "insufficient-evidence", "subsystem": "unknown", "priority": "insufficient-evidence", "missing_info": 0.02},
     802: {"type": "bug", "subsystem": "archive", "priority": "P1", "missing_info": 0.02},
 }
 DUPLICATES = {802: {700: "duplicate"}, 800: {700: "related"}}

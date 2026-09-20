@@ -1,9 +1,9 @@
 {
-  "types": ["bug", "testing", "requirements", "documentation", "performance", "security", "refactor", "enhancement", "unclear"],
+  "types": ["bug", "testing", "requirements", "documentation", "performance", "security", "refactor", "enhancement", "insufficient-evidence"],
   "subsystems": ["load-files", "cli", "production", "archive", "comparison", "validation", "emails", "profiles", "config", "ci-infra", "docs", "unknown"],
   "priorities": ["P0", "P1", "P2", "P3"],
   "labels": ["bug", "testing", "requirements", "documentation", "performance", "security", "refactor", "enhancement", "P0", "P1", "P2", "P3"],
-  "duplicate_values": ["duplicate", "related", "unrelated", "uncertain"],
+  "duplicate_values": ["duplicate", "related", "unrelated", "insufficient-evidence"],
   "confidence_threshold": 0.7,
   "max_issue_chars": 8192,
   "max_state_bytes": 131072,
