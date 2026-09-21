@@ -101,6 +101,21 @@ jobs:
           fi
           echo "No oversized files detected (limit: ${MAX_BYTES} bytes)."
 
+      - name: Check no swallowed test output (#973)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # unittest and runner.py output must never go to /dev/null —
+          # #973 needed an extra PR (#974) just to read the traceback.
+          # Tee to a log and cat on failure instead.
+          swallowed=$(grep -rnE '(python3? -m unittest|runner\.py)[^|]*([12]?>>?|&>>?) */dev/null' tests/ tools/ .github/ 2>/dev/null || true)
+          if [[ -n "$swallowed" ]]; then
+            echo "ERROR: swallowed test output detected (tee to a log instead):" >&2
+            echo "$swallowed" >&2
+            exit 1
+          fi
+          echo "No swallowed test output detected."
+
   build-and-test:
     needs: [docs-only, lint]
     if: needs.docs-only.outputs.only_docs != 'true'
