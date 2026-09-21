@@ -42,6 +42,7 @@ python3 "$TOOL_DIR/record_sample_fixture.py" "$FIXTURE_DIR"
 
 JSON_OUT="$TEMP_DIR/report.json"
 MD_OUT="$TEMP_DIR/report.md"
+RUNNER_LOG="$TEMP_DIR/runner1.log"
 
 python3 "$TOOL_DIR/runner.py" \
     --mode fixture \
@@ -49,8 +50,9 @@ python3 "$TOOL_DIR/runner.py" \
     --files "$TOOL_DIR/questions/files-sample.list" \
     --questions "$TOOL_DIR/questions/example.json" \
     --json-out "$JSON_OUT" \
-    --md-out "$MD_OUT" > /dev/null || {
+    --md-out "$MD_OUT" > "$RUNNER_LOG" 2>&1 || {
     print_error "Fixture-mode audit run failed."
+    cat "$RUNNER_LOG" >&2
     exit 1
 }
 
@@ -60,13 +62,18 @@ python3 "$TOOL_DIR/runner.py" \
 # Deterministic: a second identical run produces byte-identical JSON.
 JSON_OUT2="$TEMP_DIR/report2.json"
 MD_OUT2="$TEMP_DIR/report2.md"
+RUNNER_LOG2="$TEMP_DIR/runner2.log"
 python3 "$TOOL_DIR/runner.py" \
     --mode fixture \
     --fixture-dir "$FIXTURE_DIR" \
     --files "$TOOL_DIR/questions/files-sample.list" \
     --questions "$TOOL_DIR/questions/example.json" \
     --json-out "$JSON_OUT2" \
-    --md-out "$MD_OUT2" > /dev/null
+    --md-out "$MD_OUT2" > "$RUNNER_LOG2" 2>&1 || {
+    print_error "Fixture-mode deterministic rerun failed."
+    cat "$RUNNER_LOG2" >&2
+    exit 1
+}
 cmp -s "$JSON_OUT" "$JSON_OUT2" || { print_error "Fixture-mode output is not deterministic."; exit 1; }
 
 # Reports must not contain secrets.
