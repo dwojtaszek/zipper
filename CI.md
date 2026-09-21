@@ -130,6 +130,10 @@ Advisory side check (issue #955): [`typesafe-audit.yml`](.github/workflows/types
 
 Bot infra errors — retry, don't block merge.
 
+## GitHub Advanced Security (Copilot code-scanning agent)
+
+`dynamic/agents/github-advanced-security` ("Code scanning AI findings on PR #N") is GitHub-owned infra, not a repo workflow — it cannot be edited from this repo and it is **not** in `ci-gate`'s needs, not in branch protection (required: `ci-gate` only), and not even surfaced in `gh pr checks`. Its failures are Copilot agent runtime flakes (proxy/runtime download, sandbox setup), failing on most PRs including ones that merge green (#1000–#1003). Treat exactly like factory-droid: advisory noise, never a merge blocker, never worth chasing. Do not investigate its logs during PR closeout; if curious, re-run the workflow instead.
+
 ## Goldens
 
 Regenerate with:
