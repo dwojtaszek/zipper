@@ -156,3 +156,35 @@
 - **telemetry**: host=droid mode=local specialists=7+1fast bundle=36905c
 - **lessons**: Python's strict cp932 codec maps invalid leads to private-use error chars (U+F8F0–U+F8F3) instead of raising — UnicodeDecodeError needs a genuinely invalid sequence (0xEF 0x5C raises, 0xFF 0x5C does not). VerificationError has no .message attr — the message is str(exception). ListSuite output is ordinal Case-Key order — contract-test arrays must match that order, not declaration order.
 - **suppressions**: none
+
+### 2026-09-22 opencode:issue-review:1009-1020
+
+- **findings**: 6 (2 ACTION-tighten, 4 INFO) — blocking-edge over-serialization, README-note overlap, arch-severity overstatement, test-vector gaps
+- **outcome**: partial — 3 issue edits recommended (#1013 partial block + dedupe, #1015 severity note, #1010/#1011 test vectors), no bodies rewritten inline
+- **telemetry**: host=opencode mode=issue-review specialists=0(subagent rate-limit, inline review) bundle=12-issues
+- **lessons**: subagent wave can rate-limit; inline fallback with direct grep verification of every file:line cite works
+- **suppressions**: none
+
+### 2026-09-22 opencode:issue-review:1009-1020 (cycle 2, post-fixall)
+
+- **findings**: 2 rejected (#1015 false-premise, #1020 self-negating AC + drive-by), 4 weakened (#1009 P1->P2 + MD gap re-scoped, #1011 P1->P2, #1014/#1016 P2->P3), 3 corrected (#1011 lines 518/529->521/532, #1017 15->21 props, #1018 30->51 arms), #1019 blocker cleared + 5->6 checks
+- **outcome**: applied — 2 closed, labels re-tuned, bodies re-grounded, native blocker removed
+- **telemetry**: host=opencode mode=issue-review specialists=2 (general ×2) bundle=12-issues
+- **lessons**: challenge reviewers disagree with grounders; every numeric claim must be re-verified by orchestrator grep before acting — both agents made their own errors (run_check count, bat false-pass). Rejection comments must carry a reopen path (premise-false → reopen if maintainer disagrees).
+- **suppressions**: none
+
+### 2026-09-22 opencode:issue-review:archive-mode-verification
+
+- **findings**: 18 claims re-grounded (REQ-208..219) — 14 GROUND, 2 PARTIAL (REQ-208 encoding suite, REQ-213 deadline), 2 discrepancies; frozen REQ-210 vector math verified byte-exact by subagent; 7 verifier gaps (3 MAJOR: invariants unasserted, failureStages unenforced, single-reader expect engine; 130/cancel untested)
+- **outcome**: filed 7 tickets #1022-#1028 (P1 deadline; P2 seed/suite/verifier/cancel; P3 hash-skip/engine)
+- **telemetry**: host=opencode mode=issue-review specialists=3 (general x3: grounding, adversarial, delta) bundle=archive-domain
+- **lessons**: seq-of-verification beats single-pass: advocates confirm claims while attackers find overclaim. Frozen-vector math is independently checkable in seconds — always run it.
+- **suppressions**: none
+
+### 2026-09-22 opencode:issue-review:priority-bug-logging (archive mode)
+
+- logged fast-impl plans on #1022/#1023/#1024/#1025/#1026 (exact file:line grounding, minimal patch direction, test plan)
+- upgraded #1025 (verifier oracle: invariants unasserted + failureStages unenforced) P2 -> P1 — trust anchor of extractor testing, coverage hole on new critical code
+- re-grounded during logging: generator DOES emit failureStages for unsupported-reader profiles (ArchiveTestSuiteGenerator.cs:688-696); schema:322 + ArchiveTestCase.cs:57 define it; fixtures dir only holds smoke subset (valid-empty pair + invalid/) so failureStages absent from checked-in fixtures but live in generated ones
+- cancel wiring re-verified: Program.cs:67-79 SIGINT/SIGTERM -> cts.Cancel; ArchiveTestCliWorkflow.cs:121-125 -> 130; staging try/finally cleanup ArchiveTestSuiteGenerator.cs:41-155
+- suppressions: none
