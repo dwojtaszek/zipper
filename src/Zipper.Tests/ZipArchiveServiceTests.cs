@@ -148,6 +148,51 @@ public class ZipArchiveServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(ZipCompressionMethod.Deflate64)]
+    [InlineData(ZipCompressionMethod.BZip2)]
+    [InlineData((ZipCompressionMethod)999)]
+    public async Task CreateArchiveAsync_WithUnsupportedCompressionMethod_ThrowsArgumentOutOfRangeException(
+        ZipCompressionMethod method)
+    {
+        // Arrange
+        var zipPath = Path.GetTempFileName();
+        var loadPath = Path.GetTempFileName();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 2,
+                Concurrency = 1,
+                IncludeLoadFile = true,
+                CompressionMethod = method,
+            },
+        };
+
+        var testFiles = new List<FileData>
+        {
+            this.CreateTestFileData(1),
+            this.CreateTestFileData(2),
+        };
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        foreach (var file in testFiles)
+        {
+            await channel.Writer.WriteAsync(file);
+        }
+        channel.Writer.Complete();
+
+        var ex = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+        Assert.Contains($"Unsupported compression method ", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Supported values: store, deflate.", ex.Message, StringComparison.Ordinal);
+
+        // Clean up
+        File.Delete(zipPath);
+        File.Delete(loadPath);
+    }
+
     [Fact]
     public async Task CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles()
     {

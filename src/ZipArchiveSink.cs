@@ -219,7 +219,13 @@ internal class ZipArchiveSink : IArchiveSink
     {
         Config.ZipCompressionMethod.Store => CompressionLevel.NoCompression,
         Config.ZipCompressionMethod.Deflate => CompressionLevel.Optimal,
-        _ => CompressionLevel.Optimal,
+        // No wildcard fallback: an unsupported method is a programming error (a new codec or a
+        // value the CLI failed to reject), not a silent downgrade to the wrong compression.
+        // REQ-223: fail loudly with the supported values instead of silently writing Optimal.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(method),
+            method,
+            $"Unsupported compression method '{method}'. Supported values: store, deflate."),
     };
 
     private sealed record ZipProcessingContext(
