@@ -66,7 +66,7 @@ def check_token_health() -> bool:
     """
     try:
         result = subprocess.run(
-            ["opencode", "models", "opencode"],
+            ["opencode", "models"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
