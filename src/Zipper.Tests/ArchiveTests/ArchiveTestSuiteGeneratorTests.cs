@@ -9,7 +9,7 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
 {
     private static async Task<ArchiveTestSuiteResult> GenerateAsync(
         ArchiveTestRequest request, CancellationToken cancellationToken = default,
-        Action<string>? afterStaging = null, Action<string>? beforeFixtureBuild = null) =>
+        Action<string>? afterStaging = null, Func<string, Task>? beforeFixtureBuild = null) =>
         await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild);
 
     [Fact]
@@ -215,13 +215,13 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
             ["valid-empty", "valid-stored"], 42, Path.Combine(TempDir, "out"));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GenerateAsync(request, beforeFixtureBuild: caseKey =>
+            () => GenerateAsync(request, beforeFixtureBuild: async caseKey =>
             {
                 if (caseKey == "valid-stored")
                 {
-                    // Deadline + 2 s: the fixed sleep must deterministically outlast the
-                    // 10 s CancelAfter timer even under threadpool-timer jitter.
-                    Thread.Sleep(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                    // Deadline + 2 s: the delay must deterministically outlast the 10 s
+                    // CancelAfter timer even under threadpool-timer jitter.
+                    await Task.Delay(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
                 }
             }));
 
@@ -245,7 +245,11 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         // a plain OperationCanceledException (exit 130 in the CLI workflow) — never
         // mis-translated into the REQ-213 deadline failure (exit 1).
         var error = await Assert.ThrowsAsync<OperationCanceledException>(
-            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ => cts.Cancel()));
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ =>
+            {
+                cts.Cancel();
+                return Task.CompletedTask;
+            }));
 
         Assert.NotNull(error);
         Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));
@@ -265,9 +269,9 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         // (InvalidOperationException, exit 1 in the CLI workflow): a late SIGINT/SIGTERM
         // must not reclassify a genuine REQ-213 violation into the exit-130 cancel path.
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ =>
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: async _ =>
             {
-                Thread.Sleep(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                await Task.Delay(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
                 cts.Cancel();
             }));
 

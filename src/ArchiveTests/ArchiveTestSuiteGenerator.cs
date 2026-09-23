@@ -24,7 +24,7 @@ internal static class ArchiveTestSuiteGenerator
         ArchiveTestRequest request,
         CancellationToken cancellationToken,
         Action<string>? afterStaging = null,
-        Action<string>? beforeFixtureBuild = null)
+        Func<string, Task>? beforeFixtureBuild = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -63,7 +63,7 @@ internal static class ArchiveTestSuiteGenerator
 
                 try
                 {
-                    beforeFixtureBuild?.Invoke(caseKey);
+                    await (beforeFixtureBuild?.Invoke(caseKey) ?? Task.CompletedTask).ConfigureAwait(false);
                     var artifact = ArchiveFixtureBuilder.Build(definition, request.Seed, fixtureToken);
                     var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
                         GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,
