@@ -8,8 +8,9 @@ namespace Zipper.Tests;
 public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
 {
     private static async Task<ArchiveTestSuiteResult> GenerateAsync(
-        ArchiveTestRequest request, CancellationToken cancellationToken = default, Action<string>? afterStaging = null) =>
-        await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging);
+        ArchiveTestRequest request, CancellationToken cancellationToken = default,
+        Action<string>? afterStaging = null, Action<string>? beforeFixtureBuild = null) =>
+        await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild);
 
     [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
@@ -201,6 +202,80 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
     {
         Assert.Throws<ArgumentException>(
             () => ArchiveTestRequest.Create(["valid-empty"], 42, Path.Combine(TempDir, "..", "..", "..", "evil")));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SlowFixture_ExceedsDeadlineAndPublishesNothing()
+    {
+        // The first case publishes a pair into staging before the second exceeds the
+        // 10 s REQ-213 per-fixture deadline: the whole batch must fail (exit-1 path in
+        // the CLI workflow), the destination must never appear, and the first case's
+        // already-staged pair must be discarded wholesale with the staging directory.
+        ArchiveTestRequest request = ArchiveTestRequest.Create(
+            ["valid-empty", "valid-stored"], 42, Path.Combine(TempDir, "out"));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => GenerateAsync(request, beforeFixtureBuild: caseKey =>
+            {
+                if (caseKey == "valid-stored")
+                {
+                    // Deadline + 2 s: the fixed sleep must deterministically outlast the
+                    // 10 s CancelAfter timer even under threadpool-timer jitter.
+                    Thread.Sleep(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                }
+            }));
+
+        Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
+        Assert.Contains("valid-stored", error.Message, StringComparison.Ordinal);
+        Assert.Contains($"{ArchiveTestCaseSemantics.MaxDeadlineSeconds}s", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(TempDir, "out")), "destination must not be created");
+        Assert.DoesNotContain(
+            Directory.GetDirectories(TempDir),
+            dir => Path.GetFileName(dir).StartsWith("atc-staging-", StringComparison.Ordinal));
+        Assert.DoesNotContain(Directory.GetFiles(TempDir), file => file.Contains(".zip", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_UserCancelWhileFixturePending_PropagatesAsCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        ArchiveTestRequest request = ArchiveTestRequest.Create(["valid-stored"], 42, Path.Combine(TempDir, "out"));
+
+        // A user cancellation while the per-fixture deadline is still pending must stay
+        // a plain OperationCanceledException (exit 130 in the CLI workflow) — never
+        // mis-translated into the REQ-213 deadline failure (exit 1).
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ => cts.Cancel()));
+
+        Assert.NotNull(error);
+        Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));
+        Assert.DoesNotContain(
+            Directory.GetDirectories(TempDir),
+            dir => Path.GetFileName(dir).StartsWith("atc-staging-", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_DeadlineFiresBeforeUserCancel_StillExceedsDeadline()
+    {
+        using var cts = new CancellationTokenSource();
+        ArchiveTestRequest request = ArchiveTestRequest.Create(["valid-stored"], 42, Path.Combine(TempDir, "out"));
+
+        // The deadline fires at t=10 s while the fixture sleeps; the cancel arrives at
+        // t=12 s, after the deadline already won. Attribution must stay with the deadline
+        // (InvalidOperationException, exit 1 in the CLI workflow): a late SIGINT/SIGTERM
+        // must not reclassify a genuine REQ-213 violation into the exit-130 cancel path.
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ =>
+            {
+                Thread.Sleep(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                cts.Cancel();
+            }));
+
+        Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));
+        Assert.DoesNotContain(
+            Directory.GetDirectories(TempDir),
+            dir => Path.GetFileName(dir).StartsWith("atc-staging-", StringComparison.Ordinal));
     }
 
     [Fact]
