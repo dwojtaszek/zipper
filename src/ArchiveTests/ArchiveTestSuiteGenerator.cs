@@ -12,7 +12,9 @@ internal sealed record ArchiveTestSuiteResult(
 /// files, verify semantic validation before publication, detect duplicate Fixture IDs,
 /// enforce suite/sidecar budgets, then rename the staging directory into place. On
 /// failure or cancellation only the owned staging directory is removed; the requested
-/// destination is never created partially, overwritten, or cleaned up.
+/// destination is never created partially, overwritten, or cleaned up. REQ-213's
+/// per-fixture deadline is enforced per Case Key by a linked timeout token around
+/// build + sidecar + pair write; exceeding it stops generation before publication.
 /// </summary>
 internal static class ArchiveTestSuiteGenerator
 {
@@ -21,7 +23,8 @@ internal static class ArchiveTestSuiteGenerator
     internal static async Task<ArchiveTestSuiteResult> GenerateAsync(
         ArchiveTestRequest request,
         CancellationToken cancellationToken,
-        Action<string>? afterStaging = null)
+        Action<string>? afterStaging = null,
+        Action<string>? beforeFixtureBuild = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -43,34 +46,69 @@ internal static class ArchiveTestSuiteGenerator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var definition = ArchiveTestCatalog.GetCase(caseKey);
-                var artifact = ArchiveFixtureBuilder.Build(definition, request.Seed, cancellationToken);
-                var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
-                    GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,
-                    definition.ExpectationRevision, request.Seed, artifact.ArchiveSha256);
 
-                if (!publishedIds.Add(fixtureId))
+                // REQ-213: the per-fixture deadline bounds build + mutation chain + sidecar
+                // serialization + pair write. The deadline is its own timer source feeding the
+                // linked token, and each cancel source registers a first-wins cause marker, so
+                // attribution survives a late SIGINT/SIGTERM: once the deadline has fired, a
+                // user cancellation arriving afterwards must still surface as the REQ-213
+                // failure (exit 1) — never be reclassified as a healthy cancel (exit 130).
+                using var deadlineTimer = new CancellationTokenSource();
+                using var fixtureDeadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadlineTimer.Token);
+                var firstCause = 0; // 0 = none, 1 = user cancellation, 2 = per-fixture deadline
+                cancellationToken.Register(() => Interlocked.CompareExchange(ref firstCause, 1, 0));
+                deadlineTimer.Token.Register(() => Interlocked.CompareExchange(ref firstCause, 2, 0));
+                deadlineTimer.CancelAfter(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds));
+                var fixtureToken = fixtureDeadline.Token;
+
+                try
                 {
-                    throw new InvalidOperationException($"Duplicate Archive Test Fixture ID '{fixtureId}' for Case Key '{caseKey}'; publication stopped before any overwrite.");
-                }
+                    beforeFixtureBuild?.Invoke(caseKey);
+                    var artifact = ArchiveFixtureBuilder.Build(definition, request.Seed, fixtureToken);
+                    var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
+                        GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,
+                        definition.ExpectationRevision, request.Seed, artifact.ArchiveSha256);
 
-                var testCase = BuildExpectationFile(fixtureId, definition, request.Seed, artifact);
-                var jsonBytes = ArchiveTestJson.SerializeToUtf8Bytes(testCase);
-                if (jsonBytes.Length > ArchiveTestRequest.MaxSidecarBytes)
+                    if (!publishedIds.Add(fixtureId))
+                    {
+                        throw new InvalidOperationException($"Duplicate Archive Test Fixture ID '{fixtureId}' for Case Key '{caseKey}'; publication stopped before any overwrite.");
+                    }
+
+                    var testCase = BuildExpectationFile(fixtureId, definition, request.Seed, artifact);
+                    var jsonBytes = ArchiveTestJson.SerializeToUtf8Bytes(testCase);
+                    if (jsonBytes.Length > ArchiveTestRequest.MaxSidecarBytes)
+                    {
+                        throw new InvalidOperationException(
+                            $"Expectation File for Case Key '{caseKey}' is {jsonBytes.Length} bytes, over the {ArchiveTestRequest.MaxSidecarBytes}-byte sidecar budget.");
+                    }
+
+                    suiteBytes = checked(suiteBytes + artifact.ArchiveBytes.Length + jsonBytes.Length);
+                    if (suiteBytes > ArchiveTestRequest.MaxSuiteBytes)
+                    {
+                        throw new InvalidOperationException(
+                            $"Archive Test suite exceeds the {ArchiveTestRequest.MaxSuiteBytes}-byte folder budget at Case Key '{caseKey}'.");
+                    }
+
+                    await WritePairAsync(staging, fixtureId, artifact.ArchiveBytes, jsonBytes, fixtureToken)
+                        .ConfigureAwait(false);
+
+                    // A fixture that completes past the deadline without ever observing the
+                    // token (a few builder paths are straight-line) still exceeds the bound.
+                    if (Volatile.Read(ref firstCause) == 2)
+                    {
+                        throw DeadlineExceeded(caseKey);
+                    }
+
+                    orderedIds.Add(fixtureId);
+                }
+                catch (OperationCanceledException oce) when (Volatile.Read(ref firstCause) == 2)
                 {
-                    throw new InvalidOperationException(
-                        $"Expectation File for Case Key '{caseKey}' is {jsonBytes.Length} bytes, over the {ArchiveTestRequest.MaxSidecarBytes}-byte sidecar budget.");
+                    // The per-fixture timeout fired (and fired first): a clear REQ-213 error,
+                    // exit-1 in the CLI workflow — never a 130 that would read as
+                    // user-initiated cancellation. A genuine user cancel (firstCause 1)
+                    // propagates instead, preserving the exit-130 contract.
+                    throw DeadlineExceeded(caseKey, oce);
                 }
-
-                suiteBytes = checked(suiteBytes + artifact.ArchiveBytes.Length + jsonBytes.Length);
-                if (suiteBytes > ArchiveTestRequest.MaxSuiteBytes)
-                {
-                    throw new InvalidOperationException(
-                        $"Archive Test suite exceeds the {ArchiveTestRequest.MaxSuiteBytes}-byte folder budget at Case Key '{caseKey}'.");
-                }
-
-                await WritePairAsync(staging, fixtureId, artifact.ArchiveBytes, jsonBytes, cancellationToken)
-                    .ConfigureAwait(false);
-                orderedIds.Add(fixtureId);
             }
 
             // POSIX rename(2) silently replaces an existing empty destination directory, so an
@@ -698,6 +736,15 @@ internal static class ArchiveTestSuiteGenerator
             Platform: platform,
             Capability: capability,
             FailureStages: failureStages);
+
+    /// <summary>REQ-213 deadline exceedance: a named, clear failure (exit 1 in the CLI
+    /// workflow) that stops generation before publication — never a cancellation-style 130.
+    /// <paramref name="inner"/> chains the tripping cancellation (token + checkpoint stack)
+    /// so deadline-vs-cancel attribution stays forensically visible.</summary>
+    private static InvalidOperationException DeadlineExceeded(string caseKey, OperationCanceledException? inner = null) =>
+        new(
+            $"Case Key '{caseKey}' exceeded the {ArchiveTestCaseSemantics.MaxDeadlineSeconds}s REQ-213 per-fixture deadline; generation stopped and no fixture pair was published.",
+            inner);
 
     private static async Task WritePairAsync(
         string staging, string fixtureId, byte[] archiveBytes, byte[] jsonBytes, CancellationToken cancellationToken)
