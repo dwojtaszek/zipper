@@ -7,6 +7,8 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class BatesModuleTests
 {
+    private const int MaxBatesPrefixLength = 1024;
+
     private static bool TryBuild(bool productionSet, int rollingCount, string? rollingBatesMode, long? count, string[] apply, out BatesNumberConfig? config)
     {
         var module = new BatesModule();
@@ -61,6 +63,34 @@ public class BatesModuleTests
 
         Assert.Equal(new[] { "PROD", "PROD2" }, module.BatesPrefixes);
         Assert.Equal("PROD, PROD2", module.BatesPrefix);
+    }
+
+    [Fact]
+    public void TryApply_PrefixExceedingMaximumLength_ShouldReturnFalseAndEmitError()
+    {
+        var originalError = Console.Error;
+        using (var errWriter = new StringWriter())
+        {
+            Console.SetError(errWriter);
+            try
+            {
+                var module = new BatesModule();
+                Assert.False(module.TryApply("--bates-prefix", new string('A', MaxBatesPrefixLength + 1)));
+                Assert.Equal("Error: --bates-prefix must not exceed 1024 characters.", errWriter.ToString().TrimEnd(Environment.NewLine.ToCharArray()));
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+        }
+    }
+
+    [Fact]
+    public void TryApply_PrefixAtMaximumLength_ShouldReturnTrue()
+    {
+        var module = new BatesModule();
+
+        Assert.True(module.TryApply("--bates-prefix", new string('A', MaxBatesPrefixLength)));
     }
 
     [Fact]

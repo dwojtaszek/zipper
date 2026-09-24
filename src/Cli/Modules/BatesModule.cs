@@ -6,6 +6,8 @@ namespace Zipper.Cli.Modules;
 /// <summary>Owns --bates-prefix, --bates-start, --bates-digits: parse, validate, and build BatesNumberConfig.</summary>
 public sealed class BatesModule : CliModule
 {
+    private const int MaxBatesPrefixLength = 1024;
+
     private string? _prefix;
     private long? _start;
     private int? _digits;
@@ -22,6 +24,11 @@ public sealed class BatesModule : CliModule
                 if (value is null)
                 {
                     Console.Error.WriteLine("Error: --bates-prefix requires a value.");
+                    return false;
+                }
+                if (value.Length > MaxBatesPrefixLength)
+                {
+                    Console.Error.WriteLine($"Error: --bates-prefix must not exceed {MaxBatesPrefixLength} characters.");
                     return false;
                 }
                 _prefix = value;
