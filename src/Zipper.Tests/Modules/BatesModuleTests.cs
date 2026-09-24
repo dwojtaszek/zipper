@@ -94,6 +94,41 @@ public class BatesModuleTests
     }
 
     [Fact]
+    public void TryApply_CommaSeparatedPrefixesEachWithinLimit_ShouldReturnTrue()
+    {
+        // A rolling list may exceed the limit in total while every prefix stays
+        // within it: the limit guards each emitted Bates Number prefix, not the
+        // comma-joined flag value (REQ-225 metadata budget).
+        var module = new BatesModule();
+
+        Assert.True(module.TryApply(
+            "--bates-prefix",
+            $"{new string('A', MaxBatesPrefixLength)},{new string('B', MaxBatesPrefixLength)}"));
+    }
+
+    [Fact]
+    public void TryApply_CommaSeparatedPrefixExceedingMaximumLength_ShouldReturnFalseAndEmitError()
+    {
+        var originalError = Console.Error;
+        using (var errWriter = new StringWriter())
+        {
+            Console.SetError(errWriter);
+            try
+            {
+                var module = new BatesModule();
+                Assert.False(module.TryApply(
+                    "--bates-prefix",
+                    $"A,{new string('B', MaxBatesPrefixLength + 1)}"));
+                Assert.Equal("Error: --bates-prefix must not exceed 1024 characters.", errWriter.ToString().TrimEnd(Environment.NewLine.ToCharArray()));
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+        }
+    }
+
+    [Fact]
     public void TryApply_CommaSeparatedStart_ParsesList()
     {
         var module = new BatesModule();

@@ -478,11 +478,14 @@ internal sealed class ProductionSetPostValidator
     /// Enforces the Azure Blob custom-metadata constraints on the manifest's
     /// <c>metadata</c> block (ticket #881, REQ-226): keys must match the Azure
     /// C#-identifier rule (start with a letter or underscore, then ASCII
-    /// letters, digits, or underscores), values must be ASCII-only with no
-    /// CR/LF (header-injection hazard), and the combined size of all keys and
-    /// values must stay within the 8,192-byte Azure metadata budget. The
-    /// generator emits normalized values (REQ-225); this guards the artifact
-    /// contract for pipeline-edited manifests and future metadata sources.
+    /// letters, digits, or underscores), values may contain only tab (U+0009)
+    /// or ASCII characters U+0020 through U+007E (CR/LF are rejected as a
+    /// subset: newlines in metadata values are an HTTP response-splitting
+    /// hazard), and the combined size of all keys and values must stay within
+    /// the 8,192-byte Azure metadata budget.
+    /// The generator emits normalized values (REQ-225); this guards the
+    /// artifact contract for pipeline-edited manifests and future metadata
+    /// sources.
     /// </summary>
     private static void ValidateProductionMetadata(ValidationState state, System.Text.Json.JsonElement metadata)
     {
@@ -515,25 +518,14 @@ internal sealed class ProductionSetPostValidator
             }
 
             var value = pair.Value.GetString() ?? string.Empty;
-            if (value.Any(c => c > '\u007f'))
+            if (value.Any(c => c != '\t' && (c < '\u0020' || c > '\u007e')))
             {
                 state.Findings.Add(new ValidationReportFinding
                 {
                     Code = "MetadataAzureConstraint",
                     Severity = "error",
                     Path = "_manifest.json",
-                    Message = $"Metadata value for '{pair.Name}' contains non-ASCII characters; Azure Blob metadata values must be ASCII-only."
-                });
-            }
-
-            if (value.Contains('\r') || value.Contains('\n'))
-            {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "MetadataAzureConstraint",
-                    Severity = "error",
-                    Path = "_manifest.json",
-                    Message = $"Metadata value for '{pair.Name}' contains CR/LF; newlines in metadata values enable HTTP response-splitting and are rejected."
+                    Message = $"Metadata value for '{pair.Name}' contains a character outside the allowed Azure Blob metadata set: tab (U+0009) or U+0020 through U+007E."
                 });
             }
 

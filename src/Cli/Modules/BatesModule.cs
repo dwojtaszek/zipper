@@ -26,15 +26,19 @@ public sealed class BatesModule : CliModule
                     Console.Error.WriteLine("Error: --bates-prefix requires a value.");
                     return false;
                 }
-                if (value.Length > MaxBatesPrefixLength)
+                var prefixes = value.Contains(',', StringComparison.Ordinal)
+                    ? value.Split(',').Select(p => p.Trim()).ToList()
+                    : new List<string> { value };
+                // Each prefix reaches the Production Manifest metadata block as a
+                // Bates Number value, so the limit applies per prefix, not to the
+                // comma-joined flag value (REQ-225).
+                if (prefixes.Any(p => p.Length > MaxBatesPrefixLength))
                 {
                     Console.Error.WriteLine($"Error: --bates-prefix must not exceed {MaxBatesPrefixLength} characters.");
                     return false;
                 }
                 _prefix = value;
-                _prefixes = value.Contains(',', StringComparison.Ordinal)
-                    ? value.Split(',').Select(p => p.Trim()).ToList()
-                    : new List<string> { value };
+                _prefixes = prefixes;
                 return true;
             case "--bates-start":
                 if (value is null)

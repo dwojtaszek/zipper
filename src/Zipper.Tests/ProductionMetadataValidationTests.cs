@@ -62,7 +62,7 @@ public class ProductionMetadataValidationTests
         {
             var findings = MetadataFindings(report);
             Assert.Single(findings);
-            Assert.Contains("non-ASCII", findings[0], StringComparison.Ordinal);
+            Assert.Contains("tab (U+0009) or U+0020 through U+007E", findings[0], StringComparison.Ordinal);
         }
         finally
         {
@@ -87,7 +87,33 @@ public class ProductionMetadataValidationTests
         {
             var findings = MetadataFindings(report);
             Assert.Single(findings);
-            Assert.Contains("CR/LF", findings[0], StringComparison.Ordinal);
+            Assert.Contains("tab (U+0009) or U+0020 through U+007E", findings[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Validate_WithControlCharacterMetadataValue_ReportsAzureConstraint()
+    {
+        var manifest = """
+            {
+              "metadata": {
+                "production_id": "value\u0000",
+                "bates_number_start": "value\u007f"
+              }
+            }
+            """;
+
+        var (report, tempDir) = ValidateManifestJson(manifest);
+        try
+        {
+            var findings = MetadataFindings(report);
+            Assert.Equal(2, findings.Length);
+            Assert.All(findings, finding =>
+                Assert.Contains("tab (U+0009) or U+0020 through U+007E", finding, StringComparison.Ordinal));
         }
         finally
         {
@@ -275,7 +301,7 @@ public class ProductionMetadataValidationTests
             var findings = MetadataFindings(report);
             Assert.Equal(2, findings.Length);
             Assert.Contains(findings, f => f.Contains("naming rule", StringComparison.Ordinal));
-            Assert.Contains(findings, f => f.Contains("CR/LF", StringComparison.Ordinal));
+            Assert.Contains(findings, f => f.Contains("tab (U+0009) or U+0020 through U+007E", StringComparison.Ordinal));
         }
         finally
         {
