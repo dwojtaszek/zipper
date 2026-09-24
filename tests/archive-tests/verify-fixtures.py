@@ -18,7 +18,7 @@ shares no code with the C# generator:
 
 Report contract: one JSON report outside the fixture directory recording
 fixtureId, Case Key, adapter/runtime version, operation, normalized outcome,
-failure stage, invariant checks, and pass/fail/not-run per fixture.
+failure stage, asserted invariants, and pass/fail/not-run per fixture.
 
 Exit status: 0 only when every fixture passes; nonzero for required failures,
 malformed oracles, verification timeouts or resource exhaustion, or missing
@@ -83,6 +83,73 @@ SUCCESS_ALIASES = {
     "extract-completes": "extract-succeeds",
     "extract-completes-empty": "extract-succeeds",
 }
+
+# The verifier's canonical success token per operation, used to require full
+# evidence when an invariant is declared (REQ-212, ticket #1025). Keep in
+# lockstep with SUCCESS_ALIASES above: operation outcomes are normalized to
+# these canonical tokens before _record_operation, so the invariant handlers and
+# the outcome gate compare against the same spelling.
+OP_SUCCESS_TOKENS = {
+    "list": "list-succeeds",
+    "read-entry": "read-entry-content-matches",
+    "integrity-check": "integrity-passes",
+    "extract": "extract-succeeds",
+}
+
+# Invariant vocabulary the verifier can evaluate. An invariant outside this
+# vocabulary fails closed as 'unverified-invariant': the vocabulary grows only
+# by shipping the matching assertion, never by relabeling a collected token.
+LISTED_COUNT_PREDICATE = re.compile(r"^listed-count == (entry-count|\d+)$")
+# Structural claims re-derived by the structure audits that run before any
+# operation (verify_structure raises and fails the fixture when they break):
+# token -> audit check name.
+STRUCTURAL_INVARIANT_CHECKS = {
+    "two-structurally-plausible-eocd-records": "eocd-ambiguity",
+    "shadow-eocd-selects-b-bin": "eocd-ambiguity",
+    "declared-offsets-are-lies": "mutations",
+    "declared-sizes-are-lies": "mutations",
+    "declared-counts-disagree": "mutations",
+    "metadata-sources-disagree": "mutations",
+    "one-member-fails": "mutations",
+    "one-member-unsupported": "mutations",
+    "spanning-declared-single-file": "mutations",
+}
+# Policy/containment invariants ride the extract expectation of policy-sensitive
+# fixtures, which ordinary hosts never extract (extract stays not-run): nothing
+# was written outside the root, silently overwritten, materialized as a link, or
+# followed. Extraction exercised on such a fixture cannot be proven contained.
+POLICY_EXTRACT_INVARIANTS = frozenset((
+    "no-writes-outside-root",
+    "containment-required",
+    "no-silent-overwrite",
+    "distinct-content-hashes-observable",
+    "links-never-materialized-as-os-links",
+    "escape-targets-never-followed",
+))
+# The verifier reports failures while reading entries as stage 'per-entry'; the
+# declared vocabulary names that stage 'read-entry' (the operation it happens in).
+CANONICAL_FAILURE_STAGES = {"per-entry": "read-entry"}
+
+# Outcomes that record a failure stage and are therefore subject to failure-stage
+# enforcement when an expectation declares allowed stages (REQ-212, #1025): the
+# operation's failure token plus the codec-rejection outcomes the generator pairs
+# with declared failure stages. Integrity rejects on an unsupported method are
+# excluded: a per-entry rejection can be recorded while one generator v1
+# profile declares allowed stages without 'read-entry' (see ticket #1035). The
+# 'unchecked' outcome variants record no stage at all (see op_integrity_check)
+# and are never staged.
+STAGE_CHECKED_OUTCOMES = {
+    "list": ("list-fails",),
+    "read-entry": ("read-entry-fails", "unsupported-method-rejected"),
+    "integrity-check": ("integrity-fails", "crc-mismatch-rejected"),
+    "extract": ("extract-fails", "unsupported-method-rejected"),
+}
+
+
+def expectation_items(expectations, key):
+    """Sorted, deduplicated values declared for a key across expectations."""
+    return sorted({item for expectation in expectations
+                   for item in expectation.get(key, [])})
 
 
 class VerificationError(Exception):
@@ -668,10 +735,10 @@ class FixtureVerifier:
         return bool(candidates & allowed), sorted(allowed)
 
     @staticmethod
-    def _not_run(operation, reason):
+    def _not_run(operation, reason, invariants=None):
         return {"operation": operation, "normalizedOutcome": "not-run",
                 "failureStage": None, "details": {}, "status": "not-run",
-                "reason": reason}
+                "reason": reason, "invariantsChecked": invariants or []}
 
     # ---- driver ----
 
@@ -753,22 +820,32 @@ class FixtureVerifier:
                     continue
                 observed, details, stage = run()
                 self._record_operation(ops, operation, observed, details, stage,
-                                       expectations[operation])
+                                       expectations[operation], case,
+                                       result["structureChecks"])
                 self._check_deadline(deadline)
 
             if classification == "valid":
                 if "extract" in expectations:
                     observed, details, stage = self.op_extract(zip_bytes, case, budget)
                     self._record_operation(ops, "extract", observed, details, stage,
-                                           expectations["extract"])
+                                           expectations["extract"], case,
+                                           result["structureChecks"])
                 else:
                     ops.append(self._not_run("extract", "no expectation record"))
             else:
                 # Ticket #845 step 8: policy-sensitive and malformed fixtures are
                 # never extracted on ordinary hosts; extract stays not-run and no
                 # containment claim is made from metadata inspection.
+                extract_expectations = expectations.get("extract")
+                extract_invariants = []
+                if extract_expectations:
+                    extract_invariants = expectation_items(extract_expectations,
+                                                           "invariants")
+                    self._assert_invariants(extract_invariants, "extract", "not-run",
+                                            {}, case, result["structureChecks"])
                 ops.append(self._not_run("extract", "extraction not exercised for "
-                                         "%s fixtures on ordinary hosts" % classification))
+                                         "%s fixtures on ordinary hosts" % classification,
+                                         extract_invariants))
             self._check_deadline(deadline)
 
             result["operations"] = ops
@@ -788,10 +865,14 @@ class FixtureVerifier:
             result["status"] = "fail"
         return result
 
-    def _record_operation(self, ops, operation, observed, details, stage, expectations):
+    def _record_operation(self, ops, operation, observed, details, stage, expectations,
+                          case, structure_checks):
+        invariants = expectation_items(expectations, "invariants")
+        self._assert_invariants(invariants, operation, observed, details, case,
+                                structure_checks)
         allowed, vocabulary = self.outcome_allowed(observed, operation, expectations)
-        invariants = sorted({item for expectation in expectations
-                             for item in expectation.get("invariants", [])})
+        if allowed:
+            self._assert_failure_stage(operation, observed, stage, expectations)
         record = {
             "operation": operation,
             "normalizedOutcome": observed,
@@ -805,6 +886,162 @@ class FixtureVerifier:
             record["reason"] = ("observed outcome '%s' is outside the allowed outcomes"
                                 % observed)
         ops.append(record)
+
+    # ---- invariant and failure-stage enforcement (REQ-212, ticket #1025) ----
+
+    def _assert_invariants(self, invariants, operation, observed, details, case,
+                           structure_checks):
+        """Every collected invariant is asserted against observed evidence and
+        the structure audits that already ran; an unsatisfied or unverifiable
+        invariant fails the fixture with the invariant named — never a
+        decorative label (REQ-212, ticket #1025)."""
+        if not invariants:
+            return
+        file_count = len([entry for entry in case.get("entries", [])
+                          if entry["kind"] == "file"])
+        budget = case.get("limits", {}).get("expandedBytesBudget")
+        mutations = case.get("mutations") or []
+        for token in invariants:
+            self._assert_one_invariant(token, operation, observed, details,
+                                       file_count, budget, mutations,
+                                       structure_checks)
+
+    def _assert_one_invariant(self, token, operation, observed, details, file_count,
+                              budget, mutations, structure_checks):
+        predicate = LISTED_COUNT_PREDICATE.match(token)
+        if predicate:
+            self._assert_listed_count(token, details, predicate.group(1))
+            return
+        if token in ("no-partial-writes", "extracted-bytes-match-content-hashes",
+                     "payload-bytes-unchanged"):
+            self._assert_write_completeness(token, operation, observed, details,
+                                            file_count)
+            return
+        if token == "no-allocation-from-declared-sizes":
+            # Ops record bytesRead only when bytes were streamed; a list
+            # operation records none and the claim is vacuously satisfied
+            # (the generator emits this token on list expectations too).
+            read = details.get("bytesRead")
+            if budget is not None and read is not None and read > budget:
+                self._invariant_failure(token, "reader streamed %d bytes over the "
+                                        "declared %d-byte budget" % (read, budget))
+            return
+        if token == "no-files-created":
+            # Extract-only vocabulary: on other operations the claim names no
+            # observable output and is vacuously satisfied, so it asserts the
+            # exact evidence the extract operation records.
+            if operation == "extract":
+                extracted = details.get("extractedFiles")
+                if extracted is not None and extracted != 0:
+                    self._invariant_failure(token, "extraction created %d output files"
+                                            % extracted)
+            return
+        audit = STRUCTURAL_INVARIANT_CHECKS.get(token)
+        if audit is not None:
+            checks = {check["check"] for check in structure_checks}
+            if audit not in checks:
+                self._invariant_failure(token, "structural audit '%s' did not run "
+                                        "and pass" % audit)
+            if audit == "mutations" and not mutations:
+                # The token asserts a mutation property of the Archive; a case
+                # with no mutation records cannot satisfy it. Presence alone is
+                # not evidence (REQ-212, ticket #1025).
+                self._invariant_failure(token, "structural audit 'mutations' found "
+                                        "no mutation evidence to assert against")
+            return
+        if token in POLICY_EXTRACT_INVARIANTS:
+            if operation != "extract":
+                # Extract-only vocabulary; on another operation the claim names
+                # nothing the verifier observed and never passes silently.
+                self._invariant_failure(token, "extraction-time invariant declared "
+                                        "on the '%s' operation" % operation)
+            if observed != "not-run":
+                self._invariant_failure(token, "extraction was exercised; "
+                                        "containment cannot be asserted")
+            return
+        raise VerificationError(
+            "unverified-invariant",
+            "invariant '%s' is not part of the verifier vocabulary; it can never "
+            "pass silently (grow the vocabulary with an assertion)" % token,
+            stage="operation")
+
+    def _assert_listed_count(self, token, details, expected):
+        entry_count = details.get("entryCount")
+        if entry_count is None:
+            # The list operation produced no count; a declared count claim can
+            # never pass without evidence (REQ-212, #1025).
+            self._invariant_failure(token, "no list evidence was collected")
+            return
+        if expected == "entry-count":
+            declared = details.get("declaredEntryCount")
+            if declared is not None and entry_count != declared:
+                self._invariant_failure(token, "listed %d entries, declared %d"
+                                        % (entry_count, declared))
+        else:
+            try:
+                expected_count = int(expected)
+            except ValueError:
+                # The predicate's \d+ branch already guarantees digits; guard a
+                # pathological token that sneaks past the regex.
+                self._invariant_failure(token, "'%s' is not a bounded entry count"
+                                        % expected)
+            if entry_count != expected_count:
+                self._invariant_failure(token, "listed %d entries, expected %s"
+                                        % (entry_count, expected))
+
+    def _assert_write_completeness(self, token, operation, observed, details, file_count):
+        """Assert a write-completeness claim against the success evidence. The
+        ops only return their canonical success token after proving these
+        properties (op_extract requires extractedFiles == declared file entries;
+        op_read_entry only succeeds on full content-hash matches), so the checks
+        below are the backstop that fires if that guarantee regresses. These
+        tokens also ride list expectations, on which no entry-read evidence is
+        recorded: nothing was written there, so they are vacuously satisfied."""
+        success = OP_SUCCESS_TOKENS[operation]
+        if observed != success:
+            return
+        if operation == "extract":
+            extracted = details.get("extractedFiles")
+            if extracted is not None and extracted != file_count:
+                self._invariant_failure(token, "extracted %d of %d declared file entries"
+                                        % (extracted, file_count))
+            return
+        entries_read = details.get("entriesRead")
+        if not entries_read:
+            return
+        matched = details.get("hashMatches", 0)
+        if matched != entries_read:
+            self._invariant_failure(
+                token, "only %d of %d read entries matched their content hashes"
+                % (matched, entries_read))
+
+    @staticmethod
+    def _invariant_failure(token, detail):
+        raise VerificationError("invariant",
+                                "invariant '%s' not satisfied: %s" % (token, detail),
+                                stage="operation")
+
+    @staticmethod
+    def _assert_failure_stage(operation, observed, stage, expectations):
+        """When the observed outcome is a staged failure (the operation's
+        failure token or a codec rejection the generator pairs with stages) and
+        an expectation declares allowed failure stages, the observed stage must
+        sit inside them; an accepted failure at a prohibited stage fails the
+        fixture with the expectation quoted (REQ-212, ticket #1025)."""
+        if observed not in STAGE_CHECKED_OUTCOMES[operation]:
+            return
+        declared = expectation_items(expectations, "failureStages")
+        if not declared:
+            return
+        normalized = CANONICAL_FAILURE_STAGES.get(stage, stage)
+        if stage not in declared and normalized not in declared:
+            profiles = ",".join(sorted({expectation.get("profile", "?")
+                                        for expectation in expectations}))
+            raise VerificationError(
+                "failure-stage",
+                "observed failure stage '%s' is outside the allowed stages %s for "
+                "expectation %s[%s]" % (stage, declared, operation, profiles),
+                stage="operation")
 
 
 def verify_orphan_hidden(case, zip_bytes):
