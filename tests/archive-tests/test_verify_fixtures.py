@@ -1148,5 +1148,357 @@ class SchemaLimitsTests(TempDirTest):
         self.assertEqual("compression-methods", ctx.exception.check)
 
 
+class InvariantEnforcementTests(TempDirTest):
+    """REQ-212 invariant and failure-stage enforcement (ticket #1025): declared
+    invariants are asserted against observed evidence, never decorative
+    'checked' labels, and an accepted failure must land inside the declared
+    allowed failure stages."""
+
+    def test_list_count_disagreement_fails_through_invariant(self):
+        """A reader whose listed count disagrees with the declared count must
+        fail even when list-fails is an allowed outcome: the listed-count
+        invariant is violated by the observed evidence."""
+        zip_bytes = make_zip([("a.txt", b"first"), ("b.txt", b"second")])
+        expectations = [
+            {"operation": "list", "profile": "strict",
+             "allowedOutcomes": ["list-succeeds", "list-fails"],
+             "invariants": ["listed-count == entry-count"]},
+        ]
+        # Self-consistent metadata that wrongly declares a single entry: the
+        # reader lists two, so the invariant evidence contradicts the claim.
+        case = case_for("count-lie", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"first")], [], expectations)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("listed-count == entry-count", failure["message"])
+
+    def test_unknown_invariant_token_fails_verification(self):
+        """An invariant the verifier cannot evaluate fails closed (REQ-212:
+        unsupported is never a pass); the vocabulary grows only deliberately."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"] = ["mystery-invariant"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("unverified-invariant", failure["check"])
+        self.assertIn("mystery-invariant", failure["message"])
+
+    def test_wrong_failure_stage_fails_verification(self):
+        """A failure observed at a stage outside the declared allowed stages
+        fails with the expectation quoted (observed stage is normalized:
+        the verifier's 'per-entry' is the declared 'read-entry')."""
+        case, _ = self.publish_crc_corrupt()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [
+            {"operation": "read-entry", "profile": "strict",
+             "allowedOutcomes": ["read-entry-fails"], "invariants": [],
+             "failureStages": ["open"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("read-entry[strict]", failure["message"])
+
+    def test_allowed_failure_stage_with_normalized_stage_passes(self):
+        """Positive control: the same per-entry failure is accepted when the
+        declared stages name the read-entry stage, proving the stage
+        normalization does not create false positives."""
+        case, _ = self.publish_crc_corrupt()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [
+            {"operation": "read-entry", "profile": "strict",
+             "allowedOutcomes": ["read-entry-fails"], "invariants": [],
+             "failureStages": ["open", "read-entry"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("pass", operations["read-entry"]["status"])
+        self.assertEqual("per-entry", operations["read-entry"]["failureStage"])
+
+    def test_listed_count_without_evidence_fails_closed(self):
+        """A listed-count invariant on an operation that records no list
+        evidence can never be satisfied: it fails rather than passing silently,
+        the same fail-closed rule that rejects unknown invariant tokens."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [
+            {"operation": "read-entry", "profile": "strict",
+             "allowedOutcomes": ["read-entry-content-matches"],
+             "invariants": ["listed-count == entry-count"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("listed-count == entry-count", failure["message"])
+
+    def test_numeric_listed_count_predicate_passes(self):
+        """The numeric listed-count form ('== N') asserts the exact observed
+        count; a matching archive passes with the invariant recorded."""
+        zip_bytes = make_zip([("a.txt", b"first"), ("b.txt", b"second")])
+        expectations = [
+            {"operation": "list", "profile": "strict",
+             "allowedOutcomes": ["list-succeeds", "list-fails"],
+             "invariants": ["listed-count == 2"]},
+        ]
+        case = case_for("count-ok", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"first"),
+                         entry_record(1, "b.txt", b"second")], [], expectations)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("pass", operations["list"]["status"])
+        self.assertEqual(["listed-count == 2"],
+                         operations["list"]["invariantsChecked"])
+
+    def test_structural_invariant_audit_mismatch_fails(self):
+        """A structural token whose audit did not run for this case key cannot
+        be satisfied: the claim names an audit that never executed."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"].append(
+            "two-structurally-plausible-eocd-records")
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("eocd-ambiguity", failure["message"])
+
+    def test_integrity_rejection_outcome_stage_mismatch_fails(self):
+        """A codec/CRC rejection is a staged failure too: it is checked against
+        the declared allowed stages and fails when the observed stage is outside
+        them (otherwise the wrong-stage defect survives on this outcome class)."""
+        case, _ = self.publish_crc_corrupt()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [
+            {"operation": "integrity-check", "profile": "strict",
+             "allowedOutcomes": ["crc-mismatch-rejected"], "invariants": [],
+             "failureStages": ["open"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("integrity-check[strict]", failure["message"])
+
+    def test_rejection_outcome_accepts_raw_per_entry_stage(self):
+        """Positive control: the schema documents the stage spelling
+        'per-entry'; a declaration using it must match, never false-fail with a
+        self-contradictory message."""
+        case, _ = self.publish_crc_corrupt()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [
+            {"operation": "integrity-check", "profile": "strict",
+             "allowedOutcomes": ["crc-mismatch-rejected"], "invariants": [],
+             "failureStages": ["per-entry"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("pass", operations["integrity-check"]["status"])
+
+    def test_policy_invariant_on_wrong_operation_fails_closed(self):
+        """Extract-only containment tokens declared on another operation name
+        nothing the verifier observed: they fail closed instead of passing."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"] = ["no-silent-overwrite"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("no-silent-overwrite", failure["message"])
+
+    def test_invariants_checked_field_mirrors_declared_set(self):
+        """The report contract records the asserted invariant set per operation,
+        so consumers can see exactly what was checked."""
+        case, _ = self.publish_valid()
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual(["no-partial-writes"], operations["list"]["invariantsChecked"])
+        self.assertEqual(["no-partial-writes"],
+                         operations["read-entry"]["invariantsChecked"])
+
+    def test_structural_invariant_accepted_when_audit_ran(self):
+        """Positive control: a structural token whose audit did run passes and
+        is recorded, proving the token-to-audit mapping asserts rather than only
+        fail-closes."""
+        case, _ = self.publish_crc_corrupt()  # the mutations audit always runs
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"].append("declared-offsets-are-lies")
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertIn("declared-offsets-are-lies",
+                      operations["list"]["invariantsChecked"])
+
+    def test_structural_mutation_token_without_mutations_fails(self):
+        """A mutation-backed structural token on a clean Archive names a
+        property the Archive does not have: the claim fails even though the
+        mutations audit ran, because there is no mutation evidence."""
+
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"].append("declared-offsets-are-lies")
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("declared-offsets-are-lies", failure["message"])
+        self.assertIn("no mutation evidence", failure["message"])
+
+    def test_policy_invariant_on_exercised_extract_fails_closed(self):
+        """A policy token on an extract that actually ran cannot be proven
+        contained on an ordinary host: it fails closed."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][3]["invariants"] = ["no-silent-overwrite"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("no-silent-overwrite", failure["message"])
+
+    def test_numeric_listed_count_mismatch_fails(self):
+        """The numeric listed-count form asserts the exact observed count; a
+        mismatched declaration fails the invariant even though list-fails is
+        allowed."""
+        zip_bytes = make_zip([("a.txt", b"first"), ("b.txt", b"second")])
+        expectations = [
+            {"operation": "list", "profile": "strict",
+             "allowedOutcomes": ["list-succeeds", "list-fails"],
+             "invariants": ["listed-count == 3"]},
+        ]
+        case = case_for("count-lie-numeric", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"first"),
+                         entry_record(1, "b.txt", b"second")], [], expectations)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("listed-count == 3", failure["message"])
+
+    def test_budget_invariant_vacuous_on_list_passes(self):
+        """The budget token rides list expectations too, where no bytes are
+        streamed: nothing was allocated, so the claim is vacuously satisfied."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][0]["invariants"].append(
+            "no-allocation-from-declared-sizes")
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertIn("no-allocation-from-declared-sizes",
+                      operations["list"]["invariantsChecked"])
+
+    def test_extract_failure_stage_mismatch_fails(self):
+        """extract-fails is a staged outcome too: an accepted extraction
+        failure at a prohibited stage fails the fixture."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["entries"][0]["contentSha256"] = "0" * 64  # lie -> extract-fails
+        case["expectations"] = [
+            {"operation": "extract", "profile": "strict",
+             "allowedOutcomes": ["extract-fails"], "invariants": [],
+             "failureStages": ["open"]},
+        ]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("extract[strict]", failure["message"])
+
+    def test_list_failure_stage_mismatch_fails(self):
+        """list-fails at the 'list' stage is checked against the declared
+        stages: a declaration that only allows 'open' rejects it."""
+        zip_bytes = make_zip([("a.txt", b"first"), ("b.txt", b"second")])
+        expectations = [
+            {"operation": "list", "profile": "strict",
+             "allowedOutcomes": ["list-fails"], "invariants": [],
+             "failureStages": ["open"]},
+        ]
+        case = case_for("count-lie-stage", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"first")], [], expectations)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("list[strict]", failure["message"])
+
+    def test_no_files_created_on_nonempty_extract_fails(self):
+        """no-files-created can only hold on an empty archive; a non-empty
+        extract violates it even though extraction itself succeeded."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        case["expectations"][3]["invariants"] = ["no-files-created"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("invariant", failure["check"])
+        self.assertIn("no-files-created", failure["message"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
