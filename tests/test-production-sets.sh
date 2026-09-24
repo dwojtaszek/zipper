@@ -90,15 +90,34 @@ for key in ("production_id", "bates_number_start", "bates_number_end", "volume_c
 total = 0
 for key, value in metadata.items():
     total += len(key.encode()) + len(value.encode())
-    if any(c > "\x7f" for c in key) or any(c > "\x7f" for c in value):
-        raise SystemExit(f"metadata pair '{key}' contains non-ASCII characters")
-    if "\r" in value or "\n" in value:
-        raise SystemExit(f"metadata value for '{key}' contains CR/LF")
+    if any(c != "\t" and not (0x20 <= ord(c) <= 0x7e) for c in value):
+        raise SystemExit(f"metadata value for '{key}' contains a character outside tab or 0x20-0x7E")
 if total > 8192:
     raise SystemExit(f"metadata block exceeds 8,192 bytes: {total}")
 PY
 
 print_success "Test Case 1: Basic production set passed"
+
+
+# --- Test Case 1a: --bates-prefix maximum length ---
+
+print_info "Test Case 1a: --bates-prefix over 1024 characters is rejected"
+
+long_bates_prefix=$(printf 'X%.0s' {1..1025})
+long_bates_prefix_error="$TEST_OUTPUT_DIR/test1a.err"
+
+if zipper \
+  --production-set \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test1a" \
+  --bates-prefix "$long_bates_prefix" 2> "$long_bates_prefix_error"; then
+  print_error "Test 1a: --bates-prefix over 1024 characters succeeded but should have failed."
+fi
+if ! grep -q "must not exceed 1024 characters" "$long_bates_prefix_error"; then
+  print_error "Test 1a: rejection message does not contain the 1024-character limit"
+fi
+
+print_success "Test Case 1a: --bates-prefix over 1024 characters rejected"
 
 
 # --- Test Case 2: Production ZIP ---

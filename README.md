@@ -71,7 +71,7 @@ zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 - **Load File Formats**: DAT (Concordance), OPT (Opticon), CSV (RFC 4180), EDRM-XML (v1.2), Concordance (quote-wrapped)
 - **Generation Modes**:
   - **Standard Mode**: Zip Archive + Load File
-  - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`). The manifest carries an Azure-safe `metadata` block (`production_id`, `bates_number_start`, `bates_number_end`, `volume_count`) whose values are normalized (lossy) derivatives of the manifest's own fields, mapped onto `x-ms-meta-<key>` headers by upload clients; post-generation validation rejects non-ASCII keys/values, CR/LF, and blocks over the 8,192-byte Azure budget.
+  - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`). The **Production Manifest** carries an Azure-safe **Production Metadata** block (`metadata`, with `production_id`, `bates_number_start`, `bates_number_end`, and `volume_count`) whose values are normalized (lossy) derivatives of the manifest's own fields and are mapped onto `x-ms-meta-<key>` headers by upload clients. Every value character is tab (0x09) or printable ASCII (0x20–0x7E); CR (0x0D) and LF (0x0A) become a space, tab is preserved, and every other disallowed character (including other C0 controls, DEL 0x7F, and non-ASCII characters) becomes `_`. The combined key/value budget of 8,192 bytes is guaranteed by construction because the CLI rejects `--bates-prefix` values longer than 1,024 characters (the worst-case derived block is approximately 2.4 KB); post-generation validation rejects values outside the allowed set.
   - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
 - **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and chaos anomaly injection (`--chaos-mode`).
 - **Output Safety & Preservation**: Collision-resistant base naming with incremental suffixes (`_1`, `_2`, …) and atomic creation (`FileMode.CreateNew`) prevent overwriting existing Archives or Load Files. In Standard mode, entry path collisions across Native Files, generated Attachments, Extracted Text, and included Load Files/Audit Files fail descriptively rather than silently dropping or renaming records. Production Set mode rejects existing output directories and zip archives upfront before generation, and cleanup routines delete only artifacts created during the failed run.
@@ -107,7 +107,7 @@ All command-line flags recognized by Zipper:
 | `--delimiter-column` | ASCII 20 | ASCII code or single character | Custom column delimiter |
 | `--delimiter-quote` | ASCII 254 | ASCII code or single character | Custom quote delimiter |
 | `--delimiter-newline` | ASCII 174 | ASCII code or single character | Custom newline replacement |
-| `--bates-prefix` | none | string (or comma-separated list) | Bates numbering prefix |
+| `--bates-prefix` | none | string (or comma-separated list), maximum 1,024 characters | Bates numbering prefix |
 | `--bates-start` | `1` | non-negative integer | Starting Bates number |
 | `--bates-digits` | `8` | `1` to `20` | Bates number digit padding count |
 | `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |

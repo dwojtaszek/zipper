@@ -74,8 +74,7 @@ powershell -NoProfile -Command ^
   "  $total += [Text.Encoding]::UTF8.GetByteCount($pair.Name) + [Text.Encoding]::UTF8.GetByteCount([string]$pair.Value);" ^
   "  foreach ($c in ([string]$pair.Value).ToCharArray())" ^
   "  {" ^
-  "    if ([int]$c -gt 127) { throw \"metadata value for '$($pair.Name)' contains non-ASCII characters\" }" ^
-  "    if ($c -eq \"\`r\" -or $c -eq \"\`n\") { throw \"metadata value for '$($pair.Name)' contains CR/LF\" }" ^
+  "    if (([int]$c -ne 9) -and (([int]$c -lt 32) -or ([int]$c -gt 126))) { throw \"metadata value for '$($pair.Name)' contains a character outside tab or 0x20-0x7E\" }" ^
   "  }" ^
   "}" ^
   "if ($total -gt 8192) { throw \"metadata block exceeds 8,192 bytes: $total\" }"
@@ -85,6 +84,32 @@ if errorlevel 1 (
 )
 
 echo [ SUCCESS ] Test Case 1: Basic production set passed
+
+:: --- Test Case 1a: --bates-prefix maximum length ---
+
+echo [ INFO ] Test Case 1a: --bates-prefix over 1024 characters is rejected
+
+set "LONG_BATES_PREFIX="
+for /l %%i in (1,1,1025) do set "LONG_BATES_PREFIX=!LONG_BATES_PREFIX!X"
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test1a" ^
+  --bates-prefix "!LONG_BATES_PREFIX!" 2>"%TEST_OUTPUT_DIR%\test1a.err"
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 1a: --bates-prefix over 1024 characters succeeded but should have failed.
+  exit /b 1
+)
+
+findstr /C:"must not exceed 1024 characters" "%TEST_OUTPUT_DIR%\test1a.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 1a: rejection message does not contain the 1024-character limit
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 1a: --bates-prefix over 1024 characters rejected
 
 :: --- Test Case 2: Production ZIP ---
 
