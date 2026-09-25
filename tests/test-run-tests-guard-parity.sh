@@ -164,6 +164,97 @@ else
     cat "$SANDBOX/noexit.out"
 fi
 
+# --- Negative: 'if errorlevel 10' is not a guard for errorlevel 1 ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+old = "if errorlevel 1 (\n    echo [ ERROR ] Multipage TIFF tests failed.\n"
+new = "if errorlevel 10 (\n    echo [ ERROR ] Multipage TIFF tests failed.\n"
+if old not in text:
+    sys.exit("could not find the TIFF guard block to weaken")
+text = text.replace(old, new, 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/errlevel.out" 2>&1; then
+    fail "validator accepted 'if errorlevel 10' as a guard for errorlevel 1"
+    cat "$SANDBOX/errlevel.out"
+else
+    pass "validator rejects 'if errorlevel 10' as a guard"
+fi
+
+# --- Negative: a guard that only echoes the exit text is not a guard ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+old = """call .\\tests\\test-cross-platform.bat
+if errorlevel 1 (
+    echo [ ERROR ] Cross-platform tests failed.
+    exit /b 1
+)
+"""
+new = "call .\\tests\\test-cross-platform.bat\nif errorlevel 1 echo please exit /b 1 later\n"
+if old not in text:
+    sys.exit("could not find the cross-platform guard block to replace")
+text = text.replace(old, new, 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/echofake.out" 2>&1; then
+    fail "validator accepted a guard that only echoes 'exit /b 1' as text"
+    cat "$SANDBOX/echofake.out"
+else
+    pass "validator rejects a guard that only echoes the exit text"
+fi
+
+# --- Positive: the single-line guard form is accepted ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+old = """call .\\tests\\test-cross-platform.bat
+if errorlevel 1 (
+    echo [ ERROR ] Cross-platform tests failed.
+    exit /b 1
+)
+"""
+new = "call .\\tests\\test-cross-platform.bat\nif errorlevel 1 exit /b 1\n"
+if old not in text:
+    sys.exit("could not find the cross-platform guard block to collapse")
+text = text.replace(old, new, 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/oneline.out" 2>&1; then
+    pass "validator accepts the single-line 'if errorlevel 1 exit /b 1' form"
+else
+    fail "validator rejected a valid single-line guard"
+    cat "$SANDBOX/oneline.out"
+fi
+
 # --- Negative: a second, unguarded duplicate of an already-guarded child must be caught ---
 
 cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"

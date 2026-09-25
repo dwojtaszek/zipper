@@ -103,6 +103,10 @@ if [[ ${#SH_CASES[@]} -eq 0 || ${#BAT_CASES[@]} -eq 0 || ${#SH_SCRIPTS[@]} -eq 0
 fi
 
 DRIFT=0
+# Scratch files for the #1040 guard findings, removed before the script exits.
+SANDBOX_REPORT="$(mktemp)"
+SANDBOX_RAW="$(mktemp)"
+trap 'rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"' EXIT
 
 report_diff() {
     local label="$1"; shift
@@ -150,7 +154,7 @@ report_diff "Sub-script suite" SH_ONLY_SCRIPTS BAT_ONLY_SCRIPTS
 # Single awk pass over the runner: it reports every offending call site, so a second unguarded
 # duplicate of an already-guarded child is caught, and a REM/:: comment quoting the call text is
 # not mistaken for a call.
-mapfile -t UNGUARDED_CHILDREN < <(awk '
+awk '
     { line[NR] = $0 }
 
     function trim(s) {
@@ -185,35 +189,63 @@ mapfile -t UNGUARDED_CHILDREN < <(awk '
             g = next_stmt(n + 1)
             if (g == 0) { print child ": no guard after the call"; continue }
             gt = tolower(trim(line[g]))
-            if (gt !~ /^if[ \t]+errorlevel[ \t]+1/) { print child ": no '"'"'if errorlevel 1'"'"' guard"; continue }
+            # The threshold must be exactly 1, so "if errorlevel 10" cannot pass as a guard.
+            if (gt !~ /^if[ \t]+errorlevel[ \t]+1([ \t]|$)/) { print child ": NO_GUARD"; continue }
 
-            # Single-line form: `if errorlevel 1 exit /b 1`
-            if (gt ~ /exit[ \t]+\/b[ \t]+1/) continue
+            # Single-line form: "if errorlevel 1 exit /b 1". Anchored on the command word so a
+            # guard that merely echoes that text is not accepted.
+            if (gt ~ /^if[ \t]+errorlevel[ \t]+1([ \t]|$)[ \t]*exit[ \t]+\/b[ \t]+1([ \t]|$)/) continue
 
-            # Block form: the body up to the closing paren must exit non-zero.
+            # Anything else must be a real block: the statement has to end with an opening paren.
+            # Without one there is no block body to scan, so an unterminated "if" is not a guard.
+            if (gt !~ /\([ \t]*$/) { print child ": NO_ABORT"; continue }
+
+            # Block form: the body must exit non-zero before the closing paren. The scan is
+            # bounded by that paren so the guard of a different child cannot satisfy this one.
             aborts = 0
-            for (i = g + 1; i <= g + 12 && i <= total; i++) {
-                b = tolower(trim(line[i]))
-                if (b ~ /^exit[ \t]+\/b[ \t]+1/) { aborts = 1; break }
-                if (trim(line[i]) ~ /^\)/) break
+            closed = 0
+            for (i = g + 1; i <= total; i++) {
+                b = trim(line[i])
+                bl = tolower(b)
+                if (!aborts && bl ~ /^exit[ \t]+\/b[ \t]+1([ \t]|$)/) aborts = 1
+                if (b ~ /^\)/) { closed = 1; break }
+                # A new top-level statement before the closing paren means this block is
+                # malformed; stop rather than reading into whatever follows.
+                if (i > g + 1 && b !~ /^[ \t)]/ && bl ~ /^(call|echo|if|set|rem)[ \t]/) break
             }
-            if (!aborts) print child ": guard does not '"'"'exit /b 1'"'"'"
+            if (!aborts) { print child ": NO_ABORT" }
+            else if (!closed) { print child ": UNCLOSED_BLOCK" }
         }
     }
-' "$BAT_RUNNER" | sed "s/^\(.*\.bat\): \(.*\)$/\1 — \2/")
+' "$BAT_RUNNER" > "$SANDBOX_RAW"
 
-if [[ ${#UNGUARDED_CHILDREN[@]} -eq 0 ]] \
-    && ! grep -qiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER"; then
+# Render the machine-readable reason codes from the awk pass.
+while IFS= read -r raw; do
+    [[ -z "$raw" ]] && continue
+    case "$raw" in
+        *": NO_GUARD")
+            printf '  - %s — no '"'"'if errorlevel 1'"'"' guard\n' "${raw%: NO_GUARD}" >> "$SANDBOX_REPORT" ;;
+        *": NO_ABORT")
+            printf '  - %s — guard does not '"'"'exit /b 1'"'"'\n' "${raw%: NO_ABORT}" >> "$SANDBOX_REPORT" ;;
+        *": UNCLOSED_BLOCK")
+            printf '  - %s — guard block is not closed\n' "${raw%: UNCLOSED_BLOCK}" >> "$SANDBOX_REPORT" ;;
+        *": no guard after the call")
+            printf '  - %s — no guard after the call\n' "${raw%: no guard after the call}" >> "$SANDBOX_REPORT" ;;
+        *)
+            printf '  - %s\n' "$raw" >> "$SANDBOX_REPORT" ;;
+    esac
+done < "$SANDBOX_RAW"
+
+if [[ -s $SANDBOX_REPORT ]]; then
+    DRIFT=1
+    echo "Child E2E script calls in run-tests.bat without an 'if errorlevel 1' guard that exits non-zero:"
+    cat "$SANDBOX_REPORT"
+elif ! grep -qiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER"; then
     echo "ERROR: no 'call .\tests\*.bat' child invocations found in $BAT_RUNNER —" >&2
     echo "the #1040 guard check could not run, so treat this validator as failed." >&2
     exit 2
 fi
-
-if [[ ${#UNGUARDED_CHILDREN[@]} -gt 0 ]]; then
-    DRIFT=1
-    echo "Child E2E script calls in run-tests.bat without an 'if errorlevel 1' guard that exits non-zero:"
-    printf '  - %s\n' "${UNGUARDED_CHILDREN[@]}"
-fi
+rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"
 
 if [[ $DRIFT -eq 0 ]]; then
     echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded)."

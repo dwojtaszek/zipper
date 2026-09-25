@@ -31,6 +31,8 @@ if not exist "%RUNNER_BAT%" (
 )
 call :pass "validator and runner are present"
 
+if not exist "%SANDBOX%" mkdir "%SANDBOX%"
+
 REM --- The committed runner must be clean: every child call guarded ---
 
 bash "%VALIDATOR%" --strict > "%SANDBOX%.clean.out" 2>&1
@@ -50,7 +52,6 @@ call :pass "validator reports the guard check in its summary line"
 
 REM --- Negative 1: a child call that loses its guard must be caught ---
 
-mkdir "%SANDBOX%" 2>nul
 copy /y "%VALIDATOR%" "%SANDBOX%\validate-e2e-parity.sh" >nul
 copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
 copy /y "%REPO_ROOT%\tests\run-tests.sh" "%SANDBOX%\run-tests.sh" >nul
@@ -101,6 +102,58 @@ if errorlevel 1 (
     call :pass "validator distinguishes a non-aborting guard from a missing one"
 )
 
+REM --- Negative 3: "if errorlevel 10" is not a guard for errorlevel 1 ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"if errorlevel 1 (`r`n    echo [ ERROR ] Multipage TIFF tests failed.`r`n\"; $new=\"if errorlevel 10 (`r`n    echo [ ERROR ] Multipage TIFF tests failed.`r`n\"; if (-not $s.Contains($old)) { Write-Error 'TIFF guard block not found'; exit 1 }; [IO.File]::WriteAllText($p, $s.Replace($old, $new))"
+if errorlevel 1 (
+    call :fail "could not build the errorlevel-10 sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.errlevel.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator rejects 'if errorlevel 10' as a guard"
+) else (
+    call :fail "validator accepted 'if errorlevel 10' as a guard for errorlevel 1"
+)
+
+REM --- Negative 4: a guard that only echoes the exit text is not a guard ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"call .\tests\test-cross-platform.bat`r`nif errorlevel 1 (`r`n    echo [ ERROR ] Cross-platform tests failed.`r`n    exit /b 1`r`n)`r`n\"; $new=\"call .\tests\test-cross-platform.bat`r`nif errorlevel 1 echo please exit /b 1 later`r`n\"; if (-not $s.Contains($old)) { Write-Error 'cross-platform guard block not found'; exit 1 }; [IO.File]::WriteAllText($p, $s.Replace($old, $new))"
+if errorlevel 1 (
+    call :fail "could not build the echo-only-guard sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.echofake.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator rejects a guard that only echoes the exit text"
+) else (
+    call :fail "validator accepted a guard that only echoes 'exit /b 1' as text"
+)
+
+REM --- Positive: the single-line guard form is accepted ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"call .\tests\test-cross-platform.bat`r`nif errorlevel 1 (`r`n    echo [ ERROR ] Cross-platform tests failed.`r`n    exit /b 1`r`n)`r`n\"; $new=\"call .\tests\test-cross-platform.bat`r`nif errorlevel 1 exit /b 1`r`n\"; if (-not $s.Contains($old)) { Write-Error 'cross-platform guard block not found'; exit 1 }; [IO.File]::WriteAllText($p, $s.Replace($old, $new))"
+if errorlevel 1 (
+    call :fail "could not build the single-line-guard sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.oneline.out" 2>&1
+if errorlevel 1 (
+    call :fail "validator rejected a valid single-line guard"
+    type "%SANDBOX%.oneline.out"
+) else (
+    call :pass "validator accepts the single-line 'if errorlevel 1 exit /b 1' form"
+)
+
 call :cleanup
 
 :summary
@@ -115,6 +168,9 @@ exit /b 1
 
 :cleanup
 if exist "%SANDBOX%" rd /s /q "%SANDBOX%"
+for %%F in (clean unguarded noexit errlevel echofake oneline) do (
+    if exist "%SANDBOX%.%%F.out" del /q "%SANDBOX%.%%F.out"
+)
 goto :eof
 
 :pass
