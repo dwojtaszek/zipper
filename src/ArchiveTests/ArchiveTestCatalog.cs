@@ -176,6 +176,23 @@ internal static class ArchiveTestCatalog
     internal const string EncodingSuite = "encoding";
     internal const string AllSuites = "all";
 
+    /// <summary>
+    /// Every accepted <c>--archive-test-suite</c> value, in the order the
+    /// invalid-value diagnostic lists them (REQ-208). The diagnostic renders
+    /// this list, so a shipped suite cannot be missing from the error message;
+    /// <c>SupportedSuites_CoversEveryCatalogSuiteConstant</c> keeps it equal
+    /// to the suite constants above.
+    /// </summary>
+    internal static readonly IReadOnlyList<string> SupportedSuites =
+    [
+        SmokeSuite,
+        CompatibilitySuite,
+        MalformedSuite,
+        SecuritySuite,
+        EncodingSuite,
+        AllSuites,
+    ];
+
     internal static readonly IReadOnlyList<string> ValidControlSuites = [SmokeSuite, CompatibilitySuite];
 
     /// <summary>The two frozen reader-hostile smoke members (#834): malformed cases
