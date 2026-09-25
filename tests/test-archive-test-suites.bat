@@ -219,6 +219,26 @@ call :assert_rejected "unknown suite" --archive-test-suite bogus --output-path "
 call :assert_rejected "unknown Case Key" --archive-test-suite smoke --archive-test-cases no-such-case --output-path "%TEST_OUTPUT_DIR%\x"
 call :assert_rejected "missing --output-path" --archive-test-suite smoke
 
+REM 9.1. Negative seed validation: reject before output generation with exact error.
+set "NEGATIVE_SEED_OUT=%TEST_OUTPUT_DIR%\negative-seed"
+set "NEGATIVE_SEED_ERR=%TEST_OUTPUT_DIR%\negative-seed.stderr"
+%ZIPPER_CMD% --archive-test-suite smoke --seed -1 --output-path "%NEGATIVE_SEED_OUT%" >nul 2>"%NEGATIVE_SEED_ERR%"
+if errorlevel 1 (
+    if exist "%NEGATIVE_SEED_OUT%" (
+        call :fail "negative --seed must not create output"
+    ) else (
+        call :pass "negative --seed created no output"
+    )
+    findstr /L /X /C:"Error: --seed must be a non-negative integer." "%NEGATIVE_SEED_ERR%" >nul 2>&1
+    if errorlevel 1 (
+        call :fail "negative --seed must report exact error"
+    ) else (
+        call :pass "negative --seed rejected with exact error"
+    )
+) else (
+    call :fail "negative --seed must fail"
+)
+
 REM 10. Independent verifier: smoke, malformed selection, and the complete
 REM     catalogue (exactly one pair per unique Case Key, every pair verified;
 REM     unsafe policy fixtures are never extracted).

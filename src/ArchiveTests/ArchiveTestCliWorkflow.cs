@@ -96,6 +96,11 @@ internal static class ArchiveTestCliWorkflow
         }
 
         var seed = modules.Metadata.Seed ?? ArchiveTestRequest.DefaultSeed;
+        if (seed < 0)
+        {
+            Console.Error.WriteLine("Error: --seed must be a non-negative integer.");
+            return 1;
+        }
 
         ArchiveTestRequest request;
         try

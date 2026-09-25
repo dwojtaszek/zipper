@@ -348,6 +348,11 @@ internal static class ArchiveTestCaseSemantics
             errors.Add($"limits.deadlineSeconds must be between 1 and {MaxDeadlineSeconds}");
         }
 
+        if (testCase.Seed < 0)
+        {
+            errors.Add("seed must be non-negative");
+        }
+
         return errors;
     }
 

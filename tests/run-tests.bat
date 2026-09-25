@@ -549,6 +549,10 @@ call :print_success "Unified workflow tests passed."
 REM Test 11b: Archive Test workflow CLI tests
 call :print_info "Running Archive Test suite CLI tests..."
 call .\tests\test-archive-test-suites.bat
+if errorlevel 1 (
+    echo [ ERROR ] Archive Test suite CLI tests failed.
+    exit /b 1
+)
 call :print_success "Archive Test suite CLI tests passed."
 
 REM Test 12: Loadfile-only and Chaos Engine tests

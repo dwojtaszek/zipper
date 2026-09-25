@@ -1,3 +1,4 @@
+using System.Globalization;
 using Xunit;
 using Zipper.ArchiveTests;
 using Zipper.Cli.Modules;
@@ -24,6 +25,22 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
 
     private static async Task<int> RunAsync(params string[] args) =>
         await ArchiveTestCliWorkflow.RunAsync(Parse(args), CancellationToken.None);
+
+    private static async Task<(int ExitCode, string Stderr)> RunWithCapturedErrorAsync(params string[] args)
+    {
+        var originalError = Console.Error;
+        using var errorWriter = new StringWriter();
+        try
+        {
+            Console.SetError(errorWriter);
+            var exitCode = await RunAsync(args);
+            return (exitCode, errorWriter.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
 
     private static List<string> SuiteKeys(string suite) =>
         [.. ArchiveTestCatalog.ListSuite(suite).Select(definition => definition.CaseKey)];
@@ -104,16 +121,33 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task RunAsync_OmittedSeedDefaultsToFortyTwo()
+    public async Task RunAsync_OmittedSeedDefaultsToFortyTwo_PublishesByteIdenticalPairs()
     {
         var defaults = Path.Combine(TempDir, "seed-default");
         var explicitFortyTwo = Path.Combine(TempDir, "seed-42");
-        await RunAsync("--archive-test-suite", "smoke", "--output-path", defaults);
-        await RunAsync("--archive-test-suite", "smoke", "--seed", "42", "--output-path", explicitFortyTwo);
+        Assert.Equal(0, await RunAsync("--archive-test-suite", "smoke", "--output-path", defaults));
+        Assert.Equal(0, await RunAsync("--archive-test-suite", "smoke", "--seed", "42", "--output-path", explicitFortyTwo));
 
-        Assert.Equal(
-            Directory.GetFiles(defaults).Select(Path.GetFileName).Order(StringComparer.Ordinal),
-            Directory.GetFiles(explicitFortyTwo).Select(Path.GetFileName).Order(StringComparer.Ordinal));
+        var defaultFiles = Directory.GetFiles(defaults).OrderBy(Path.GetFileName, StringComparer.Ordinal).ToArray();
+        var explicitFiles = Directory.GetFiles(explicitFortyTwo).OrderBy(Path.GetFileName, StringComparer.Ordinal).ToArray();
+        Assert.NotEmpty(defaultFiles);
+        Assert.Equal(defaultFiles.Length, explicitFiles.Length);
+        Assert.Equal(explicitFiles.Select(Path.GetFileName), defaultFiles.Select(Path.GetFileName));
+        Assert.Equal(explicitFiles.Select(File.ReadAllBytes), defaultFiles.Select(File.ReadAllBytes));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(42)]
+    public async Task RunAsync_NonNegativeSeed_PublishesFixturePairs(int seed)
+    {
+        var destination = Path.Combine(TempDir, $"seed-{seed}");
+
+        var exitCode = await RunAsync(
+            "--archive-test-suite", "smoke", "--seed", seed.ToString(CultureInfo.InvariantCulture), "--output-path", destination);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(10, Directory.GetFiles(destination).Length);
     }
 
     [Fact]
@@ -192,6 +226,19 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
     public async Task RunAsync_MissingOutputPath_Fails()
     {
         Assert.Equal(1, await RunAsync("--archive-test-suite", "smoke"));
+    }
+
+    [Fact]
+    public async Task RunAsync_NegativeSeed_FailsWithNonNegativeSeedError()
+    {
+        var destination = Path.Combine(TempDir, "negative-seed");
+
+        var (exitCode, stderr) = await RunWithCapturedErrorAsync(
+            "--archive-test-suite", "smoke", "--seed", "-5", "--output-path", destination);
+
+        Assert.Equal(1, exitCode);
+        Assert.Equal($"Error: --seed must be a non-negative integer.{Environment.NewLine}", stderr);
+        Assert.False(Directory.Exists(destination));
     }
 
     [Theory]
