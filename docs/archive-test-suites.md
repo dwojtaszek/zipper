@@ -53,7 +53,7 @@ zipper --archive-test-suite <smoke|compatibility|malformed|security|encoding|all
   - `encoding` — the three legacy-codec 0x5C trail-byte controls (ticket #887: `encoding-cp932-trail-backslash`, `encoding-big5-trail-backslash`, `encoding-gbk-trail-backslash`). Valid single-entry Archives with bit 11 clear whose raw name bytes carry `0x5C` only as a CP932/Big5/GBK character's trail byte (`表` = `0x95 0x5C`, `許` = `0xB3 0x5C`, `乗` = `0x81 0x5C`). Deliberately outside the default compatibility suite per the #887 triage note: only a named codec consumer can evaluate the hazard, so the verifier's `encoding-trail-byte` check decodes the raw name bytes with the codec (Python stdlib `cp932`/`big5`/`gbk`) and asserts no spurious directory split **after** decoding, never on the raw bytes.
   - `all` — the distinct union of every case.
 - Generation order is ordinal Case Key. `--archive-test-cases` filters to named Case Keys; unknown, empty, duplicate, or out-of-suite keys fail validation.
-- `--seed` defaults to 42.
+- `--seed` accepts only non-negative integers and defaults to 42.
 - `--output-path` must be a **new** directory inside the working directory. Only these flags may be combined; all generation flags are rejected (ADR-0008).
 - Exit codes: `0` success, `1` validation or generation failure (no partial publication), `130` cancellation.
 

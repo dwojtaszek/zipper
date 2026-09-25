@@ -198,6 +198,22 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task GenerateAsync_DirectRequestWithNegativeSeed_FailsSemanticValidation()
+    {
+        var destination = Path.Combine(TempDir, "negative-seed");
+        var request = ArchiveTestRequest.Create(["valid-empty"], -5, destination);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => GenerateAsync(request));
+
+        Assert.Contains(
+            "Expectation File for Case Key 'valid-empty' failed semantic validation",
+            error.Message,
+            StringComparison.Ordinal);
+        Assert.Contains("seed must be non-negative", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+    }
+
+    [Fact]
     public void Create_EscapeOutsideWorkingDirectory_Throws()
     {
         Assert.Throws<ArgumentException>(

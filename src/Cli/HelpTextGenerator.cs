@@ -105,7 +105,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("                           smoke, compatibility, malformed, security, encoding, all");
         Console.Error.WriteLine("  --archive-test-cases <k>  Comma-separated Case Keys from the selected suite");
         Console.Error.WriteLine("                           (default: all members of the suite)");
-        Console.Error.WriteLine("  --seed <number>           Fixture Seed (default: 42)");
+        Console.Error.WriteLine("  --seed <number>           Fixture Seed (non-negative integer, default: 42)");
         Console.Error.WriteLine("  --output-path <path>      New output directory for the fixture pairs (required)");
         Console.Error.WriteLine("                           Only these flags may be combined with --archive-test-suite.");
         Console.Error.WriteLine();

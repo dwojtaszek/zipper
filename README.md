@@ -62,6 +62,7 @@ Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie 
 ```bash
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 ```
+For Archive Test workflows, `--seed` accepts only non-negative integers and defaults to 42; negative values fail before output generation.
 
 ---
 
@@ -112,7 +113,7 @@ All command-line flags recognized by Zipper:
 | `--bates-digits` | `8` | `1` to `20` | Bates number digit padding count |
 | `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |
 | `--column-profile` | none | `minimal`, `standard`, `litigation`, `full`, or file path | Metadata column profile |
-| `--seed` | none | integer | Random seed for reproducible runs |
+| `--seed` | none (42 for Archive Test) | integer (non-negative for Archive Test) | Random seed for reproducible runs |
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |
 | `--empty-percentage` | `15` | `0` to `100` | Percentage of empty values for optional fields |
 | `--custodian-count` | `10` | `1` to `1000` | Number of custodians in data pool |

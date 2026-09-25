@@ -217,6 +217,24 @@ else
   check 0 "missing --output-path rejected"
 fi
 
+# 9.1. Negative seed validation: reject before output generation with exact error.
+NEGATIVE_SEED_OUT="$TEST_OUTPUT_DIR/negative-seed"
+NEGATIVE_SEED_ERR="$TEST_OUTPUT_DIR/negative-seed.stderr"
+if zipper --archive-test-suite smoke --seed -1 --output-path "$NEGATIVE_SEED_OUT" >/dev/null 2>"$NEGATIVE_SEED_ERR"; then
+  check 1 "negative --seed must fail"
+else
+  if [[ -e "$NEGATIVE_SEED_OUT" ]]; then
+    check 1 "negative --seed must not create output"
+  else
+    check 0 "negative --seed created no output"
+  fi
+  if grep -Fxq "Error: --seed must be a non-negative integer." "$NEGATIVE_SEED_ERR"; then
+    check 0 "negative --seed rejected with exact error"
+  else
+    check 1 "negative --seed must report exact error"
+  fi
+fi
+
 # 10. Independent verifier: the published pairs pass cross-implementation
 #     verification (schema, identity, mutation audit, reader operations; ticket
 #     #845). The complete catalogue must publish exactly one pair per unique
