@@ -1,9 +1,17 @@
 project: Zipper
+platform: github
 imagemagick: true
+video_evidence: false
+droid_control:
+  plugin: droid-control@factory-plugins
+  compose: false
+
 environments:
   local:
-    url: localhost
-    restrictions: []
+    url: local CLI
+    restrictions:
+      - Use run-scoped QA data under qa-results/
+      - Do not use production credentials or external services
 
 default_target: local
 
@@ -13,23 +21,37 @@ auth:
 
 personas:
   - name: default
-    description: 'CLI user running zipper with standard arguments'
+    description: 'CLI user generating synthetic e-discovery test data'
     credentials_source: none
-    test_focus: ['standard-mode', 'loadfile-only', 'production-set', 'target-zip-size']
+    test_focus:
+      - standard-mode
+      - loadfile-only
+      - loadfile-only-with-chaos
+      - production-set
+      - bates-numbering
+      - target-zip-size
+      - source-driven-generation
+      - load-file-formats
+      - archive-test-suite
+      - production-manifest-comparison
+      - version-output
     cannot_do: []
 
 apps:
   cli:
     path_patterns:
-      - "src/**/*.cs"
-      - "src/**/*.csproj"
+      - "src/**"
+      - "tests/**/*.sh"
+      - "tests/**/*.bat"
+      - "tests/fixtures/**"
       - "Directory.Build.props"
       - "global.json"
       - ".editorconfig"
       - "BannedSymbols.txt"
+      - "zipper.sln"
     skill: qa-cli
-    test_tool: shell
-    build_command: 'dotnet publish src/Zipper.csproj -c Release -o ./publish-bin -p:Version=qa-test'
+    test_tool: tuistory
+    build_command: 'dotnet publish src/Zipper.csproj -c Release -o "./qa-results/$RUN_ID/publish" -p:Version=qa-test -p:InformationalVersion=qa-test'
 
 feature_flags:
   provider: none
@@ -41,6 +63,6 @@ integrations: {}
 cleanup:
   auto_cleanup: true
   strategy: delete-output-files
-  instructions: 'Remove generated output files (archive.zip, *.dat, *.opt, *.csv, production directories) from the working directory after each test run'
+  instructions: 'Delete only qa-results/$RUN_ID/data and qa-results/$RUN_ID/publish after each run. Preserve qa-results/report.md and qa-results/$RUN_ID/evidence.'
 
-failure_learning: open_pr
+failure_learning: suggest_in_report
