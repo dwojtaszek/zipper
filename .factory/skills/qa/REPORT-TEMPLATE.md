@@ -1,11 +1,10 @@
 ## QA Report
 
-| # | Test Case | App | Persona | Result | Notes |
+| #   | Test Case | App | Persona | Result | Notes |
 | --- | --------- | --- | ------- | ------ | ----- |
-
 {{TEST_ROWS}}
 
-Result values: ✅ PASS, ❌ FAIL, ⛔ BLOCKED, ⚠️ FLAKY, ❓ INCONCLUSIVE
+Result values: :white_check_mark: PASS, :x: FAIL, :no_entry: BLOCKED, :warning: FLAKY, :grey_question: INCONCLUSIVE
 
 {{#if ACTIONABLE_ITEMS}}
 

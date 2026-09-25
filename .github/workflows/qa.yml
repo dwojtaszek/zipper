@@ -1,0 +1,425 @@
+name: Functional QA
+
+on:
+  pull_request_target:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Ancestor commit before the CLI change to test
+        required: true
+        type: string
+
+concurrency:
+  group: qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qa:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate QA output root
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ ! -L qa-results ]] || {
+            echo "Refusing symlinked QA output root." >&2
+            exit 1
+          }
+          mkdir -p -- qa-results
+          repo_root="$(realpath -- .)"
+          qa_root="$(realpath -- qa-results)"
+          [[ -d qa-results && "$qa_root" == "$repo_root/qa-results" ]] || {
+            echo "QA output root must be a directory inside the checkout." >&2
+            exit 1
+          }
+
+      - name: Install QA workflow dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-yaml
+
+      - name: Read QA runtime configuration
+        id: qa-config
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import yaml
+
+          with open(".factory/skills/qa/config.yaml", encoding="utf-8") as config_file:
+              config = yaml.safe_load(config_file)
+
+          values = {
+              "imagemagick": config["imagemagick"],
+              "video_evidence": config["video_evidence"],
+              "compose": config["droid_control"]["compose"],
+          }
+          plugin = config["droid_control"]["plugin"]
+          cli_patterns = config["apps"]["cli"]["path_patterns"]
+          if any(type(value) is not bool for value in values.values()):
+              raise SystemExit("QA runtime settings must be booleans.")
+          if not isinstance(plugin, str) or not plugin or "\n" in plugin or "\r" in plugin:
+              raise SystemExit("Droid Control plugin must be a non-empty string.")
+          if not isinstance(cli_patterns, list) or not cli_patterns or any(
+              not isinstance(pattern, str) or not pattern or "\n" in pattern or "\r" in pattern
+              for pattern in cli_patterns
+          ):
+              raise SystemExit("CLI path patterns must be a non-empty list of single-line strings.")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
+              for name, value in values.items():
+                  output_file.write(f"{name}={str(value).lower()}\n")
+              output_file.write(f"plugin={plugin}\n")
+              output_file.write(f"cli_patterns={json.dumps(cli_patterns, separators=(',', ':'))}\n")
+          PY
+
+      - name: Validate diff base and determine CLI scope
+        id: qa-scope
+        shell: bash
+        env:
+          QA_DIFF_BASE: ${{ inputs.base_sha }}
+          CLI_PATTERNS: ${{ steps.qa-config.outputs.cli_patterns }}
+        run: |
+          set -euo pipefail
+          [[ "$QA_DIFF_BASE" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "QA diff base must be a 40-character commit SHA." >&2
+            exit 1
+          }
+          git cat-file -e "${QA_DIFF_BASE}^{commit}" || {
+            echo "QA diff base is not available in this checkout." >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$QA_DIFF_BASE" "$GITHUB_SHA" || {
+            echo "QA diff base must be an ancestor in protected main history." >&2
+            exit 1
+          }
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          patterns = json.loads(os.environ["CLI_PATTERNS"])
+          pathspecs = [f":(glob){pattern}" for pattern in patterns]
+          result = subprocess.run(
+              [
+                  "git",
+                  "diff",
+                  "--name-only",
+                  "--no-renames",
+                  os.environ["QA_DIFF_BASE"],
+                  os.environ["GITHUB_SHA"],
+                  "--",
+                  *pathspecs,
+              ],
+              check=True,
+              stdout=subprocess.PIPE,
+          )
+          changed_paths = [
+              path.decode("utf-8", errors="replace")
+              for path in result.stdout.split(b"\0")
+              if path
+          ]
+          for path in changed_paths:
+              print(f"CLI path changed: {path}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
+              output_file.write(f"cli_affected={'true' if changed_paths else 'false'}\n")
+          PY
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        with:
+          node-version: 22
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Install terminal QA tools
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        shell: bash
+        env:
+          IMAGEMAGICK: ${{ steps.qa-config.outputs.imagemagick }}
+          VIDEO_EVIDENCE: ${{ steps.qa-config.outputs.video_evidence }}
+          COMPOSE: ${{ steps.qa-config.outputs.compose }}
+        run: |
+          set -euo pipefail
+          npm install --global tuistory@0.11.0
+          packages=()
+          [[ "$IMAGEMAGICK" != true ]] || packages+=(imagemagick)
+          if [[ "$VIDEO_EVIDENCE" == true ]]; then
+            packages+=(asciinema)
+          fi
+          if [[ "$VIDEO_EVIDENCE" == true && "$COMPOSE" == true ]]; then
+            packages+=(ffmpeg cargo)
+          fi
+          if ((${#packages[@]})); then
+            sudo apt-get install -y -qq "${packages[@]}"
+          fi
+          if [[ "$VIDEO_EVIDENCE" == true && "$COMPOSE" == true ]]; then
+            cargo install --git https://github.com/asciinema/agg
+          fi
+
+      - name: Install Droid CLI
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        run: npm install --global @factory/cli@0.226.2
+
+      - name: Install Droid Control plugin
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        env:
+          PLUGIN: ${{ steps.qa-config.outputs.plugin }}
+        run: droid plugin install "$PLUGIN" --scope project
+
+      - name: Run functional QA
+        id: qa
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        timeout-minutes: 20
+        env:
+          FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+          QA_EVIDENCE_TOKEN: ${{ steps.qa-config.outputs.video_evidence == 'true' && secrets.QA_EVIDENCE_TOKEN || '' }}
+          REPO_ID: ${{ github.event.repository.id }}
+          CI: 'true'
+          QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          QA_DIFF_BASE: ${{ inputs.base_sha }}
+          VIDEO_EVIDENCE: ${{ steps.qa-config.outputs.video_evidence }}
+          COMPOSE: ${{ steps.qa-config.outputs.compose }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$HOME/.factory/bin:$PATH"
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || {
+            echo "Credentialed QA is allowed only from protected main." >&2
+            exit 1
+          }
+          [[ -n "${FACTORY_API_KEY:-}" ]] || {
+            echo "FACTORY_API_KEY is not configured." >&2
+            exit 1
+          }
+          prompt="You are running in a non-interactive CI environment. There is NO human available. Do NOT use AskUser, do NOT wait for confirmations, and do NOT pause for input. Run the qa skill. The diff base is ${QA_DIFF_BASE}. Use droid-control for every terminal interaction and write the final report to qa-results/report.md. Use ${QA_RUN_ID} as RUN_ID and keep all build output and generated test data under qa-results/${QA_RUN_ID}, then clean only that run's data and publish directories."
+          if [[ "$VIDEO_EVIDENCE" == true ]]; then
+            prompt+=" Use droid-control Capture and upload video evidence per the QA skill's GitHub evidence rules."
+          fi
+          if [[ "$VIDEO_EVIDENCE" == true && "$COMPOSE" == true ]]; then
+            prompt+=" Read the Compose setting from config.yaml and run droid-control Compose for each captured flow before upload."
+          fi
+          droid exec --model gpt-5.6-sol --reasoning-effort medium --auto high "$prompt"
+
+      - name: Write no-app report
+        if: steps.qa-scope.outputs.cli_affected == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-results
+          cat > qa-results/report.md <<'REPORT'
+          ## QA Report
+
+          | #   | Test Case | App | Persona | Result | Notes |
+          | --- | --------- | --- | ------- | ------ | ----- |
+          | 1 | No app code changed | CLI | default | :grey_question: INCONCLUSIVE | No app code changed -- QA not applicable for this diff. |
+
+          <details>
+          <summary>Screenshots & Evidence</summary>
+
+          No CLI path matching `.factory/skills/qa/config.yaml` changed.
+
+          </details>
+          REPORT
+
+      - name: Validate QA report
+        shell: bash
+        if: success()
+        env:
+          CLI_AFFECTED: ${{ steps.qa-scope.outputs.cli_affected }}
+        run: |
+          set -euo pipefail
+          test -s qa-results/report.md
+          grep -q '^## QA Report$' qa-results/report.md
+          grep -Fqx '| #   | Test Case | App | Persona | Result | Notes |' qa-results/report.md
+          mapfile -t result_rows < <(grep -E '^\|[[:space:]]*[0-9]+[[:space:]]*\|' qa-results/report.md || true)
+          if [[ "$CLI_AFFECTED" == false ]]; then
+            if ((${#result_rows[@]} == 1)) &&
+               [[ "${result_rows[0]}" == '| 1 | No app code changed | CLI | default | :grey_question: INCONCLUSIVE | No app code changed -- QA not applicable for this diff. |' ]]; then
+              echo "No configured CLI path changed; accepting the required INCONCLUSIVE report."
+              exit 0
+            fi
+            echo "No CLI path changed, but the report does not match the required INCONCLUSIVE row." >&2
+            exit 1
+          fi
+          if ((${#result_rows[@]} < 2)); then
+            echo "QA report must contain a successful flow and a negative or boundary flow." >&2
+            exit 1
+          fi
+          has_positive=false
+          has_negative_or_boundary=false
+          for row in "${result_rows[@]}"; do
+            if [[ ! "$row" =~ ^\|[[:space:]]*[0-9]+[[:space:]]*\|[^|]*\|[^|]*\|[^|]*\|[[:space:]]:white_check_mark:[[:space:]]PASS[[:space:]]\|[^|]*\|[[:space:]]*$ ]]; then
+              echo "QA report contains a non-passing or malformed test result: $row" >&2
+              exit 1
+            fi
+            test_case="$(awk -F '|' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $3); print $3}' <<<"$row")"
+            notes="$(awk -F '|' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $7); print $7}' <<<"$row")"
+            [[ -n "$notes" ]] || {
+              echo "QA report test row lacks observed evidence: $row" >&2
+              exit 1
+            }
+            if [[ "$test_case" =~ ^\[positive\][[:space:]]+.+$ ]]; then
+              has_positive=true
+            fi
+            if [[ "$test_case" =~ ^\[(negative|boundary)\][[:space:]]+.+$ ]]; then
+              has_negative_or_boundary=true
+            fi
+          done
+          [[ "$has_positive" == true && "$has_negative_or_boundary" == true ]] || {
+            echo "QA report must label at least one [positive] and one [negative] or [boundary] test case." >&2
+            exit 1
+          }
+
+      - name: Preserve run evidence and remove generated data
+        if: always()
+        shell: bash
+        env:
+          QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$QA_RUN_ID" =~ ^[0-9]+-[0-9]+$ ]] || exit 0
+          [[ -d qa-results && ! -L qa-results ]] || exit 0
+          qa_root="$(realpath -- qa-results)"
+          run_dir="qa-results/$QA_RUN_ID"
+          [[ ! -L "$run_dir" ]] || { echo "Refusing symlinked QA run directory" >&2; exit 1; }
+          for name in data publish; do
+            target="$run_dir/$name"
+            [[ ! -L "$target" ]] || { echo "Refusing symlinked QA cleanup target: $target" >&2; exit 1; }
+            resolved="$(realpath -m -- "$target")"
+            [[ "$resolved" == "$qa_root/$QA_RUN_ID/$name" ]] || {
+              echo "Refusing QA cleanup outside the run directory: $target" >&2
+              exit 1
+            }
+            rm -rf -- "$target"
+          done
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: qa-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+  report-blocked:
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Write blocked QA report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-results
+          cat > qa-results/report.md <<'REPORT'
+          ## QA Report
+
+          | # | Test Case | App | Persona | Result | Notes |
+          | --- | --- | --- | --- | --- | --- |
+          | 1 | Functional QA | CLI | default | :no_entry: BLOCKED | Credentialed QA can run only from protected `main`. |
+
+          <details>
+          <summary>Screenshots & Evidence</summary>
+
+          No app interaction was run because the dispatch ref is not `main`.
+
+          </details>
+          REPORT
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: qa-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/report.md
+          if-no-files-found: warn
+          retention-days: 14
+
+  report-pr:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Write blocked QA report
+        shell: bash
+        env:
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: |
+          set -euo pipefail
+          if [[ "$IS_FORK" == true ]]; then
+            reason='GitHub does not expose FACTORY_API_KEY to fork pull requests.'
+          else
+            reason='Credentialed QA runs only after review and merge, by manual dispatch from protected main.'
+          fi
+          mkdir -p qa-results
+          {
+            cat <<'REPORT'
+          ## QA Report
+
+          | # | Test Case | App | Persona | Result | Notes |
+          | --- | --- | --- | --- | --- | --- |
+          REPORT
+            printf '| 1 | Functional QA | CLI | default | :no_entry: BLOCKED | %s |\n' "$reason"
+            cat <<'REPORT'
+
+          <details>
+          <summary>Screenshots & Evidence</summary>
+
+          No app interaction was run for this pull request.
+
+          </details>
+          REPORT
+          } > qa-results/report.md
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: qa-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/report.md
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Post or update QA report comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '<!-- qa-report -->'
+            cat qa-results/report.md
+            printf '\n\n---\n\n[Download QA artifact](%s) · [Workflow run](%s)\n' "$RUN_URL" "$RUN_URL"
+          } > qa-comment.md
+          comment_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq '.[] | select(.body | startswith("<!-- qa-report -->")) | .id' | sed -n '1p')"
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
+              -f body="$(cat qa-comment.md)" >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$(cat qa-comment.md)" >/dev/null
+          fi

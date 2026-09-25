@@ -1,150 +1,83 @@
 ---
 name: qa
 description: >
-  Run QA tests for Zipper. Analyzes git diff to determine affected areas,
-  runs configured test flows against the CLI binary, and generates diff-targeted tests.
-  Uses shell commands to run the binary and verify output files.
-  Use when testing PRs, releases, or smoke testing the CLI.
+  Run functional QA for Zipper. Maps the git diff to CLI flows, tests the
+  built application through Droid Control, and writes a concise QA report.
+  Use when testing PRs, releases, or local changes.
 ---
 
 # QA Orchestrator
 
-**SCOPE: This skill performs functional QA only -- verifying that the Zipper CLI actually works by running it with real arguments and checking output files. Do NOT run or report on CI checks, linting, dotnet format, unit tests, or any static analysis. Those are handled by separate workflows.**
+**SCOPE: Functional QA only.** Verify real CLI behavior by interacting with Zipper and inspecting generated Archives, Load Files, Production Sets, and reports. Do not run or report unit tests, E2E scripts, formatting, builds as test cases, or static analysis.
 
-## Step 1: Load Configuration
+## 1. Load configuration and scope the run
 
-Read `.factory/skills/qa/config.yaml` for build commands, test tool config, and app definitions.
+Read `.factory/skills/qa/config.yaml`. Use its target, path patterns, persona, cleanup rule, `video_evidence`, and `droid_control.compose`.
 
-## Step 2: Determine Target Environment
+Before writing output, refuse a symlinked `qa-results` root, create the directory if absent, and verify its resolved path is exactly `qa-results` under the checkout. If this check fails, report BLOCKED and stop. Set `RUN_ID="${QA_RUN_ID:-$(date +%s)-$$}"` and export it. Require `RUN_ID` to match `^[A-Za-z0-9_-]+$`; otherwise report BLOCKED and stop. Create `qa-results/$RUN_ID` only if it does not already exist; if it exists, report BLOCKED rather than reusing or deleting it. Store generated data and build output under that directory; preserve `qa-results/report.md` and evidence.
 
-The default target is `local`. Zipper is a CLI tool with no deployed environments -- it runs locally against the built binary.
+For an affected interactive app, invoke `droid-control` before interaction. Use its terminal route, Capture, and Verify stages. Read `droid_control.compose` on every run. Invoke Compose only when both `video_evidence` and `droid_control.compose` are true; otherwise, do not load Compose. Keep these decisions conditional on the config values.
 
-## Step 3: Analyze Git Diff
+## 2. Select the target
 
-Determine the diff base. In a PR context, compare against the PR base SHA:
+Use `default_target` unless the user names another configured target. Zipper runs locally and has no hosted application URL, authentication, roles, or external app services. Use synthetic data only.
 
-```bash
-git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD
-```
+## 3. Analyze the diff
 
-If running locally (no PR context), compare against the main branch:
+Use `QA_DIFF_BASE` when provided (the PR base in CI). Otherwise compare against `origin/main`; if that is unavailable, compare the latest commit with its parent. Include committed changes since that base, `git diff --name-only HEAD`, and paths from `git ls-files --others --exclude-standard` before matching app patterns. This includes staged, unstaged, and untracked app files.
 
-```bash
-git diff --name-only origin/main HEAD
-```
+Map changed paths to `apps.*.path_patterns`. Files outside every app's patterns, including this QA setup, docs, and unrelated CI files, do not trigger app flows.
 
-If there are no uncommitted or unpushed changes, compare the latest commit against its parent:
+- Run only flows relevant to the affected app and the diff.
+- Add a direct, change-specific check when the menu has no matching flow.
+- Include adjacent flows only when they verify integration with the change.
+- Ensure at least half of reported cases directly test the changed behavior.
+- For any CLI-path diff, include at least one successful behavior flow and at least one relevant negative or boundary flow. Prefix the Test Case with `[positive]`, `[negative]`, or `[boundary]`, followed by a descriptive flow name. Put concise observed evidence in the Notes column.
+- If no app path changed, report one INCONCLUSIVE row with Test Case exactly `No app code changed` and Notes `No app code changed -- QA not applicable for this diff.` Do not build or run app flows.
 
-```bash
-git diff --name-only HEAD~1 HEAD
-```
+## 4. App-specific pre-flight
 
-Map changed files to apps using the path_patterns in config.yaml.
+For the affected CLI app only:
 
-Files that don't match ANY app's path_patterns (e.g., `.factory/skills/**`, `docs/**`, `.github/**`, `droid-wiki/**`, `*.md`) are NOT associated with any app. Do NOT run app test flows for them.
+1. Build with `apps.cli.build_command`, after setting `RUN_ID`.
+2. Confirm `qa-results/$RUN_ID/publish/Zipper` exists (or `Zipper.exe` on Windows).
+3. Confirm Droid Control is active and its terminal route prerequisites are available. If not, report the app flows as BLOCKED with the missing prerequisite and remediation.
 
-For each affected app:
+Run the build through Droid Control's terminal route. The build is a prerequisite, not a report row. Do not run pre-flight steps for an unaffected app. When Compose is selected by config, let Droid Control resolve its own plugin root; if its `remotion/node_modules` is missing, install from the lockfile in that `remotion` directory before rendering. Never install Remotion dependencies otherwise.
 
-- Run ONLY that app's flows from its sub-skill
-- Generate ADDITIONAL targeted tests based on the specific changes in the diff
+## 5. Choose and run flows
 
-For apps NOT affected by the diff:
+Read `.factory/skills/qa-cli/SKILL.md`. Treat its test menu as options, not a checklist:
 
-- Do NOT load or run their flows. They are completely out of scope.
+- Select only flows that exercise the diff, plus relevant integration checks.
+- Execute Zipper through Droid Control's terminal route. The CLI is one-shot, so send each invocation through a run-scoped terminal session; use real arguments and inspect real generated files.
+- Do not launch raw `tuistory` or bypass Droid Control for terminal interactions.
+- Do not run the repository's E2E scripts or any unit-test/static-analysis suite.
+- If an existing flow does not cover the diff, add an ad-hoc interaction that directly proves the changed behavior.
 
-If NO app is affected by the diff (e.g., docs-only, CI-only, or config-only changes), report as INCONCLUSIVE: "No app code changed -- QA not applicable for this diff." Do NOT run any app flows.
+## 6. Capture evidence
 
-## Step 4: Pre-flight Checks
+Use Droid Control Capture and Verify for the selected route. Capture terminal text snapshots after meaningful state changes; each snapshot must show distinct evidence. Save any screenshots or recordings under `qa-results/$RUN_ID/evidence/`.
 
-For the CLI app (if affected):
+When `imagemagick` is true and the change has meaningful before/after screenshots, use ImageMagick to create an animated GIF diff under the evidence directory. Do not fabricate a baseline; skip the GIF when no real comparison exists.
 
-1. Build the binary using the `build_command` from config.yaml (includes `-p:Version=qa-test` for meaningful `--version` output):
-   ```bash
-   dotnet publish src/Zipper.csproj -c Release -o ./publish-bin -p:Version=qa-test
-   ```
-2. Verify the binary exists (check both Linux/macOS and Windows names):
-   ```bash
-   test -f ./publish-bin/Zipper || test -f ./publish-bin/Zipper.exe
-   ```
-3. If build fails, report BLOCKED with the build error
+When `video_evidence` is true, capture one recording per flow. Keep raw terminal casts as downloadable artifacts, never upload `.cast` files as video. When both runtime settings permit Compose, render one verified MP4 per flow using a `single` layout and the literal `"preset": "factory"`. Do not derive or configure the preset. For GitHub uploads, use the returned URL exactly: bare URL for videos, image Markdown for screenshots. Upload failures fall back to text and artifacts.
 
-Do NOT run pre-flight checks if the CLI app is not affected by the diff.
+When `video_evidence` is false, use text snapshots as primary evidence. Do not embed screenshot or repository URLs in GitHub comments; name any files retained in the workflow artifact.
 
-## Step 5: Execute Diff-Relevant Flows Only
+## 7. Handle failures and clean up
 
-Read the sub-skill from `.factory/skills/qa-cli/SKILL.md`.
+**Never silently skip a flow. If a flow cannot complete, report it as BLOCKED with what was tried and how the user can fix it.** Continue with other relevant flows. Distinguish FAIL (behavior incorrect) from BLOCKED (environment or prerequisite prevented a valid test).
 
-The sub-skill contains a MENU of available test flows. You must:
+Delete only the run's `data/` and `publish/` subdirectories after testing, after verifying `qa-results`, the run directory, and both targets are not symlinks. Preserve the report and evidence. Never clean or overwrite other output paths.
 
-1. Read the diff carefully and identify which flows are relevant to the change
-2. Run those flows PLUS adjacent flows that verify the change integrates correctly
-3. Do NOT run completely unrelated flows
-4. If no existing flow covers the change, write a NEW ad-hoc test that directly verifies the changed behavior
-5. Do NOT run unit tests, lint, or any automated test suite. This is functional QA -- run the binary as a real user would.
+## 8. Report and failure learning
 
-## Step 6: Evidence Capture
+Write `qa-results/report.md` using `.factory/skills/qa/REPORT-TEMPLATE.md`.
 
-After each test, capture evidence:
+- Start with `## QA Report` and the result table.
+- Use `:white_check_mark:` PASS, `:x:` FAIL, `:no_entry:` BLOCKED, `:warning:` FLAKY, or `:grey_question:` INCONCLUSIVE in the Result column.
+- Keep the report concise: table, short Action Required section if needed, and one collapsed evidence block.
+- Do not include a behavioral-change summary, setup rows, or unrelated-flow commentary.
 
-- Terminal output (stdout/stderr) from the CLI run
-- Output file verification: list generated files, check file sizes, verify load file format
-- For load files: show first few lines to verify headers and delimiters
-- For ZIP archives: list contents
-- For production sets: show directory tree structure
-
-Embed evidence as fenced code blocks in the report with descriptive labels.
-
-## Step 7: Test Quality Gate
-
-1. CHANGE-SPECIFIC FIRST. Prioritize tests that directly verify the behavioral change in the diff.
-2. INTEGRATION TESTS ARE VALID. Tests verifying the change integrates with existing features are good.
-3. NO UNRELATED FLOWS. Do NOT test features completely unrelated to the diff.
-4. NO AUTOMATED TEST SUITES. Do NOT run dotnet test or any CI-style checks.
-5. NEGATIVE TESTS. Include at least 1 test verifying error handling or boundary conditions.
-6. FUNCTIONAL TESTING. Test by running the binary with real arguments and checking outputs.
-7. INCONCLUSIVE IF UNSURE. If you cannot articulate what the PR changes, mark INCONCLUSIVE.
-
-## Step 8: Handle Failures
-
-**Never silently skip a flow.** If a flow cannot complete, report it as BLOCKED with what was tried and how the user can fix it. Then continue to the next flow.
-
-## Step 9: Generate Report
-
-Generate the report at `./qa-results/report.md` using `.factory/skills/qa/REPORT-TEMPLATE.md`.
-
-The report MUST follow the template. Key rules:
-
-- Start with `## QA Report` heading followed by the test results table
-- Result column MUST use emojis: ✅ PASS, ❌ FAIL, ⛔ BLOCKED, ⚠️ FLAKY, ❓ INCONCLUSIVE
-- Keep it CONCISE. The table + short "Action Required" section + collapsed evidence = the entire report.
-- Do NOT report build steps as test rows. Only report rows that verify actual user-facing behavior.
-- Put ALL evidence in a single collapsed `<details>` block.
-
-## Step 10: Suggest Skill Updates (Failure Learning)
-
-After generating the report, check if any BLOCKED or FAIL results revealed a testing environment insight that would help future QA runs.
-
-Format as a table with severity, collapsible fix prompts, and a count in the heading:
-
-## Suggested Skill Updates (N issues found)
-
-| # | Severity | File | Issue | Fix Prompt |
-| --- | -------- | ---- | ----- | ---------- |
-| 1 | emoji level | `file` | description | details with fix prompt |
-
-Severity levels: Breaking (causes failures every run), Degraded (intermittent failures), Info (improves future runs).
-
-Read the `failure_learning` field from config.yaml (`open_pr`): include the table in the report AND write a `qa-results/skill-updates.json` file so the workflow can open a PR with the updates.
-
-**`skill-updates.json` format:**
-
-```json
-[
-  {
-    "file": ".factory/skills/qa-cli/SKILL.md",
-    "section": "Known Failure Modes",
-    "action": "append",
-    "content": "N. **Description.** Fix instructions."
-  }
-]
-```
+Read `failure_learning` from config. For `suggest_in_report`, add a “Suggested Skill Updates (N issues found)” section only when a BLOCKED or FAIL result exposed new testing-environment knowledge not already in the sub-skill's Known Failure Modes. Use a table with columns `#`, `Severity`, `File`, `Issue`, and `Fix Prompt`. Classify severity as Breaking, Degraded, or Info. Each fix prompt must be self-contained; put it in a collapsed `<details><summary>Copy</summary>` block. Include the exact target file, heading, and insertion point in the issue or prompt. Do not suggest selector fixes or expected behavior changes. Do not write `skill-updates.json`.

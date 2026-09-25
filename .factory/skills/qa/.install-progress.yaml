@@ -1,9 +1,10 @@
 questionnaire_completed: true
-date: 2026-06-21
+date: 2026-09-24
 
 categories:
   default_qa_target:
     answer: local
+    restrictions: none beyond isolated QA outputs
   personas:
     answer:
       - name: default
@@ -18,14 +19,27 @@ categories:
       - production-set
       - bates-numbering
       - target-zip-size
+      - source-driven-csv-and-directory-input
+      - load-file-formats
+      - archive-test-suite
+      - production-manifest-comparison
+      - version-output
+    success_criteria: existing E2E assertions
+    personas: [default]
   external_services:
     answer: none
   cleanup:
-    answer: delete-output-files
+    answer: delete-run-scoped-test-data
     auto_cleanup: true
+    strategy: delete-test-data
+    instructions: 'Delete only run-scoped test data; retain qa-results/report.md and evidence.'
   imagemagick:
+    answer: installed_manually
     installed: true
   github_action:
-    answer: no
+    answer: yes
+    required: false
+    video_evidence: false
+    droid_control_compose: false
   failure_learning:
-    answer: open_pr
+    answer: suggest_in_report
