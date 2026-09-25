@@ -7,6 +7,7 @@ REM determinism, and independent verification.
 call "%~dp0_zipper-cli.bat"
 setlocal enabledelayedexpansion
 
+set "SCRIPT_DIR=%~dp0"
 set "TEST_OUTPUT_DIR=.\results\archive-test-suites"
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 mkdir "%TEST_OUTPUT_DIR%" >nul 2>&1
@@ -323,6 +324,166 @@ if errorlevel 1 (
     call :pass "independent verifier passed the complete catalogue"
 )
 
+REM 10.1. Cancellation (REQ-215/REQ-219): start the longest suite in a hidden
+REM     console and signal only after its first owned atc-*.zip appears in an
+REM     atc-staging-<GUID> sibling. Direct termination cannot provide graceful
+REM     cancellation because it calls TerminateProcess, so console Ctrl+C is sent.
+REM     Windows delegates Ctrl+C through the PowerShell worker; Bash signals its
+REM     job-control process group directly.
+REM     The requested destination is published by one final rename, so either
+REM     race outcome must leave no owned staging directory behind.
+set "CANCEL_TEMP_ID=%RANDOM%%RANDOM%"
+set "CANCEL_PARENT=%TEST_OUTPUT_DIR%"
+set "CANCEL_OUT=%CANCEL_PARENT%\cancellation"
+set "CANCEL_WORKER_SCRIPT=%SCRIPT_DIR%_archive-test-cancellation.ps1"
+set "CANCEL_WORKER_PID_FILE=%TEMP%\atc-cancel-worker-%CANCEL_TEMP_ID%.pid"
+set "CANCEL_PID_FILE=%TEMP%\atc-cancel-worker-%CANCEL_TEMP_ID%.target-pid"
+set "CANCEL_RESULT_FILE=%TEMP%\atc-cancel-worker-%CANCEL_TEMP_ID%.result"
+set "CANCEL_ERROR_FILE=%TEMP%\atc-cancel-worker-%CANCEL_TEMP_ID%.error"
+set "CANCEL_DONE_FILE=%TEMP%\atc-cancel-worker-%CANCEL_TEMP_ID%.done"
+set "CANCEL_WORKER_PID="
+set "CANCEL_PID="
+set "CANCEL_STAGING_CHECKED_COUNT="
+set "CANCEL_WORKDIR=%CD%"
+set "CANCEL_POLL_INTERVAL_MS=10"
+set "CANCEL_STAGING_TIMEOUT_SECONDS=30"
+set "CANCEL_WORKER_PID_TIMEOUT_MS=30000"
+set "CANCEL_TARGET_PID_TIMEOUT_MS=30000"
+set "CANCEL_WORKER_DONE_TIMEOUT_MS=30000"
+set "CANCEL_RESULT_TIMEOUT_MS=10000"
+set "CANCEL_CLEANUP_TIMEOUT_SECONDS=10"
+where powershell.exe >nul 2>&1
+if errorlevel 1 (
+    call :fail "PowerShell must be available for Windows cancellation"
+    goto :summary
+)
+if exist "%ZIPPER_CMD%" (
+    set "CANCEL_EXE=%ZIPPER_CMD%"
+    set CANCEL_ARGS=--archive-test-suite all --seed 42 --output-path "%CANCEL_OUT%"
+) else (
+    for /f "tokens=1,* delims= " %%E in ("%ZIPPER_CMD%") do (
+        set "CANCEL_EXE=%%E"
+        set CANCEL_ARGS=%%F
+    )
+    set CANCEL_ARGS=!CANCEL_ARGS! --archive-test-suite all --seed 42 --output-path "%CANCEL_OUT%"
+)
+if not exist "%CANCEL_WORKER_SCRIPT%" (
+    call :fail "Windows cancellation worker script is missing"
+    goto :summary
+)
+
+start "" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CANCEL_WORKER_SCRIPT%"
+if errorlevel 1 (
+    call :fail "Windows cancellation worker failed to start"
+    goto :summary
+)
+call :await_file "%CANCEL_WORKER_PID_FILE%" CANCEL_WORKER_PID "%CANCEL_WORKER_PID_TIMEOUT_MS%" "%CANCEL_POLL_INTERVAL_MS%"
+if not defined CANCEL_WORKER_PID (
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    call :fail "Windows cancellation worker did not hand off its PID"
+    goto :summary
+)
+call :await_file "%CANCEL_PID_FILE%" CANCEL_PID "%CANCEL_TARGET_PID_TIMEOUT_MS%" "%CANCEL_POLL_INTERVAL_MS%"
+if not defined CANCEL_PID (
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    call :fail "Windows cancellation run did not hand off its PID"
+    goto :summary
+)
+call :await_file "%CANCEL_DONE_FILE%" CANCEL_DONE "%CANCEL_WORKER_DONE_TIMEOUT_MS%" "%CANCEL_POLL_INTERVAL_MS%"
+if not defined CANCEL_DONE (
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    call :fail "Windows cancellation worker did not finish"
+    goto :summary
+)
+call :await_process_exit "%CANCEL_WORKER_PID%" "%CANCEL_RESULT_TIMEOUT_MS%" "%CANCEL_POLL_INTERVAL_MS%"
+if errorlevel 1 (
+    call :fail "Windows cancellation worker did not exit within %CANCEL_RESULT_TIMEOUT_MS%ms after its DONE marker"
+    goto :summary
+)
+REM Both processes are gone on this path, so drop the PIDs: a later failure
+REM reaching :summary must not taskkill an id the OS may have reused. Failure
+REM paths keep them so :cleanup_cancel_process can still force cleanup.
+set "CANCEL_WORKER_PID="
+set "CANCEL_PID="
+call :await_file "%CANCEL_RESULT_FILE%" CANCEL_RESULT "%CANCEL_RESULT_TIMEOUT_MS%" "%CANCEL_POLL_INTERVAL_MS%"
+if not defined CANCEL_RESULT (
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    call :fail "Windows cancellation run did not report an exit code"
+    goto :summary
+)
+set "CANCEL_SIGNAL_SENT="
+set "CANCEL_EXIT_CODE="
+set "CANCEL_RESULT_EXTRA="
+for /f "tokens=1,2,* delims=," %%A in ("!CANCEL_RESULT!") do (
+    set "CANCEL_SIGNAL_SENT=%%A"
+    set "CANCEL_EXIT_CODE=%%B"
+    set "CANCEL_RESULT_EXTRA=%%C"
+)
+if not defined CANCEL_SIGNAL_SENT (
+    call :fail "Windows cancellation result omitted race outcome"
+    goto :summary
+)
+if not defined CANCEL_EXIT_CODE (
+    call :fail "Windows cancellation result omitted exit code"
+    goto :summary
+)
+if defined CANCEL_RESULT_EXTRA (
+    call :fail "Windows cancellation result contained unexpected fields"
+    goto :summary
+)
+if "!CANCEL_SIGNAL_SENT!" NEQ "0" if "!CANCEL_SIGNAL_SENT!" NEQ "1" (
+    call :fail "Windows cancellation result has invalid race outcome (!CANCEL_SIGNAL_SENT!)"
+    goto :summary
+)
+set "CANCEL_EXIT_INVALID="
+for /f "eol=| delims=0123456789" %%C in ("!CANCEL_EXIT_CODE!") do set "CANCEL_EXIT_INVALID=1"
+if defined CANCEL_EXIT_INVALID (
+    call :fail "Windows cancellation result has invalid exit code (!CANCEL_EXIT_CODE!)"
+    goto :summary
+)
+if "!CANCEL_EXIT_CODE!" EQU "0" set "CANCEL_SIGNAL_SENT=0"
+
+set CANCEL_ZIPS=0
+if exist "%CANCEL_OUT%\atc-*.zip" for %%Z in ("%CANCEL_OUT%\atc-*.zip") do set /a CANCEL_ZIPS+=1
+set CANCEL_JSONS=0
+if exist "%CANCEL_OUT%\atc-*.json" for %%J in ("%CANCEL_OUT%\atc-*.json") do set /a CANCEL_JSONS+=1
+set CANCEL_STAGING=0
+if exist "%CANCEL_PARENT%\atc-staging-*" for /d %%D in ("%CANCEL_PARENT%\atc-staging-*") do set /a CANCEL_STAGING+=1
+
+if !CANCEL_SIGNAL_SENT! EQU 1 (
+    if !CANCEL_EXIT_CODE! EQU 130 (
+        call :pass "cancellation race signal-won run exited 130"
+    ) else (
+        call :fail "cancellation race signal-won run exited !CANCEL_EXIT_CODE! instead of 130"
+    )
+    if !CANCEL_ZIPS! EQU 0 if !CANCEL_JSONS! EQU 0 (
+        call :pass "cancellation race signal-won run published no Archive or Expectation File"
+    ) else (
+        call :fail "cancellation race signal-won run published !CANCEL_ZIPS! Archives and !CANCEL_JSONS! Expectation Files (expected zero each)"
+    )
+) else (
+    if !CANCEL_SIGNAL_SENT! EQU 0 (
+        if !CANCEL_EXIT_CODE! EQU 0 (
+            call :pass "cancellation race finished-first run exited 0"
+        ) else (
+            call :fail "cancellation race finished-first run exited !CANCEL_EXIT_CODE! instead of 0"
+        )
+        if !CANCEL_ZIPS! EQU %ALL_CASES% if !CANCEL_JSONS! EQU %ALL_CASES% (
+            call :pass "cancellation race finished-first run published all %ALL_CASES% pairs"
+        ) else (
+            call :fail "cancellation race finished-first run published !CANCEL_ZIPS! Archives and !CANCEL_JSONS! Expectation Files (expected %ALL_CASES% each)"
+        )
+    ) else (
+        call :fail "Windows cancellation signal outcome was invalid (!CANCEL_SIGNAL_SENT!)"
+    )
+)
+if !CANCEL_STAGING! EQU 0 (
+    call :pass "cancellation left no owned staging directory"
+) else (
+    call :fail "cancellation left !CANCEL_STAGING! owned staging directories"
+)
+set "CANCEL_STAGING_CHECKED_COUNT=!CANCEL_STAGING!"
+
 REM 11. Tamper detection: one flipped Archive byte must fail verification. The
 REM     copy and the flip are guarded so the check cannot pass vacuously.
 set "TAMPER=%TEST_OUTPUT_DIR%\tamper"
@@ -499,6 +660,22 @@ set "npm_config_cache="
 set "npm_config_registry="
 
 :summary
+call :cleanup_cancel_process
+if defined CANCEL_PARENT (
+    set "CANCEL_STAGING=0"
+    if exist "%CANCEL_PARENT%\atc-staging-*" for /d %%D in ("%CANCEL_PARENT%\atc-staging-*") do set /a CANCEL_STAGING+=1
+    if !CANCEL_STAGING! GTR 0 (
+        if not defined CANCEL_STAGING_CHECKED_COUNT (
+            call :fail "cancellation left !CANCEL_STAGING! owned staging directories"
+        )
+        if defined CANCEL_STAGING_CHECKED_COUNT if !CANCEL_STAGING! NEQ !CANCEL_STAGING_CHECKED_COUNT! (
+            call :fail "cancellation left !CANCEL_STAGING! owned staging directories"
+        )
+        if exist "%CANCEL_PARENT%\atc-staging-*" for /d %%D in ("%CANCEL_PARENT%\atc-staging-*") do rmdir /s /q "%%~fD" >nul 2>&1
+    )
+)
+set "CANCEL_WORKER_PID="
+set "CANCEL_PID="
 echo [ INFO ] Passed: %PASSED%, Failed: %FAILED%
 if %FAILED% GTR 0 (
     echo [ ERROR ] Archive Test E2E failed.
@@ -506,6 +683,50 @@ if %FAILED% GTR 0 (
 )
 echo [ SUCCESS ] Archive Test E2E passed.
 exit /b 0
+
+:await_file
+set "WAIT_FILE_VALUE="
+set "WAIT_FILE_PATH=%~1"
+set "WAIT_FILE_TARGET=%~2"
+set "WAIT_FILE_TIMEOUT_MS=%~3"
+set "WAIT_FILE_POLL_INTERVAL_MS=%~4"
+for /f "usebackq delims=" %%V in (`powershell.exe -NoProfile -Command "$deadline=[DateTime]::UtcNow.AddMilliseconds([int]$env:WAIT_FILE_TIMEOUT_MS); while([DateTime]::UtcNow -lt $deadline){ if(Test-Path -LiteralPath $env:WAIT_FILE_PATH){ $value=Get-Content -LiteralPath $env:WAIT_FILE_PATH -Raw -ErrorAction SilentlyContinue; if($null -ne $value){ $value=$value.Trim(); if($value.Length -gt 0){ Write-Output $value; exit 0 } } }; Start-Sleep -Milliseconds ([int]$env:WAIT_FILE_POLL_INTERVAL_MS) }; exit 1" 2^>nul`) do set "WAIT_FILE_VALUE=%%V"
+set "%WAIT_FILE_TARGET%=%WAIT_FILE_VALUE%"
+set "WAIT_FILE_PATH="
+set "WAIT_FILE_TARGET="
+set "WAIT_FILE_TIMEOUT_MS="
+set "WAIT_FILE_POLL_INTERVAL_MS="
+goto :eof
+
+:await_process_exit
+set "WAIT_PROCESS_PID=%~1"
+set "WAIT_PROCESS_TIMEOUT_MS=%~2"
+set "WAIT_PROCESS_POLL_INTERVAL_MS=%~3"
+powershell.exe -NoProfile -Command "$deadline=[DateTime]::UtcNow.AddMilliseconds([int]$env:WAIT_PROCESS_TIMEOUT_MS); while([DateTime]::UtcNow -lt $deadline){ if($null -eq (Get-Process -Id ([int]$env:WAIT_PROCESS_PID) -ErrorAction SilentlyContinue)){ exit 0 }; Start-Sleep -Milliseconds ([int]$env:WAIT_PROCESS_POLL_INTERVAL_MS) }; exit 1" >nul 2>&1
+if errorlevel 1 (
+    set "WAIT_PROCESS_EXITED="
+) else (
+    set "WAIT_PROCESS_EXITED=1"
+)
+set "WAIT_PROCESS_PID="
+set "WAIT_PROCESS_TIMEOUT_MS="
+set "WAIT_PROCESS_POLL_INTERVAL_MS="
+if defined WAIT_PROCESS_EXITED exit /b 0
+exit /b 1
+
+:cleanup_cancel_process
+if defined CANCEL_WORKER_PID (
+    taskkill /PID %CANCEL_WORKER_PID% /T /F >nul 2>&1
+)
+if defined CANCEL_PID (
+    taskkill /PID %CANCEL_PID% /T /F >nul 2>&1
+)
+if defined CANCEL_WORKER_PID_FILE if exist "%CANCEL_WORKER_PID_FILE%" del /q "%CANCEL_WORKER_PID_FILE%" >nul 2>&1
+if defined CANCEL_PID_FILE if exist "%CANCEL_PID_FILE%" del /q "%CANCEL_PID_FILE%" >nul 2>&1
+if defined CANCEL_RESULT_FILE if exist "%CANCEL_RESULT_FILE%" del /q "%CANCEL_RESULT_FILE%" >nul 2>&1
+if defined CANCEL_ERROR_FILE if exist "%CANCEL_ERROR_FILE%" del /q "%CANCEL_ERROR_FILE%" >nul 2>&1
+if defined CANCEL_DONE_FILE if exist "%CANCEL_DONE_FILE%" del /q "%CANCEL_DONE_FILE%" >nul 2>&1
+goto :eof
 
 :count_files
 set COUNT_TMP=0
