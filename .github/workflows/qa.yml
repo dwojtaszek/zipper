@@ -1,8 +1,6 @@
 name: Functional QA
 
 on:
-  pull_request_target:
-    branches: [main]
   workflow_dispatch:
     inputs:
       base_sha:
@@ -161,7 +159,7 @@ jobs:
           COMPOSE: ${{ steps.qa-config.outputs.compose }}
         run: |
           set -euo pipefail
-          npm install --global tuistory@0.11.0
+          npm install --global --ignore-scripts --no-audit --no-fund tuistory@0.11.0
           packages=()
           [[ "$IMAGEMAGICK" != true ]] || packages+=(imagemagick)
           if [[ "$VIDEO_EVIDENCE" == true ]]; then
@@ -179,7 +177,7 @@ jobs:
 
       - name: Install Droid CLI
         if: steps.qa-scope.outputs.cli_affected == 'true'
-        run: npm install --global @factory/cli@0.226.2
+        run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@0.226.2
 
       - name: Install Droid Control plugin
         if: steps.qa-scope.outputs.cli_affected == 'true'
@@ -354,72 +352,3 @@ jobs:
           path: qa-results/report.md
           if-no-files-found: warn
           retention-days: 14
-
-  report-pr:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - name: Write blocked QA report
-        shell: bash
-        env:
-          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
-        run: |
-          set -euo pipefail
-          if [[ "$IS_FORK" == true ]]; then
-            reason='GitHub does not expose FACTORY_API_KEY to fork pull requests.'
-          else
-            reason='Credentialed QA runs only after review and merge, by manual dispatch from protected main.'
-          fi
-          mkdir -p qa-results
-          {
-            cat <<'REPORT'
-          ## QA Report
-
-          | # | Test Case | App | Persona | Result | Notes |
-          | --- | --- | --- | --- | --- | --- |
-          REPORT
-            printf '| 1 | Functional QA | CLI | default | :no_entry: BLOCKED | %s |\n' "$reason"
-            cat <<'REPORT'
-
-          <details>
-          <summary>Screenshots & Evidence</summary>
-
-          No app interaction was run for this pull request.
-
-          </details>
-          REPORT
-          } > qa-results/report.md
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: qa-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: qa-results/report.md
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Post or update QA report comment
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo '<!-- qa-report -->'
-            cat qa-results/report.md
-            printf '\n\n---\n\n[Download QA artifact](%s) · [Workflow run](%s)\n' "$RUN_URL" "$RUN_URL"
-          } > qa-comment.md
-          comment_id="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
-            --jq '.[] | select(.body | startswith("<!-- qa-report -->")) | .id' | sed -n '1p')"
-          if [[ -n "$comment_id" ]]; then
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
-              -f body="$(cat qa-comment.md)" >/dev/null
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              -f body="$(cat qa-comment.md)" >/dev/null
-          fi
