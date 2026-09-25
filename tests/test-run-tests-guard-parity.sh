@@ -95,6 +95,36 @@ else
     cat "$SANDBOX/unguarded.out"
 fi
 
+# --- Negative: a REM comment quoting a call is not a call ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "call .\\tests\\test-bates-numbering.bat"
+# Padding comments push the real, correctly guarded call beyond any fixed line window, so a
+# validator that scanned a window instead of the next significant statement would either
+# match the comment or read the wrong lines.
+padding = "\n".join(["REM  call .\\tests\\test-bates-numbering.bat"] + ["REM  pad"] * 6)
+if target not in text:
+    sys.exit("could not find the bates-numbering call to shadow")
+text = text.replace(target, padding + "\n" + target, 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/comment.out" 2>&1; then
+    pass "validator ignores a REM comment that quotes a child call"
+else
+    fail "validator treated a REM comment as an unguarded child call"
+    cat "$SANDBOX/comment.out"
+fi
+
 # --- Negative: a guard that reports but does not abort must be caught ---
 
 python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
@@ -132,6 +162,18 @@ if grep -q "does not 'exit /b 1'" "$SANDBOX/noexit.out"; then
 else
     fail "validator does not report the non-aborting guard case"
     cat "$SANDBOX/noexit.out"
+fi
+
+# --- Negative: a second, unguarded duplicate of an already-guarded child must be caught ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+printf '\ncall .\\tests\\test-archive-test-suites.bat\n' >> "$SANDBOX_REPO/tests/run-tests.bat"
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/duplicate.out" 2>&1; then
+    fail "validator passed a runner with a second unguarded call to an already-guarded child"
+    cat "$SANDBOX/duplicate.out"
+else
+    pass "validator fails on a second unguarded duplicate call site"
 fi
 
 # --- Summary ---

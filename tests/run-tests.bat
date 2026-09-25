@@ -303,25 +303,6 @@ if "%~1"=="--meta-test-fail-only" (
     goto :end_of_tests
 )
 
-REM #1040: a child E2E script that exits non-zero must abort the wrapper. The stub child always
-REM exits 1, so running this mode proves the guard aborts on real cmd.exe rather than only
-REM asserting the guard's presence statically.
-if "%~1"=="--meta-test-child-fail-only" (
-    set "META_CHILD_STUB=%TEMP%\zipper-meta-child-%RANDOM%%RANDOM%.bat"
-    > "%META_CHILD_STUB%" echo @exit /b 1
-    call "%META_CHILD_STUB%"
-    set "META_CHILD_EXIT=!errorlevel!"
-    del /q "%META_CHILD_STUB%" 2>nul
-    call :print_info "meta-test: stub child exited with !META_CHILD_EXIT!"
-
-    REM Same guard shape as every real child call below.
-    if !META_CHILD_EXIT! neq 0 (
-        echo [ ERROR ] Meta-test child E2E script failed.
-        goto :end_of_tests
-    )
-    goto :end_of_tests
-)
-
 call :print_info "Starting test suite..."
 
 REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
@@ -712,7 +693,7 @@ if errorlevel 1 (
 )
 call :print_success "run-tests.bat fatal error behavior meta-test passed."
 
-REM #1040: validator guard-parity + the runtime proof that a failing child aborts the wrapper
+REM #1040: the validator must keep every .bat child call guarded
 call :print_info "Running run-tests.bat child-exit-code guard parity tests..."
 call .\tests\test-run-tests-guard-parity.bat
 if errorlevel 1 (

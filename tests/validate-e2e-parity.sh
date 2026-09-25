@@ -10,6 +10,13 @@
 #   sub-scripts:   bash ./<repo-relative-path>.sh  |  call .\<path>.bat
 # Invoke new suites in exactly these forms or the gate cannot see them.
 #
+# The .bat side carries one extra rule (#1040): every `call .\tests\*.bat` must be
+# followed, as the next significant statement (blank lines, REM, and :: comments
+# are skipped), by an `if errorlevel 1` guard that exits non-zero — either the
+# single-line form `if errorlevel 1 exit /b 1` or a block containing `exit /b 1`.
+# A child that returns non-zero and is not aborted is a silent pass. The .sh side
+# already does this with `|| print_error`.
+#
 # Usage:
 #   validate-e2e-parity.sh [--strict]
 #
@@ -137,40 +144,74 @@ report_diff "Sub-script suite" SH_ONLY_SCRIPTS BAT_ONLY_SCRIPTS
 
 # #1040: a `call .\tests\*.bat` whose exit code is never checked is a silent pass — a child that
 # exits non-zero is swallowed and the wrapper still reports success. Each child call must be
-# followed by an `if errorlevel 1` block that itself exits non-zero. run-tests.sh already does
-# this with `|| print_error`, so only the .bat side can drift.
-mapfile -t BAT_CHILD_CALLS < <(grep -oiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER" | sort -u)
+# followed, as the next significant statement, by an `if errorlevel 1` guard that itself exits
+# non-zero. run-tests.sh already does this with `|| print_error`, so only the .bat side can drift.
+#
+# Single awk pass over the runner: it reports every offending call site, so a second unguarded
+# duplicate of an already-guarded child is caught, and a REM/:: comment quoting the call text is
+# not mistaken for a call.
+mapfile -t UNGUARDED_CHILDREN < <(awk '
+    { line[NR] = $0 }
 
-if [[ ${#BAT_CHILD_CALLS[@]} -eq 0 ]]; then
+    function trim(s) {
+        sub(/\r$/, "", s)
+        gsub(/^[ \t]+/, "", s)
+        return s
+    }
+
+    # Index of the next line at or after `from` that is a real statement, or 0 if none.
+    # Skips blanks, REM, and :: comments.
+    function next_stmt(from,   i, s) {
+        for (i = from; i <= total; i++) {
+            s = trim(line[i])
+            if (s == "") continue
+            t = tolower(s)
+            if (t ~ /^rem/ || t ~ /^::/) continue
+            return i
+        }
+        return 0
+    }
+
+    END {
+        total = NR
+        for (n = 1; n <= total; n++) {
+            stmt = trim(line[n])
+            t = tolower(stmt)
+            if (t ~ /^(rem|::)/) continue
+            if (match(t, /call[ \t]+\.\\tests\\[a-z0-9._-]+\.bat/) == 0) continue
+            child = substr(t, RSTART, RLENGTH)
+            sub(/^call[ \t]+\.\\tests\\/, "", child)
+
+            g = next_stmt(n + 1)
+            if (g == 0) { print child ": no guard after the call"; continue }
+            gt = tolower(trim(line[g]))
+            if (gt !~ /^if[ \t]+errorlevel[ \t]+1/) { print child ": no '"'"'if errorlevel 1'"'"' guard"; continue }
+
+            # Single-line form: `if errorlevel 1 exit /b 1`
+            if (gt ~ /exit[ \t]+\/b[ \t]+1/) continue
+
+            # Block form: the body up to the closing paren must exit non-zero.
+            aborts = 0
+            for (i = g + 1; i <= g + 12 && i <= total; i++) {
+                b = tolower(trim(line[i]))
+                if (b ~ /^exit[ \t]+\/b[ \t]+1/) { aborts = 1; break }
+                if (trim(line[i]) ~ /^\)/) break
+            }
+            if (!aborts) print child ": guard does not '"'"'exit /b 1'"'"'"
+        }
+    }
+' "$BAT_RUNNER" | sed "s/^\(.*\.bat\): \(.*\)$/\1 — \2/")
+
+if [[ ${#UNGUARDED_CHILDREN[@]} -eq 0 ]] \
+    && ! grep -qiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER"; then
     echo "ERROR: no 'call .\tests\*.bat' child invocations found in $BAT_RUNNER —" >&2
-    echo "the #1040 guard check cannot run, so treat this validator as failed." >&2
-    exit 1
+    echo "the #1040 guard check could not run, so treat this validator as failed." >&2
+    exit 2
 fi
-
-UNGUARDED_CHILDREN=()
-for child_call in "${BAT_CHILD_CALLS[@]}"; do
-    child_line="$(grep -niF -m1 "$child_call" "$BAT_RUNNER" | cut -d: -f1)"
-    if [[ -z "$child_line" ]]; then
-        echo "ERROR: could not locate '$child_call' in $BAT_RUNNER" >&2
-        exit 1
-    fi
-
-    # The guard must be the next effective statement, and it must itself exit non-zero —
-    # a guard that only prints would let the wrapper carry on and report success.
-    guard_window="$(sed -n "$((child_line + 1)),$((child_line + 5))p" "$BAT_RUNNER")"
-    if ! grep -qiE '^[[:space:]]*if[[:space:]]+errorlevel[[:space:]]+1' <<< "$guard_window"; then
-        UNGUARDED_CHILDREN+=("${child_call#*tests\\} (no 'if errorlevel 1' guard)")
-        continue
-    fi
-
-    if ! sed -n "$((child_line + 1)),$((child_line + 9))p" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*exit[[:space:]]+/b[[:space:]]+1'; then
-        UNGUARDED_CHILDREN+=("${child_call#*tests\\} (guard does not 'exit /b 1')")
-    fi
-done
 
 if [[ ${#UNGUARDED_CHILDREN[@]} -gt 0 ]]; then
     DRIFT=1
-    echo "Child E2E scripts called in run-tests.bat without an 'if errorlevel 1' guard that exits non-zero:"
+    echo "Child E2E script calls in run-tests.bat without an 'if errorlevel 1' guard that exits non-zero:"
     printf '  - %s\n' "${UNGUARDED_CHILDREN[@]}"
 fi
 
