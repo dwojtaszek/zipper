@@ -26,6 +26,9 @@
 #   0  no drift (or report-only mode)
 #   1  drift detected (--strict)
 #   2  missing files / parse errors
+#
+# Portability: this script runs on the macOS E2E leg where /bin/bash is 3.2, so it must avoid
+# bash 4+ constructs (mapfile, local -n).
 
 set -euo pipefail
 
@@ -92,10 +95,21 @@ is_exempt() {
     return 1
 }
 
-mapfile -t SH_CASES < <(extract_cases_sh)
-mapfile -t BAT_CASES < <(extract_cases_bat)
-mapfile -t SH_SCRIPTS < <(extract_scripts_sh)
-mapfile -t BAT_SCRIPTS < <(extract_scripts_bat)
+# Portable replacement for `mapfile` (bash 4+). This script runs on the macOS E2E leg, where
+# /bin/bash is 3.2 and has no mapfile. The target variable name is passed unquoted on purpose.
+read_lines_into() {
+    local __target="$1"
+    local __line
+    eval "$__target=()"
+    while IFS= read -r __line; do
+        eval "$__target+=(\"\$__line\")"
+    done
+}
+
+read_lines_into SH_CASES < <(extract_cases_sh)
+read_lines_into BAT_CASES < <(extract_cases_bat)
+read_lines_into SH_SCRIPTS < <(extract_scripts_sh)
+read_lines_into BAT_SCRIPTS < <(extract_scripts_bat)
 
 if [[ ${#SH_CASES[@]} -eq 0 || ${#BAT_CASES[@]} -eq 0 || ${#SH_SCRIPTS[@]} -eq 0 || ${#BAT_SCRIPTS[@]} -eq 0 ]]; then
     echo "Error: extraction yielded an empty set (sh cases: ${#SH_CASES[@]}, bat cases: ${#BAT_CASES[@]}, sh scripts: ${#SH_SCRIPTS[@]}, bat scripts: ${#BAT_SCRIPTS[@]})" >&2
@@ -108,43 +122,43 @@ SANDBOX_REPORT="$(mktemp)"
 SANDBOX_RAW="$(mktemp)"
 trap 'rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"' EXIT
 
+# `local -n` (namerefs) is bash 4.3+, so the two sides arrive as newline-delimited strings
+# rather than as array references. An empty string means "no drift on this side".
 report_diff() {
-    local label="$1"; shift
-    local -n only_sh_ref=$1
-    local -n only_bat_ref=$2
-    if [[ ${#only_sh_ref[@]} -gt 0 ]]; then
+    local label="$1"
+    local only_sh="$2"
+    local only_bat="$3"
+
+    if [[ -n "$only_sh" ]]; then
         DRIFT=1
         echo "$label present in run-tests.sh only:"
-        printf '  - %s\n' "${only_sh_ref[@]}"
+        printf '%s\n' "$only_sh" | sed 's/^/  - /'
     fi
-    if [[ ${#only_bat_ref[@]} -gt 0 ]]; then
+    if [[ -n "$only_bat" ]]; then
         DRIFT=1
         echo "$label present in run-tests.bat only:"
-        printf '  - %s\n' "${only_bat_ref[@]}"
+        printf '%s\n' "$only_bat" | sed 's/^/  - /'
     fi
 }
 
 # Inline test cases
-# shellcheck disable=SC2034  # consumed via nameref in report_diff
-mapfile -t SH_ONLY_CASES < <(comm -23 <(printf '%s\n' "${SH_CASES[@]}") <(printf '%s\n' "${BAT_CASES[@]}"))
-# shellcheck disable=SC2034  # consumed via nameref in report_diff
-mapfile -t BAT_ONLY_CASES < <(comm -13 <(printf '%s\n' "${SH_CASES[@]}") <(printf '%s\n' "${BAT_CASES[@]}"))
-report_diff "Inline test case" SH_ONLY_CASES BAT_ONLY_CASES
+report_diff "Inline test case" \
+    "$(comm -23 <(printf '%s\n' "${SH_CASES[@]}") <(printf '%s\n' "${BAT_CASES[@]}"))" \
+    "$(comm -13 <(printf '%s\n' "${SH_CASES[@]}") <(printf '%s\n' "${BAT_CASES[@]}"))"
 
 # Sub-scripts (exemptions filtered from both sides)
-mapfile -t SH_ONLY_SCRIPTS_RAW < <(comm -23 <(printf '%s\n' "${SH_SCRIPTS[@]}") <(printf '%s\n' "${BAT_SCRIPTS[@]}"))
-mapfile -t BAT_ONLY_SCRIPTS_RAW < <(comm -13 <(printf '%s\n' "${SH_SCRIPTS[@]}") <(printf '%s\n' "${BAT_SCRIPTS[@]}"))
-# shellcheck disable=SC2034  # consumed via nameref in report_diff
-SH_ONLY_SCRIPTS=()
-for s in ${SH_ONLY_SCRIPTS_RAW[@]+"${SH_ONLY_SCRIPTS_RAW[@]}"}; do
-    is_exempt "$s" || SH_ONLY_SCRIPTS+=("$s")
-done
-# shellcheck disable=SC2034  # consumed via nameref in report_diff
-BAT_ONLY_SCRIPTS=()
-for s in ${BAT_ONLY_SCRIPTS_RAW[@]+"${BAT_ONLY_SCRIPTS_RAW[@]}"}; do
-    is_exempt "$s" || BAT_ONLY_SCRIPTS+=("$s")
-done
-report_diff "Sub-script suite" SH_ONLY_SCRIPTS BAT_ONLY_SCRIPTS
+# Sub-scripts (exemptions filtered from both sides)
+filter_exempt() {
+    local s
+    while IFS= read -r s; do
+        [[ -z "$s" ]] && continue
+        is_exempt "$s" || printf '%s\n' "$s"
+    done
+}
+
+report_diff "Sub-script suite" \
+    "$(comm -23 <(printf '%s\n' "${SH_SCRIPTS[@]}") <(printf '%s\n' "${BAT_SCRIPTS[@]}") | filter_exempt)" \
+    "$(comm -13 <(printf '%s\n' "${SH_SCRIPTS[@]}") <(printf '%s\n' "${BAT_SCRIPTS[@]}") | filter_exempt)"
 
 # #1040: a `call .\tests\*.bat` whose exit code is never checked is a silent pass — a child that
 # exits non-zero is swallowed and the wrapper still reports success. Each child call must be

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # E2E test: tests/validate-e2e-parity.sh must catch an unguarded .bat child call.
 #
 # Guards #1040. The Windows E2E wrapper (run-tests.bat) used to call child scripts without
