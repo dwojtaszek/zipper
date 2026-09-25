@@ -492,6 +492,10 @@ call :print_info "Running standalone feature test suites..."
 REM Test 1: EML comprehensive tests
 call :print_info "Running EML comprehensive tests..."
 call .\tests\test-eml-comprehensive.bat
+if errorlevel 1 (
+    echo [ ERROR ] EML comprehensive tests failed.
+    exit /b 1
+)
 call :print_success "EML comprehensive tests passed."
 
 REM Test 2: Bates numbering tests
@@ -514,36 +518,64 @@ if errorlevel 1 (
 REM Test 3: Multipage TIFF tests
 call :print_info "Running multipage TIFF tests..."
 call .\tests\test-multipage-tiff.bat
+if errorlevel 1 (
+    echo [ ERROR ] Multipage TIFF tests failed.
+    exit /b 1
+)
 call :print_success "Multipage TIFF tests passed."
 
 REM Test 4: Office formats tests
 call :print_info "Running office formats tests..."
 call .\tests\test-office-formats.bat
+if errorlevel 1 (
+    echo [ ERROR ] Office formats tests failed.
+    exit /b 1
+)
 call :print_success "Office formats tests passed."
 
 REM Test 5: Load file formats tests
 call :print_info "Running load file formats tests..."
 call .\tests\test-load-file-formats.bat
+if errorlevel 1 (
+    echo [ ERROR ] Load file formats tests failed.
+    exit /b 1
+)
 call :print_success "Load file formats tests passed."
 
 REM Test 6: Artifact handling tests
 call :print_info "Running artifact handling tests..."
 call .\tests\test-artifact-handling.bat
+if errorlevel 1 (
+    echo [ ERROR ] Artifact handling tests failed.
+    exit /b 1
+)
 call :print_success "Artifact handling tests passed."
 
 REM Test 7: Cross-platform tests
 call :print_info "Running cross-platform tests..."
 call .\tests\test-cross-platform.bat
+if errorlevel 1 (
+    echo [ ERROR ] Cross-platform tests failed.
+    exit /b 1
+)
 call :print_success "Cross-platform tests passed."
 
 REM Test 10: Path traversal security tests
 call :print_info "Running path traversal security tests..."
 call .\tests\test-path-traversal-security.bat
+if errorlevel 1 (
+    echo [ ERROR ] Path traversal security tests failed.
+    exit /b 1
+)
 call :print_success "Path traversal security tests passed."
 
 REM Test 11: Unified workflow tests
 call :print_info "Running unified workflow tests..."
 call .\tests\test-unified-workflow.bat
+if errorlevel 1 (
+    echo [ ERROR ] Unified workflow tests failed.
+    exit /b 1
+)
 call :print_success "Unified workflow tests passed."
 
 REM Test 11b: Archive Test workflow CLI tests
@@ -660,6 +692,15 @@ if errorlevel 1 (
     exit /b 1
 )
 call :print_success "run-tests.bat fatal error behavior meta-test passed."
+
+REM #1040: the validator must keep every .bat child call guarded
+call :print_info "Running run-tests.bat child-exit-code guard parity tests..."
+call .\tests\test-run-tests-guard-parity.bat
+if errorlevel 1 (
+    echo [ ERROR ] test-run-tests-guard-parity.bat failed.
+    exit /b 1
+)
+call :print_success "run-tests.bat child-exit-code guard parity tests passed."
 
 call :print_info "Running TypeSafe audit foundation tests..."
 call .\tests\test-typesafe-audit.bat

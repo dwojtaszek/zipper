@@ -660,6 +660,10 @@ print_info "Running CLI coverage gap tests..."
 bash ./tests/test-cli-coverage-gaps.sh || print_error "test-cli-coverage-gaps.sh failed."
 print_success "CLI coverage gap tests passed."
 
+# Keep the Windows wrapper's child exit codes guarded (#1040)
+bash ./tests/test-run-tests-guard-parity.sh || print_error "test-run-tests-guard-parity.sh failed."
+print_success "Run-tests child-exit-code guard parity tests passed."
+
 print_info "Running mixed file types tests..."
 bash ./tests/test-mixed-file-types.sh || print_error "test-mixed-file-types.sh failed."
 print_success "Mixed file types tests passed."
