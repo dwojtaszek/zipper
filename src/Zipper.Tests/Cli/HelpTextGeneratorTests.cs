@@ -31,7 +31,15 @@ public class HelpTextGeneratorTests
             Assert.Contains("Production Set Options:", output, StringComparison.Ordinal);
             Assert.Contains("--redacted-production", output, StringComparison.Ordinal);
             Assert.Contains("--withheld-native-policy", output, StringComparison.Ordinal);
+            Assert.Contains(
+                "  --production-id <string> Configurable production ID (supports lists, defaults to auto-incrementing/timestamp), max 250 UTF-8 bytes per generated element",
+                output,
+                StringComparison.Ordinal);
             Assert.Contains("Bates Numbering:", output, StringComparison.Ordinal);
+            Assert.Contains(
+                "  --bates-prefix <string>  Bates Number prefix, max 200 UTF-8 bytes per list element (e.g., CLIENT001)",
+                output,
+                StringComparison.Ordinal);
             Assert.Contains("TIFF Options:", output, StringComparison.Ordinal);
             Assert.Contains("Column Profile Options:", output, StringComparison.Ordinal);
             Assert.Contains("Utility Options:", output, StringComparison.Ordinal);

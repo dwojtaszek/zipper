@@ -47,6 +47,28 @@ public class ProductionMetadataValidationTests
     }
 
     [Fact]
+    public void Validate_WithTabAndUpperAsciiBoundaryValue_ProducesNoMetadataFindings()
+    {
+        var manifest = """
+            {
+              "metadata": {
+                "production_id": " \t~"
+              }
+            }
+            """;
+
+        var (report, tempDir) = ValidateManifestJson(manifest);
+        try
+        {
+            Assert.Empty(MetadataFindings(report));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void Validate_WithNonAsciiMetadataValue_ReportsAzureConstraint()
     {
         var manifest = """

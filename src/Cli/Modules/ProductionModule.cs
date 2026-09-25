@@ -6,6 +6,8 @@ namespace Zipper.Cli.Modules;
 /// <summary>Owns the production flags: parse, validate, and build ProductionConfig.</summary>
 public sealed class ProductionModule : CliModule
 {
+    private const int MaxProductionIdBytes = 250;
+
     private bool _productionSet;
     private bool _productionZip;
     private int? _volumeSize;
@@ -217,6 +219,18 @@ public sealed class ProductionModule : CliModule
             }
         }
 
+        List<string>? prodIds = null;
+        if (_productionId is not null)
+        {
+            prodIds = GenerateProductionIds(_productionId, _rollingCount);
+            if (prodIds.Any(id => System.Text.Encoding.UTF8.GetByteCount(id) > MaxProductionIdBytes))
+            {
+                Console.Error.WriteLine($"Error: --production-id must not exceed {MaxProductionIdBytes} UTF-8 bytes.");
+                config = default!;
+                return false;
+            }
+        }
+
         if (_productionSet)
         {
             if (_rollingCount <= 0)
@@ -248,7 +262,7 @@ public sealed class ProductionModule : CliModule
                 }
             }
 
-            var prodIds = GenerateProductionIds(_productionId, _rollingCount);
+            prodIds ??= GenerateProductionIds(_productionId, _rollingCount);
             if (prodIds.Count != _rollingCount)
             {
                 Console.Error.WriteLine("Error: Number of production IDs must match rolling count.");

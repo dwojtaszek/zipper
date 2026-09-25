@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Xunit;
 using Zipper.Config;
@@ -320,6 +321,49 @@ public class ProductionManifestWriterTests
 
             Assert.Equal("PROD___\tID", metadata.GetProperty("production_id").GetString());
             Assert.Equal("BATES___\tSTART", metadata.GetProperty("bates_number_start").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_AtAzureMetadataBudgetBoundary_EmitsExactly8192Bytes()
+    {
+        const int MaxAzureMetadataBytes = 8192;
+        const int BatesStartValueLength = 3939;
+        const int BatesEndValueLength = 3938;
+        const int ProductionIdLength = 255;
+        const int VolumeCount = 1;
+
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                new FileGenerationRequest(),
+                new string('B', BatesStartValueLength),
+                new string('E', BatesEndValueLength),
+                VolumeCount,
+                TimeSpan.Zero,
+                productionId: new string('P', ProductionIdLength));
+
+            var jsonContent = await File.ReadAllTextAsync(path);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var totalBytes = doc.RootElement
+                .GetProperty("metadata")
+                .EnumerateObject()
+                .Sum(property =>
+                    Encoding.UTF8.GetByteCount(property.Name) +
+                    Encoding.UTF8.GetByteCount(property.Value.GetString()!));
+
+            Assert.Equal(MaxAzureMetadataBytes, totalBytes);
         }
         finally
         {

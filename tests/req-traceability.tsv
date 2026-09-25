@@ -152,7 +152,9 @@ REQ-166	unit	HashModuleTests.Parse_SimulatedMode_ReturnsDefaultMD5	--hash-algori
 REQ-167	unit	ParallelFileGeneratorTests.GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes	Hash columns MD5HASH/SHA1HASH/SHA256HASH
 REQ-168	unit	HashModuleTests.TryBuild_InvalidHashMode_ReturnsFalse	Invalid hash-mode/algorithms fail validation
 REQ-169	unit	HashModuleTests.TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse	Algorithms without hash-mode fail
-REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults
+REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults; 250 UTF-8 byte cap after rolling derivation
+REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdExceedingMaximumLength_ShouldReturnFalseAndEmitError	Oversized Production ID rejected at 250 UTF-8 bytes
+REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdExceedingMaximumLengthOutsideProductionSet_ShouldReturnFalseAndEmitError	Oversized Production ID rejected outside Production Set mode
 REQ-171	unit	ProductionSetTests.ProductionSet_RollingCountNonPositive_FailsValidation	--rolling-count positive integer
 REQ-172	unit	ProductionSetTests.ProductionSet_RollingBatesModeInvalid_FailsValidation	--rolling-bates-mode continuous|restart
 REQ-173	unit	ProductionModuleTests.TryBuild_SupplementalWithoutSet_ReturnsFalse	--supplemental-production requires production-set + prior-manifest
@@ -226,11 +228,16 @@ REQ-221	unit	OutputModuleTests.TryBuild_Compression_Omitted_DefaultsToDeflate	De
 REQ-222	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithCompressionMethod_ProducesExpectedMethodEntries	Archive entries created with configured compression method (Store=0, Deflate=8)
 REQ-223	unit	OutputModuleTests.TryBuild_Compression_InvalidValue_Fails	Unrecognized and unsupported compression methods rejected with descriptive error
 REQ-224	unit	ParallelFileGeneratorTests.CalculatePaddingPerFile_WithStoreMethod_AccountsForNoCompressionRatio	Target zip size padding and size estimation use uncompressed ratio (1.0) with store compression
-REQ-225	unit	ProductionManifestWriterTests.WriteAsync_EmitsDerivedAzureMetadataBlock	Generator emits derived metadata block with normalized Azure-safe values (lossy derivatives; ASCII-only, no CR/LF)
+REQ-225	unit	ProductionManifestWriterTests.WriteAsync_EmitsDerivedAzureMetadataBlock	Generator emits derived metadata block with normalized Azure-safe values (lossy derivatives; tab + 0x20-0x7E; CR/LF to space; other disallowed characters to underscore)
+REQ-225	unit	ProductionManifestWriterTests.WriteAsync_WithControlCharacterValues_NormalizesToAzureSafeSet	C0 and DEL values normalize to underscore while tab is preserved
+REQ-225	unit	ProductionManifestWriterTests.WriteAsync_AtAzureMetadataBudgetBoundary_EmitsExactly8192Bytes	Writer emits exactly the 8,192-byte Production Metadata budget (boundary)
+REQ-225	unit	BatesModuleTests.TryApply_PrefixExceedingMaximumLength_ShouldReturnFalseAndEmitError	Bates Prefix 200 UTF-8 byte cap rejects an oversized element before generation
 REQ-225	unit	ProductionManifestWriterTests.WriteAsync_WithNonAsciiAndCrlfValues_NormalizesMetadataToAzureSafe	Non-ASCII and CR/LF inputs normalized to Azure-safe metadata values
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithCompliantMetadataBlock_ProducesNoMetadataFindings	Compliant metadata block passes validation
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithNonAsciiMetadataValue_ReportsAzureConstraint	Non-ASCII metadata value rejected
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithCrlfMetadataValue_ReportsAzureConstraint	CR/LF metadata value rejected (header-injection hazard)
+REQ-226	unit	ProductionMetadataValidationTests.Validate_WithControlCharacterMetadataValue_ReportsAzureConstraint	C0 control and DEL metadata values rejected
+REQ-226	unit	ProductionMetadataValidationTests.Validate_WithTabAndUpperAsciiBoundaryValue_ProducesNoMetadataFindings	Tab and upper printable-ASCII boundary accepted
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithInvalidMetadataKey_ReportsAzureConstraint	Metadata key violating Azure naming rule rejected
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithNonStringMetadataValue_ReportsAzureConstraint	Non-string metadata value rejected
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithNonObjectMetadata_ReportsAzureConstraint	Non-object metadata block rejected instead of silently skipped

@@ -106,7 +106,7 @@ internal static class ProductionManifestWriter
 
         // Azure Blob custom metadata (ticket #881): the derived block an upload
         // client maps onto x-ms-meta-<key>. Keys are fixed Azure-safe literals;
-        // values are normalized to ASCII without CR/LF (REQ-225).
+        // values are normalized to the tab/printable-ASCII set (REQ-225).
         manifest.Metadata = new Dictionary<string, string>
         {
             ["production_id"] = NormalizeMetadataValue(manifest.ProductionId),
