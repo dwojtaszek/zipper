@@ -216,6 +216,35 @@ public class ProductionMetadataValidationTests
     }
 
     [Fact]
+    public void Validate_WithOversizedMetadataBlockFromNonStringValue_ShouldReportAzureConstraint()
+    {
+        // A non-string value is its own finding, but its key still counts toward the budget:
+        // the 9,000-byte key alone exceeds 8,192 once the value measures as zero bytes.
+        var manifest = $$"""
+            {
+              "metadata": {
+                "{{new string('a', 9000)}}": 42
+              }
+            }
+            """;
+
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+        File.WriteAllText(Path.Combine(tempDir, "_manifest.json"), manifest);
+
+        try
+        {
+            var findings = MetadataFindings(ProductionSetPostValidator.Validate(tempDir, new FileGenerationRequest()));
+            Assert.Contains(findings, f => f.Contains("must be a string", StringComparison.Ordinal));
+            Assert.Contains(findings, f => f.Contains("8,192 bytes", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
     public void Validate_WithMetadataAtExactBudget_ProducesNoMetadataFindings()
     {
         // "production_id" is 13 bytes; 13 + 8179 = 8,192, the exact Azure budget.

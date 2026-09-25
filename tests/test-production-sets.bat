@@ -149,6 +149,81 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 1b: --production-id over %MAX_PRODUCTION_ID_BYTES% UTF-8 bytes rejected
 
+:: --- Test Case 1c: --production-id must be a single safe path segment ---
+
+echo [ INFO ] Test Case 1c: --production-id rejects path separators, dot segments, and empty values
+
+:: Each value is a Production ID that must be rejected before any output is written.
+for %%I in ("../escape" "nested/id" "..\escape" "id with:colon" "id/../.." "." ".." ".. " "PROD " "PROD." "CON" "nul" "COM1" "AUX" "CON.txt") do (
+  set "UNSAFE_PRODUCTION_ID=%%~I"
+  del /q "%TEST_OUTPUT_DIR%\test1c" 2>nul
+  rd /s /q "%TEST_OUTPUT_DIR%\test1c" 2>nul
+
+  %ZIPPER_CMD% ^
+    --production-set ^
+    --count 1 ^
+    --output-path "%TEST_OUTPUT_DIR%\test1c" ^
+    --bates-prefix PROD ^
+    --production-id "!UNSAFE_PRODUCTION_ID!" 2>"%TEST_OUTPUT_DIR%\test1c.err"
+
+  if not errorlevel 1 (
+    echo [ ERROR ] Test 1c: --production-id "!UNSAFE_PRODUCTION_ID!" succeeded but should have failed.
+    exit /b 1
+  )
+
+  findstr /C:"Error: --production-id must be a Safe Path Segment" "%TEST_OUTPUT_DIR%\test1c.err" >nul
+  if errorlevel 1 (
+    echo [ ERROR ] Test 1c: --production-id "!UNSAFE_PRODUCTION_ID!" did not report the Safe Path Segment error.
+    type "%TEST_OUTPUT_DIR%\test1c.err"
+    exit /b 1
+  )
+
+  if exist "%TEST_OUTPUT_DIR%\test1c" (
+    echo [ ERROR ] Test 1c: --production-id "!UNSAFE_PRODUCTION_ID!" created output under --output-path despite failing validation.
+    exit /b 1
+  )
+)
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test1c-empty" ^
+  --bates-prefix PROD ^
+  --production-id "" 2>"%TEST_OUTPUT_DIR%\test1c-empty.err"
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 1c: --production-id with an empty value succeeded but should have failed.
+  exit /b 1
+)
+
+findstr /C:"Error: --production-id cannot be empty" "%TEST_OUTPUT_DIR%\test1c-empty.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 1c: empty --production-id did not report the empty-value error.
+  type "%TEST_OUTPUT_DIR%\test1c-empty.err"
+  exit /b 1
+)
+
+%ZIPPER_CMD% ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test1c-noset" ^
+  --bates-prefix PROD ^
+  --type pdf ^
+  --production-id PROD_001 2>"%TEST_OUTPUT_DIR%\test1c-noset.err"
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 1c: --production-id without --production-set succeeded but should have failed.
+  exit /b 1
+)
+
+findstr /C:"Error: --production-id requires --production-set" "%TEST_OUTPUT_DIR%\test1c-noset.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 1c: --production-id without --production-set did not report the requires error.
+  type "%TEST_OUTPUT_DIR%\test1c-noset.err"
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 1c: --production-id rejects unsafe path segments, dot segments, and empty values
+
 :: --- Test Case 2: Production ZIP ---
 
 echo [ INFO ] Test Case 2: Production set with --production-zip

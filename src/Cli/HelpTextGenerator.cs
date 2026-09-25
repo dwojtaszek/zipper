@@ -66,7 +66,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine();
         Console.Error.WriteLine("Production Set Options:");
         Console.Error.WriteLine("  --production-set         Generate structured production with DATA/IMAGES/NATIVES/TEXT");
-        Console.Error.WriteLine("  --production-id <string> Configurable production ID (supports lists, defaults to auto-incrementing/timestamp), max 250 UTF-8 bytes per generated element");
+        Console.Error.WriteLine("  --production-id <string> Configurable production ID (requires --production-set; non-empty; supports lists, defaults to auto-incrementing/timestamp), max 250 UTF-8 bytes per generated element, single safe path segment per element");
         Console.Error.WriteLine("  --rolling-count <number> Generate multiple rolling production sets (default: 1)");
         Console.Error.WriteLine("  --rolling-bates-mode <continuous|restart> Bates numbering mode across rolling sets (default: continuous)");
         Console.Error.WriteLine("  --source-path-mode <bates|preserve|originals> Source Path Mode for Source-Driven Production Sets (default: bates)");

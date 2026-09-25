@@ -407,6 +407,116 @@ public class ProductionModuleTests
             error.TrimEnd(Environment.NewLine.ToCharArray()));
     }
 
+    [Theory]
+    [InlineData("../escape")]
+    [InlineData("nested/id")]
+    [InlineData("..\\escape")]
+    [InlineData("nested\\id")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("id/../..")]
+    [InlineData("id with:colon")]
+    [InlineData("id*star")]
+    [InlineData("id?query")]
+    [InlineData("id\"quote")]
+    [InlineData("id<lt")]
+    [InlineData("id>gt")]
+    [InlineData("id|pipe")]
+    [InlineData("id\u0007bell")]
+    [InlineData(".. ")]
+    [InlineData("...")]
+    [InlineData("PROD ")]
+    [InlineData("PROD.")]
+    [InlineData("CON")]
+    [InlineData("nul")]
+    [InlineData("PRN")]
+    [InlineData("AUX")]
+    [InlineData("COM1")]
+    [InlineData("com9")]
+    [InlineData("LPT1")]
+    [InlineData("lpt9")]
+    [InlineData("CON.txt")]
+    [InlineData("CONIN$")]
+    [InlineData("CONOUT$")]
+    public void TryBuild_ProductionIdThatIsNotASafePathSegment_ShouldReturnFalseAndEmitError(string productionId)
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-set", null, "--production-id", productionId }, out _));
+        });
+
+        Assert.Contains(
+            "Error: --production-id must be a Safe Path Segment",
+            error,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("GOOD1,bad/id")]
+    [InlineData("../escape,GOOD1")]
+    public void TryBuild_CommaSeparatedProductionIdsContainingInvalidPathSegment_ShouldReturnFalseAndEmitError(string productionId)
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(
+                new[] { "--production-set", null, "--rolling-count", "2", "--production-id", productionId },
+                out _));
+        });
+
+        Assert.Contains(
+            "Error: --production-id must be a Safe Path Segment",
+            error,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("PROD_001")]
+    [InlineData("PROD-001_20250101")]
+    [InlineData("custodian 1 (legal hold)")]
+    [InlineData("PROD.001")]
+    [InlineData("élan-2025")]
+    [InlineData("CONSOLE")]
+    [InlineData("CONSOLE.txt")]
+    [InlineData("COM10")]
+    [InlineData("LPT0")]
+    [InlineData("NULL")]
+    [InlineData("AUXILIARY")]
+    [InlineData("COM")]
+    public void TryBuild_ProductionIdThatIsASafePathSegment_ShouldReturnTrueAndUseValueVerbatim(string productionId)
+    {
+        Assert.True(TryBuild(new[] { "--production-set", null, "--production-id", productionId }, out var config));
+
+        Assert.Equal(productionId, config.ProductionId);
+    }
+
+    [Fact]
+    public void TryBuild_EmptyProductionId_ShouldReturnFalseAndEmitError()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-set", null, "--production-id", string.Empty }, out _));
+        });
+
+        Assert.Contains(
+            "Error: --production-id cannot be empty; omit the flag to auto-generate the Production ID.",
+            error,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionIdWithoutProductionSet_ShouldReturnFalseAndEmitError()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-id", "PROD_001" }, out _));
+        });
+
+        Assert.Contains(
+            "Error: --production-id requires --production-set.",
+            error,
+            StringComparison.Ordinal);
+    }
+
     // --- Config assembly ---
 
     [Fact]

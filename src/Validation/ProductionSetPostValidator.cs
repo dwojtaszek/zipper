@@ -452,9 +452,6 @@ internal sealed class ProductionSetPostValidator
         }
     }
 
-    /// <summary>Azure Blob caps an upload's custom metadata at 8 KB across all keys and values (ticket #881).</summary>
-    private const int MaxAzureMetadataBytes = 8192;
-
     /// <summary>Azure Blob metadata keys follow the C# identifier rule: start with a letter or underscore, then ASCII letters, digits, or underscores (ticket #881).</summary>
     private static bool IsAzureSafeKey(string key)
     {
@@ -503,8 +500,6 @@ internal sealed class ProductionSetPostValidator
                 });
             }
 
-            totalBytes += System.Text.Encoding.UTF8.GetByteCount(pair.Name);
-
             if (pair.Value.ValueKind != System.Text.Json.JsonValueKind.String)
             {
                 state.Findings.Add(new ValidationReportFinding
@@ -514,6 +509,10 @@ internal sealed class ProductionSetPostValidator
                     Path = "_manifest.json",
                     Message = $"Metadata value for '{pair.Name}' must be a string."
                 });
+
+                // A non-string value is reported above, but its key still counts toward the
+                // budget — the value simply measures as zero bytes.
+                totalBytes += ProductionMetadataBudget.PairBytes(pair.Name, string.Empty);
                 continue;
             }
 
@@ -529,17 +528,17 @@ internal sealed class ProductionSetPostValidator
                 });
             }
 
-            totalBytes += System.Text.Encoding.UTF8.GetByteCount(value);
+            totalBytes += ProductionMetadataBudget.PairBytes(pair.Name, value);
         }
 
-        if (totalBytes > MaxAzureMetadataBytes)
+        if (totalBytes > ProductionMetadataBudget.MaxBytes)
         {
             state.Findings.Add(new ValidationReportFinding
             {
                 Code = "MetadataAzureConstraint",
                 Severity = "error",
                 Path = "_manifest.json",
-                Message = $"Metadata block is {totalBytes} bytes across all keys and values; the Azure Blob metadata budget is {MaxAzureMetadataBytes:N0} bytes."
+                Message = $"Metadata block is {totalBytes} bytes across all keys and values; the Azure Blob metadata budget is {ProductionMetadataBudget.MaxBytes:N0} bytes."
             });
         }
     }

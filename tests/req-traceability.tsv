@@ -155,6 +155,12 @@ REQ-169	unit	HashModuleTests.TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse
 REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults; 250 UTF-8 byte cap after rolling derivation
 REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdExceedingMaximumLength_ShouldReturnFalseAndEmitError	Oversized Production ID rejected at 250 UTF-8 bytes
 REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdExceedingMaximumLengthOutsideProductionSet_ShouldReturnFalseAndEmitError	Oversized Production ID rejected outside Production Set mode
+REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdThatIsNotASafePathSegment_ShouldReturnFalseAndEmitError	Separators, dot segments, trailing space/dot, and reserved device names rejected
+REQ-170	unit	ProductionModuleTests.TryBuild_CommaSeparatedProductionIdsContainingInvalidPathSegment_ShouldReturnFalseAndEmitError	Unsafe segment in a list element rejected
+REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdThatIsASafePathSegment_ShouldReturnTrueAndUseValueVerbatim	Accepted Safe Path Segment used verbatim
+REQ-170	unit	ProductionModuleTests.TryBuild_EmptyProductionId_ShouldReturnFalseAndEmitError	Empty supplied value rejected instead of auto-generating
+REQ-170	unit	ProductionModuleTests.TryBuild_ProductionIdWithoutProductionSet_ShouldReturnFalseAndEmitError	--production-id without --production-set rejected
+REQ-170	e2e	test-production-sets.sh Test Case 1c	Path-segment, dot-segment, empty, and missing---production-set rejections end to end
 REQ-171	unit	ProductionSetTests.ProductionSet_RollingCountNonPositive_FailsValidation	--rolling-count positive integer
 REQ-172	unit	ProductionSetTests.ProductionSet_RollingBatesModeInvalid_FailsValidation	--rolling-bates-mode continuous|restart
 REQ-173	unit	ProductionModuleTests.TryBuild_SupplementalWithoutSet_ReturnsFalse	--supplemental-production requires production-set + prior-manifest
@@ -233,6 +239,7 @@ REQ-224	unit	ParallelFileGeneratorTests.CalculatePaddingPerFile_WithStoreMethod_
 REQ-225	unit	ProductionManifestWriterTests.WriteAsync_EmitsDerivedAzureMetadataBlock	Generator emits derived metadata block with normalized Azure-safe values (lossy derivatives; tab + 0x20-0x7E; CR/LF to space; other disallowed characters to underscore)
 REQ-225	unit	ProductionManifestWriterTests.WriteAsync_WithControlCharacterValues_NormalizesToAzureSafeSet	C0 and DEL values normalize to underscore while tab is preserved
 REQ-225	unit	ProductionManifestWriterTests.WriteAsync_AtAzureMetadataBudgetBoundary_EmitsExactly8192Bytes	Writer emits exactly the 8,192-byte Production Metadata budget (boundary)
+REQ-225	unit	ProductionManifestWriterTests.WriteAsync_ProductionMetadataBlockOverAzureBudget_ShouldThrowAndWriteNoManifest	Writer refuses to serialize an over-budget Production Metadata block and writes no manifest
 REQ-225	unit	BatesModuleTests.TryApply_PrefixExceedingMaximumLength_ShouldReturnFalseAndEmitError	Bates Prefix 200 UTF-8 byte cap rejects an oversized element before generation
 REQ-225	unit	ProductionManifestWriterTests.WriteAsync_WithNonAsciiAndCrlfValues_NormalizesMetadataToAzureSafe	Non-ASCII and CR/LF inputs normalized to Azure-safe metadata values
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithCompliantMetadataBlock_ProducesNoMetadataFindings	Compliant metadata block passes validation
@@ -244,6 +251,7 @@ REQ-226	unit	ProductionMetadataValidationTests.Validate_WithInvalidMetadataKey_R
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithNonStringMetadataValue_ReportsAzureConstraint	Non-string metadata value rejected
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithNonObjectMetadata_ReportsAzureConstraint	Non-object metadata block rejected instead of silently skipped
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithOversizedMetadataBlock_ReportsAzureConstraint	Metadata block over the 8,192-byte Azure budget rejected
+REQ-226	unit	ProductionMetadataValidationTests.Validate_WithOversizedMetadataBlockFromNonStringValue_ShouldReportAzureConstraint	Non-string value still contributes its key bytes to the budget
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMetadataAtExactBudget_ProducesNoMetadataFindings	Exactly 8,192 bytes passes (boundary)
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMetadataOneByteOverBudget_ReportsAzureConstraint	8,193 bytes rejected (boundary +1)
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMultipleViolations_ReportsOneFindingPerViolation	One finding per violation accumulates
