@@ -135,8 +135,47 @@ for s in ${BAT_ONLY_SCRIPTS_RAW[@]+"${BAT_ONLY_SCRIPTS_RAW[@]}"}; do
 done
 report_diff "Sub-script suite" SH_ONLY_SCRIPTS BAT_ONLY_SCRIPTS
 
+# #1040: a `call .\tests\*.bat` whose exit code is never checked is a silent pass — a child that
+# exits non-zero is swallowed and the wrapper still reports success. Each child call must be
+# followed by an `if errorlevel 1` block that itself exits non-zero. run-tests.sh already does
+# this with `|| print_error`, so only the .bat side can drift.
+mapfile -t BAT_CHILD_CALLS < <(grep -oiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER" | sort -u)
+
+if [[ ${#BAT_CHILD_CALLS[@]} -eq 0 ]]; then
+    echo "ERROR: no 'call .\tests\*.bat' child invocations found in $BAT_RUNNER —" >&2
+    echo "the #1040 guard check cannot run, so treat this validator as failed." >&2
+    exit 1
+fi
+
+UNGUARDED_CHILDREN=()
+for child_call in "${BAT_CHILD_CALLS[@]}"; do
+    child_line="$(grep -niF -m1 "$child_call" "$BAT_RUNNER" | cut -d: -f1)"
+    if [[ -z "$child_line" ]]; then
+        echo "ERROR: could not locate '$child_call' in $BAT_RUNNER" >&2
+        exit 1
+    fi
+
+    # The guard must be the next effective statement, and it must itself exit non-zero —
+    # a guard that only prints would let the wrapper carry on and report success.
+    guard_window="$(sed -n "$((child_line + 1)),$((child_line + 5))p" "$BAT_RUNNER")"
+    if ! grep -qiE '^[[:space:]]*if[[:space:]]+errorlevel[[:space:]]+1' <<< "$guard_window"; then
+        UNGUARDED_CHILDREN+=("${child_call#*tests\\} (no 'if errorlevel 1' guard)")
+        continue
+    fi
+
+    if ! sed -n "$((child_line + 1)),$((child_line + 9))p" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*exit[[:space:]]+/b[[:space:]]+1'; then
+        UNGUARDED_CHILDREN+=("${child_call#*tests\\} (guard does not 'exit /b 1')")
+    fi
+done
+
+if [[ ${#UNGUARDED_CHILDREN[@]} -gt 0 ]]; then
+    DRIFT=1
+    echo "Child E2E scripts called in run-tests.bat without an 'if errorlevel 1' guard that exits non-zero:"
+    printf '  - %s\n' "${UNGUARDED_CHILDREN[@]}"
+fi
+
 if [[ $DRIFT -eq 0 ]]; then
-    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites)."
+    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded)."
     exit 0
 fi
 

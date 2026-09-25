@@ -303,6 +303,25 @@ if "%~1"=="--meta-test-fail-only" (
     goto :end_of_tests
 )
 
+REM #1040: a child E2E script that exits non-zero must abort the wrapper. The stub child always
+REM exits 1, so running this mode proves the guard aborts on real cmd.exe rather than only
+REM asserting the guard's presence statically.
+if "%~1"=="--meta-test-child-fail-only" (
+    set "META_CHILD_STUB=%TEMP%\zipper-meta-child-%RANDOM%%RANDOM%.bat"
+    > "%META_CHILD_STUB%" echo @exit /b 1
+    call "%META_CHILD_STUB%"
+    set "META_CHILD_EXIT=!errorlevel!"
+    del /q "%META_CHILD_STUB%" 2>nul
+    call :print_info "meta-test: stub child exited with !META_CHILD_EXIT!"
+
+    REM Same guard shape as every real child call below.
+    if !META_CHILD_EXIT! neq 0 (
+        echo [ ERROR ] Meta-test child E2E script failed.
+        goto :end_of_tests
+    )
+    goto :end_of_tests
+)
+
 call :print_info "Starting test suite..."
 
 REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
@@ -492,6 +511,10 @@ call :print_info "Running standalone feature test suites..."
 REM Test 1: EML comprehensive tests
 call :print_info "Running EML comprehensive tests..."
 call .\tests\test-eml-comprehensive.bat
+if errorlevel 1 (
+    echo [ ERROR ] EML comprehensive tests failed.
+    exit /b 1
+)
 call :print_success "EML comprehensive tests passed."
 
 REM Test 2: Bates numbering tests
@@ -514,36 +537,64 @@ if errorlevel 1 (
 REM Test 3: Multipage TIFF tests
 call :print_info "Running multipage TIFF tests..."
 call .\tests\test-multipage-tiff.bat
+if errorlevel 1 (
+    echo [ ERROR ] Multipage TIFF tests failed.
+    exit /b 1
+)
 call :print_success "Multipage TIFF tests passed."
 
 REM Test 4: Office formats tests
 call :print_info "Running office formats tests..."
 call .\tests\test-office-formats.bat
+if errorlevel 1 (
+    echo [ ERROR ] Office formats tests failed.
+    exit /b 1
+)
 call :print_success "Office formats tests passed."
 
 REM Test 5: Load file formats tests
 call :print_info "Running load file formats tests..."
 call .\tests\test-load-file-formats.bat
+if errorlevel 1 (
+    echo [ ERROR ] Load file formats tests failed.
+    exit /b 1
+)
 call :print_success "Load file formats tests passed."
 
 REM Test 6: Artifact handling tests
 call :print_info "Running artifact handling tests..."
 call .\tests\test-artifact-handling.bat
+if errorlevel 1 (
+    echo [ ERROR ] Artifact handling tests failed.
+    exit /b 1
+)
 call :print_success "Artifact handling tests passed."
 
 REM Test 7: Cross-platform tests
 call :print_info "Running cross-platform tests..."
 call .\tests\test-cross-platform.bat
+if errorlevel 1 (
+    echo [ ERROR ] Cross-platform tests failed.
+    exit /b 1
+)
 call :print_success "Cross-platform tests passed."
 
 REM Test 10: Path traversal security tests
 call :print_info "Running path traversal security tests..."
 call .\tests\test-path-traversal-security.bat
+if errorlevel 1 (
+    echo [ ERROR ] Path traversal security tests failed.
+    exit /b 1
+)
 call :print_success "Path traversal security tests passed."
 
 REM Test 11: Unified workflow tests
 call :print_info "Running unified workflow tests..."
 call .\tests\test-unified-workflow.bat
+if errorlevel 1 (
+    echo [ ERROR ] Unified workflow tests failed.
+    exit /b 1
+)
 call :print_success "Unified workflow tests passed."
 
 REM Test 11b: Archive Test workflow CLI tests
@@ -660,6 +711,15 @@ if errorlevel 1 (
     exit /b 1
 )
 call :print_success "run-tests.bat fatal error behavior meta-test passed."
+
+REM #1040: validator guard-parity + the runtime proof that a failing child aborts the wrapper
+call :print_info "Running run-tests.bat child-exit-code guard parity tests..."
+call .\tests\test-run-tests-guard-parity.bat
+if errorlevel 1 (
+    echo [ ERROR ] test-run-tests-guard-parity.bat failed.
+    exit /b 1
+)
+call :print_success "run-tests.bat child-exit-code guard parity tests passed."
 
 call :print_info "Running TypeSafe audit foundation tests..."
 call .\tests\test-typesafe-audit.bat

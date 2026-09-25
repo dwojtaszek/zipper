@@ -658,6 +658,9 @@ print_success "Argument-interaction conflict tests passed."
 
 print_info "Running CLI coverage gap tests..."
 bash ./tests/test-cli-coverage-gaps.sh || print_error "test-cli-coverage-gaps.sh failed."
+
+# Guard the Windows wrapper's child exit codes (#1040)
+bash ./tests/test-run-tests-guard-parity.sh || print_error "test-run-tests-guard-parity.sh failed."
 print_success "CLI coverage gap tests passed."
 
 print_info "Running mixed file types tests..."
