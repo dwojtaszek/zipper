@@ -3,7 +3,7 @@ platform: github
 imagemagick: true
 video_evidence: false
 droid_control:
-  plugin: droid-control@factory-plugins
+  plugin: droid-control@factory-plugins@d362dc18
   compose: false
 
 environments:
