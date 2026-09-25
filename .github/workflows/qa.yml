@@ -57,10 +57,13 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import re
           import yaml
 
           with open(".factory/skills/qa/config.yaml", encoding="utf-8") as config_file:
               config = yaml.safe_load(config_file)
+          with open(".factory/settings.json", encoding="utf-8") as settings_file:
+              settings = json.load(settings_file)
 
           values = {
               "imagemagick": config["imagemagick"],
@@ -68,11 +71,30 @@ jobs:
               "compose": config["droid_control"]["compose"],
           }
           plugin = config["droid_control"]["plugin"]
+          if not isinstance(plugin, str) or not plugin or "\n" in plugin or "\r" in plugin:
+              raise SystemExit("Droid Control plugin must be a non-empty string.")
+          plugin_name, separator, marketplace_name = plugin.partition("@")
+          if plugin_name != "droid-control" or not separator or not marketplace_name:
+              raise SystemExit("Droid Control plugin must use plugin@marketplace format.")
+          marketplace = settings.get("extraKnownMarketplaces", {}).get(marketplace_name)
+          source = marketplace.get("source") if isinstance(marketplace, dict) else None
+          repo = source.get("repo") if isinstance(source, dict) else None
+          sha = source.get("sha") if isinstance(source, dict) else None
           cli_patterns = config["apps"]["cli"]["path_patterns"]
           if any(type(value) is not bool for value in values.values()):
               raise SystemExit("QA runtime settings must be booleans.")
-          if not isinstance(plugin, str) or not plugin or "\n" in plugin or "\r" in plugin:
-              raise SystemExit("Droid Control plugin must be a non-empty string.")
+          if settings.get("enabledPlugins", {}).get(plugin) is not True:
+              raise SystemExit("Droid Control plugin must be enabled in project settings.")
+          if (
+              not isinstance(source, dict)
+              or source.get("source") != "github"
+              or not isinstance(repo, str)
+              or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)
+              or not isinstance(sha, str)
+              or not re.fullmatch(r"[0-9a-f]{40}", sha)
+              or not marketplace_name.endswith(f"@{sha[:8]}")
+          ):
+              raise SystemExit("Droid Control marketplace must use its pinned GitHub commit.")
           if not isinstance(cli_patterns, list) or not cli_patterns or any(
               not isinstance(pattern, str) or not pattern or "\n" in pattern or "\r" in pattern
               for pattern in cli_patterns
@@ -83,6 +105,7 @@ jobs:
               for name, value in values.items():
                   output_file.write(f"{name}={str(value).lower()}\n")
               output_file.write(f"plugin={plugin}\n")
+              output_file.write(f"marketplace_url=https://github.com/{repo}@{sha}\n")
               output_file.write(f"cli_patterns={json.dumps(cli_patterns, separators=(',', ':'))}\n")
           PY
 
@@ -178,6 +201,12 @@ jobs:
       - name: Install Droid CLI
         if: steps.qa-scope.outputs.cli_affected == 'true'
         run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@0.226.2
+
+      - name: Register pinned Droid Control marketplace
+        if: steps.qa-scope.outputs.cli_affected == 'true'
+        env:
+          MARKETPLACE_URL: ${{ steps.qa-config.outputs.marketplace_url }}
+        run: droid plugin marketplace add "$MARKETPLACE_URL"
 
       - name: Install Droid Control plugin
         if: steps.qa-scope.outputs.cli_affected == 'true'
