@@ -156,6 +156,79 @@ fi
 print_success "Test Case 1b: --production-id over ${MAX_PRODUCTION_ID_BYTES} UTF-8 bytes rejected"
 
 
+# --- Test Case 1c: --production-id must be a single safe path segment ---
+
+print_info "Test Case 1c: --production-id rejects path separators, dot segments, and empty values"
+
+# Each value is a Production ID that must be rejected before any output is written.
+unsafe_production_ids=(
+  "../escape"
+  "nested/id"
+  "..\\escape"
+  "id with:colon"
+  "id/../.."
+  "."
+  ".."
+  ".. "
+  "PROD "
+  "PROD."
+  "CON"
+  "nul"
+  "COM1"
+  "AUX"
+  "CON.txt"
+)
+
+for unsafe_id in "${unsafe_production_ids[@]}"; do
+  unsafe_error="$TEST_OUTPUT_DIR/test1c.err"
+  rm -f "$unsafe_error"
+  if zipper \
+    --production-set \
+    --count 1 \
+    --output-path "$TEST_OUTPUT_DIR/test1c" \
+    --bates-prefix PROD \
+    --production-id "$unsafe_id" 2> "$unsafe_error"; then
+    print_error "Test 1c: --production-id '$unsafe_id' succeeded but should have failed."
+  fi
+  if ! grep -q "Error: --production-id must be a Safe Path Segment" "$unsafe_error"; then
+    print_error "Test 1c: --production-id '$unsafe_id' did not report the Safe Path Segment error."
+    cat "$unsafe_error"
+  fi
+  if [ -e "$TEST_OUTPUT_DIR/test1c" ]; then
+    print_error "Test 1c: --production-id '$unsafe_id' created output under --output-path despite failing validation."
+  fi
+done
+
+empty_error="$TEST_OUTPUT_DIR/test1c-empty.err"
+if zipper \
+  --production-set \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test1c-empty" \
+  --bates-prefix PROD \
+  --production-id "" 2> "$empty_error"; then
+  print_error "Test 1c: --production-id with an empty value succeeded but should have failed."
+fi
+if ! grep -q "Error: --production-id cannot be empty" "$empty_error"; then
+  print_error "Test 1c: empty --production-id did not report the empty-value error."
+  cat "$empty_error"
+fi
+
+no_set_error="$TEST_OUTPUT_DIR/test1c-noset.err"
+if zipper \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test1c-noset" \
+  --bates-prefix PROD \
+  --type pdf \
+  --production-id PROD_001 2> "$no_set_error"; then
+  print_error "Test 1c: --production-id without --production-set succeeded but should have failed."
+fi
+if ! grep -q "Error: --production-id requires --production-set" "$no_set_error"; then
+  print_error "Test 1c: --production-id without --production-set did not report the requires error."
+  cat "$no_set_error"
+fi
+
+print_success "Test Case 1c: --production-id rejects unsafe path segments, dot segments, and empty values"
+
 # --- Test Case 2: Production ZIP ---
 
 print_info "Test Case 2: Production set with --production-zip"

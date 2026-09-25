@@ -141,6 +141,22 @@ internal static class ProductionManifestWriter
             manifest.RedactionReasons = reasonCounts.Count > 0 ? reasonCounts : null;
         }
 
+        // REQ-226: the Production Metadata block is bounded by the Azure Blob custom-metadata
+        // budget. ProductionSetPostValidator reports an over-budget block as an artifact
+        // finding; this guard is the by-construction counterpart so a direct caller outside
+        // that validation path cannot write a manifest no upload client will accept.
+        // Measured before serialization so no partial manifest lands on disk.
+        var metadataBudgetBytes = MeasureProductionMetadataBudget(manifest.Metadata);
+        if (metadataBudgetBytes > ProductionMetadataBudget.MaxBytes)
+        {
+            throw new InvalidOperationException(
+                string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "Production Metadata block is {0} bytes across all keys and values; the Azure Blob metadata budget is {1:N0} bytes.",
+                    metadataBudgetBytes,
+                    ProductionMetadataBudget.MaxBytes));
+        }
+
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);
         if (materializer is not null)
         {
@@ -152,6 +168,18 @@ internal static class ProductionManifestWriter
         }
 
         return manifestPath;
+    }
+
+    /// <summary>Sums the REQ-226 Production Metadata budget across every key and value.</summary>
+    private static long MeasureProductionMetadataBudget(IReadOnlyDictionary<string, string> metadata)
+    {
+        long totalBytes = 0;
+        foreach (var pair in metadata)
+        {
+            totalBytes += ProductionMetadataBudget.PairBytes(pair.Key, pair.Value);
+        }
+
+        return totalBytes;
     }
 
     private static string FormatDelimiter(string delimiter)

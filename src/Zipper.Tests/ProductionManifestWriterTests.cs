@@ -373,4 +373,40 @@ public class ProductionManifestWriterTests
             }
         }
     }
+
+    [Fact]
+    public async Task WriteAsync_ProductionMetadataBlockOverAzureBudget_ShouldThrowAndWriteNoManifest()
+    {
+        // 59 bytes of keys + 3939 + 3939 + 300 + 1 byte of values = 8,238, four bytes over budget.
+        const int ExpectedTotalBytes = 8238;
+
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                ProductionManifestWriter.WriteAsync(
+                    tempDir,
+                    new FileGenerationRequest(),
+                    new string('B', 3939),
+                    new string('E', 3939),
+                    1,
+                    TimeSpan.Zero,
+                    productionId: new string('P', 300)));
+
+            Assert.Equal(
+                $"Production Metadata block is {ExpectedTotalBytes} bytes across all keys and values; the Azure Blob metadata budget is 8,192 bytes.",
+                exception.Message);
+
+            Assert.Empty(Directory.EnumerateFiles(tempDir, "_manifest.json", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }

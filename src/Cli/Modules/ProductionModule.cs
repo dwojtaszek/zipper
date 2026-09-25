@@ -222,10 +222,44 @@ public sealed class ProductionModule : CliModule
         List<string>? prodIds = null;
         if (_productionId is not null)
         {
+            // REQ-170: an empty value is a supplied value, not an omission. The auto-generated
+            // default only applies when the flag is absent, so fail before GenerateProductionIds
+            // can silently take its IsNullOrEmpty auto-ID branch.
+            if (_productionId.Length == 0)
+            {
+                Console.Error.WriteLine("Error: --production-id cannot be empty; omit the flag to auto-generate the Production ID.");
+                config = default!;
+                return false;
+            }
+
             prodIds = GenerateProductionIds(_productionId, _rollingCount);
+
+            // The byte cap is checked first and outside the Production Set branch on purpose:
+            // REQ-170 rejects oversized elements in every mode in which --production-id is
+            // supplied, so the size error must keep winning over the requires-production-set
+            // error below.
             if (prodIds.Any(id => System.Text.Encoding.UTF8.GetByteCount(id) > MaxProductionIdBytes))
             {
                 Console.Error.WriteLine($"Error: --production-id must not exceed {MaxProductionIdBytes} UTF-8 bytes.");
+                config = default!;
+                return false;
+            }
+
+            if (!_productionSet)
+            {
+                Console.Error.WriteLine("Error: --production-id requires --production-set.");
+                config = default!;
+                return false;
+            }
+
+            // REQ-170: every Production ID becomes one directory-name segment beneath
+            // --output-path, so each element must be a Safe Path Segment. The whitespace test is
+            // load-bearing, not redundant: it routes whitespace-only elements (a bare tab) to the
+            // more specific "Production ID cannot be empty." error further down instead of letting
+            // them fall through to this rule.
+            if (prodIds.Any(id => !string.IsNullOrWhiteSpace(id) && !IsSafePathSegment(id)))
+            {
+                Console.Error.WriteLine("Error: --production-id must be a Safe Path Segment: no path separators, reserved characters, trailing spaces or dots, or dot segments.");
                 config = default!;
                 return false;
             }
@@ -370,4 +404,63 @@ public sealed class ProductionModule : CliModule
         }
         return result;
     }
+
+    /// <summary>
+    /// REQ-170: a Production ID is used verbatim as one directory-name segment beneath
+    /// <c>--output-path</c>, so it must be a Safe Path Segment. The rules are fixed rather than
+    /// read from <see cref="Path.GetInvalidFileNameChars"/> or a platform device list, so the
+    /// same Production ID is accepted or rejected identically on every platform:
+    /// <list type="bullet">
+    /// <item>no path separator, control character, or character Windows reserves in file names;</item>
+    /// <item>no trailing space or dot — Win32 strips those from every component, so
+    /// <c>".. "</c> would resolve to the parent of <c>--output-path</c>, and <c>"PROD"</c> and
+    /// <c>"PROD "</c> would name the same directory where a case-insensitive duplicate check
+    /// cannot see the collision;</item>
+    /// <item>not a dot segment, directly or after stripping trailing spaces and dots;</item>
+    /// <item>not a reserved DOS device name, which <c>CreateDirectory</c> can never create.</item>
+    /// </list>
+    /// </summary>
+    private static bool IsSafePathSegment(string value)
+    {
+        if (value.Length == 0 ||
+            value[^1] is ' ' or '.' ||
+            value.Any(c => char.IsControl(c) || c is '/' or '\\' or ':' or '*' or '?' or '"' or '<' or '>' or '|'))
+        {
+            return false;
+        }
+
+        // Win32 trims trailing spaces and dots from a path component before resolving it, so a
+        // dot segment is judged after the same trim. A value made only of dots trims to empty.
+        var trimmed = value.TrimEnd(' ', '.');
+        if (trimmed.Length == 0 || trimmed == "." || trimmed == "..")
+        {
+            return false;
+        }
+
+        var stem = trimmed;
+        var dotIndex = trimmed.IndexOf('.', StringComparison.Ordinal);
+        if (dotIndex >= 0)
+        {
+            stem = trimmed[..dotIndex];
+        }
+
+        return !IsReservedDeviceName(stem);
+    }
+
+    /// <summary>
+    /// DOS device names Windows reserves regardless of extension, matched case-insensitively.
+    /// <c>CreateDirectory</c> fails on these <em>after</em> validation, which would surface as an
+    /// unhandled generation error instead of a validation error. The COM/LPT suffix set includes
+    /// the superscript digits U+00B9, U+00B2, and U+00B3, which Windows also reserves.
+    /// </summary>
+    private static bool IsReservedDeviceName(string stem) =>
+        stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
+        stem.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+        stem.Equals("AUX", StringComparison.OrdinalIgnoreCase) ||
+        stem.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+        stem.Equals("CONIN$", StringComparison.OrdinalIgnoreCase) ||
+        stem.Equals("CONOUT$", StringComparison.OrdinalIgnoreCase) ||
+        (stem.Length == 4 &&
+         (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
+         stem[3] is (>= '1' and <= '9') or '\u00b9' or '\u00b2' or '\u00b3');
 }

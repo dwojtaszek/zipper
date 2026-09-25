@@ -33,7 +33,7 @@ public class HelpTextGeneratorTests
             Assert.Contains("--redacted-production", output, StringComparison.Ordinal);
             Assert.Contains("--withheld-native-policy", output, StringComparison.Ordinal);
             Assert.Contains(
-                "  --production-id <string> Configurable production ID (supports lists, defaults to auto-incrementing/timestamp), max 250 UTF-8 bytes per generated element",
+                "  --production-id <string> Configurable production ID (requires --production-set; non-empty; supports lists, defaults to auto-incrementing/timestamp), max 250 UTF-8 bytes per generated element, single safe path segment per element",
                 output,
                 StringComparison.Ordinal);
             Assert.Contains("Bates Numbering:", output, StringComparison.Ordinal);
