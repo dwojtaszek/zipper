@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Xunit;
 using Zipper.Config;
@@ -275,6 +276,94 @@ public class ProductionManifestWriterTests
 
             Assert.EndsWith("caf_", metadata.GetProperty("production_id").GetString(), StringComparison.Ordinal);
             Assert.Equal("PR_F  00000001", metadata.GetProperty("bates_number_start").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithControlCharacterValues_NormalizesToAzureSafeSet()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        var request = new FileGenerationRequest();
+        var productionId = "PROD\u0000\u0001\u007F\tID";
+        var batesStart = "BATES\u0000\u0001\u007F\tSTART";
+
+        try
+        {
+            var path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                request,
+                batesStart,
+                "BATES00000010",
+                1,
+                TimeSpan.Zero,
+                productionId: productionId);
+
+            var jsonContent = await File.ReadAllTextAsync(path);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var metadata = doc.RootElement.GetProperty("metadata");
+
+            foreach (var pair in metadata.EnumerateObject())
+            {
+                var value = pair.Value.GetString() ?? string.Empty;
+                Assert.True(
+                    value.All(c => c == '\t' || (c >= '\u0020' && c <= '\u007e')),
+                    $"Metadata value for '{pair.Name}' contains a character outside tab or 0x20-0x7E: '{value}'");
+            }
+
+            Assert.Equal("PROD___\tID", metadata.GetProperty("production_id").GetString());
+            Assert.Equal("BATES___\tSTART", metadata.GetProperty("bates_number_start").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_AtAzureMetadataBudgetBoundary_EmitsExactly8192Bytes()
+    {
+        const int MaxAzureMetadataBytes = 8192;
+        const int BatesStartValueLength = 3939;
+        const int BatesEndValueLength = 3938;
+        const int ProductionIdLength = 255;
+        const int VolumeCount = 1;
+
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                new FileGenerationRequest(),
+                new string('B', BatesStartValueLength),
+                new string('E', BatesEndValueLength),
+                VolumeCount,
+                TimeSpan.Zero,
+                productionId: new string('P', ProductionIdLength));
+
+            var jsonContent = await File.ReadAllTextAsync(path);
+            using var doc = JsonDocument.Parse(jsonContent);
+            var totalBytes = doc.RootElement
+                .GetProperty("metadata")
+                .EnumerateObject()
+                .Sum(property =>
+                    Encoding.UTF8.GetByteCount(property.Name) +
+                    Encoding.UTF8.GetByteCount(property.Value.GetString()!));
+
+            Assert.Equal(MaxAzureMetadataBytes, totalBytes);
         }
         finally
         {

@@ -6,6 +6,8 @@ namespace Zipper.Cli.Modules;
 /// <summary>Owns --bates-prefix, --bates-start, --bates-digits: parse, validate, and build BatesNumberConfig.</summary>
 public sealed class BatesModule : CliModule
 {
+    private const int MaxBatesPrefixBytes = 200;
+
     private string? _prefix;
     private long? _start;
     private int? _digits;
@@ -24,10 +26,19 @@ public sealed class BatesModule : CliModule
                     Console.Error.WriteLine("Error: --bates-prefix requires a value.");
                     return false;
                 }
-                _prefix = value;
-                _prefixes = value.Contains(',', StringComparison.Ordinal)
+                var prefixes = value.Contains(',', StringComparison.Ordinal)
                     ? value.Split(',').Select(p => p.Trim()).ToList()
                     : new List<string> { value };
+                // Each prefix reaches the Production Manifest metadata block as a
+                // Bates Number value, so the limit applies per prefix, not to the
+                // comma-joined flag value (REQ-225).
+                if (prefixes.Any(p => System.Text.Encoding.UTF8.GetByteCount(p) > MaxBatesPrefixBytes))
+                {
+                    Console.Error.WriteLine($"Error: --bates-prefix must not exceed {MaxBatesPrefixBytes} UTF-8 bytes.");
+                    return false;
+                }
+                _prefix = value;
+                _prefixes = prefixes;
                 return true;
             case "--bates-start":
                 if (value is null)

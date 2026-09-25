@@ -106,7 +106,7 @@ internal static class ProductionManifestWriter
 
         // Azure Blob custom metadata (ticket #881): the derived block an upload
         // client maps onto x-ms-meta-<key>. Keys are fixed Azure-safe literals;
-        // values are normalized to ASCII without CR/LF (REQ-225).
+        // values are normalized to the tab/printable-ASCII set (REQ-225).
         manifest.Metadata = new Dictionary<string, string>
         {
             ["production_id"] = NormalizeMetadataValue(manifest.ProductionId),
@@ -171,9 +171,10 @@ internal static class ProductionManifestWriter
 
     /// <summary>
     /// Normalizes a derived metadata value for Azure Blob custom metadata
-    /// (ticket #881): values must be ASCII-only and free of CR/LF (the
-    /// header-injection hazard). Non-ASCII characters become '_' and CR/LF
-    /// become ' '.
+    /// (ticket #881): values may contain only tab (U+0009) or ASCII characters
+    /// U+0020 through U+007E. Tab is preserved. CR/LF become ' ' because
+    /// newlines in metadata values are an HTTP response-splitting hazard;
+    /// every other disallowed character becomes '_'.
     /// </summary>
     private static string NormalizeMetadataValue(string value)
     {
@@ -183,8 +184,9 @@ internal static class ProductionManifestWriter
             builder.Append(c switch
             {
                 '\r' or '\n' => ' ',
-                > '\u007f' => '_',
-                _ => c,
+                '\t' => c,
+                >= ' ' and <= '~' => c,
+                _ => '_',
             });
         }
 

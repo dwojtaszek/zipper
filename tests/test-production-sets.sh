@@ -74,6 +74,10 @@ if ! grep -q "PROD00000001" "$prod_dir/DATA/loadfile.dat"; then
   print_error "Bates start not found in DAT"
 fi
 
+# Production Metadata limits
+MAX_BATES_PREFIX_BYTES=200
+MAX_PRODUCTION_ID_BYTES=250
+
 # Verify manifest metadata block (Azure-safe contract, REQ-225)
 python3 - "$prod_dir" <<'PY'
 import json
@@ -89,16 +93,67 @@ for key in ("production_id", "bates_number_start", "bates_number_end", "volume_c
         raise SystemExit(f"manifest metadata missing key: {key}")
 total = 0
 for key, value in metadata.items():
+    if not isinstance(value, str):
+        raise SystemExit(f"metadata value for '{key}' must be a string")
     total += len(key.encode()) + len(value.encode())
-    if any(c > "\x7f" for c in key) or any(c > "\x7f" for c in value):
-        raise SystemExit(f"metadata pair '{key}' contains non-ASCII characters")
-    if "\r" in value or "\n" in value:
-        raise SystemExit(f"metadata value for '{key}' contains CR/LF")
+    if any(c > "\x7f" for c in key):
+        raise SystemExit(f"metadata key '{key}' contains a non-ASCII character")
+    if any(c != "\t" and not (0x20 <= ord(c) <= 0x7e) for c in value):
+        raise SystemExit(f"metadata value for '{key}' contains a character outside tab or 0x20-0x7E")
 if total > 8192:
     raise SystemExit(f"metadata block exceeds 8,192 bytes: {total}")
 PY
 
 print_success "Test Case 1: Basic production set passed"
+
+
+# --- Test Case 1a: --bates-prefix maximum length ---
+
+print_info "Test Case 1a: --bates-prefix over ${MAX_BATES_PREFIX_BYTES} UTF-8 bytes is rejected"
+
+long_bates_prefix=""
+for ((i = 0; i <= MAX_BATES_PREFIX_BYTES; i++)); do
+  long_bates_prefix="${long_bates_prefix}X"
+done
+long_bates_prefix_error="$TEST_OUTPUT_DIR/test1a.err"
+
+if zipper \
+  --production-set \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test1a" \
+  --bates-prefix "$long_bates_prefix" 2> "$long_bates_prefix_error"; then
+  print_error "Test 1a: --bates-prefix over ${MAX_BATES_PREFIX_BYTES} UTF-8 bytes succeeded but should have failed."
+fi
+if ! grep -q "Error: --bates-prefix must not exceed ${MAX_BATES_PREFIX_BYTES} UTF-8 bytes" "$long_bates_prefix_error"; then
+  print_error "Test 1a: rejection message does not contain the ${MAX_BATES_PREFIX_BYTES}-UTF-8-byte limit"
+fi
+
+print_success "Test Case 1a: --bates-prefix over ${MAX_BATES_PREFIX_BYTES} UTF-8 bytes rejected"
+
+
+# --- Test Case 1b: --production-id maximum length ---
+
+print_info "Test Case 1b: --production-id over ${MAX_PRODUCTION_ID_BYTES} UTF-8 bytes is rejected"
+
+long_production_id=""
+for ((i = 0; i <= MAX_PRODUCTION_ID_BYTES; i++)); do
+  long_production_id="${long_production_id}X"
+done
+long_production_id_error="$TEST_OUTPUT_DIR/test1b.err"
+
+if zipper \
+  --production-set \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test1b" \
+  --bates-prefix PROD \
+  --production-id "$long_production_id" 2> "$long_production_id_error"; then
+  print_error "Test 1b: --production-id over ${MAX_PRODUCTION_ID_BYTES} UTF-8 bytes succeeded but should have failed."
+fi
+if ! grep -q "Error: --production-id must not exceed ${MAX_PRODUCTION_ID_BYTES} UTF-8 bytes" "$long_production_id_error"; then
+  print_error "Test 1b: rejection message does not contain the ${MAX_PRODUCTION_ID_BYTES}-UTF-8-byte limit"
+fi
+
+print_success "Test Case 1b: --production-id over ${MAX_PRODUCTION_ID_BYTES} UTF-8 bytes rejected"
 
 
 # --- Test Case 2: Production ZIP ---

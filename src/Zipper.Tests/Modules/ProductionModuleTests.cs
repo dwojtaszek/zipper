@@ -7,6 +7,9 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ProductionModuleTests
 {
+    private const int MaxProductionIdBytes = 250;
+    private static readonly string ProductionIdTooLongError = $"Error: --production-id must not exceed {MaxProductionIdBytes} UTF-8 bytes.";
+
     private static bool TryBuild(string?[] apply, out ProductionConfig config)
     {
         var module = new ProductionModule();
@@ -338,6 +341,70 @@ public class ProductionModuleTests
             Assert.False(TryBuild(new[] { "--production-set", null, "--rolling-count", "2", "--production-id", "PROD001," }, out _));
         });
         Assert.Contains("Error: Production ID cannot be empty.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionIdExceedingMaximumLength_ShouldReturnFalseAndEmitError()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-set", null, "--production-id", new string('P', MaxProductionIdBytes + 1) }, out _));
+        });
+
+        Assert.Equal(
+            ProductionIdTooLongError,
+            error.TrimEnd(Environment.NewLine.ToCharArray()));
+    }
+
+    [Fact]
+    public void TryBuild_ProductionIdAtMaximumLength_ShouldReturnTrue()
+    {
+        Assert.True(TryBuild(new[] { "--production-set", null, "--production-id", new string('P', MaxProductionIdBytes) }, out _));
+    }
+
+    [Fact]
+    public void TryBuild_CommaSeparatedProductionIdsEachWithinLimit_ShouldReturnTrue()
+    {
+        var firstId = new string('P', MaxProductionIdBytes);
+        var secondId = new string('Q', MaxProductionIdBytes);
+
+        Assert.True(TryBuild(
+            new[] { "--production-set", null, "--rolling-count", "2", "--production-id", $"{firstId},{secondId}" },
+            out _));
+    }
+
+    [Fact]
+    public void TryBuild_MultibyteProductionIdAtByteLimit_ShouldReturnTrue()
+    {
+        var productionId = new string('é', MaxProductionIdBytes / 2);
+
+        Assert.True(TryBuild(new[] { "--production-set", null, "--production-id", productionId }, out _));
+    }
+
+    [Fact]
+    public void TryBuild_MultibyteProductionIdExceedingByteLimit_ShouldReturnFalseAndEmitError()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-set", null, "--production-id", new string('é', MaxProductionIdBytes / 2 + 1) }, out _));
+        });
+
+        Assert.Equal(
+            ProductionIdTooLongError,
+            error.TrimEnd(Environment.NewLine.ToCharArray()));
+    }
+
+    [Fact]
+    public void TryBuild_ProductionIdExceedingMaximumLengthOutsideProductionSet_ShouldReturnFalseAndEmitError()
+    {
+        var error = CaptureError(() =>
+        {
+            Assert.False(TryBuild(new[] { "--production-id", new string('P', MaxProductionIdBytes + 1) }, out _));
+        });
+
+        Assert.Equal(
+            ProductionIdTooLongError,
+            error.TrimEnd(Environment.NewLine.ToCharArray()));
     }
 
     // --- Config assembly ---

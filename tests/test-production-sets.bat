@@ -62,6 +62,10 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:: Production Metadata limits
+set "MAX_BATES_PREFIX_BYTES=200"
+set "MAX_PRODUCTION_ID_BYTES=250"
+
 :: Verify manifest metadata block (Azure-safe contract, REQ-225)
 powershell -NoProfile -Command ^
   "$metadata = (Get-Content (Join-Path '%PROD_DIR%' '_manifest.json') -Raw | ConvertFrom-Json).metadata;" ^
@@ -71,11 +75,15 @@ powershell -NoProfile -Command ^
   "$total = 0;" ^
   "foreach ($pair in $metadata.PSObject.Properties)" ^
   "{" ^
-  "  $total += [Text.Encoding]::UTF8.GetByteCount($pair.Name) + [Text.Encoding]::UTF8.GetByteCount([string]$pair.Value);" ^
-  "  foreach ($c in ([string]$pair.Value).ToCharArray())" ^
+  "  if ($pair.Value -isnot [string]) { throw \"metadata value for '$($pair.Name)' must be a string\" }" ^
+  "  $total += [Text.Encoding]::UTF8.GetByteCount($pair.Name) + [Text.Encoding]::UTF8.GetByteCount($pair.Value);" ^
+  "  foreach ($c in $pair.Name.ToCharArray())" ^
   "  {" ^
-  "    if ([int]$c -gt 127) { throw \"metadata value for '$($pair.Name)' contains non-ASCII characters\" }" ^
-  "    if ($c -eq \"\`r\" -or $c -eq \"\`n\") { throw \"metadata value for '$($pair.Name)' contains CR/LF\" }" ^
+  "    if ([int]$c -gt 127) { throw \"metadata key '$($pair.Name)' contains a non-ASCII character\" }" ^
+  "  }" ^
+  "  foreach ($c in $pair.Value.ToCharArray())" ^
+  "  {" ^
+  "    if (([int]$c -ne 9) -and (([int]$c -lt 32) -or ([int]$c -gt 126))) { throw \"metadata value for '$($pair.Name)' contains a character outside tab or 0x20-0x7E\" }" ^
   "  }" ^
   "}" ^
   "if ($total -gt 8192) { throw \"metadata block exceeds 8,192 bytes: $total\" }"
@@ -85,6 +93,61 @@ if errorlevel 1 (
 )
 
 echo [ SUCCESS ] Test Case 1: Basic production set passed
+
+:: --- Test Case 1a: --bates-prefix maximum length ---
+
+echo [ INFO ] Test Case 1a: --bates-prefix over %MAX_BATES_PREFIX_BYTES% UTF-8 bytes is rejected
+
+set "LONG_BATES_PREFIX="
+set /a MAX_BATES_PREFIX_BYTES_PLUS_ONE=MAX_BATES_PREFIX_BYTES + 1
+for /l %%i in (1,1,%MAX_BATES_PREFIX_BYTES_PLUS_ONE%) do set "LONG_BATES_PREFIX=!LONG_BATES_PREFIX!X"
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test1a" ^
+  --bates-prefix "!LONG_BATES_PREFIX!" 2>"%TEST_OUTPUT_DIR%\test1a.err"
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 1a: --bates-prefix over %MAX_BATES_PREFIX_BYTES% UTF-8 bytes succeeded but should have failed.
+  exit /b 1
+)
+
+findstr /C:"Error: --bates-prefix must not exceed %MAX_BATES_PREFIX_BYTES% UTF-8 bytes" "%TEST_OUTPUT_DIR%\test1a.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 1a: rejection message does not contain the %MAX_BATES_PREFIX_BYTES%-UTF-8-byte limit
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 1a: --bates-prefix over %MAX_BATES_PREFIX_BYTES% UTF-8 bytes rejected
+
+:: --- Test Case 1b: --production-id maximum length ---
+
+echo [ INFO ] Test Case 1b: --production-id over %MAX_PRODUCTION_ID_BYTES% UTF-8 bytes is rejected
+
+set "LONG_PRODUCTION_ID="
+set /a MAX_PRODUCTION_ID_BYTES_PLUS_ONE=MAX_PRODUCTION_ID_BYTES + 1
+for /l %%i in (1,1,%MAX_PRODUCTION_ID_BYTES_PLUS_ONE%) do set "LONG_PRODUCTION_ID=!LONG_PRODUCTION_ID!X"
+
+%ZIPPER_CMD% ^
+  --production-set ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test1b" ^
+  --bates-prefix PROD ^
+  --production-id "!LONG_PRODUCTION_ID!" 2>"%TEST_OUTPUT_DIR%\test1b.err"
+
+if not errorlevel 1 (
+  echo [ ERROR ] Test 1b: --production-id over %MAX_PRODUCTION_ID_BYTES% UTF-8 bytes succeeded but should have failed.
+  exit /b 1
+)
+
+findstr /C:"Error: --production-id must not exceed %MAX_PRODUCTION_ID_BYTES% UTF-8 bytes" "%TEST_OUTPUT_DIR%\test1b.err" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 1b: rejection message does not contain the %MAX_PRODUCTION_ID_BYTES%-UTF-8-byte limit
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 1b: --production-id over %MAX_PRODUCTION_ID_BYTES% UTF-8 bytes rejected
 
 :: --- Test Case 2: Production ZIP ---
 
