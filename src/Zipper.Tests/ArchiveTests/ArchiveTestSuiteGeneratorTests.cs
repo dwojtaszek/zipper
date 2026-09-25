@@ -329,4 +329,19 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         Assert.NotNull(testCase.Entries[1].ContentSha256);
         Assert.Empty(testCase.Mutations);
     }
+
+    [Fact]
+    public void BuildExpectationFile_UnsupportedMethod_PinsIntegrityStagesAndRevision()
+    {
+        var definition = ArchiveTestCatalog.GetCase("unsupported-method");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var expectationFile = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        var integrity = Assert.Single(
+            expectationFile.Expectations,
+            expectation => expectation.Operation == "integrity-check");
+        Assert.Equal(["open", "read-entry", "integrity-check"], integrity.FailureStages);
+        Assert.Equal(3, expectationFile.ExpectationRevision);
+    }
 }

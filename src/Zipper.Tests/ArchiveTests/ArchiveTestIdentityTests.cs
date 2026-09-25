@@ -7,13 +7,13 @@ namespace Zipper.Tests;
 public class ArchiveTestIdentityTests
 {
     private const string EmptyArchiveSha256 = "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85";
-    private const string FrozenValidEmptyId = "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950";
+    private const string FrozenValidEmptyId = "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f";
 
     [Fact]
     public void ComputeFixtureId_FrozenValidEmptyVector_MatchesPublishedId()
     {
         // Independently computed (Python hashlib) before the implementation existed.
-        var id = ArchiveTestIdentity.ComputeFixtureId("1", "valid-empty", 1, 1, 42, EmptyArchiveSha256);
+        var id = ArchiveTestIdentity.ComputeFixtureId("1", "valid-empty", 1, 2, 42, EmptyArchiveSha256);
 
         Assert.Equal(FrozenValidEmptyId, id);
     }
