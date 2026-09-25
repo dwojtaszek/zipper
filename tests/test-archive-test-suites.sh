@@ -290,6 +290,117 @@ else
   check 1 "independent verifier must pass the complete catalogue"
 fi
 
+# 10.1. Cancellation (REQ-215/REQ-219): cancel the longest suite only after
+#     its first owned atc-*.zip appears in an atc-staging-<GUID> sibling.
+#     Non-interactive Bash otherwise starts background jobs with SIGINT ignored;
+#     brief job control restores normal signal disposition. Bash signals its
+#     process group directly; Windows delegates Ctrl+C through a PowerShell worker.
+#     The requested destination is published
+#     by one final rename, so cancellation must leave no fixture files there and
+#     no owned staging directory behind.
+CANCEL_OUT="$TEST_OUTPUT_DIR/cancellation"
+CANCEL_PID=""
+CANCEL_POLL_INTERVAL=0.01
+CANCEL_STAGING_TIMEOUT_SECONDS=30
+CANCEL_EXIT_TIMEOUT_SECONDS=30
+CANCEL_CLEANUP_TIMEOUT_SECONDS=10
+
+cleanup_cancel_process() {
+  if [[ -n "$CANCEL_PID" ]]; then
+    local cancel_pid="$CANCEL_PID"
+    local cleanup_deadline=$((SECONDS + CANCEL_CLEANUP_TIMEOUT_SECONDS))
+    if ! kill -TERM -- "-$CANCEL_PID" 2>/dev/null; then
+      kill -TERM "$CANCEL_PID" 2>/dev/null || true
+    fi
+    while kill -0 "$cancel_pid" 2>/dev/null && [[ "$SECONDS" -lt "$cleanup_deadline" ]]; do
+      sleep "$CANCEL_POLL_INTERVAL"
+    done
+    if kill -0 -- "-$cancel_pid" 2>/dev/null; then
+      kill -KILL -- "-$cancel_pid" 2>/dev/null || true
+    elif kill -0 "$cancel_pid" 2>/dev/null; then
+      kill -KILL "$cancel_pid" 2>/dev/null || true
+    fi
+    wait "$cancel_pid" 2>/dev/null || true
+    CANCEL_PID=""
+  fi
+}
+trap cleanup_cancel_process EXIT
+trap 'cleanup_cancel_process; exit 130' INT
+trap 'cleanup_cancel_process; exit 143' TERM
+
+set -m
+if [[ -n "${_ZIPPER_BIN:-}" ]] && [[ -x "${_ZIPPER_BIN}" ]]; then
+  "${_ZIPPER_BIN}" --archive-test-suite all --seed 42 --output-path "$CANCEL_OUT" >/dev/null 2>&1 &
+else
+  dotnet run -c Release --project "${ZIPPER_PROJECT:-src/Zipper.csproj}" -- --archive-test-suite all --seed 42 --output-path "$CANCEL_OUT" >/dev/null 2>&1 &
+fi
+CANCEL_PID=$!
+set +m
+
+CANCEL_SIGNAL_SENT=0
+CANCEL_STAGING_DEADLINE=$((SECONDS + CANCEL_STAGING_TIMEOUT_SECONDS))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if compgen -G "$TEST_OUTPUT_DIR/atc-staging-*/atc-*.zip" >/dev/null; then
+    if kill -INT -- "-$CANCEL_PID" 2>/dev/null; then
+      CANCEL_SIGNAL_SENT=1
+    elif kill -INT "$CANCEL_PID" 2>/dev/null; then
+      CANCEL_SIGNAL_SENT=1
+    fi
+    break
+  fi
+  if [[ "$SECONDS" -ge "$CANCEL_STAGING_DEADLINE" ]]; then
+    check 1 "cancellation staging evidence did not appear within ${CANCEL_STAGING_TIMEOUT_SECONDS}s"
+    break
+  fi
+  sleep "$CANCEL_POLL_INTERVAL"
+done
+
+CANCEL_EXIT_DEADLINE=$((SECONDS + CANCEL_EXIT_TIMEOUT_SECONDS))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if [[ "$SECONDS" -ge "$CANCEL_EXIT_DEADLINE" ]]; then
+    check 1 "cancellation run did not exit within ${CANCEL_EXIT_TIMEOUT_SECONDS}s; forcing termination"
+    if ! kill -KILL -- "-$CANCEL_PID" 2>/dev/null; then
+      kill -KILL "$CANCEL_PID" 2>/dev/null || true
+    fi
+    break
+  fi
+  sleep "$CANCEL_POLL_INTERVAL"
+done
+
+CANCEL_EXIT_CODE=0
+wait "$CANCEL_PID" || CANCEL_EXIT_CODE=$?
+CANCEL_PID=""
+trap - EXIT INT TERM
+
+if [[ "$CANCEL_EXIT_CODE" -eq 0 ]]; then
+  CANCEL_SIGNAL_SENT=0
+fi
+
+CANCEL_ZIPS=0
+CANCEL_JSONS=0
+if [[ -d "$CANCEL_OUT" ]]; then
+  CANCEL_ZIPS=$(find "$CANCEL_OUT" -maxdepth 1 -type f -name 'atc-*.zip' | wc -l)
+  CANCEL_JSONS=$(find "$CANCEL_OUT" -maxdepth 1 -type f -name 'atc-*.json' | wc -l)
+fi
+CANCEL_STAGING=$(find "$TEST_OUTPUT_DIR" -maxdepth 1 -type d -name 'atc-staging-*' | wc -l)
+
+if [[ "$CANCEL_SIGNAL_SENT" -eq 1 ]]; then
+  assert_eq "$CANCEL_EXIT_CODE" 130 "cancellation race signal-won run exited 130"
+  if [[ "$CANCEL_ZIPS" -eq 0 ]] && [[ "$CANCEL_JSONS" -eq 0 ]]; then
+    check 0 "cancellation race signal-won run published no Archive or Expectation File"
+  else
+    check 1 "cancellation race signal-won run published $CANCEL_ZIPS Archives and $CANCEL_JSONS Expectation Files (expected zero each)"
+  fi
+else
+  assert_eq "$CANCEL_EXIT_CODE" 0 "cancellation race finished-first run exited 0"
+  if [[ "$CANCEL_ZIPS" -eq "$ALL_CASES" ]] && [[ "$CANCEL_JSONS" -eq "$ALL_CASES" ]]; then
+    check 0 "cancellation race finished-first run published all $ALL_CASES pairs"
+  else
+    check 1 "cancellation race finished-first run published $CANCEL_ZIPS Archives and $CANCEL_JSONS Expectation Files (expected $ALL_CASES each)"
+  fi
+fi
+assert_eq "$CANCEL_STAGING" 0 "cancellation left no owned staging directory"
+
 # 11. Tamper detection: one flipped Archive byte must fail verification.
 TAMPER="$TEST_OUTPUT_DIR/tamper"
 mkdir -p "$TAMPER"
