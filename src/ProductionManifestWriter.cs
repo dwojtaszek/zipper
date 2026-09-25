@@ -150,7 +150,11 @@ internal static class ProductionManifestWriter
         if (metadataBudgetBytes > ProductionMetadataBudget.MaxBytes)
         {
             throw new InvalidOperationException(
-                $"Production Metadata block is {metadataBudgetBytes} bytes across all keys and values; the Azure Blob metadata budget is {ProductionMetadataBudget.MaxBytes:N0} bytes.");
+                string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "Production Metadata block is {0} bytes across all keys and values; the Azure Blob metadata budget is {1:N0} bytes.",
+                    metadataBudgetBytes,
+                    ProductionMetadataBudget.MaxBytes));
         }
 
         var json = JsonSerializer.Serialize(manifest, ManifestSerializerOptions);

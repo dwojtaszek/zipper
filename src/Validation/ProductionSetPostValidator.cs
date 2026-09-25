@@ -538,7 +538,11 @@ internal sealed class ProductionSetPostValidator
                 Code = "MetadataAzureConstraint",
                 Severity = "error",
                 Path = "_manifest.json",
-                Message = $"Metadata block is {totalBytes} bytes across all keys and values; the Azure Blob metadata budget is {ProductionMetadataBudget.MaxBytes:N0} bytes."
+                Message = string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "Metadata block is {0} bytes across all keys and values; the Azure Blob metadata budget is {1:N0} bytes.",
+                    totalBytes,
+                    ProductionMetadataBudget.MaxBytes)
             });
         }
     }

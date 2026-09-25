@@ -450,7 +450,8 @@ public sealed class ProductionModule : CliModule
     /// <summary>
     /// DOS device names Windows reserves regardless of extension, matched case-insensitively.
     /// <c>CreateDirectory</c> fails on these <em>after</em> validation, which would surface as an
-    /// unhandled generation error instead of a validation error.
+    /// unhandled generation error instead of a validation error. The COM/LPT suffix set includes
+    /// the superscript digits U+00B9, U+00B2, and U+00B3, which Windows also reserves.
     /// </summary>
     private static bool IsReservedDeviceName(string stem) =>
         stem.Equals("CON", StringComparison.OrdinalIgnoreCase) ||
@@ -461,5 +462,5 @@ public sealed class ProductionModule : CliModule
         stem.Equals("CONOUT$", StringComparison.OrdinalIgnoreCase) ||
         (stem.Length == 4 &&
          (stem.StartsWith("COM", StringComparison.OrdinalIgnoreCase) || stem.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) &&
-         stem[3] is >= '1' and <= '9');
+         stem[3] is (>= '1' and <= '9') or '\u00b9' or '\u00b2' or '\u00b3');
 }

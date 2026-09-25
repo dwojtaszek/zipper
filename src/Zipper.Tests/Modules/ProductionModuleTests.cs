@@ -438,6 +438,9 @@ public class ProductionModuleTests
     [InlineData("CON.txt")]
     [InlineData("CONIN$")]
     [InlineData("CONOUT$")]
+    [InlineData("COM\u00b9")]
+    [InlineData("LPT\u00b2")]
+    [InlineData("com\u00b3.txt")]
     public void TryBuild_ProductionIdThatIsNotASafePathSegment_ShouldReturnFalseAndEmitError(string productionId)
     {
         var error = CaptureError(() =>
@@ -482,6 +485,7 @@ public class ProductionModuleTests
     [InlineData("NULL")]
     [InlineData("AUXILIARY")]
     [InlineData("COM")]
+    [InlineData("COM\u00b0")]
     public void TryBuild_ProductionIdThatIsASafePathSegment_ShouldReturnTrueAndUseValueVerbatim(string productionId)
     {
         Assert.True(TryBuild(new[] { "--production-set", null, "--production-id", productionId }, out var config));
