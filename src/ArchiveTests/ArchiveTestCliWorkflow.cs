@@ -44,7 +44,7 @@ internal static class ArchiveTestCliWorkflow
         if (suite is null)
         {
             Console.Error.WriteLine(
-                $"Error: Invalid --archive-test-suite '{modules.ArchiveTest.RawSuite}'. Supported suites: smoke, compatibility, malformed, security, all.");
+                $"Error: Invalid --archive-test-suite '{modules.ArchiveTest.RawSuite}'. Supported suites: {string.Join(", ", ArchiveTestCatalog.SupportedSuites)}.");
             return 1;
         }
 

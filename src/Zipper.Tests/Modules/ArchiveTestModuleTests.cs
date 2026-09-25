@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Xunit;
 using Zipper.ArchiveTests;
 using Zipper.Cli.Modules;
@@ -100,6 +101,31 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys()
+    {
+        var destination = Path.Combine(TempDir, "encoding-out");
+        var exitCode = await RunAsync("--archive-test-suite", "encoding", "--output-path", destination);
+
+        Assert.Equal(0, exitCode);
+        string[] expectedCaseKeys =
+        [
+            "encoding-big5-trail-backslash",
+            "encoding-cp932-trail-backslash",
+            "encoding-gbk-trail-backslash",
+        ];
+        Assert.Equal(expectedCaseKeys.Length * 2, Directory.GetFiles(destination).Length);
+        var publishedCaseKeys = Directory.GetFiles(destination, "*.json")
+            .Select(path =>
+            {
+                using var json = JsonDocument.Parse(File.ReadAllBytes(path));
+                return json.RootElement.GetProperty("caseKey").GetString()!;
+            })
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(expectedCaseKeys, publishedCaseKeys);
+    }
+
+    [Fact]
     public async Task RunAsync_CaseSelection_FiltersToSelectedKeys()
     {
         var destination = Path.Combine(TempDir, "two-cases");
@@ -172,9 +198,46 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task RunAsync_UnknownSuite_Fails()
+    public async Task RunAsync_UnknownSuite_ListsEverySupportedSuite()
     {
-        Assert.Equal(1, await RunAsync("--archive-test-suite", "bogus", "--output-path", Path.Combine(TempDir, "x")));
+        var originalError = Console.Error;
+        using var errorWriter = new StringWriter();
+        try
+        {
+            Console.SetError(errorWriter);
+
+            var exitCode = await RunAsync(
+                "--archive-test-suite", "encodign", "--output-path", Path.Combine(TempDir, "x"));
+
+            Assert.Equal(1, exitCode);
+            Assert.False(Directory.Exists(Path.Combine(TempDir, "x")));
+            Assert.Equal(
+                "Error: Invalid --archive-test-suite 'encodign'. Supported suites: smoke, compatibility, malformed, security, encoding, all."
+                + Environment.NewLine,
+                errorWriter.ToString());
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+    }
+
+    [Fact]
+    public void SupportedSuites_CoversEveryCatalogSuiteConstant()
+    {
+        // A new suite constant must be added to ArchiveTestCatalog.SupportedSuites
+        // too, so the invalid-value diagnostic cannot silently omit it (#1024).
+        var suiteConstants = typeof(ArchiveTestCatalog)
+            .GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            .Where(field => field.IsLiteral
+                && field.FieldType == typeof(string)
+                && (field.Name.EndsWith("Suite", StringComparison.Ordinal)
+                    || field.Name.EndsWith("Suites", StringComparison.Ordinal)))
+            .Select(field => (string)field.GetRawConstantValue()!)
+            .ToArray();
+
+        Assert.NotEmpty(suiteConstants);
+        Assert.Equal(suiteConstants, ArchiveTestCatalog.SupportedSuites);
     }
 
     [Fact]
