@@ -51,7 +51,7 @@ apps:
       - "zipper.sln"
     skill: qa-cli
     test_tool: tuistory
-    build_command: 'dotnet publish src/Zipper.csproj -c Release -o "./qa-results/$RUN_ID/publish" -p:Version=qa-test -p:InformationalVersion=qa-test'
+    build_command: 'dotnet publish src/Zipper.csproj -c Release -o "./qa-results/$RUN_ID/publish" -p:Version=0.0.0-qa-test -p:InformationalVersion=qa-test'
 
 feature_flags:
   provider: none

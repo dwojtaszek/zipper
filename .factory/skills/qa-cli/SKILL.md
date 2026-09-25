@@ -22,7 +22,7 @@ Set `RUN_ID` before building. Build only when the CLI is affected:
 
 ```bash
 dotnet publish src/Zipper.csproj -c Release \
-  -o "./qa-results/$RUN_ID/publish" -p:Version=qa-test -p:InformationalVersion=qa-test
+  -o "./qa-results/$RUN_ID/publish" -p:Version=0.0.0-qa-test -p:InformationalVersion=qa-test
 ```
 
 The binary is `./qa-results/$RUN_ID/publish/Zipper` (Linux/macOS) or `Zipper.exe` (Windows). Create each flow's output directory below `./qa-results/$RUN_ID/data/`. Do not use the existing `publish-bin/` or `results/` directories. Preserve evidence under `./qa-results/$RUN_ID/evidence/`; clean only this run's `data/` and `publish/` directories after testing.
