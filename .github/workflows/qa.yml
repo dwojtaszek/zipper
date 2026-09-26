@@ -1,6 +1,8 @@
 name: Functional QA
 
 on:
+  schedule:
+    - cron: '17 4 * * 1'
   workflow_dispatch:
     inputs:
       base_sha:
@@ -9,15 +11,54 @@ on:
         type: string
 
 concurrency:
-  group: qa-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: qa-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
+  weekly-smoke:
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Run deterministic CLI smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-results
+          {
+            dotnet build src/Zipper.csproj -c Release
+            ./tests/run-e2e-basic.sh
+          } 2>&1 | tee qa-results/weekly-smoke.log
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: weekly-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/weekly-smoke.log
+          if-no-files-found: warn
+          retention-days: 14
+
   qa:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: [weekly-smoke]
+    if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && needs.weekly-smoke.result == 'success'))
+    outputs:
+      droid_outcome: ${{ steps.qa.outcome }}
+      droid_available: ${{ steps.droid-key.outputs.available }}
+      tools_outcome: ${{ steps.terminal-tools.outcome }}
+      cli_outcome: ${{ steps.install-droid.outcome }}
+      marketplace_outcome: ${{ steps.marketplace.outcome }}
+      plugin_outcome: ${{ steps.plugin.outcome }}
     environment: QA
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -120,6 +161,12 @@ jobs:
           CLI_PATTERNS: ${{ steps.qa-config.outputs.cli_patterns }}
         run: |
           set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            QA_DIFF_BASE="$(git rev-list --first-parent -1 --before='7 days ago' "$GITHUB_SHA")"
+            [[ -n "$QA_DIFF_BASE" ]] || QA_DIFF_BASE="$(git rev-list --max-parents=0 "$GITHUB_SHA" | tail -1)"
+            export QA_DIFF_BASE
+            echo "Weekly diff base: $QA_DIFF_BASE"
+          fi
           [[ "$QA_DIFF_BASE" =~ ^[0-9a-f]{40}$ ]] || {
             echo "QA diff base must be a 40-character commit SHA." >&2
             exit 1
@@ -132,6 +179,7 @@ jobs:
             echo "QA diff base must be an ancestor in protected main history." >&2
             exit 1
           }
+          echo "diff_base=$QA_DIFF_BASE" >> "$GITHUB_OUTPUT"
           python3 - <<'PY'
           import json
           import os
@@ -165,20 +213,29 @@ jobs:
               output_file.write(f"cli_affected={'true' if changed_paths else 'false'}\n")
           PY
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - name: Check Droid availability
+        id: droid-key
         if: steps.qa-scope.outputs.cli_affected == 'true'
+        env:
+          HAS_KEY: ${{ secrets.FACTORY_API_KEY != '' }}
+        run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
         with:
           node-version: 22
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
         with:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
       - name: Install terminal QA tools
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        id: terminal-tools
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         shell: bash
         env:
           IMAGEMAGICK: ${{ steps.qa-config.outputs.imagemagick }}
@@ -203,24 +260,31 @@ jobs:
           fi
 
       - name: Install Droid CLI
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        id: install-droid
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@0.226.2
 
       - name: Register pinned Droid Control marketplace
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        id: marketplace
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.terminal-tools.outcome == 'success' && steps.install-droid.outcome == 'success'
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           MARKETPLACE_URL: ${{ steps.qa-config.outputs.marketplace_url }}
         run: droid plugin marketplace add "$MARKETPLACE_URL"
 
       - name: Install Droid Control plugin
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        id: plugin
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.marketplace.outcome == 'success'
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           PLUGIN: ${{ steps.qa-config.outputs.plugin }}
         run: droid plugin install "$PLUGIN" --scope project
 
       - name: Run functional QA
         id: qa
-        if: steps.qa-scope.outputs.cli_affected == 'true'
+        if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.plugin.outcome == 'success'
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         timeout-minutes: 20
         env:
           FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
@@ -228,7 +292,7 @@ jobs:
           REPO_ID: ${{ github.event.repository.id }}
           CI: 'true'
           QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-          QA_DIFF_BASE: ${{ inputs.base_sha }}
+          QA_DIFF_BASE: ${{ steps.qa-scope.outputs.diff_base }}
           VIDEO_EVIDENCE: ${{ steps.qa-config.outputs.video_evidence }}
           COMPOSE: ${{ steps.qa-config.outputs.compose }}
         shell: bash
@@ -243,7 +307,13 @@ jobs:
             echo "FACTORY_API_KEY is not configured." >&2
             exit 1
           }
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            prompt_extra="The weekly deterministic smoke suite already checks standard CLI outputs. Run exactly two change-specific cases not covered by that suite: one [positive] and one [negative] or [boundary]. Do not repeat mechanical file-count or format checks already covered by the smoke suite."
+          else
+            prompt_extra=''
+          fi
           prompt="You are running in a non-interactive CI environment. There is NO human available. Do NOT use AskUser, do NOT wait for confirmations, and do NOT pause for input. Run the qa skill. The diff base is ${QA_DIFF_BASE}. Use droid-control for every terminal interaction and write the final report to qa-results/report.md. Use ${QA_RUN_ID} as RUN_ID and keep all build output and generated test data under qa-results/${QA_RUN_ID}, then clean only that run's data and publish directories."
+          prompt+=" $prompt_extra"
           if [[ "$VIDEO_EVIDENCE" == true ]]; then
             prompt+=" Use droid-control Capture and upload video evidence per the QA skill's GitHub evidence rules."
           fi
@@ -275,7 +345,7 @@ jobs:
 
       - name: Validate QA report
         shell: bash
-        if: success()
+        if: success() && (github.event_name != 'schedule' || steps.qa.outcome == 'success' || steps.qa-scope.outputs.cli_affected == 'false')
         env:
           CLI_AFFECTED: ${{ steps.qa-scope.outputs.cli_affected }}
           QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -381,6 +451,52 @@ jobs:
           path: qa-results/
           if-no-files-found: warn
           retention-days: 14
+
+  weekly-issue:
+    if: always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+    needs: [weekly-smoke, qa]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Open or update weekly improvement review
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SMOKE_RESULT: ${{ needs.weekly-smoke.result }}
+          DROID_RESULT: ${{ needs.qa.result }}
+          DROID_OUTCOME: ${{ needs.qa.outputs.droid_outcome }}
+          DROID_AVAILABLE: ${{ needs.qa.outputs.droid_available }}
+          TOOLS_RESULT: ${{ needs.qa.outputs.tools_outcome }}
+          CLI_RESULT: ${{ needs.qa.outputs.cli_outcome }}
+          MARKETPLACE_RESULT: ${{ needs.qa.outputs.marketplace_outcome }}
+          PLUGIN_RESULT: ${{ needs.qa.outputs.plugin_outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          created_at="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+          title="Weekly CLI QA improvement review $(date -u -d "$created_at" +%G-W%V)"
+          {
+            echo "Weekly QA run: $RUN_URL"
+            echo "Commit: $GITHUB_SHA"
+            echo
+            echo "- Deterministic CLI smoke: $SMOKE_RESULT"
+            echo "- Optional Droid job: $DROID_RESULT"
+            echo "- Droid availability (key configured): ${DROID_AVAILABLE:-not checked}"
+            echo "- Droid prerequisites (terminal / CLI / marketplace / plugin): ${TOOLS_RESULT:-skipped} / ${CLI_RESULT:-skipped} / ${MARKETPLACE_RESULT:-skipped} / ${PLUGIN_RESULT:-skipped}"
+            echo "- Droid execution: ${DROID_OUTCOME:-skipped}"
+            echo
+            echo "Download the run's artifacts to inspect the smoke log and, when present, the Droid report and raw terminal snapshots."
+            echo "If a check failed or Droid was unavailable, investigate that result before claiming a Zipper defect. If all checks passed, inspect recent changes and choose one concrete, reproducible CLI coverage improvement; do not invent a failure."
+          } > weekly-issue.md
+          number="$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title \"$title\"" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [[ -n "$number" ]]; then
+            gh issue comment "$number" -R "$GITHUB_REPOSITORY" --body-file weekly-issue.md
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file weekly-issue.md --label testing --label P3
+          fi
+          cat weekly-issue.md >> "$GITHUB_STEP_SUMMARY"
 
   report-blocked:
     if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
