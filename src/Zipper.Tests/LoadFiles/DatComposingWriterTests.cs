@@ -127,6 +127,51 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         Assert.DoesNotContain("Compression Method", lines[0], StringComparison.Ordinal);
     }
 
+    // REQ-001: Compression Method is Email-intrinsic, so an eml Archive carries the column with
+    // or without --with-metadata. Every other File Type gates it on --with-metadata.
+    [Fact]
+    public async Task WriteAsync_EmailType_WithoutMetadata_IncludesCompressionMethodColumn()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.Contains("Compression Method", lines[0], StringComparison.Ordinal);
+        Assert.Contains("Deflate", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_EmailType_WithMetadata_IncludesCompressionMethodColumnOnce()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        var header = lines[0];
+        var occurrences = header.Split("Compression Method").Length - 1;
+        Assert.Equal(1, occurrences);
+    }
+
+    [Theory]
+    [InlineData("pdf")]
+    [InlineData("docx")]
+    [InlineData("tiff")]
+    public async Task WriteAsync_NonEmailType_WithoutMetadata_OmitsCompressionMethodColumn(string fileType)
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = fileType };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.DoesNotContain("Compression Method", lines[0], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task WriteAsync_WithStoreCompression_WritesStoreValue()
     {

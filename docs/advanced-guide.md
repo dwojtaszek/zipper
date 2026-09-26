@@ -90,14 +90,14 @@ zipper --loadfile-only --count 100000 --output-path ./chaos_ingest --chaos-mode 
 ```
 
 ### Recipe C: Email & Attachment Family Simulation
-Generate 10,000 Emails with a 30% Attachment Rate and parent-child Attachment relationship Metadata columns (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`):
+Generate 10,000 **Email** Native Files with a 30% **Attachment Rate** and parent-child **Attachment** relationship **Metadata** columns (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`):
 
 ```bash
 zipper --type eml --count 10000 --output-path ./email_families --attachment-rate 30 --with-families --with-metadata
 ```
 
 ### Recipe D: File Type Mix Archive Export
-Generate a File Type Mix Archive (60% PDF, 20% Email, 10% TIFF, 10% XLSX) of Native Files with default Metadata:
+Generate an **Archive** with a **File Type Mix** (60% PDF, 20% Email, 10% TIFF, 10% XLSX) of **Native Files** with default **Metadata**:
 
 ```bash
 zipper --types "pdf:60,eml:20,tiff:10,xlsx:10" --count 20000 --output-path ./mixed_archive
@@ -114,7 +114,7 @@ zipper --type pdf --count 20000 --output-path ./litigation_archive --column-prof
 
 ## 4. Custom Column Profile Authoring Guide
 
-You can define custom JSON Column Profiles to generate domain-specific Metadata schemas with up to 200 columns. Custom profiles must be saved within your working directory.
+You can define custom JSON **Column Profiles** to generate domain-specific **Metadata** with up to 200 columns. Custom profiles must be saved within your working directory.
 
 ### Example Custom Profile (`custom-profile.json`)
 
@@ -242,6 +242,38 @@ Example usage:
 ```bash
 zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile litigation --with-text --seed 12345
 ```
+
+---
+
+### Archive Compression
+
+`--compression` selects the ZIP compression method for every **Archive** the run produces — Standard mode, `--include-load-file`, and `--production-zip`. It defaults to `deflate`.
+
+| Method | Status | Notes |
+| --- | --- | --- |
+| `store` | Supported | Method 0, no compression. Pairs with `--target-zip-size`: size pre-checks and padding use an uncompressed ratio of 1.0 rather than the default 50% (REQ-224). |
+| `deflate` | Supported (default) | Method 8, standard DEFLATE. |
+| `deflate64` | Not yet supported | Recognized, then rejected as lacking codec support (REQ-223). |
+| `bzip2` | Not yet supported | Recognized, then rejected as lacking codec support (REQ-223). |
+
+Method names are matched case-insensitively. An unrecognized method fails validation with a non-zero exit code reporting the invalid value and listing the supported methods.
+
+```bash
+# Uncompressed Archive — Native Files are stored, not deflated
+zipper --type pdf --count 1000 --output-path ./stored_archive --compression store
+
+# Pair with a target size; padding assumes a 1.0 ratio because nothing compresses
+zipper --type pdf --count 1000 --output-path ./sized_archive \
+    --compression store --target-zip-size 10MB
+
+# Default is deflate, so this is equivalent to omitting the flag
+zipper --type pdf --count 1000 --output-path ./deflated_archive --compression deflate
+
+# Rejected: recognized but not yet supported
+zipper --type pdf --count 1000 --output-path ./bad --compression deflate64
+```
+
+The Compression Method **Metadata** column reports the method actually used. It is independent of `--with-metadata`: see REQ-001 — the column is Email-intrinsic, so it appears whenever the **Archive** contains an **Email**, and for every other **File Type** only with `--with-metadata`.
 
 ---
 
@@ -419,5 +451,6 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation (REQ-179): other registered generation/Production arguments are consumed but their values are never parsed or validated — invalid values (e.g. `--count not-a-number`) neither fail the run nor have any effect. Unknown flags still fail, and the three comparison flags remain strictly validated. |
 | `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
 | `--archive-test-suite` | Exclusive workflow: may only combine with `--archive-test-cases`, `--output-path` (required, new directory), and `--seed` (non-negative integer, defaults to 42). Every other flag — including `--benchmark` and `--chaos-list` — is rejected, even at its default value. See [Archive Test Suites](archive-test-suites.md) and ADR-0008. |
+| `--compression` | Applies to every output Archive the run produces: Standard mode, `--include-load-file`, and `--production-zip`. Defaults to `deflate`. Independent of `--with-metadata` — the Compression Method **Metadata** column reflects the Archive-wide setting whenever it appears at all (see REQ-001 for when the column is included). With `--target-zip-size`, `--compression store` makes size pre-checks and padding use an uncompressed ratio of 1.0 instead of the default 50% (REQ-224). `deflate64` and `bzip2` are recognized but rejected as not yet supported (REQ-223); an unrecognized method fails validation listing the supported values. |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
