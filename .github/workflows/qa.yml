@@ -278,7 +278,7 @@ jobs:
           set -euo pipefail
           test -s qa-results/report.md
           grep -q '^## QA Report$' qa-results/report.md
-          grep -Fqx '| #   | Test Case | App | Persona | Result | Notes |' qa-results/report.md
+          grep -Eq '^\|[[:space:]]*#[[:space:]]*\| Test Case \| App \| Persona \| Result \| Notes \|$' qa-results/report.md
           mapfile -t result_rows < <(grep -E '^\|[[:space:]]*[0-9]+[[:space:]]*\|' qa-results/report.md || true)
           if [[ "$CLI_AFFECTED" == false ]]; then
             if ((${#result_rows[@]} == 1)) &&
