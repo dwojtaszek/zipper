@@ -97,14 +97,14 @@ zipper --type eml --count 10000 --output-path ./email_families --attachment-rate
 ```
 
 ### Recipe D: File Type Mix Archive Export
-Generate an **Archive** with a **File Type Mix** (60% PDF, 20% Email, 10% TIFF, 10% XLSX) of **Native Files** with default **Metadata**:
+Generate an **Archive** with a **File Type Mix** (60% PDF, 20% Email, 10% TIFF, 10% XLSX) of **Native Files**, with no `--with-metadata` — the **Metadata** columns present are the Email-intrinsic ones, because the mix includes **Email** (see REQ-001):
 
 ```bash
 zipper --types "pdf:60,eml:20,tiff:10,xlsx:10" --count 20000 --output-path ./mixed_archive
 ```
 
 ### Recipe E: Single-File-Type Column Profile Generation
-Generate an Archive of single-File-Type Native Files (PDF) with a litigation Column Profile and extracted text Metadata:
+Generate an **Archive** of single-File-Type **Native Files** (PDF) with a litigation **Column Profile** and extracted text **Metadata**:
 
 ```bash
 zipper --type pdf --count 20000 --output-path ./litigation_archive --column-profile litigation --with-text
@@ -256,7 +256,7 @@ zipper --type pdf --count 5000 --output-path ./litigation_data --column-profile 
 | `deflate64` | Not yet supported | Recognized, then rejected as lacking codec support (REQ-223). |
 | `bzip2` | Not yet supported | Recognized, then rejected as lacking codec support (REQ-223). |
 
-Method names are matched case-insensitively. An unrecognized method fails validation with a non-zero exit code reporting the invalid value and listing the supported methods.
+Method names are matched case-insensitively. An unrecognized method fails validation with a non-zero exit code reporting the invalid value and listing the four recognized names (`store, deflate, deflate64, bzip2`), two of which are not yet supported.
 
 ```bash
 # Uncompressed Archive — Native Files are stored, not deflated
@@ -273,7 +273,9 @@ zipper --type pdf --count 1000 --output-path ./deflated_archive --compression de
 zipper --type pdf --count 1000 --output-path ./bad --compression deflate64
 ```
 
-The Compression Method **Metadata** column reports the method actually used. The `--compression` **setting** is Archive-wide and is not itself gated on `--with-metadata`; whether the column is **included** follows REQ-001 — it is Email-intrinsic, so it appears whenever the **Archive** contains an **Email**, and for every other **File Type** only when `--with-metadata` is specified.
+The Compression Method **Metadata** column (rendered as a `CompressionMethod` tag in EDRM-XML) reports the `--compression` setting. The setting itself is Archive-wide and is not gated on `--with-metadata`; whether the column is **included** follows REQ-001 — it is Email-intrinsic, so it appears whenever the **Archive** contains an **Email**, and for every other **File Type** only when `--with-metadata` is specified.
+
+Two modes write no **Archive** at all, so the column there reports the requested setting rather than an applied one: **Loadfile-Only Mode**, and **Production Set** without `--production-zip`. In every mode that does write an Archive, the value is the method that was used.
 
 ---
 

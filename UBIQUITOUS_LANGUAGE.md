@@ -33,7 +33,7 @@
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
 | **Email** | A **Native File** with File Type `eml`. Contains email metadata (To, From, Subject, Sent Date) and may have **Attachments**. Represented by `Zipper.Emails.Email`. | EML file, message |
-| **Email Metadata** | Intrinsic columns in the **Load File** for **Emails** (To, From, CC, Subject, Sent Date, Compression Method). Always included regardless of `--with-metadata` flag, because the Archive-wide `--compression` setting is a property of how each **Native File** was stored, not an attribute of a message. For every other **File Type**, Compression Method is not **Email Metadata** and is included only with `--with-metadata`. | Email headers, email-specific columns |
+| **Email Metadata** | Intrinsic columns in the **Load File** for **Emails** (To, From, CC, Subject, Sent Date, Compression Method). Included regardless of the `--with-metadata` flag, subject to the format exclusions in REQ-001 (absent from the OPT format and from the Production Set DAT, which has its own fixed schema). Compression Method is listed here because an **Email** record is emitted wherever the Archive was stored, so the record carries it without the flag; for every other **File Type** it is ordinary **Metadata**, included only with `--with-metadata`. | Email headers, email-specific columns |
 | **Attachment** | Placeholder binary content (one of `attachment.jpg`, `attachment.tiff`, or `attachment.pdf` drawn at random from the internal attachment pool) embedded within an **Email** — never one of the `--count` generated **Native Files** (REQ-011), preserving the streaming, no-intermediate-storage generation design. The **Attachment Rate** determines what percentage of **Emails** embed an **Attachment**. Distinct from the generated-set **Native Files**: with `--with-families`, the **Attachment** is additionally surfaced as a family child — a **Load File** record keyed `{parent}_A001` — and in **Production Sets** it materializes as separate child files under `NATIVES`/`IMAGES`/`TEXT`, counted separately in the **Production Manifest** (`attachmentNativeFileCount`). Represented by `Zipper.Emails.EmailAttachment`. | Enclosed file, embedded document |
 | **Attachment Rate** | The percentage (0–100) of **Emails** that receive a random **Attachment**. Controlled by `--attachment-rate`. | Attachment probability, attachment percentage |
 
@@ -230,7 +230,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 >
 > **Dev:** "What if I use `--with-metadata`?"
 >
-> **Expert:** "Then the **Load File** gains additional **Columns** like **Custodian**, Author, Date Sent, File Size—all auto-generated. If you're using **Emails**, those always get email **Metadata**: To, From, Subject, Sent Date, whether or not you specify `--with-metadata`."
+> **Expert:** "Then the **Load File** gains additional **Columns** like **Custodian**, Author, Date Sent, File Size—all auto-generated. If you're using **Emails**, those always get email **Metadata**: To, From, Subject, Sent Date, and Compression Method, whether or not you specify `--with-metadata`."
 >
 > **Dev:** "And the `--chaos-mode` option?"
 >
@@ -260,7 +260,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 3. **"Metadata" scope**:
    - **Metadata** can mean all columns in the **Load File** (broad definition).
-    - But `--with-metadata` adds only specific columns (Custodian, Author, Date Sent, File Size, Compression Method)—not all columns.
+    - But `--with-metadata` adds only specific columns (Custodian, Author, Date Sent, File Size, plus Compression Method for non-Email **File Types**)—not all columns. Compression Method also appears without the flag on **Email** records; see **Email Metadata**.
    - Use "**Load File** columns" for breadth; "**with-metadata** columns" for the specific flag's columns.
 
 4. **"Encoding" vs "Line Ending"**:

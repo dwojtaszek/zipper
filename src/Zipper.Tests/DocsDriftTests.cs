@@ -60,9 +60,9 @@ public class DocsDriftTests
         var readmePath = Path.Combine(RepoRoot, "README.md");
         var lines = File.ReadAllLines(readmePath);
 
-        // Anchor on the Arguments Quick Reference table row specifically. Matching any line that
-        // mentions both "--compression" and "store" would pick up a usage example elsewhere in
-        // the README, which does not carry the argument's value list.
+        // Anchor on the Quick Reference table-row format. Matching any line that mentions both
+        // "--compression" and "store" would pick up a usage example elsewhere in the README,
+        // which does not carry the argument's value list.
         var compressionLine = lines
             .FirstOrDefault(l => l.TrimStart().StartsWith("| `--compression`", StringComparison.Ordinal));
 
