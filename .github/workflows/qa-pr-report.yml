@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      issues: write
+      pull-requests: write
     steps:
       - name: Write blocked QA report
         shell: bash
