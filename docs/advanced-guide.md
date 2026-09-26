@@ -273,7 +273,7 @@ zipper --type pdf --count 1000 --output-path ./deflated_archive --compression de
 zipper --type pdf --count 1000 --output-path ./bad --compression deflate64
 ```
 
-The Compression Method **Metadata** column reports the method actually used. It is independent of `--with-metadata`: see REQ-001 — the column is Email-intrinsic, so it appears whenever the **Archive** contains an **Email**, and for every other **File Type** only with `--with-metadata`.
+The Compression Method **Metadata** column reports the method actually used. The `--compression` **setting** is Archive-wide and is not itself gated on `--with-metadata`; whether the column is **included** follows REQ-001 — it is Email-intrinsic, so it appears whenever the **Archive** contains an **Email**, and for every other **File Type** only when `--with-metadata` is specified.
 
 ---
 
@@ -451,6 +451,6 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--compare-production-manifests` | Requires `--comparison-mode` and `--comparison-output`. Bypasses normal file generation and validation (REQ-179): other registered generation/Production arguments are consumed but their values are never parsed or validated — invalid values (e.g. `--count not-a-number`) neither fail the run nor have any effect. Unknown flags still fail, and the three comparison flags remain strictly validated. |
 | `--comparison-mode`, `--comparison-output` | Require `--compare-production-manifests` |
 | `--archive-test-suite` | Exclusive workflow: may only combine with `--archive-test-cases`, `--output-path` (required, new directory), and `--seed` (non-negative integer, defaults to 42). Every other flag — including `--benchmark` and `--chaos-list` — is rejected, even at its default value. See [Archive Test Suites](archive-test-suites.md) and ADR-0008. |
-| `--compression` | Applies to every output Archive the run produces: Standard mode, `--include-load-file`, and `--production-zip`. Defaults to `deflate`. Independent of `--with-metadata` — the Compression Method **Metadata** column reflects the Archive-wide setting whenever it appears at all (see REQ-001 for when the column is included). With `--target-zip-size`, `--compression store` makes size pre-checks and padding use an uncompressed ratio of 1.0 instead of the default 50% (REQ-224). `deflate64` and `bzip2` are recognized but rejected as not yet supported (REQ-223); an unrecognized method fails validation listing the supported values. |
+| `--compression` | Applies to every output Archive the run produces: Standard mode, `--include-load-file`, and `--production-zip`. Defaults to `deflate`. The setting itself is not gated on `--with-metadata`; whether the Compression Method **Metadata** column is included follows REQ-001 — always when the Archive contains an **Email**, and for every other **File Type** only with `--with-metadata`. With `--target-zip-size`, `--compression store` makes size pre-checks and padding use an uncompressed ratio of 1.0 instead of the default 50% (REQ-224). `deflate64` and `bzip2` are recognized but rejected as not yet supported (REQ-223); an unrecognized method fails validation listing the supported values. |
 | `--with-families` + non-dat format | Supported. Generates parent-child columns/relationships in CSV, Concordance, and EDRM-XML. |
 
