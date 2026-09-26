@@ -25,8 +25,8 @@ report = """## QA Report
 <details>
 <summary>Screenshots & Evidence</summary>
 
-- `qa-results/test-1/evidence/case-1.snapshot.txt`
-- `qa-results/test-1/evidence/case-2.snapshot.txt`
+- [Case 1 snapshot](test-1/evidence/case-1.snapshot.txt)
+- [Case 2 snapshot](test-1/evidence/case-2.snapshot.txt)
 
 </details>
 """
@@ -59,6 +59,18 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
         assert (result.returncode == 0) == expected, result.stdout + result.stderr
 
     check(report, True)
+    check(report.replace(
+        "](test-1/evidence/case-1.snapshot.txt)",
+        "](qa-results/test-1/evidence/case-1.snapshot.txt)",
+    ), False)
+    check(report.replace(
+        "[Case 1 snapshot](test-1/evidence/case-1.snapshot.txt)",
+        "`test-1/evidence/case-1.snapshot.txt`",
+    ), False)
+    check(report.replace(
+        "[Case 1 snapshot](test-1/evidence/case-1.snapshot.txt)",
+        "Case 1 snapshot](test-1/evidence/case-1.snapshot.txt)",
+    ), False)
     negative.write_text("APP_RC=1 VERIFY_RC=0\n")
     check(report, False)
     negative.write_text("Summary: PASS\nAPP_EXIT:1\n")
@@ -67,8 +79,8 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
     check(report.replace("case-2.snapshot.txt", "summary.txt"), False)
     notes_only = report.replace(
         "Exit 1, no Archive.",
-        "Exit 1, no Archive; qa-results/test-1/evidence/case-2.snapshot.txt.",
-    ).replace("- `qa-results/test-1/evidence/case-2.snapshot.txt`", "")
+        "Exit 1, no Archive; test-1/evidence/case-2.snapshot.txt.",
+    ).replace("- [Case 2 snapshot](test-1/evidence/case-2.snapshot.txt)", "")
     check(notes_only, False)
     check(report.replace("| 2 |", "| 1 |"), False)
     negative.unlink()

@@ -57,7 +57,7 @@ Read `.factory/skills/qa-cli/SKILL.md`. Treat its test menu as options, not a ch
 
 ## 6. Capture evidence
 
-Use Droid Control Capture and Verify for the selected route. For each numbered report case, save the terminal's unedited `$TCTL -s "$session" snapshot --trim` output after the Zipper invocation to `qa-results/$RUN_ID/evidence/case-<number>.snapshot.txt`, before closing that case's session. Include the actual CLI output and a shell `APP_EXIT:<number>` marker in the snapshot; keep verifier output separately when needed. Each snapshot must show distinct evidence. Link every snapshot path in the report's evidence block. Do not replace snapshots with verification summaries.
+Use Droid Control Capture and Verify for the selected route. For each numbered report case, save the terminal's unedited `$TCTL -s "$session" snapshot --trim` output after the Zipper invocation to `qa-results/$RUN_ID/evidence/case-<number>.snapshot.txt`, before closing that case's session. Include the actual CLI output and a shell `APP_EXIT:<number>` marker in the snapshot; keep verifier output separately when needed. Each snapshot must show distinct evidence. In `qa-results/report.md`'s evidence block, link each snapshot with a report-relative Markdown link, `[$label]($RUN_ID/evidence/case-<number>.snapshot.txt)`, so the links also work in the downloaded artifact. Do not replace snapshots with verification summaries.
 
 When `imagemagick` is true and the change has meaningful before/after screenshots, use ImageMagick to create an animated GIF diff under the evidence directory. Do not fabricate a baseline; skip the GIF when no real comparison exists.
 

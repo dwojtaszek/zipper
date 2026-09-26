@@ -325,11 +325,12 @@ jobs:
               exit 1
             }
             snapshot="qa-results/$QA_RUN_ID/evidence/case-$case_no.snapshot.txt"
+            report_link="^[[:space:]]*-[[:space:]]+\\[[^]]+\\]\\($QA_RUN_ID/evidence/case-${case_no}[.]snapshot[.]txt\\)[[:space:]]*$"
             if [[ ! -f "$snapshot" || -L "$snapshot" || ! -s "$snapshot" ]] ||
                ! grep -Eq '^APP_EXIT:[0-9]+[[:space:]]*$' "$snapshot" ||
                ! grep -Eq '^[^[:cntrl:]]*[#$][[:space:]]+.*Zipper([[:space:].;]|$)' "$snapshot" ||
-               ! grep -Fq "$snapshot" <<<"$evidence_links"; then
-              echo "QA report row $case_no requires a linked, raw terminal snapshot with APP_EXIT: $snapshot" >&2
+               ! grep -Eq "$report_link" <<<"$evidence_links"; then
+              echo "QA report row $case_no requires a report-relative linked, raw terminal snapshot with APP_EXIT: $snapshot" >&2
               exit 1
             fi
             test_case="$(awk -F '|' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $3); print $3}' <<<"$row")"
