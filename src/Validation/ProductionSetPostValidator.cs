@@ -64,8 +64,20 @@ internal sealed class ProductionSetPostValidator
     }
 
     /// <summary>Mutable per-run accumulator threaded through the per-concern validation steps.</summary>
+    /// <summary>
+    /// The mutable state threaded through the per-concern validation steps.
+    ///
+    /// Kept as one flat bag on purpose (#1017). The fields are grouped by concern
+    /// below, but nesting them into per-concern records would only add a level of
+    /// indirection: each group is written by exactly one step, read by the report
+    /// writer, and none of them is passed anywhere but through here. Collapsing the
+    /// clump that actually hurt — the six positional arguments of
+    /// <see cref="AddReferencedFileFinding"/> — was worth doing; reshaping this bag was not.
+    /// </summary>
     private sealed class ValidationState
     {
+        // --- Inputs: the request and the resolved paths on disk ---
+
         public required FileGenerationRequest Request { get; init; }
         public required string ProductionPath { get; init; }
         public required string DatPath { get; init; }
@@ -73,16 +85,24 @@ internal sealed class ProductionSetPostValidator
         public required bool SkipNativePathValidation { get; init; }
         public ProductionSetValidationReport Report { get; } = new();
         public List<ValidationReportFinding> Findings => Report.Findings;
+
+        // --- Relative Load File paths, as they appear in a Manifest ---
         public string DatRelPath { get; } = "DATA/loadfile.dat";
         public string OptRelPath { get; } = "DATA/loadfile.opt";
+
+        // --- Row and reference counters, reported as checkedFileCounts ---
         public int DatRowsChecked { get; set; }
         public int OptRowsChecked { get; set; }
         public int CheckedNativesCount { get; set; }
         public int CheckedTextsCount { get; set; }
         public int CheckedImagesCount { get; set; }
+
+        // --- Uniqueness accumulators ---
         public HashSet<string> SeenDocIds { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> SeenBatesNumbers { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> SeenOptBates { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // --- Prior-Manifest Bates continuity (supplemental Production Sets) ---
         public List<string> ParentBatesList { get; } = [];
         public string? ManifestStart { get; set; }
         public string? ManifestEnd { get; set; }
@@ -115,17 +135,30 @@ internal sealed class ProductionSetPostValidator
             headers.FindIndex(h => string.Equals(h, "NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase)));
     }
 
-    private static void AddReferencedFileFinding(ValidationState state, string relPath, long line, string kindLabel, string referencedPath, string fullPath)
+    /// <summary>
+    /// A reference from one Load File record to a Native File on disk: where the
+    /// reference appears (the referencing file and line), what it names, and the
+    /// resolved path that must exist. Bundled so <see cref="AddReferencedFileFinding"/>
+    /// takes one argument instead of a positional clump.
+    /// </summary>
+    private readonly record struct ReferencedFile(
+        string RelPath,
+        long Line,
+        string KindLabel,
+        string ReferencedPath,
+        string FullPath);
+
+    private static void AddReferencedFileFinding(ValidationState state, ReferencedFile reference)
     {
-        if (!File.Exists(fullPath))
+        if (!File.Exists(reference.FullPath))
         {
             state.Findings.Add(new ValidationReportFinding
             {
                 Code = "PathExistence",
                 Severity = "error",
-                Path = relPath,
-                Line = line,
-                Message = $"Referenced {kindLabel} file '{referencedPath}' does not exist."
+                Path = reference.RelPath,
+                Line = reference.Line,
+                Message = $"Referenced {reference.KindLabel} file '{reference.ReferencedPath}' does not exist."
             });
         }
     }
@@ -283,7 +316,7 @@ internal sealed class ProductionSetPostValidator
             {
                 state.CheckedNativesCount++;
                 var fullNativePath = Path.Combine(state.ProductionPath, nativePath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, "native", nativePath, fullNativePath);
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "native", nativePath, fullNativePath));
             }
         }
     }
@@ -298,7 +331,7 @@ internal sealed class ProductionSetPostValidator
             {
                 state.CheckedTextsCount++;
                 var fullTextPath = Path.Combine(state.ProductionPath, textPath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, "text", textPath, fullTextPath);
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "text", textPath, fullTextPath));
             }
         }
     }
@@ -345,7 +378,7 @@ internal sealed class ProductionSetPostValidator
             if (!string.IsNullOrEmpty(redactedPath))
             {
                 var fullRedactedPath = Path.Combine(state.ProductionPath, redactedPath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, state.DatRelPath, lineNumber, kindLabel, redactedPath, fullRedactedPath);
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, kindLabel, redactedPath, fullRedactedPath));
             }
         }
     }
@@ -669,7 +702,7 @@ internal sealed class ProductionSetPostValidator
             if (!string.IsNullOrEmpty(imagePath))
             {
                 var fullImagePath = Path.Combine(state.ProductionPath, imagePath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, state.OptRelPath, lineNumber, "image", imagePath, fullImagePath);
+                AddReferencedFileFinding(state, new ReferencedFile(state.OptRelPath, lineNumber, "image", imagePath, fullImagePath));
             }
         }
     }
