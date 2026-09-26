@@ -49,6 +49,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq python3-yaml
 
+      - name: Check QA report contract
+        run: python3 tests/test-qa-report-gate.py
+
       - name: Read QA runtime configuration
         id: qa-config
         shell: bash
@@ -141,6 +144,7 @@ jobs:
                   "git",
                   "diff",
                   "--name-only",
+                  "-z",
                   "--no-renames",
                   os.environ["QA_DIFF_BASE"],
                   os.environ["GITHUB_SHA"],
@@ -156,7 +160,7 @@ jobs:
               if path
           ]
           for path in changed_paths:
-              print(f"CLI path changed: {path}")
+              print(f"CLI path changed: {path!r}")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output_file:
               output_file.write(f"cli_affected={'true' if changed_paths else 'false'}\n")
           PY
@@ -246,7 +250,7 @@ jobs:
           if [[ "$VIDEO_EVIDENCE" == true && "$COMPOSE" == true ]]; then
             prompt+=" Read the Compose setting from config.yaml and run droid-control Compose for each captured flow before upload."
           fi
-          droid exec --model gpt-5.6-sol --reasoning-effort medium --auto high "$prompt"
+          droid exec --model gpt-5.6-sol --reasoning-effort medium --auto high --tag "qa-run-$QA_RUN_ID" "$prompt"
 
       - name: Write no-app report
         if: steps.qa-scope.outputs.cli_affected == 'false'
@@ -274,6 +278,7 @@ jobs:
         if: success()
         env:
           CLI_AFFECTED: ${{ steps.qa-scope.outputs.cli_affected }}
+          QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
           test -s qa-results/report.md
@@ -293,11 +298,38 @@ jobs:
             echo "QA report must contain a successful flow and a negative or boundary flow." >&2
             exit 1
           fi
+          [[ -d "qa-results/$QA_RUN_ID/evidence" &&
+             ! -L qa-results &&
+             ! -L "qa-results/$QA_RUN_ID" &&
+             ! -L "qa-results/$QA_RUN_ID/evidence" ]] || {
+            echo "QA evidence must be a real directory inside the run directory." >&2
+            exit 1
+          }
+          evidence_links="$(sed -n '/^<summary>Screenshots & Evidence<\/summary>$/,/^<\/details>$/p' qa-results/report.md)"
+          [[ "$evidence_links" == *'</details>'* ]] || {
+            echo "QA report is missing its evidence block." >&2
+            exit 1
+          }
           has_positive=false
           has_negative_or_boundary=false
+          expected_case_no=0
           for row in "${result_rows[@]}"; do
             if [[ ! "$row" =~ ^\|[[:space:]]*[0-9]+[[:space:]]*\|[^|]*\|[^|]*\|[^|]*\|[[:space:]]:white_check_mark:[[:space:]]PASS[[:space:]]\|[^|]*\|[[:space:]]*$ ]]; then
               echo "QA report contains a non-passing or malformed test result: $row" >&2
+              exit 1
+            fi
+            case_no="$(awk -F '|' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2}' <<<"$row")"
+            ((++expected_case_no))
+            [[ "$case_no" == "$expected_case_no" ]] || {
+              echo "QA report case numbers must be consecutive: $row" >&2
+              exit 1
+            }
+            snapshot="qa-results/$QA_RUN_ID/evidence/case-$case_no.snapshot.txt"
+            if [[ ! -f "$snapshot" || -L "$snapshot" || ! -s "$snapshot" ]] ||
+               ! grep -Eq '^APP_EXIT:[0-9]+[[:space:]]*$' "$snapshot" ||
+               ! grep -Eq '^[^[:cntrl:]]*[#$][[:space:]]+.*Zipper([[:space:].;]|$)' "$snapshot" ||
+               ! grep -Fq "$snapshot" <<<"$evidence_links"; then
+              echo "QA report row $case_no requires a linked, raw terminal snapshot with APP_EXIT: $snapshot" >&2
               exit 1
             fi
             test_case="$(awk -F '|' '{gsub(/^[[:space:]]+|[[:space:]]+$/, "", $3); print $3}' <<<"$row")"

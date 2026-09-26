@@ -12,7 +12,7 @@ description: >
 
 Zipper is a one-shot .NET CLI, not a persistent TUI. Use the `droid-control` skill for all terminal interactions. Route a shell through its tuistory backend and `tctl` wrapper; type each real Zipper invocation into the terminal, press Enter, and inspect the actual output and files. Do not use raw tuistory commands or run test flows in a plain shell outside Droid Control.
 
-In CI, use a unique run-scoped session name and `--cols 110 --rows 36`. Run the build and each Zipper command through that routed terminal. Prefix each Zipper launch with `env -u CI FACTORY_DISABLE_KEYRING=true` to avoid Ink CI detection. Capture terminal text after the command returns; use another run-scoped session for each distinct flow. Droid Control owns driver mechanics, Capture, and Verify.
+In CI, use a unique run-scoped session name and `--cols 110 --rows 36`. Run the build and each Zipper command through that routed terminal. Prefix each Zipper launch with `env -u CI FACTORY_DISABLE_KEYRING=true` to avoid Ink CI detection. In the shell session, print `APP_EXIT:$?` immediately after each Zipper command; save `$TCTL -s "$session" snapshot --trim` before closing it, using the numbered evidence path in the QA skill. Capture a fresh snapshot for each distinct report case. Droid Control owns driver mechanics, Capture, and Verify.
 
 Read `.factory/skills/qa/config.yaml` on every run. Invoke Compose only when both `video_evidence` and `droid_control.compose` are true; never invoke it otherwise.
 

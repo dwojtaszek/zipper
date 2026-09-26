@@ -57,13 +57,13 @@ Read `.factory/skills/qa-cli/SKILL.md`. Treat its test menu as options, not a ch
 
 ## 6. Capture evidence
 
-Use Droid Control Capture and Verify for the selected route. Capture terminal text snapshots after meaningful state changes; each snapshot must show distinct evidence. Save any screenshots or recordings under `qa-results/$RUN_ID/evidence/`.
+Use Droid Control Capture and Verify for the selected route. For each numbered report case, save the terminal's unedited `$TCTL -s "$session" snapshot --trim` output after the Zipper invocation to `qa-results/$RUN_ID/evidence/case-<number>.snapshot.txt`, before closing that case's session. Include the actual CLI output and a shell `APP_EXIT:<number>` marker in the snapshot; keep verifier output separately when needed. Each snapshot must show distinct evidence. Link every snapshot path in the report's evidence block. Do not replace snapshots with verification summaries.
 
 When `imagemagick` is true and the change has meaningful before/after screenshots, use ImageMagick to create an animated GIF diff under the evidence directory. Do not fabricate a baseline; skip the GIF when no real comparison exists.
 
 When `video_evidence` is true, capture one recording per flow. Keep raw terminal casts as downloadable artifacts, never upload `.cast` files as video. When both runtime settings permit Compose, render one verified MP4 per flow using a `single` layout and the literal `"preset": "factory"`. Do not derive or configure the preset. For GitHub uploads, use the returned URL exactly: bare URL for videos, image Markdown for screenshots. Upload failures fall back to text and artifacts.
 
-When `video_evidence` is false, use text snapshots as primary evidence. Do not embed screenshot or repository URLs in GitHub comments; name any files retained in the workflow artifact.
+When `video_evidence` is false, use those raw text snapshots as primary evidence. Do not embed screenshot or repository URLs in GitHub comments; name any files retained in the workflow artifact.
 
 ## 7. Handle failures and clean up
 
