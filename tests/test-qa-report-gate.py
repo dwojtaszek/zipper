@@ -35,11 +35,21 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
     root = Path(workspace)
     evidence = root / "qa-results/test-1/evidence"
     evidence.mkdir(parents=True)
+    launch = "env -u CI FACTORY_DISABLE_KEYRING=true ./qa-results/$RUN_ID/publish/Zipper"
+    wrapped_command = (
+        "$ echo " + "x" * (110 - len("$ echo ; " + launch[:-7]))
+        + "; " + launch[:-7] + "\n"
+        + launch[-7:] + " --version; code=$?; echo APP_EXIT:$code\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
     (evidence / "case-1.snapshot.txt").write_text(
-        "$ Zipper --version\nZipper vqa-test\nAPP_EXIT:0\n"
+        wrapped_command
     )
     negative = evidence / "case-2.snapshot.txt"
-    negative.write_text("$ Zipper --type invalid\nError: invalid File Type\nAPP_EXIT:1\n")
+    negative.write_text(
+        "$ " + launch + " --type invalid; code=$?; echo APP_EXIT:$code\n"
+        "Error: invalid File Type\nAPP_EXIT:1\n"
+    )
     report_file = root / "qa-results/report.md"
 
     def check(content, expected, cli_affected=True):
@@ -59,6 +69,50 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
         assert (result.returncode == 0) == expected, result.stdout + result.stderr
 
     check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch + " --version\nZipper vqa-test\n"
+        "$ echo APP_EXIT:$?\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch.replace("true ./", "true  ./") + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo '# note'; " + launch + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo note; # " + launch + " --version\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ echo "; ' + launch + ' --version"; code=$?; echo APP_EXIT:$code\n'
+        "APP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo " + launch + "; code=$?; echo APP_EXIT:$code\n"
+        "APP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo APP_EXIT:0\nZipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ cat diagnostics.txt\n"
+        " Zipper failed; echo APP_EXIT:0\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ cat diagnostics.txt; #" + "x" * 88 + "\n"
+        " /publish/Zipper was not invoked\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(wrapped_command)
     check(report.replace(
         "](test-1/evidence/case-1.snapshot.txt)",
         "](qa-results/test-1/evidence/case-1.snapshot.txt)",
