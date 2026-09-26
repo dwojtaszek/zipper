@@ -83,6 +83,18 @@ Every fixture carries a `classification`: `valid` (well-formed), `malformed` (co
 
 The **Expectation File** records, per operation (`list`, `read-entry`, `integrity-check`, `extract`), a named reader profile, allowed outcomes, allowed failure stages, and invariants. Every Expectation File declares all four operations. `unsupported` and `not-run` are **not** passing verifications; platform-inapplicable operation records are reported as `not-run` rather than claimed as successes. Valid coded controls (`valid-bzip2`, `valid-deflate64`, `valid-deflate64-long-match`, `valid-mixed-methods`, `bzip2-high-ratio-bounded`) carry two capability profiles: `full-codec` (e.g. 7-Zip) must list, decode, hash-check, integrity-check, and extract successfully, while `unsupported-reader` must cleanly report `unsupported-method-rejected` without producing unverified bytes. `valid-deflate64` is the subset control (a Deflate-subset stream labeled method 9, decodable by ordinary DEFLATE); `valid-deflate64-long-match` is the Deflate64-specific control (a pinned 7-Zip stream with a 38,000-byte match distance, undecodable by ordinary DEFLATE).
 
+### Where each profile is actually exercised
+
+Only one reader runs the expectation engine: the Python `zipfile` adapter inside `verify-fixtures.py`. A `full-codec` or `unsupported-reader` record is therefore enforced by *that* reader, against the operation outcomes it produced.
+
+The 7-Zip adapter is a **separate E2E policy layer** with a hard-coded case list, and it is **not** driven by the expectation engine. This is worth stating precisely, because the two mechanisms are easy to conflate:
+
+- `allowedOutcomes` is a **permissive set** — the set of outcomes a reader may legitimately produce — not a directive about what a given adapter should do. A `malformed` case commonly allows both `extract-fails` and `extract-succeeds`, so the record cannot say which one to assert.
+- The Expectation File carries **no adapter directive**: nothing states "run 7-Zip in test mode" or "run it in extract mode" for a given case. The `capability` field that 16 fixtures carry is generator metadata and the verifier never reads it.
+- Consequently the E2E list is per-case intent that no declared property reproduces. Measured against the 106-fixture catalogue: of the **18** case keys the 7-Zip block names, only **5** carry a `full-codec` expectation, and those 5 are exactly the coded controls named above. The other 13 — including `valid-zip64-descriptor-signature` and `valid-zip64-descriptor-no-signature`, which the block extracts — carry only a `strict` expectation. Deriving the list from entry codecs reproduces 5 of the 7 extract keys, a strict subset.
+
+The practical consequence: **adding a new multi-profile expectation does not automatically gain 7-Zip coverage** — it needs a matching entry in the E2E adapter list, which is a hard-coded list. That gap is real and is tracked separately; it is not closed by the Expectation File as it stands, and this section does not claim otherwise. A declaration in the Expectation File (for example an explicit adapter/mode field) is the prerequisite for driving the adapter from data rather than from a list.
+
 ## Expectation File schema
 
 The machine-readable contract lives at `tests/fixtures/archive-test-case.schema.json` (JSON Schema draft-07, using `definitions`). Required fields: `schemaVersion`, `generatorContractVersion`, `generatorVersion`, `fixtureId`, `caseKey`, `caseRevision`, `expectationRevision`, `seed`, `classification`, `archive`, `entries`, `mutations`, `expectations`, `limits`.
