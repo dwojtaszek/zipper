@@ -185,6 +185,138 @@ public class ProductionSetValidationTests : IDisposable
     }
 
     [Fact]
+    public async Task Validate_OneMissingFilePerKind_ShouldAttributeEachToItsOwnLoadFileAndLine()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = this.testOutputPath,
+                FileCount = 8,
+                FileTypeRatios = new List<FileTypeRatio>
+                {
+                    new() { Type = "pdf", Weight = 4 },
+                    new() { Type = "tiff", Weight = 4 },
+                },
+                WithText = true,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 10,
+                RedactedProduction = true,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "TEST",
+                Start = 1,
+                Digits = 8,
+            },
+        };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Delete exactly one file of each referenced kind, so every reference check has work
+        // to do and all four call sites of the referenced-file check produce a finding.
+        //
+        // The directory AND the extension are both pinned. REDACTED/ holds both an IMAGES and
+        // a TEXT subtree, so taking whichever file enumerated first would make the expected
+        // kind depend on filesystem order: Directory.GetFiles guarantees no ordering, and NTFS
+        // returns sorted entries, so Windows would hand back a redacted image where Linux
+        // hands back redacted text. Pinning both makes the kind deterministic everywhere.
+        var deleted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["native"] = DeleteFirstFile(result.ProductionPath, "*.pdf", "NATIVES"),
+            ["text"] = DeleteFirstFile(result.ProductionPath, "*.txt", "TEXT"),
+            ["redacted text"] = DeleteFirstFile(result.ProductionPath, "*.txt", "REDACTED", "TEXT"),
+            ["redacted image"] = DeleteFirstFile(result.ProductionPath, "*.tif", "REDACTED", "IMAGES"),
+            ["image"] = DeleteFirstFile(result.ProductionPath, "*.tif", "IMAGES"),
+        };
+
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        Assert.Equal("failed", report.Status);
+
+        // The image reference appears in both Load Files, so it is expected twice: once
+        // attributed to the DAT Load File and once to the OPT Load File.
+        var expectations = new (string Kind, string LoadFile)[]
+        {
+            ("native", "DATA/loadfile.dat"),
+            ("text", "DATA/loadfile.dat"),
+            ("redacted text", "DATA/loadfile.dat"),
+            ("redacted image", "DATA/loadfile.dat"),
+            ("image", "DATA/loadfile.dat"),
+            ("image", "DATA/loadfile.opt"),
+        };
+
+        foreach (var (kind, loadFile) in expectations)
+        {
+            var referencedPath = deleted[kind];
+            var line = await FindReferenceLineAsync(
+                Path.Combine(result.ProductionPath, loadFile.Replace('/', Path.DirectorySeparatorChar)),
+                referencedPath);
+
+            Assert.Single(report.Findings, f =>
+                f.Code == "PathExistence" &&
+                f.Severity == "error" &&
+                f.Path == loadFile &&
+                f.Line == line &&
+                f.Message == $"Referenced {kind} file '{referencedPath}' does not exist.");
+        }
+
+        // Exactly one finding per expectation, and no others: a count catches a spurious or
+        // duplicated finding that the per-expectation Assert.Single would not, because that
+        // only requires at least one match somewhere in the list.
+        Assert.Equal(expectations.Length, report.Findings.Count(f => f.Code == "PathExistence"));
+    }
+
+    private static string DeleteFirstFile(string productionPath, string searchPattern, params string[] relativeDirectory)
+    {
+        var files = Directory.GetFiles(
+            Path.Combine([productionPath, .. relativeDirectory]),
+            searchPattern,
+            SearchOption.AllDirectories);
+        Assert.NotEmpty(files);
+
+        // Keep the production-relative path in the separator and case the Load File uses,
+        // because that exact string is echoed back in the finding message. Load Files store
+        // Windows-style separators on every platform, so normalize with '/' rather than
+        // Path.DirectorySeparatorChar (a no-op on Windows, per the repo's Code Style rule).
+        var referencedPath = Path.GetRelativePath(productionPath, files[0]).Replace('/', '\\');
+        File.Delete(files[0]);
+        return referencedPath;
+    }
+
+    /// <summary>
+    /// The physical 1-based line in a Load File that names <paramref name="referencedPath"/>,
+    /// counted by scanning raw newlines rather than by enumerating parsed lines. Deriving it
+    /// independently of the validator's own line counting is the point: if the validator
+    /// propagated a line number off by one, a test that reused its counting would agree with
+    /// the bug instead of catching it.
+    /// </summary>
+    private static async Task<long> FindReferenceLineAsync(string loadFilePath, string referencedPath)
+    {
+        var content = await File.ReadAllTextAsync(loadFilePath);
+        var offset = content.IndexOf(referencedPath, StringComparison.OrdinalIgnoreCase);
+        if (offset < 0)
+        {
+            Assert.Fail($"'{loadFilePath}' does not reference '{referencedPath}'.");
+        }
+
+        var newlinesBefore = 0;
+        for (var i = 0; i < offset; i++)
+        {
+            if (content[i] == '\n')
+            {
+                newlinesBefore++;
+            }
+        }
+
+        return newlinesBefore + 1;
+    }
+
+    [Fact]
     public void ParseDatLine_WithDoubledQuotes_ShouldUnescapeLiteralQuotes()
     {
         var lineInput = "\"value1\",\"value \"\"2\"\" hello\",\"value3\"";

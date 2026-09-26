@@ -63,16 +63,20 @@ internal sealed class ProductionSetPostValidator
         return state.Report;
     }
 
-    /// <summary>Mutable per-run accumulator threaded through the per-concern validation steps.</summary>
     /// <summary>
-    /// The mutable state threaded through the per-concern validation steps.
+    /// The mutable per-run state shared by the per-concern validation steps.
     ///
-    /// Kept as one flat bag on purpose (#1017). The fields are grouped by concern
-    /// below, but nesting them into per-concern records would only add a level of
-    /// indirection: each group is written by exactly one step, read by the report
-    /// writer, and none of them is passed anywhere but through here. Collapsing the
-    /// clump that actually hurt — the six positional arguments of
-    /// <see cref="AddReferencedFileFinding"/> — was worth doing; reshaping this bag was not.
+    /// Kept as one flat bag on purpose (#1017): the fields are grouped by concern
+    /// below rather than nested into per-concern records, because no group has a
+    /// single owner. The prior-Manifest fields in particular are written by one step
+    /// and read by two others (<see cref="ParentBatesList"/> is filled while reading
+    /// the DAT and then consumed by both Manifest and Bates-continuity validation), so
+    /// splitting the bag by concern would hide that coupling rather than remove it.
+    ///
+    /// The real constraint this bag imposes is that <see cref="Validate"/>'s step
+    /// order is load-bearing: each step consumes state a later-listed step produced.
+    /// Reordering those five calls compiles, passes review, and silently changes which
+    /// findings are reported. Keep the order, and keep it in this comment.
     /// </summary>
     private sealed class ValidationState
     {
@@ -83,16 +87,20 @@ internal sealed class ProductionSetPostValidator
         public required string DatPath { get; init; }
         public required string OptPath { get; init; }
         public required bool SkipNativePathValidation { get; init; }
+
+        // --- Output: the report being accumulated as the steps run ---
         public ProductionSetValidationReport Report { get; } = new();
         public List<ValidationReportFinding> Findings => Report.Findings;
 
-        // --- Relative Load File paths, as they appear in a Manifest ---
+        // --- Which Load File a finding is attributed to ---
         public string DatRelPath { get; } = "DATA/loadfile.dat";
         public string OptRelPath { get; } = "DATA/loadfile.opt";
 
-        // --- Row and reference counters, reported as checkedFileCounts ---
+        // --- Row counts, reported as checkedLoadFileRowCounts ---
         public int DatRowsChecked { get; set; }
         public int OptRowsChecked { get; set; }
+
+        // --- Referenced-file counts, reported as checkedFileCounts ---
         public int CheckedNativesCount { get; set; }
         public int CheckedTextsCount { get; set; }
         public int CheckedImagesCount { get; set; }
@@ -102,7 +110,7 @@ internal sealed class ProductionSetPostValidator
         public HashSet<string> SeenBatesNumbers { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> SeenOptBates { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        // --- Prior-Manifest Bates continuity (supplemental Production Sets) ---
+        // --- Bates continuity between this set's Load File and its Production Manifest ---
         public List<string> ParentBatesList { get; } = [];
         public string? ManifestStart { get; set; }
         public string? ManifestEnd { get; set; }
@@ -136,21 +144,30 @@ internal sealed class ProductionSetPostValidator
     }
 
     /// <summary>
-    /// A reference from one Load File record to a Native File on disk: where the
-    /// reference appears (the referencing file and line), what it names, and the
-    /// resolved path that must exist. Bundled so <see cref="AddReferencedFileFinding"/>
-    /// takes one argument instead of a positional clump.
+    /// A reference from one Load File record to a file on disk: which Load File and line
+    /// the reference appears on, what kind of file it names, and the path as the Load File
+    /// spells it. Bundled so <see cref="AddReferencedFileFinding"/> takes one argument
+    /// instead of a positional clump.
+    ///
+    /// Deliberately not called a Native File: the referenced file is a Native File only
+    /// for the native call site. The others reference an Extracted Text companion, a
+    /// redaction derivative, or an OPT image record.
+    ///
+    /// The resolved on-disk path is deliberately absent: it is always
+    /// <c>Path.Combine(ProductionPath, ReferencedPath)</c>, so accepting it as a field
+    /// would let a call site pass a path that disagrees with the one the Load File names
+    /// and have the finding blame the wrong file.
     /// </summary>
     private readonly record struct ReferencedFile(
         string RelPath,
         long Line,
         string KindLabel,
-        string ReferencedPath,
-        string FullPath);
+        string ReferencedPath);
 
     private static void AddReferencedFileFinding(ValidationState state, ReferencedFile reference)
     {
-        if (!File.Exists(reference.FullPath))
+        var fullPath = Path.Combine(state.ProductionPath, reference.ReferencedPath.Replace('\\', '/'));
+        if (!File.Exists(fullPath))
         {
             state.Findings.Add(new ValidationReportFinding
             {
@@ -315,8 +332,7 @@ internal sealed class ProductionSetPostValidator
             if (!string.IsNullOrEmpty(nativePath))
             {
                 state.CheckedNativesCount++;
-                var fullNativePath = Path.Combine(state.ProductionPath, nativePath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "native", nativePath, fullNativePath));
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "native", nativePath));
             }
         }
     }
@@ -330,8 +346,7 @@ internal sealed class ProductionSetPostValidator
             if (!string.IsNullOrEmpty(textPath))
             {
                 state.CheckedTextsCount++;
-                var fullTextPath = Path.Combine(state.ProductionPath, textPath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "text", textPath, fullTextPath));
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, "text", textPath));
             }
         }
     }
@@ -377,8 +392,7 @@ internal sealed class ProductionSetPostValidator
             var redactedPath = fields[redactedIdx];
             if (!string.IsNullOrEmpty(redactedPath))
             {
-                var fullRedactedPath = Path.Combine(state.ProductionPath, redactedPath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, kindLabel, redactedPath, fullRedactedPath));
+                AddReferencedFileFinding(state, new ReferencedFile(state.DatRelPath, lineNumber, kindLabel, redactedPath));
             }
         }
     }
@@ -701,8 +715,7 @@ internal sealed class ProductionSetPostValidator
             var imagePath = columns[2];
             if (!string.IsNullOrEmpty(imagePath))
             {
-                var fullImagePath = Path.Combine(state.ProductionPath, imagePath.Replace('\\', '/'));
-                AddReferencedFileFinding(state, new ReferencedFile(state.OptRelPath, lineNumber, "image", imagePath, fullImagePath));
+                AddReferencedFileFinding(state, new ReferencedFile(state.OptRelPath, lineNumber, "image", imagePath));
             }
         }
     }
