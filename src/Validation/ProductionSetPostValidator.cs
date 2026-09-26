@@ -13,9 +13,20 @@ public class ProductionSetValidationReport
     [JsonPropertyName("warningCount")]
     public int WarningCount { get; set; }
 
+    /// <summary>
+    /// How many file references were existence-checked, by kind.
+    /// <para>
+    /// The unit is a reference, not a document, and the two are not the same population.
+    /// <c>image</c> is the sum of the DAT Load File's IMAGE_PATH references (one per Native
+    /// File) and the OPT Load File's image references (one record per page), so a multipage
+    /// TIFF contributes more than one. <c>native</c> and <c>text</c> are DAT-only. Row counts
+    /// are reported separately in <see cref="CheckedLoadFileRowCounts"/>.
+    /// </para>
+    /// </summary>
     [JsonPropertyName("checkedFileCounts")]
     public Dictionary<string, int> CheckedFileCounts { get; set; } = new();
 
+    /// <summary>How many Load File records were parsed, by Load File.</summary>
     [JsonPropertyName("checkedLoadFileRowCounts")]
     public Dictionary<string, int> CheckedLoadFileRowCounts { get; set; } = new();
 

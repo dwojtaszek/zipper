@@ -324,6 +324,106 @@ public class ProductionSetValidationTests : IDisposable
         return referencedPath;
     }
 
+    [Fact]
+    public async Task Validate_TiffProductionSet_ShouldCountImageReferencesFromBothLoadFiles()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = this.testOutputPath,
+                FileCount = 4,
+                FileTypeRatios = new List<FileTypeRatio>
+                {
+                    new() { Type = "pdf", Weight = 1 },
+                    new() { Type = "tiff", Weight = 1 },
+                },
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 10,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "TEST",
+                Start = 1,
+                Digits = 8,
+            },
+        };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+
+        // Count the image references independently from each Load File rather than trusting
+        // the counter. The two are not the same population: the DAT carries one IMAGE_PATH per
+        // Native File, while the OPT emits one record per page, so a multipage TIFF contributes
+        // 1 to the DAT and N to the OPT. checkedFileCounts.image counts image references
+        // checked, so it must be the sum of the two.
+        var datImageRefs = await CountImageReferencesInDatAsync(result.DatFilePath, request);
+        var optImageRefs = await CountImageReferencesInOptAsync(result.OptFilePath, request);
+
+        Assert.True(datImageRefs > 0, "the DAT Load File should reference at least one image");
+        Assert.True(optImageRefs > 0, "the OPT Load File should reference at least one image");
+
+        Assert.Equal(datImageRefs + optImageRefs, report.CheckedFileCounts["image"]);
+    }
+
+    private static async Task<int> CountImageReferencesInDatAsync(string datPath, FileGenerationRequest request)
+    {
+        var lines = await File.ReadAllLinesAsync(datPath);
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+
+        var headers = ProductionSetPostValidator.ParseDatLine(lines[0], colDelim, quoteDelim);
+        var imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase));
+        Assert.True(imageIdx >= 0, "the DAT Load File should have an IMAGE_PATH column");
+
+        var count = 0;
+        foreach (var line in lines.Skip(1))
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var fields = ProductionSetPostValidator.ParseDatLine(line, colDelim, quoteDelim);
+            if (imageIdx < fields.Count && !string.IsNullOrEmpty(fields[imageIdx]))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static async Task<int> CountImageReferencesInOptAsync(string optPath, FileGenerationRequest request)
+    {
+        _ = request;
+        var lines = await File.ReadAllLinesAsync(optPath);
+
+        // The OPT is a fixed comma-delimited legacy format and does NOT use the configurable
+        // DelimiterConfig.ColumnDelimiter that the DAT uses, so it is split on a literal comma.
+        // It has no header: fixed positional fields, with ImagePath third.
+        var count = 0;
+        foreach (var line in lines)
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var fields = line.Split(',');
+            if (fields.Length > 2 && !string.IsNullOrEmpty(fields[2].Trim('"', '\'')))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     /// <summary>
     /// The physical 1-based line in a Load File that names <paramref name="referencedPath"/>,
     /// counted by scanning raw newlines rather than by enumerating parsed lines. Deriving it
