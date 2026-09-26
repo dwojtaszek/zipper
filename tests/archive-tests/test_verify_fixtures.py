@@ -11,6 +11,7 @@ Fixture ID, as the published contract requires) and small synthetic pairs
 built here with the standard library only — no C# generator code involved.
 """
 
+import hashlib
 import importlib.util
 import io
 import json
@@ -1739,14 +1740,25 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertIn("contentSha256", failure["message"])
 
     def test_omitted_content_hash_with_wrong_bytes_is_not_a_pass(self):
-        """The issue case: no declared hash plus content that does not match the
-        sidecar's other declarations must fail rather than being waved through as
-        a successful extraction."""
-        zip_bytes = make_zip([("a.txt", b"hello archive test")])
-        case = case_for("valid-nohash", "valid", zip_bytes,
-                        [entry_record(0, "a.txt", b"hello archive test")],
-                        [], VALID_EXPECTATIONS)
-        del case["entries"][0]["contentSha256"]
+        """The relabelling attack: a real Archive file declared as a `directory`
+        (legitimately hash-free) with the hash-bearing `file` record moved onto a
+        directory member. Entry counts still balance, so nothing else notices, and
+        without the Archive-bound check the real content is written to disk and
+        reported as `extract-succeeds` with `read-entry` matching nothing."""
+        zip_bytes = make_zip([("payload.txt", b"REAL CONTENT BYTES"), ("sub/", b"")])
+        real_file = entry_record(0, "payload.txt", b"REAL CONTENT BYTES")
+        directory = entry_record(1, "sub", b"")
+
+        real_file["kind"] = "directory"
+        real_file.pop("contentSha256", None)
+        real_file.pop("payloadCodec", None)  # the schema forbids it on a directory
+        directory["kind"] = "file"
+        directory["payloadCodec"] = "stored"
+        directory["contentSha256"] = hashlib.sha256(b"").hexdigest()
+        directory["contentSize"] = 0
+
+        case = case_for("valid-kindswap", "valid", zip_bytes,
+                        [real_file, directory], [], VALID_EXPECTATIONS)
         write_pair(self.dir, case, zip_bytes)
 
         report, exit_code = verify(self.dir)
@@ -1754,13 +1766,49 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertEqual(1, exit_code)
         failure = report["fixtures"][0]["failure"]
         self.assertEqual("expectation-content", failure["check"])
-        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
-        self.assertNotEqual("extract-succeeds",
-                            operations.get("extract", {}).get("normalizedOutcome"))
+        self.assertIn("kind 'directory'", failure["message"])
 
-    def test_directory_entries_need_no_content_hash(self):
-        """Only file entries are content-checked, so the ordinary control with a
-        declared hash must still verify cleanly after the guard is added."""
+    def test_archive_file_member_with_no_sidecar_record_fails_at_list(self):
+        """An Archive file member the sidecar describes nothing about is caught by
+        `list`, which owns the reader-count-versus-declared-count comparison. The
+        content-binding check deliberately stays out of it so `list` still records
+        its own outcome rather than being pre-empted."""
+        zip_bytes = make_zip([("a.txt", b"first"), ("b.txt", b"second")])
+        # Only ordinal 0 is described; ordinal 1 has no record at all.
+        case = case_for("valid-gap", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"first")],
+                        [], VALID_EXPECTATIONS)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("list-fails", operations["list"]["normalizedOutcome"])
+        self.assertEqual("fail", operations["list"]["status"])
+
+    def test_directory_entry_without_content_hash_still_verifies(self):
+        """A directory entry legitimately declares no content hash, so the
+        content guards must not reject an Archive that contains one."""
+        zip_bytes = make_zip([("a.txt", b"hello archive test"), ("sub/", b"")])
+        directory = entry_record(1, "sub", b"")
+        directory["kind"] = "directory"
+        directory.pop("contentSha256", None)
+        directory.pop("payloadCodec", None)
+        case = case_for("valid-withdir", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"hello archive test"), directory],
+                        [], VALID_EXPECTATIONS)
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("extract-succeeds",
+                         operations["extract"]["normalizedOutcome"])
+
+    def test_file_entry_with_declared_content_hash_still_passes(self):
+        """Control: the ordinary verified pair is unaffected by the guards."""
         self.publish_valid()
 
         report, exit_code = verify(self.dir)

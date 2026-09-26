@@ -653,18 +653,14 @@ class FixtureVerifier:
 
                 # Independent safety derivation (the JSON is not hash-bound).
                 if case["mutations"]:
-                    # Divergence from the 7-Zip adapter, deliberately. This reader
-                    # extracts into a real directory on the host, so a fixture
-                    # carrying a declared mutation is refused outright: a control
-                    # is only extracted when nothing about it is adversarial.
-                    # The 7-Zip E2E extracts the same mutated cases because it
-                    # extracts to a scratch tree it owns and treats the adapter's
-                    # own policy output as the oracle rather than re-deriving
-                    # safety. So one case can be extracted by one adapter and
-                    # skipped by the other, and that is expected: coverage of a
-                    # mutated case comes from the adapter that owns its policy,
-                    # not from this reader. What must never happen is the weaker
-                    # outcome — a mutated case reported as 'extract-succeeds'.
+                    # Defence in depth, currently unexercised: no `valid` fixture
+                    # in the published catalogue carries mutations, and every
+                    # mutated case is malformed or policy-sensitive, so the
+                    # classification gate below declines it first. The 7-Zip
+                    # adapter also declines them — it extracts seven unmutated
+                    # valid controls, plus the healthy siblings of two
+                    # mixed-methods cases, and never a mutated payload. See
+                    # docs/archive-test-suites.md.
                     return ("not-run", {"reason": "fixture declares mutations; "
                                        "extraction is for safe controls only"}, None)
                 unsafe = self._unsafe_extract_names(infos)
@@ -703,6 +699,10 @@ class FixtureVerifier:
                         if entry is not None and entry.get("contentSha256") is not None \
                                 and sha256_hex(data) != entry["contentSha256"]:
                             return "extract-fails", {"ordinal": ordinal}, "extract"
+                        if entry is not None and entry.get("contentSha256") is None \
+                                and not info.is_dir():
+                            return ("not-run", {"reason": "no declared content hash "
+                                        "for Archive member %d" % ordinal}, None)
                         with open(target, "wb") as handle:
                             handle.write(data)
                 finally:
@@ -723,17 +723,15 @@ class FixtureVerifier:
 
     @staticmethod
     def _require_declared_content_hashes(case):
-        """Every file entry must declare a content hash.
+        """Every sidecar record that claims to be a file must declare a content hash.
 
-        The schema makes ``contentSha256`` optional, so a publisher can omit it.
-        The operations that claim to have verified content then verify nothing:
-        ``op_read_entry`` skips the entry entirely (and would report
-        ``read-entry-content-matches`` having read zero entries), and
-        ``op_extract`` writes the bytes and reports ``extract-succeeds``. Both are
-        silent passes, so the Expectation File is refused up front rather than
-        the outcome being quietly weakened. Directory entries legitimately carry
-        no content and are unaffected. REQ-212: an unverifiable outcome is not a
-        passing verification."""
+        Cheap pre-flight only. The schema makes ``contentSha256`` optional, so a
+        publisher can omit it; the operations that claim to have verified content
+        would then verify nothing. Directory entries legitimately carry no content
+        and are unaffected. This is not sufficient on its own — a publisher can
+        relabel a real file as a directory — so
+        :meth:`_require_content_verifiable` binds the same requirement to the
+        Archive itself."""
         for entry in case["entries"]:
             if entry["kind"] != "file":
                 continue
@@ -746,10 +744,76 @@ class FixtureVerifier:
                     % (case["caseKey"], entry["ordinal"]),
                     stage="expectation")
 
-    def applicable_expectations(self, case):
-        """Validate complete operation coverage, then select platform-applicable
-        expectations for this host (or those with no platform mark)."""
+    def _archive_members(self, zip_bytes):
+        """The Archive's own member list, used to bind sidecar claims to reality.
+
+        Returns ``None`` when the Archive cannot be opened. A deliberately
+        truncated or corrupt Archive is the operations' business — they already
+        report the honest rejection for it — so this supplementary binding check
+        stands aside rather than pre-empting them with its own failure."""
+        try:
+            with self._open(zip_bytes) as zf:
+                return zf.infolist()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _require_content_verifiable(case, infos, check):
+        """Bind the content-hash requirement to the Archive, not just the sidecar.
+
+        ``kind`` and ``contentSha256`` are sidecar claims; the bytes that get
+        verified are the Archive's members. Nothing else ties the two together, so
+        a publisher could label a real file member as a ``directory`` (legitimately
+        hash-free), put the hash-bearing ``file`` record on a directory member, and
+        have ``extract`` write the real content while reporting ``extract-succeeds``
+        and ``read-entry`` report ``content-matches`` having read nothing.
+
+        So for every Archive member that is not a directory, the sidecar must carry
+        a record at that exact ordinal with ``kind == "file"`` and a declared hash.
+        A directory member may carry a ``file`` record — that is what makes the
+        counts balance in the relabelling attack — so the rule is driven by the
+        Archive, not the sidecar. Sidecar records the reader cannot reach are
+        deliberately not constrained (REQ-212: an unverifiable outcome is not a
+        passing verification)."""
+        by_ordinal = {}
+        for entry in case["entries"]:
+            by_ordinal.setdefault(entry["ordinal"], entry)
+
+        for ordinal, info in enumerate(infos):
+            if info.is_dir():
+                continue
+            entry = by_ordinal.get(ordinal)
+            if entry is None:
+                # Count and ordinal coverage belong to the `list` operation, which
+                # compares the reader's own member count against the declared
+                # entryCount. Refusing here as well would pre-empt `list` and
+                # discard its recorded outcome, so this check stays out of it.
+                continue
+            if entry.get("kind") != "file":
+                raise VerificationError(
+                    check,
+                    "Expectation File for Case Key '%s' labels Archive file member "
+                    "%d ('%s') as kind '%s'; content verification requires a 'file' "
+                    "record with a declared contentSha256 at that ordinal"
+                    % (case["caseKey"], ordinal, info.filename, entry.get("kind")),
+                    stage="expectation")
+            if entry.get("contentSha256") is None:
+                raise VerificationError(
+                    check,
+                    "Expectation File for Case Key '%s' omits contentSha256 for "
+                    "Archive file member %d ('%s'), so its content cannot be verified"
+                    % (case["caseKey"], ordinal, info.filename),
+                    stage="expectation")
+
+    def applicable_expectations(self, case, zip_bytes=None):
+        """Validate the Expectation File — operation coverage and content-hash
+        completeness — then select platform-applicable expectations for this host
+        (or those with no platform mark)."""
         self._require_declared_content_hashes(case)
+        if zip_bytes is not None:
+            infos = self._archive_members(zip_bytes)
+            if infos is not None:
+                self._require_content_verifiable(case, infos, "expectation-content")
         declared_operations = {expectation["operation"]
                                for expectation in case["expectations"]}
         missing_operations = [operation for operation in OPERATIONS
@@ -878,7 +942,7 @@ class FixtureVerifier:
             raw_budget = case.get("limits", {}).get("expandedBytesBudget", MAX_EXPANDED_BYTES_BUDGET)
             budget = min(raw_budget if isinstance(raw_budget, int) and raw_budget >= 0 else MAX_EXPANDED_BYTES_BUDGET,
                          MAX_EXPANDED_BYTES_BUDGET)
-            expectations = self.applicable_expectations(case)
+            expectations = self.applicable_expectations(case, zip_bytes)
             ops = []
 
             runners = {
