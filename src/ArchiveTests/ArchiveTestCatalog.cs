@@ -458,12 +458,11 @@ internal static class ArchiveTestCatalog
         // Unsupported-feature case: classification policy-sensitive; housed in the
         // security suite per #834 alongside the policy recipes, and in malformed as
         // the structure-case home pinned since ticket #840.
-        ["unsupported-method"] = new(
-            "unsupported-method", CaseRevision: 1, ExpectationRevision: 3, Classification: PolicySensitiveClassification,
-            Suites: [MalformedSuite, SecuritySuite],
-            Recipe: StoredControlRecipe,
-            ControlCaseKey: StoredControlCaseKey,
-            Mutations: [ArchiveTestMutationKind.UnsupportedMethod]),
+        ["unsupported-method"] = MutatedDefinition(
+            ArchiveTestMutationKind.UnsupportedMethod,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite],
+            expectationRevision: 3),
         ["unsupported-method-deflate64"] = MutatedDefinition(
             ArchiveTestMutationKind.UnsupportedMethodDeflate64,
             classification: PolicySensitiveClassification,
@@ -654,8 +653,9 @@ internal static class ArchiveTestCatalog
         ArchiveTestMutationKind mutation,
         string controlCaseKey = StoredControlCaseKey,
         string classification = MalformedClassification,
-        IReadOnlyList<string>? suites = null) => new(
-        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 2, Classification: classification,
+        IReadOnlyList<string>? suites = null,
+        int expectationRevision = 2) => new(
+        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: expectationRevision, Classification: classification,
         Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,

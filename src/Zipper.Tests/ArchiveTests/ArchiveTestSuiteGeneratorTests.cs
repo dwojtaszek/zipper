@@ -344,4 +344,55 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         Assert.Equal(["open", "read-entry", "integrity-check"], integrity.FailureStages);
         Assert.Equal(3, expectationFile.ExpectationRevision);
     }
+
+    /// <summary>
+    /// A record that allows a stage-checked outcome must declare a non-empty failure-stage set.
+    /// Enumerating the whole catalogue here catches that class at <c>dotnet test</c> speed.
+    ///
+    /// This cannot catch a *wrong but non-empty* stage set — the stage the verifier actually
+    /// observes is context-dependent (<c>open</c> for some codec rejections, <c>per-entry</c> for
+    /// others), so only the offline verifier in tests/archive-tests/verify-fixtures.py can judge
+    /// that. The E2E suite runs the verifier over the full catalogue, which is what catches the
+    /// original #1035 omission; this test is the fast pre-filter for the empty-set case.
+    ///
+    /// The outcome tokens below mirror STAGE_CHECKED_OUTCOMES in verify-fixtures.py.
+    /// </summary>
+    [Theory]
+    [InlineData("list", "list-fails")]
+    [InlineData("read-entry", "read-entry-fails")]
+    [InlineData("read-entry", "unsupported-method-rejected")]
+    [InlineData("integrity-check", "integrity-fails")]
+    [InlineData("integrity-check", "crc-mismatch-rejected")]
+    [InlineData("integrity-check", "unsupported-method-rejected")]
+    [InlineData("extract", "extract-fails")]
+    [InlineData("extract", "unsupported-method-rejected")]
+    public void BuildExpectationFile_StagedOutcome_DeclaresNonEmptyFailureStages(string operation, string stagedOutcome)
+    {
+        var offenders = new List<string>();
+
+        foreach (var definition in ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites))
+        {
+            var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+            var expectationFile = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+            foreach (var expectation in expectationFile.Expectations)
+            {
+                if (expectation.Operation != operation)
+                {
+                    continue;
+                }
+
+                var allowsStagedOutcome = expectation.AllowedOutcomes?.Contains(stagedOutcome) == true;
+                if (allowsStagedOutcome && (expectation.FailureStages is null || expectation.FailureStages.Count == 0))
+                {
+                    offenders.Add($"{definition.CaseKey}[{expectation.Profile}]");
+                }
+            }
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            $"Expectations allowing the stage-checked outcome '{stagedOutcome}' must declare a "
+            + $"non-empty failure-stage set; offenders: {string.Join(", ", offenders)}");
+    }
 }

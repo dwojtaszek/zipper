@@ -1421,6 +1421,78 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertIn("operation 'integrity-check'", failure["message"])
         self.assertIn("integrity-check[strict]", failure["message"])
 
+    def test_staged_outcome_without_own_failure_stages_fails_in_multi_profile_case(self):
+        """Stages bind per profile. A multi-profile Expectation File must not let a
+        sibling profile's failureStages satisfy the record that actually governs the
+        observed outcome, or a stripped stage set on that profile goes unnoticed."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+
+        governing = {"operation": "integrity-check", "profile": "unsupported-reader",
+                     "allowedOutcomes": ["unsupported-method-rejected"],
+                     "invariants": ["no-partial-writes"]}
+        sibling = {"operation": "integrity-check", "profile": "full-codec",
+                   "allowedOutcomes": ["integrity-passes"],
+                   "invariants": ["no-partial-writes"],
+                   "failureStages": ["open", "read-entry"]}
+        case["expectations"] = [
+            expectation for expectation in case["expectations"]
+            if expectation["operation"] != "integrity-check"
+        ] + [governing, sibling]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("has no declared failure stages", failure["message"])
+        self.assertIn("integrity-check[unsupported-reader]", failure["message"])
+
+    def test_multi_profile_case_with_governing_stages_passes(self):
+        """The per-profile rule must not reject a well-formed multi-profile file: the
+        profile that allows the observed outcome declares a stage set containing it."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+
+        governing = {"operation": "integrity-check", "profile": "unsupported-reader",
+                     "allowedOutcomes": ["unsupported-method-rejected"],
+                     "invariants": ["no-partial-writes"],
+                     "failureStages": ["open", "read-entry"]}
+        sibling = {"operation": "integrity-check", "profile": "full-codec",
+                   "allowedOutcomes": ["integrity-passes"],
+                   "invariants": ["no-partial-writes"],
+                   "failureStages": ["open", "read-entry"]}
+        case["expectations"] = [
+            expectation for expectation in case["expectations"]
+            if expectation["operation"] != "integrity-check"
+        ] + [governing, sibling]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report)
+        self.assertIsNone(report["fixtures"][0]["failure"])
+
+    def test_unscoped_fixture_shadowed_by_platform_mark_fails(self):
+        """An unscoped Expectation File must not be made to verify nothing. Marking
+        records platform-inapplicable on this host would report every operation
+        'not-run' while the fixture still counted as passed."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+        for expectation in case["expectations"]:
+            if expectation["operation"] != "list":
+                expectation["platform"] = "windows"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation", failure["check"])
+        self.assertIn("no applicable expectation on this host", failure["message"])
+        self.assertIn("could", failure["message"])
+
     def test_integrity_unsupported_method_rejection_with_empty_failure_stages_fails(self):
         case, _ = self.publish_unsupported_method()
         case, path = self.rewrite_case(case)
