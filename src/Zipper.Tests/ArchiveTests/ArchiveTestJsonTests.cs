@@ -12,14 +12,14 @@ public class ArchiveTestJsonTests
         SchemaVersion: 1,
         GeneratorContractVersion: "1",
         GeneratorVersion: "0.0.0",
-        FixtureId: "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950",
+        FixtureId: "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f",
         CaseKey: "valid-empty",
         CaseRevision: 1,
-        ExpectationRevision: 1,
+        ExpectationRevision: 2,
         Seed: 42,
         Classification: "valid",
         Archive: new ArchiveTestArchive(
-            FileName: "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950.zip",
+            FileName: "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f.zip",
             PhysicalSize: 22,
             Sha256: "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"),
         Entries: [],
@@ -29,16 +29,32 @@ public class ArchiveTestJsonTests
             new ArchiveTestExpectation(
                 Operation: "list",
                 Profile: "strict",
-                AllowedOutcomes: ["empty-list"],
-                Invariants: ["listed-count == 0"],
+                AllowedOutcomes: ["listed-count-matches-entries"],
+                Invariants: ["no-partial-writes", "listed-count == entry-count"],
+                Platform: null,
+                Capability: null,
+                FailureStages: null),
+            new ArchiveTestExpectation(
+                Operation: "read-entry",
+                Profile: "strict",
+                AllowedOutcomes: ["read-entry-content-matches"],
+                Invariants: ["no-partial-writes"],
+                Platform: null,
+                Capability: null,
+                FailureStages: null),
+            new ArchiveTestExpectation(
+                Operation: "integrity-check",
+                Profile: "strict",
+                AllowedOutcomes: ["integrity-passes"],
+                Invariants: ["no-partial-writes"],
                 Platform: null,
                 Capability: null,
                 FailureStages: null),
             new ArchiveTestExpectation(
                 Operation: "extract",
                 Profile: "strict",
-                AllowedOutcomes: ["extract-completes-empty"],
-                Invariants: ["no-files-created", "no-partial-writes"],
+                AllowedOutcomes: ["extract-completes"],
+                Invariants: ["no-partial-writes", "extracted-bytes-match-content-hashes"],
                 Platform: null,
                 Capability: null,
                 FailureStages: null),
@@ -132,7 +148,7 @@ public class ArchiveTestJsonTests
 
         var parsed = ArchiveTestJson.Parse(File.ReadAllBytes(fixturePath));
 
-        Assert.Equal("atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950", parsed.FixtureId);
+        Assert.Equal("atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f", parsed.FixtureId);
         Assert.Equal(parsed.FixtureId + ".zip", parsed.Archive.FileName);
 
         // The production identity function must reproduce the published pair's Fixture ID

@@ -24,7 +24,7 @@ ALL_CASES=106    # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +
 # for same-run identity only. Golden mirrored in ArchiveTestSuiteReplayTests.cs,
 # tests/test-archive-test-suites.bat, and docs/archive-test-suites.md.
 FROZEN_VALID_STORED_ID=atc-d4998f7846f15ca3c2d709a07579a0ba6723f5f7b524ca39953622407b90a24a
-FROZEN_VALID_EMPTY_ID=atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950
+FROZEN_VALID_EMPTY_ID=atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f
 
 failures=0
 

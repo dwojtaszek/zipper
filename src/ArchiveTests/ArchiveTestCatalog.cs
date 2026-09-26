@@ -242,7 +242,7 @@ internal static class ArchiveTestCatalog
     private static readonly IReadOnlyDictionary<string, ArchiveTestCaseDefinition> Cases = new Dictionary<string, ArchiveTestCaseDefinition>(StringComparer.Ordinal)
     {
         ["valid-empty"] = new(
-            "valid-empty", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-empty", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: ValidControlSuites,
             Recipe: new ArchiveTestRecipe([])),
         ["valid-zero-entry"] = new(
@@ -461,7 +461,8 @@ internal static class ArchiveTestCatalog
         ["unsupported-method"] = MutatedDefinition(
             ArchiveTestMutationKind.UnsupportedMethod,
             classification: PolicySensitiveClassification,
-            suites: [MalformedSuite, SecuritySuite]),
+            suites: [MalformedSuite, SecuritySuite],
+            expectationRevision: 3),
         ["unsupported-method-deflate64"] = MutatedDefinition(
             ArchiveTestMutationKind.UnsupportedMethodDeflate64,
             classification: PolicySensitiveClassification,
@@ -652,8 +653,9 @@ internal static class ArchiveTestCatalog
         ArchiveTestMutationKind mutation,
         string controlCaseKey = StoredControlCaseKey,
         string classification = MalformedClassification,
-        IReadOnlyList<string>? suites = null) => new(
-        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: 2, Classification: classification,
+        IReadOnlyList<string>? suites = null,
+        int expectationRevision = 2) => new(
+        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: expectationRevision, Classification: classification,
         Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,

@@ -133,15 +133,12 @@ CANONICAL_FAILURE_STAGES = {"per-entry": "read-entry"}
 # Outcomes that record a failure stage and are therefore subject to failure-stage
 # enforcement when an expectation declares allowed stages (REQ-212, #1025): the
 # operation's failure token plus the codec-rejection outcomes the generator pairs
-# with declared failure stages. Integrity rejects on an unsupported method are
-# excluded: a per-entry rejection can be recorded while one generator v1
-# profile declares allowed stages without 'read-entry' (see ticket #1035). The
-# 'unchecked' outcome variants record no stage at all (see op_integrity_check)
-# and are never staged.
+# with declared failure stages. The 'unchecked' outcome variants record no stage at
+# all (see op_integrity_check) and are never staged.
 STAGE_CHECKED_OUTCOMES = {
     "list": ("list-fails",),
     "read-entry": ("read-entry-fails", "unsupported-method-rejected"),
-    "integrity-check": ("integrity-fails", "crc-mismatch-rejected"),
+    "integrity-check": ("integrity-fails", "crc-mismatch-rejected", "unsupported-method-rejected"),
     "extract": ("extract-fails", "unsupported-method-rejected"),
 }
 
@@ -713,13 +710,52 @@ class FixtureVerifier:
     # ---- expectation matching ----
 
     def applicable_expectations(self, case):
-        """Expectations whose platform mark applies on this host (or is unset)."""
+        """Validate complete operation coverage, then select platform-applicable
+        expectations for this host (or those with no platform mark)."""
+        declared_operations = {expectation["operation"]
+                               for expectation in case["expectations"]}
+        missing_operations = [operation for operation in OPERATIONS
+                              if operation not in declared_operations]
+        if missing_operations:
+            raise VerificationError(
+                "expectation",
+                "Expectation File for Case Key '%s' is missing operation record(s): %s"
+                % (case["caseKey"], ", ".join(missing_operations)),
+                stage="expectation")
+
         applicable = {}
+        inapplicable = {}
         for expectation in case["expectations"]:
             platform = expectation.get("platform")
+            operation = expectation["operation"]
             if platform is not None and platform not in self.platforms:
+                inapplicable.setdefault(operation, set()).add(platform)
                 continue
-            applicable.setdefault(expectation["operation"], []).append(expectation)
+            applicable.setdefault(operation, []).append(expectation)
+
+        # A platform-scoped Case Key (e.g. a Windows-only path case) legitimately has every
+        # record marked for a platform this host is not, and verifying it off-platform is a
+        # skip, not a pass. What must never happen is a Case Key with no platform scope at
+        # all being marked inapplicable wholesale: that is a fixture claiming to be verified
+        # while every operation reports "not-run". So a record only counts as a hole when it
+        # has no platform mark of its own and another record for the same operation carries
+        # the only applicable mark.
+        unscoped = any(expectation.get("platform") is None
+                       for expectation in case["expectations"])
+        if unscoped:
+            shadowed = [operation for operation in OPERATIONS
+                        if operation not in applicable and operation in inapplicable]
+            if shadowed:
+                detail = ", ".join(
+                    "%s (only records are marked for %s)"
+                    % (operation, "/".join(sorted(inapplicable[operation])))
+                    for operation in shadowed)
+                raise VerificationError(
+                    "expectation",
+                    "Expectation File for Case Key '%s' has an unscoped record but leaves "
+                    "operation(s) with no applicable expectation on this host, so they could "
+                    "only be reported 'not-run': %s" % (case["caseKey"], detail),
+                    stage="expectation")
         return applicable
 
     @staticmethod
@@ -1024,24 +1060,42 @@ class FixtureVerifier:
     @staticmethod
     def _assert_failure_stage(operation, observed, stage, expectations):
         """When the observed outcome is a staged failure (the operation's
-        failure token or a codec rejection the generator pairs with stages) and
-        an expectation declares allowed failure stages, the observed stage must
-        sit inside them; an accepted failure at a prohibited stage fails the
-        fixture with the expectation quoted (REQ-212, ticket #1025)."""
+        failure token or a codec rejection the generator pairs with stages), its
+        expectations must declare failure stages containing the observed stage;
+        an absent declaration or prohibited stage fails the fixture with the
+        expectation quoted (REQ-212, ticket #1025).
+
+        Stages bind per profile, not across the whole operation. A multi-profile
+        Expectation File (e.g. an archive whose members use different codecs) has
+        one record per profile, and only the records that actually allow
+        `observed` govern it — unioning stages over every profile would let a
+        sibling profile's declaration mask a record that declares nothing.
+        """
         if observed not in STAGE_CHECKED_OUTCOMES[operation]:
             return
-        declared = expectation_items(expectations, "failureStages")
-        if not declared:
-            return
-        normalized = CANONICAL_FAILURE_STAGES.get(stage, stage)
-        if stage not in declared and normalized not in declared:
-            profiles = ",".join(sorted({expectation.get("profile", "?")
-                                        for expectation in expectations}))
-            raise VerificationError(
-                "failure-stage",
-                "observed failure stage '%s' is outside the allowed stages %s for "
-                "expectation %s[%s]" % (stage, declared, operation, profiles),
-                stage="operation")
+
+        governing = [expectation for expectation in expectations
+                     if observed in (expectation.get("allowedOutcomes") or [])]
+        if not governing:
+            governing = list(expectations)
+
+        for expectation in governing:
+            profile = expectation.get("profile", "?")
+            declared = sorted(expectation.get("failureStages") or [])
+            if not declared:
+                raise VerificationError(
+                    "failure-stage",
+                    "observed failure '%s' for operation '%s' has no declared failure "
+                    "stages in expectation %s[%s]"
+                    % (observed, operation, operation, profile),
+                    stage="operation")
+            normalized = CANONICAL_FAILURE_STAGES.get(stage, stage)
+            if stage not in declared and normalized not in declared:
+                raise VerificationError(
+                    "failure-stage",
+                    "observed failure stage '%s' is outside the allowed stages %s for "
+                    "expectation %s[%s]" % (stage, declared, operation, profile),
+                    stage="operation")
 
 
 def verify_orphan_hidden(case, zip_bytes):

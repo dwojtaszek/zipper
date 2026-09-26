@@ -17,9 +17,9 @@ public class ArchiveTestCaseSemanticsTests
         var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
         {
             Archive = new ArchiveTestArchive(
-                "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950.zip", 22,
+                "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f.zip", 22,
                 "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"),
-            FixtureId = "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e951",
+            FixtureId = "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489e",
         };
 
         var errors = ArchiveTestCaseSemantics.Validate(testCase);
@@ -40,7 +40,7 @@ public class ArchiveTestCaseSemanticsTests
     [Fact]
     public void Validate_UnsafeBasename_IsRejected()
     {
-        var fileName = "nested/atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950.zip";
+        var fileName = "nested/atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f.zip";
         var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
         {
             Archive = new ArchiveTestArchive(

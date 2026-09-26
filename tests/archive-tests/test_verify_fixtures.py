@@ -158,16 +158,20 @@ VALID_EXPECTATIONS = [
 CRC_EXPECTATIONS = [
     {"operation": "list", "profile": "strict",
      "allowedOutcomes": ["list-succeeds", "list-fails"],
-     "invariants": ["payload-bytes-unchanged"]},
+     "invariants": ["payload-bytes-unchanged"],
+     "failureStages": ["open", "list"]},
     {"operation": "read-entry", "profile": "strict",
      "allowedOutcomes": ["read-entry-content-matches", "read-entry-fails"],
-     "invariants": ["payload-bytes-unchanged"]},
+     "invariants": ["payload-bytes-unchanged"],
+     "failureStages": ["open", "read-entry"]},
     {"operation": "integrity-check", "profile": "strict-integrity-v1",
      "allowedOutcomes": ["crc-mismatch-rejected", "crc-mismatch-unchecked"],
-     "invariants": ["payload-bytes-unchanged"], "capability": "crc32"},
+     "invariants": ["payload-bytes-unchanged"], "capability": "crc32",
+     "failureStages": ["open", "read-entry", "integrity-check"]},
     {"operation": "extract", "profile": "strict",
      "allowedOutcomes": ["extract-succeeds", "extract-fails"],
-     "invariants": ["payload-bytes-unchanged"]},
+     "invariants": ["payload-bytes-unchanged"],
+     "failureStages": ["open", "read-entry", "extract"]},
 ]
 
 
@@ -234,6 +238,60 @@ class TempDirTest(unittest.TestCase):
         write_pair(self.dir, case, patched)
         return case, patched
 
+    def publish_unsupported_method(self):
+        """Mirrors the published unsupported-method fixture's method-98 mutation
+        and operation expectations without sharing generator code."""
+        content = b"unsupported method"
+        control = make_zip([("a.txt", content)])
+        patched = bytearray(control)
+        local_method_offset = 8
+        central_method_offset = control.index(b"PK\x01\x02") + 10
+        for offset in (local_method_offset, central_method_offset):
+            struct.pack_into("<H", patched, offset, 98)
+        patched = bytes(patched)
+        control_sha = sha256_hex(control)
+        patched_sha = sha256_hex(patched)
+
+        def mutation(structure, offset):
+            return {
+                "code": "unsupported-method", "structure": structure,
+                "offsetBasis": "before-mutation", "offset": offset,
+                "explanation": "synthetic unsupported method",
+                "deletedLength": 2, "insertedLength": 2,
+                "beforeSize": len(control), "afterSize": len(patched),
+                "beforeSha256": control_sha, "afterSha256": patched_sha,
+                "beforeHex": control[offset:offset + 2].hex(),
+                "afterHex": patched[offset:offset + 2].hex(),
+                "declaredValue": "method=98",
+            }
+
+        mutations = [
+            mutation("local-header", local_method_offset),
+            mutation("central-header", central_method_offset),
+        ]
+        expectations = [
+            {"operation": "list", "profile": "strict",
+             "allowedOutcomes": ["list-succeeds"], "invariants": ["payload-bytes-unchanged"],
+             "failureStages": ["open", "list"]},
+            {"operation": "read-entry", "profile": "strict",
+             "allowedOutcomes": ["unsupported-method-rejected", "unsupported-method-unchecked"],
+             "invariants": ["payload-bytes-unchanged"],
+             "failureStages": ["open", "read-entry"]},
+            {"operation": "integrity-check", "profile": "strict",
+             "allowedOutcomes": ["unsupported-method-rejected", "integrity-unchecked"],
+             "invariants": ["payload-bytes-unchanged"],
+             "failureStages": ["open", "read-entry", "integrity-check"]},
+            {"operation": "extract", "profile": "strict",
+             "allowedOutcomes": ["extract-fails", "extract-succeeds"],
+             "invariants": ["no-partial-writes"], "failureStages": ["open", "extract"]},
+        ]
+        case = case_for(
+            "unsupported-method", "policy-sensitive", patched,
+            [entry_record(0, "a.txt", content, local_method=98,
+                          central_method=98)], mutations, expectations)
+        write_pair(self.dir, case, patched)
+        return case, patched
+
     def publish_duplicate_names(self):
         """Two same-name entries with distinct payloads (policy-sensitive)."""
         first, second = b"first payload", b"second payload"
@@ -268,6 +326,13 @@ class TempDirTest(unittest.TestCase):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(case, handle, separators=(",", ":"))
             handle.write("\n")
+
+    def replace_expectation(self, case, operation, expectation):
+        case["expectations"] = [
+            existing for existing in case["expectations"]
+            if existing["operation"] != operation
+        ]
+        case["expectations"].append(expectation)
 
 
 class EocdAmbiguityTests(TempDirTest):
@@ -1037,9 +1102,9 @@ class DescriptorTests(unittest.TestCase):
     def test_compute_fixture_id_matches_the_frozen_vector(self):
         # Frozen test vector from REQ-210: the 22-byte empty Archive, Seed 42.
         self.assertEqual(
-            "atc-860f76f376dcb6f212fd080f8ec5dc5e454388b779a8fb5dbdff1d49cde3e950",
+            "atc-4d275f1fe266174e43c71d2cbe42084da23ce42369a17af7b84a9d165b6c489f",
             vf.compute_fixture_id(
-                "1", "valid-empty", 1, 1, 42,
+                "1", "valid-empty", 1, 2, 42,
                 "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"))
 
 
@@ -1162,7 +1227,9 @@ class InvariantEnforcementTests(TempDirTest):
         expectations = [
             {"operation": "list", "profile": "strict",
              "allowedOutcomes": ["list-succeeds", "list-fails"],
-             "invariants": ["listed-count == entry-count"]},
+             "invariants": ["listed-count == entry-count"],
+             "failureStages": ["open", "list"]},
+            *VALID_EXPECTATIONS[1:],
         ]
         # Self-consistent metadata that wrongly declares a single entry: the
         # reader lists two, so the invariant evidence contradicts the claim.
@@ -1198,11 +1265,11 @@ class InvariantEnforcementTests(TempDirTest):
         the verifier's 'per-entry' is the declared 'read-entry')."""
         case, _ = self.publish_crc_corrupt()
         case, path = self.rewrite_case(case)
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "read-entry",
             {"operation": "read-entry", "profile": "strict",
              "allowedOutcomes": ["read-entry-fails"], "invariants": [],
-             "failureStages": ["open"]},
-        ]
+             "failureStages": ["open"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1218,11 +1285,11 @@ class InvariantEnforcementTests(TempDirTest):
         normalization does not create false positives."""
         case, _ = self.publish_crc_corrupt()
         case, path = self.rewrite_case(case)
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "read-entry",
             {"operation": "read-entry", "profile": "strict",
              "allowedOutcomes": ["read-entry-fails"], "invariants": [],
-             "failureStages": ["open", "read-entry"]},
-        ]
+             "failureStages": ["open", "read-entry"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1238,11 +1305,11 @@ class InvariantEnforcementTests(TempDirTest):
         the same fail-closed rule that rejects unknown invariant tokens."""
         case, _ = self.publish_valid()
         case, path = self.rewrite_case(case)
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "read-entry",
             {"operation": "read-entry", "profile": "strict",
              "allowedOutcomes": ["read-entry-content-matches"],
-             "invariants": ["listed-count == entry-count"]},
-        ]
+             "invariants": ["listed-count == entry-count"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1259,7 +1326,9 @@ class InvariantEnforcementTests(TempDirTest):
         expectations = [
             {"operation": "list", "profile": "strict",
              "allowedOutcomes": ["list-succeeds", "list-fails"],
-             "invariants": ["listed-count == 2"]},
+             "invariants": ["listed-count == 2"],
+             "failureStages": ["open", "list"]},
+            *VALID_EXPECTATIONS[1:],
         ]
         case = case_for("count-ok", "valid", zip_bytes,
                         [entry_record(0, "a.txt", b"first"),
@@ -1296,11 +1365,11 @@ class InvariantEnforcementTests(TempDirTest):
         them (otherwise the wrong-stage defect survives on this outcome class)."""
         case, _ = self.publish_crc_corrupt()
         case, path = self.rewrite_case(case)
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "integrity-check",
             {"operation": "integrity-check", "profile": "strict",
              "allowedOutcomes": ["crc-mismatch-rejected"], "invariants": [],
-             "failureStages": ["open"]},
-        ]
+             "failureStages": ["open"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1310,17 +1379,184 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertEqual("failure-stage", failure["check"])
         self.assertIn("integrity-check[strict]", failure["message"])
 
+    def test_integrity_unsupported_method_rejection_stage_mismatch_fails(self):
+        """The published unsupported-method fixture permits a codec rejection;
+        narrowing its integrity oracle to that rejection at open must not accept
+        the observed per-entry rejection."""
+        case, _ = self.publish_unsupported_method()
+        published = next(expectation for expectation in case["expectations"]
+                         if expectation["operation"] == "integrity-check")
+        self.assertIn("unsupported-method-rejected", published["allowedOutcomes"])
+        self.assertIn("read-entry", published["failureStages"])
+        case, path = self.rewrite_case(case)
+        integrity = next(expectation for expectation in case["expectations"]
+                         if expectation["operation"] == "integrity-check")
+        integrity["allowedOutcomes"] = ["unsupported-method-rejected"]
+        integrity["failureStages"] = ["open"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("observed failure stage 'per-entry'", failure["message"])
+        self.assertIn("integrity-check[strict]", failure["message"])
+
+    def test_integrity_unsupported_method_rejection_without_failure_stages_fails(self):
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+        integrity = next(expectation for expectation in case["expectations"]
+                         if expectation["operation"] == "integrity-check")
+        integrity["allowedOutcomes"] = ["unsupported-method-rejected"]
+        del integrity["failureStages"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("observed failure 'unsupported-method-rejected'", failure["message"])
+        self.assertIn("operation 'integrity-check'", failure["message"])
+        self.assertIn("integrity-check[strict]", failure["message"])
+
+    def test_staged_outcome_without_own_failure_stages_fails_in_multi_profile_case(self):
+        """Stages bind per profile. A multi-profile Expectation File must not let a
+        sibling profile's failureStages satisfy the record that actually governs the
+        observed outcome, or a stripped stage set on that profile goes unnoticed."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+
+        governing = {"operation": "integrity-check", "profile": "unsupported-reader",
+                     "allowedOutcomes": ["unsupported-method-rejected"],
+                     "invariants": ["no-partial-writes"]}
+        sibling = {"operation": "integrity-check", "profile": "full-codec",
+                   "allowedOutcomes": ["integrity-passes"],
+                   "invariants": ["no-partial-writes"],
+                   "failureStages": ["open", "read-entry"]}
+        case["expectations"] = [
+            expectation for expectation in case["expectations"]
+            if expectation["operation"] != "integrity-check"
+        ] + [governing, sibling]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("has no declared failure stages", failure["message"])
+        self.assertIn("integrity-check[unsupported-reader]", failure["message"])
+
+    def test_multi_profile_case_with_governing_stages_passes(self):
+        """The per-profile rule must not reject a well-formed multi-profile file: the
+        profile that allows the observed outcome declares a stage set containing it."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+
+        governing = {"operation": "integrity-check", "profile": "unsupported-reader",
+                     "allowedOutcomes": ["unsupported-method-rejected"],
+                     "invariants": ["no-partial-writes"],
+                     "failureStages": ["open", "read-entry"]}
+        sibling = {"operation": "integrity-check", "profile": "full-codec",
+                   "allowedOutcomes": ["integrity-passes"],
+                   "invariants": ["no-partial-writes"],
+                   "failureStages": ["open", "read-entry"]}
+        case["expectations"] = [
+            expectation for expectation in case["expectations"]
+            if expectation["operation"] != "integrity-check"
+        ] + [governing, sibling]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report)
+        self.assertIsNone(report["fixtures"][0]["failure"])
+
+    def test_unscoped_fixture_shadowed_by_platform_mark_fails(self):
+        """An unscoped Expectation File must not be made to verify nothing. Marking
+        records platform-inapplicable on this host would report every operation
+        'not-run' while the fixture still counted as passed."""
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+        for expectation in case["expectations"]:
+            if expectation["operation"] != "list":
+                expectation["platform"] = "windows"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation", failure["check"])
+        self.assertIn("no applicable expectation on this host", failure["message"])
+        self.assertIn("could", failure["message"])
+
+    def test_integrity_unsupported_method_rejection_with_empty_failure_stages_fails(self):
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+        integrity = next(expectation for expectation in case["expectations"]
+                         if expectation["operation"] == "integrity-check")
+        integrity["allowedOutcomes"] = ["unsupported-method-rejected"]
+        integrity["failureStages"] = []
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("failure-stage", failure["check"])
+        self.assertIn("observed failure 'unsupported-method-rejected'", failure["message"])
+        self.assertIn("operation 'integrity-check'", failure["message"])
+        self.assertIn("integrity-check[strict]", failure["message"])
+
+    def test_missing_integrity_expectation_operation_fails(self):
+        case, _ = self.publish_unsupported_method()
+        case, path = self.rewrite_case(case)
+        case["expectations"] = [expectation for expectation in case["expectations"]
+                                if expectation["operation"] != "integrity-check"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation", failure["check"])
+        self.assertIn("missing operation record", failure["message"])
+        self.assertIn("integrity-check", failure["message"])
+
+    def test_integrity_unsupported_method_rejection_accepts_raw_and_normalized_stages(self):
+        case, _ = self.publish_unsupported_method()
+
+        for declared_stage in ("read-entry", "per-entry"):
+            with self.subTest(declared_stage=declared_stage):
+                case, path = self.rewrite_case(case)
+                integrity = next(expectation for expectation in case["expectations"]
+                                 if expectation["operation"] == "integrity-check")
+                integrity["allowedOutcomes"] = ["unsupported-method-rejected"]
+                integrity["failureStages"] = [declared_stage]
+                self.persist(path, case)
+
+                report, exit_code = verify(self.dir)
+
+                self.assertEqual(0, exit_code, report["fixtures"][0].get("failure"))
+                operations = {op["operation"]: op
+                              for op in report["fixtures"][0]["operations"]}
+                self.assertEqual("pass", operations["integrity-check"]["status"])
+                self.assertEqual("per-entry", operations["integrity-check"]["failureStage"])
+
     def test_rejection_outcome_accepts_raw_per_entry_stage(self):
         """Positive control: the schema documents the stage spelling
         'per-entry'; a declaration using it must match, never false-fail with a
         self-contradictory message."""
         case, _ = self.publish_crc_corrupt()
         case, path = self.rewrite_case(case)
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "integrity-check",
             {"operation": "integrity-check", "profile": "strict",
              "allowedOutcomes": ["crc-mismatch-rejected"], "invariants": [],
-             "failureStages": ["per-entry"]},
-        ]
+             "failureStages": ["per-entry"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1414,7 +1650,9 @@ class InvariantEnforcementTests(TempDirTest):
         expectations = [
             {"operation": "list", "profile": "strict",
              "allowedOutcomes": ["list-succeeds", "list-fails"],
-             "invariants": ["listed-count == 3"]},
+             "invariants": ["listed-count == 3"],
+             "failureStages": ["open", "list"]},
+            *VALID_EXPECTATIONS[1:],
         ]
         case = case_for("count-lie-numeric", "valid", zip_bytes,
                         [entry_record(0, "a.txt", b"first"),
@@ -1450,11 +1688,11 @@ class InvariantEnforcementTests(TempDirTest):
         case, _ = self.publish_valid()
         case, path = self.rewrite_case(case)
         case["entries"][0]["contentSha256"] = "0" * 64  # lie -> extract-fails
-        case["expectations"] = [
+        self.replace_expectation(
+            case, "extract",
             {"operation": "extract", "profile": "strict",
              "allowedOutcomes": ["extract-fails"], "invariants": [],
-             "failureStages": ["open"]},
-        ]
+             "failureStages": ["open"]})
         self.persist(path, case)
 
         report, exit_code = verify(self.dir)
@@ -1472,6 +1710,7 @@ class InvariantEnforcementTests(TempDirTest):
             {"operation": "list", "profile": "strict",
              "allowedOutcomes": ["list-fails"], "invariants": [],
              "failureStages": ["open"]},
+            *VALID_EXPECTATIONS[1:],
         ]
         case = case_for("count-lie-stage", "valid", zip_bytes,
                         [entry_record(0, "a.txt", b"first")], [], expectations)
