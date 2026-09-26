@@ -127,6 +127,115 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         Assert.DoesNotContain("Compression Method", lines[0], StringComparison.Ordinal);
     }
 
+    // REQ-001: Compression Method is Email-intrinsic, so an Archive carrying at least one Email
+    // includes the column with or without --with-metadata. Every other File Type gates it on
+    // --with-metadata. The column is excluded from OPT and from the Production Set DAT.
+    [Fact]
+    public async Task WriteAsync_EmailType_WithoutMetadata_IncludesCompressionMethodColumn()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.Contains("Compression Method", lines[0], StringComparison.Ordinal);
+        Assert.Contains("Deflate", lines[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_EmailType_WithMetadata_IncludesCompressionMethodColumnWithDeflateValue()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        // The DAT column delimiter is U+00FE; both header and record split on it, so the
+        // column index in the header selects the same field in the record.
+        const char DatDelimiter = 'þ';
+        var headerFields = lines[0].Split(DatDelimiter);
+        var index = Array.IndexOf(headerFields, "Compression Method");
+        Assert.True(index >= 0, $"expected the column in header: {lines[0]}");
+
+        var recordFields = lines[1].Split(DatDelimiter);
+        Assert.Equal("Deflate", recordFields[index], StringComparer.Ordinal);
+    }
+
+    /// <summary>The documented rule resolves through <c>OutputConfig.HasFileType</c> and its
+    /// File Type Plan, which is a different path from a single <c>FileType</c>. A regression in
+    /// <c>FileTypePlan.ContainsType</c> would otherwise break the rule with every other test green.</summary>
+    [Fact]
+    public async Task WriteAsync_MixedFileTypePlanContainingEml_WithoutMetadata_IncludesCompressionMethodColumn()
+    {
+        var request = DefaultRequest();
+        var ratios = new List<FileTypeRatio>
+        {
+            new() { Type = "pdf", Weight = 60 },
+            new() { Type = "eml", Weight = 40 },
+        };
+        request.Output = request.Output with { FileTypePlan = new FileTypePlan(ratios, 2) };
+        var files = new List<FileData> { MakeFileData(1), MakeFileData(2) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.Contains("Compression Method", lines[0], StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("docx")]
+    [InlineData("tiff")]
+    [InlineData("jpg")]
+    [InlineData("xlsx")]
+    public async Task WriteAsync_NonEmailType_WithoutMetadata_OmitsCompressionMethodColumn(string fileType)
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = fileType };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        var (_, lines) = await WriteAndCapture(request, files);
+
+        Assert.DoesNotContain("Compression Method", lines[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>REQ-001 excludes the column from OPT, which carries no Metadata columns.</summary>
+    [Fact]
+    public void Compose_Opt_OmitsCompressionMethodColumnEvenWithEmailAndMetadata()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithMetadata = true };
+
+        var composer = new OptComposer(request, WriterMode.LoadfileOnly);
+        var record = composer.Compose([MakeFileData(1)]).First();
+
+        // OPT carries a fixed positional schema and no Metadata columns.
+        Assert.Equal(
+            ["Bates", "Volume", "ImagePath", "DocBreak", "Reserved1", "Reserved2", "PageCount"],
+            record.Columns);
+        Assert.DoesNotContain("Compression Method", record.Columns);
+    }
+
+    /// <summary>REQ-001 excludes the column from the Production Set DAT, whose schema is fixed.</summary>
+    [Fact]
+    public async Task WriteAsync_ProductionSet_OmitsCompressionMethodColumnEvenWithEmailAndMetadata()
+    {
+        var request = DefaultRequest();
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithMetadata = true };
+        var files = new List<FileData> { MakeFileData(1) };
+
+        using var stream = new MemoryStream();
+        await new DatComposingWriter(WriterMode.ProductionSet).WriteAsync(stream, request, files);
+        stream.Position = 0;
+        var output = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.Contains("EmailSentDate", output, StringComparison.Ordinal);
+        Assert.DoesNotContain("Compression Method", output, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task WriteAsync_WithStoreCompression_WritesStoreValue()
     {

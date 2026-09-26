@@ -64,6 +64,13 @@ zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 ```
 For Archive Test workflows, `--seed` accepts only non-negative integers and defaults to 42; negative values fail before output generation.
 
+#### 7. Choose the Archive compression method
+`--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
+```bash
+zipper --type pdf --count 1000 --output-path ./stored_archive --compression store
+```
+`store` writes entries uncompressed and, with `--target-zip-size`, switches size pre-checks and padding to an uncompressed ratio of 1.0. `deflate64` and `bzip2` are recognized but not yet supported and are rejected. See [Archive Compression](docs/advanced-guide.md#archive-compression).
+
 ---
 
 ## Features & Supported Formats
@@ -152,7 +159,7 @@ All command-line flags recognized by Zipper:
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases |
 | `--version` | `false` | flag | Print version string and exit |
 
-For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md).
+For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md). Argument interactions for `--compression` are in [§7 Argument Interactions Reference](docs/advanced-guide.md#7-argument-interactions-reference).
 
 ---
 
