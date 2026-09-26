@@ -1702,6 +1702,74 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertEqual("failure-stage", failure["check"])
         self.assertIn("extract[strict]", failure["message"])
 
+    def test_extract_with_omitted_content_hash_fails_closed(self):
+        """A file entry with no declared content hash cannot be content-verified,
+        so extraction must not report 'extract-succeeds' on the strength of the
+        bytes merely having been written to disk. The schema makes
+        contentSha256 optional, so omitting the key is schema-legal and reaches
+        the operation — setting it to null would be rejected by the schema
+        first."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        del case["entries"][0]["contentSha256"]
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation-content", failure["check"])
+        self.assertIn("contentSha256", failure["message"])
+
+    def test_read_entry_with_omitted_content_hash_fails_closed(self):
+        """read-entry must not report 'read-entry-content-matches' when it
+        verified nothing: every file entry here omits its declared hash."""
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        for entry in case["entries"]:
+            if entry["kind"] == "file":
+                entry.pop("contentSha256", None)
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation-content", failure["check"])
+        self.assertIn("contentSha256", failure["message"])
+
+    def test_omitted_content_hash_with_wrong_bytes_is_not_a_pass(self):
+        """The issue case: no declared hash plus content that does not match the
+        sidecar's other declarations must fail rather than being waved through as
+        a successful extraction."""
+        zip_bytes = make_zip([("a.txt", b"hello archive test")])
+        case = case_for("valid-nohash", "valid", zip_bytes,
+                        [entry_record(0, "a.txt", b"hello archive test")],
+                        [], VALID_EXPECTATIONS)
+        del case["entries"][0]["contentSha256"]
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation-content", failure["check"])
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertNotEqual("extract-succeeds",
+                            operations.get("extract", {}).get("normalizedOutcome"))
+
+    def test_directory_entries_need_no_content_hash(self):
+        """Only file entries are content-checked, so the ordinary control with a
+        declared hash must still verify cleanly after the guard is added."""
+        self.publish_valid()
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report)
+        operations = {op["operation"]: op for op in report["fixtures"][0]["operations"]}
+        self.assertEqual("extract-succeeds",
+                         operations["extract"]["normalizedOutcome"])
+
     def test_list_failure_stage_mismatch_fails(self):
         """list-fails at the 'list' stage is checked against the declared
         stages: a declaration that only allows 'open' rejects it."""

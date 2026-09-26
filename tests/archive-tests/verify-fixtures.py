@@ -653,6 +653,18 @@ class FixtureVerifier:
 
                 # Independent safety derivation (the JSON is not hash-bound).
                 if case["mutations"]:
+                    # Divergence from the 7-Zip adapter, deliberately. This reader
+                    # extracts into a real directory on the host, so a fixture
+                    # carrying a declared mutation is refused outright: a control
+                    # is only extracted when nothing about it is adversarial.
+                    # The 7-Zip E2E extracts the same mutated cases because it
+                    # extracts to a scratch tree it owns and treats the adapter's
+                    # own policy output as the oracle rather than re-deriving
+                    # safety. So one case can be extracted by one adapter and
+                    # skipped by the other, and that is expected: coverage of a
+                    # mutated case comes from the adapter that owns its policy,
+                    # not from this reader. What must never happen is the weaker
+                    # outcome — a mutated case reported as 'extract-succeeds'.
                     return ("not-run", {"reason": "fixture declares mutations; "
                                        "extraction is for safe controls only"}, None)
                 unsafe = self._unsafe_extract_names(infos)
@@ -709,9 +721,35 @@ class FixtureVerifier:
 
     # ---- expectation matching ----
 
+    @staticmethod
+    def _require_declared_content_hashes(case):
+        """Every file entry must declare a content hash.
+
+        The schema makes ``contentSha256`` optional, so a publisher can omit it.
+        The operations that claim to have verified content then verify nothing:
+        ``op_read_entry`` skips the entry entirely (and would report
+        ``read-entry-content-matches`` having read zero entries), and
+        ``op_extract`` writes the bytes and reports ``extract-succeeds``. Both are
+        silent passes, so the Expectation File is refused up front rather than
+        the outcome being quietly weakened. Directory entries legitimately carry
+        no content and are unaffected. REQ-212: an unverifiable outcome is not a
+        passing verification."""
+        for entry in case["entries"]:
+            if entry["kind"] != "file":
+                continue
+            if entry.get("contentSha256") is None:
+                raise VerificationError(
+                    "expectation-content",
+                    "Expectation File for Case Key '%s' omits contentSha256 for file "
+                    "entry at ordinal %d, so its content cannot be verified; the "
+                    "Expectation File must declare a content hash for every file entry"
+                    % (case["caseKey"], entry["ordinal"]),
+                    stage="expectation")
+
     def applicable_expectations(self, case):
         """Validate complete operation coverage, then select platform-applicable
         expectations for this host (or those with no platform mark)."""
+        self._require_declared_content_hashes(case)
         declared_operations = {expectation["operation"]
                                for expectation in case["expectations"]}
         missing_operations = [operation for operation in OPERATIONS
