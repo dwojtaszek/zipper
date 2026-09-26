@@ -396,9 +396,42 @@ jobs:
             }
             snapshot="qa-results/$QA_RUN_ID/evidence/case-$case_no.snapshot.txt"
             report_link="^[[:space:]]*-[[:space:]]+\\[[^]]+\\]\\($QA_RUN_ID/evidence/case-${case_no}[.]snapshot[.]txt\\)[[:space:]]*$"
+            # tuistory uses 110 columns; a wrapped row can contain 109 or 110 visible chars.
             if [[ ! -f "$snapshot" || -L "$snapshot" || ! -s "$snapshot" ]] ||
                ! grep -Eq '^APP_EXIT:[0-9]+[[:space:]]*$' "$snapshot" ||
-               ! grep -Eq '^[^[:cntrl:]]*[#$][[:space:]]+.*Zipper([[:space:].;]|$)' "$snapshot" ||
+               ! awk '
+                 function shell_code(text,    i, char, quote, escaped, apostrophe, output) {
+                   apostrophe = sprintf("%c", 39)
+                   for (i = 1; i <= length(text); i++) {
+                     char = substr(text, i, 1)
+                     if (escaped) { escaped = 0; output = output " "; continue }
+                     if (char == "\\" && quote != apostrophe) { escaped = 1; output = output " "; continue }
+                     if (char == apostrophe && quote != "\"") { quote = quote == apostrophe ? "" : apostrophe; output = output " "; continue }
+                     if (char == "\"" && quote != apostrophe) { quote = quote == "\"" ? "" : "\""; output = output " "; continue }
+                     if (char == "#" && quote == "" &&
+                         (i == 1 || substr(text, i - 1, 1) ~ /[[:space:];&|]/))
+                       return output
+                     output = output (quote == "" ? char : " ")
+                   }
+                   return output
+                 }
+                 function invokes_zipper(text) {
+                   return shell_code(text) ~ /(^|[;&|])[[:space:]]*env[[:space:]]+-u[[:space:]]+CI[[:space:]]+FACTORY_DISABLE_KEYRING=true[[:space:]]+[.]\/qa-results\/(\$RUN_ID|[0-9]+-[0-9]+)\/publish\/Zipper([[:space:].;]|$)/
+                 }
+                 /^[^[:space:]#$]*[#$][[:space:]]+/ {
+                   command = $0
+                   sub(/^[^[:space:]#$]*[#$][[:space:]]+/, "", command)
+                   wrapping = length($0) >= 109
+                   if (invokes_zipper(command)) found = 1
+                   next
+                 }
+                 wrapping {
+                   command = command $0
+                   if (invokes_zipper(command)) found = 1
+                   if (length($0) < 109) wrapping = 0
+                 }
+                 END { exit !found }
+               ' "$snapshot" ||
                ! grep -Eq "$report_link" <<<"$evidence_links"; then
               echo "QA report row $case_no requires a report-relative linked, raw terminal snapshot with APP_EXIT: $snapshot" >&2
               exit 1
