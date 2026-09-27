@@ -325,20 +325,17 @@ public class ProductionSetValidationTests : IDisposable
     }
 
     [Fact]
-    public async Task Validate_TiffProductionSet_ShouldCountImageReferencesFromBothLoadFiles()
+    public async Task Validate_MultipageTiffProductionSet_ShouldCountImageReferencesFromBothLoadFiles()
     {
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
             {
                 OutputPath = this.testOutputPath,
-                FileCount = 4,
-                FileTypeRatios = new List<FileTypeRatio>
-                {
-                    new() { Type = "pdf", Weight = 1 },
-                    new() { Type = "tiff", Weight = 1 },
-                },
+                FileCount = 3,
+                FileType = "tiff",
             },
+            Tiff = new TiffConfig { PageRange = (3, 3) },
             Production = new ProductionConfig
             {
                 ProductionSet = true,
@@ -357,15 +354,21 @@ public class ProductionSetValidationTests : IDisposable
         var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
 
         // Count the image references independently from each Load File rather than trusting
-        // the counter. The two are not the same population: the DAT carries one IMAGE_PATH per
-        // Native File, while the OPT emits one record per page, so a multipage TIFF contributes
-        // 1 to the DAT and N to the OPT. checkedFileCounts.image counts image references
-        // checked, so it must be the sum of the two.
+        // the counter, then assert the sum.
+        //
+        // The page range matters: with single-page records the DAT and the OPT name the SAME
+        // file, one reference each, so the two halves of this assertion are indistinguishable
+        // and any per-page counting bug goes unnoticed. Forcing 3 pages makes the OPT emit one
+        // record per page (3 per Native File) while the DAT still emits one IMAGE_PATH per Native
+        // File, so the two counts must differ. Without that, a counter that only fired on the
+        // first page of each Native File would still pass.
         var datImageRefs = await CountImageReferencesInDatAsync(result.DatFilePath, request);
         var optImageRefs = await CountImageReferencesInOptAsync(result.OptFilePath, request);
 
-        Assert.True(datImageRefs > 0, "the DAT Load File should reference at least one image");
-        Assert.True(optImageRefs > 0, "the OPT Load File should reference at least one image");
+        Assert.Equal(request.Output.FileCount, datImageRefs);
+        Assert.True(
+            optImageRefs > datImageRefs,
+            $"multipage TIFFs must make the OPT emit more image references than the DAT; got DAT={datImageRefs}, OPT={optImageRefs}");
 
         Assert.Equal(datImageRefs + optImageRefs, report.CheckedFileCounts["image"]);
     }
@@ -373,7 +376,7 @@ public class ProductionSetValidationTests : IDisposable
     private static async Task<int> CountImageReferencesInDatAsync(string datPath, FileGenerationRequest request)
     {
         var lines = await File.ReadAllLinesAsync(datPath);
-        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var colDelim = request.Delimiters.GetColumnChar();
         var quoteDelim = request.Delimiters.QuoteDelimiter[0];
 
         var headers = ProductionSetPostValidator.ParseDatLine(lines[0], colDelim, quoteDelim);
@@ -405,7 +408,8 @@ public class ProductionSetValidationTests : IDisposable
 
         // The OPT is a fixed comma-delimited legacy format and does NOT use the configurable
         // DelimiterConfig.ColumnDelimiter that the DAT uses, so it is split on a literal comma.
-        // It has no header: fixed positional fields, with ImagePath third.
+        // It has no header: fixed positional fields, with ImagePath third. The OPT emits no
+        // quoting, so the raw field is compared without trimming.
         var count = 0;
         foreach (var line in lines)
         {
@@ -415,7 +419,7 @@ public class ProductionSetValidationTests : IDisposable
             }
 
             var fields = line.Split(',');
-            if (fields.Length > 2 && !string.IsNullOrEmpty(fields[2].Trim('"', '\'')))
+            if (fields.Length > 2 && !string.IsNullOrEmpty(fields[2]))
             {
                 count++;
             }

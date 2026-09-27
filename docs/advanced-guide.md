@@ -50,6 +50,16 @@ Generates a structured e-discovery Production Set with volume folders, single-pa
     └── _validation_report.json          (Self-Validation Summary)
 ```
 
+#### Reading `_validation_report.json`
+
+`checkedFileCounts` reports how many file references the validator **examined**, by kind. The unit is a reference examined — not a distinct file, and not a file that was found:
+
+- `image` is the sum of the DAT Load File's `IMAGE_PATH` references (one per Native File) and the OPT Load File's image references (one record per page). For a single-page Native File, and for every non-TIFF File Type, both Load Files name the **same** file, so it is counted twice. Only a multipage TIFF makes the two diverge, and there the DAT's base path is resolved through the page-one fallback rather than existing literally.
+- `native` and `text` are DAT-only. `native` reports `0` when `--withheld-native-policy replace-with-placeholder` skips native path validation.
+- `dat` and `opt` report whether that Load File was present, not how many rows it holds — row counts live in `checkedLoadFileRowCounts`.
+
+To count distinct image files, do not use `image`; resolve the Load File paths instead.
+
 ### Loadfile-Only Mode (`Standalone Metadata`)
 Generates metadata or image-referencing load files directly to disk without creating native files or zip archives.
 

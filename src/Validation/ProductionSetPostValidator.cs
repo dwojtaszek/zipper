@@ -14,13 +14,31 @@ public class ProductionSetValidationReport
     public int WarningCount { get; set; }
 
     /// <summary>
-    /// How many file references were existence-checked, by kind.
+    /// How many file references the validator examined, by kind.
     /// <para>
-    /// The unit is a reference, not a document, and the two are not the same population.
-    /// <c>image</c> is the sum of the DAT Load File's IMAGE_PATH references (one per Native
-    /// File) and the OPT Load File's image references (one record per page), so a multipage
-    /// TIFF contributes more than one. <c>native</c> and <c>text</c> are DAT-only. Row counts
-    /// are reported separately in <see cref="CheckedLoadFileRowCounts"/>.
+    /// The unit is a reference examined, NOT a distinct file and NOT a file that was found.
+    /// Read the two image-bearing Load Files together, because they do not describe the same
+    /// population:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>
+    /// The DAT Load File carries one IMAGE_PATH per Native File. The OPT Load File carries one
+    /// record per page, each naming an image path.
+    /// </item>
+    /// <item>
+    /// For a single-page Native File, and for every non-TIFF File Type, those two name the
+    /// <em>same</em> file, so <c>image</c> counts it twice. Only a multipage TIFF makes them
+    /// diverge: the DAT names the base path while the OPT names each <c>_NNN</c> page.
+    /// </item>
+    /// <item>
+    /// A count is a reference examined, not a reference found. For a multipage TIFF the DAT's
+    /// base path does not exist on disk; it is resolved through the page-one fallback.
+    /// </item>
+    /// </list>
+    /// <para>
+    /// <c>native</c> and <c>text</c> are DAT-only, and <c>native</c> reports 0 when native path
+    /// validation is skipped (<c>--withheld-native-policy replace-with-placeholder</c>). Load
+    /// File row counts are reported separately in <see cref="CheckedLoadFileRowCounts"/>.
     /// </para>
     /// </summary>
     [JsonPropertyName("checkedFileCounts")]
