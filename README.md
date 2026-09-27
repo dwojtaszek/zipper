@@ -63,6 +63,7 @@ Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie 
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 ```
 For Archive Test workflows, `--seed` accepts only non-negative integers and defaults to 42; negative values fail before output generation.
+Selected Expectation Files declare 7-Zip Adapter Checks for extraction, rejection, or presence. Both E2E scripts run those checks from the sidecars rather than from a separate Case Key list; see [Archive Test Suites](docs/archive-test-suites.md).
 
 #### 7. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:

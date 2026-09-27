@@ -74,7 +74,8 @@ internal sealed record ArchiveTestCaseDefinition(
     ArchiveTestRecipe Recipe,
     string? ControlCaseKey = null,
     IReadOnlyList<ArchiveTestMutationKind>? Mutations = null,
-    ArchiveControlConstruction? Construction = null)
+    ArchiveControlConstruction? Construction = null,
+    IReadOnlyList<ArchiveTestAdapterCheck>? AdapterChecks = null)
 {
     public bool IsMutation => Mutations is { Count: > 0 };
 }
@@ -226,6 +227,15 @@ internal static class ArchiveTestCatalog
     /// </summary>
     private static readonly byte[] DeflateDynamicText = BuildDeflateDynamicText();
 
+    private static readonly IReadOnlyList<ArchiveTestAdapterCheck> SevenZipExtract =
+        [new("7zip", "extract", "success")];
+    private static readonly IReadOnlyList<ArchiveTestAdapterCheck> SevenZipTestFailure =
+        [new("7zip", "test", "failure")];
+    private static readonly IReadOnlyList<ArchiveTestAdapterCheck> SevenZipPresence =
+        [new("7zip", "presence", "present")];
+    private static readonly IReadOnlyList<ArchiveTestAdapterCheck> SevenZipMixedBadMember =
+        [new("7zip", "test", "failure"), new("7zip", "extract-entries", "success", ["a.txt", "b.bin"])];
+
     private static byte[] BuildDeflateDynamicText()
     {
         const string Sentence = "Lorem ipsum dolor sit amet, consectetur adipiscing elit; sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ";
@@ -267,9 +277,9 @@ internal static class ArchiveTestCatalog
         // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
         // (method 12).
         ["valid-bzip2"] = new(
-            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
+            "valid-bzip2", CaseRevision: 1, ExpectationRevision: 4, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: Bzip2ControlRecipe),
+            Recipe: Bzip2ControlRecipe, AdapterChecks: SevenZipExtract),
         // Ticket #898 Deflate64 control: one entry with a Deflate-subset stream
         // labeled method 9, giving the method/data and corruption cases a genuine
         // Deflate64 source. Any Deflate64 decoder accepts the subset stream.
@@ -277,22 +287,22 @@ internal static class ArchiveTestCatalog
         // ordinary DEFLATE decoder can still decode; the Deflate64-only behavior
         // lives in valid-deflate64-long-match.
         ["valid-deflate64"] = new(
-            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
+            "valid-deflate64", CaseRevision: 1, ExpectationRevision: 4, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: Deflate64ControlRecipe),
+            Recipe: Deflate64ControlRecipe, AdapterChecks: SevenZipExtract),
         // Ticket #931 Deflate64-specific control: one entry with a genuine
         // Deflate64-only stream (a 38,000-byte match distance from the 64 KiB
         // window). The stream is pinned 7-Zip output (provenance in the builder);
         // the content recipe is seed-independent so the pinned stream matches
         // the content at every seed.
         ["valid-deflate64-long-match"] = new(
-            "valid-deflate64-long-match", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-deflate64-long-match", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: new ArchiveTestRecipe(
             [
                 ArchiveTestRecipeEntry.File("long-match.bin", 42000, "deflate64"),
             ]),
-            Construction: ArchiveControlConstruction.PinnedDeflate64LongMatch),
+            Construction: ArchiveControlConstruction.PinnedDeflate64LongMatch, AdapterChecks: SevenZipExtract),
         ["valid-directories"] = new(
             "valid-directories", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -380,15 +390,15 @@ internal static class ArchiveTestCatalog
         // descriptor, one per descriptor form. Both round-trip with capable
         // decoders; the signature presence is the isolated parser decision.
         ["valid-zip64-descriptor-signature"] = new(
-            "valid-zip64-descriptor-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-zip64-descriptor-signature", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Zip64DescriptorControlRecipe,
-            Construction: ArchiveControlConstruction.Zip64Descriptor),
+            Construction: ArchiveControlConstruction.Zip64Descriptor, AdapterChecks: SevenZipExtract),
         ["valid-zip64-descriptor-no-signature"] = new(
-            "valid-zip64-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            "valid-zip64-descriptor-no-signature", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: Zip64DescriptorControlRecipe,
-            Construction: ArchiveControlConstruction.Zip64DescriptorNoSignature),
+            Construction: ArchiveControlConstruction.Zip64DescriptorNoSignature, AdapterChecks: SevenZipExtract),
         // Malformed or policy-sensitive cases: built from the named valid control at the
         // same Seed by applying the recorded mutation. The control recipe is repeated so
         // a fixture is reconstructible from controlCaseKey + mutations alone.
@@ -423,16 +433,16 @@ internal static class ArchiveTestCatalog
         ["multidisk-eocd-declared"] = MutatedDefinition(
             ArchiveTestMutationKind.MultidiskEocdDeclared,
             classification: PolicySensitiveClassification,
-            suites: [MalformedSuite, SecuritySuite]),
+            suites: [MalformedSuite, SecuritySuite], adapterChecks: SevenZipTestFailure),
         ["multidisk-central-entry-declared"] = MutatedDefinition(
             ArchiveTestMutationKind.MultidiskCentralEntryDeclared,
             classification: PolicySensitiveClassification,
-            suites: [MalformedSuite, SecuritySuite]),
-        ["eocd-entry-count-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.EocdEntryCountMismatch),
+            suites: [MalformedSuite, SecuritySuite], adapterChecks: SevenZipTestFailure),
+        ["eocd-entry-count-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.EocdEntryCountMismatch, adapterChecks: SevenZipTestFailure),
         ["zip64-eocd-entry-count-mismatch"] = MutatedDefinition(
-            ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, controlCaseKey: Zip64ControlCaseKey),
+            ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, controlCaseKey: Zip64ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["zip64-locator-disk-mismatch"] = MutatedDefinition(
-            ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey),
+            ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey, adapterChecks: SevenZipPresence),
         // Descriptor, extra-field, and encoding conflict matrix (ticket #934):
         // one Case Key isolates one parser decision; each mutates declarations
         // or flags only over a tiny physical Archive.
@@ -470,19 +480,19 @@ internal static class ArchiveTestCatalog
         ["encryption-flag-with-plaintext"] = MutatedDefinition(ArchiveTestMutationKind.EncryptionFlagWithPlaintext),
         ["overlapping-entry-ranges"] = MutatedDefinition(ArchiveTestMutationKind.OverlappingEntryRanges),
         ["bzip2-corrupt-block-magic"] = MutatedDefinition(
-            ArchiveTestMutationKind.Bzip2CorruptBlockMagic, controlCaseKey: Bzip2ControlCaseKey),
+            ArchiveTestMutationKind.Bzip2CorruptBlockMagic, controlCaseKey: Bzip2ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["bzip2-truncated-stream"] = MutatedDefinition(
-            ArchiveTestMutationKind.Bzip2TruncatedStream, controlCaseKey: Bzip2ControlCaseKey),
+            ArchiveTestMutationKind.Bzip2TruncatedStream, controlCaseKey: Bzip2ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["bzip2-wrong-crc"] = MutatedDefinition(
-            ArchiveTestMutationKind.Bzip2WrongCrc, controlCaseKey: Bzip2ControlCaseKey),
+            ArchiveTestMutationKind.Bzip2WrongCrc, controlCaseKey: Bzip2ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["deflate64-corrupt-stream"] = MutatedDefinition(
-            ArchiveTestMutationKind.Deflate64CorruptStream, controlCaseKey: Deflate64ControlCaseKey),
+            ArchiveTestMutationKind.Deflate64CorruptStream, controlCaseKey: Deflate64ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["deflate64-truncated-stream"] = MutatedDefinition(
-            ArchiveTestMutationKind.Deflate64TruncatedStream, controlCaseKey: Deflate64ControlCaseKey),
+            ArchiveTestMutationKind.Deflate64TruncatedStream, controlCaseKey: Deflate64ControlCaseKey, adapterChecks: SevenZipTestFailure),
         ["bzip2-high-ratio-bounded"] = new(
-            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
+            "bzip2-high-ratio-bounded", CaseRevision: 1, ExpectationRevision: 4, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
-            Recipe: HighRatioBzip2Recipe),
+            Recipe: HighRatioBzip2Recipe, AdapterChecks: SevenZipExtract),
         ["method-cross-deflate64-deflate"] = MutatedDefinition(
             ArchiveTestMutationKind.MethodCrossDeflate64Deflate, controlCaseKey: DeflateControlCaseKey),
         ["method-cross-bzip2-stored"] = MutatedDefinition(
@@ -496,20 +506,20 @@ internal static class ArchiveTestCatalog
             controlCaseKey: StoredControlCaseKey,
             suites: [MalformedSuite, SecuritySuite]),
         ["valid-mixed-methods"] = new(
-            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 3, Classification: "valid",
+            "valid-mixed-methods", CaseRevision: 1, ExpectationRevision: 4, Classification: "valid",
             Suites: [CompatibilitySuite],
-            Recipe: MixedMethodsRecipe),
+            Recipe: MixedMethodsRecipe, AdapterChecks: SevenZipExtract),
         // Ticket #935 one-bad-member cases over the mixed control: the Store
         // and Deflate siblings stay healthy while one member fails. Corruption
         // is malformed; a cleanly unsupported member is policy-sensitive,
         // housed like unsupported-method.
         ["mixed-methods-one-corrupt-member"] = MutatedDefinition(
-            ArchiveTestMutationKind.MixedMethodsOneCorruptMember, controlCaseKey: "valid-mixed-methods"),
+            ArchiveTestMutationKind.MixedMethodsOneCorruptMember, controlCaseKey: "valid-mixed-methods", adapterChecks: SevenZipMixedBadMember),
         ["mixed-methods-one-unsupported-member"] = MutatedDefinition(
             ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember,
             controlCaseKey: "valid-mixed-methods",
             classification: PolicySensitiveClassification,
-            suites: [MalformedSuite, SecuritySuite]),
+            suites: [MalformedSuite, SecuritySuite], adapterChecks: SevenZipMixedBadMember),
         ["deflate-invalid-btype"] = MutatedDefinition(
             ArchiveTestMutationKind.DeflateInvalidBtype, controlCaseKey: DeflateControlCaseKey),
         ["deflate-corrupt-huffman"] = MutatedDefinition(
@@ -654,12 +664,14 @@ internal static class ArchiveTestCatalog
         string controlCaseKey = StoredControlCaseKey,
         string classification = MalformedClassification,
         IReadOnlyList<string>? suites = null,
-        int expectationRevision = 2) => new(
-        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: expectationRevision, Classification: classification,
+        int expectationRevision = 2,
+        IReadOnlyList<ArchiveTestAdapterCheck>? adapterChecks = null) => new(
+        mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: expectationRevision + (adapterChecks is null ? 0 : 1), Classification: classification,
         Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
-        Mutations: [mutation]);
+        Mutations: [mutation],
+        AdapterChecks: adapterChecks);
 
     /// <summary>An ordered mutation chain (ticket #843): a finite, explicit combination
     /// over the stored control; each mutation consumes the previous result.</summary>

@@ -62,6 +62,12 @@ internal sealed record ArchiveTestLimits(
     [property: JsonPropertyName("jsonBytesBudget")] long JsonBytesBudget,
     [property: JsonPropertyName("deadlineSeconds")] int DeadlineSeconds);
 
+internal sealed record ArchiveTestAdapterCheck(
+    [property: JsonPropertyName("adapter")] string Adapter,
+    [property: JsonPropertyName("action")] string Action,
+    [property: JsonPropertyName("expectedOutcome")] string ExpectedOutcome,
+    [property: JsonPropertyName("entryNames")] IReadOnlyList<string>? EntryNames = null);
+
 internal sealed record ArchiveTestCase(
     [property: JsonPropertyName("schemaVersion")] int SchemaVersion,
     [property: JsonPropertyName("generatorContractVersion")] string GeneratorContractVersion,
@@ -76,7 +82,8 @@ internal sealed record ArchiveTestCase(
     [property: JsonPropertyName("entries")] IReadOnlyList<ArchiveTestEntry> Entries,
     [property: JsonPropertyName("mutations")] IReadOnlyList<ArchiveTestMutation> Mutations,
     [property: JsonPropertyName("expectations")] IReadOnlyList<ArchiveTestExpectation> Expectations,
-    [property: JsonPropertyName("limits")] ArchiveTestLimits Limits);
+    [property: JsonPropertyName("limits")] ArchiveTestLimits Limits,
+    [property: JsonPropertyName("adapterChecks")] IReadOnlyList<ArchiveTestAdapterCheck>? AdapterChecks = null);
 
 /// <summary>
 /// Semantic checks that the draft-07 schema cannot express (REQ-217): basename ↔ Fixture ID
@@ -319,6 +326,49 @@ internal static class ArchiveTestCaseSemantics
             if (expectation.AllowedOutcomes is null || expectation.AllowedOutcomes.Count == 0)
             {
                 errors.Add($"operation '{expectation.Operation}': allowedOutcomes must not be empty");
+            }
+        }
+
+        if (testCase.AdapterChecks is not null)
+        {
+            if (testCase.AdapterChecks.Count == 0)
+            {
+                errors.Add("adapterChecks must not be empty when present");
+            }
+
+            foreach (var check in testCase.AdapterChecks)
+            {
+                if (check is null)
+                {
+                    errors.Add("adapter check must not be null");
+                    continue;
+                }
+
+                if (check.Adapter != "7zip")
+                {
+                    errors.Add($"unknown adapter '{check.Adapter}'");
+                }
+
+                if ((check.Action, check.ExpectedOutcome) is not
+                    (("extract", "success") or ("test", "failure") or ("extract-entries", "success") or ("presence", "present")))
+                {
+                    errors.Add($"adapter action '{check.Action}' has invalid expectedOutcome '{check.ExpectedOutcome}'");
+                }
+
+                if (check.Action == "extract-entries")
+                {
+                    if (check.EntryNames is null || check.EntryNames.Count == 0
+                        || check.EntryNames.Any(string.IsNullOrEmpty)
+                        || check.EntryNames.Distinct(StringComparer.Ordinal).Count() != check.EntryNames.Count
+                        || check.EntryNames.Any(name => !testCase.Entries!.Any(entry => entry?.Kind == "file" && entry.ReadableName == name)))
+                    {
+                        errors.Add("extract-entries requires distinct, non-empty entryNames present in entries");
+                    }
+                }
+                else if (check.EntryNames is not null)
+                {
+                    errors.Add($"adapter action '{check.Action}' must not declare entryNames");
+                }
             }
         }
 

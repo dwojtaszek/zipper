@@ -201,7 +201,8 @@ internal static class ArchiveTestSuiteGenerator
                 EntryCount: artifact.Layout.EntryCount,
                 ExpandedBytesBudget: expandedBytes,
                 JsonBytesBudget: (int)Math.Min(ArchiveTestRequest.MaxSidecarBytes, int.MaxValue),
-                DeadlineSeconds: ArchiveTestCaseSemantics.MaxDeadlineSeconds));
+                DeadlineSeconds: ArchiveTestCaseSemantics.MaxDeadlineSeconds),
+            AdapterChecks: definition.AdapterChecks);
 
         var errors = ArchiveTestCaseSemantics.Validate(testCase);
         if (errors.Count > 0)

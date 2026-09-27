@@ -345,6 +345,84 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         Assert.Equal(3, expectationFile.ExpectationRevision);
     }
 
+    [Theory]
+    [InlineData("valid-bzip2", "extract", "success", 4)]
+    [InlineData("valid-deflate64", "extract", "success", 4)]
+    [InlineData("valid-deflate64-long-match", "extract", "success", 2)]
+    [InlineData("valid-mixed-methods", "extract", "success", 4)]
+    [InlineData("bzip2-high-ratio-bounded", "extract", "success", 4)]
+    [InlineData("valid-zip64-descriptor-signature", "extract", "success", 2)]
+    [InlineData("valid-zip64-descriptor-no-signature", "extract", "success", 2)]
+    [InlineData("bzip2-corrupt-block-magic", "test", "failure", 3)]
+    [InlineData("bzip2-truncated-stream", "test", "failure", 3)]
+    [InlineData("bzip2-wrong-crc", "test", "failure", 3)]
+    [InlineData("deflate64-corrupt-stream", "test", "failure", 3)]
+    [InlineData("deflate64-truncated-stream", "test", "failure", 3)]
+    [InlineData("multidisk-eocd-declared", "test", "failure", 3)]
+    [InlineData("multidisk-central-entry-declared", "test", "failure", 3)]
+    [InlineData("eocd-entry-count-mismatch", "test", "failure", 3)]
+    [InlineData("zip64-eocd-entry-count-mismatch", "test", "failure", 3)]
+    [InlineData("zip64-locator-disk-mismatch", "presence", "present", 3)]
+    public void BuildExpectationFile_AdapterCase_DeclaresExpectedAction(string caseKey, string action, string outcome, int revision)
+    {
+        var definition = ArchiveTestCatalog.GetCase(caseKey);
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+        using var json = JsonDocument.Parse(ArchiveTestJson.SerializeToUtf8Bytes(testCase));
+        var checks = json.RootElement.GetProperty("adapterChecks").EnumerateArray().ToList();
+
+        var check = Assert.Single(checks);
+        Assert.Equal("7zip", check.GetProperty("adapter").GetString());
+        Assert.Equal(action, check.GetProperty("action").GetString());
+        Assert.Equal(outcome, check.GetProperty("expectedOutcome").GetString());
+        Assert.False(check.TryGetProperty("entryNames", out _));
+        Assert.Equal(1, testCase.CaseRevision);
+        Assert.Equal(revision, testCase.ExpectationRevision);
+        Assert.Equal("1", testCase.GeneratorContractVersion);
+    }
+
+    [Theory]
+    [InlineData("mixed-methods-one-corrupt-member")]
+    [InlineData("mixed-methods-one-unsupported-member")]
+    public void BuildExpectationFile_MixedBadMember_DeclaresTestAndHealthyEntryExtraction(string caseKey)
+    {
+        var definition = ArchiveTestCatalog.GetCase(caseKey);
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        Assert.Collection(testCase.AdapterChecks!,
+            check =>
+            {
+                Assert.Equal(("7zip", "test", "failure"), (check.Adapter, check.Action, check.ExpectedOutcome));
+                Assert.Null(check.EntryNames);
+            },
+            check =>
+            {
+                Assert.Equal(("7zip", "extract-entries", "success"), (check.Adapter, check.Action, check.ExpectedOutcome));
+                Assert.Equal(["a.txt", "b.bin"], check.EntryNames);
+            });
+        Assert.Equal(3, testCase.ExpectationRevision);
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
+    public void BuildExpectationFile_UnselectedCase_PreservesOptionalFieldAndIdentity()
+    {
+        var definition = ArchiveTestCatalog.GetCase("valid-stored");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+        using var json = JsonDocument.Parse(ArchiveTestJson.SerializeToUtf8Bytes(testCase));
+
+        Assert.False(json.RootElement.TryGetProperty("adapterChecks", out _));
+        Assert.Equal(2, testCase.ExpectationRevision);
+        Assert.Equal(1, testCase.CaseRevision);
+        Assert.Equal("1", testCase.GeneratorContractVersion);
+        Assert.Equal(
+            ArchiveTestIdentity.ComputeFixtureId("1", "valid-stored", 1, 2, 42, artifact.ArchiveSha256),
+            testCase.FixtureId);
+    }
+
     /// <summary>
     /// A record that allows a stage-checked outcome must declare a non-empty failure-stage set.
     /// Enumerating the whole catalogue here catches that class at <c>dotnet test</c> speed.

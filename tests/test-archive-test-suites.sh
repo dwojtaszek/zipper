@@ -34,7 +34,7 @@ function check() {
   if [[ "$code" -eq 0 ]]; then
     echo -e "\e[42m[ SUCCESS ]\e[0m $message"
   else
-    echo -e "\e[41m[ ERROR ]\e[0m $message"
+    echo -e "\e[41m[ ERROR ]\e[0m $message" >&2
     failures=$((failures + 1))
   fi
 }
@@ -424,10 +424,8 @@ else
   check 1 "verifier self-test module must pass"
 fi
 
-# 13. Full-codec verification profile via 7-Zip (ticket #930): valid coded
-#     controls must extract with matching content hashes; coded-corruption
-#     fixtures must be rejected. Tested with `t` (no extraction) for malformed
-#     fixtures so malformed bytes are never extracted. Missing 7-Zip fails.
+# 13. Run the 7-Zip actions declared by each Expectation File. Malformed
+#     Archives are tested with `t`, never extracted as a whole. Missing 7-Zip fails.
 SEVEN_ZIP=""
 if command -v 7zz >/dev/null 2>&1; then
   SEVEN_ZIP="7zz"
@@ -443,99 +441,15 @@ else
   else
     check 0 "7-Zip full-codec adapter present: $SEVEN_VERSION"
   fi
-  if python3 - "$ALL_OUT" "$SEVEN_ZIP" <<'PYEOF' >/dev/null 2>&1; then
-import glob, hashlib, json, os, subprocess, sys, tempfile
-out, seven = sys.argv[1:3]
-for key in ("valid-bzip2", "valid-deflate64", "valid-deflate64-long-match", "valid-mixed-methods", "bzip2-high-ratio-bounded", "valid-zip64-descriptor-signature", "valid-zip64-descriptor-no-signature"):
-    jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
-    d = json.load(open(jp))
-    zp = jp[:-5] + ".zip"
-    files = [e for e in d["entries"] if e["kind"] == "file"]
-    if not files:
-        sys.exit(f"no file entries for {key}")
-    with tempfile.TemporaryDirectory() as td:
-        r = subprocess.run([seven, "x", zp, f"-o{td}", "-y"], capture_output=True)
-        if r.returncode != 0:
-            sys.exit(f"extract failed for {key}")
-        for e in files:
-            fp = os.path.join(td, e["readableName"])
-            if not os.path.isfile(fp):
-                sys.exit(f"missing extracted entry for {key}")
-            h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
-            if h != e["contentSha256"]:
-                sys.exit(f"hash mismatch for {key}")
-PYEOF
-    check 0 "7-Zip extracted valid coded controls with matching content hashes"
+  if python3 tests/archive-tests/test_verify_7zip_adapter.py; then
+    check 0 "7-Zip adapter self-test passed"
   else
-    check 1 "7-Zip must extract valid coded controls with matching hashes"
+    check 1 "7-Zip adapter self-test must pass"
   fi
-  CORRUPT_OK=1
-  for key in bzip2-corrupt-block-magic bzip2-truncated-stream bzip2-wrong-crc deflate64-corrupt-stream deflate64-truncated-stream; do
-    CZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]==sys.argv[2]), ""))' "$ALL_OUT" "$key" || true)
-    if [[ -z "$CZIP" ]] || [[ ! -f "$CZIP" ]]; then
-      CORRUPT_OK=0
-    elif "$SEVEN_ZIP" t "$CZIP" >/dev/null 2>&1; then
-      CORRUPT_OK=0
-    fi
-  done
-  if [[ "$CORRUPT_OK" -eq 1 ]]; then
-    check 0 "7-Zip rejected all #900 coded-corruption fixtures"
+  if python3 tests/archive-tests/verify-7zip-adapter.py "$ALL_OUT" "$SEVEN_ZIP"; then
+    check 0 "7-Zip verified all declared adapter checks"
   else
-    check 1 "7-Zip must reject all #900 coded-corruption fixtures"
-  fi
-  # Ticket #933: split-archive declarations and count disagreements are
-  # malformed/unsupported declarations tested with `t` (never extracted).
-  # Four are rejected by 7-Zip; the locator total-disks declaration is
-  # ignored by 7-Zip (while Python's reader refuses it), so only its
-  # presence is asserted, not a rejection.
-  DISPUTE_OK=1
-  for key in multidisk-eocd-declared multidisk-central-entry-declared eocd-entry-count-mismatch zip64-eocd-entry-count-mismatch; do
-    DZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]==sys.argv[2]), ""))' "$ALL_OUT" "$key" || true)
-    if [[ -z "$DZIP" ]] || [[ ! -f "$DZIP" ]]; then
-      DISPUTE_OK=0
-    elif "$SEVEN_ZIP" t "$DZIP" >/dev/null 2>&1; then
-      DISPUTE_OK=0
-    fi
-  done
-  LOCATOR_ZIP=$(python3 -c 'import glob,json,sys; print(next((p[:-5]+".zip" for p in glob.glob(sys.argv[1]+"/*.json") if json.load(open(p))["caseKey"]=="zip64-locator-disk-mismatch"), ""))' "$ALL_OUT" || true)
-  if [[ -z "$LOCATOR_ZIP" ]] || [[ ! -f "$LOCATOR_ZIP" ]]; then
-    DISPUTE_OK=0
-  fi
-  if [[ "$DISPUTE_OK" -eq 1 ]]; then
-    check 0 "7-Zip rejected the #933 spanning and count-disagreement fixtures"
-  else
-    check 1 "7-Zip must reject the #933 spanning and count-disagreement fixtures"
-  fi
-  # Ticket #935: mixed one-bad-member archives must fail as a whole (`t`
-  # rejects) while the healthy Store and Deflate siblings extract by name
-  # with matching hashes — the bad member's bytes are never decoded.
-  if python3 - "$ALL_OUT" "$SEVEN_ZIP" <<'PYEOF' >/dev/null 2>&1; then
-import glob, hashlib, json, os, subprocess, sys, tempfile
-out, seven = sys.argv[1:3]
-for key in ("mixed-methods-one-corrupt-member", "mixed-methods-one-unsupported-member"):
-    jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
-    d = json.load(open(jp))
-    zp = jp[:-5] + ".zip"
-    healthy = [e for e in d["entries"] if e["kind"] == "file" and e["readableName"] in ("a.txt", "b.bin")]
-    if len(healthy) != 2:
-        sys.exit(f"expected healthy siblings for {key}")
-    if subprocess.run([seven, "t", zp], capture_output=True).returncode == 0:
-        sys.exit(f"one-bad-member Archive must not verify as success: {key}")
-    with tempfile.TemporaryDirectory() as td:
-        names = [e["readableName"] for e in healthy]
-        r = subprocess.run([seven, "x", zp, f"-o{td}", "-y", *names], capture_output=True)
-        if r.returncode != 0:
-            sys.exit(f"healthy sibling extraction failed for {key}")
-        for e in healthy:
-            fp = os.path.join(td, e["readableName"])
-            if not os.path.isfile(fp):
-                sys.exit(f"healthy sibling missing for {key}")
-            if hashlib.sha256(open(fp, "rb").read()).hexdigest() != e["contentSha256"]:
-                sys.exit(f"healthy sibling hash mismatch for {key}")
-PYEOF
-    check 0 "7-Zip isolates the bad member while healthy siblings match"
-  else
-    check 1 "7-Zip must isolate the bad member while healthy siblings match"
+    check 1 "7-Zip must satisfy every declared adapter check"
   fi
 fi
 
@@ -555,7 +469,7 @@ else
 fi
 
 if [[ "$failures" -ne 0 ]]; then
-  echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors."
+  echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors." >&2
   exit 1
 fi
 

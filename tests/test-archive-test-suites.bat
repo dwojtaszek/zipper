@@ -523,9 +523,8 @@ if errorlevel 1 (
     call :pass "verifier self-test module passed"
 )
 
-REM 13. Full-codec verification profile via 7-Zip (ticket #930): valid coded
-REM     controls must extract with matching content hashes; coded-corruption
-REM     fixtures must be rejected via `t` (no extraction). Missing 7-Zip fails.
+REM 13. Run the 7-Zip actions declared by each Expectation File. Malformed
+REM     Archives are tested with `t`, never extracted as a whole. Missing 7-Zip fails.
 set "SEVEN_ZIP="
 where 7zz >nul 2>&1
 if not errorlevel 1 set "SEVEN_ZIP=7zz"
@@ -537,107 +536,18 @@ if not defined SEVEN_ZIP (
     call :fail "7-Zip (7zz/7z) must be installed for full-codec verification"
 ) else (
     call :pass "7-Zip full-codec adapter present"
-    set "FULLCODEC_PY=%TEMP%\atc-fullcodec-%RANDOM%.py"
-    > "!FULLCODEC_PY!" echo import glob, hashlib, json, os, subprocess, sys, tempfile
-    >> "!FULLCODEC_PY!" echo out, seven = sys.argv[1:3]
-    >> "!FULLCODEC_PY!" echo for key in ("valid-bzip2", "valid-deflate64", "valid-deflate64-long-match", "valid-mixed-methods", "bzip2-high-ratio-bounded", "valid-zip64-descriptor-signature", "valid-zip64-descriptor-no-signature"):
-    >> "!FULLCODEC_PY!" echo     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
-    >> "!FULLCODEC_PY!" echo     d = json.load(open(jp))
-    >> "!FULLCODEC_PY!" echo     zp = jp[:-5] + ".zip"
-    >> "!FULLCODEC_PY!" echo     files = [e for e in d["entries"] if e["kind"] == "file"]
-    >> "!FULLCODEC_PY!" echo     if not files: sys.exit(f"no file entries for {key}")
-    >> "!FULLCODEC_PY!" echo     with tempfile.TemporaryDirectory() as td:
-    >> "!FULLCODEC_PY!" echo         r = subprocess.run([seven, "x", zp, f"-o{td}", "-y"], capture_output=True)
-    >> "!FULLCODEC_PY!" echo         if r.returncode != 0: sys.exit(f"extract failed for {key}")
-    >> "!FULLCODEC_PY!" echo         for e in files:
-    >> "!FULLCODEC_PY!" echo             fp = os.path.join(td, e["readableName"])
-    >> "!FULLCODEC_PY!" echo             if not os.path.isfile(fp): sys.exit(f"missing extracted entry for {key}")
-    >> "!FULLCODEC_PY!" echo             h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
-    >> "!FULLCODEC_PY!" echo             if h != e["contentSha256"]: sys.exit(f"hash mismatch for {key}")
-    %PYCMD% "!FULLCODEC_PY!" "%ALL_OUT%" "!SEVEN_ZIP!" >nul 2>&1
+    %PYCMD% tests\archive-tests\test_verify_7zip_adapter.py
     if errorlevel 1 (
-        call :fail "7-Zip must extract valid coded controls with matching hashes"
+        call :fail "7-Zip adapter self-test must pass"
     ) else (
-        call :pass "7-Zip extracted valid coded controls with matching content hashes"
+        call :pass "7-Zip adapter self-test passed"
     )
-    del "!FULLCODEC_PY!" >nul 2>&1
-    set "CORRUPT_OK=1"
-    for %%K in (bzip2-corrupt-block-magic bzip2-truncated-stream bzip2-wrong-crc deflate64-corrupt-stream deflate64-truncated-stream) do (
-        set "CK_ZIP="
-        for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']==sys.argv[2]), ''))" "%ALL_OUT%" "%%K" 2^>nul') do set "CK_ZIP=%%P"
-        if not defined CK_ZIP (
-            set "CORRUPT_OK=0"
-        ) else (
-            if not exist "!CK_ZIP!" (
-                set "CORRUPT_OK=0"
-            ) else (
-                "!SEVEN_ZIP!" t "!CK_ZIP!" >nul 2>&1
-                if not errorlevel 1 set "CORRUPT_OK=0"
-            )
-        )
-    )
-    if !CORRUPT_OK! EQU 1 (
-        call :pass "7-Zip rejected all #900 coded-corruption fixtures"
-    ) else (
-        call :fail "7-Zip must reject all #900 coded-corruption fixtures"
-    )
-    REM Ticket #933: spanning declarations and count disagreements are tested
-    REM with `t` (never extracted). Four are rejected by 7-Zip; the locator
-    REM total-disks declaration is ignored by 7-Zip, so only its presence is
-    REM asserted, not a rejection.
-    set "DISPUTE_OK=1"
-    for %%K in (multidisk-eocd-declared multidisk-central-entry-declared eocd-entry-count-mismatch zip64-eocd-entry-count-mismatch) do (
-        set "D_ZIP="
-        for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']==sys.argv[2]), ''))" "%ALL_OUT%" "%%K" 2^>nul') do set "D_ZIP=%%P"
-        if not defined D_ZIP (
-            set "DISPUTE_OK=0"
-        ) else (
-            if not exist "!D_ZIP!" (
-                set "DISPUTE_OK=0"
-            ) else (
-                "!SEVEN_ZIP!" t "!D_ZIP!" >nul 2>&1
-                if not errorlevel 1 set "DISPUTE_OK=0"
-            )
-        )
-    )
-    set "LOC_ZIP="
-    for /f "delims=" %%P in ('%PYCMD% -c "import glob,json,sys; print(next((p[:-5]+'.zip' for p in glob.glob(sys.argv[1]+'/*.json') if json.load(open(p))['caseKey']=='zip64-locator-disk-mismatch'), ''))" "%ALL_OUT%" 2^>nul') do set "LOC_ZIP=%%P"
-    if not defined LOC_ZIP set "DISPUTE_OK=0"
-    if defined LOC_ZIP if not exist "!LOC_ZIP!" set "DISPUTE_OK=0"
-    if !DISPUTE_OK! EQU 1 (
-        call :pass "7-Zip rejected the #933 spanning and count-disagreement fixtures"
-    ) else (
-        call :fail "7-Zip must reject the #933 spanning and count-disagreement fixtures"
-    )
-    REM Ticket #935: mixed one-bad-member archives must fail as a whole (`t`
-    REM rejects) while the healthy Store and Deflate siblings extract by name
-    REM with matching hashes — the bad member's bytes are never decoded.
-    set "MIXED_PY=%TEMP%\atc-mixed-%RANDOM%.py"
-    > "!MIXED_PY!" echo import glob, hashlib, json, os, subprocess, sys, tempfile
-    >> "!MIXED_PY!" echo out, seven = sys.argv[1:3]
-    >> "!MIXED_PY!" echo for key in ("mixed-methods-one-corrupt-member", "mixed-methods-one-unsupported-member"):
-    >> "!MIXED_PY!" echo     jp = next(p for p in glob.glob(os.path.join(out, "*.json")) if json.load(open(p))["caseKey"] == key)
-    >> "!MIXED_PY!" echo     d = json.load(open(jp))
-    >> "!MIXED_PY!" echo     zp = jp[:-5] + ".zip"
-    >> "!MIXED_PY!" echo     healthy = [e for e in d["entries"] if e["kind"] == "file" and e["readableName"] in ("a.txt", "b.bin")]
-    >> "!MIXED_PY!" echo     if len(healthy) != 2: sys.exit(f"expected healthy siblings for {key}")
-    >> "!MIXED_PY!" echo     if subprocess.run([seven, "t", zp], capture_output=True).returncode == 0: sys.exit(f"one-bad-member Archive must not verify as success: {key}")
-    >> "!MIXED_PY!" echo     with tempfile.TemporaryDirectory() as td:
-    >> "!MIXED_PY!" echo         names = [e["readableName"] for e in healthy]
-    >> "!MIXED_PY!" echo         r = subprocess.run([seven, "x", zp, f"-o{td}", "-y", *names], capture_output=True)
-    >> "!MIXED_PY!" echo         if r.returncode != 0: sys.exit(f"healthy sibling extraction failed for {key}")
-    >> "!MIXED_PY!" echo         for e in healthy:
-    >> "!MIXED_PY!" echo             fp = os.path.join(td, e["readableName"])
-    >> "!MIXED_PY!" echo             if not os.path.isfile(fp): sys.exit(f"healthy sibling missing for {key}")
-    >> "!MIXED_PY!" echo             h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
-    >> "!MIXED_PY!" echo             if h != e["contentSha256"]: sys.exit(f"healthy sibling hash mismatch for {key}")
-    %PYCMD% "!MIXED_PY!" "%ALL_OUT%" "!SEVEN_ZIP!" >nul 2>&1
+    %PYCMD% tests\archive-tests\verify-7zip-adapter.py "%ALL_OUT%" "!SEVEN_ZIP!"
     if errorlevel 1 (
-        call :fail "7-Zip must isolate the bad member while healthy siblings match"
+        call :fail "7-Zip must satisfy every declared adapter check"
     ) else (
-        call :pass "7-Zip isolates the bad member while healthy siblings match"
+        call :pass "7-Zip verified all declared adapter checks"
     )
-    del "!MIXED_PY!" >nul 2>&1
 )
 
 REM 14. Offline verification (ticket #932): with an empty npm cache and an
