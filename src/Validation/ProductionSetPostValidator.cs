@@ -105,14 +105,15 @@ public class ValidationReportFinding
 
 internal sealed class ProductionSetPostValidator
 {
+    internal const string DatRelativePath = "DATA/loadfile.dat";
+    internal const string OptRelativePath = "DATA/loadfile.opt";
+
     public static ProductionSetValidationReport Validate(string productionPath, FileGenerationRequest request)
     {
         var state = new ValidationState
         {
             Request = request,
             ProductionPath = productionPath,
-            DatPath = Path.Combine(productionPath, "DATA", "loadfile.dat"),
-            OptPath = Path.Combine(productionPath, "DATA", "loadfile.opt"),
             SkipNativePathValidation = string.Equals(request.Production.WithheldNativePolicy, "replace-with-placeholder", StringComparison.OrdinalIgnoreCase),
         };
 
@@ -146,17 +147,18 @@ internal sealed class ProductionSetPostValidator
 
         public required FileGenerationRequest Request { get; init; }
         public required string ProductionPath { get; init; }
-        public required string DatPath { get; init; }
-        public required string OptPath { get; init; }
         public required bool SkipNativePathValidation { get; init; }
+
+        public string DatPath => Path.Combine(ProductionPath, DatRelativePath);
+        public string OptPath => Path.Combine(ProductionPath, OptRelativePath);
 
         // --- Output: the report being accumulated as the steps run ---
         public ProductionSetValidationReport Report { get; } = new();
         public List<ValidationReportFinding> Findings => Report.Findings;
 
         // --- Which Load File a finding is attributed to ---
-        public string DatRelPath { get; } = "DATA/loadfile.dat";
-        public string OptRelPath { get; } = "DATA/loadfile.opt";
+        public string DatRelPath => DatRelativePath;
+        public string OptRelPath => OptRelativePath;
 
         // --- Row counts, reported as checkedLoadFileRowCounts ---
         public int DatRowsChecked { get; set; }

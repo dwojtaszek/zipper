@@ -87,8 +87,8 @@ internal static class ProductionManifestWriter
             },
             LoadFiles = new ProductionLoadFiles
             {
-                Dat = "DATA/loadfile.dat",
-                Opt = "DATA/loadfile.opt",
+                Dat = Validation.ProductionSetPostValidator.DatRelativePath,
+                Opt = Validation.ProductionSetPostValidator.OptRelativePath,
             },
             Settings = new ProductionSettings
             {
