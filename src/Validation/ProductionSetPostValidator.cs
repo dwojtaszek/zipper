@@ -81,6 +81,26 @@ public class ValidationReportFinding
 
     [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
+
+    public static ValidationReportFinding Error(string code, string? path, string message, long? line = null) =>
+        new()
+        {
+            Code = code,
+            Severity = "error",
+            Path = path,
+            Line = line,
+            Message = message,
+        };
+
+    public static ValidationReportFinding Warning(string code, string? path, string message, long? line = null) =>
+        new()
+        {
+            Code = code,
+            Severity = "warning",
+            Path = path,
+            Line = line,
+            Message = message,
+        };
 }
 
 internal sealed class ProductionSetPostValidator
@@ -211,14 +231,11 @@ internal sealed class ProductionSetPostValidator
         var fullPath = Path.Combine(state.ProductionPath, reference.ReferencedPath.Replace('\\', '/'));
         if (!File.Exists(fullPath))
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "PathExistence",
-                Severity = "error",
-                Path = reference.RelPath,
-                Line = reference.Line,
-                Message = $"Referenced {reference.KindLabel} file '{reference.ReferencedPath}' does not exist."
-            });
+            state.Findings.Add(ValidationReportFinding.Error(
+                "PathExistence",
+                reference.RelPath,
+                $"Referenced {reference.KindLabel} file '{reference.ReferencedPath}' does not exist.",
+                reference.Line));
         }
     }
 
@@ -227,13 +244,7 @@ internal sealed class ProductionSetPostValidator
         // 1. Verify DAT load file existence and contents
         if (!File.Exists(state.DatPath))
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "PathExistence",
-                Severity = "error",
-                Path = state.DatRelPath,
-                Message = "DAT load file does not exist."
-            });
+            state.Findings.Add(ValidationReportFinding.Error("PathExistence", state.DatRelPath, "DAT load file does not exist."));
         }
         else
         {
@@ -273,14 +284,11 @@ internal sealed class ProductionSetPostValidator
     {
         if (fields.Count != headerCount)
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "ColumnCount",
-                Severity = "error",
-                Path = state.DatRelPath,
-                Line = lineNumber,
-                Message = $"Expected {headerCount} columns, got {fields.Count} on line {lineNumber}"
-            });
+            state.Findings.Add(ValidationReportFinding.Error(
+                "ColumnCount",
+                state.DatRelPath,
+                $"Expected {headerCount} columns, got {fields.Count} on line {lineNumber}",
+                lineNumber));
         }
 
         ValidateDatDocId(state, columns.DocId, fields, lineNumber);
@@ -303,14 +311,11 @@ internal sealed class ProductionSetPostValidator
             {
                 if (!state.SeenDocIds.Add(docId))
                 {
-                    state.Findings.Add(new ValidationReportFinding
-                    {
-                        Code = "UniqueId",
-                        Severity = "error",
-                        Path = state.DatRelPath,
-                        Line = lineNumber,
-                        Message = $"Duplicate DOCID: '{docId}'"
-                    });
+                    state.Findings.Add(ValidationReportFinding.Error(
+                        "UniqueId",
+                        state.DatRelPath,
+                        $"Duplicate DOCID: '{docId}'",
+                        lineNumber));
                 }
             }
         }
@@ -327,14 +332,11 @@ internal sealed class ProductionSetPostValidator
             {
                 if (!state.SeenBatesNumbers.Add(batesVal))
                 {
-                    state.Findings.Add(new ValidationReportFinding
-                    {
-                        Code = "UniqueId",
-                        Severity = "error",
-                        Path = state.DatRelPath,
-                        Line = lineNumber,
-                        Message = $"Duplicate Bates Number: '{batesVal}'"
-                    });
+                    state.Findings.Add(ValidationReportFinding.Error(
+                        "UniqueId",
+                        state.DatRelPath,
+                        $"Duplicate Bates Number: '{batesVal}'",
+                        lineNumber));
                 }
             }
         }
@@ -352,14 +354,11 @@ internal sealed class ProductionSetPostValidator
                 var parentDocId = fields[columns.ParentId];
                 if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
                 {
-                    state.Findings.Add(new ValidationReportFinding
-                    {
-                        Code = "BatesConsistency",
-                        Severity = "error",
-                        Path = state.DatRelPath,
-                        Line = lineNumber,
-                        Message = $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'"
-                    });
+                    state.Findings.Add(ValidationReportFinding.Error(
+                        "BatesConsistency",
+                        state.DatRelPath,
+                        $"Child Bates number '{batesVal}' does not start with parent Doc ID '{parentDocId}'",
+                        lineNumber));
                 }
             }
         }
@@ -412,14 +411,11 @@ internal sealed class ProductionSetPostValidator
 
                     if (!File.Exists(pageOnePath))
                     {
-                        state.Findings.Add(new ValidationReportFinding
-                        {
-                            Code = "PathExistence",
-                            Severity = "error",
-                            Path = state.DatRelPath,
-                            Line = lineNumber,
-                            Message = $"Referenced image file '{imagePath}' does not exist."
-                        });
+                        state.Findings.Add(ValidationReportFinding.Error(
+                            "PathExistence",
+                            state.DatRelPath,
+                            $"Referenced image file '{imagePath}' does not exist.",
+                            lineNumber));
                     }
                 }
             }
@@ -449,14 +445,11 @@ internal sealed class ProductionSetPostValidator
                 (!string.Equals(withheldVal, "YES", StringComparison.OrdinalIgnoreCase) &&
                  !string.Equals(withheldVal, "NO", StringComparison.OrdinalIgnoreCase)))
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "InvalidValue",
-                    Severity = "error",
-                    Path = state.DatRelPath,
-                    Line = lineNumber,
-                    Message = $"NATIVE_WITHHELD must be 'YES' or 'NO', got '{withheldVal}'"
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "InvalidValue",
+                    state.DatRelPath,
+                    $"NATIVE_WITHHELD must be 'YES' or 'NO', got '{withheldVal}'",
+                    lineNumber));
             }
         }
     }
@@ -494,13 +487,10 @@ internal sealed class ProductionSetPostValidator
                     else
                     {
                         // Present but not an object (e.g. hand-edited): report rather than silently skipping.
-                        state.Findings.Add(new ValidationReportFinding
-                        {
-                            Code = "MetadataAzureConstraint",
-                            Severity = "error",
-                            Path = "_manifest.json",
-                            Message = $"Manifest 'metadata' must be an object of string key/value pairs, but it is a {metadataElem.ValueKind}."
-                        });
+                        state.Findings.Add(ValidationReportFinding.Error(
+                            "MetadataAzureConstraint",
+                            "_manifest.json",
+                            $"Manifest 'metadata' must be an object of string key/value pairs, but it is a {metadataElem.ValueKind}."));
                     }
                 }
 
@@ -508,35 +498,26 @@ internal sealed class ProductionSetPostValidator
                 {
                     if (!string.IsNullOrEmpty(state.ManifestStart) && !string.Equals(state.ParentBatesList[0], state.ManifestStart, StringComparison.Ordinal))
                     {
-                        state.Findings.Add(new ValidationReportFinding
-                        {
-                            Code = "BatesConsistency",
-                            Severity = "error",
-                            Path = state.DatRelPath,
-                            Message = $"DAT first Bates number '{state.ParentBatesList[0]}' does not match manifest start '{state.ManifestStart}'"
-                        });
+                        state.Findings.Add(ValidationReportFinding.Error(
+                            "BatesConsistency",
+                            state.DatRelPath,
+                            $"DAT first Bates number '{state.ParentBatesList[0]}' does not match manifest start '{state.ManifestStart}'"));
                     }
                     if (!string.IsNullOrEmpty(state.ManifestEnd) && !string.Equals(state.ParentBatesList[^1], state.ManifestEnd, StringComparison.Ordinal))
                     {
-                        state.Findings.Add(new ValidationReportFinding
-                        {
-                            Code = "BatesConsistency",
-                            Severity = "error",
-                            Path = state.DatRelPath,
-                            Message = $"DAT last Bates number '{state.ParentBatesList[^1]}' does not match manifest end '{state.ManifestEnd}'"
-                        });
+                        state.Findings.Add(ValidationReportFinding.Error(
+                            "BatesConsistency",
+                            state.DatRelPath,
+                            $"DAT last Bates number '{state.ParentBatesList[^1]}' does not match manifest end '{state.ManifestEnd}'"));
                     }
                 }
             }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or System.IO.IOException)
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "ManifestSyntax",
-                    Severity = "error",
-                    Path = "_manifest.json",
-                    Message = $"Manifest file '_manifest.json' could not be read or parsed: {ex.Message}"
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "ManifestSyntax",
+                    "_manifest.json",
+                    $"Manifest file '_manifest.json' could not be read or parsed: {ex.Message}"));
             }
         }
     }
@@ -580,24 +561,18 @@ internal sealed class ProductionSetPostValidator
         {
             if (!IsAzureSafeKey(pair.Name))
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "MetadataAzureConstraint",
-                    Severity = "error",
-                    Path = "_manifest.json",
-                    Message = $"Metadata key '{pair.Name}' violates the Azure Blob naming rule: keys must start with a letter or underscore and contain only ASCII letters, digits, or underscores."
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "MetadataAzureConstraint",
+                    "_manifest.json",
+                    $"Metadata key '{pair.Name}' violates the Azure Blob naming rule: keys must start with a letter or underscore and contain only ASCII letters, digits, or underscores."));
             }
 
             if (pair.Value.ValueKind != System.Text.Json.JsonValueKind.String)
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "MetadataAzureConstraint",
-                    Severity = "error",
-                    Path = "_manifest.json",
-                    Message = $"Metadata value for '{pair.Name}' must be a string."
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "MetadataAzureConstraint",
+                    "_manifest.json",
+                    $"Metadata value for '{pair.Name}' must be a string."));
 
                 // A non-string value is reported above, but its key still counts toward the
                 // budget — the value simply measures as zero bytes.
@@ -608,13 +583,10 @@ internal sealed class ProductionSetPostValidator
             var value = pair.Value.GetString() ?? string.Empty;
             if (value.Any(c => c != '\t' && (c < '\u0020' || c > '\u007e')))
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "MetadataAzureConstraint",
-                    Severity = "error",
-                    Path = "_manifest.json",
-                    Message = $"Metadata value for '{pair.Name}' contains a character outside the allowed Azure Blob metadata set: tab (U+0009) or U+0020 through U+007E."
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "MetadataAzureConstraint",
+                    "_manifest.json",
+                    $"Metadata value for '{pair.Name}' contains a character outside the allowed Azure Blob metadata set: tab (U+0009) or U+0020 through U+007E."));
             }
 
             totalBytes += ProductionMetadataBudget.PairBytes(pair.Name, value);
@@ -622,17 +594,14 @@ internal sealed class ProductionSetPostValidator
 
         if (totalBytes > ProductionMetadataBudget.MaxBytes)
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "MetadataAzureConstraint",
-                Severity = "error",
-                Path = "_manifest.json",
-                Message = string.Format(
+            state.Findings.Add(ValidationReportFinding.Error(
+                "MetadataAzureConstraint",
+                "_manifest.json",
+                string.Format(
                     System.Globalization.CultureInfo.InvariantCulture,
                     "Metadata block is {0} bytes across all keys and values; the Azure Blob metadata budget is {1:N0} bytes.",
                     totalBytes,
-                    ProductionMetadataBudget.MaxBytes)
-            });
+                    ProductionMetadataBudget.MaxBytes)));
         }
     }
 
@@ -649,13 +618,10 @@ internal sealed class ProductionSetPostValidator
                 var actualBates = state.ParentBatesList[i];
                 if (!string.Equals(actualBates, expectedBates, StringComparison.Ordinal))
                 {
-                    state.Findings.Add(new ValidationReportFinding
-                    {
-                        Code = "BatesConsistency",
-                        Severity = "error",
-                        Path = state.DatRelPath,
-                        Message = $"Bates range inconsistency: expected '{expectedBates}' at parent index {i}, but got '{actualBates}'"
-                    });
+                    state.Findings.Add(ValidationReportFinding.Error(
+                        "BatesConsistency",
+                        state.DatRelPath,
+                        $"Bates range inconsistency: expected '{expectedBates}' at parent index {i}, but got '{actualBates}'"));
                 }
             }
         }
@@ -666,13 +632,7 @@ internal sealed class ProductionSetPostValidator
         // 2. Verify OPT load file existence and contents
         if (!File.Exists(state.OptPath))
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "PathExistence",
-                Severity = "error",
-                Path = state.OptRelPath,
-                Message = "OPT load file does not exist."
-            });
+            state.Findings.Add(ValidationReportFinding.Error("PathExistence", state.OptRelPath, "OPT load file does not exist."));
         }
         else
         {
@@ -694,23 +654,17 @@ internal sealed class ProductionSetPostValidator
             // OPT Bates boundaries consistency with manifest
             if (!string.IsNullOrEmpty(firstOptBates) && !string.IsNullOrEmpty(state.ManifestStart) && !firstOptBates.StartsWith(state.ManifestStart, StringComparison.Ordinal))
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "BatesConsistency",
-                    Severity = "error",
-                    Path = state.OptRelPath,
-                    Message = $"OPT first Bates number '{firstOptBates}' does not match manifest start '{state.ManifestStart}'"
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "BatesConsistency",
+                    state.OptRelPath,
+                    $"OPT first Bates number '{firstOptBates}' does not match manifest start '{state.ManifestStart}'"));
             }
             if (!string.IsNullOrEmpty(lastOptBates) && !string.IsNullOrEmpty(state.ManifestEnd) && !lastOptBates.StartsWith(state.ManifestEnd, StringComparison.Ordinal))
             {
-                state.Findings.Add(new ValidationReportFinding
-                {
-                    Code = "BatesConsistency",
-                    Severity = "error",
-                    Path = state.OptRelPath,
-                    Message = $"OPT last Bates number '{lastOptBates}' does not match manifest end '{state.ManifestEnd}'"
-                });
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "BatesConsistency",
+                    state.OptRelPath,
+                    $"OPT last Bates number '{lastOptBates}' does not match manifest end '{state.ManifestEnd}'"));
             }
         }
     }
@@ -719,14 +673,11 @@ internal sealed class ProductionSetPostValidator
     {
         if (columns.Length != 7)
         {
-            state.Findings.Add(new ValidationReportFinding
-            {
-                Code = "OptBoundary",
-                Severity = "error",
-                Path = state.OptRelPath,
-                Line = lineNumber,
-                Message = $"OPT line {lineNumber} has {columns.Length} columns, expected 7"
-            });
+            state.Findings.Add(ValidationReportFinding.Error(
+                "OptBoundary",
+                state.OptRelPath,
+                $"OPT line {lineNumber} has {columns.Length} columns, expected 7",
+                lineNumber));
         }
 
         // OPT Bates uniqueness
@@ -739,14 +690,11 @@ internal sealed class ProductionSetPostValidator
                 lastOptBates = optBates;
                 if (!state.SeenOptBates.Add(optBates))
                 {
-                    state.Findings.Add(new ValidationReportFinding
-                    {
-                        Code = "UniqueId",
-                        Severity = "error",
-                        Path = state.OptRelPath,
-                        Line = lineNumber,
-                        Message = $"Duplicate Bates Number in OPT: '{optBates}'"
-                    });
+                    state.Findings.Add(ValidationReportFinding.Error(
+                        "UniqueId",
+                        state.OptRelPath,
+                        $"Duplicate Bates Number in OPT: '{optBates}'",
+                        lineNumber));
                 }
             }
         }
