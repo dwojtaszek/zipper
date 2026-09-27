@@ -40,7 +40,7 @@ internal static class ArchiveTestCliWorkflow
             return 1;
         }
 
-        var suite = ResolveSuite(modules.ArchiveTest.RawSuite);
+        var suite = ArchiveTestCatalog.ResolveSuite(modules.ArchiveTest.RawSuite);
         if (suite is null)
         {
             Console.Error.WriteLine(
@@ -134,16 +134,4 @@ internal static class ArchiveTestCliWorkflow
             return 1;
         }
     }
-
-    /// <summary>Suite names are case-insensitive; the canonical name is returned.</summary>
-    private static string? ResolveSuite(string raw) => raw.ToLowerInvariant() switch
-    {
-        "smoke" => ArchiveTestCatalog.SmokeSuite,
-        "compatibility" => ArchiveTestCatalog.CompatibilitySuite,
-        "malformed" => ArchiveTestCatalog.MalformedSuite,
-        "security" => ArchiveTestCatalog.SecuritySuite,
-        "encoding" => ArchiveTestCatalog.EncodingSuite,
-        "all" => ArchiveTestCatalog.AllSuites,
-        _ => null,
-    };
 }

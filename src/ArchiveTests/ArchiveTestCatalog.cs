@@ -1083,14 +1083,26 @@ internal static class ArchiveTestCatalog
             ? definition
             : throw new KeyNotFoundException($"Unknown Archive Test Case Key '{caseKey}'. Known keys: {string.Join(", ", Cases.Keys.Order())}.");
 
-    internal static IReadOnlyList<ArchiveTestCaseDefinition> ListSuite(string suite) => suite switch
+    /// <summary>Maps a raw <c>--archive-test-suite</c> value to its canonical name
+    /// (case-insensitive), or <see langword="null"/> when it is not in
+    /// <see cref="SupportedSuites"/>. The single allowlist behind the CLI, the
+    /// invalid-value diagnostic, the help text, and <see cref="ListSuite"/>.</summary>
+    internal static string? ResolveSuite(string raw) =>
+        SupportedSuites.FirstOrDefault(suite => string.Equals(suite, raw, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The cases in <paramref name="suite"/>, in ordinal Case Key order.
+    /// <paramref name="suite"/> must be a canonical name from <see cref="SupportedSuites"/>
+    /// and is matched case-sensitively — resolve raw operator input through
+    /// <see cref="ResolveSuite"/> first.</summary>
+    internal static IReadOnlyList<ArchiveTestCaseDefinition> ListSuite(string suite)
     {
-        AllSuites => [.. Cases.Values.OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        SmokeSuite => [.. Cases.Values.Where(c => c.Suites.Contains(SmokeSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        CompatibilitySuite => [.. Cases.Values.Where(c => c.Suites.Contains(CompatibilitySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        MalformedSuite => [.. Cases.Values.Where(c => c.Suites.Contains(MalformedSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        SecuritySuite => [.. Cases.Values.Where(c => c.Suites.Contains(SecuritySuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        EncodingSuite => [.. Cases.Values.Where(c => c.Suites.Contains(EncodingSuite)).OrderBy(c => c.CaseKey, StringComparer.Ordinal)],
-        _ => throw new ArgumentException($"Unknown Archive Test suite '{suite}'."),
-    };
+        if (!SupportedSuites.Contains(suite, StringComparer.Ordinal))
+        {
+            throw new ArgumentException($"Unknown Archive Test suite '{suite}'.");
+        }
+
+        return [.. Cases.Values
+            .Where(c => suite == AllSuites || c.Suites.Contains(suite))
+            .OrderBy(c => c.CaseKey, StringComparer.Ordinal)];
+    }
 }

@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.ArchiveTests;
 
 namespace Zipper.Tests;
 
@@ -83,5 +84,27 @@ public class DocsDriftTests
 
         Assert.True(content.IndexOf("ProductionSetOrchestrator", StringComparison.Ordinal) >= 0, "architecture.md should reference ProductionSetOrchestrator for Production Set load-file delegation.");
         Assert.True(content.IndexOf("PSG --> LFO", StringComparison.Ordinal) < 0, "architecture.md should not show PSG --> LFO; PSG is a thin facade.");
+    }
+
+    [Fact]
+    public void ArchiveTestSuiteOptions_DocumentEverySupportedSuite()
+    {
+        var supported = ArchiveTestCatalog.SupportedSuites;
+        Assert.NotEmpty(supported);
+        var option = $"<{string.Join("|", supported)}>";
+        var readmeRow = Assert.Single(File.ReadLines(Path.Combine(RepoRoot, "README.md")),
+            line => line.StartsWith("| `--archive-test-suite`", StringComparison.Ordinal));
+        Assert.Contains(string.Join(", ", supported.Select(suite => $"`{suite}`")), readmeRow);
+
+        var requirement = Assert.Single(File.ReadLines(Path.Combine(RepoRoot, "Requirements.md")),
+            line => line.StartsWith("- **REQ-208**:", StringComparison.Ordinal));
+        Assert.Contains($"--archive-test-suite {option}", requirement);
+
+        var docs = File.ReadAllText(Path.Combine(RepoRoot, "docs", "archive-test-suites.md"));
+        Assert.Contains($"--archive-test-suite {option}", docs);
+        foreach (var suite in supported)
+        {
+            Assert.Contains($"  - `{suite}` —", docs);
+        }
     }
 }
