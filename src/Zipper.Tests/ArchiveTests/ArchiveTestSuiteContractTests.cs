@@ -96,6 +96,19 @@ public class ArchiveTestSuiteContractTests
 
     private static List<string> AllKeys() => SuiteKeys(ArchiveTestCatalog.AllSuites);
 
+    [Fact]
+    public void ResolveSuite_SupportedNames_CanonicalizesCase()
+    {
+        foreach (var suite in ArchiveTestCatalog.SupportedSuites)
+        {
+            Assert.Equal(suite, ArchiveTestCatalog.ResolveSuite(suite.ToUpperInvariant()));
+            Assert.NotEmpty(ArchiveTestCatalog.ListSuite(suite));
+        }
+
+        Assert.Null(ArchiveTestCatalog.ResolveSuite("unsupported"));
+        Assert.Throws<ArgumentException>(() => ArchiveTestCatalog.ListSuite("unsupported"));
+    }
+
     // ---- smoke: exactly the frozen five ----
 
     [Fact]
@@ -211,11 +224,9 @@ public class ArchiveTestSuiteContractTests
     [Fact]
     public void ListSuite_All_IsTheDistinctUnionOfEverySuite()
     {
-        var union = SuiteKeys(ArchiveTestCatalog.SmokeSuite)
-            .Concat(SuiteKeys(ArchiveTestCatalog.CompatibilitySuite))
-            .Concat(SuiteKeys(ArchiveTestCatalog.MalformedSuite))
-            .Concat(SuiteKeys(ArchiveTestCatalog.SecuritySuite))
-            .Concat(SuiteKeys(ArchiveTestCatalog.EncodingSuite))
+        var union = ArchiveTestCatalog.SupportedSuites
+            .Where(suite => suite != ArchiveTestCatalog.AllSuites)
+            .SelectMany(SuiteKeys)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();

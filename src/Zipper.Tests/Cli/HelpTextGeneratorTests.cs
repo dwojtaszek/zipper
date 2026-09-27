@@ -1,4 +1,5 @@
 using Xunit;
+using Zipper.ArchiveTests;
 using Zipper.Cli;
 
 namespace Zipper.Tests;
@@ -28,7 +29,7 @@ public class HelpTextGeneratorTests
             Assert.Contains("Load File Options:", output, StringComparison.Ordinal);
             Assert.Contains("Loadfile-Only Options:", output, StringComparison.Ordinal);
             Assert.Contains("Chaos Engine Options:", output, StringComparison.Ordinal);
-            Assert.Contains("smoke, compatibility, malformed, security, encoding, all", output, StringComparison.Ordinal);
+            Assert.Contains(string.Join(", ", ArchiveTestCatalog.SupportedSuites), output, StringComparison.Ordinal);
             Assert.Contains("Production Set Options:", output, StringComparison.Ordinal);
             Assert.Contains("--redacted-production", output, StringComparison.Ordinal);
             Assert.Contains("--withheld-native-policy", output, StringComparison.Ordinal);

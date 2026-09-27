@@ -212,7 +212,8 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
             Assert.Equal(1, exitCode);
             Assert.False(Directory.Exists(Path.Combine(TempDir, "x")));
             Assert.Equal(
-                "Error: Invalid --archive-test-suite 'encodign'. Supported suites: smoke, compatibility, malformed, security, encoding, all."
+                "Error: Invalid --archive-test-suite 'encodign'. Supported suites: "
+                + string.Join(", ", ArchiveTestCatalog.SupportedSuites) + "."
                 + Environment.NewLine,
                 errorWriter.ToString());
         }
