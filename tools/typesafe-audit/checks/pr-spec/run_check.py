@@ -282,11 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="PR specification compliance side check (advisory).")
     parser.add_argument("--pr-json", type=Path, help="Collected PR context JSON (live mode in CI).")
     parser.add_argument("--corpus", type=Path, help="Evaluation corpus dir with cases/*.json (skips --pr-json).")
-    parser.add_argument("--mode", choices=("live", "fixture"), default="fixture")
-    parser.add_argument("--fixture-dir", type=Path, default=CHECK_DIR / "fixtures")
-    parser.add_argument("--json-out", type=Path, required=True)
-    parser.add_argument("--md-out", type=Path, required=True)
-    parser.add_argument("--summary-out", type=Path, help="Append the Markdown report to this file (CI job summary).")
+    checks_common.add_report_arguments(parser, CHECK_DIR / "fixtures")
     args = parser.parse_args(argv)
 
     policy = load_json(POLICY_PATH)

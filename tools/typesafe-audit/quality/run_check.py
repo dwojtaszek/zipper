@@ -135,11 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--coverage", type=Path, help="Cobertura XML from the test run.")
     parser.add_argument("--mutation", type=Path, help="Stryker JSON mutation report.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--mode", choices=("live", "fixture"), default="fixture")
-    parser.add_argument("--fixture-dir", type=Path, default=QUALITY_DIR / "fixtures")
-    parser.add_argument("--json-out", type=Path, required=True)
-    parser.add_argument("--md-out", type=Path, required=True)
-    parser.add_argument("--summary-out", type=Path, help="Append the Markdown report to this file (CI job summary).")
+    checks_common.add_report_arguments(parser, QUALITY_DIR / "fixtures")
     args = parser.parse_args(argv)
 
     questions = checks_common.load_json(QUESTIONS_PATH, label="quality-audit")["questions"]
