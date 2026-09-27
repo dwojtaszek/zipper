@@ -38,26 +38,6 @@ internal sealed record ArchiveFixtureArtifact(
 /// </summary>
 internal static class ArchiveFixtureBuilder
 {
-    /// <summary>The ZIP method codes shared by recipes, the hand-built path, and layout expectations.</summary>
-    internal static ushort MethodCode(string method) => method switch
-    {
-        "stored" => 0,
-        "deflate" => 8,
-        "deflate64" => 9,
-        "bzip2" => 12,
-        _ => throw new InvalidOperationException($"Unknown Archive Test recipe method \"{method}\"."),
-    };
-
-    /// <summary>The APPNOTE version-needed for each method code.</summary>
-    internal static ushort MethodVersion(ushort code) => code switch
-    {
-        0 => 10,
-        8 => 20,
-        9 => 21,
-        12 => 46,
-        _ => throw new InvalidOperationException($"Unknown Archive Test method code {code}."),
-    };
-
     private static readonly DateTimeOffset FixedDosTimestamp = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
@@ -107,7 +87,7 @@ internal static class ArchiveFixtureBuilder
         foreach (var recipeEntry in definition.Recipe.Entries)
         {
             // Unknown method strings fail here, never silently become deflate.
-            MethodCode(recipeEntry.Method);
+            ArchiveTestCodec.WireCode(recipeEntry.PayloadCodec);
             totalExpanded = checked(totalExpanded + recipeEntry.Length);
         }
 
@@ -212,7 +192,7 @@ internal static class ArchiveFixtureBuilder
             return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken);
         }
 
-        if (definition.Recipe.Entries.Any(e => MethodCode(e.Method) is 9 or 12))
+        if (definition.Recipe.Entries.Any(e => ArchiveTestCodec.WireCode(e.PayloadCodec) is ArchiveTestCodec.Deflate64 or ArchiveTestCodec.Bzip2))
         {
             return BuildHandBuiltCoded(definition, seed, cancellationToken);
         }
@@ -266,8 +246,8 @@ internal static class ArchiveFixtureBuilder
                         $"Archive Test case '{definition.CaseKey}' exceeds the {ArchiveTestCaseSemantics.MaxArchivePhysicalBytes}-byte physical Archive budget.");
                 }
 
-                var code = MethodCode(recipeEntry.Method);
-                var level = code == 0 ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
+                var code = ArchiveTestCodec.WireCode(recipeEntry.PayloadCodec);
+                var level = code == ArchiveTestCodec.Stored ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
                 var entry = archive.CreateEntry(recipeEntry.Name, level);
                 entry.LastWriteTime = FixedDosTimestamp;
                 if (recipeEntry.ExternalAttributes != 0)
@@ -288,7 +268,7 @@ internal static class ArchiveFixtureBuilder
                     Method: code,
                     Content: content,
                     ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
-                    PayloadCodec: recipeEntry.Method));
+                    PayloadCodec: recipeEntry.PayloadCodec));
 
                 ordinal++;
             }
@@ -788,7 +768,7 @@ internal static class ArchiveFixtureBuilder
         ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].Method != "stored")
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].PayloadCodec != "stored")
         {
             throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': the Zip64 baseline expects exactly one stored file entry.");
@@ -901,10 +881,10 @@ internal static class ArchiveFixtureBuilder
                     Ordinal: 0,
                     Name: recipeEntry.Name,
                     IsDirectory: false,
-                    Method: 0,
+                    Method: ArchiveTestCodec.Stored,
                     Content: content,
                     ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
-                    PayloadCodec: recipeEntry.Method),
+                    PayloadCodec: recipeEntry.PayloadCodec),
             ],
             Mutations: []);
     }
@@ -934,8 +914,8 @@ internal static class ArchiveFixtureBuilder
         }
 
         var recipeEntry = definition.Recipe.Entries[0];
-        if (recipeEntry.IsDirectory || recipeEntry.Method != "deflate"
-            || definition.Recipe.Entries.Any(e => e.Name != recipeEntry.Name || e.Length != recipeEntry.Length || e.Method != recipeEntry.Method || e.IsDirectory))
+        if (recipeEntry.IsDirectory || recipeEntry.PayloadCodec != "deflate"
+            || definition.Recipe.Entries.Any(e => e.Name != recipeEntry.Name || e.Length != recipeEntry.Length || e.PayloadCodec != recipeEntry.PayloadCodec || e.IsDirectory))
         {
             throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': the overlapping baseline expects every entry to be the same deflate file.");
@@ -1022,10 +1002,10 @@ internal static class ArchiveFixtureBuilder
                 Ordinal: ordinal,
                 Name: entry.Name,
                 IsDirectory: false,
-                Method: 8,
+                Method: ArchiveTestCodec.Deflate,
                 Content: content,
                 ContentSha256: contentSha,
-                PayloadCodec: entry.Method))],
+                PayloadCodec: entry.PayloadCodec))],
             Mutations: []);
     }
 
@@ -1094,11 +1074,11 @@ internal static class ArchiveFixtureBuilder
         }
 
         var recipeEntry = definition.Recipe.Entries[0];
-        var code = MethodCode(recipeEntry.Method);
-        if (code != 9)
+        var code = ArchiveTestCodec.WireCode(recipeEntry.PayloadCodec);
+        if (code != ArchiveTestCodec.Deflate64)
         {
             throw new InvalidOperationException(
-                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 baseline expects method \"deflate64\"; found \"{recipeEntry.Method}\".");
+                $"Archive Test case '{definition.CaseKey}': the pinned Deflate64 baseline expects method \"deflate64\"; found \"{recipeEntry.PayloadCodec}\".");
         }
 
         var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
@@ -1137,7 +1117,7 @@ internal static class ArchiveFixtureBuilder
         }
 
         using var stream = new MemoryStream();
-        var version = MethodVersion(code);
+        var version = ArchiveTestCodec.VersionNeeded(code);
         WriteLocalHeader(stream, version, code, content, encoded, name);
         var centralDirectoryOffset = stream.Position;
         WriteCentralHeader(stream, version, code, content, encoded, name, 0);
@@ -1165,7 +1145,7 @@ internal static class ArchiveFixtureBuilder
                     Method: code,
                     Content: content,
                     ContentSha256: contentSha,
-                    PayloadCodec: recipeEntry.Method),
+                    PayloadCodec: recipeEntry.PayloadCodec),
             ],
             Mutations: []);
     }
@@ -1183,7 +1163,7 @@ internal static class ArchiveFixtureBuilder
         ArchiveTestCaseDefinition definition, int seed, bool withSignature, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].Method != "deflate")
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].PayloadCodec != "deflate")
         {
             throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': the Zip64 descriptor baseline expects exactly one deflate file entry.");
@@ -1320,7 +1300,7 @@ internal static class ArchiveFixtureBuilder
                     Method: Code,
                     Content: content,
                     ContentSha256: contentSha,
-                    PayloadCodec: recipeEntry.Method),
+                    PayloadCodec: recipeEntry.PayloadCodec),
             ],
             Mutations: []);
     }
@@ -1359,9 +1339,9 @@ internal static class ArchiveFixtureBuilder
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.Recipe.Entries.Count != 3
-            || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].Method != "stored"
-            || definition.Recipe.Entries[1].IsDirectory || definition.Recipe.Entries[1].Method != "stored"
-            || definition.Recipe.Entries[2].IsDirectory || definition.Recipe.Entries[2].Method != "stored")
+            || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].PayloadCodec != "stored"
+            || definition.Recipe.Entries[1].IsDirectory || definition.Recipe.Entries[1].PayloadCodec != "stored"
+            || definition.Recipe.Entries[2].IsDirectory || definition.Recipe.Entries[2].PayloadCodec != "stored")
         {
             throw new InvalidOperationException(
                 $"Archive Test case '{definition.CaseKey}': the nested-budget baseline expects two stored inner Archives and one stored pad entry.");
@@ -1409,7 +1389,7 @@ internal static class ArchiveFixtureBuilder
                     Ordinal: ordinal++,
                     Name: name,
                     IsDirectory: false,
-                    Method: 0,
+                    Method: ArchiveTestCodec.Stored,
                     Content: innerBytes,
                     ContentSha256: Convert.ToHexStringLower(SHA256.HashData(innerBytes)),
                     PayloadCodec: "stored"));
@@ -1427,7 +1407,7 @@ internal static class ArchiveFixtureBuilder
                 Ordinal: ordinal,
                 Name: definition.Recipe.Entries[2].Name,
                 IsDirectory: false,
-                Method: 0,
+                Method: ArchiveTestCodec.Stored,
                 Content: pad,
                 ContentSha256: Convert.ToHexStringLower(SHA256.HashData(pad)),
                 PayloadCodec: "stored"));
@@ -1502,11 +1482,11 @@ internal static class ArchiveFixtureBuilder
         foreach (var recipeEntry in definition.Recipe.Entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var code = MethodCode(recipeEntry.Method);
-            if (recipeEntry.IsDirectory && code != 0)
+            var code = ArchiveTestCodec.WireCode(recipeEntry.PayloadCodec);
+            if (recipeEntry.IsDirectory && code != ArchiveTestCodec.Stored)
             {
                 throw new InvalidOperationException(
-                    $"Archive Test case '{definition.CaseKey}': the coded baseline expects stored directories only; found directory '{recipeEntry.Name}' with method \"{recipeEntry.Method}\".");
+                    $"Archive Test case '{definition.CaseKey}': the coded baseline expects stored directories only; found directory '{recipeEntry.Name}' with method \"{recipeEntry.PayloadCodec}\".");
             }
 
             if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem != 0)
@@ -1533,7 +1513,7 @@ internal static class ArchiveFixtureBuilder
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             var (name, content, encoded, code) = payloads[ordinal];
-            var version = MethodVersion(code);
+            var version = ArchiveTestCodec.VersionNeeded(code);
             localOffsets[ordinal] = stream.Position;
             WriteLocalHeader(stream, version, code, content, encoded, name);
         }
@@ -1542,7 +1522,7 @@ internal static class ArchiveFixtureBuilder
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             var (name, content, encoded, code) = payloads[ordinal];
-            var version = MethodVersion(code);
+            var version = ArchiveTestCodec.VersionNeeded(code);
             WriteCentralHeader(stream, version, code, content, encoded, name, localOffsets[ordinal]);
         }
 
@@ -1570,10 +1550,10 @@ internal static class ArchiveFixtureBuilder
                 Ordinal: ordinal,
                 Name: entry.Name,
                 IsDirectory: entry.IsDirectory,
-                Method: MethodCode(entry.Method),
+                Method: ArchiveTestCodec.WireCode(entry.PayloadCodec),
                 Content: payloads[ordinal].Content,
                 ContentSha256: Convert.ToHexStringLower(SHA256.HashData(payloads[ordinal].Content)),
-                PayloadCodec: entry.Method))],
+                PayloadCodec: entry.PayloadCodec))],
             Mutations: []);
     }
 
