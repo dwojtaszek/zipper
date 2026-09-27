@@ -140,6 +140,23 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
 
    Appendix appended to each agent file:
    ```text
+   ## Hard constraints — you are a READ-ONLY reviewer
+   You share one working tree with the orchestrator and with every other
+   specialist in this wave, all running concurrently. Anything you write
+   corrupts their in-flight review, and anything you revert destroys work
+   the orchestrator did after your snapshot.
+
+   - Do NOT edit, create, delete, stage, stash, checkout, restore, or revert ANY file.
+   - Do NOT run `git add`/`commit`/`checkout`/`restore`/`reset`/`stash`/`clean`/`apply`.
+   - Read-only shell (cat, grep, rg, git diff/log/show/status) is fine.
+   - To PROVE a test bites, do not apply the mutation. Describe it in the finding:
+     "adding `FuzzSuite` to SupportedSuites makes <test> fail on <assertion>".
+     Reason about the assertion and cite the line — that is sufficient proof.
+   - If you want to execute something, copy the repo to a scratch dir outside
+     the working tree first and work only there.
+   - The orchestrator diff-verifies the tree after the wave. If you touched it,
+     say so explicitly in your final line so a revert can be traced.
+
    ## Effort
    <Low|Medium|High|Maximum — see SKILL.md Effort Levels>
 
@@ -157,6 +174,21 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
    **Cache discipline (cost):** assemble the prompt as a stable prefix + volatile suffix — the agent file, effort, insights, and repo context come first (identical across runs of the same repo), and the `<diff>` block comes **last**. Across the fix→re-review cycles (up to 3 per the Contract) keep that prefix **byte-identical** so the host prompt cache hits and only the changed diff is re-billed. Do not reorder or reword the prefix between cycles. See `references/improvements.md` (C1).
 
 4. **Collect responses.** Tag each finding with its specialist. Pass the structured JSON findings through `validators/line-validator.sh` to deterministically verify that the referenced files and lines exist. Merge and dedup per `references/review-policy.md` (Finding Merging & Fingerprinting).
+
+   **Tree-integrity gate (mandatory, before acting on any finding).** Subagents share the orchestrator's working tree and have been observed writing to it despite read-only dispatch — applying "verification" mutations mid-review and then reverting files the orchestrator had since edited. Never trust a subagent's self-report that it left the tree alone; verify:
+
+   ```bash
+   git status --porcelain    # must match the set you expect from step 1
+   git diff HEAD --stat      # must match your in-flight patch
+   ```
+
+   Compare against the snapshot you took in step 1. If the tree diverged:
+   1. Read the actual diff — do not assume contamination is junk. A subagent may have left a *correct* fix (observed: a valid DRY fix survived a botched restore).
+   2. Re-apply anything of yours that was reverted; drop any mutation a subagent introduced (`FuzzSuite`, altered constants, reverted lines).
+   3. Re-run the focused tests before continuing.
+   4. Note it in the final report so the maintainer knows the wave touched the tree.
+
+   Then apply the AUTO-FIX batch in a single pass and verify the resulting diff line by line against the merge table.
 
 5. **Merge + synthesize** once all subagents (specialists + adversarial) return. Emit the required **merge table** (fingerprint dedup + multi-source confidence boost) and the **SYNTHESIS** block, both per `references/review-policy.md`. These are mandatory output, not optional — multi-source agreement must be made visible, not left implicit.
 
