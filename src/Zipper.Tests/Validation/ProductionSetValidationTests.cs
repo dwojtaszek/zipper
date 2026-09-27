@@ -668,4 +668,46 @@ public class ProductionSetValidationTests : IDisposable
         Assert.Equal("passed", report.Status);
         Assert.Equal(0, report.ErrorCount);
     }
+
+    [Fact]
+    public void LoadFileRelativePaths_AreSingleSourceOfTruth()
+    {
+        Assert.Equal("DATA/loadfile.dat", ProductionSetPostValidator.DatRelativePath);
+        Assert.Equal("DATA/loadfile.opt", ProductionSetPostValidator.OptRelativePath);
+    }
+
+    [Fact]
+    public void Validate_MissingLoadFiles_EmitsFindingsMatchingRelativePaths()
+    {
+        var request = this.CreateTestRequest(count: 1);
+        var emptyProdDir = Path.Combine(this.testOutputPath, "empty_prod");
+        Directory.CreateDirectory(emptyProdDir);
+
+        var report = ProductionSetPostValidator.Validate(emptyProdDir, request);
+
+        var datFinding = Assert.Single(report.Findings, f => f.Code == "PathExistence" && f.Message.Contains("DAT load file", StringComparison.Ordinal));
+        Assert.Equal(ProductionSetPostValidator.DatRelativePath, datFinding.Path);
+
+        var optFinding = Assert.Single(report.Findings, f => f.Code == "PathExistence" && f.Message.Contains("OPT load file", StringComparison.Ordinal));
+        Assert.Equal(ProductionSetPostValidator.OptRelativePath, optFinding.Path);
+    }
+
+    [Fact]
+    public void Validate_LoadFilesOnDisk_DerivedFromRelativePaths()
+    {
+        var request = this.CreateTestRequest(count: 1);
+        var prodDir = Path.Combine(this.testOutputPath, "derived_paths_prod");
+        var datFullPath = Path.Combine(prodDir, ProductionSetPostValidator.DatRelativePath);
+        var optFullPath = Path.Combine(prodDir, ProductionSetPostValidator.OptRelativePath);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(datFullPath)!);
+        File.WriteAllText(datFullPath, "DOCID\r\n");
+        File.WriteAllText(optFullPath, "");
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal(1, report.CheckedFileCounts["dat"]);
+        Assert.Equal(1, report.CheckedFileCounts["opt"]);
+    }
 }
+
