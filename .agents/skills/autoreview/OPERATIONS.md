@@ -24,6 +24,8 @@ Each entry: `### YYYY-MM-DD host:mode:target` (host = claude-code or cursor)
 > Severity: a missing or insufficient test is a **coverage gap → INFO** (appendix if low value), never ACTION. The ACTION belongs to the underlying triggerable bug (owned by correctness/security), not to the absent test. (Observed 2026-06-02: testing specialist rated a missing test ACTION.)
 >
 > Injected project insights are **context, not findings**: do not emit a finding (or raise severity) merely because an insight names an edge case. Flag it only if the diff actually exercises that edge. Do not let an insight's topic inflate the finding count or confidence on that topic.
+>
+> **Never mutate the code under review to prove a finding.** Describe the mutation in the finding text instead ("adding `FuzzSuite` makes `<Test>` fail on `<assertion>`") and prove it by citing the line and reasoning about the assertion. Applying it corrupts the concurrent wave and the orchestrator's in-flight patch, and a later `git restore` of "contamination" silently reverts work the orchestrator did after the agent's snapshot. If execution is genuinely required, copy the repo to a scratch dir outside the working tree. (Observed 2026-09-27, issue #1042: the testing and adversarial specialists each mutated the shared tree, and each one's cleanup reverted 1–3 legitimate orchestrator fixes — one silently.)
 
 ### Project facts (zipper) — inject into prompts for this repo; drop if forking the skill elsewhere
 
