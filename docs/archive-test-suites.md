@@ -87,17 +87,15 @@ The **Expectation File** records, per operation (`list`, `read-entry`, `integrit
 
 Only one reader runs the expectation engine: the Python `zipfile` adapter inside `verify-fixtures.py`. A `full-codec` or `unsupported-reader` record is therefore enforced by *that* reader, against the operation outcomes it produced.
 
-The 7-Zip adapter is a **separate E2E policy layer** with a hard-coded case list, and it is **not** driven by the expectation engine. This is worth stating precisely, because the two mechanisms are easy to conflate:
+The 7-Zip adapter is a **separate E2E layer**, driven by each fixture's optional `adapterChecks` list rather than the Python expectation engine or a hard-coded Case Key list. Each **Adapter Check** names the adapter (`7zip`), action, and required outcome: `extract` verifies every file entry's content hash, `test` requires whole-Archive rejection without extraction, `extract-entries` verifies only explicitly named healthy siblings, and `presence` checks only that the Archive exists (the ZIP64 locator declaration is tolerated by 7-Zip). A fixture may declare more than one check, so mixed one-bad-member cases require both rejection and healthy-sibling extraction.
 
-- `allowedOutcomes` is a **permissive set** — the set of outcomes a reader may legitimately produce — not a directive about what a given adapter should do. A `malformed` case commonly allows both `extract-fails` and `extract-succeeds`, so the record cannot say which one to assert.
-- The Expectation File carries **no adapter directive**: nothing states "run 7-Zip in test mode" or "run it in extract mode" for a given case. The `capability` field that 16 fixtures carry is generator metadata and the verifier never reads it.
-- Consequently the E2E list is per-case intent that no declared property reproduces. Measured against the 106-fixture catalogue: of the **18** case keys the 7-Zip block names, only **5** carry a `full-codec` expectation, and those 5 are exactly the coded controls named above. The other 13 — including `valid-zip64-descriptor-signature` and `valid-zip64-descriptor-no-signature`, which the block extracts — carry only a `strict` expectation. Deriving the list from entry codecs reproduces 5 of the 7 extract keys, a strict subset.
+`allowedOutcomes` remains a **permissive set** of outcomes for a reader profile, not an instruction to 7-Zip. The `capability` field remains generator metadata. Adding a new 7-Zip check requires declaring it in the Case Key definition, but no E2E Case Key list edit; the shell and Windows E2E scripts both invoke `verify-7zip-adapter.py` against the generated sidecars.
 
-The practical consequence: **adding a new multi-profile expectation does not automatically gain 7-Zip coverage** — it needs a matching entry in the E2E adapter list, which is a hard-coded list. That gap is real and is tracked separately; it is not closed by the Expectation File as it stands, and this section does not claim otherwise. A declaration in the Expectation File (for example an explicit adapter/mode field) is the prerequisite for driving the adapter from data rather than from a list.
+Adding a new multi-profile expectation does not automatically gain 7-Zip coverage. Declare an Adapter Check in its Case Key definition to request and verify the corresponding action.
 
 ## Expectation File schema
 
-The machine-readable contract lives at `tests/fixtures/archive-test-case.schema.json` (JSON Schema draft-07, using `definitions`). Required fields: `schemaVersion`, `generatorContractVersion`, `generatorVersion`, `fixtureId`, `caseKey`, `caseRevision`, `expectationRevision`, `seed`, `classification`, `archive`, `entries`, `mutations`, `expectations`, `limits`.
+The machine-readable contract lives at `tests/fixtures/archive-test-case.schema.json` (JSON Schema draft-07, using `definitions`). Required fields: `schemaVersion`, `generatorContractVersion`, `generatorVersion`, `fixtureId`, `caseKey`, `caseRevision`, `expectationRevision`, `seed`, `classification`, `archive`, `entries`, `mutations`, `expectations`, `limits`. The optional `adapterChecks` list declares external reader checks for selected Case Keys.
 
 Structural rules the schema and its semantic companion checks enforce:
 

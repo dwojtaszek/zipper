@@ -321,6 +321,26 @@ public class ArchiveTestCaseSchemaTests
     }
 
     [Fact]
+    public void Load_SchemaFile_DeclaresOptionalAdapterChecksWithRestrictedActions()
+    {
+        using var schema = LoadJson("archive-test-case.schema.json");
+        var root = schema.RootElement;
+        Assert.DoesNotContain("adapterChecks", root.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+        var checks = root.GetProperty("properties").GetProperty("adapterChecks");
+        Assert.Equal(1, checks.GetProperty("minItems").GetInt32());
+        var item = checks.GetProperty("items");
+        Assert.False(item.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(["adapter", "action", "expectedOutcome"], item.GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal("7zip", item.GetProperty("properties").GetProperty("adapter").GetProperty("const").GetString());
+        Assert.Equal(["extract", "test", "extract-entries", "presence"],
+            item.GetProperty("properties").GetProperty("action").GetProperty("enum").EnumerateArray().Select(value => value.GetString()));
+        var names = item.GetProperty("properties").GetProperty("entryNames");
+        Assert.Equal(1, names.GetProperty("minItems").GetInt32());
+        Assert.True(names.GetProperty("uniqueItems").GetBoolean());
+        Assert.Equal(4, item.GetProperty("oneOf").GetArrayLength());
+    }
+
+    [Fact]
     public void Validate_ValidEmptyExample_PassesSemanticChecks()
     {
         using var example = LoadJson(Path.Combine("archive-tests", "valid-empty.json"));

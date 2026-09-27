@@ -283,4 +283,53 @@ public class ArchiveTestCaseSemanticsTests
             ArchiveTestCaseSemantics.Validate(testCaseFileWithoutCodec),
             error => error.Contains("file entry must declare a payloadCodec", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData("other", "extract", "success", false, "unknown adapter")]
+    [InlineData("7zip", "unknown", "success", false, "invalid expectedOutcome")]
+    [InlineData("7zip", "extract", "failure", false, "invalid expectedOutcome")]
+    [InlineData("7zip", "test", "success", false, "invalid expectedOutcome")]
+    [InlineData("7zip", "presence", "success", false, "invalid expectedOutcome")]
+    [InlineData("7zip", "extract-entries", "success", false, "requires distinct")]
+    [InlineData("7zip", "test", "failure", true, "must not declare entryNames")]
+    [InlineData("7zip", "extract-entries", "success", true, "present in entries")]
+    public void Validate_InvalidAdapterCheck_IsRejected(
+        string adapter, string action, string outcome, bool withNames, string expectedError)
+    {
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            AdapterChecks = [new ArchiveTestAdapterCheck(adapter, action, outcome, withNames ? ["a.txt"] : null)],
+        };
+
+        Assert.Contains(
+            ArchiveTestCaseSemantics.Validate(testCase),
+            error => error.Contains(expectedError, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_EmptyOrNullAdapterCheck_IsRejected()
+    {
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase();
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(testCase with { AdapterChecks = [] }),
+            error => error.Contains("must not be empty", StringComparison.Ordinal));
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(testCase with { AdapterChecks = [null!] }),
+            error => error.Contains("must not be null", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_ExtractEntriesNamingDirectory_IsRejected()
+    {
+        var directory = new ArchiveTestEntry(
+            0, "directory", "6469722f", "6469722f", "dir/",
+            LocalHeaderMethod: 0, CentralDirectoryMethod: 0, PayloadCodec: null);
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Entries = [directory],
+            Limits = new ArchiveTestLimits(1, 0, 1048576, 10),
+            AdapterChecks = [new ArchiveTestAdapterCheck("7zip", "extract-entries", "success", ["dir/"])],
+        };
+
+        Assert.Contains(ArchiveTestCaseSemantics.Validate(testCase),
+            error => error.Contains("present in entries", StringComparison.Ordinal));
+    }
 }

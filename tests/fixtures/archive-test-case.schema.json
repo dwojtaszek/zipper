@@ -332,6 +332,33 @@
         }
       }
     },
+    "adapterChecks": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Optional per-case external adapter directives; omitted for cases without a named adapter check.",
+      "items": {
+        "type": "object",
+        "required": ["adapter", "action", "expectedOutcome"],
+        "additionalProperties": false,
+        "properties": {
+          "adapter": { "const": "7zip" },
+          "action": { "enum": ["extract", "test", "extract-entries", "presence"] },
+          "expectedOutcome": { "enum": ["success", "failure", "present"] },
+          "entryNames": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "oneOf": [
+          { "properties": { "action": { "const": "extract" }, "expectedOutcome": { "const": "success" } }, "not": { "required": ["entryNames"] } },
+          { "properties": { "action": { "const": "test" }, "expectedOutcome": { "const": "failure" } }, "not": { "required": ["entryNames"] } },
+          { "properties": { "action": { "const": "presence" }, "expectedOutcome": { "const": "present" } }, "not": { "required": ["entryNames"] } },
+          { "properties": { "action": { "const": "extract-entries" }, "expectedOutcome": { "const": "success" } }, "required": ["entryNames"] }
+        ]
+      }
+    },
     "limits": {
       "type": "object",
       "required": ["entryCount", "expandedBytesBudget", "jsonBytesBudget", "deadlineSeconds"],
