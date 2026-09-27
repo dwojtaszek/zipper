@@ -44,7 +44,7 @@ internal static class ArchiveTestCliWorkflow
         if (suite is null)
         {
             Console.Error.WriteLine(
-                $"Error: Invalid --archive-test-suite '{modules.ArchiveTest.RawSuite}'. Supported suites: {string.Join(", ", ArchiveTestCatalog.SupportedSuites)}.");
+                $"Error: Invalid --archive-test-suite '{SanitizeForEcho(modules.ArchiveTest.RawSuite)}'. Supported suites: {string.Join(", ", ArchiveTestCatalog.SupportedSuites)}.");
             return 1;
         }
 
@@ -133,5 +133,27 @@ internal static class ArchiveTestCliWorkflow
             await Console.Error.WriteLineAsync($"\nAn error occurred: {ex.Message}").ConfigureAwait(false);
             return 1;
         }
+    }
+
+    private static string SanitizeForEcho(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value ?? string.Empty;
+        }
+
+        if (!value.Any(char.IsControl))
+        {
+            return value;
+        }
+
+        return string.Create(value.Length, value, static (span, state) =>
+        {
+            for (var i = 0; i < state.Length; i++)
+            {
+                var c = state[i];
+                span[i] = char.IsControl(c) ? '?' : c;
+            }
+        });
     }
 }
