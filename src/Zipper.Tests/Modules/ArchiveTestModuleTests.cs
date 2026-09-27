@@ -224,6 +224,21 @@ public class ArchiveTestModuleTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task RunAsync_InvalidSuiteWithControlCharacters_SanitizesEchoedValue()
+    {
+        var (exitCode, stderr) = await RunWithCapturedErrorAsync(
+            "--archive-test-suite", "bad\nsuite\x1b[2K", "--output-path", Path.Combine(TempDir, "x"));
+
+        Assert.Equal(1, exitCode);
+        Assert.False(Directory.Exists(Path.Combine(TempDir, "x")));
+        Assert.Equal(
+            "Error: Invalid --archive-test-suite 'bad?suite?[2K'. Supported suites: "
+            + string.Join(", ", ArchiveTestCatalog.SupportedSuites) + "."
+            + Environment.NewLine,
+            stderr);
+    }
+
+    [Fact]
     public void SupportedSuites_CoversEveryCatalogSuiteConstant()
     {
         // A new suite constant must be added to ArchiveTestCatalog.SupportedSuites
