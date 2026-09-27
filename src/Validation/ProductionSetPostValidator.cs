@@ -16,13 +16,14 @@ public class ProductionSetValidationReport
     /// <summary>
     /// How many file references the validator examined, by kind.
     /// <para>
-    /// The unit is a reference examined, NOT a distinct file and NOT a file that was found.
-    /// Read the two image-bearing Load Files together, because they do not describe the same
-    /// population:
+    /// For <c>native</c>, <c>text</c>, and <c>image</c> the unit is a reference examined, NOT a
+    /// distinct file and NOT a file that was found. Read the two image-bearing Load Files
+    /// together, because they do not describe the same population:
     /// </para>
     /// <list type="bullet">
     /// <item>
-    /// The DAT Load File carries one IMAGE_PATH per Native File. The OPT Load File carries one
+    /// The DAT Load File carries one IMAGE_PATH per row, which is one per Native File plus one
+    /// per Attachment family child under <c>--with-families</c>. The OPT Load File carries one
     /// record per page, each naming an image path.
     /// </item>
     /// <item>
@@ -34,11 +35,23 @@ public class ProductionSetValidationReport
     /// A count is a reference examined, not a reference found. For a multipage TIFF the DAT's
     /// base path does not exist on disk; it is resolved through the page-one fallback.
     /// </item>
+    /// <item>
+    /// Redacted Image and Redacted Text references are examined but counted in no key, per
+    /// REQ-149.
+    /// </item>
     /// </list>
     /// <para>
-    /// <c>native</c> and <c>text</c> are DAT-only, and <c>native</c> reports 0 when native path
-    /// validation is skipped (<c>--withheld-native-policy replace-with-placeholder</c>). Load
-    /// File row counts are reported separately in <see cref="CheckedLoadFileRowCounts"/>.
+    /// <c>native</c> and <c>text</c> are DAT-only. <c>native</c> reports 0 when native path
+    /// validation is skipped (<c>--withheld-native-policy replace-with-placeholder</c>) and also
+    /// when NATIVE_PATH is left empty (<c>--withheld-native-policy omit-native-path</c>).
+    /// <c>text</c> is still counted under the placeholder policy, which skips only the native
+    /// path.
+    /// </para>
+    /// <para>
+    /// <c>dat</c> and <c>opt</c> are presence flags (1 when that Load File was found, else 0),
+    /// not reference or row counts. Record counts are reported separately in
+    /// <see cref="CheckedLoadFileRowCounts"/>, where <c>dat</c> includes its header row and
+    /// <c>opt</c> has none, so the two differ by one for equal record counts.
     /// </para>
     /// </summary>
     [JsonPropertyName("checkedFileCounts")]

@@ -52,11 +52,12 @@ Generates a structured e-discovery Production Set with volume folders, single-pa
 
 #### Reading `_validation_report.json`
 
-`checkedFileCounts` reports how many file references the validator **examined**, by kind. The unit is a reference examined — not a distinct file, and not a file that was found:
+`checkedFileCounts` reports how many file references the validator **examined**, by kind. For `native`, `text`, and `image` the unit is a reference examined — not a distinct file, and not a file that was found:
 
-- `image` is the sum of the DAT Load File's `IMAGE_PATH` references (one per Native File) and the OPT Load File's image references (one record per page). For a single-page Native File, and for every non-TIFF File Type, both Load Files name the **same** file, so it is counted twice. Only a multipage TIFF makes the two diverge, and there the DAT's base path is resolved through the page-one fallback rather than existing literally.
-- `native` and `text` are DAT-only. `native` reports `0` when `--withheld-native-policy replace-with-placeholder` skips native path validation.
-- `dat` and `opt` report whether that Load File was present, not how many rows it holds — row counts live in `checkedLoadFileRowCounts`.
+- `image` is the sum of the DAT Load File's `IMAGE_PATH` references (one per DAT row: one per Native File, plus one per Attachment family child under `--with-families`) and the OPT Load File's image references (one record per page). For a single-page Native File, and for every non-TIFF File Type, both Load Files name the **same** file, so it is counted twice. Only a multipage TIFF makes the two diverge, and there the DAT's base path is resolved through the page-one fallback rather than existing literally.
+- `native` and `text` are DAT-only. `native` reports `0` when `--withheld-native-policy replace-with-placeholder` skips native path validation, and also when `--withheld-native-policy omit-native-path` leaves `NATIVE_PATH` empty. `text` is still counted under the placeholder policy, which skips only the native path.
+- Redacted Image and Redacted Text references are examined but counted in no key (REQ-149).
+- `dat` and `opt` report whether that Load File was present (1 or 0), not how many rows it holds — record counts live in `checkedLoadFileRowCounts`, where `dat` includes its header row and `opt` has none, so the two differ by one for equal record counts.
 
 To count distinct image files, do not use `image`; resolve the Load File paths instead.
 
