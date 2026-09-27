@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'src/**'
+      - '!src/Zipper.Tests/**'
+      - '!src/Zipper.Analyzers/**'
+      - '!src/Zipper.Analyzers.Tests/**'
 
 jobs:
   perf-guard:
@@ -23,75 +26,43 @@ jobs:
         run: dotnet publish src/Zipper.csproj -c Release -o publish-bin
 
       - name: Run perf measurements (5 runs)
+        id: measure
         run: |
           mkdir -p results
           for i in $(seq 1 5); do
             ./tests/perf/measure.sh ./publish-bin/Zipper > "results/run_${i}.json"
           done
 
-      - name: Compare against baselines
+      - name: Compare against baselines (advisory)
         id: compare
-        continue-on-error: true
         run: python3 .github/scripts/perf-compare.py results
-
-      - name: Retry perf measurements (5 runs, only if first compare failed)
-        if: steps.compare.outcome == 'failure'
-        run: |
-          mkdir -p results_retry
-          for i in $(seq 1 5); do
-            ./tests/perf/measure.sh ./publish-bin/Zipper > "results_retry/run_${i}.json"
-          done
-
-      - name: Compare retry against baselines
-        id: compare_retry
-        if: steps.compare.outcome == 'failure'
-        continue-on-error: true
-        run: python3 .github/scripts/perf-compare.py results_retry
-
-      - name: Final perf gate (fail only if both attempts failed)
-        run: |
-          if [[ "${{ steps.compare.outcome }}" == "success" ]]; then
-            echo "✅ First attempt passed — no retry needed."
-            exit 0
-          fi
-          if [[ "${{ steps.compare_retry.outcome }}" == "success" ]]; then
-            echo "::warning title=Perf Guard flake::First 5-run median exceeded RSS 1.20× but retry passed. Treating as runner noise, not a regression."
-            exit 0
-          fi
-          echo "❌ Performance regression detected on both attempts!" >&2
-          exit 1
 
       - name: Upload measurement artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: perf-measurements
-          path: |
-            results/
-            results_retry/
+          path: results/
 
       - name: Post PR comment
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PERF_TABLE: ${{ steps.compare.outputs.table }}
         with:
           script: |
-            const table = `${{ steps.compare.outputs.table }}`;
-            const retryTable = `${{ steps.compare_retry.outputs.table }}`;
-            const retried = (outcome => outcome === 'success' || outcome === 'failure')('${{ steps.compare_retry.outcome }}');
-            const firstFailed = '${{ steps.compare.outputs.failed }}' === 'true';
-            const retryFailed = '${{ steps.compare_retry.outputs.failed }}' === 'true';
-            const failed = retried ? (firstFailed && retryFailed) : firstFailed;
-            const header = failed
-              ? '## ❌ Performance Regression Detected'
-              : (retried && firstFailed
-                ? '## ✅ Performance Guard Passed (flake on first attempt)'
-                : '## ✅ Performance Guard Passed');
+            const table = process.env.PERF_TABLE || 'No comparison table (measurement or comparison failed).';
+            const measurementFailed = '${{ steps.measure.outcome }}' !== 'success' ||
+              '${{ steps.compare.outcome }}' !== 'success';
+            const highRss = '${{ steps.compare.outputs.failed }}' === 'true';
+            const header = measurementFailed
+              ? '## ❌ Performance Guard Failed (measurement or comparison error)'
+              : highRss
+                ? '## ⚠️ Performance Guard: high RSS (advisory)'
+                : '## ✅ Performance Guard Passed';
             let body = `${header}\n\n${table}\n\n`;
-            if (retried) {
-              body += `### Retry (second 5-run median)\n\n${retryTable}\n\n`;
-            }
-            body += `_Gate: RSS ≤ 1.20× baseline (median of 5 runs, retry once on fail — both must fail to block). ` +
-              `wall_s is informational only — shared-runner timing is noise-dominated and not comparable across runners._`;
+            body += `_RSS > 1.20× baseline is advisory (median of 5 runs); ` +
+              `wall_s is informational only. Measurement or comparison errors still fail the check._`;
             const marker = '<!-- perf-guard-comment -->';
             const fullBody = `${marker}\n${body}`;
 

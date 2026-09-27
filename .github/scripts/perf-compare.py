@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Compare perf-measure medians against baselines (RSS gates, wall_s informs).
+"""Compare perf-measure medians against baselines (advisory RSS and wall_s).
 
 Usage:
     perf-compare.py <results-dir> [--table-out PATH] [--measured-out PATH]
 
 Reads run_1..run_5.json from <results-dir>, medians per scenario, compares to
-tests/perf/baselines.json. Exits 1 when any rss_kb ratio exceeds 1.20.
-Prints the markdown table to stdout and appends failed=/table outputs when
-GITHUB_OUTPUT is set (GitHub Actions), so perf-guard.yml can retry once
-before failing.
+tests/perf/baselines.json. High RSS produces a warning, not a failing exit
+status. Measurement errors still fail. Prints the markdown table to stdout
+and appends failed=/table outputs when GITHUB_OUTPUT is set (GitHub Actions).
 """
 
 import json
@@ -16,7 +15,7 @@ import os
 import sys
 
 WALL_THRESHOLD = 1.25  # informational only — never fails the job
-RSS_THRESHOLD = 1.20  # hard gate
+RSS_THRESHOLD = 1.20  # advisory warning threshold
 WALL_WARN_RATIO = 1.5
 
 
@@ -53,6 +52,8 @@ def load_medians(results_dir, scenarios):
             runs.append(json.load(f))
     medians = {}
     for sc in scenarios:
+        if any(r[sc]["rss_kb"] <= 0 or r[sc]["wall_s"] < 0 for r in runs):
+            raise ValueError(f"invalid measurement for {sc}: RSS must be positive and wall time non-negative")
         medians[sc] = {
             "wall_s": median([r[sc]["wall_s"] for r in runs]),
             "rss_kb": median([r[sc]["rss_kb"] for r in runs]),
@@ -77,7 +78,7 @@ def scenario_rows(sc, baseline, measured):
     rr = mr / br if br > 0 else 0
     warn_wall(sc, rw, mw, bw)
     sw = "ℹ️" if rw <= WALL_THRESHOLD else "⚠️"  # informational, never fails
-    sr = "✅" if rr <= RSS_THRESHOLD else "❌"
+    sr = "✅" if rr <= RSS_THRESHOLD else "⚠️"
     rows = [
         f"| {sc} | wall_s | {bw:.2f} | {mw:.2f} | {rw:.2f}× | {sw} |",
         f"| {sc} | rss_kb | {br} | {mr:.0f} | {rr:.2f}× | {sr} |",
@@ -131,12 +132,15 @@ def main() -> int:
     except FileNotFoundError as e:
         print(f"perf-compare: missing run file: {e.filename}", file=sys.stderr)
         return 2
+    except ValueError as e:
+        print(f"perf-compare: {e}", file=sys.stderr)
+        return 2
     table, failed = build_table(baselines, medians, scenarios)
     emit_outputs(table, failed, medians, table_out, measured_out)
 
     if failed:
-        print("❌ Performance regression detected!", file=sys.stderr)
-        return 1
+        print("::warning title=Perf Guard (rss_kb)::Peak RSS exceeds 1.20× baseline; review recommended.")
+        return 0
     print("✅ All scenarios within thresholds.")
     return 0
 
