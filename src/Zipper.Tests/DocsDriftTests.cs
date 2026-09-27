@@ -107,4 +107,20 @@ public class DocsDriftTests
             Assert.Contains($"  - `{suite}` —", docs);
         }
     }
+
+    [Fact]
+    public void ArchiveTestSuites_ExpectationFileSchema_DocumentsCodecAndWireMethodFields()
+    {
+        var docs = File.ReadAllText(Path.Combine(RepoRoot, "docs", "archive-test-suites.md"));
+        Assert.Contains("localHeaderMethod", docs);
+        Assert.Contains("centralDirectoryMethod", docs);
+        Assert.Contains("payloadCodec", docs);
+        Assert.Contains("stored", docs);
+        Assert.Contains("deflate", docs);
+        Assert.Contains("deflate64", docs);
+        Assert.Contains("bzip2", docs);
+        Assert.Contains("unknown", docs);
+        Assert.Contains("omitted for directories", docs);
+    }
 }
+

@@ -99,9 +99,40 @@ The machine-readable contract lives at `tests/fixtures/archive-test-case.schema.
 
 Structural rules the schema and its semantic companion checks enforce:
 
-- `entries` are keyed by `ordinal` and carry raw local/central name bytes (hex), a readable name, name lengths in UTF-8 bytes / UTF-16 code units / Unicode scalars, expected content hash/size when knowable, `kind` (`file`/`directory`), and structure offsets. Duplicate entry names must remain representable; duplicate `ordinal`s are rejected.
+- `entries` are keyed by `ordinal` and carry raw local/central name bytes (hex), a readable name, name lengths in UTF-8 bytes / UTF-16 code units / Unicode scalars, wire compression method codes (`localHeaderMethod` and `centralDirectoryMethod` as uint16 `0..65535`), generator knowledge (`payloadCodec` enum `stored`, `deflate`, `deflate64`, `bzip2`, `unknown` for files; omitted for directories), expected content hash/size when knowable, `kind` (`file`/`directory`), and structure offsets. Duplicate entry names must remain representable; duplicate `ordinal`s are rejected.
 - `mutations` record code, structure, offset basis (`before-mutation` — all offsets refer to the pre-mutation Archive), offset, deleted/inserted lengths, before/after sizes and SHA-256 hashes, an explanation, and — for adversarial declared sizes — a string `declaredValue`. Inline `beforeHex`/`afterHex` is capped at 256 bytes (512 hex characters); larger removed ranges are referenced by hash instead.
 - Semantic equalities a JSON Schema cannot express (filename ↔ Fixture ID, ordinal uniqueness) are verified by the test suite in `src/Zipper.Tests/ArchiveTests/`.
+
+### Entry codec fields
+
+The entry-level compression method and codec fields defined in `tests/fixtures/archive-test-case.schema.json` (per REQ-217):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `localHeaderMethod` | integer (`0..65535`) | Always | Compression method code declared in the local file header (APPNOTE §4.4.5). |
+| `centralDirectoryMethod` | integer (`0..65535`) | Always | Compression method code declared in the central directory header (APPNOTE §4.4.5). |
+| `payloadCodec` | string (enum) | Files only | Generator-known payload compression codec: `stored`, `deflate`, `deflate64`, `bzip2`, or `unknown`. Required for `kind: "file"`, omitted for directories (`kind: "directory"`). |
+
+```json
+{
+  "ordinal": 0,
+  "kind": "file",
+  "localNameRaw": "68656c6c6f2e747874",
+  "centralNameRaw": "68656c6c6f2e747874",
+  "readableName": "hello.txt",
+  "localHeaderMethod": 8,
+  "centralDirectoryMethod": 8,
+  "payloadCodec": "deflate",
+  "contentSha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+  "contentSize": 5,
+  "nameLengthUtf8Bytes": 9,
+  "nameLengthUtf16Units": 9,
+  "nameLengthScalars": 9,
+  "localHeaderOffset": 0,
+  "dataOffset": 39,
+  "centralDirectoryOffset": 53
+}
+```
 
 ## Architecture
 
