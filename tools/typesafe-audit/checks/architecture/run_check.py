@@ -200,11 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Semantic architecture lint (advisory).")
     parser.add_argument("--base", required=True, help="Diff base ref (PR base SHA).")
     parser.add_argument("--head", default="HEAD", help="Diff head ref.")
-    parser.add_argument("--mode", choices=("live", "fixture"), default="fixture")
-    parser.add_argument("--fixture-dir", type=Path, default=CHECK_DIR / "fixtures")
-    parser.add_argument("--json-out", type=Path, required=True)
-    parser.add_argument("--md-out", type=Path, required=True)
-    parser.add_argument("--summary-out", type=Path, help="Append the Markdown report to this file.")
+    checks_common.add_report_arguments(parser, CHECK_DIR / "fixtures", "Append the Markdown report to this file.")
     args = parser.parse_args(argv)
 
     policy = checks_common.load_json(POLICY_PATH, label="architecture-lint")

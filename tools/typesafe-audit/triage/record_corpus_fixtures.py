@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -68,12 +67,8 @@ def main() -> None:
             }
         for req_id in prepared["mentioned_req_ids"]:
             answers[f"req{run_check.SPAN_SEPARATOR}{req_id}{run_check.SPAN_SEPARATOR}relevance"] = {"type": "noul", "noul": 0.98, "confidence": HIGH}
-        key = runner.request_fixture_key(request)
-        (fixture_dir / f"{key}.json").write_text(
-            json.dumps({"model": config["model"], "answers": answers}, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        print(f"recorded {key}.json for issue {case['number']} ({len(prepared['candidates'])} candidate(s))")
+        path = runner.record_fixture(request, fixture_dir, {"model": config["model"], "answers": answers})
+        print(f"recorded {path.name} for issue {case['number']} ({len(prepared['candidates'])} candidate(s))")
 
 
 if __name__ == "__main__":

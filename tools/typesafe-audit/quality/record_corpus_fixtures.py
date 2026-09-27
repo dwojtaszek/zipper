@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -62,12 +61,8 @@ def main() -> None:
         label = HIGH if candidate["method"] == "ValidateDestination" else MEDIUM
         answers[key] = {"type": "score", "score": label[qid], "confidence": CONFIDENCE}
 
-    key = runner.request_fixture_key(request)
-    (fixture_dir / f"{key}.json").write_text(
-        json.dumps({"model": config["model"], "answers": answers}, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    print(f"recorded {key}.json for {len(batch)} candidate(s)")
+    path = runner.record_fixture(request, fixture_dir, {"model": config["model"], "answers": answers})
+    print(f"recorded {path.name} for {len(batch)} candidate(s)")
 
 
 if __name__ == "__main__":

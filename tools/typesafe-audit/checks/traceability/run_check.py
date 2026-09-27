@@ -132,11 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tsv", type=Path, default=DEFAULT_TSV)
     parser.add_argument("--tests-root", type=Path, default=DEFAULT_TESTS_ROOT, help="Root for resolving test sources (corpus tests point this at fixture trees).")
     parser.add_argument("--requirements-root", type=Path, default=Path.cwd(), help="Root containing Requirements.md (corpus tests point this at fixture trees).")
-    parser.add_argument("--mode", choices=("live", "fixture"), default="fixture")
-    parser.add_argument("--fixture-dir", type=Path, default=CHECK_DIR / "fixtures")
-    parser.add_argument("--json-out", type=Path, required=True)
-    parser.add_argument("--md-out", type=Path, required=True)
-    parser.add_argument("--summary-out", type=Path, help="Append the Markdown report (CI job summary).")
+    checks_common.add_report_arguments(parser, CHECK_DIR / "fixtures", "Append the Markdown report (CI job summary).")
     args = parser.parse_args(argv)
 
     policy = load_json(POLICY_PATH)

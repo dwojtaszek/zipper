@@ -8,6 +8,7 @@ install.
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import sys
@@ -15,6 +16,19 @@ from pathlib import Path
 
 # One request key namespace per obligation/span across all checks.
 SPAN_SEPARATOR = "#"
+
+
+def add_report_arguments(
+    parser: argparse.ArgumentParser,
+    fixture_dir: Path,
+    summary_help: str = "Append the Markdown report to this file (CI job summary).",
+) -> None:
+    """The identical mode and report arguments used by each advisory check."""
+    parser.add_argument("--mode", choices=("live", "fixture"), default="fixture")
+    parser.add_argument("--fixture-dir", type=Path, default=fixture_dir)
+    parser.add_argument("--json-out", type=Path, required=True)
+    parser.add_argument("--md-out", type=Path, required=True)
+    parser.add_argument("--summary-out", type=Path, help=summary_help)
 
 
 def load_module(name: str, path: Path):
