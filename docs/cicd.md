@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph side["Side checks (parallel, on PR)"]
-        perf["perf-guard.yml (src/** only):<br/>5 runs vs baselines, retry once on fail<br/>RSS ≤1.20× gate (both must fail), wall_s informational"]
+        perf["perf-guard.yml (product src/** only):<br/>5 runs vs baselines<br/>RSS and wall_s advisory"]
         sonar["SonarCloud / CodeRabbit / CodeQL<br/>(see CI.md — Sonar not a GitHub check)"]
     end
     remote -.-> perf
@@ -81,7 +81,7 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 
 ### 3. Side checks (parallel on PR)
 
-- **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered only on `src/**` changes. Runs `measure.sh` 5×, takes the median, compares to `tests/perf/baselines.json` via [`.github/scripts/perf-compare.py`](../.github/scripts/perf-compare.py). **RSS ≤ 1.20× baseline is the hard gate**; `wall_s` is reported but informational (shared-runner timing is noise-dominated). On a gate failure the 5-run set is measured and compared **once more**; the merge blocks only if **both** attempts fail (a first-fail-then-pass posts a flake warning, not a failure). Posts/updates a single PR comment with both tables when retried.
+- **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered on product code under `src/**` (excluding test and analyzer projects). Runs `measure.sh` 5×, takes the median, and compares to `tests/perf/baselines.json` via [`.github/scripts/perf-compare.py`](../.github/scripts/perf-compare.py). **RSS > 1.20× baseline is advisory**, as is `wall_s` (shared-runner variance); measurement and comparison errors still fail. Posts/updates one PR comment with the result table.
 - **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL failures block merge. CodeRabbit blocking issues required, nitpicks optional.
 - **typesafe-audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), **advisory only** (never blocks). Path-filtered on PR (`Requirements.md`, `docs/`, `src/`, `tests/`, `tools/typesafe-audit/`), a weekly full audit (Monday 06:00 UTC), and manual `workflow_dispatch` (`changed`/`full`). Runs the Python audit runner in `tools/typesafe-audit/` with the `TYPESAFE_API_KEY` repository secret; fork PRs (no secret access) skip with a neutral summary. Uploads JSON/Markdown reports (7-day retention) and writes a job summary. Remote failures are always non-blocking. See [CI.md](../CI.md#typesafe-audit).
   - **Foundation audit (#955)** — fixed sample scope via `tools/typesafe-audit/runner.py`.
@@ -117,7 +117,7 @@ Trigger: `push` → `main`, and tags `v*`.
 | Golden parity | goldens | Yes |
 | Oversized file (>500 KB) | lint | Yes |
 | Vulnerable NuGet packages | build-and-test (Linux) | Yes |
-| Perf RSS ≤ 1.20× (both attempts) | perf-guard | Yes (RSS only) |
+| Perf RSS ≤ 1.20× | perf-guard | No (advisory; measurement errors block) |
 | Perf wall_s | perf-guard | No (informational) |
 | SonarCloud BLOCKER/MAJOR | external | Yes (manual fetch) |
 | CodeQL | external | Yes |
@@ -143,4 +143,4 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 - A docs-only PR skips the build matrix — don't wait on jobs that won't run.
 - Don't merge until PR Checks **and** side checks are green and all reviewer comments are addressed ([AGENTS.md workflow steps 9–12](../AGENTS.md#workflow-for-github-issues)).
 - Changing a workflow? `actionlint` runs in `lint`; pin any new action to a full commit SHA (SonarCloud flags unpinned actions as security hotspots — see [CI.md](../CI.md#quality-gate-vs-code-issues)).
-- A behavior change that alters perf or output **bytes** will trip perf-guard / goldens — that is the gate working, not a flake.
+- A behavior change that alters output **bytes** will trip goldens; performance changes produce advisory warnings from perf-guard.

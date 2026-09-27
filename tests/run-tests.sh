@@ -682,6 +682,7 @@ print_success "CI per-file coverage gate action tests passed."
 
 print_info "Running performance measurement regression tests..."
 bash ./tests/test-perf-measure.sh || print_error "test-perf-measure.sh failed."
+python3 -m unittest discover -s tests/perf -p 'test_perf_compare.py' || print_error "test_perf_compare.py failed."
 print_success "Performance measurement regression tests passed."
 
 print_info "Running TypeSafe audit foundation tests..."

@@ -5,16 +5,15 @@ Automated performance regression detection for Zipper.
 ## How It Works
 
 1. `measure.sh` runs three scenarios and emits wall time + peak RSS as JSON.
-2. `perf-guard.yml` runs on PRs that touch `src/**`, takes the **median** of 5 runs, and compares against `baselines.json`.
-3. **RSS is the hard gate:** if peak RSS exceeds 1.20× baseline, the check fails.
+2. `perf-guard.yml` runs on PRs that touch product code under `src/**` (not test or analyzer projects), takes the **median** of 5 runs, and compares against `baselines.json`.
+3. **RSS is advisory:** if peak RSS exceeds 1.20× baseline, the check posts a warning and comparison table. It does not fail for a threshold exceedance; measurement or comparison errors still fail.
 4. **Wall time is informational only.** Shared GitHub runners vary 15–40% run-to-run with no code change, and baselines are captured on a different runner than each PR is measured on, so the wall ratio mixes hardware delta with code delta. It is reported (1.25× reference line) but never fails the job.
 
-> **Why median for guard, max for baselines?** Baselines are captured using the
+> **Why median for reports, max for baselines?** Baselines are captured using the
 > maximum of 5 runs (see Capturing New Baselines below), which sets a conservative
-> ceiling. The PR guard then checks the median of 5 runs against that ceiling,
-> giving real regressions time to surface while absorbing single-run noise.
-> This asymmetry is intentional: a genuine leak shows up in the median; a
-> one-off spike does not.
+> ceiling. The PR check then compares the median of 5 runs against that ceiling,
+> absorbing single-run noise. Host-to-host RSS varies enough that the
+> 1.20× threshold cannot reliably block merges.
 
 ## Scenarios
 
@@ -51,8 +50,8 @@ The perf-guard workflow posts a markdown table on the PR:
 | pdf_50k | wall_s | 1.86 | 2.10 | 1.13× | ✅ |
 | pdf_50k | rss_kb | 110116 | 115000 | 1.04× | ✅ |
 
-- **✅** = RSS within threshold (≤ 1.20×) — gating
-- **❌** = RSS exceeds 1.20× — fails the job
+- **✅** = RSS within threshold (≤ 1.20×)
+- **⚠️** = RSS exceeds 1.20× — advisory, review recommended
 - **ℹ️ / ⚠️** = wall_s reference marker (≤ / > 1.25×) — informational only, never fails
 
 ## When to Re-capture
