@@ -201,6 +201,14 @@ if not errorlevel 1 (
 )
 echo [ SUCCESS ] Workflow check: advisory (no --strict)
 
+REM YAML-aware workflow validation (#1046: permissions scope, line continuation advisory checks, secret/fork guards)
+python3 "%TOOL_DIR%\workflow_validator.py" "%WORKFLOW_FILE%"
+if errorlevel 1 (
+    echo [ ERROR ] YAML-aware workflow validation failed.
+    exit /b 1
+)
+echo [ SUCCESS ] Workflow check: YAML-aware validation (permissions, advisory mode, secret/fork guards)
+
 REM Every failure path above types its log before exiting, so the temp directory
 REM is only needed for the success path here.
 rd /s /q "%TEMP_DIR%"

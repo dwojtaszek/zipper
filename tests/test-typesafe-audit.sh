@@ -182,4 +182,11 @@ elif [[ $? -gt 1 ]]; then
 fi
 print_success "Workflow check: advisory (no --strict)"
 
+# YAML-aware workflow validation (#1046: permissions scope, line continuation advisory checks, secret/fork guards)
+python3 "$TOOL_DIR/workflow_validator.py" "$WORKFLOW_FILE" || {
+    print_error "YAML-aware workflow validation failed."
+    exit 1
+}
+print_success "Workflow check: YAML-aware validation (permissions, advisory mode, secret/fork guards)"
+
 print_success "All TypeSafe audit E2E tests passed!"
