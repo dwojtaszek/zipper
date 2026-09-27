@@ -14,14 +14,6 @@ namespace Zipper.ArchiveTests;
 /// </summary>
 internal static class ArchiveFixtureMutator
 {
-    /// <summary>The reserved method code 98 (PPMd): a defined method with no codec in the
-    /// reference reader; used by the policy-sensitive unsupported-method case.</summary>
-    private const ushort UnsupportedMethodCode = 98;
-
-    /// <summary>The Deflate64 method code (ticket #877): documented but undecodable by the
-    /// reference reader; used by the policy-sensitive unsupported-method-deflate64 case.</summary>
-    private const ushort UnsupportedMethodDeflate64Code = 9;
-
     /// <summary>The general-purpose bit 0: the "encrypted" flag.</summary>
     private const ushort EncryptionFlag = 0x0001;
 
@@ -69,14 +61,14 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.DeflateInvalidBtype),
             ArchiveTestMutationKind.DeflateCorruptHuffman => CorruptDeflateHuffman(control, before),
             ArchiveTestMutationKind.Bzip2CorruptBlockMagic => CorruptBzip2Magic(control, before),
-            ArchiveTestMutationKind.Bzip2TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Bzip2TruncatedStream, 12),
+            ArchiveTestMutationKind.Bzip2TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Bzip2TruncatedStream, ArchiveTestCodec.Bzip2),
             ArchiveTestMutationKind.Bzip2WrongCrc => CorruptBzip2Crc(control, before),
             ArchiveTestMutationKind.Deflate64CorruptStream => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.Deflate64CorruptStream),
-            ArchiveTestMutationKind.Deflate64TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Deflate64TruncatedStream, 9),
-            ArchiveTestMutationKind.MethodCrossDeflate64Deflate => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossDeflate64Deflate, 9),
-            ArchiveTestMutationKind.MethodCrossBzip2Stored => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossBzip2Stored, 12),
-            ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, 8, "Deflate"),
-            ArchiveTestMutationKind.MethodDataBzip2AsStored => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataBzip2AsStored, 12, "BZip2"),
+            ArchiveTestMutationKind.Deflate64TruncatedStream => TruncateCodedTail(control, before, ArchiveTestMutationKind.Deflate64TruncatedStream, ArchiveTestCodec.Deflate64),
+            ArchiveTestMutationKind.MethodCrossDeflate64Deflate => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossDeflate64Deflate, ArchiveTestCodec.Deflate64),
+            ArchiveTestMutationKind.MethodCrossBzip2Stored => SetLocalMethodCode(control, before, ArchiveTestMutationKind.MethodCrossBzip2Stored, ArchiveTestCodec.Bzip2),
+            ArchiveTestMutationKind.MethodDataDeflateAsBzip2 => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataDeflateAsBzip2, ArchiveTestCodec.Deflate),
+            ArchiveTestMutationKind.MethodDataBzip2AsStored => DeclareMethodCode(control, before, ArchiveTestMutationKind.MethodDataBzip2AsStored, ArchiveTestCodec.Bzip2),
             ArchiveTestMutationKind.UnsupportedMethodDeflate64 => DeclareUnsupportedMethodDeflate64(control, before),
             ArchiveTestMutationKind.MixedMethodsOneCorruptMember => CorruptMixedBzip2Member(control, before),
             ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember => DeclareMixedUnsupportedMember(control, before),
@@ -855,7 +847,7 @@ internal static class ArchiveFixtureMutator
     {
         var entry = control.Layout.Entries[0];
         var localMethodOffset = entry.LocalHeaderOffset + 8;  // local header method field (u16)
-        var declaredMethod = entry.Method == 0 ? (ushort)8 : (ushort)0;
+        var declaredMethod = entry.Method == ArchiveTestCodec.Stored ? ArchiveTestCodec.Deflate : ArchiveTestCodec.Stored;
 
         return Patch(ArchiveTestMutationKind.MethodLocalCentralMismatch, before,
         [
@@ -963,7 +955,7 @@ internal static class ArchiveFixtureMutator
     /// Policy-sensitive, not universally malformed.
     /// </summary>
     private static MutatedArchiveFixture DeclareUnsupportedMethod(ArchiveFixtureArtifact control, byte[] before) =>
-        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethod, UnsupportedMethodCode, "PPMd");
+        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethod, ArchiveTestCodec.Ppmd);
 
     /// <summary>
     /// Rewrites the compression method in both headers to Deflate64 (9) over stored
@@ -973,12 +965,13 @@ internal static class ArchiveFixtureMutator
     /// separate valid-deflate64 control (ticket #898).
     /// </summary>
     private static MutatedArchiveFixture DeclareUnsupportedMethodDeflate64(ArchiveFixtureArtifact control, byte[] before) =>
-        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethodDeflate64, UnsupportedMethodDeflate64Code, "Deflate64");
+        DeclareMethodCode(control, before, ArchiveTestMutationKind.UnsupportedMethodDeflate64, ArchiveTestCodec.Deflate64);
 
     private static MutatedArchiveFixture DeclareMethodCode(
-        ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind, ushort code, string name)
+        ArchiveFixtureArtifact control, byte[] before, ArchiveTestMutationKind kind, ushort code)
     {
         var entry = control.Layout.Entries[0];
+        var name = ArchiveTestCodec.DisplayName(code);
         var localMethodOffset = entry.LocalHeaderOffset + 8;
         var centralMethodOffset = entry.CentralDirectoryOffset + 10;
 
@@ -1255,7 +1248,7 @@ internal static class ArchiveFixtureMutator
     /// (methods 8 and 9 share the 3-bit block header the bit edits address).</summary>
     private static ArchiveFixtureEntryLayout DeflateEntry(ArchiveFixtureArtifact control, ArchiveTestMutationKind kind)
     {
-        if (control.Layout.Entries.Count == 0 || (control.Layout.Entries[0].Method != 8 && control.Layout.Entries[0].Method != 9))
+        if (control.Layout.Entries.Count == 0 || (control.Layout.Entries[0].Method != ArchiveTestCodec.Deflate && control.Layout.Entries[0].Method != ArchiveTestCodec.Deflate64))
         {
             throw new InvalidOperationException(
                 $"Archive Test mutation '{kind.ToCaseKey()}': the control's entry 0 must be a DEFLATE-family entry.");
@@ -1294,7 +1287,7 @@ internal static class ArchiveFixtureMutator
     /// </summary>
     private static MutatedArchiveFixture CorruptMixedBzip2Member(ArchiveFixtureArtifact control, byte[] before)
     {
-        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == 12)
+        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == ArchiveTestCodec.Bzip2)
             ?? throw new InvalidOperationException(
                 $"Archive Test mutation '{ArchiveTestMutationKind.MixedMethodsOneCorruptMember.ToCaseKey()}': the control has no method-12 member.");
         RequireBzip2Magic(before, entry, ArchiveTestMutationKind.MixedMethodsOneCorruptMember);
@@ -1319,8 +1312,8 @@ internal static class ArchiveFixtureMutator
     /// </summary>
     private static MutatedArchiveFixture DeclareMixedUnsupportedMember(ArchiveFixtureArtifact control, byte[] before)
     {
-        const ushort UnsupportedCode = 98;
-        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == 12)
+        const ushort UnsupportedCode = ArchiveTestCodec.Ppmd;
+        var entry = control.Layout.Entries.SingleOrDefault(e => e.Method == ArchiveTestCodec.Bzip2)
             ?? throw new InvalidOperationException(
                 $"Archive Test mutation '{ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember.ToCaseKey()}': the control has no method-12 member.");
         var localMethodOffset = entry.LocalHeaderOffset + 8;
@@ -1351,7 +1344,7 @@ internal static class ArchiveFixtureMutator
     /// </summary>
     private static MutatedArchiveFixture CorruptBzip2Magic(ArchiveFixtureArtifact control, byte[] before)
     {
-        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2CorruptBlockMagic, 12);
+        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2CorruptBlockMagic, ArchiveTestCodec.Bzip2);
         RequireBzip2Magic(before, entry, ArchiveTestMutationKind.Bzip2CorruptBlockMagic);
 
         var magicOffset = entry.DataOffset + 4;
@@ -1374,7 +1367,7 @@ internal static class ArchiveFixtureMutator
     /// </summary>
     private static MutatedArchiveFixture CorruptBzip2Crc(ArchiveFixtureArtifact control, byte[] before)
     {
-        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2WrongCrc, 12);
+        var entry = CodedEntry(control, ArchiveTestMutationKind.Bzip2WrongCrc, ArchiveTestCodec.Bzip2);
         if (entry.CompressedSize < 10
             || before[(int)entry.DataOffset + 4] != 0x31
             || before[(int)entry.DataOffset + 5] != 0x41

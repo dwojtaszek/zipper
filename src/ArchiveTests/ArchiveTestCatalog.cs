@@ -12,7 +12,7 @@ namespace Zipper.ArchiveTests;
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
     int Length,
-    string Method,
+    string PayloadCodec,
     bool IsDirectory,
     byte[]? PayloadPrefix,
     bool IsPolicyName = false,
@@ -20,8 +20,8 @@ internal sealed record ArchiveTestRecipeEntry(
     uint ExternalAttributes = 0,
     byte HostSystem = 0)
 {
-    internal static ArchiveTestRecipeEntry File(string name, int length, string method = "deflate") =>
-        new(name, length, method, IsDirectory: false, PayloadPrefix: null);
+    internal static ArchiveTestRecipeEntry File(string name, int length, string payloadCodec = "deflate") =>
+        new(name, length, payloadCodec, IsDirectory: false, PayloadPrefix: null);
 
     internal static ArchiveTestRecipeEntry Directory(string name) =>
         new(name, 0, "stored", IsDirectory: true, PayloadPrefix: null);
