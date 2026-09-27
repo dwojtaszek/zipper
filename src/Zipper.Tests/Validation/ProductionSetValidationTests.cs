@@ -78,6 +78,42 @@ public class ProductionSetValidationTests : IDisposable
     }
 
     [Fact]
+    public async Task Validate_ImageReferencesInBothLoadFiles_ShouldCountBothInReport()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var datLines = await File.ReadAllLinesAsync(result.DatFilePath);
+        var optLines = await File.ReadAllLinesAsync(result.OptFilePath);
+        Assert.Equal(3, datLines.Length - 1);
+        Assert.Equal(3, optLines.Length);
+        var columnDelimiter = request.Delimiters.GetColumnChar();
+        var quoteDelimiter = request.Delimiters.GetQuoteChar();
+        var headers = ProductionSetPostValidator.ParseDatLine(datLines[0], columnDelimiter, quoteDelimiter);
+        var imageIndex = headers.IndexOf("IMAGE_PATH");
+        Assert.True(imageIndex >= 0);
+        Assert.All(datLines.Skip(1), line =>
+            Assert.False(string.IsNullOrEmpty(ProductionSetPostValidator.ParseDatLine(line, columnDelimiter, quoteDelimiter)[imageIndex])));
+        Assert.All(optLines, line => Assert.False(string.IsNullOrEmpty(line.Split(',')[2])));
+
+        var report = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+        Assert.Equal("passed", report.Status);
+        Assert.Equal(6, report.CheckedFileCounts["image"]);
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(result.ProductionPath, "_validation_report.json")));
+        Assert.Equal(6, document.RootElement.GetProperty("checkedFileCounts").GetProperty("image").GetInt32());
+
+        var columns = optLines[0].Split(',');
+        columns[2] = string.Empty;
+        optLines[0] = string.Join(',', columns);
+        await File.WriteAllLinesAsync(result.OptFilePath, optLines);
+
+        var reportWithEmptyOptPath = ProductionSetPostValidator.Validate(result.ProductionPath, request);
+        Assert.Equal("passed", reportWithEmptyOptPath.Status);
+        Assert.Equal(5, reportWithEmptyOptPath.CheckedFileCounts["image"]);
+    }
+
+    [Fact]
     public async Task Validate_MissingNativeFile_ShouldCreateFailedReport()
     {
         var request = this.CreateTestRequest(count: 3);

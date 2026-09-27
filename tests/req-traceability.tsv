@@ -139,6 +139,7 @@ REQ-145	unit	ProductionSetTests.RedactedProduction_WithWithheldPolicy_OmitsNativ
 REQ-146	unit	ProductionSetTests.RedactedProduction_DatHeader_IncludesRedactedColumns	REDACTION_REASON column
 REQ-147	unit	ProductionSetTests.RedactedProduction_Manifest_IncludesRedactionStats	Redaction counts in Production Manifest
 REQ-148	e2e	test-production-sets.sh	Post-gen validation of redacted refs + NATIVE_WITHHELD YES/NO
+REQ-149	unit	ProductionSetValidationTests.Validate_ImageReferencesInBothLoadFiles_ShouldCountBothInReport	DAT and OPT image references counted; empty OPT paths excluded
 REQ-157	unit	ComparisonTests.Compare_E2EGeneratedManifests_VerifiesSuccessfully	Compare two or more Production Manifests
 REQ-158	unit	ComparisonTests.Compare_ReplacementMode_IdentifiesChangesCorrectly	Replacement workflow comparison
 REQ-159	unit	ComparisonTests.Compare_SupplementalMode_IdentifiesDuplicateBatesNumbers	Supplemental workflow comparison

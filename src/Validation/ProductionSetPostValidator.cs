@@ -715,6 +715,7 @@ internal sealed class ProductionSetPostValidator
             var imagePath = columns[2];
             if (!string.IsNullOrEmpty(imagePath))
             {
+                state.CheckedImagesCount++;
                 AddReferencedFileFinding(state, new ReferencedFile(state.OptRelPath, lineNumber, "image", imagePath));
             }
         }
