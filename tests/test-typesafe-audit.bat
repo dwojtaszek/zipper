@@ -156,8 +156,32 @@ call :check_contains "path-filtered PR trigger" "^    paths:"
 if errorlevel 1 exit /b 1
 call :check_contains "TYPESAFE_API_KEY secret wiring" "TYPESAFE_API_KEY"
 if errorlevel 1 exit /b 1
-call :check_contains "fork/secret-availability guard" "secret"
+call :check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork"
 if errorlevel 1 exit /b 1
+call :check_contains "secret-availability condition" "steps\.secret\.outputs\.available"
+if errorlevel 1 exit /b 1
+
+REM Negative probe: verify that a workflow fixture without the fork guard or
+REM secret-availability condition fails the strengthened assertions, even if it
+REM contains bare "secret" tokens.
+set NO_GUARD_FIXTURE=%TEMP_DIR%\workflow-no-guard.yml
+findstr /V /R /C:"github\.event\.pull_request\.head\.repo\.fork" /C:"steps\.secret\.outputs\.available" "%WORKFLOW_FILE%" > "%NO_GUARD_FIXTURE%"
+findstr /C:"secret" "%NO_GUARD_FIXTURE%" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Negative probe fixture must contain bare 'secret' token.
+    exit /b 1
+)
+findstr /R /C:"github\.event\.pull_request\.head\.repo\.fork" "%NO_GUARD_FIXTURE%" >nul 2>&1
+if not errorlevel 1 (
+    echo [ ERROR ] Negative probe failed: fork guard unexpectedly passed on fixture without guards.
+    exit /b 1
+)
+findstr /R /C:"steps\.secret\.outputs\.available" "%NO_GUARD_FIXTURE%" >nul 2>&1
+if not errorlevel 1 (
+    echo [ ERROR ] Negative probe failed: secret-availability condition unexpectedly passed on fixture without guards.
+    exit /b 1
+)
+echo [ SUCCESS ] Workflow check: negative probe (fixture without guards fails)
 
 call :check_action_pins
 if errorlevel 1 exit /b 1
@@ -188,7 +212,9 @@ echo [ SUCCESS ] All TypeSafe audit E2E tests passed!
 exit /b 0
 
 :check_contains
-findstr /R /C:"%~2" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
+set "CHECK_TARGET=%~3"
+if not defined CHECK_TARGET set "CHECK_TARGET=%WORKFLOW_FILE%"
+findstr /R /C:"%~2" "%CHECK_TARGET%" >"%WORKFLOW_CHECK_LOG%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Workflow check failed: %~1
     type "%WORKFLOW_CHECK_LOG%" >&2

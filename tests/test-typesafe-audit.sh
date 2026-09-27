@@ -100,10 +100,13 @@ print_success "Fixture-mode audit is deterministic and secret-free."
 [[ -f "$WORKFLOW_FILE" ]] || { print_error "Missing $WORKFLOW_FILE"; exit 1; }
 
 check_contains() {
-    if grep -qE "$2" "$WORKFLOW_FILE"; then
-        print_success "Workflow check: $1"
+    local check_name="$1"
+    local pattern="$2"
+    local target="${3:-$WORKFLOW_FILE}"
+    if grep -qE "$pattern" "$target"; then
+        print_success "Workflow check: $check_name"
     else
-        print_error "Workflow check failed: $1"
+        print_error "Workflow check failed: $check_name"
         exit 1
     fi
 }
@@ -130,7 +133,29 @@ check_contains "weekly schedule trigger" "^  schedule:"
 check_contains "manual dispatch trigger" "workflow_dispatch"
 check_contains "path-filtered PR trigger" "^    paths:"
 check_contains "TYPESAFE_API_KEY secret wiring" "TYPESAFE_API_KEY"
-check_contains "fork/secret-availability guard" "secret"
+check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork"
+check_contains "secret-availability condition" "steps\.secret\.outputs\.available"
+
+# Negative probe: verify that a workflow fixture without the fork guard or
+# secret-availability condition fails the strengthened assertions, even if it
+# contains bare "secret" tokens.
+NO_GUARD_FIXTURE="$TEMP_DIR/workflow-no-guard.yml"
+grep -vE 'github\.event\.pull_request\.head\.repo\.fork|steps\.secret\.outputs\.available' "$WORKFLOW_FILE" > "$NO_GUARD_FIXTURE"
+if ! grep -q "secret" "$NO_GUARD_FIXTURE"; then
+    print_error "Negative probe fixture must contain bare 'secret' token"
+    exit 1
+fi
+if (check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork" "$NO_GUARD_FIXTURE") 2>/dev/null; then
+    print_error "Negative probe failed: fork guard unexpectedly passed on fixture without guards"
+    exit 1
+fi
+if (check_contains "secret-availability condition" "steps\.secret\.outputs\.available" "$NO_GUARD_FIXTURE") 2>/dev/null; then
+    print_error "Negative probe failed: secret-availability condition unexpectedly passed on fixture without guards"
+    exit 1
+fi
+print_success "Workflow check: negative probe (fixture without guards fails)"
+
+
 # Every action reference must be pinned to a full 40-char commit SHA. Keys may be
 # quoted ('uses': / "uses":), comments are stripped so a SHA inside a comment
 # cannot pose as a pin, and the result is read in full (no `grep -q`, which under
