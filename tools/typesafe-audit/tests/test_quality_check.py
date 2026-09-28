@@ -218,6 +218,38 @@ class RunCheckTests(unittest.TestCase):
             self.assertEqual(priorities, sorted(priorities, reverse=True))
             self.assertEqual(len(priorities), 25)
 
+    def test_changed_files_filter_restricts_candidates(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            fake_scored = [{"origin": "coverage", "category": "coverage_gap", "file": "src/Validation/ProductionSetPostValidator.cs", "method": "Validate", "lines": "1-10", "req_ids": [], "priority": 0.8, "scores": {}}]
+            with mock.patch.object(self.run_check, "score_batch", return_value=fake_scored):
+                args = [
+                    "--coverage", str(CORPUS / "cobertura.xml"),
+                    "--repo-root", str(CORPUS),
+                    "--mode", "fixture",
+                    "--changed-files", "src/Validation/ProductionSetPostValidator.cs",
+                    "--json-out", str(tmp / "r.json"), "--md-out", str(tmp / "r.md"),
+                ]
+                code = self.run_check.main(args)
+                self.assertEqual(code, self.run_check.EXIT_OK)
+                report = json.loads((tmp / "r.json").read_text(encoding="utf-8"))
+                self.assertEqual(len(report["ranked"]), 1)
+
+            args[7] = "src/Unrelated/OtherFile.cs"
+            code = self.run_check.main(args)
+            self.assertEqual(code, self.run_check.EXIT_OK)
+            report2 = json.loads((tmp / "r.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(report2["ranked"]), 0)
+
+    def test_path_matches_respects_boundary(self):
+        pm = self.run_check._path_matches
+        self.assertTrue(pm("src/Foo.cs", {"src/Foo.cs"}))
+        self.assertTrue(pm("src/Foo.cs", {"Foo.cs"}))
+        self.assertTrue(pm("/repo/src/Foo.cs", {"src/Foo.cs"}))
+        self.assertFalse(pm("src/BarFoo.cs", {"Foo.cs"}))
+        self.assertFalse(pm("src/Foo.cs", {"BarFoo.cs"}))
+
 
 class WorkflowWiringTests(unittest.TestCase):
     """Scheduled/manual quality workflow with least privilege and budgets."""

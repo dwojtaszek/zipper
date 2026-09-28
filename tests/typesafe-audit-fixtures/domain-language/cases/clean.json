@@ -1,0 +1,4 @@
+{
+  "case": "clean",
+  "text": "public static int Add(int a, int b) => a + b;\n// Helper method to compute sum of integers."
+}

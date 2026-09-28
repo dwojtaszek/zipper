@@ -1,0 +1,13 @@
+{
+  "case": "diagram_stale",
+  "changed_files": [
+    "src/ProductionSets/ProductionSetOrchestrator.cs"
+  ],
+  "diff_hunks": [
+    {
+      "path": "src/ProductionSets/ProductionSetOrchestrator.cs",
+      "diff": "@@ -15,6 +15,20 @@\n+ // Introduce new packaging subsystem without updating diagrams\n"
+    }
+  ],
+  "architecture_doc": "# Architecture Invariants\nAll production sets route through ProductionSetOrchestrator."
+}

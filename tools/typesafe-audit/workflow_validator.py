@@ -190,15 +190,12 @@ def _extract_commands(run_script: str) -> list[str]:
 def _executes_runner(tokens: list[str]) -> bool:
     if not tokens:
         return False
-    # If the first token itself is runner.py
-    if tokens[0].endswith("runner.py"):
+    if tokens[0].endswith("runner.py") or tokens[0].endswith("run_check.py"):
         return True
-    # If standard shell utilities (echo, printf, cat, etc.) have runner.py as an argument, ignore
     first_cmd = os.path.basename(tokens[0])
     if first_cmd in ("echo", "printf", "cat", "grep", "sed", "awk"):
         return False
-    # Check if any token targets runner.py
-    return any(t.endswith("runner.py") for t in tokens)
+    return any(t.endswith("runner.py") or t.endswith("run_check.py") for t in tokens)
 
 
 def _step_executes_runner(run_script: str) -> bool:
@@ -272,47 +269,80 @@ def validate_secret_guards(workflow: dict) -> None:
     _require_mapping(workflow, "Workflow root")
     jobs = _require_mapping(workflow.get("jobs", {}), "Jobs section")
 
-    audit_job = jobs.get("audit")
-    if not audit_job or not isinstance(audit_job, dict):
-        raise WorkflowValidationError("Workflow is missing 'audit' job")
+    # If this workflow contains the 'audit' job or neither triage nor quality-audit, validate audit workflow requirements
+    if "audit" in jobs or ("triage" not in jobs and "quality-audit" not in jobs):
+        audit_job = jobs.get("audit")
+        if not audit_job or not isinstance(audit_job, dict):
+            raise WorkflowValidationError("Workflow is missing 'audit' job")
 
-    audit_steps = audit_job.get("steps", [])
-    if not isinstance(audit_steps, list):
-        raise WorkflowValidationError("Job 'audit' steps must be a list")
+        audit_steps = audit_job.get("steps", [])
+        if not isinstance(audit_steps, list):
+            raise WorkflowValidationError("Job 'audit' steps must be a list")
 
-    has_secret_step = False
-    runner_step_count = 0
+        has_secret_step = False
+        runner_step_count = 0
 
-    for step in audit_steps:
-        if not isinstance(step, dict):
-            continue
-        step_id = step.get("id")
-        if step_id == "secret":
-            has_secret_step = True
+        for step in audit_steps:
+            if not isinstance(step, dict):
+                continue
+            step_id = step.get("id")
+            if step_id == "secret":
+                has_secret_step = True
 
-        run_cmd = step.get("run")
-        if run_cmd and isinstance(run_cmd, str) and _step_executes_runner(run_cmd):
-            runner_step_count += 1
-            step_if = str(step.get("if", ""))
-            if not _is_effective_secret_guard(step_if):
+            run_cmd = step.get("run")
+            if run_cmd and isinstance(run_cmd, str) and _step_executes_runner(run_cmd):
+                runner_step_count += 1
+                step_if = str(step.get("if", ""))
+                if not _is_effective_secret_guard(step_if):
+                    raise WorkflowValidationError(
+                        f"In job 'audit', step '{step.get('name', 'unnamed')}' invokes runner.py without "
+                        "effective secret availability guard (steps.secret.outputs.available == 'true')"
+                    )
+
+        if not has_secret_step:
+            raise WorkflowValidationError("Job 'audit' must contain a step with id: secret")
+        if runner_step_count == 0:
+            raise WorkflowValidationError("Job 'audit' must contain at least one step executing runner.py")
+
+        pr_spec_job = jobs.get("pr-spec-review")
+        if pr_spec_job and isinstance(pr_spec_job, dict):
+            job_if = str(pr_spec_job.get("if", ""))
+            if not _is_effective_fork_guard(job_if):
                 raise WorkflowValidationError(
-                    f"In job 'audit', step '{step.get('name', 'unnamed')}' invokes runner.py without "
-                    "effective secret availability guard (steps.secret.outputs.available == 'true')"
+                    "Job 'pr-spec-review' must effectively restrict to non-fork PRs with "
+                    "'github.event.pull_request.head.repo.fork == false'"
                 )
 
-    if not has_secret_step:
-        raise WorkflowValidationError("Job 'audit' must contain a step with id: secret")
-    if runner_step_count == 0:
-        raise WorkflowValidationError("Job 'audit' must contain at least one step executing runner.py")
+    # General secret guard checks for other TypeSafe jobs (e.g. triage, quality-audit)
+    for job_name in ("triage", "quality-audit"):
+        if job_name in jobs:
+            job_def = jobs[job_name]
+            if not isinstance(job_def, dict):
+                raise WorkflowValidationError(f"Job '{job_name}' must be a mapping")
+            steps = job_def.get("steps", [])
+            if not isinstance(steps, list):
+                raise WorkflowValidationError(f"Job '{job_name}' steps must be a list")
 
-    pr_spec_job = jobs.get("pr-spec-review")
-    if pr_spec_job and isinstance(pr_spec_job, dict):
-        job_if = str(pr_spec_job.get("if", ""))
-        if not _is_effective_fork_guard(job_if):
-            raise WorkflowValidationError(
-                "Job 'pr-spec-review' must effectively restrict to non-fork PRs with "
-                "'github.event.pull_request.head.repo.fork == false'"
-            )
+            has_secret_step = False
+            check_step_count = 0
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                if step.get("id") == "secret":
+                    has_secret_step = True
+                run_cmd = step.get("run")
+                if run_cmd and isinstance(run_cmd, str) and _step_executes_runner(run_cmd):
+                    check_step_count += 1
+                    step_if = str(step.get("if", ""))
+                    if not _is_effective_secret_guard(step_if):
+                        raise WorkflowValidationError(
+                            f"In job '{job_name}', step '{step.get('name', 'unnamed')}' invokes TypeSafe check without "
+                            "effective secret availability guard (steps.secret.outputs.available == 'true')"
+                        )
+            if not has_secret_step:
+                raise WorkflowValidationError(f"Job '{job_name}' must contain a step with id: secret")
+            if check_step_count == 0:
+                raise WorkflowValidationError(f"Job '{job_name}' must contain at least one step executing TypeSafe")
 
 
 def validate_workflow(workflow_path: str) -> list[str]:
@@ -339,20 +369,33 @@ def validate_workflow(workflow_path: str) -> list[str]:
 
 
 def main() -> int:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    workflows_dir = os.path.join(repo_root, ".github", "workflows")
+
     if len(sys.argv) > 1:
-        workflow_path = sys.argv[1]
+        workflow_paths = sys.argv[1:]
     else:
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        workflow_path = os.path.join(repo_root, ".github", "workflows", "typesafe-audit.yml")
+        # Default: discover all typesafe-*.yml workflows if present
+        if os.path.isdir(workflows_dir):
+            workflow_paths = sorted([
+                os.path.join(workflows_dir, f)
+                for f in os.listdir(workflows_dir)
+                if f.startswith("typesafe-") and f.endswith(".yml")
+            ])
+        else:
+            workflow_paths = [os.path.join(workflows_dir, "typesafe-audit.yml")]
 
-    errors = validate_workflow(workflow_path)
-    if errors:
-        for err in errors:
-            print(f"[ ERROR ] {err}", file=sys.stderr)
-        return 1
+    all_errors = []
+    for workflow_path in workflow_paths:
+        errors = validate_workflow(workflow_path)
+        if errors:
+            for err in errors:
+                print(f"[ ERROR ] {os.path.basename(workflow_path)}: {err}", file=sys.stderr)
+            all_errors.extend(errors)
+        else:
+            print(f"[ SUCCESS ] Workflow {os.path.basename(workflow_path)} passed all YAML-aware assertions.")
 
-    print(f"[ SUCCESS ] Workflow {os.path.basename(workflow_path)} passed all YAML-aware assertions.")
-    return 0
+    return 1 if all_errors else 0
 
 
 if __name__ == "__main__":

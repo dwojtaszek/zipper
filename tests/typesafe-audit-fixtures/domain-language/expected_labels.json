@@ -1,0 +1,32 @@
+{
+  "examples": [
+    {
+      "case": "canonical",
+      "expected": {
+        "status": "ok",
+        "choice": "canonical"
+      }
+    },
+    {
+      "case": "alias",
+      "expected": {
+        "status": "finding",
+        "choice": "non_canonical_alias"
+      }
+    },
+    {
+      "case": "clean",
+      "expected": {
+        "status": "ok",
+        "choice": "clean_no_domain_terms"
+      }
+    },
+    {
+      "case": "ambiguous",
+      "expected": {
+        "status": "needs-human-review",
+        "choice": "ambiguous"
+      }
+    }
+  ]
+}

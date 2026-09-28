@@ -128,6 +128,35 @@ if not errorlevel 1 (
 
 echo [ SUCCESS ] Fixture-mode audit is deterministic and secret-free.
 
+REM Architecture corpus replay
+set ARCH_FIXTURE_DIR=%TEMP_DIR%\fixtures-arch
+mkdir "%ARCH_FIXTURE_DIR%"
+python3 "%TOOL_DIR%\checks\architecture\record_corpus_fixtures.py" "%ARCH_FIXTURE_DIR%" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Architecture corpus fixture recording failed.
+    exit /b 1
+)
+python3 "%TOOL_DIR%\checks\architecture\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\architecture" --mode fixture --fixture-dir "%ARCH_FIXTURE_DIR%" --json-out "%TEMP_DIR%\arch.json" --md-out "%TEMP_DIR%\arch.md" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Architecture corpus replay failed.
+    exit /b 1
+)
+
+REM Domain language corpus replay
+set DL_FIXTURE_DIR=%TEMP_DIR%\fixtures-dl
+mkdir "%DL_FIXTURE_DIR%"
+python3 "%TOOL_DIR%\checks\domain_language\record_corpus_fixtures.py" "%DL_FIXTURE_DIR%" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Domain language corpus fixture recording failed.
+    exit /b 1
+)
+python3 "%TOOL_DIR%\checks\domain_language\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\domain-language" --mode fixture --fixture-dir "%DL_FIXTURE_DIR%" --json-out "%TEMP_DIR%\dl.json" --md-out "%TEMP_DIR%\dl.md" >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] Domain language corpus replay failed.
+    exit /b 1
+)
+echo [ SUCCESS ] Architecture and domain language corpus replays passed.
+
 REM --- Part 3: workflow structure checks ---
 
 if not exist "%WORKFLOW_FILE%" (
@@ -201,8 +230,8 @@ if not errorlevel 1 (
 )
 echo [ SUCCESS ] Workflow check: advisory (no --strict)
 
-REM YAML-aware workflow validation (#1046: permissions scope, line continuation advisory checks, secret/fork guards)
-python3 "%TOOL_DIR%\workflow_validator.py" "%WORKFLOW_FILE%"
+REM YAML-aware workflow validation (validates all typesafe-*.yml workflows)
+python3 "%TOOL_DIR%\workflow_validator.py"
 if errorlevel 1 (
     echo [ ERROR ] YAML-aware workflow validation failed.
     exit /b 1

@@ -1,0 +1,4 @@
+{
+  "case": "alias",
+  "text": "When running in redacted mode, the system splits into rolling sets according to the target zip size and writes an audit log."
+}
