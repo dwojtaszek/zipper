@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -49,7 +50,12 @@ QUESTIONS_PATH = CHECK_DIR / "questions.json"
 POLICY_PATH = CHECK_DIR / "policy.json"
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "architecture.md"
 
-SEAM_PREFIX = "src/LoadFiles/"
+SEAM_PREFIXES = (
+    "src/LoadFiles/",
+    "src/ProductionSets/",
+    "src/Validation/",
+    "src/Cli/Modules/",
+)
 CARVE_OUT_FILE = "src/LoadFiles/XmlLoadFileWriter.cs"
 ARCHITECTURE_DOC_REL = "docs/architecture.md"
 
@@ -58,7 +64,7 @@ def watched_files(changed: list[str]) -> list[str]:
     """Seam files this check cares about, in a stable order."""
     return sorted(
         f for f in changed
-        if f.startswith(SEAM_PREFIX) or f == ARCHITECTURE_DOC_REL
+        if any(f.startswith(prefix) for prefix in SEAM_PREFIXES) or f == ARCHITECTURE_DOC_REL
     )
 
 
@@ -198,16 +204,111 @@ def render_markdown(rows: list[dict], watched: list[str], carve_out_review: bool
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Semantic architecture lint (advisory).")
-    parser.add_argument("--base", required=True, help="Diff base ref (PR base SHA).")
+    parser.add_argument("--base", default=None, help="Diff base ref (PR base SHA).")
     parser.add_argument("--head", default="HEAD", help="Diff head ref.")
+    parser.add_argument("--corpus", type=Path, default=None, help="Evaluate every case in this corpus directory.")
     checks_common.add_report_arguments(parser, CHECK_DIR / "fixtures", "Append the Markdown report to this file.")
     args = parser.parse_args(argv)
+
+    if not args.base and not args.corpus:
+        print("architecture-lint: input error: either --base or --corpus is required.", file=sys.stderr)
+        return EXIT_INPUT_ERROR
 
     policy = checks_common.load_json(POLICY_PATH, label="architecture-lint")
     questions = checks_common.load_json(QUESTIONS_PATH, label="architecture-lint")["questions"]
     config = runner.load_config(runner.DEFAULT_CONFIG)
 
-    # --- Deterministic prechecks: fail or skip before any model call. ---
+    api_key = os.environ.get("TYPESAFE_API_KEY", "") if args.mode == "live" else ""
+    if args.mode == "live" and not api_key:
+        print("architecture-lint: input error: TYPESAFE_API_KEY must be set for live mode.", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+    secrets = [api_key] if api_key else []
+
+    if args.corpus:
+        case_files = sorted((args.corpus / "cases").glob("*.json"))
+        if not case_files:
+            print(f"architecture-lint: input error: no cases found in {args.corpus / 'cases'}", file=sys.stderr)
+            return EXIT_INPUT_ERROR
+
+        corpus_results = []
+        for case_path in case_files:
+            case = json.loads(case_path.read_text(encoding="utf-8"))
+            case_name = case.get("case", case_path.stem)
+            changed = case.get("changed_files", [])
+            watched = watched_files(changed)
+            carve_out_review = carve_out_without_doc_update(changed)
+            if not watched:
+                corpus_results.append({
+                    "case": case_name,
+                    "mode": "neutral",
+                    "watched_files": [],
+                    "carve_out_needs_review": False,
+                    "answers": [],
+                })
+                continue
+            if carve_out_review:
+                corpus_results.append({
+                    "case": case_name,
+                    "mode": "carve-out-review",
+                    "watched_files": watched,
+                    "carve_out_needs_review": True,
+                    "answers": [],
+                })
+                continue
+
+            evidence = {
+                "changed_files": watched,
+                "diff_hunks": case.get("diff_hunks", []),
+                "architecture_doc": case.get("architecture_doc", ""),
+            }
+            evidence_key = evidence_key_for(watched)
+            request = {
+                "state": evidence,
+                "model": config["model"],
+                "questions": build_questions(questions, evidence_key),
+            }
+            if args.mode == "fixture":
+                raw = dict(runner.run_fixture(request, Path(args.fixture_dir)))
+            else:
+                raw = dict(runner.run_live(request, config, api_key, secrets))
+
+            rows = _build_rows(questions, raw, evidence_key, policy)
+            if rows is None:
+                return EXIT_INPUT_ERROR
+            corpus_results.append({
+                "case": case_name,
+                "mode": raw.get("_mode", args.mode),
+                "watched_files": watched,
+                "carve_out_needs_review": False,
+                "answers": rows,
+            })
+
+        total_findings = sum(sum(1 for r in cr["answers"] if r["status"] == "finding") for cr in corpus_results)
+        total_reviews = sum(
+            (1 if cr["carve_out_needs_review"] else 0) + sum(1 for r in cr["answers"] if r["status"] == "needs-human-review")
+            for cr in corpus_results
+        )
+        report = {
+            "mode": args.mode,
+            "cases": corpus_results,
+            "total_findings": total_findings,
+            "total_needs_review": total_reviews,
+        }
+        lines = ["# Architecture Corpus Lint Report", ""]
+        lines.append(f"- Mode: {args.mode}")
+        lines.append(f"- Evaluated cases: {len(corpus_results)}")
+        lines.append(f"- Total findings: {total_findings}")
+        lines.append(f"- Needs human review: {total_reviews}")
+        lines.append("")
+        for cr in corpus_results:
+            lines.append(f"## Case: `{cr['case']}`")
+            lines.append(render_markdown(cr["answers"], cr["watched_files"], cr["carve_out_needs_review"]))
+        markdown = "\n".join(lines)
+        checks_common.write_outputs(args.json_out, args.md_out, args.summary_out, report, markdown)
+        print(f"architecture-lint: {len(corpus_results)} case(s), {total_findings} finding(s), {total_reviews} needs-human-review (advisory only).")
+        return EXIT_OK
+
+    # --- Single diff mode (--base) ---
     changed = changed_files(REPO_ROOT, args.base, args.head)
     watched = watched_files(changed)
     if not watched:
@@ -225,10 +326,6 @@ def main(argv: list[str] | None = None) -> int:
 
     carve_out_review = carve_out_without_doc_update(changed)
     if carve_out_review:
-        # Deterministic short-circuit (no model call): a carve-out change
-        # without a same-diff docs/architecture.md update always needs
-        # explicit human approval (Critical Rule 5) — judging the seam on
-        # top would not change that outcome.
         report = {
             "mode": "carve-out-review",
             "watched_files": watched,
@@ -243,11 +340,6 @@ def main(argv: list[str] | None = None) -> int:
     evidence = build_evidence(REPO_ROOT, args.base, args.head, watched, policy)
     evidence_key = evidence_key_for(watched)
 
-    # --- TypeSafe judgment (one bounded request over the seam evidence). ---
-    api_key = os.environ.get("TYPESAFE_API_KEY", "") if args.mode == "live" else ""
-    if args.mode == "live" and not api_key:
-        print("architecture-lint: input error: TYPESAFE_API_KEY must be set for live mode.", file=sys.stderr)
-        return EXIT_INPUT_ERROR
     request = {
         "state": evidence,
         "model": config["model"],
@@ -256,7 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode == "fixture":
         raw = dict(runner.run_fixture(request, Path(args.fixture_dir)))
     else:
-        raw = dict(runner.run_live(request, config, api_key, [api_key]))
+        raw = dict(runner.run_live(request, config, api_key, secrets))
 
     rows = _build_rows(questions, raw, evidence_key, policy)
     if rows is None:

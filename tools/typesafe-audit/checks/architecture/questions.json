@@ -2,10 +2,10 @@
   "questions": {
     "seam_bypass": {
       "type": "noul",
-      "instructions": "Judging only the supplied changed-file list, diff hunks, and architecture excerpt: does the diff make a load-file format produce or render output outside the composer -> serializer -> emitter seam (for example reintroducing a fat writer that renders records directly, or bypassing LoadFileEmitter), or move format dispatch out of LoadFileOrchestrator? The EDRM-XML carve-out (XmlLoadFileWriter) is the only sanctioned exception.",
+      "instructions": "Judging only the supplied changed-file list, diff hunks, and architecture excerpt: does the diff make a component produce or render output outside its architectural seam (e.g. load-file output outside the composer -> serializer -> emitter seam, fat writers bypassing LoadFileEmitter, production set packing outside ProductionSetOrchestrator, post-validation coupled directly to writers rather than ValidationOrchestrator, or CLI module leaks bypassing ICliModule)? The EDRM-XML carve-out (XmlLoadFileWriter) is the only sanctioned load-file exception.",
       "criteria": {
-        "true": "The diff bypasses the seam for a non-XML format or breaks the orchestrator's dispatch ownership",
-        "false": "The diff stays within the seam (or only touches the sanctioned EDRM-XML carve-out)"
+        "true": "The diff bypasses an architectural seam (load file, production set orchestrator, validation orchestrator, or CLI module boundaries)",
+        "false": "The diff stays within designated architectural seams (or only touches the sanctioned EDRM-XML carve-out)"
       }
     },
     "diagram_stale": {

@@ -31,6 +31,41 @@ class TestWorkflowValidator(unittest.TestCase):
         errors = validate_workflow(WORKFLOW_PATH)
         self.assertEqual(errors, [])
 
+    def test_all_three_actual_workflows_pass_validations(self):
+        workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")
+        for fname in ("typesafe-audit.yml", "typesafe-issue-triage.yml", "typesafe-quality-audit.yml"):
+            wpath = os.path.join(workflows_dir, fname)
+            errors = validate_workflow(wpath)
+            self.assertEqual(errors, [], f"Workflow {fname} failed validation: {errors}")
+
+    def test_triage_job_missing_secret_condition_fails(self):
+        workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")
+        triage_path = os.path.join(workflows_dir, "typesafe-issue-triage.yml")
+        with open(triage_path, "r", encoding="utf-8") as f:
+            triage_text = f.read()
+        mutated = triage_text.replace(
+            "if: steps.secret.outputs.available == 'true'",
+            "if: success()",
+        )
+        parsed = parse_workflow_yaml(mutated)
+        with self.assertRaises(WorkflowValidationError) as ctx:
+            validate_secret_guards(parsed)
+        self.assertIn("secret availability guard", str(ctx.exception).lower())
+
+    def test_quality_job_missing_secret_condition_fails(self):
+        workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")
+        quality_path = os.path.join(workflows_dir, "typesafe-quality-audit.yml")
+        with open(quality_path, "r", encoding="utf-8") as f:
+            quality_text = f.read()
+        mutated = quality_text.replace(
+            "if: steps.secret.outputs.available == 'true'",
+            "if: success()",
+        )
+        parsed = parse_workflow_yaml(mutated)
+        with self.assertRaises(WorkflowValidationError) as ctx:
+            validate_secret_guards(parsed)
+        self.assertIn("secret availability guard", str(ctx.exception).lower())
+
     # ---- Regression 1: Advisory mode & line continuations ----
 
     def test_runner_with_strict_on_continuation_line_fails(self):

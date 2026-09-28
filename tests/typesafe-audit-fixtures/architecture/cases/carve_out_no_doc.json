@@ -1,0 +1,13 @@
+{
+  "case": "carve_out_no_doc",
+  "changed_files": [
+    "src/LoadFiles/XmlLoadFileWriter.cs"
+  ],
+  "diff_hunks": [
+    {
+      "path": "src/LoadFiles/XmlLoadFileWriter.cs",
+      "diff": "@@ -10,6 +10,12 @@\n+ // XML carve-out modified without doc update\n"
+    }
+  ],
+  "architecture_doc": "# Architecture Invariants\nEDRM-XML carve-out requires approval."
+}

@@ -93,7 +93,34 @@ elif [[ $? -gt 1 ]]; then
     exit 1
 fi
 
+# Architecture corpus replay
+ARCH_FIXTURE_DIR="$TEMP_DIR/fixtures-arch"
+python3 "$TOOL_DIR/checks/architecture/record_corpus_fixtures.py" "$ARCH_FIXTURE_DIR"
+python3 "$TOOL_DIR/checks/architecture/run_check.py" \
+    --corpus "$SCRIPT_DIR/typesafe-audit-fixtures/architecture" \
+    --mode fixture \
+    --fixture-dir "$ARCH_FIXTURE_DIR" \
+    --json-out "$TEMP_DIR/arch.json" \
+    --md-out "$TEMP_DIR/arch.md" || {
+    print_error "Architecture corpus replay failed."
+    exit 1
+}
+
+# Domain language corpus replay
+DL_FIXTURE_DIR="$TEMP_DIR/fixtures-dl"
+python3 "$TOOL_DIR/checks/domain_language/record_corpus_fixtures.py" "$DL_FIXTURE_DIR"
+python3 "$TOOL_DIR/checks/domain_language/run_check.py" \
+    --corpus "$SCRIPT_DIR/typesafe-audit-fixtures/domain-language" \
+    --mode fixture \
+    --fixture-dir "$DL_FIXTURE_DIR" \
+    --json-out "$TEMP_DIR/dl.json" \
+    --md-out "$TEMP_DIR/dl.md" || {
+    print_error "Domain language corpus replay failed."
+    exit 1
+}
+
 print_success "Fixture-mode audit is deterministic and secret-free."
+print_success "Architecture and domain language corpus replays passed."
 
 # --- Part 3: workflow structure checks ---
 
@@ -182,8 +209,8 @@ elif [[ $? -gt 1 ]]; then
 fi
 print_success "Workflow check: advisory (no --strict)"
 
-# YAML-aware workflow validation (#1046: permissions scope, line continuation advisory checks, secret/fork guards)
-python3 "$TOOL_DIR/workflow_validator.py" "$WORKFLOW_FILE" || {
+# YAML-aware workflow validation (validates all typesafe-*.yml workflows)
+python3 "$TOOL_DIR/workflow_validator.py" || {
     print_error "YAML-aware workflow validation failed."
     exit 1
 }

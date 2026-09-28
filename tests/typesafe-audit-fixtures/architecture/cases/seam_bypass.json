@@ -1,0 +1,18 @@
+{
+  "case": "seam_bypass",
+  "changed_files": [
+    "src/LoadFiles/DatComposer.cs",
+    "src/LoadFiles/LoadFileEmitter.cs"
+  ],
+  "diff_hunks": [
+    {
+      "path": "src/LoadFiles/DatComposer.cs",
+      "diff": "@@ -20,6 +20,15 @@\n+ // Fat writer writing directly to disk bypassing LoadFileEmitter\n+ File.WriteAllText(\"output.dat\", content);\n"
+    },
+    {
+      "path": "src/LoadFiles/LoadFileEmitter.cs",
+      "diff": "@@ -5,6 +5,7 @@\n+ // unmodified emitter\n"
+    }
+  ],
+  "architecture_doc": "# Architecture Invariants\nComposer -> Serializer -> Emitter seam must be respected."
+}

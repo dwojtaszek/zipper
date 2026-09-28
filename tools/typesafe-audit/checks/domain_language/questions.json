@@ -1,0 +1,14 @@
+{
+  "questions": {
+    "canonical_terminology": {
+      "type": "choice",
+      "instructions": "Evaluate the supplied text/diff against UBIQUITOUS_LANGUAGE.md. Choose 'canonical' if all domain concepts use canonical terminology (e.g. Production Set, Rolling Production Set, Audit File, Volume Size Threshold, Production Metadata Budget, Mutation, Reader Profile, Capability Profile, Compression Method). Choose 'non_canonical_alias' if deprecated, colloquial, or prohibited aliases are used (e.g. 'rolling sets', 'target zip size', 'redacted mode', 'audit log'). Choose 'clean_no_domain_terms' if the text contains no domain terminology. Choose 'ambiguous' if evidence is insufficient to decide.",
+      "criteria": {
+        "canonical": "All domain concepts in the text use canonical terminology from UBIQUITOUS_LANGUAGE.md",
+        "non_canonical_alias": "Text uses deprecated, colloquial, or prohibited aliases instead of canonical terms",
+        "clean_no_domain_terms": "Text contains no domain concepts",
+        "ambiguous": "Evidence is insufficient to decide"
+      }
+    }
+  }
+}

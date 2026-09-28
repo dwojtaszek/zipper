@@ -1,0 +1,41 @@
+{
+  "examples": [
+    {
+      "case": "clean_seam",
+      "expected": {
+        "statuses": {
+          "seam_bypass": "ok",
+          "diagram_stale": "ok"
+        },
+        "carve_out_needs_review": false
+      }
+    },
+    {
+      "case": "seam_bypass",
+      "expected": {
+        "statuses": {
+          "seam_bypass": "finding",
+          "diagram_stale": "ok"
+        },
+        "carve_out_needs_review": false
+      }
+    },
+    {
+      "case": "diagram_stale",
+      "expected": {
+        "statuses": {
+          "seam_bypass": "ok",
+          "diagram_stale": "finding"
+        },
+        "carve_out_needs_review": false
+      }
+    },
+    {
+      "case": "carve_out_no_doc",
+      "expected": {
+        "statuses": {},
+        "carve_out_needs_review": true
+      }
+    }
+  ]
+}

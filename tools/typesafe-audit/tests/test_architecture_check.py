@@ -8,6 +8,7 @@ Run: python3 -m unittest tools.typesafe-audit.tests... is not a package; use
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -45,6 +46,22 @@ class WatchedFilesTests(unittest.TestCase):
 
     def test_watched_files_withNoSeamPaths_ExpectedEmpty(self):
         self.assertEqual(arch_check.watched_files(["src/Program.cs", "tests/run-tests.sh"]), [])
+
+    def test_watched_files_withExpandedSeamPaths_ExpectedKeptSorted(self):
+        changed = [
+            "src/ProductionSets/ProductionSetOrchestrator.cs",
+            "src/Validation/ValidationOrchestrator.cs",
+            "src/Cli/Modules/ArchiveTestModule.cs",
+            "tests/test.sh",
+        ]
+        self.assertEqual(
+            arch_check.watched_files(changed),
+            [
+                "src/Cli/Modules/ArchiveTestModule.cs",
+                "src/ProductionSets/ProductionSetOrchestrator.cs",
+                "src/Validation/ValidationOrchestrator.cs",
+            ],
+        )
 
     def test_carve_out_without_doc_update_withCarveOutOnly_ExpectedTrue(self):
         changed = ["src/LoadFiles/XmlLoadFileWriter.cs", "src/Program.cs"]
@@ -205,5 +222,54 @@ class MainLiveTests(unittest.TestCase):
             self.assertEqual(code, arch_check.EXIT_INPUT_ERROR)
 
 
+class CorpusEvaluationTests(unittest.TestCase):
+    def test_corpus_labels_reproduced_with_recorded_responses(self):
+        corpus_dir = Path(__file__).resolve().parents[3] / "tests" / "typesafe-audit-fixtures" / "architecture"
+        recorder_script = CHECK_DIR / "record_corpus_fixtures.py"
+        with tempfile.TemporaryDirectory() as fixture_tmp, tempfile.TemporaryDirectory() as out_tmp:
+            fixture_dir = Path(fixture_tmp)
+            subprocess.run([sys.executable, str(recorder_script), str(fixture_dir)], check=True)
+
+            json_out = Path(out_tmp) / "report.json"
+            md_out = Path(out_tmp) / "report.md"
+            code = arch_check.main([
+                "--corpus", str(corpus_dir),
+                "--mode", "fixture",
+                "--fixture-dir", str(fixture_dir),
+                "--json-out", str(json_out),
+                "--md-out", str(md_out),
+            ])
+            self.assertEqual(code, arch_check.EXIT_OK)
+
+            report = json.loads(json_out.read_text(encoding="utf-8"))
+            expected_labels = json.loads((corpus_dir / "expected_labels.json").read_text(encoding="utf-8"))
+            expected_by_case = {ex["case"]: ex["expected"] for ex in expected_labels["examples"]}
+
+            for case_result in report["cases"]:
+                case_name = case_result["case"]
+                expected = expected_by_case[case_name]
+                self.assertEqual(case_result["carve_out_needs_review"], expected["carve_out_needs_review"], f"Mismatch for {case_name}")
+                actual_statuses = {ans["question"]: ans["status"] for ans in case_result["answers"]}
+                self.assertEqual(actual_statuses, expected["statuses"], f"Mismatch for {case_name}")
+
+    def test_report_json_is_stable_byte_for_byte(self):
+        corpus_dir = Path(__file__).resolve().parents[3] / "tests" / "typesafe-audit-fixtures" / "architecture"
+        recorder_script = CHECK_DIR / "record_corpus_fixtures.py"
+        with tempfile.TemporaryDirectory() as fixture_tmp, tempfile.TemporaryDirectory() as out_tmp:
+            fixture_dir = Path(fixture_tmp)
+            subprocess.run([sys.executable, str(recorder_script), str(fixture_dir)], check=True)
+
+            json_1 = Path(out_tmp) / "report1.json"
+            md_1 = Path(out_tmp) / "report1.md"
+            json_2 = Path(out_tmp) / "report2.json"
+            md_2 = Path(out_tmp) / "report2.md"
+            arch_check.main(["--corpus", str(corpus_dir), "--mode", "fixture", "--fixture-dir", str(fixture_dir), "--json-out", str(json_1), "--md-out", str(md_1)])
+            arch_check.main(["--corpus", str(corpus_dir), "--mode", "fixture", "--fixture-dir", str(fixture_dir), "--json-out", str(json_2), "--md-out", str(md_2)])
+
+            self.assertEqual(json_1.read_bytes(), json_2.read_bytes())
+            self.assertEqual(md_1.read_bytes(), md_2.read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()
+

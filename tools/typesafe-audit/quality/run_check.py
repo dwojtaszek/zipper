@@ -130,11 +130,20 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
+def _path_matches(file_path: str, changed_files: set[str]) -> bool:
+    norm = os.path.normpath(file_path).replace("\\", "/")
+    for cf in changed_files:
+        if norm == cf or norm.endswith("/" + cf) or cf.endswith("/" + norm):
+            return True
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Quality prioritization audit (advisory).")
     parser.add_argument("--coverage", type=Path, help="Cobertura XML from the test run.")
     parser.add_argument("--mutation", type=Path, help="Stryker JSON mutation report.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
+    parser.add_argument("--changed-files", nargs="*", default=None, help="Filter candidates to only these changed files (PR delta mode).")
     checks_common.add_report_arguments(parser, QUALITY_DIR / "fixtures")
     args = parser.parse_args(argv)
 
@@ -162,6 +171,10 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"quality-audit: input error: {exc}", file=sys.stderr)
         return EXIT_INPUT_ERROR
+
+    if args.changed_files is not None:
+        changed_set = {os.path.normpath(cf).replace("\\", "/") for cf in args.changed_files}
+        candidates = [c for c in candidates if _path_matches(c["file"], changed_set)]
 
     for index, candidate in enumerate(candidates):
         candidate["key"] = f"{candidate['file']}:{candidate.get('first_line', candidate.get('line'))}#{index}"

@@ -1,0 +1,18 @@
+{
+  "confidence_threshold": 0.7,
+  "max_file_diff_bytes": 60000,
+  "max_total_diff_bytes": 200000,
+  "allowed_choices": {
+    "canonical_terminology": [
+      "canonical",
+      "non_canonical_alias",
+      "clean_no_domain_terms",
+      "ambiguous"
+    ]
+  },
+  "finding_choices": {
+    "canonical_terminology": [
+      "non_canonical_alias"
+    ]
+  }
+}
