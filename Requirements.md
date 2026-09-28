@@ -142,6 +142,9 @@ The application operates in three distinct generation modes:
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
 - `--tiff-pages <min-max>`: (Optional) Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
+- `--compression <store|deflate|deflate64|bzip2>`: (Optional) The compression method for output Archives. Defaults to `deflate`. `store` writes uncompressed entries; `deflate64` and `bzip2` are recognized but not yet supported.
+- `--archive-test-suite <smoke|compatibility|malformed|security|encoding|all>`: (Optional) Predefined Archive Test Fixture suite to generate. Requires `--output-path` pointing to a non-existent directory. Accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; all other generation flags rejected.
+- `--archive-test-cases <key,key,...>`: (Optional) Comma-separated list of Archive Test Case keys to filter fixture generation.
 
 ## 5. Testing
 
@@ -249,14 +252,14 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 
 #### Conditional Column Ordering
 **Non-EML Output:**
-- **Standard mode:** Control Number, File Path, [if metadata] Custodian, Date Sent, Author, File Size, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Standard mode:** Control Number, File Path, [if metadata] Custodian, Date Sent, Author, File Size, Compression Method, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
 - **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, ExtractedText
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, [if metadata] Compression Method, ExtractedText
 
 **EML Output (`--type eml`):**
-- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, To, From, CC, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
+- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, To, From, CC, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
 - **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate
 
 ### 8.3 Opticon (OPT) Format Specification
 
@@ -522,7 +525,7 @@ The `concordance` format (`--load-file-format concordance`) is a **distinct** da
 - **In-field quote escaping**: Embedded quote characters are doubled (DAT-style escaping)
 
 #### Conditional Column Ordering
-**Concordance Standard mode:** BEGATTY (always, empty), ENDATTY (always, empty), CONTROLNUMBER, PATH, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, [if eml] TO, FROM, SUBJECT, SENTDATE, ATTACHMENT, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH
+**Concordance Standard mode:** BEGATTY (always, empty), ENDATTY (always, empty), CONTROLNUMBER, PATH, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, COMPRESSION_METHOD, [if eml] TO, FROM, SUBJECT, SENTDATE, ATTACHMENT, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH
 
 Leading columns (always present):
 
@@ -533,7 +536,7 @@ Leading columns (always present):
 | `CONTROLNUMBER` | Unique document identifier. |
 | `PATH` | Relative Native File path within the Archive. |
 
-Conditional columns append in this order when their feature is active: metadata (`CUSTODIAN`, `DATESENT`, `AUTHOR`, `FILESIZE`), email (`TO`, `FROM`, `SUBJECT`, `SENTDATE`, `ATTACHMENT`), `BATES`, `PAGECOUNT`, `TEXT_PATH`.
+Conditional columns append in this order when their feature is active: metadata (`CUSTODIAN`, `DATESENT`, `AUTHOR`, `FILESIZE`, `COMPRESSION_METHOD`), email (`TO`, `FROM`, `SUBJECT`, `SENTDATE`, `ATTACHMENT`), `BATES`, `PAGECOUNT`, `TEXT_PATH`.
 
 > [!NOTE]
 > `BEGATTY`/`ENDATTY` are structurally required by the format but are intentionally emitted empty because the generator does not compute attachment parent/child Bates ranges. This is a known limitation, not corruption.
@@ -556,7 +559,7 @@ The `csv` format (`--load-file-format csv`) produces a standard RFC 4180 comma-s
 - Empty values are emitted as an empty field (no quotes).
 
 #### Conditional Column Ordering
-**CSV Standard mode:** CONTROL NUMBER, FILE PATH, [if metadata/eml] CUSTODIAN, DATE SENT, AUTHOR, FILE SIZE, [if eml] TO, FROM, SUBJECT, SENT DATE, ATTACHMENT, [if --bates-prefix] BATES NUMBER, [if type=tiff + --tiff-pages] PAGE COUNT, [if --with-text] EXTRACTED TEXT
+**CSV Standard mode:** CONTROL NUMBER, FILE PATH, [if metadata/eml] CUSTODIAN, DATE SENT, AUTHOR, FILE SIZE, COMPRESSION METHOD, [if eml] TO, FROM, SUBJECT, SENT DATE, ATTACHMENT, [if --bates-prefix] BATES NUMBER, [if type=tiff + --tiff-pages] PAGE COUNT, [if --with-text] EXTRACTED TEXT
 
 #### `--load-file-format csv` vs `--dat-delimiters csv`
 
@@ -636,6 +639,12 @@ This section clarifies behavior when multiple arguments interact:
 | `--chaos-list` | **Early exit**: bypasses all file generation and argument validation; prints scenarios and exits |
 | `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only` |
 | `--withheld-native-policy` | Requires `--redacted-production`; values: `keep-native`, `omit-native-path`, `replace-with-placeholder` |
+| `--compression store` + `--target-zip-size` | Uncompressed ratio of 1.0 used for size pre-checks and padding calculations rather than default 50% (REQ-224) |
+| `--compression` + `--with-metadata` / Email | Compression Method column included when `--with-metadata` is set, or automatically when Email participates (REQ-001) |
+| `--archive-test-suite` / `--archive-test-cases` | **Closed flag set**: requires `--output-path` (pointing to a new directory); accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; all other generation flags, `--benchmark`, and `--chaos-list` are rejected |
+| `--compare-production-manifests` | **Short-circuit**: bypasses normal file generation, post-generation validation, and generation flag validation (REQ-179); requires `--comparison-mode` and `--comparison-output` |
+| `--production-id` + `--production-set` | **Requires**: `--production-id` cannot be used without `--production-set`; each element must be a Safe Path Segment ≤ 250 UTF-8 bytes (REQ-170) |
+| `--bates-prefix` cap | Maximum 200 UTF-8 bytes per prefix element (REQ-225) |
 
 ---
 
@@ -778,6 +787,9 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-167**: When `--hash-mode` is enabled (`actual` or `simulated`), generated Load Files (DAT, CSV, Concordance, EDRM-XML) shall include corresponding hash columns (`MD5HASH`, `SHA1HASH`, `SHA256HASH`) for each specified algorithm.
 - **REQ-168**: Invalid `--hash-mode` values (values other than `actual`, `simulated`, or `none`, case-insensitive) or invalid `--hash-algorithms` values (unrecognized algorithm names or empty selections) shall fail validation immediately with a clear error message and non-zero exit code.
 - **REQ-169**: Specifying `--hash-algorithms` when `--hash-mode` is `none` or omitted shall fail validation with a clear error message.
+
+### FR-031: Production Manifest Azure-Safe Metadata Block
+
 - **REQ-225**: The Production Manifest shall carry a `metadata` block of string key/value pairs describing the Azure Blob custom metadata an upload client maps onto `x-ms-meta-<key>` headers. The generator shall emit a deterministic derived block (`production_id`, `bates_number_start`, `bates_number_end`, `volume_count`) whose values are Azure-safe by construction: keys match the Azure C#-identifier rule (start with a letter or underscore, then ASCII letters, digits, or underscores), and value characters are limited to tab (0x09) or printable ASCII (0x20–0x7E). The generator normalizes CR (0x0D) and LF (0x0A) to a space, preserves tab, and maps every other disallowed character, including C0 controls other than CR/LF (including NUL 0x00), DEL 0x7F, and non-ASCII characters, to `_`. The combined key/value size is guaranteed to stay within the 8,192-byte Azure metadata budget by construction at the CLI input seam: the CLI rejects any parsed `--bates-prefix` element longer than 200 UTF-8 bytes and any `--production-id` element longer than 250 UTF-8 bytes; the comma-joined flag value itself may be longer when every element is within its cap. These limits are measured in UTF-8 bytes because Native File names carry the Bates Number prefix, while the Production ID names both a Production Set directory and the base of its sibling `<id>.zip` Archive; filesystem path components are limited to 255 bytes on Linux and macOS filesystems, and reserving four bytes for `.zip` keeps the Production ID at 250 bytes (`250 + 4 = 254 ≤ 255`). The worst-case derived Production Metadata block is 759 bytes (59 bytes of keys + `volume_count` ≤10 bytes + two Bates Number values ≤2×(200+20) bytes + a Production ID value ≤250 bytes), below Azure's 8,192-byte budget. The block is additionally guarded at write time: the Production Manifest writer measures the combined key/value size using the same accounting as REQ-226 and refuses to serialize a block exceeding 8,192 bytes, measuring before serialization so no partial manifest is written; REQ-226 guards hand-edited or pipeline-produced artifacts.
 - **REQ-226**: Post-generation validation shall enforce the Azure Blob metadata constraints (REQ-225) on the Production Manifest's `metadata` block: a key violating the Azure naming rule, a non-string value, a value containing a character outside tab or 0x20–0x7E (which subsumes non-ASCII characters and CR/LF), or a combined key/value size exceeding 8,192 bytes shall each produce an error finding (`MetadataAzureConstraint`) that fails the validation report. A non-string value is itself a finding, but its key still counts toward the combined size. Both this validator and the writer guard measure the block through one shared accounting so they cannot disagree. The writer guard preempts this validator: an over-budget block is refused before serialization, the run fails with a non-zero exit code, and the generated Production Set is removed.
 
@@ -819,7 +831,7 @@ This section pins the public CLI contract for each rolling, supplemental, and co
 - **REQ-186**: In Production Set mode, `--with-collection-metadata` is silently ignored (no columns added, no error). Production Set DAT uses its own fixed column schema (FR-023 / §8.2 conditional ordering) that does not include Collection Metadata columns.
 - **REQ-187**: When both `--column-profile` and `--with-collection-metadata` are specified, the five Collection Metadata columns shall be merged into the loaded profile. Column values supplied by the profile take precedence; when the profile does not supply a value for a Collection Metadata column, the synthetic generator (REQ-182) provides the fallback value.
 - **REQ-188**: Collection Metadata column names shall follow the naming convention of the active profile (`FieldNamingConvention`, default `UPPERCASE`) when a profile is loaded. Without a profile in Standard mode DAT, the columns use the display names: `Data Source`, `Collection Date`, `De-Nisted`, `Dedupe Group ID`, `Processing Status`, subject to the naming convention. In CSV and Concordance formats, the columns use the field names `DATA_SOURCE`, `COLLECTION_DATE`, `DENISTED`, `DEDUPE_GROUP_ID`, `PROCESSING_STATUS`.
-- **REQ-189**: `--with-collection-metadata` shall not conflict with `--with-metadata`; both flags may be combined. `--with-metadata` adds Custodian, Date Sent, Author, and File Size columns; `--with-collection-metadata` adds the five Collection Metadata columns. The two column sets are disjoint.
+- **REQ-189**: `--with-collection-metadata` shall not conflict with `--with-metadata`; both flags may be combined. `--with-metadata` adds Custodian, Date Sent, Author, File Size, and Compression Method columns; `--with-collection-metadata` adds the five Collection Metadata columns. The two column sets are disjoint.
 
 ## 19. File Type Mix
 

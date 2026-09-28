@@ -108,7 +108,7 @@ All command-line flags recognized by Zipper:
 | `--attachment-rate` | `0` | `0` to `100` | Percentage of Emails containing attachments |
 | `--target-zip-size` | none | e.g. `500MB`, `10GB` | Target padded Archive size |
 | `--include-load-file` | `false` | flag | Include Load File inside ZIP Archive |
-| `--compression` | `deflate` | `store`, `deflate` (`deflate64`, `bzip2` planned — currently rejected) | ZIP compression method for output Archives |
+| `--compression` | `deflate` | `store`, `deflate` (`deflate64`, `bzip2` planned — currently rejected) | ZIP compression method for output Archives (Standard mode, `--include-load-file`, `--production-zip`) |
 | `--load-file-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Single Load File format |
 | `--load-file-formats` | none | comma-separated list (e.g. `dat,opt,csv`) | Multiple simultaneous Load File formats |
 | `--loadfile-format` | `dat` | `dat`, `opt` | Alias for `--load-file-format` in Loadfile-Only mode |
@@ -141,24 +141,46 @@ All command-line flags recognized by Zipper:
 | `--production-set` | `false` | flag | Structured Production Set output |
 | `--volume-size` | `5000` | positive integer | Maximum documents per volume subfolder |
 | `--production-id` | auto | string, requires `--production-set`, non-empty, maximum 250 UTF-8 bytes per generated element (after rolling derivation), single safe path segment per element | Production ID for the Production Set |
-| `--rolling-count` | `1` | positive integer | Generate multiple rolling production sets |
-| `--rolling-bates-mode` | `continuous` | `continuous`, `restart` | Bates sequence behavior across rolling sets |
+| `--rolling-count` | `1` | positive integer | Generate multiple Rolling Production Sets |
+| `--rolling-bates-mode` | `continuous` | `continuous`, `restart` | Bates sequence behavior across Rolling Production Sets |
 | `--source-path-mode` | `bates` | `bates`, `preserve`, `originals` | Source path placement policy |
 | `--production-zip` | `false` | flag | Wrap Production Set output in ZIP Archive |
 | `--redacted-production` | `false` | flag | Redacted production placeholders |
-| `--withheld-native-policy` | `keep-native` | `keep-native`, `omit-native-path`, `replace-with-placeholder` | Redacted mode native path handling policy |
+| `--withheld-native-policy` | `keep-native` | `keep-native`, `omit-native-path`, `replace-with-placeholder` | Redacted Production native path handling policy |
 | `--supplemental-production` | `false` | flag | Supplemental Production Set generation |
 | `--prior-manifest` | none | comma-separated paths | Paths to prior production `_manifest.json` files |
-| `--supplemental-gap-policy` | `reject` | `reject`, `allow` | Gap validation policy for supplemental sets |
+| `--supplemental-gap-policy` | `reject` | `reject`, `allow` | Gap validation policy for Supplemental Production Sets |
 | `--compare-production-manifests` | none | comma-separated paths | Compare Production Set manifests; the last path is the new Production Manifest, earlier paths are prior input |
 | `--comparison-mode` | none | `replacement`, `supplemental`, `reproduction` | Production Manifest comparison ruleset; `replacement` and `reproduction` share the same matching/classification rules and differ only in reported mode |
 | `--comparison-output` | none | file path | Report JSON output path |
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
-| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (exclusive workflow; see [Archive Test Suites](docs/archive-test-suites.md)) |
-| `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print version string and exit |
+
+### Standard Load File Columns
+
+In Standard generation mode (no custom `--column-profile`), Load File columns are emitted in a fixed order depending on active flags:
+
+| Column (DAT) | Column (CSV) | Column (Concordance) | Trigger / Condition |
+|---|---|---|---|
+| — | — | `BEGATTY`, `ENDATTY` | Fixed leading columns in Concordance format |
+| `Control Number` | `CONTROL NUMBER` | `CONTROLNUMBER` | Always present (required) |
+| `File Path` | `FILE PATH` | `PATH` | Always present (required) |
+| `File Type` | `FILE TYPE` | `FILE_TYPE` | `--types` (File Type Mix only) |
+| `Custodian` | `CUSTODIAN` | `CUSTODIAN` | `--with-metadata` or `--type eml` / EML in mix |
+| `Date Sent` | `DATE SENT` | `DATESENT` | `--with-metadata` or `--type eml` / EML in mix |
+| `Author` | `AUTHOR` | `AUTHOR` | `--with-metadata` or `--type eml` / EML in mix |
+| `File Size` | `FILE SIZE` | `FILESIZE` | `--with-metadata` or `--type eml` / EML in mix |
+| `Compression Method` | `COMPRESSION METHOD` | `COMPRESSION_METHOD` | `--with-metadata` or `--type eml` / EML in mix |
+| `To`, `From`, `CC`, `Subject`, `Sent Date`, `Attachment` | `TO`, `FROM`, `CC`, `SUBJECT`, `SENT DATE`, `ATTACHMENT` | `TO`, `FROM`, `SUBJECT`, `SENTDATE`, `ATTACHMENT` | `--type eml` or EML in mix |
+| `Data Source`, `Collection Date`, `De-Nisted`, `Dedupe Group ID`, `Processing Status` | `DATA_SOURCE`, `COLLECTION_DATE`, `DENISTED`, `DEDUPE_GROUP_ID`, `PROCESSING_STATUS` | `DATA_SOURCE`, `COLLECTION_DATE`, `DENISTED`, `DEDUPE_GROUP_ID`, `PROCESSING_STATUS` | `--with-collection-metadata` |
+| `Bates Number` | `BATES NUMBER` | `BATES` | `--bates-prefix` |
+| `Page Count` | `PAGE COUNT` | `PAGECOUNT` | `--type tiff` (or TIFF in mix) + `--tiff-pages` |
+| `Extracted Text` | `EXTRACTED TEXT` | `TEXT_PATH` | `--with-text` |
+| `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `--with-families` |
 
 For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md). Argument interactions for `--compression` are in [§7 Argument Interactions Reference](docs/advanced-guide.md#7-argument-interactions-reference).
 

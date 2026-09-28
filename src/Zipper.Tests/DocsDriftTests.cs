@@ -122,5 +122,44 @@ public class DocsDriftTests
         Assert.Contains("unknown", docs);
         Assert.Contains("omitted for directories", docs);
     }
+
+    [Fact]
+    public void Requirements_Section8ColumnLists_IncludesCompressionMethod()
+    {
+        var reqPath = Path.Combine(RepoRoot, "Requirements.md");
+        var content = File.ReadAllText(reqPath);
+
+        Assert.Contains("Compression Method", content);
+        Assert.Contains("COMPRESSION_METHOD", content);
+        Assert.Contains("COMPRESSION METHOD", content);
+    }
+
+    [Fact]
+    public void UbiquitousLanguage_RecentTerminology_ContainsNewTerms()
+    {
+        var langPath = Path.Combine(RepoRoot, "UBIQUITOUS_LANGUAGE.md");
+        var content = File.ReadAllText(langPath);
+
+        Assert.Contains("**Mutation**", content);
+        Assert.Contains("**Reader Profile**", content);
+        Assert.Contains("**Capability Profile**", content);
+        Assert.Contains("**Frozen Test Vector**", content);
+        Assert.Contains("**Compression Method**", content);
+        Assert.Contains("**Local Header Method**", content);
+        Assert.Contains("**Central Directory Method**", content);
+        Assert.Contains("**Payload Codec**", content);
+        Assert.Contains("**Volume Membership**", content);
+        Assert.Contains("**Production Metadata Budget**", content);
+    }
+
+    [Fact]
+    public void Architecture_ComponentMapAndOverview_DocumentsTwelveModulesAndValidationOrchestrator()
+    {
+        var archPath = Path.Combine(RepoRoot, "docs", "architecture.md");
+        var content = File.ReadAllText(archPath);
+
+        Assert.Contains("all twelve", content);
+        Assert.Contains("ValidationOrchestrator", content);
+    }
 }
 

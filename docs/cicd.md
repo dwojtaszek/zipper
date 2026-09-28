@@ -105,6 +105,10 @@ Trigger: `push` → `main`, and tags `v*`.
 
 - **perf-baseline-refresh** — [`perf-baseline-refresh.yml`](../.github/workflows/perf-baseline-refresh.yml), Monday 04:00 UTC (or manual `workflow_dispatch`). Re-measures (5 runs, take max), and if any metric drifts ≥5% opens a `chore: refresh perf baselines` PR with a review checklist.
 - **Dependabot** — [`dependabot.yml`](../.github/dependabot.yml). NuGet daily (grouped minor/patch vs major), GitHub Actions weekly. Subject to the **3-day waiting period** before merge — see [CI.md](../CI.md#dependency-update-policy).
+- **Weekly functional QA** — [`qa.yml`](../.github/workflows/qa.yml), Sunday 02:00 UTC (or manual `workflow_dispatch`). Full cross-platform functional and E2E regression suite across Windows, macOS, and Linux runners.
+- **Nightly Zip64 scale test** — [`zip64-nightly.yml`](../.github/workflows/zip64-nightly.yml), nightly at 01:00 UTC. Exercises 100GB+ generation and Zip64 entry bounds on large runner storage.
+- **TypeSafe quality prioritization audit** — [`typesafe-quality-audit.yml`](../.github/workflows/typesafe-quality-audit.yml), Monday 06:00 UTC (or manual `workflow_dispatch`). Runs coverage gap extraction, Stryker mutation testing shard, and TypeSafe scoring.
+- **TypeSafe full audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), Monday 06:00 UTC. Full audit of requirements, traceability, and architecture seams.
 
 ## Gates summary
 
