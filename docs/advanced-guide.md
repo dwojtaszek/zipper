@@ -67,7 +67,7 @@ Generates metadata or image-referencing load files directly to disk without crea
 ```text
 <output-path>/
 ├── loadfile_20260731_120000.dat
-└── loadfile_20260731_120000_properties.json  (Audit Metadata File)
+└── loadfile_20260731_120000_properties.json  (Audit File)
 ```
 
 ---
@@ -273,7 +273,7 @@ Method names are matched case-insensitively. An unrecognized method fails valida
 # Uncompressed Archive — Native Files are stored, not deflated
 zipper --type pdf --count 1000 --output-path ./stored_archive --compression store
 
-# Pair with a target size; padding assumes a 1.0 ratio because nothing compresses
+# Pair with a Target Zip Size; padding assumes a 1.0 ratio because nothing compresses
 zipper --type pdf --count 1000 --output-path ./sized_archive \
     --compression store --target-zip-size 10MB
 
@@ -369,7 +369,91 @@ Written alongside standalone Load Files in Loadfile-Only Mode using `camelCase` 
 
 ### `_manifest.json` (Production Set Manifest)
 
-Written at the root of Production Sets. Records Bates ranges, volume layout, load file paths, document counts (`nativeFileCount`, `parentNativeFileCount`, `attachmentNativeFileCount`), and configuration parameters.
+Written at the root of Production Sets. Records Bates ranges, volume layout, load file paths, document counts (`nativeFileCount`, `parentNativeFileCount`, `attachmentNativeFileCount`), configuration parameters, and the Azure-safe Production Metadata block (`metadata`):
+
+```json
+{
+  "productionDate": "2026-09-28T12:00:00Z",
+  "productionId": "PROD_20260928_120000",
+  "rollingSequenceNumber": 1,
+  "batesNumberStart": "CLIENT00100000001",
+  "batesNumberEnd": "CLIENT00100005000",
+  "batesRangeMode": "continuous",
+  "batesRange": {
+    "start": "CLIENT00100000001",
+    "end": "CLIENT00100005000",
+    "prefix": "CLIENT001",
+    "digits": 8
+  },
+  "nativeFileCount": 5000,
+  "parentNativeFileCount": null,
+  "attachmentNativeFileCount": null,
+  "fileType": "pdf",
+  "volumeCount": 1,
+  "volumeSize": 5000,
+  "directories": {
+    "data": "DATA",
+    "natives": "NATIVES",
+    "text": "TEXT",
+    "images": "IMAGES",
+    "redacted": null,
+    "originals": null
+  },
+  "loadFiles": {
+    "dat": "DATA/loadfile.dat",
+    "opt": "DATA/loadfile.opt"
+  },
+  "settings": {
+    "encoding": "UTF-8",
+    "columnDelimiter": "ascii:20",
+    "quoteDelimiter": "ascii:254",
+    "columnProfile": null,
+    "seed": 42
+  },
+  "generationTime": "3.5s",
+  "validationReport": "_validation_report.json",
+  "metadata": {
+    "production_id": "PROD_20260928_120000",
+    "bates_number_start": "CLIENT00100000001",
+    "bates_number_end": "CLIENT00100005000",
+    "volume_count": "1"
+  }
+}
+```
+
+### `_validation_report.json` (Production Set Validation Report)
+
+Written at the root of Production Sets by `ProductionSetPostValidator`. Records overall validation status, error and warning counts, checked file counts, checked row counts, and structural findings:
+
+```json
+{
+  "status": "passed",
+  "errorCount": 0,
+  "warningCount": 0,
+  "checkedFileCounts": {
+    "native": 5000,
+    "text": 5000,
+    "image": 10000,
+    "dat": 1,
+    "opt": 1
+  },
+  "checkedLoadFileRowCounts": {
+    "DATA/loadfile.dat": 5001,
+    "DATA/loadfile.opt": 5000
+  },
+  "findings": []
+}
+```
+
+Finding records report issues using eight standard codes:
+- `PathExistence` — Referenced native, image, text, or load file is missing from disk.
+- `BatesConsistency` — Bates number continuity breach, out-of-order sequence, or gap violation.
+- `OptBoundary` — Invalid Opticon document break (`Y`), missing page marker, or page count mismatch.
+- `ColumnCount` — DAT row field count does not match the header definition.
+- `UniqueId` — Duplicate Bates number or Control Number detected within the production.
+- `InvalidValue` — Field value fails domain validation (e.g. non-numeric size or invalid date).
+- `ManifestSyntax` — Missing or unparseable `_manifest.json` file.
+- `MetadataAzureConstraint` — Production Manifest `metadata` block violates Azure Blob naming constraints, printable ASCII character set, or 8,192-byte combined budget.
 
 ### `report.json` (Comparison Report)
 

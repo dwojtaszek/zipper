@@ -62,12 +62,12 @@ graph TD
     Chaos --> Audit["_properties.json Audit"]
 
     ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
-    PSG --> PSP["ProductionSetPlanner (no I/O)"]
-    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
     PSG --> PSO["ProductionSetOrchestrator"]
+    PSO --> PSP["ProductionSetPlanner (no I/O)"]
+    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
     PSO --> LFO
     LFO --> LF3["Load Files + Audit Files"]
-    PSG --> Manifest["Production Manifest"]
+    PSO --> Manifest["Production Manifest"]
 ```
 
 ## Component Map
@@ -104,8 +104,9 @@ graph LR
         StdMode["StandardMode"]
         LFMode["LoadFileOnlyMode"]
         PSMode["ProductionSetMode"]
-        PSG["ProductionSetGenerator"]
-        PSMode --> PSG
+        PSG["ProductionSetGenerator (thin facade)"]
+        PSO["ProductionSetOrchestrator"]
+        PSMode --> PSG --> PSO
     end
 
     subgraph File Generators
@@ -134,10 +135,12 @@ graph LR
     end
 
     subgraph Validation
+        VO["ValidationOrchestrator<br/>(shared post-generation tail)"]
         PGV["PostGenerationValidator<br/>(Standard / Loadfile-Only / Production Set)"]
         Runner["ValidatorRunner"]
         PSPV["ProductionSetPostValidator"]
         SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
+        VO --> PGV
         PGV --> Runner
         PGV --> PSPV
     end
@@ -158,26 +161,36 @@ graph LR
     Program -->|"SelectMode(request)"| StdMode
     Program -->|"SelectMode(request)"| LFMode
     Program -->|"SelectMode(request)"| PSMode
-    StdMode --> PGV
-    LFMode --> PGV
-    PSMode --> PGV
-    PSG --> SuppV
+    StdMode --> VO
+    LFMode --> VO
+    PSMode --> VO
+    PSO --> SuppV
     FGR --> File Generators
     FGR --> Load File Seam
     Profiles --> DataGen
 ```
 
-*Phase 1–4 of #750 complete: all eleven parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison). `Program` owns `CliModuleSet.Parse` (token reader + module dispatcher) and the comparison short-circuit; `CrossCuttingRules.Validate` then runs the generation-path cross-domain checks on the parsed module fields, before any `TryBuild`. `Pipeline.Build` runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then applies the image-type load-file override (`ApplyImageTypeLoadFileOverride`) and constructs `FileGenerationRequest`. When `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), `Program` short-circuits to the Production Manifest comparer and never calls `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
+*Phase 1–4 of #750 complete: all twelve parse/validate/build domains moved into `CliModule`s (Hash/Delimiter/Tiff/Chaos/Bates/Metadata/LoadFile/Production/SourceInput/Output/Comparison/ArchiveTest). `Program` owns `CliModuleSet.Parse` (token reader + module dispatcher) and the comparison short-circuit; `CrossCuttingRules.Validate` then runs the generation-path cross-domain checks on the parsed module fields, before any `TryBuild`. `Pipeline.Build` runs the **ten**-module `TryBuild` chain in order Production → Bates → SourceInput → Output → Metadata → LoadFile → Delimiter → Tiff → Chaos → Hash (Comparison is not in that chain), then applies the image-type load-file override (`ApplyImageTypeLoadFileOverride`) and constructs `FileGenerationRequest`. When `ComparisonModule.TryBuild` yields a validated `ComparisonRequest` (REQ-179), `Program` short-circuits to the Production Manifest comparer and never calls `Pipeline.Build`. `CliParser`/`CliValidator`/`ParsedArguments`/`RequestBuilder` and the three mode validators are deleted.*
 
 *Archive Test dispatch (#844, per ADR-0008): `ArchiveTestModule` parses `--archive-test-suite` / `--archive-test-cases`; when requested, `Program` short-circuits to `ArchiveTestCliWorkflow` before the comparison check and before `Pipeline.Build`. The workflow enforces a closed flag set (no generation flags, `--benchmark`, or `--chaos-list` may be combined with it), resolves the suite and Case Key selection, and drives `ArchiveTestSuiteGenerator` to publish Archive Test Fixture + Expectation File pairs. It is not a generation mode and never constructs a `FileGenerationRequest`.*
 
 ## Post-Generation Validation
 
-Each mode adapter runs `PostGenerationValidator.Validate(ValidationContext)` after its generator completes:
+Each mode adapter delegates to `ValidationOrchestrator.RunAfterGeneration(ValidationContext)` after its generator completes:
 
-- **Standard / Loadfile-Only / Production Set**: `StandardMode`, `LoadFileOnlyMode`, and `ProductionSetMode` each construct `PostGenerationValidator`, which drives `ValidatorRunner` over the emitted Load File(s). For Production Set mode it additionally calls `ProductionSetPostValidator.Validate`.
+- **Standard / Loadfile-Only / Production Set**: `StandardMode`, `LoadFileOnlyMode`, and `ProductionSetMode` each build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` (driving `ValidatorRunner` over emitted Load Files, plus `ProductionSetPostValidator.Validate` for Production Sets) and throws on any validation errors.
 - **Supplemental**: `SupplementalValidator.ValidateAsync` runs during supplemental Production Set generation (before output is written) to validate Bates Number ranges against prior Production Manifests.
-- **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `PostGenerationValidator` entirely.
+- **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `ValidationOrchestrator` and `PostGenerationValidator` entirely.
+
+## Archive Compression & Wire Methods
+
+Standard Archive generation (`ZipArchiveSink`) delegates entry creation and stream compression directly to `System.IO.Compression.ZipArchive`, mapping `--compression store` to `CompressionLevel.NoCompression` (method 0) and `--compression deflate` to `CompressionLevel.Optimal` (method 8).
+
+In contrast, Archive Test Fixture generation (`src/ArchiveTests/`, ADR-0008) is decoupled from the runtime sink and uses `ICSharpCode.SharpZipLib.Zip` within its own fixture generator to construct frozen test vectors with exact wire method codes (`store`, `deflate`, `deflate64`, `bzip2`), explicit local/central directory method numbers, and bit-level header mutations. This preserves the simplicity and streaming invariants of `ZipArchiveSink` while allowing full test fixture coverage for foreign codecs.
+
+## Semantic Architecture Seam Lint (Critical Rule 5)
+
+An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**` or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
 
 ## Load File Composition Seam
 
