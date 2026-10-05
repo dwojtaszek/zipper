@@ -19,8 +19,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `opencode/claude-haiku-4-5` | 0|
 | `opencode` | `opencode/deepseek-v4-flash` | 0|
 | `opencode` | `opencode/deepseek-v4-flash-free` | 0|
-| `opencode` | `default` | 2|
-| `opencode` | `opencode/big-pickle` | 3|
+| `opencode` | `default` | 0|
 | `opencode` | `opencode/deepseek-v4-pro` | 0|
 | `opencode` | `opencode/gemini-3-flash` | 0|
 | `opencode` | `opencode/gemini-3.1-pro` | 0|
@@ -41,7 +40,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `opencode/grok-build-0.1` | 0|
 | `opencode` | `opencode/kimi-k2.5` | 0|
 | `opencode` | `opencode/kimi-k2.6` | 0|
-| `opencode` | `opencode/mimo-v2.5-free` | 3|
+| `opencode` | `opencode/mimo-v2.6-flash-free` | 3|
 | `opencode` | `opencode/minimax-m2.5` | 0|
 | `opencode` | `opencode/minimax-m2.7` | 0|
 | `opencode` | `opencode/nemotron-3-ultra-free` | 3|

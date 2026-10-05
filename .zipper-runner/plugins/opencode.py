@@ -15,39 +15,19 @@ import shutil
 
 
 def list_models() -> list[str]:
-    """Returns list of available model strings (agent/model format).
-
-    Discovers all models from every configured opencode provider.
-    """
-    providers_found = set()
+    """Returns list of available model strings (agent/model format)."""
     try:
         stdout = subprocess.check_output(
             ["opencode", "models"],
             text=True, stderr=subprocess.DEVNULL, timeout=15,
         )
-        for line in stdout.strip().splitlines():
-            line = line.strip()
-            if "/" in line and not line.startswith("Error"):
-                providers_found.add(line.split("/")[0])
+        return [
+            line.strip()
+            for line in stdout.strip().splitlines()
+            if "/" in line and not line.startswith("Error")
+        ]
     except Exception:
-        pass
-
-    models: list[str] = []
-    for provider in sorted(providers_found):
-        try:
-            result = subprocess.run(
-                ["opencode", "models", provider],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True, timeout=15,
-            )
-            for line in result.stdout.strip().splitlines():
-                line = line.strip()
-                if "/" in line and not line.startswith("Error"):
-                    models.append(line)
-        except Exception:
-            pass
-    return models
+        return []
 
 
 def check_installation() -> bool:
@@ -109,7 +89,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         base += ["--continue"]
     if model:
         base += ["--model", model]
-    base += ["--command", prompt, "--dangerously-skip-permissions"]
+    base += ["--auto", prompt]
 
     print(f"[opencode] Running mission (continue={is_continue}) in {cwd}")
     p = None

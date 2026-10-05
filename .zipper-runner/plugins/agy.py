@@ -46,7 +46,8 @@ def check_installation() -> bool:
 def _check_quota_in_log(log_path: str) -> bool:
     """Returns True if quota exhaustion detected in agy log file."""
     quota_keywords = [
-        "quota", "limit reached", "rate limit", "insufficient", "credit",
+        "quota exceeded", "exceeded your current quota", "insufficient quota",
+        "limit reached", "rate limit", "insufficient credits",
         "billing", "exhausted", "429", "403", "subscription", "run out of",
         "payment", "resource_exhausted",
     ]
@@ -66,7 +67,7 @@ def check_token_health() -> bool:
     """
     Returns True if agy has active API tokens.
 
-    Sends a cheap ping prompt with a 15s timeout. Captures agy's internal
+    Sends a cheap prompt with a 25s timeout. Captures agy's internal
     log file via --log-file because agy writes quota errors there, not to
     stdout/stderr.
     """
@@ -74,18 +75,20 @@ def check_token_health() -> bool:
     log_path = tmp.name
     tmp.close()
     try:
+        # Probe with primary model gemini-3.8-flash-high to test active quota;
+        # unparameterized 'agy' defaults to gemini-3.1-pro which has 0 free quota.
         result = subprocess.run(
-            ["agy", "--prompt", "ping", "--print-timeout", "15s", "--log-file", log_path],
+            ["agy", "--model", "gemini-3.8-flash-high", "--prompt", "reply with pong", "--print-timeout", "25s", "--log-file", log_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            timeout=30,
+            timeout=35,
         )
         # ponytail: exit 0 + output = healthy. Log keyword check only
         # when agy itself failed, avoids false positives from informational
         # log entries ("quota remaining" etc.).
-        if result.returncode == 0 and result.stdout.strip():
-            print("[agy] API health check: SUCCESS (exit 0 + non-empty output)")
+        if result.returncode == 0 and (result.stdout.strip() or "print timeout" in result.stderr):
+            print("[agy] API health check: SUCCESS (exit 0 + active agent)")
             return True
 
         full_output = (result.stdout + "\n" + result.stderr).lower()
