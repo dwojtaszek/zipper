@@ -52,7 +52,7 @@ jobs:
 
       - name: Setup .NET
         if: steps.secret.outputs.available == 'true'
-        uses: actions/setup-dotnet@d4c94342e560b34958e1fc9a20821cb6cf2a4f51 # v5.0.1
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
 
       - name: Cache NuGet packages (tools only; never TypeSafe responses)
         if: steps.secret.outputs.available == 'true'
