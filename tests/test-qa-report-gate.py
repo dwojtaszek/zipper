@@ -85,6 +85,19 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
     )
     check(report, True)
     (evidence / "case-1.snapshot.txt").write_text(
+        "QA> " + launch + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    tuistory_wrapped = (
+        "QA> " + launch + " --version; rc=$?; printf\n"
+        "'APP_EXIT:%s\\n' \"$rc\"\n"
+        "Zipper vqa-test https://github.com/dwojtaszek/zipper/\n"
+        "APP_EXIT:0\nQA> █\n"
+    )
+    (evidence / "case-1.snapshot.txt").write_text(tuistory_wrapped)
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
         "$ echo note; # " + launch + " --version\nAPP_EXIT:0\n"
     )
     check(report, False)
