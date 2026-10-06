@@ -265,6 +265,8 @@ public class DataGeneratorTests
         var validCoded = new HashSet<string>(StringComparer.Ordinal) { "Active", "Inactive", "Pending", "Closed", "Archived" };
         var validBool = new HashSet<string>(StringComparer.Ordinal) { "Y", "N" };
 
+        // Every column above is Required, and DataGenerator never leaves a Required column empty
+        // regardless of Empty Percentage, so each per-kind spec is asserted unconditionally.
         for (int i = 1; i <= 200; i++)
         {
             var workItem = new FileWorkItem { Index = i, FilePathInZip = $"NATIVES/001/DOC{i:D8}.pdf" };
@@ -275,43 +277,25 @@ public class DataGeneratorTests
             Assert.Matches(@"^DOC[0-9]+$", row["DOCID"]);
 
             // date: yyyy-MM-dd format
-            if (!string.IsNullOrEmpty(row["DATEFIELD"]))
-            {
-                Assert.True(
-                    DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
-                    $"DATEFIELD '{row["DATEFIELD"]}' is not yyyy-MM-dd");
-            }
+            Assert.True(
+                DateTime.TryParseExact(row["DATEFIELD"], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
+                $"DATEFIELD '{row["DATEFIELD"]}' is not yyyy-MM-dd");
 
             // datetime: ISO 8601 with time component
-            if (!string.IsNullOrEmpty(row["DATETIMEFIELD"]))
-            {
-                Assert.Contains("T", row["DATETIMEFIELD"], StringComparison.Ordinal);
-            }
+            Assert.Contains("T", row["DATETIMEFIELD"], StringComparison.Ordinal);
 
             // number: integer in valid range
-            if (!string.IsNullOrEmpty(row["NUMBERFIELD"]))
-            {
-                Assert.True(int.TryParse(row["NUMBERFIELD"], System.Globalization.CultureInfo.InvariantCulture, out var numVal), $"NUMBERFIELD is not an integer: {row["NUMBERFIELD"]}");
-                Assert.InRange(numVal, 0, 10000);
-            }
+            Assert.True(int.TryParse(row["NUMBERFIELD"], System.Globalization.CultureInfo.InvariantCulture, out var numVal), $"NUMBERFIELD is not an integer: {row["NUMBERFIELD"]}");
+            Assert.InRange(numVal, 0, 10000);
 
             // boolean: Y or N
-            if (!string.IsNullOrEmpty(row["BOOLEANFIELD"]))
-            {
-                Assert.Contains(row["BOOLEANFIELD"], validBool);
-            }
+            Assert.Contains(row["BOOLEANFIELD"], validBool);
 
             // coded: from declared set
-            if (!string.IsNullOrEmpty(row["CODEDFIELD"]))
-            {
-                Assert.Contains(row["CODEDFIELD"], validCoded);
-            }
+            Assert.Contains(row["CODEDFIELD"], validCoded);
 
             // email: matches pattern
-            if (!string.IsNullOrEmpty(row["EMAILFIELD"]))
-            {
-                Assert.Matches(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", row["EMAILFIELD"]);
-            }
+            Assert.Matches(@"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$", row["EMAILFIELD"]);
         }
     }
 

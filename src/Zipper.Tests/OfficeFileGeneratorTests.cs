@@ -183,7 +183,7 @@ public class OfficeFileGeneratorTests
         }
 
         // ...and that the worksheet's own cell text reaches the shared strings table. The
-        // control number and description are workbook content here, not Load File Control Numbers.
+        // Control Number and description are workbook content here, not Load File values.
         var sharedStringsEntry = archive.GetEntry("xl/sharedStrings.xml") ?? throw new InvalidOperationException("xl/sharedStrings.xml not found");
         using (var reader = new StreamReader(sharedStringsEntry.Open()))
         {

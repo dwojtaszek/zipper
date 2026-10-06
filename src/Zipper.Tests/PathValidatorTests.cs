@@ -5,23 +5,11 @@ namespace Zipper.Tests;
 
 public class PathValidatorTests
 {
-    /// <summary>
-    /// Builds the absolute path <see cref="PathValidator.ResolveSecurePath"/> is expected to
-    /// resolve <paramref name="path"/> to. The current directory is resolved through
-    /// PathValidator first because it resolves symbolic links while
-    /// <see cref="Path.GetFullPath(string)"/> does not - comparing against the raw
-    /// <see cref="Path.GetFullPath(string)"/> would fail on any runner whose checkout sits under
-    /// a link, such as macOS <c>/var</c> or <c>/tmp</c>.
-    /// </summary>
-    private static string ExpectedResolvedPath(string path)
-    {
-        var currentDir = Directory.GetCurrentDirectory();
-        var resolvedCurrentDir = PathValidator.ResolveSecurePath(currentDir);
-        Assert.NotNull(resolvedCurrentDir);
-
-        var relative = Path.GetRelativePath(currentDir, path);
-        return Path.GetFullPath(Path.Combine(resolvedCurrentDir.FullName, relative));
-    }
+    // Expected values for resolved paths are derived from Path.GetFullPath rather than from
+    // PathValidator itself: ResolveSecurePath_ValidPath_ReturnsDirectoryInfo pins
+    // ResolveSecurePath(currentDirectory) == Path.GetFullPath(currentDirectory), which is green
+    // on every CI runner, so no runner's checkout sits under an unresolved symbolic link. Using
+    // the system under test to build expectations would hide a base-resolution regression.
 
     [Fact]
     public void ResolveSecurePath_ValidPath_ReturnsDirectoryInfo()
@@ -213,7 +201,7 @@ public class PathValidatorTests
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(ExpectedResolvedPath(path), result.FullName);
+        Assert.Equal(Path.GetFullPath(path), result.FullName);
     }
 
     [Fact]
@@ -255,7 +243,7 @@ public class PathValidatorTests
             var result = PathValidator.ResolveSecurePath(path);
 
             Assert.NotNull(result);
-            Assert.Equal(ExpectedResolvedPath(path), result.FullName);
+            Assert.Equal(Path.GetFullPath(path), result.FullName);
             Assert.DoesNotContain("..", result.FullName, StringComparison.Ordinal);
         }
     }

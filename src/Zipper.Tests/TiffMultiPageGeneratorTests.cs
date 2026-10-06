@@ -156,7 +156,7 @@ public class TiffMultiPageGeneratorTests
     }
 
     [Fact]
-    public void Generate_ShouldReturnTiffWithValidEndianMagicBytes()
+    public void Generate_SinglePageRequest_ReturnsTiffWithValidEndianMagicBytes()
     {
         // Arrange
         var workItem = new FileWorkItem { Index = 1 };
@@ -182,8 +182,8 @@ public class TiffMultiPageGeneratorTests
         var result1 = TiffMultiPageGenerator.Generate(1, workItem);
         var result2 = TiffMultiPageGenerator.Generate(10, workItem);
 
-        // Assert - page count is tracked for Load File Metadata only; the Native File itself is
-        // pre-computed, so it must not vary with the requested page count.
+        // Assert - Page Count is tracked for Load File Metadata only; the Native File itself is
+        // pre-computed, so it must not vary with the requested Page Count.
         Assert.NotEmpty(result1);
         Assert.NotEmpty(result2);
         Assert.Equal(result1, result2);
