@@ -5,6 +5,12 @@ namespace Zipper.Tests;
 
 public class PathValidatorTests
 {
+    // Expected values for resolved paths are derived from Path.GetFullPath rather than from
+    // PathValidator itself: ResolveSecurePath_ValidPath_ReturnsDirectoryInfo pins
+    // ResolveSecurePath(currentDirectory) == Path.GetFullPath(currentDirectory), which is green
+    // on every CI runner, so no runner's checkout sits under an unresolved symbolic link. Using
+    // the system under test to build expectations would hide a base-resolution regression.
+
     [Fact]
     public void ResolveSecurePath_ValidPath_ReturnsDirectoryInfo()
     {
@@ -162,36 +168,40 @@ public class PathValidatorTests
     }
 
     [Fact]
-    public void ResolveSecurePath_WithInvalidCharactersInFileName_HandlesGracefully()
+    public void ResolveSecurePath_WithEmbeddedNullCharacter_ReturnsNull()
     {
-        // Arrange - Test that PathValidator handles various edge cases without crashing
-        // PathValidator.GetInvalidFileNameChars() returns different results on different platforms
-        // so we test the exception handling rather than specific character validation
-        string[] edgeCasePaths =
-        {
-            "folder\0test", // Null character
-            new string('x', 500), // Very long path
-        };
-
-        // Act & Assert - Should not throw exceptions, returns null or DirectoryInfo depending on platform
-        foreach (string path in edgeCasePaths)
-        {
-            var exception = Record.Exception(() => PathValidator.ResolveSecurePath(path));
-            Assert.Null(exception);
-        }
-    }
-
-    [Fact]
-    public void ResolveSecurePath_WithPathTooLong_DoesNotThrow()
-    {
-        // Arrange - Create a path longer than max path length
-        string longPath = Path.Combine(Directory.GetCurrentDirectory(), new string('a', 300));
+        // Arrange - an embedded NUL is rejected by path resolution on every platform, so
+        // PathValidator must report it as invalid rather than hand back a usable DirectoryInfo.
+        string path = "folder\0test";
 
         // Act
-        var exception = Record.Exception(() => PathValidator.ResolveSecurePath(longPath));
+        var result = PathValidator.ResolveSecurePath(path);
 
         // Assert
-        Assert.Null(exception);
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ResolveSecurePath_WithOverlongPath_ResolvesOnEveryPlatform(bool rooted)
+    {
+        // Arrange - no platform in the CI matrix rejects a 500-character segment: modern .NET
+        // grows its GetFullPathName buffer up to the UNICODE_STRING limit, well past MAX_PATH.
+        // A prior "returns null on Windows" expectation had to be relaxed for that reason, so the
+        // contract asserted here is uniform: the path resolves. Each leg pins an exact expected
+        // value, because a hedged "null or contained" disjunction would pass for an
+        // implementation that simply always returned null.
+        var currentDir = Directory.GetCurrentDirectory();
+        var overlongSegment = new string('x', 500);
+        var path = rooted ? Path.Combine(currentDir, overlongSegment) : overlongSegment;
+
+        // Act
+        var result = PathValidator.ResolveSecurePath(path);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(Path.GetFullPath(path), result.FullName);
     }
 
     [Fact]
@@ -217,23 +227,23 @@ public class PathValidatorTests
     }
 
     [Fact]
-    public void ResolveSecurePath_WithVariousExceptionPaths_HandlesGracefully()
+    public void ResolveSecurePath_WithoutBaseDirectory_ResolvesTraversalInsteadOfRejectingIt()
     {
-        // Arrange - Paths that might trigger different exceptions
-        string[] exceptionPaths =
+        // Arrange - containment only applies when a base directory is supplied. Blank paths are
+        // already covered by ResolveSecurePath_NullOrEmptyPath_ReturnsNull; these must resolve.
+        string[] traversalPaths =
         {
-            string.Empty,
-            "   ",
-            new string('a', 500), // Very long path
             "../etc/passwd",
             "test/../../../data",
         };
 
         // Act & Assert
-        foreach (string path in exceptionPaths)
+        foreach (string path in traversalPaths)
         {
-            var exception = Record.Exception(() => PathValidator.ResolveSecurePath(path));
-            Assert.Null(exception);
+            var result = PathValidator.ResolveSecurePath(path);
+
+            Assert.NotNull(result);
+            Assert.Equal(Path.GetFullPath(path), result.FullName);
         }
     }
 
@@ -278,12 +288,29 @@ public class PathValidatorTests
     }
 
     [Fact]
-    public void ResolveSecurePath_WithUncPath_DoesNotThrow()
+    public void ResolveSecurePath_WithUncPath_IsRejectedAsOutsideTheBaseDirectory()
     {
-        var baseDir = Directory.GetCurrentDirectory();
-        var uncPath = @"\\server\share\folder";
-        var exception = Record.Exception(() => PathValidator.ResolveSecurePath(uncPath, baseDir));
-        Assert.Null(exception);
+        // A UNC root cannot sit under a freshly created sibling directory on any platform:
+        // Windows resolves it to \\server\share, and Unix treats the backslashes as ordinary
+        // characters and resolves it under the current directory - outside this base either way.
+        // Using a sibling base (not the current directory itself) is what makes the expected
+        // outcome null everywhere instead of only on Windows.
+        var baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperUncBase_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(baseDir);
+
+        try
+        {
+            var result = PathValidator.ResolveSecurePath(@"\\server\share\folder", baseDir);
+
+            Assert.Null(result);
+        }
+        finally
+        {
+            if (Directory.Exists(baseDir))
+            {
+                Directory.Delete(baseDir, true);
+            }
+        }
     }
 
     [Fact]
@@ -306,12 +333,14 @@ public class PathValidatorTests
     }
 
     [Fact]
-    public void IsPathSafe_UncPath_DoesNotThrow()
+    public void IsPathSafe_WithUncPath_ReturnsTrueOnlyWhereThePathStaysUnderBaseDirectory()
     {
-        var uncPath = @"\\server\share\folder";
         var baseDir = Directory.GetCurrentDirectory();
-        var exception = Record.Exception(() => PathValidator.IsPathSafe(uncPath, baseDir));
-        Assert.Null(exception);
+        var uncPath = @"\\server\share\folder";
+
+        // Windows resolves the UNC root outside the base directory (false); Unix resolves it to a
+        // name under the base directory (true).
+        Assert.Equal(!OperatingSystem.IsWindows(), PathValidator.IsPathSafe(uncPath, baseDir));
     }
 
     [Theory]

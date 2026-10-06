@@ -5,15 +5,15 @@ namespace Zipper.Tests;
 public class PerformanceConstantsTests
 {
     [Fact]
-    public void DefaultConcurrency_ShouldBePositive()
+    public void DefaultConcurrency_DefaultValue_EqualsHalfTheProcessorCountFloorOne()
     {
-        Assert.True(PerformanceConstants.DefaultConcurrency > 0);
+        // Half the processors keeps one core free for the OS, but never drops below a single worker.
+        Assert.Equal(Math.Max(1, Environment.ProcessorCount / 2), PerformanceConstants.DefaultConcurrency);
     }
 
     [Fact]
-    public void BufferSize_ShouldBePowerOfTwo()
+    public void DefaultBufferSize_DefaultValue_EqualsSixtyFourKilobytes()
     {
-        var bufferSize = PerformanceConstants.DefaultBufferSize;
-        Assert.True((bufferSize & (bufferSize - 1)) == 0); // Power of 2 check
+        Assert.Equal(65536, PerformanceConstants.DefaultBufferSize);
     }
 }

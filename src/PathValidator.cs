@@ -10,7 +10,7 @@ public static class PathValidator
     /// Validates and creates a secure DirectoryInfo, preventing path traversal attacks outside a base directory.
     /// </summary>
     /// <param name="path">The path to validate and create DirectoryInfo from.</param>
-    /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
+    /// <param name="baseDirectory">The allowed base directory. When null, no containment check is applied.</param>
     /// <returns>Validated DirectoryInfo if safe, null if path is invalid.</returns>
     public static DirectoryInfo? ResolveSecurePath(string? path, string? baseDirectory = null)
     {
@@ -76,7 +76,7 @@ public static class PathValidator
     /// Validates if a path is safe (without creating DirectoryInfo or writing to console).
     /// </summary>
     /// <param name="path">The path to validate.</param>
-    /// <param name="baseDirectory">The allowed base directory. Defaults to current directory if null.</param>
+    /// <param name="baseDirectory">The allowed base directory. When null, every resolvable path is considered safe.</param>
     /// <returns>True if path is safe, false otherwise.</returns>
     public static bool IsPathSafe(string path, string? baseDirectory = null)
     {

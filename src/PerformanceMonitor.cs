@@ -48,6 +48,11 @@ public class PerformanceMonitor
     }
 
     /// <summary>
+    /// Gets the total number of files passed to the most recent <see cref="Start"/> call.
+    /// </summary>
+    internal long TotalFiles => Interlocked.Read(ref this.totalFiles);
+
+    /// <summary>
     /// Get current completion count.
     /// </summary>
     /// <returns>Number of files completed so far.</returns>

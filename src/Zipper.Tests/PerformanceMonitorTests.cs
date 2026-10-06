@@ -13,13 +13,14 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
-    public void Constructor_CreatesValidInstance()
+    public void Constructor_NewMonitor_StartsWithZeroedTrackingState()
     {
         // Act
         var monitor = new PerformanceMonitor();
 
-        // Assert
-        Assert.NotNull(monitor);
+        // Assert - a monitor that has never been started tracks nothing.
+        Assert.Equal(0, monitor.TotalFiles);
+        Assert.Equal(0, monitor.GetCompletedCount());
     }
 
     [Theory]
@@ -27,32 +28,40 @@ public class PerformanceMonitorTests
     [InlineData(100)]
     [InlineData(1000)]
     [InlineData(10000)]
-    public void Start_ValidTotalFiles_InitializesCorrectly(long totalFiles)
+    public void Start_ValidTotalFiles_ResetsCompletionCountAndRecordsTotal(long totalFiles)
     {
         // Arrange
         var monitor = new PerformanceMonitor();
+        monitor.Start(5000);
+        monitor.ReportFilesCompleted(4321);
 
         // Act
         monitor.Start(totalFiles);
 
-        // Assert
-        // No direct assertions possible as the state is internal
-        // This tests that Start doesn't throw
-        Assert.True(true);
+        // Assert - Start begins a new operation: the completion count restarts and the total is the new one.
+        Assert.Equal(0, monitor.GetCompletedCount());
+        Assert.Equal(totalFiles, monitor.TotalFiles);
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(-100)]
-    public void Start_InvalidTotalFiles_HandlesGracefully(long totalFiles)
+    public void Start_InvalidTotalFiles_StoresTotalVerbatimAndLeavesCompletionCountAtZero(long totalFiles)
     {
-        // Arrange
+        // Arrange - report first, so the completion count is non-zero before Start runs. Asserting
+        // zero against a never-used monitor would pass no matter what Start does.
         var monitor = new PerformanceMonitor();
+        monitor.Start(10);
+        monitor.ReportFilesCompleted(7);
 
-        // Act & Assert
-        // Should handle gracefully (though behavior might be undefined)
-        monitor.Start(totalFiles); // Should not throw
+        // Act
+        monitor.Start(totalFiles);
+
+        // Assert - Start must not clamp or throw on non-positive totals, and it must still reset
+        // completion tracking for the new (non-positive) total.
+        Assert.Equal(totalFiles, monitor.TotalFiles);
+        Assert.Equal(0, monitor.GetCompletedCount());
     }
 
     [Fact]
@@ -69,10 +78,15 @@ public class PerformanceMonitorTests
         // Act
         var metrics = monitor.Stop();
 
-        // Assert
-        Assert.NotNull(metrics);
-        Assert.True(metrics.ElapsedMilliseconds >= 0);
-        Assert.True(metrics.FilesPerSecond >= 0);
+        // Assert - every metric must be derived from the reported count and the measured elapsed
+        // time. The rate numerator is asserted against FilesCompleted while TotalFiles differs
+        // (100 vs 50), so a rate derived from the total instead of the completed count fails here.
+        Assert.Equal(100, monitor.TotalFiles);
+        Assert.Equal(50, metrics.FilesCompleted);
+        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms pause");
+        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms pause must not report a runaway elapsed time");
+        Assert.Equal(metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000), metrics.FilesPerSecond, 6);
+        Assert.Equal(metrics.ElapsedMilliseconds / 50, metrics.AverageTimePerFile, 6);
     }
 
     [Fact]
@@ -85,7 +99,6 @@ public class PerformanceMonitorTests
         var metrics = monitor.Stop();
 
         // Assert
-        Assert.NotNull(metrics);
         Assert.Equal(0, metrics.ElapsedMilliseconds);
         Assert.Equal(0, metrics.FilesPerSecond);
     }
@@ -112,20 +125,25 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
-    public void PerformanceMetrics_HasValidStructure()
+    public async Task Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
     {
-        // Arrange
+        // Arrange - an awaited delay (not Thread.Sleep) so the stopwatch has measurably advanced.
         var monitor = new PerformanceMonitor();
         monitor.Start(100);
         monitor.ReportFilesCompleted(100);
+        await Task.Delay(10);
 
         // Act
         var metrics = monitor.Stop();
 
-        // Assert
-        Assert.True(metrics.ElapsedMilliseconds >= 0);
-        Assert.True(metrics.FilesPerSecond >= 0);
-        Assert.True(metrics.ElapsedMilliseconds <= 60000); // Should complete within reasonable time
+        // Assert - a fully-reported run: the count is exact, the total is intact, and each rate
+        // divides by the elapsed time.
+        Assert.Equal(100, monitor.TotalFiles);
+        Assert.Equal(100, metrics.FilesCompleted);
+        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms delay");
+        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms delay must not report a runaway elapsed time");
+        Assert.Equal(metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000), metrics.FilesPerSecond, 6);
+        Assert.Equal(metrics.ElapsedMilliseconds / 100, metrics.AverageTimePerFile, 6);
     }
 
     [Fact]
@@ -158,8 +176,9 @@ public class PerformanceMonitorTests
 
         var metrics = monitor.Stop();
 
-        // Assert
-        Assert.NotNull(metrics);
+        // Assert - every concurrent report must be counted exactly once.
+        Assert.Equal(1000, metrics.FilesCompleted);
+        Assert.Equal(1000, monitor.GetCompletedCount());
         Assert.True(metrics.FilesPerSecond > 0);
         this.output.WriteLine($"Files per second: {metrics.FilesPerSecond}");
     }
@@ -178,9 +197,11 @@ public class PerformanceMonitorTests
             Thread.Sleep(1);
             var metrics = monitor.Stop();
 
-            Assert.NotNull(metrics);
-            Assert.True(metrics.ElapsedMilliseconds >= 0);
-            Assert.True(metrics.FilesPerSecond >= 0);
+            Assert.Equal(100, monitor.TotalFiles);
+            Assert.Equal(50, metrics.FilesCompleted);
+            Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 1ms pause");
+            Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 1ms pause must not report a runaway elapsed time");
+            Assert.True(metrics.FilesPerSecond > 0, "Throughput must be positive for a run that reported files");
 
             this.output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
         }
@@ -231,14 +252,19 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
-    public void FinalizeProgress_DoesNotThrow()
+    public void FinalizeProgress_AfterFullReport_LeavesCompletionStateUntouched()
     {
         // Arrange
         var monitor = new PerformanceMonitor();
         monitor.Start(100);
         monitor.ReportFilesCompleted(100);
 
-        // Act & Assert
-        monitor.FinalizeProgress(); // Should not throw
+        // Act
+        monitor.FinalizeProgress();
+
+        // Assert - FinalizeProgress only closes the progress display; it must not alter tracking
+        // state. Both values are pinned independently so that resetting both to zero fails.
+        Assert.Equal(100, monitor.TotalFiles);
+        Assert.Equal(100, monitor.GetCompletedCount());
     }
 }
