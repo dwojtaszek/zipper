@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.50" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.SampleModule" filename="SampleModule.cs">
+          <lines>
+            <line number="notanumber" hits="5" />
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>

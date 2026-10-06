@@ -1,0 +1,4 @@
+# Comment with leading hash
+src\AllowWin.cs
+./src/AllowDot.cs
+AllowPlain.cs

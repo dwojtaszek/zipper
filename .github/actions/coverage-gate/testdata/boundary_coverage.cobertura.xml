@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.50" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.ExactFifty" filename="ExactFifty.cs">
+          <lines>
+            <line number="1" hits="1" />
+            <line number="2" hits="1" />
+            <line number="3" hits="1" />
+            <line number="4" hits="1" />
+            <line number="5" hits="1" />
+            <line number="6" hits="1" />
+            <line number="7" hits="1" />
+            <line number="8" hits="1" />
+            <line number="9" hits="1" />
+            <line number="10" hits="1" />
+            <line number="11" hits="0" />
+            <line number="12" hits="0" />
+            <line number="13" hits="0" />
+            <line number="14" hits="0" />
+            <line number="15" hits="0" />
+            <line number="16" hits="0" />
+            <line number="17" hits="0" />
+            <line number="18" hits="0" />
+            <line number="19" hits="0" />
+            <line number="20" hits="0" />
+          </lines>
+        </class>
+        <class name="Zipper.NineteenLines" filename="NineteenLines.cs">
+          <lines>
+            <line number="1" hits="0" />
+            <line number="2" hits="0" />
+            <line number="3" hits="0" />
+            <line number="4" hits="0" />
+            <line number="5" hits="0" />
+            <line number="6" hits="0" />
+            <line number="7" hits="0" />
+            <line number="8" hits="0" />
+            <line number="9" hits="0" />
+            <line number="10" hits="0" />
+            <line number="11" hits="0" />
+            <line number="12" hits="0" />
+            <line number="13" hits="0" />
+            <line number="14" hits="0" />
+            <line number="15" hits="0" />
+            <line number="16" hits="0" />
+            <line number="17" hits="0" />
+            <line number="18" hits="0" />
+            <line number="19" hits="0" />
+          </lines>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
