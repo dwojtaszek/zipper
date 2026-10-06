@@ -84,6 +84,7 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 - **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered on product code under `src/**` (excluding test and analyzer projects). Runs `measure.sh` 5×, takes the median, and compares to `tests/perf/baselines.json` via [`.github/scripts/perf-compare.py`](../.github/scripts/perf-compare.py). **RSS > 1.20× baseline is advisory**, as is `wall_s` (shared-runner variance); measurement and comparison errors still fail. Posts/updates one PR comment with the result table.
 - **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL failures block merge. CodeRabbit blocking issues required, nitpicks optional.
 - **typesafe-audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), **advisory only** (never blocks). Path-filtered on PR (`Requirements.md`, `docs/`, `src/`, `tests/`, `tools/typesafe-audit/`), a weekly full audit (Monday 06:00 UTC), and manual `workflow_dispatch` (`changed`/`full`). Runs the Python audit runner in `tools/typesafe-audit/` with the `TYPESAFE_API_KEY` repository secret; fork PRs (no secret access) skip with a neutral summary. Uploads JSON/Markdown reports (7-day retention) and writes a job summary. Remote failures are always non-blocking. See [CI.md](../CI.md#typesafe-audit).
+  - **Bounded concurrent audits** — the five audit checks run as matrix jobs with `max-parallel: 2` and `fail-fast: false`. Each job has an isolated checkout, summary, and `typesafe-audit-report-<check>` artifact; the independent PR specification review retains its own artifact. No native `background`/`wait` syntax is used: local actionlint 1.7.12 rejects those keywords. Build, E2E, coverage, goldens, and release gates remain unchanged.
   - **Foundation audit (#955)** — fixed sample scope via `tools/typesafe-audit/runner.py`.
   - **Requirements semantic audit (#956)** — `tools/typesafe-audit/checks/requirements/run_check.py`: deterministic changed-section extraction, prechecks (immutable REQ IDs, orphan references, missing traceability rows), then five advisory TypeSafe judgments (testability, contradiction, non-canonical terms, completeness, doc sync). PR mode audits changed sections (docs-only PRs included); `workflow_dispatch` with `mode: full` audits every active requirement in a bounded request budget. Findings cite supplied evidence spans only; low-confidence signals are `needs-human-review`, never defects. Local reproduction: `python3 tools/typesafe-audit/record_corpus_fixtures.py /tmp/tsa-fx && python3 tools/typesafe-audit/checks/requirements/run_check.py --corpus tests/typesafe-audit-fixtures --mode fixture --fixture-dir /tmp/tsa-fx --json-out req.json --md-out req.md`.
   - **Semantic traceability audit (#957)** — `tools/typesafe-audit/checks/traceability/run_check.py`, run after the blocking `validate-req-traceability.sh --strict` gate: resolves each mapped test to its exact source (unit `Class.Method`, e2e `script.sh Scenario`) deterministically, then judges coverage as `full`/`partial`/`none`/`ambiguous` with separate mocked-only and execution-only signals. Advisory; unresolved refs, malformed rows, and oversized evidence exit 2 before any model call.
@@ -149,3 +150,31 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 - Don't merge until PR Checks **and** side checks are green and all reviewer comments are addressed ([AGENTS.md workflow steps 9–12](../AGENTS.md#workflow-for-github-issues)).
 - Changing a workflow? `actionlint` runs in `lint`; pin any new action to a full commit SHA (SonarCloud flags unpinned actions as security hotspots — see [CI.md](../CI.md#quality-gate-vs-code-issues)).
 - A behavior change that alters output **bytes** will trip goldens; performance changes produce advisory warnings from perf-guard.
+
+### Audit concurrency measurement and limits
+
+Run `python3 tools/typesafe-audit/benchmark_concurrency.py` from the repository
+root. It records existing offline corpus fixtures, alternates seven serial and
+seven two-worker replays, checks successful exits, and compares all five JSON
+and five Markdown reports byte-for-byte. It never calls the live API.
+
+Local Linux measurement on 2026-10-07 (12 available CPUs, Python 3.14):
+serial median **0.534 s**, two-worker median **0.314 s**, **1.70×** speedup.
+Repeating with `taskset -c 0,1` to restrict all benchmark subprocesses to two
+CPUs gave **0.486 s → 0.385 s**, **1.26×**, with the same report parity.
+This affinity check tests CPU contention, not separate hosted matrix runners.
+This measures audit subprocess work, **not hosted CI wall time**. Matrix jobs
+add four checkouts and artifact uploads relative to the original single job;
+queueing and setup can outweigh the measured 0.220 s local saving. A hosted
+before/after measurement is required before claiming a CI speedup or cost saving.
+
+The matrix cap applies only to these five audit jobs. PR specification review
+can add another API caller, other workflow runs can overlap, and repository or
+organization runner capacity can reduce actual concurrency. No account-specific
+TypeSafe quota was verified. Existing runners allow 60 seconds per HTTP request
+and retry HTTP 429/529 once after two seconds. Requirements and traceability
+checks each retain a 40-request budget (10 requirements/mappings per batch);
+the 10-minute job timeout is not a guarantee that the full budget completes
+under sustained slow responses. Request counts and paid API usage are not reduced
+by concurrent jobs. Keep performance measurements isolated, and do not overlap
+publish/E2E builds against shared `bin`/`obj` outputs.
