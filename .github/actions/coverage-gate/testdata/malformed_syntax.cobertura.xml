@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.50">
+  <packages>
+    <package name="Zipper">
+      <!-- Truncated XML causing parse error
