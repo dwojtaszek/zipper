@@ -125,13 +125,13 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
-    public void Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
+    public async Task Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
     {
-        // Arrange
+        // Arrange - an awaited delay (not Thread.Sleep) so the stopwatch has measurably advanced.
         var monitor = new PerformanceMonitor();
         monitor.Start(100);
         monitor.ReportFilesCompleted(100);
-        Thread.Sleep(10);
+        await Task.Delay(10);
 
         // Act
         var metrics = monitor.Stop();
@@ -140,8 +140,8 @@ public class PerformanceMonitorTests
         // divides by the elapsed time.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(100, metrics.FilesCompleted);
-        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms pause");
-        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms pause must not report a runaway elapsed time");
+        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms delay");
+        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms delay must not report a runaway elapsed time");
         Assert.Equal(metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000), metrics.FilesPerSecond, 6);
         Assert.Equal(metrics.ElapsedMilliseconds / 100, metrics.AverageTimePerFile, 6);
     }
