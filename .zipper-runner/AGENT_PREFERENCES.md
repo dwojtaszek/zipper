@@ -68,9 +68,9 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `agy` | `gemini-3.5-flash-low` | 0|
 | `agy` | `claude-sonnet-4-6` | 3|
 | `agy` | `claude-opus-4-6-thinking` | 0|
-| `hermes` | `default` | 1|
-| `hermes` | `stepfun/step-3.7-flash:free` | 1|
-| `hermes` | `deepseek-ai/deepseek-v4-flash` | 2|
+| `hermes` | `default` | 0|
+| `hermes` | `stepfun/step-3.7-flash:free` | 0|
+| `hermes` | `deepseek-ai/deepseek-v4-flash` | 0|
 | `droid` | `factory-ai-default` (model managed internally, config shows `glm-5.2`) | 3|
 | `codex` | `openai/gpt-5.6-terra` | 3|
 | `codex` | `openai/gpt-5.5` | 0|

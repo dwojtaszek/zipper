@@ -449,6 +449,9 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
         if not module.check_installation():
             print(f"[select] {name!r}: not installed, skipping")
             continue
+        if prefs and not any(prio > 0 for (ag, _), prio in prefs.items() if ag == name):
+            print(f"[select] {name!r}: all models priority 0 (disabled), skipping")
+            continue
         if DRY_RUN:
             print(f"[select] {name!r}: installed, skipping token health check (dry run)")
             healthy = True
