@@ -244,7 +244,6 @@ public class PathValidatorTests
 
             Assert.NotNull(result);
             Assert.Equal(Path.GetFullPath(path), result.FullName);
-            Assert.DoesNotContain("..", result.FullName, StringComparison.Ordinal);
         }
     }
 

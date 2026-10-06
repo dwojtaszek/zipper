@@ -173,7 +173,7 @@ public class TiffMultiPageGeneratorTests
     }
 
     [Fact]
-    public void Generate_WithDifferentPageCounts_ReturnsSamePrecomputedNativeFile()
+    public void Generate_WithDifferentPageCounts_ReturnsSinglePagePrecomputedNativeFile()
     {
         // Arrange
         var workItem = new FileWorkItem { Index = 1 };
@@ -182,10 +182,45 @@ public class TiffMultiPageGeneratorTests
         var result1 = TiffMultiPageGenerator.Generate(1, workItem);
         var result2 = TiffMultiPageGenerator.Generate(10, workItem);
 
-        // Assert - Page Count is tracked for Load File Metadata only; the Native File itself is
-        // pre-computed, so it must not vary with the requested Page Count.
+        // Assert - Page Count is tracked for Load File Metadata only (see the generator's class
+        // documentation): both requests return the pre-computed Native File placeholder, so the
+        // decoded IFD chain must hold exactly one page regardless of the requested Page Count.
+        // Asserting the decoded page count - not byte equality - keeps this valid when the
+        // placeholder content is regenerated, and pins the actual domain property. Once
+        // multi-page Native File output satisfies REQ-045 at the file level, this expectation
+        // moves to the requested range.
         Assert.NotEmpty(result1);
         Assert.NotEmpty(result2);
-        Assert.Equal(result1, result2);
+        Assert.Equal(1, CountTiffPages(result1));
+        Assert.Equal(1, CountTiffPages(result2));
+    }
+
+    /// <summary>
+    /// Walks a TIFF's Image File Directory chain and counts its pages, reading offsets in the
+    /// endianness declared by the magic bytes. A cycle guard bounds malformed inputs.
+    /// </summary>
+    private static int CountTiffPages(byte[] tiff)
+    {
+        bool littleEndian = tiff[0] == 0x49 && tiff[1] == 0x49;
+
+        ushort ReadUInt16(int offset) => littleEndian
+            ? (ushort)(tiff[offset] | (tiff[offset + 1] << 8))
+            : (ushort)((tiff[offset] << 8) | tiff[offset + 1]);
+
+        uint ReadUInt32(int offset) => littleEndian
+            ? (uint)(tiff[offset] | (tiff[offset + 1] << 8) | (tiff[offset + 2] << 16) | (tiff[offset + 3] << 24))
+            : ((uint)tiff[offset] << 24) | ((uint)tiff[offset + 1] << 16) | ((uint)tiff[offset + 2] << 8) | tiff[offset + 3];
+
+        int pages = 0;
+        uint nextIfdOffset = ReadUInt32(4);
+        while (nextIfdOffset != 0)
+        {
+            int entryCount = ReadUInt16((int)nextIfdOffset);
+            nextIfdOffset = ReadUInt32((int)nextIfdOffset + 2 + (12 * entryCount));
+            pages++;
+            Assert.InRange(pages, 1, 1000); // Bound the walk if the IFD chain is cyclic.
+        }
+
+        return pages;
     }
 }

@@ -262,7 +262,9 @@ public class PerformanceMonitorTests
         // Act
         monitor.FinalizeProgress();
 
-        // Assert - FinalizeProgress only closes the progress display; it must not alter tracking state.
-        Assert.Equal(monitor.TotalFiles, monitor.GetCompletedCount());
+        // Assert - FinalizeProgress only closes the progress display; it must not alter tracking
+        // state. Both values are pinned independently so that resetting both to zero fails.
+        Assert.Equal(100, monitor.TotalFiles);
+        Assert.Equal(100, monitor.GetCompletedCount());
     }
 }
