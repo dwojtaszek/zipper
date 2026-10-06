@@ -63,32 +63,21 @@ def _check_quota_in_log(log_path: str) -> bool:
     return False
 
 
-def check_token_health() -> bool:
-    """
-    Returns True if agy has active API tokens.
-
-    Sends a cheap prompt with a 25s timeout. Captures agy's internal
-    log file via --log-file because agy writes quota errors there, not to
-    stdout/stderr.
-    """
+def _probe_model(model: str) -> bool:
+    """Probes a single model. Returns True if healthy, False if quota or error."""
     tmp = tempfile.NamedTemporaryFile(suffix=".log", delete=False)
     log_path = tmp.name
     tmp.close()
     try:
-        # Probe with primary model gemini-3.8-flash-high to test active quota;
-        # unparameterized 'agy' defaults to gemini-3.1-pro which has 0 free quota.
         result = subprocess.run(
-            ["agy", "--model", "gemini-3.8-flash-high", "--prompt", "reply with pong", "--print-timeout", "25s", "--log-file", log_path],
+            ["agy", "--model", model, "--prompt", "reply with pong", "--print-timeout", "25s", "--log-file", log_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             timeout=35,
         )
-        # ponytail: exit 0 + output = healthy. Log keyword check only
-        # when agy itself failed, avoids false positives from informational
-        # log entries ("quota remaining" etc.).
         if result.returncode == 0 and (result.stdout.strip() or "print timeout" in result.stderr):
-            print("[agy] API health check: SUCCESS (exit 0 + active agent)")
+            print(f"[agy] API health check: SUCCESS on model '{model}' (exit 0 + active agent)")
             return True
 
         full_output = (result.stdout + "\n" + result.stderr).lower()
@@ -99,34 +88,48 @@ def check_token_health() -> bool:
         ]
         for keyword in quota_keywords:
             if keyword in full_output:
-                print(f"[agy] API health check: detected quota issue ({keyword!r})")
+                print(f"[agy] API health check: detected quota issue ({keyword!r}) on model '{model}'")
                 return False
 
         if _check_quota_in_log(log_path):
             return False
 
         if result.returncode != 0:
-            print(f"[agy] API health check: non-zero exit code {result.returncode}")
-            if "error" in full_output or "failed" in full_output:
-                return False
-
-        if not (result.stdout or os.path.getsize(log_path) > 0):
-            print("[agy] API health check: empty output from agy (likely silent quota/error)")
+            print(f"[agy] API health check: non-zero exit code {result.returncode} on model '{model}'")
             return False
 
-        print("[agy] API health check: SUCCESS")
+        if not (result.stdout or os.path.getsize(log_path) > 0):
+            print(f"[agy] API health check: empty output from agy on model '{model}'")
+            return False
+
+        print(f"[agy] API health check: SUCCESS on model '{model}'")
         return True
     except subprocess.TimeoutExpired:
-        print("[agy] API health check: timed out")
+        print(f"[agy] API health check: timed out on model '{model}'")
         return False
     except Exception as e:
-        print(f"[agy] API health check: exception — {e}")
+        print(f"[agy] API health check: exception on model '{model}' — {e}")
         return False
     finally:
         try:
             os.unlink(log_path)
         except OSError:
             pass
+
+
+def check_token_health() -> bool:
+    """
+    Returns True if agy has active API tokens on at least one candidate model.
+
+    Probes models in priority order, falling back to other candidate models
+    if the primary model hits quota.
+    """
+    candidates = ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gemini-3.7-flash-high"]
+    for model in candidates:
+        if _probe_model(model):
+            return True
+    print("[agy] API health check: all candidate models failed")
+    return False
 
 
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:

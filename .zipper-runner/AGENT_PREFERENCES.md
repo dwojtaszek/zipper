@@ -9,6 +9,9 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `deepseek/deepseek-v4-flash` | 0|
 | `opencode` | `deepseek/deepseek-v4-pro` | 0|
 | `opencode` | `opencode/big-pickle` | 2|
+| `opencode` | `google/gemini-3.8-flash` | 2|
+| `opencode` | `google/gemini-3.7-flash` | 2|
+| `opencode` | `opencode/exo-free` | 3|
 | `opencode` | `opencode/claude-sonnet-4` | 0|
 | `opencode` | `opencode/claude-sonnet-4-5` | 0|
 | `opencode` | `opencode/claude-sonnet-4-6` | 0|
@@ -55,7 +58,9 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `claude` | `default` | 1|
 | `claude` | `claude-sonnet-4-6-20250622` (Sonnet 4.6) | 0|
 | `agy` | `default` | 1|
-| `agy` | `gemini-3.8-flash-high` | 1|
+| `agy` | `claude-sonnet-4-6` | 1|
+| `agy` | `claude-opus-4-6-thinking` | 2|
+| `agy` | `gemini-3.8-flash-high` | 3|
 | `agy` | `gemini-3.8-flash-medium` | 0|
 | `agy` | `gemini-3.8-flash-low` | 0|
 | `agy` | `gemini-3.7-flash-high` | 0|
@@ -66,8 +71,6 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `agy` | `gemini-3.5-flash-high` | 0|
 | `agy` | `gemini-3.5-flash-medium` | 0|
 | `agy` | `gemini-3.5-flash-low` | 0|
-| `agy` | `claude-sonnet-4-6` | 3|
-| `agy` | `claude-opus-4-6-thinking` | 0|
 | `hermes` | `default` | 0|
 | `hermes` | `stepfun/step-3.7-flash:free` | 0|
 | `hermes` | `deepseek-ai/deepseek-v4-flash` | 0|
