@@ -98,9 +98,11 @@ public class DataGeneratorTests
     [Fact]
     public void GenerateRow_BooleanColumn_GeneratesYOrN()
     {
-        // Use Litigation profile which has actual boolean columns
+        // Use Litigation profile which has actual boolean columns.
+        // ISRESPONSIVE is optional and the profile has a 15% Empty Percentage, so empty values are
+        // disabled here - otherwise "is it Y or N?" could never be asserted unconditionally.
         var profile = BuiltInProfiles.Litigation;
-        var generator = new DataGenerator(profile, seed: 12345);
+        var generator = new DataGenerator(profile, seed: 12345, emptyPercentageOverride: 0);
         var workItem = new FileWorkItem { Index = 1, FilePathInZip = "Folder001/file001.pdf" };
         var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
 
@@ -108,9 +110,10 @@ public class DataGeneratorTests
 
         // ISRESPONSIVE is a boolean column with Format = "YN"
         var responsiveValue = row["ISRESPONSIVE"];
+        Assert.False(string.IsNullOrEmpty(responsiveValue), "ISRESPONSIVE must be populated when empty values are disabled");
         Assert.True(
-string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(responsiveValue, "N", StringComparison.Ordinal) || string.IsNullOrEmpty(responsiveValue),
-            $"Expected Y, N, or empty but got {responsiveValue}");
+            string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(responsiveValue, "N", StringComparison.Ordinal),
+            $"Expected Y or N but got {responsiveValue}");
     }
 
     /// <summary>
@@ -119,20 +122,20 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
     [Fact]
     public void GenerateRow_DateColumn_GeneratesValidDateFormat()
     {
+        // DATECREATED is optional and the profile has a 10% Empty Percentage, so empty values are
+        // disabled here - otherwise "is it a date?" could never be asserted unconditionally.
         var profile = BuiltInProfiles.Standard;
-        var generator = new DataGenerator(profile, seed: 12345);
+        var generator = new DataGenerator(profile, seed: 12345, emptyPercentageOverride: 0);
         var workItem = new FileWorkItem { Index = 1, FilePathInZip = "Folder001/file001.pdf" };
         var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
 
         var row = generator.GenerateRow(workItem, fileData);
 
         var dateValue = row["DATECREATED"];
-        if (!string.IsNullOrEmpty(dateValue))
-        {
-            Assert.True(
-                DateTime.TryParse(dateValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
-                $"Expected valid date but got {dateValue}");
-        }
+        Assert.False(string.IsNullOrEmpty(dateValue), "DATECREATED must be populated when empty values are disabled");
+        Assert.True(
+            DateTime.TryParse(dateValue, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _),
+            $"Expected valid date but got {dateValue}");
     }
 
     /// <summary>
@@ -141,19 +144,19 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
     [Fact]
     public void GenerateRow_EmailColumn_GeneratesValidEmailFormat()
     {
+        // EMAILFROM is optional with a 30% Empty Percentage, so empty values are disabled here -
+        // otherwise "is it an email address?" could never be asserted unconditionally.
         var profile = BuiltInProfiles.Standard;
-        var generator = new DataGenerator(profile, seed: 12345);
+        var generator = new DataGenerator(profile, seed: 12345, emptyPercentageOverride: 0);
         var workItem = new FileWorkItem { Index = 1, FilePathInZip = "Folder001/file001.pdf" };
         var fileData = new FileData { Data = new byte[1024], WorkItem = workItem };
 
         var row = generator.GenerateRow(workItem, fileData);
 
         var emailValue = row["EMAILFROM"];
-        if (!string.IsNullOrEmpty(emailValue))
-        {
-            Assert.Contains("@", emailValue, StringComparison.Ordinal);
-            Assert.Contains(".", emailValue, StringComparison.Ordinal);
-        }
+        Assert.False(string.IsNullOrEmpty(emailValue), "EMAILFROM must be populated when empty values are disabled");
+        Assert.Contains("@", emailValue, StringComparison.Ordinal);
+        Assert.Contains(".", emailValue, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -313,7 +316,7 @@ string.Equals(responsiveValue, "Y", StringComparison.Ordinal) || string.Equals(r
     }
 
     /// <summary>
-    /// Test that EmptyPercentage produces the configured empty rate within statistical tolerance.
+    /// Test that EmptyPercentage produces the configured Empty Percentage within statistical tolerance.
     /// </summary>
     [Theory]
     [InlineData(0)]

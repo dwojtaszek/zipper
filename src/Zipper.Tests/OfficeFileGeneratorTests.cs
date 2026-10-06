@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Xml.Linq;
 using Xunit;
 
 namespace Zipper.Tests;
@@ -75,13 +76,12 @@ public class OfficeFileGeneratorTests
         var result = OfficeFileGenerator.GenerateDocx(workItem);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result);
 
         // Verify it's a valid ZIP archive
         using var stream = new MemoryStream(result);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
+        Assert.NotEmpty(archive.Entries);
     }
 
     [Fact]
@@ -154,7 +154,6 @@ public class OfficeFileGeneratorTests
         var result = OfficeFileGenerator.GenerateXlsx(workItem);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result);
     }
 
@@ -171,11 +170,27 @@ public class OfficeFileGeneratorTests
         // Verify it's a valid ZIP archive (XLSX is a ZIP file)
         using var stream = new MemoryStream(result);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
 
-        // XLSX files should contain workbook entries
-        var xlEntry = archive.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/", StringComparison.Ordinal));
-        Assert.NotNull(xlEntry);
+        // An XLSX is an OPC package: assert the workbook part really is workbook XML. ClosedXML
+        // may emit it namespace-prefixed, so compare the root's local name.
+        var workbookEntry = archive.GetEntry("xl/workbook.xml") ?? throw new InvalidOperationException("xl/workbook.xml not found");
+        using (var workbookStream = workbookEntry.Open())
+        {
+            var workbook = XDocument.Load(workbookStream);
+            var root = workbook.Root;
+            Assert.NotNull(root);
+            Assert.Equal("workbook", root.Name.LocalName);
+        }
+
+        // ...and that the worksheet's own cell text reaches the shared strings table. The
+        // control number and description are workbook content here, not Load File Control Numbers.
+        var sharedStringsEntry = archive.GetEntry("xl/sharedStrings.xml") ?? throw new InvalidOperationException("xl/sharedStrings.xml not found");
+        using (var reader = new StreamReader(sharedStringsEntry.Open()))
+        {
+            var sharedStrings = reader.ReadToEnd();
+            Assert.Contains("DOC00000001", sharedStrings, StringComparison.Ordinal);
+            Assert.Contains("Sample document for eDiscovery testing", sharedStrings, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -203,13 +218,10 @@ public class OfficeFileGeneratorTests
         var result = OfficeFileGenerator.GenerateContent("docx", workItem);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result);
 
-        // Verify it's a valid ZIP archive
-        using var stream = new MemoryStream(result);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
+        // Verify it's a valid DOCX package
+        AssertOpcPartExists(result, "word/document.xml");
     }
 
     [Fact]
@@ -222,13 +234,10 @@ public class OfficeFileGeneratorTests
         var result = OfficeFileGenerator.GenerateContent("xlsx", workItem);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result);
 
-        // Verify it's a valid ZIP archive
-        using var stream = new MemoryStream(result);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
+        // Verify it's a valid XLSX package
+        AssertOpcPartExists(result, "xl/workbook.xml");
     }
 
     [Fact]
@@ -263,7 +272,6 @@ public class OfficeFileGeneratorTests
         var result = OfficeFileGenerator.GenerateContent("DOCX", workItem);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result);
     }
 
@@ -299,12 +307,9 @@ public class OfficeFileGeneratorTests
         var result = generator.Generate(workItem, request);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result.Content);
 
-        using var stream = new MemoryStream(result.Content);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
+        AssertOpcPartExists(result.Content, "word/document.xml");
     }
 
     [Fact]
@@ -319,12 +324,9 @@ public class OfficeFileGeneratorTests
         var result = generator.Generate(workItem, request);
 
         // Assert
-        Assert.NotNull(result);
         Assert.NotEmpty(result.Content);
 
-        using var stream = new MemoryStream(result.Content);
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        Assert.NotNull(archive);
+        AssertOpcPartExists(result.Content, "xl/workbook.xml");
     }
 
     [Fact]
@@ -341,5 +343,19 @@ public class OfficeFileGeneratorTests
 
         // Assert
         Assert.Equal(staticResult, instanceResult.Content);
+    }
+
+    /// <summary>
+    /// Asserts that a generated Office package actually contains the OPC part its format
+    /// requires. Asserting on the part is what makes the archive check meaningful: the
+    /// <see cref="ZipArchive"/> constructor throws on non-archive bytes and never returns null,
+    /// so a nullness assertion on the archive itself verifies nothing.
+    /// </summary>
+    private static void AssertOpcPartExists(byte[] package, string partPath)
+    {
+        using var stream = new MemoryStream(package);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+
+        Assert.NotNull(archive.GetEntry(partPath));
     }
 }

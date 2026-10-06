@@ -156,7 +156,7 @@ public class TiffMultiPageGeneratorTests
     }
 
     [Fact]
-    public void Generate_ShouldReturnNonEmptyByteArray()
+    public void Generate_ShouldReturnTiffWithValidEndianMagicBytes()
     {
         // Arrange
         var workItem = new FileWorkItem { Index = 1 };
@@ -164,13 +164,16 @@ public class TiffMultiPageGeneratorTests
         // Act
         var result = TiffMultiPageGenerator.Generate(5, workItem);
 
-        // Assert
-        Assert.NotNull(result);
+        // Assert - the pre-computed Native File must be a real TIFF: "II*\0" (little-endian) or "MM\0*" (big-endian).
         Assert.NotEmpty(result);
+        Assert.True(result.Length >= 4);
+        bool isLittleEndian = result[0] == 0x49 && result[1] == 0x49 && result[2] == 0x2A && result[3] == 0x00;
+        bool isBigEndian = result[0] == 0x4D && result[1] == 0x4D && result[2] == 0x00 && result[3] == 0x2A;
+        Assert.True(isLittleEndian || isBigEndian, $"TIFF must have valid endian magic bytes but started with {Convert.ToHexString(result.AsSpan(0, 4))}");
     }
 
     [Fact]
-    public void Generate_WithDifferentPageCounts_ShouldReturnDifferentSizes()
+    public void Generate_WithDifferentPageCounts_ReturnsSamePrecomputedNativeFile()
     {
         // Arrange
         var workItem = new FileWorkItem { Index = 1 };
@@ -179,9 +182,10 @@ public class TiffMultiPageGeneratorTests
         var result1 = TiffMultiPageGenerator.Generate(1, workItem);
         var result2 = TiffMultiPageGenerator.Generate(10, workItem);
 
-        // Assert - Currently generates single-page TIFF regardless of pageCount
-        // This is expected behavior as noted in the class documentation
-        Assert.NotNull(result1);
-        Assert.NotNull(result2);
+        // Assert - page count is tracked for Load File Metadata only; the Native File itself is
+        // pre-computed, so it must not vary with the requested page count.
+        Assert.NotEmpty(result1);
+        Assert.NotEmpty(result2);
+        Assert.Equal(result1, result2);
     }
 }
