@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Droid agent plugin for the Zipper autonomous runner.  EXPERIMENTAL — NOT ACTIVE.
+Droid agent plugin for the Zipper autonomous runner.
 
 Uses the Factory Droid CLI (droid exec) to implement GitHub issues and run
 autonomous coding sessions.
@@ -10,8 +10,17 @@ Protocol interface:
     check_token_health() -> bool
     run_mission(prompt, cwd, is_continue=False) -> tuple[int, str, str]
 """
+import os
+import signal
 import subprocess
 import shutil
+
+DEFAULT_MODEL = "gpt-6-luna"
+REASONING_EFFORT = "max"
+
+
+def list_models() -> list[str]:
+    return [DEFAULT_MODEL]
 
 
 def check_installation() -> bool:
@@ -23,13 +32,13 @@ def check_token_health() -> bool:
     """
     Returns True if droid has active API tokens.
 
-    Runs 'droid exec "ping"' — returns a near-instant 'pong' response with no
-    meaningful token cost. A non-zero exit code or missing 'pong' indicates
-    an authentication or credit issue.
+    Sends a tiny prompt using the configured model and reasoning effort.
+    Requires a successful response containing pong within 30 seconds;
+    failures can reflect authentication, quota, connectivity, or latency.
     """
     try:
         result = subprocess.run(
-            ["droid", "exec", "ping"],
+            ["droid", "exec", "--model", DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "Reply only with pong. Do not use tools."],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -61,10 +70,8 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     """
     Runs a coding mission non-interactively using droid exec.
 
-    Note: droid exec does not natively support session continuation like agy
-    does. When is_continue is True, we still dispatch a fresh exec in the
-    same worktree with the same prompt; Droid uses its own internal session
-    context management within the worktree directory.
+    This plugin starts a fresh exec even when is_continue is True.
+    The agent reads current worktree state; prior conversation is not resumed.
 
     Args:
         prompt: The task description to pass to the agent.
@@ -74,7 +81,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     Returns:
         (exit_code, stdout, stderr)
     """
-    cmd = ["droid", "exec", "--auto", "high", "--cwd", cwd, "--skip-permissions-unsafe", prompt]
+    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--cwd", cwd, prompt]
     print(f"[droid] Running mission (continue={is_continue}) in {cwd}")
     try:
         p = subprocess.Popen(
@@ -82,11 +89,19 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            start_new_session=True,
         )
         stdout, stderr = p.communicate(timeout=2700)
         print(f"--- [droid stdout] ---\n{stdout}")
         if stderr:
             print(f"--- [droid stderr] ---\n{stderr}")
         return p.returncode, stdout, stderr
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            p.kill()
+        stdout, stderr = p.communicate()
+        return -1, stdout, "Error: Droid mission timed out after 2700 seconds."
     except Exception as e:
         return -1, "", str(e)
