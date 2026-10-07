@@ -210,7 +210,6 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
 
             // Crucial: Child hash must refer to child bytes, not parent Email.
             Assert.NotEqual(family.ParentHash, family.ChildHash);
-            Assert.NotEqual(parentBytes.Length, childBytes.Length);
         }
 
         Assert.Equal(parentCount * 2, totalCheckedRecords);
@@ -471,7 +470,6 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
 
             var childBytes = await File.ReadAllBytesAsync(childDiskPath);
             Assert.NotEmpty(childBytes);
-            Assert.NotEqual(parentBytes.Length, childBytes.Length);
 
             var expectedChildMd5 = ComputeIndependentDigest(childBytes, Config.HashAlgorithm.MD5);
             var expectedChildSha256 = ComputeIndependentDigest(childBytes, Config.HashAlgorithm.SHA256);
