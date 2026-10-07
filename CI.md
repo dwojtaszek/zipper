@@ -130,6 +130,14 @@ Traceability uses the same configured batch size and maximum-request budget in
 both PR and full modes. A mapping-file change can select every requirement; it
 must not collapse that scope into one unbounded API request.
 
+Preparation builds a fresh run-local class lookup and reuses source text for
+unit and E2E references. Every mapping is still validated before scope selection
+and before any API call; ambiguity checks and evidence hashes are unchanged.
+No source cache persists between runs. Local three-run preparation benchmark
+(257 mappings, Linux, Python 3.14) improved from 24.55 s median to 0.387 s,
+with identical complete evidence hashes. This is preparation time, not total
+hosted workflow time or API latency.
+
 ## factory-droid
 
 Bot infra errors — retry, don't block merge.

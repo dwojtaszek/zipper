@@ -65,6 +65,24 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+class SourceIndex:
+    """One preparation's source snapshot; never retained across audit runs."""
+
+    def __init__(self, tests_root: Path):
+        self.contents: dict[Path, str] = {}
+        self.class_files: dict[str, list[Path]] = {}
+        for path in tests_root.rglob("*.cs"):
+            content = self.read(path)
+            names = dict.fromkeys(match.group(1) for match in re.finditer(r"class\s+(@?\w+)\b", content))
+            for name in names:
+                self.class_files.setdefault(name, []).append(path)
+
+    def read(self, path: Path) -> str:
+        if path not in self.contents:
+            self.contents[path] = _read(path)
+        return self.contents[path]
+
+
 def _extract_brace_body(lines: list[str], start_idx: int) -> str:
     """Return the brace-balanced method body starting at `start_idx`."""
     depth = 0
@@ -83,7 +101,9 @@ def _extract_brace_body(lines: list[str], start_idx: int) -> str:
     return "\n".join(body)
 
 
-def _find_class_files(tests_root: Path, class_name: str) -> list[Path]:
+def _find_class_files(tests_root: Path, class_name: str, source_index: SourceIndex | None = None) -> list[Path]:
+    if source_index is not None:
+        return source_index.class_files.get(class_name, [])
     candidates = []
     for cs_file in tests_root.rglob("*.cs"):
         content = _read(cs_file)
@@ -92,8 +112,8 @@ def _find_class_files(tests_root: Path, class_name: str) -> list[Path]:
     return candidates
 
 
-def _method_occurrences(cs_file: Path, method_name: str) -> list[tuple[int, str]]:
-    content = _read(cs_file)
+def _method_occurrences(cs_file: Path, method_name: str, source_index: SourceIndex | None = None) -> list[tuple[int, str]]:
+    content = _read(cs_file) if source_index is None else source_index.read(cs_file)
     lines = content.splitlines()
     occurrences = []
     pattern = re.compile(
@@ -106,20 +126,20 @@ def _method_occurrences(cs_file: Path, method_name: str) -> list[tuple[int, str]
     return occurrences
 
 
-def resolve_unit_reference(tests_root: Path, reference: str) -> dict:
+def resolve_unit_reference(tests_root: Path, reference: str, source_index: SourceIndex | None = None) -> dict:
     """Resolve `Class.Method` to its test body. Ambiguity/unresolved = ParseError."""
     parts = reference.split(".")
     if len(parts) != 2 or not all(parts):
         raise ParseError(f"Unit reference '{reference}' must be 'Class.Method'.")
     class_name, method_name = parts
 
-    class_files = _find_class_files(tests_root, class_name)
+    class_files = _find_class_files(tests_root, class_name, source_index)
     if not class_files:
         raise ParseError(f"Test class '{class_name}' not found under {tests_root}.")
 
     bodies: list[tuple[Path, int, str]] = []
     for cs_file in class_files:
-        for idx, body in _method_occurrences(cs_file, method_name):
+        for idx, body in _method_occurrences(cs_file, method_name, source_index):
             bodies.append((cs_file, idx, body))
 
     if not bodies:
@@ -139,7 +159,7 @@ def resolve_unit_reference(tests_root: Path, reference: str) -> dict:
     }
 
 
-def resolve_e2e_reference(tests_root: Path, reference: str) -> dict:
+def resolve_e2e_reference(tests_root: Path, reference: str, source_index: SourceIndex | None = None) -> dict:
     """Resolve `script.sh [Scenario]` to the whole script or its scenario block."""
     parts = reference.split(None, 1)
     if not parts:
@@ -153,7 +173,8 @@ def resolve_e2e_reference(tests_root: Path, reference: str) -> dict:
     if not script_path.is_file():
         raise ParseError(f"E2E script '{script}' not found.")
 
-    lines = _read(script_path).splitlines()
+    content = _read(script_path) if source_index is None else source_index.read(script_path)
+    lines = content.splitlines()
     start = 0
     block = lines
     if len(parts) == 2:
@@ -178,9 +199,9 @@ def resolve_e2e_reference(tests_root: Path, reference: str) -> dict:
     }
 
 
-def resolve_reference(tests_root: Path, row: dict) -> dict | None:
+def resolve_reference(tests_root: Path, row: dict, source_index: SourceIndex | None = None) -> dict | None:
     if row["coverage"] == "exemption":
         return None
     if row["coverage"] == "unit":
-        return resolve_unit_reference(tests_root, row["reference"])
-    return resolve_e2e_reference(tests_root, row["reference"])
+        return resolve_unit_reference(tests_root, row["reference"], source_index)
+    return resolve_e2e_reference(tests_root, row["reference"], source_index)
