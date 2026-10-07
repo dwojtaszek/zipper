@@ -24,6 +24,14 @@ def load_module(name: str, path: Path):
     return module
 
 
+def is_stryker_cli_available() -> bool:
+    try:
+        result = subprocess.run(["dotnet", "stryker", "--help"], capture_output=True, text=True, check=False)
+        return result.returncode == 0
+    except OSError:
+        return False
+
+
 class StrykerContractTests(unittest.TestCase):
     """End-to-end contract between pinned Stryker CLI, normalization, and quality ranking."""
 
@@ -33,6 +41,7 @@ class StrykerContractTests(unittest.TestCase):
         cls.normalize = load_module("quality_normalize_report", QUALITY_DIR / "normalize_report.py")
         cls.run_check = load_module("quality_run_check", QUALITY_DIR / "run_check.py")
 
+    @unittest.skipUnless(is_stryker_cli_available(), "dotnet-stryker tool is not restored (run 'dotnet tool restore')")
     def test_cli_accepts_pinned_options(self):
         result = subprocess.run(["dotnet", "stryker", "--help"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0)
@@ -40,6 +49,7 @@ class StrykerContractTests(unittest.TestCase):
         for opt in ["--concurrency", "--mutate", "--project", "--test-project", "--reporter", "--output", "--break-at", "--skip-version-check"]:
             self.assertIn(opt, help_text)
 
+    @unittest.skipUnless(is_stryker_cli_available(), "dotnet-stryker tool is not restored (run 'dotnet tool restore')")
     def test_cli_rejects_unsupported_max_concurrent_test_runs(self):
         result = subprocess.run(
             ["dotnet", "stryker", "--max-concurrent-test-runs", "4"],
