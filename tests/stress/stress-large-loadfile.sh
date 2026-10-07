@@ -29,7 +29,7 @@ set -euo pipefail  # Exit on any error, use unset variable as error, and fail on
 # --- Check Required Utilities ---
 check_required_utilities() {
     local missing_utils=()
-    for util in bc df stat unzip grep wc find; do
+    for util in df stat unzip grep wc find iconv; do
         if ! command -v "$util" &> /dev/null; then
             missing_utils+=("$util")
         fi
@@ -38,23 +38,64 @@ check_required_utilities() {
     if [ ${#missing_utils[@]} -gt 0 ]; then
         print_error "Missing required utilities: ${missing_utils[*]}"
         print_info "Install missing utilities:"
-        echo "  Ubuntu/Debian: sudo apt-get install bc unzip"
-        echo "  macOS: brew install bc"
+        echo "  Ubuntu/Debian: sudo apt-get install unzip"
         exit 1
     fi
 }
 
+to_mb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^2" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1048576}"
+    fi
+}
+
+to_gb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^3" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1073741824}"
+    fi
+}
+
+get_file_size() {
+    local file="$1"
+    if [ -z "$file" ] || [ ! -e "$file" ]; then
+        echo "0"
+        return 0
+    fi
+    stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0"
+}
+
 # --- Configuration ---
 TEST_NAME="Large_Load_File_Performance"
-OUTPUT_DIR="results"
-PROJECT="../../src/Zipper.csproj"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT="${ZIPPER_PROJECT:-$PROJECT_ROOT/src/Zipper.csproj}"
+STRESS_RESULTS_DIR="${STRESS_RESULTS_DIR:-$SCRIPT_DIR/results}"
+OUTPUT_DIR="${OUTPUT_DIR:-$STRESS_RESULTS_DIR/${TEST_NAME}_$(date +%Y%m%d_%H%M%S)_$$}"
+
+# Summary measurement variables (scoped at file level for set -u safety)
+UTF8_EXTERNAL_MB="0.00"
+UTF8_EMBEDDED_MB="0.00"
+UTF16_EXTERNAL_MB="0.00"
+ANSI_EXTERNAL_MB="0.00"
+utf8_external_mb="0.00"
+utf8_embedded_mb="0.00"
+utf16_external_mb="0.00"
+ansi_external_mb="0.00"
 
 # Test parameters
-FILE_COUNT=10000
-TARGET_LOAD_SIZE_MB=500
-FOLDERS=100
-FILE_TYPE="pdf"
-DISTRIBUTION="proportional"
+FILE_COUNT="${FILE_COUNT:-10000}"
+TARGET_LOAD_SIZE_MB="${TARGET_LOAD_SIZE_MB:-500}"
+FOLDERS="${FOLDERS:-100}"
+FILE_TYPE="${FILE_TYPE:-pdf}"
+DISTRIBUTION="${DISTRIBUTION:-proportional}"
 
 # --- Helper Functions ---
 print_header() {
@@ -84,10 +125,12 @@ check_disk_space() {
     print_info "Checking available disk space..."
 
     local required_bytes=$((2 * 1024 * 1024 * 1024))  # 2GB
-    local available_kb=$(df --output=avail . | tail -1 | tr -d ' ')
+    mkdir -p "$OUTPUT_DIR"
+    local available_kb=$(df -k -P "$OUTPUT_DIR" | awk 'NR>1 {print $4; exit}')
+    available_kb=${available_kb:-0}
     local available_bytes=$((available_kb * 1024))
-    local available_gb=$(echo "scale=2; $available_bytes / 1024^3" | bc)
-    local required_gb=$(echo "scale=2; $required_bytes / 1024^3" | bc)
+    local available_gb=$(to_gb "$available_bytes")
+    local required_gb=$(to_gb "$required_bytes")
 
     print_info "Available space: ${available_gb}GB"
     print_info "Required space: ${required_gb}GB"
@@ -147,8 +190,8 @@ run_scenario_1_external_utf8() {
     # Validate results
     local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
     local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
-    local dat_size=$(stat -c%s "$dat_file")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local dat_size=$(get_file_size "$dat_file")
+    local dat_size_mb=$(to_mb "$dat_size")
 
     print_success "Scenario 1 completed in ${duration}s"
     print_info "Load file size: ${dat_size_mb}MB"
@@ -179,16 +222,16 @@ run_scenario_2_embedded_utf8() {
 
     # Validate results
     local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
-    local zip_size=$(stat -c%s "$zip_file")
-    local zip_size_mb=$(echo "scale=2; $zip_size / 1024^2" | bc)
+    local zip_size=$(get_file_size "$zip_file")
+    local zip_size_mb=$(to_mb "$zip_size")
 
     # Extract and check embedded load file
     local temp_dir=$(mktemp -d)
     trap "rm -rf $temp_dir" RETURN
     unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null
     local embedded_dat=$(find "$temp_dir" -name "*.dat" -print -quit)
-    local dat_size=$(stat -c%s "$embedded_dat")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local dat_size=$(get_file_size "$embedded_dat")
+    local dat_size_mb=$(to_mb "$dat_size")
 
     print_success "Scenario 2 completed in ${duration}s"
     print_info "Embedded load file size: ${dat_size_mb}MB"
@@ -220,8 +263,8 @@ run_scenario_3_external_utf16() {
     # Validate results
     local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
     local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
-    local dat_size=$(stat -c%s "$dat_file")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local dat_size=$(get_file_size "$dat_file")
+    local dat_size_mb=$(to_mb "$dat_size")
 
     print_success "Scenario 3 completed in ${duration}s"
     print_info "UTF-16 load file size: ${dat_size_mb}MB"
@@ -252,11 +295,39 @@ run_scenario_4_external_ansi() {
     # Validate results
     local zip_file=$(find "$scenario_dir" -name "*.zip" -print -quit)
     local dat_file=$(find "$scenario_dir" -name "*.dat" -print -quit)
-    local dat_size=$(stat -c%s "$dat_file")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local dat_size=$(get_file_size "$dat_file")
+    local dat_size_mb=$(to_mb "$dat_size")
 
     print_success "Scenario 4 completed in ${duration}s"
     print_info "ANSI load file size: ${dat_size_mb}MB"
+}
+
+count_decoded_lines_utf16() {
+    local file="$1"
+    local lines
+    if lines=$(iconv -f UTF-16LE -t UTF-8 "$file" 2>/dev/null | wc -l) && [ "$lines" -gt 0 ]; then
+        echo "$lines"
+        return 0
+    fi
+    if lines=$(iconv -f UTF-16 -t UTF-8 "$file" 2>/dev/null | wc -l) && [ "$lines" -gt 0 ]; then
+        echo "$lines"
+        return 0
+    fi
+    return 1
+}
+
+count_decoded_lines_ansi() {
+    local file="$1"
+    local lines
+    if lines=$(iconv -f WINDOWS-1252 -t UTF-8 "$file" 2>/dev/null | wc -l) && [ "$lines" -gt 0 ]; then
+        echo "$lines"
+        return 0
+    fi
+    if lines=$(iconv -f CP1252 -t UTF-8 "$file" 2>/dev/null | wc -l) && [ "$lines" -gt 0 ]; then
+        echo "$lines"
+        return 0
+    fi
+    return 1
 }
 
 # --- Performance Analysis ---
@@ -272,79 +343,153 @@ analyze_performance() {
     local ansi_external_size=0
 
     # Scenario 1: UTF-8 External
-    local dat_file=$(find "$OUTPUT_DIR/scenario1_external_utf8" -name "*.dat" -print -quit)
-    if [ -n "$dat_file" ]; then
-        utf8_external_size=$(stat -c%s "$dat_file")
+    local dat_file=""
+    if [ -d "$OUTPUT_DIR/scenario1_external_utf8" ]; then
+        dat_file=$(find "$OUTPUT_DIR/scenario1_external_utf8" -name "*.dat" -print -quit 2>/dev/null || true)
+        if [ -n "$dat_file" ]; then
+            utf8_external_size=$(get_file_size "$dat_file")
+        fi
     fi
 
     # Scenario 2: UTF-8 Embedded
-    local zip_file=$(find "$OUTPUT_DIR/scenario2_embedded_utf8" -name "*.zip" -print -quit)
-    if [ -n "$zip_file" ]; then
-        local temp_dir=$(mktemp -d)
-        trap "rm -rf $temp_dir" RETURN
-        unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null
-        local embedded_dat=$(find "$temp_dir" -name "*.dat" -print -quit)
-        if [ -n "$embedded_dat" ]; then
-            utf8_embedded_size=$(stat -c%s "$embedded_dat")
+    if [ -d "$OUTPUT_DIR/scenario2_embedded_utf8" ]; then
+        local zip_file=$(find "$OUTPUT_DIR/scenario2_embedded_utf8" -name "*.zip" -print -quit 2>/dev/null || true)
+        if [ -n "$zip_file" ]; then
+            local temp_dir=$(mktemp -d)
+            trap "rm -rf '$temp_dir'; trap - RETURN" RETURN
+            unzip -j "$zip_file" "*.dat" -d "$temp_dir" > /dev/null 2>&1 || true
+            local embedded_dat=$(find "$temp_dir" -name "*.dat" -print -quit 2>/dev/null || true)
+            if [ -n "$embedded_dat" ]; then
+                utf8_embedded_size=$(get_file_size "$embedded_dat")
+            fi
         fi
     fi
 
     # Scenario 3: UTF-16 External
-    dat_file=$(find "$OUTPUT_DIR/scenario3_external_utf16" -name "*.dat" -print -quit)
-    if [ -n "$dat_file" ]; then
-        utf16_external_size=$(stat -c%s "$dat_file")
+    if [ -d "$OUTPUT_DIR/scenario3_external_utf16" ]; then
+        dat_file=$(find "$OUTPUT_DIR/scenario3_external_utf16" -name "*.dat" -print -quit 2>/dev/null || true)
+        if [ -n "$dat_file" ]; then
+            utf16_external_size=$(get_file_size "$dat_file")
+        fi
     fi
 
     # Scenario 4: ANSI External
-    dat_file=$(find "$OUTPUT_DIR/scenario4_external_ansi" -name "*.dat" -print -quit)
-    if [ -n "$dat_file" ]; then
-        ansi_external_size=$(stat -c%s "$dat_file")
+    if [ -d "$OUTPUT_DIR/scenario4_external_ansi" ]; then
+        dat_file=$(find "$OUTPUT_DIR/scenario4_external_ansi" -name "*.dat" -print -quit 2>/dev/null || true)
+        if [ -n "$dat_file" ]; then
+            ansi_external_size=$(get_file_size "$dat_file")
+        fi
     fi
 
     # Convert to MB
-    local utf8_external_mb=$(echo "scale=2; $utf8_external_size / 1024^2" | bc)
-    local utf8_embedded_mb=$(echo "scale=2; $utf8_embedded_size / 1024^2" | bc)
-    local utf16_external_mb=$(echo "scale=2; $utf16_external_size / 1024^2" | bc)
-    local ansi_external_mb=$(echo "scale=2; $ansi_external_size / 1024^2" | bc)
+    UTF8_EXTERNAL_MB=$(to_mb "$utf8_external_size")
+    UTF8_EMBEDDED_MB=$(to_mb "$utf8_embedded_size")
+    UTF16_EXTERNAL_MB=$(to_mb "$utf16_external_size")
+    ANSI_EXTERNAL_MB=$(to_mb "$ansi_external_size")
+    utf8_external_mb="$UTF8_EXTERNAL_MB"
+    utf8_embedded_mb="$UTF8_EMBEDDED_MB"
+    utf16_external_mb="$UTF16_EXTERNAL_MB"
+    ansi_external_mb="$ANSI_EXTERNAL_MB"
 
     print_info "Load File Size Comparison:"
     echo "  - UTF-8 External:  ${utf8_external_mb}MB"
     echo "  - UTF-8 Embedded:  ${utf8_embedded_mb}MB"
     echo "  - UTF-16 External: ${utf16_external_mb}MB"
-    echo "  - ANSI External:    ${ansi_external_mb}MB"
+    echo "  - ANSI External:   ${ansi_external_mb}MB"
 
-    # Size comparisons
-    if (( $(echo "$utf16_external_mb > $utf8_external_mb * 1.8" | bc -l) )); then
-        print_success "UTF-16 encoding overhead verified: $(echo "scale=1; $utf16_external_mb / $utf8_external_mb" | bc)x larger than UTF-8"
+    # Size comparisons (environmental performance observations)
+    local is_utf16_overhead_ok=false
+    local is_embedded_ok=false
+    local is_target_ok=false
+    if command -v bc >/dev/null 2>&1; then
+        (( $(echo "$utf16_external_mb > $utf8_external_mb * 1.8" | bc -l) )) && is_utf16_overhead_ok=true || true
+        (( $(echo "$utf8_embedded_mb > 0" | bc -l) )) && is_embedded_ok=true || true
+        (( $(echo "$utf8_external_mb >= $TARGET_LOAD_SIZE_MB * 0.5" | bc -l) )) && is_target_ok=true || true
+    else
+        awk "BEGIN {exit !($utf16_external_mb > $utf8_external_mb * 1.8)}" && is_utf16_overhead_ok=true || true
+        awk "BEGIN {exit !($utf8_embedded_mb > 0)}" && is_embedded_ok=true || true
+        awk "BEGIN {exit !($utf8_external_mb >= $TARGET_LOAD_SIZE_MB * 0.5)}" && is_target_ok=true || true
     fi
 
-    if (( $(echo "$utf8_embedded_mb > 0" | bc -l) )); then
+    if [ "$is_utf16_overhead_ok" = true ]; then
+        print_success "UTF-16 encoding overhead verified"
+    fi
+
+    if [ "$is_embedded_ok" = true ]; then
         print_success "Embedded load file functionality verified: ${utf8_embedded_mb}MB"
     fi
 
-    # Check if target size achieved
-    if (( $(echo "$utf8_external_mb >= $TARGET_LOAD_SIZE_MB * 0.5" | bc -l) )); then
+    if [ "$is_target_ok" = true ]; then
         print_success "Target load file size achieved: ${utf8_external_mb}MB (target: ~${TARGET_LOAD_SIZE_MB}MB)"
     else
         print_warning "Load file size below target: ${utf8_external_mb}MB (target: ~${TARGET_LOAD_SIZE_MB}MB)"
     fi
 
-    # Validate line counts
+    # Validate line counts (hard product assertions)
     print_info "Validating load file line counts..."
-
     local expected_lines=$((FILE_COUNT + 1))  # +1 for header
+    local contract_violations=0
 
-    for scenario in "scenario1_external_utf8" "scenario3_external_utf16" "scenario4_external_ansi"; do
-        local dat_file=$(find "$OUTPUT_DIR/$scenario" -name "*.dat" -print -quit)
-        if [ -n "$dat_file" ]; then
-            local line_count=$(wc -l < "$dat_file")
-            if [ "$line_count" -eq "$expected_lines" ]; then
-                print_success "$scenario: Correct line count ($line_count)"
+    local scenarios=(
+        "scenario1_external_utf8:UTF-8"
+        "scenario3_external_utf16:UTF-16"
+        "scenario4_external_ansi:ANSI"
+    )
+
+    for entry in "${scenarios[@]}"; do
+        local scenario="${entry%%:*}"
+        local encoding="${entry##*:}"
+        local s_dir="$OUTPUT_DIR/$scenario"
+        local s_dat=""
+        if [ -d "$s_dir" ]; then
+            s_dat=$(find "$s_dir" -name "*.dat" -print -quit 2>/dev/null || true)
+        fi
+
+        if [ -z "$s_dat" ]; then
+            print_error "$scenario: PRODUCT CONTRACT VIOLATION: missing load file (*.dat)"
+            contract_violations=$((contract_violations + 1))
+            continue
+        fi
+
+        local line_count=0
+        local decode_err=0
+        if [ "$encoding" = "UTF-16" ]; then
+            if command -v iconv >/dev/null 2>&1; then
+                if ! line_count=$(count_decoded_lines_utf16 "$s_dat"); then
+                    decode_err=1
+                fi
             else
-                print_error "$scenario: Incorrect line count. Expected: $expected_lines, Found: $line_count"
+                print_error "$scenario: missing iconv utility to decode UTF-16 load file"
+                decode_err=1
             fi
+        elif [ "$encoding" = "ANSI" ]; then
+            if command -v iconv >/dev/null 2>&1; then
+                if ! line_count=$(count_decoded_lines_ansi "$s_dat"); then
+                    decode_err=1
+                fi
+            else
+                line_count=$(wc -l < "$s_dat")
+            fi
+        else
+            line_count=$(wc -l < "$s_dat")
+        fi
+
+        if [ $decode_err -ne 0 ]; then
+            print_error "$scenario: PRODUCT CONTRACT VIOLATION: failed to decode $encoding load file"
+            contract_violations=$((contract_violations + 1))
+        elif [ "$line_count" -eq "$expected_lines" ]; then
+            print_success "$scenario: Correct line count ($line_count)"
+        else
+            print_error "$scenario: PRODUCT CONTRACT VIOLATION: Incorrect line count. Expected: $expected_lines, Found: $line_count"
+            contract_violations=$((contract_violations + 1))
         fi
     done
+
+    if [ "$contract_violations" -gt 0 ]; then
+        print_error "Contract validation failed with $contract_violations violation(s)"
+        return 2 2>/dev/null || exit 2
+    fi
+    return 0
 }
 
 # --- Cleanup and Summary ---
@@ -361,7 +506,7 @@ cleanup_and_summary() {
     echo "  ✓ Generated $(printf "%'d" $FILE_COUNT) files per scenario"
     echo "  ✓ Tested external and embedded load files"
     echo "  ✓ Verified UTF-8, UTF-16, and ANSI encoding performance"
-    echo "  ✓ Load file sizes ranging from ${ansi_external_mb}MB to ${utf16_external_mb}MB"
+    echo "  ✓ Load file sizes ranging from ${ANSI_EXTERNAL_MB}MB to ${UTF16_EXTERNAL_MB}MB"
     echo "  ✓ Metadata and text extraction enabled for maximum load file size"
     echo "  ✓ Load file I/O performance validated"
     echo "  ✓ Encoding overhead measured and verified"
@@ -393,7 +538,7 @@ main() {
     run_scenario_4_external_ansi
 
     # Analyze performance
-    analyze_performance
+    analyze_performance || exit $?
 
     # Show summary
     cleanup_and_summary

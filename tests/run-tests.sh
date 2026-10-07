@@ -685,6 +685,13 @@ bash ./tests/test-perf-measure.sh || print_error "test-perf-measure.sh failed."
 python3 -m unittest discover -s tests/perf -p 'test_perf_compare.py' || print_error "test_perf_compare.py failed."
 print_success "Performance measurement regression tests passed."
 
+print_info "Running stress test harness regressions..."
+if bash ./tests/test-stress-harness.sh; then
+    print_success "Stress test harness regressions passed."
+else
+    print_error "test-stress-harness.sh failed."
+fi
+
 print_info "Running TypeSafe audit foundation tests..."
 if ! bash ./tests/test-typesafe-audit.sh; then
     print_error "test-typesafe-audit.sh failed."

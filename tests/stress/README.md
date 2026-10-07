@@ -121,9 +121,9 @@ Stress tests complement the automated performance testing by:
 
 2.  **Software Requirements:**
     *   .NET 10.0 SDK
-    *   Required utilities: `bc`, `df`, `stat`, `unzip`, `file`, `grep`, `wc`, `find`
-        *   **Ubuntu/Debian:** `sudo apt-get install bc unzip`
-        *   **macOS:** `brew install bc`
+    *   Required utilities: `df`, `stat`, `unzip`, `file`, `grep`, `wc`, `find` (and optionally `bc` for floating-point calculations, with shell/awk fallback)
+        *   **Ubuntu/Debian:** `sudo apt-get install unzip` (optional: `bc`)
+        *   **macOS:** `brew install unzip` (optional: `bc`)
 
 3.  **Application Build:**
     ```bash
@@ -148,15 +148,17 @@ All stress tests include comprehensive pre-run validations:
     ```
 
 2.  **Run the main test runner:**
-    You can run all tests sequentially or specify a single test.
+    Specify the scenario to run, or pass `all` to run all tests sequentially. An exact or unique selector is required to prevent accidental execution of heavy workloads:
 
     ```bash
-    # Run all stress tests
-    ./run-stress-tests.sh
-
-    # Run a specific test by name (substring match)
+    # Run a specific test by selector
+    ./run-stress-tests.sh 100m
     ./run-stress-tests.sh 10gb
     ./run-stress-tests.sh attachments
+    ./run-stress-tests.sh large-loadfile
+
+    # Run all stress tests sequentially
+    ./run-stress-tests.sh all
     ```
 
 3.  **Alternatively, run an individual test script:**
@@ -173,14 +175,18 @@ All stress tests include comprehensive pre-run validations:
 
 ### Output Structure
 
-All stress tests write their output to a `results` directory within the `tests/stress` directory.
+All stress tests write their output to isolated run-scoped directories within `tests/stress/results/` (`<test_name>_<timestamp>_<pid>/`):
 
 ```
 tests/stress/
 └── results/
-    ├── archive_20251019_104843.zip
-    └── archive_20251019_104843.dat
+    └── stress_large_loadfile_20261007_062500_1234/
+        ├── stress_large_loadfile_external_ansi.dat
+        ├── stress_large_loadfile_external_utf16.dat
+        └── stress_large_loadfile_external_utf8.dat
 ```
+
+This isolates each invocation from prior runs, preventing stale file contamination while preserving historical outputs for inspection.
 
 ### Validation Performed
 
