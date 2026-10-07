@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Mutation shard scope (--mutate glob, stable directory/class selection)"
+        description: "Mutation shard scope (--mutate glob, relative to project root src/)"
         required: false
-        default: "src/LoadFiles/**"
+        default: "LoadFiles/**"
       shard:
         description: "Per-shard mutation timeout in minutes"
         required: false
@@ -83,21 +83,36 @@ jobs:
 
       - name: Mutation testing shard (Phase 2)
         if: steps.secret.outputs.available == 'true'
-        timeout-minutes: 45
+        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}
         env:
-          SCOPE: ${{ github.event.inputs.scope || 'src/LoadFiles/**' }}
+          SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**' }}
           SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
         run: |
           # Runtime/cost budget: one bounded shard per run until measured
           # runtimes justify widening (issue #959 Phase 2).
-          cd src && dotnet stryker \
+          # Scope is relative to project root src/; strip leading src/ if provided.
+          MUTATE_SCOPE="${SCOPE#src/}"
+          mkdir -p results/mutation
+          cd src && timeout "${SHARD_TIMEOUT}m" dotnet stryker \
             --project Zipper.csproj \
             --test-project Zipper.Tests/Zipper.Tests.csproj \
-            --mutate "$SCOPE" \
+            --mutate "$MUTATE_SCOPE" \
             --reporter json \
-            --output "../results/mutation/mutation-report.json" \
+            --output "../results/mutation" \
             --break-at 0 \
-            --max-concurrent-test-runs 4
+            --concurrency 4 \
+            --skip-version-check
+          STRYKER_RC=$?
+          if [ "$STRYKER_RC" -ne 0 ]; then
+            echo "::error::dotnet stryker exited with code $STRYKER_RC"
+            exit "$STRYKER_RC"
+          fi
+          cd ..
+          python3 tools/typesafe-audit/quality/normalize_report.py \
+            --input results/mutation \
+            --output results/mutation/mutation-report.json \
+            --scope "$MUTATE_SCOPE" \
+            --repo-root .
 
       - name: Run TypeSafe quality ranking (advisory)
         if: steps.secret.outputs.available == 'true'
@@ -105,14 +120,10 @@ jobs:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         run: |
           set -o pipefail
-          MUTATION_ARG=()
-          if [ -f results/mutation/mutation-report.json ]; then
-            MUTATION_ARG=(--mutation results/mutation/mutation-report.json)
-          fi
           python3 tools/typesafe-audit/quality/run_check.py \
             --mode live \
             --coverage "${{ steps.coverage.outputs.coverage_file }}" \
-            "${MUTATION_ARG[@]}" \
+            --mutation results/mutation/mutation-report.json \
             --json-out results/typesafe-quality/ranking.json \
             --md-out results/typesafe-quality/ranking.md \
             --summary-out "$GITHUB_STEP_SUMMARY"
@@ -129,14 +140,15 @@ jobs:
           exit "$rc"
 
       - name: Upload quality artifacts
-        if: steps.secret.outputs.available == 'true'
+        if: always() && steps.secret.outputs.available == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: typesafe-quality-report
           path: |
             results/coverage/**/coverage.cobertura.xml
-            results/mutation/mutation-report.json
+            results/mutation/**
             results/typesafe-quality/ranking.json
             results/typesafe-quality/ranking.md
           retention-days: 7
           if-no-files-found: ignore
+
