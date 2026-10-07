@@ -47,6 +47,7 @@ _parse_mod = checks_common.load_module("tsa_trace_parse_internal", CHECK_DIR / "
 ParseError = _parse_mod.ParseError
 parse_tsv = _parse_mod.parse_tsv
 resolve_reference = _parse_mod.resolve_reference
+SourceIndex = _parse_mod.SourceIndex
 sha256_text = _parse_mod.sha256_text
 
 EXIT_OK = runner.EXIT_OK
@@ -155,8 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     evidence_by_req: dict[str, list[dict]] = {}
     resolved_by_req: dict[str, list[dict | None]] = {}
     try:
+        source_index = SourceIndex(args.tests_root)
         for row in tsv_rows:
-            resolved = resolve_reference(args.tests_root, row)
+            resolved = resolve_reference(args.tests_root, row, source_index)
             evidence = build_evidence(row, resolved, requirements, policy["max_evidence_bytes"])
             evidence_by_req.setdefault(row["req_id"], []).append(evidence)
             resolved_by_req.setdefault(row["req_id"], []).append(resolved)

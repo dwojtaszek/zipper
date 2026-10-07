@@ -69,21 +69,79 @@ class TsvParserTests(unittest.TestCase):
 
 
 class UnitResolverTests(unittest.TestCase):
+    def test_source_index_reuses_reads_and_preserves_method_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "FixtureTests.cs"
+            source.write_text(
+                "public partial class FixtureTests {\n"
+                " public void First() { Assert.Equal(1, result); }\n"
+                " public void Second() { Assert.Equal(2, result); }\n"
+                "}\npublic partial class FixtureTests {}\n"
+            )
+            script = root / "check.sh"
+            script.write_text("echo check\n")
+            expected = {
+                reference: resolve_unit_reference(root, reference)
+                for reference in ("FixtureTests.First", "FixtureTests.Second")
+            }
+            expected_script = resolve_e2e_reference(root, "check.sh")
+            with mock.patch.object(trace_parse, "_read", wraps=trace_parse._read) as reads:
+                index = trace_parse.SourceIndex(root)
+                for reference, evidence in expected.items():
+                    self.assertEqual(evidence, resolve_unit_reference(root, reference, index))
+                self.assertEqual(expected_script, resolve_e2e_reference(root, "check.sh", index))
+                self.assertEqual(expected_script, resolve_e2e_reference(root, "check.sh", index))
+                self.assertEqual([mock.call(source), mock.call(script)], reads.call_args_list)
+
+    def test_source_index_preserves_ambiguity_and_missing_method_errors(self):
+        index = trace_parse.SourceIndex(CORPUS_DIR / "src")
+        for reference in ("DupTests.Dup", "FixtureTests.WasRenamedAway"):
+            with self.subTest(reference=reference):
+                with self.assertRaises(ParseError) as uncached:
+                    resolve_unit_reference(CORPUS_DIR / "src", reference)
+                with self.assertRaises(ParseError) as indexed:
+                    resolve_unit_reference(CORPUS_DIR / "src", reference, index)
+                self.assertEqual(str(uncached.exception), str(indexed.exception))
+
+    def test_source_index_preserves_escaped_class_identifiers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "EscapedTests.cs").write_text(
+                "class @FixtureTests { public void Check() { Assert.Equal(1, result); } }\n"
+            )
+            expected = resolve_unit_reference(root, "@FixtureTests.Check")
+            actual = resolve_unit_reference(root, "@FixtureTests.Check", trace_parse.SourceIndex(root))
+            self.assertEqual(expected, actual)
+
+    def test_source_index_is_fresh_for_each_preparation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "FreshTests.cs"
+            source.write_text("class FreshTests { public void Check() { Assert.True(true); } }\n")
+            first = resolve_unit_reference(root, "FreshTests.Check", trace_parse.SourceIndex(root))
+            source.write_text("class FreshTests { public void Check() { Assert.False(false); } }\n")
+            second = resolve_unit_reference(root, "FreshTests.Check", trace_parse.SourceIndex(root))
+            self.assertIn("Assert.False(false)", second["body"])
+            self.assertNotEqual(first["sha256"], second["sha256"])
+
     def test_repository_unit_mappings_resolve_real_test_bodies(self):
         rows = parse_tsv(REPO_ROOT / "tests/req-traceability.tsv")
         unit_rows = [row for row in rows if row["coverage"] == "unit"]
         self.assertGreater(len(unit_rows), 0)
+        index = trace_parse.SourceIndex(REPO_ROOT / "src/Zipper.Tests")
         for row in unit_rows:
             with self.subTest(req_id=row["req_id"], reference=row["reference"]):
-                resolved = resolve_unit_reference(REPO_ROOT / "src/Zipper.Tests", row["reference"])
+                resolved = resolve_unit_reference(REPO_ROOT / "src/Zipper.Tests", row["reference"], index)
                 self.assertTrue(resolved["body"].strip())
                 self.assertEqual(64, len(resolved["sha256"]))
 
     def test_repository_non_unit_mappings_resolve_real_test_sources(self):
         rows = parse_tsv(REPO_ROOT / "tests/req-traceability.tsv")
+        index = trace_parse.SourceIndex(REPO_ROOT)
         for row in (row for row in rows if row["coverage"] != "unit"):
             with self.subTest(req_id=row["req_id"], reference=row["reference"]):
-                resolved = trace_parse.resolve_reference(REPO_ROOT, row)
+                resolved = trace_parse.resolve_reference(REPO_ROOT, row, index)
                 if row["coverage"] == "exemption":
                     self.assertIsNone(resolved)
                 else:
@@ -193,16 +251,22 @@ class CorpusEvaluationTests(unittest.TestCase):
 
         json_out = fixtures / "report.json"
         md_out = fixtures / "report.md"
-        code = run_check_main([
-            "--full",
-            "--tsv", str(CORPUS_DIR / "req-traceability.tsv"),
-            "--tests-root", str(CORPUS_DIR / "src"),
-            "--requirements-root", str(CORPUS_DIR),
-            "--mode", "fixture",
-            "--fixture-dir", str(fixtures),
-            "--json-out", str(json_out),
-            "--md-out", str(md_out),
-        ])
+        with mock.patch.object(
+            trace_run_check._parse_mod, "_read", wraps=trace_run_check._parse_mod._read,
+        ) as reads:
+            code = run_check_main([
+                "--full",
+                "--tsv", str(CORPUS_DIR / "req-traceability.tsv"),
+                "--tests-root", str(CORPUS_DIR / "src"),
+                "--requirements-root", str(CORPUS_DIR),
+                "--mode", "fixture",
+                "--fixture-dir", str(fixtures),
+                "--json-out", str(json_out),
+                "--md-out", str(md_out),
+            ])
+        read_paths = [call.args[0] for call in reads.call_args_list]
+        self.assertGreater(len(read_paths), 0)
+        self.assertEqual(len(set(read_paths)), len(read_paths))
         self.assertEqual(0, code)
 
         report = json.loads(json_out.read_text(encoding="utf-8"))
