@@ -126,6 +126,10 @@ Advisory side check (issue #955): [`typesafe-audit.yml`](.github/workflows/types
 - **Issue triage (dry-run, #960):** `typesafe-issue-triage.yml` on `issues: [opened, edited, reopened]` + manual dispatch, `permissions: contents: read, issues: read` — dry run cannot modify GitHub state (no labels/comments/closures/assignments/new issues until a separate write-mode PR lands after 50+ maintainer-reviewed issues). `tools/typesafe-audit/triage/collect_issue.py` reads issue text and open-issue candidates via `gh` as JSON data only (issue numbers, never issue text, cross the shell boundary). Deterministic preparation strips markup with size caps, extracts keywords (REQ IDs, file paths, domain terms), retrieves bounded duplicate candidates by keyword overlap, and supplies closed sets (issue types, subsystems, priorities, active REQ IDs). TypeSafe Choices (type, subsystem, priority, duplicate-vs-related-vs-unrelated-vs-insufficient-evidence per candidate) and Nouls (missing reproduction/spec info, REQ relevance) select among supplied values only; any selection outside the closed sets is demoted to `needs-human-review`. Duplicate suggestions require both deterministic retrieval and high-confidence judgment with candidate links. API failure/no candidates/low confidence are neutral results; raw distributions retained. Corpus: `tests/typesafe-audit-fixtures/triage/`.
 - **Ownership:** repository maintainers; the workflow is path-filtered and runs `contents: read` with all third-party actions pinned to full commit SHAs.
 
+Traceability uses the same configured batch size and maximum-request budget in
+both PR and full modes. A mapping-file change can select every requirement; it
+must not collapse that scope into one unbounded API request.
+
 ## factory-droid
 
 Bot infra errors — retry, don't block merge.

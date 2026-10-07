@@ -138,6 +138,46 @@ class E2eResolverTests(unittest.TestCase):
 
 
 class CorpusEvaluationTests(unittest.TestCase):
+    def test_changed_scope_uses_bounded_batches_and_reports_every_requirement(self):
+        rows = parse_tsv(CORPUS_DIR / "req-traceability.tsv")
+        scope = sorted({row["req_id"] for row in rows if row["coverage"] != "exemption"})
+        lines = (CORPUS_DIR / "req-traceability.tsv").read_text().splitlines()
+        original_load_json = trace_run_check.load_json
+        with tempfile.TemporaryDirectory() as tmp:
+            fixtures = Path(tmp)
+            for start in range(0, len(scope), 2):
+                batch = set(scope[start:start + 2])
+                tsv = fixtures / f"batch-{start}.tsv"
+                # Retain original row numbers, which are part of request evidence.
+                tsv.write_text("\n".join(
+                    line if index == 0 or line.split("\t")[0] in batch else ""
+                    for index, line in enumerate(lines)
+                ) + "\n")
+                recorded = subprocess.run([
+                    sys.executable, str(CHECK_DIR / "record_corpus_fixtures.py"),
+                    str(fixtures), str(tsv), str(CORPUS_DIR / "src"),
+                    str(CORPUS_DIR), str(CHECK_DIR / "questions.json"),
+                ], capture_output=True, text=True)
+                self.assertEqual(0, recorded.returncode, recorded.stderr)
+
+            def configured_json(path):
+                data = original_load_json(path)
+                return {**data, "batch_size": 2} if path == trace_run_check.POLICY_PATH else data
+
+            report_path = fixtures / "report.json"
+            with mock.patch.object(trace_run_check, "changed_req_ids", return_value=set(scope)), \
+                    mock.patch.object(trace_run_check, "load_json", side_effect=configured_json):
+                code = run_check_main([
+                    "--base", "fixture-base", "--tsv", str(CORPUS_DIR / "req-traceability.tsv"),
+                    "--tests-root", str(CORPUS_DIR / "src"), "--requirements-root", str(CORPUS_DIR),
+                    "--mode", "fixture", "--fixture-dir", str(fixtures),
+                    "--json-out", str(report_path), "--md-out", str(fixtures / "report.md"),
+                ])
+            self.assertEqual(0, code)
+            results = json.loads(report_path.read_text())["results"]
+            self.assertEqual(set(scope), {result["req_id"] for result in results})
+            self.assertEqual(len(scope) * 3, len(results))
+
     def test_corpus_labels_reproduced_with_recorded_responses(self):
         fixtures = Path(tempfile.mkdtemp())
         recorder = subprocess.run(

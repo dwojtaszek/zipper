@@ -174,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
             print("traceability-audit: input error: --base is required without --full.", file=sys.stderr)
             return EXIT_INPUT_ERROR
         scope = sorted(changed_req_ids(Path.cwd(), args.base, args.head, tsv_rows) & set(evidence_by_req))
-        batch_size = len(scope) or 1
+        batch_size = policy["batch_size"]
 
     max_requests = policy["max_requests"]
     if len(scope) > batch_size * max_requests:
