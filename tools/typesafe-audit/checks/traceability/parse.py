@@ -83,6 +83,10 @@ class SourceIndex:
         return self.contents[path]
 
 
+def _read_source(path: Path, source_index: SourceIndex | None) -> str:
+    return _read(path) if source_index is None else source_index.read(path)
+
+
 def _extract_brace_body(lines: list[str], start_idx: int) -> str:
     """Return the brace-balanced method body starting at `start_idx`."""
     depth = 0
@@ -113,7 +117,7 @@ def _find_class_files(tests_root: Path, class_name: str, source_index: SourceInd
 
 
 def _method_occurrences(cs_file: Path, method_name: str, source_index: SourceIndex | None = None) -> list[tuple[int, str]]:
-    content = _read(cs_file) if source_index is None else source_index.read(cs_file)
+    content = _read_source(cs_file, source_index)
     lines = content.splitlines()
     occurrences = []
     pattern = re.compile(
@@ -173,7 +177,7 @@ def resolve_e2e_reference(tests_root: Path, reference: str, source_index: Source
     if not script_path.is_file():
         raise ParseError(f"E2E script '{script}' not found.")
 
-    content = _read(script_path) if source_index is None else source_index.read(script_path)
+    content = _read_source(script_path, source_index)
     lines = content.splitlines()
     start = 0
     block = lines
