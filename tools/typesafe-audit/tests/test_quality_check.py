@@ -85,6 +85,37 @@ class MutationTests(unittest.TestCase):
         self.assertEqual(survivor["method"], "ValidateDestination")
         self.assertIn("REQ-171", survivor["req_ids"])
 
+    def test_parse_report_handles_absolute_paths_from_real_stryker(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            real_stryker_json = tmp / "mutation-report.json"
+            abs_file = (CORPUS / "src" / "Validation" / "ProductionSetPostValidator.cs").resolve()
+            report_data = {
+                "schemaVersion": "4",
+                "files": {
+                    str(abs_file): {
+                        "language": "csharp",
+                        "mutants": [
+                            {
+                                "id": 1,
+                                "mutatorName": "Arithmetic",
+                                "description": "Path.Combine(baseDir, name) changed to Path.Combine(baseDir, name + 1)",
+                                "location": {"start": {"line": 12, "column": 20}, "end": {"line": 12, "column": 44}},
+                                "status": "Survived"
+                            }
+                        ]
+                    }
+                }
+            }
+            real_stryker_json.write_text(json.dumps(report_data), encoding="utf-8")
+            categories = self.mutation.parse_report(real_stryker_json, CORPUS)
+            self.assertIn("survived", categories)
+            survivor = categories["survived"][0]
+            self.assertEqual(survivor["file"], "src/Validation/ProductionSetPostValidator.cs")
+            self.assertFalse(survivor["file"].startswith("src//"))
+            self.assertEqual(survivor["method"], "ValidateDestination")
+
+
 
 class RunCheckTests(unittest.TestCase):
     """Fixture-mode ranking run, composition, byte stability."""
@@ -275,6 +306,97 @@ class WorkflowWiringTests(unittest.TestCase):
         manifest = json.loads((REPO_ROOT / ".config" / "dotnet-tools.json").read_text())
         self.assertIn("dotnet-stryker", manifest["tools"])
         self.assertTrue(manifest["tools"]["dotnet-stryker"]["version"])
+
+    def test_workflow_uses_pinned_concurrency_option(self):
+        self.assertIn("--concurrency 4", self.wf)
+        self.assertNotIn("--max-concurrent-test-runs", self.wf)
+
+    def test_workflow_scope_relative_to_project_root(self):
+        self.assertIn('default: "LoadFiles/**', self.wf)
+        self.assertNotIn('default: "src/LoadFiles/**', self.wf)
+
+    def test_workflow_wires_shard_timeout(self):
+        self.assertIn("timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}", self.wf)
+
+    def test_workflow_upload_runs_on_failure_or_timeout(self):
+        self.assertIn("always() && steps.secret.outputs.available == 'true'", self.wf)
+
+    def test_workflow_does_not_silently_drop_mutation_input(self):
+        self.assertNotIn("MUTATION_ARG=()", self.wf)
+        self.assertIn("--mutation results/mutation/mutation-report.json", self.wf)
+
+    def test_workflow_locates_and_normalizes_mutation_report(self):
+        self.assertIn("normalize_report.py", self.wf)
+        self.assertIn('--output "../results/mutation"', self.wf)
+
+
+class MutationNormalizeTests(unittest.TestCase):
+    """Report location, mutant counting, normalization, and validation."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mutation = load_module("quality_mutation", QUALITY_DIR / "mutation.py")
+
+    def test_locate_report_finds_nested_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            nested = tmp / "reports"
+            nested.mkdir()
+            report_file = nested / "mutation-report.json"
+            report_file.write_text("{}", encoding="utf-8")
+            located = self.mutation.locate_report(tmp)
+            self.assertEqual(located, report_file)
+
+    def test_locate_report_missing_file_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            with self.assertRaises(FileNotFoundError):
+                self.mutation.locate_report(tmp)
+
+    def test_count_selected_mutants_excludes_ignored(self):
+        report = {
+            "files": {
+                "Foo.cs": {
+                    "mutants": [
+                        {"status": "Ignored"},
+                        {"status": "Killed"},
+                        {"status": "Survived"},
+                    ]
+                }
+            }
+        }
+        self.assertEqual(self.mutation.count_selected_mutants(report), 2)
+
+    def test_process_report_zero_mutants_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            raw = tmp / "raw.json"
+            raw.write_text(json.dumps({
+                "files": {
+                    "Foo.cs": {"mutants": [{"status": "Ignored"}]}
+                }
+            }), encoding="utf-8")
+            out = tmp / "out.json"
+            with self.assertRaises(ValueError) as ctx:
+                self.mutation.process_report(raw, out, REPO_ROOT, scope="Foo/**")
+            self.assertIn("0 selected mutants", str(ctx.exception))
+
+    def test_process_report_normalizes_and_writes_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            raw = tmp / "raw.json"
+            abs_path = str((REPO_ROOT / "src" / "ContentTypeHelper.cs").resolve())
+            raw.write_text(json.dumps({
+                "files": {
+                    abs_path: {"mutants": [{"status": "Killed"}]}
+                }
+            }), encoding="utf-8")
+            out = tmp / "out.json"
+            norm = self.mutation.process_report(raw, out, REPO_ROOT, scope="ContentTypeHelper.cs")
+            self.assertTrue(out.is_file())
+            self.assertIn("files", norm)
+            self.assertIn("ContentTypeHelper.cs", norm["files"])
+            self.assertNotIn(abs_path, norm["files"])
 
 
 if __name__ == "__main__":
