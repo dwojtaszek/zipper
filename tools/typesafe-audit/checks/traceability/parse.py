@@ -160,7 +160,7 @@ def resolve_e2e_reference(tests_root: Path, reference: str) -> dict:
         scenario = parts[1]
         start = next((
             idx for idx, line in enumerate(lines)
-            if scenario in line and ("scenario:" in line or "Test Case" in line or "print_info" in line or "INFO" in line)
+            if scenario in line and any(marker in line for marker in ("scenario:", "Test Case", "print_info", "INFO"))
         ), None)
         if start is None:
             raise ParseError(f"Scenario '{scenario}' not found in {script_path.name}.")
