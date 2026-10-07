@@ -40,7 +40,8 @@ with tempfile.TemporaryDirectory() as directory:
     with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
         prompt = "Keep spaces, 'quotes', and $variables literal."
         code, out, err = plugin.run_mission(prompt, directory, is_continue=True, model="gpt-6-sol")
-        assert code == 0 and not err
+        assert code == 0
+        assert not err
         args = json.loads(out.splitlines()[0])
         assert args == ["exec", "--model", "gpt-6-sol", "--reasoning-effort", "max", "--auto", "high", "--cwd", directory, prompt]
         assert plugin.check_token_health()
@@ -56,7 +57,9 @@ with tempfile.TemporaryDirectory() as directory:
             return super().communicate(input=input, timeout=0.2 if timeout is not None else None)
     with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}), patch.object(plugin.subprocess, "Popen", ShortMission):
         code, out, err = plugin.run_mission("timeout check", directory)
-        assert code == -1 and "timed out" in err and "started" in out
+        assert code == -1
+        assert "timed out" in err
+        assert "started" in out
     time.sleep(0.6)
     assert not marker.exists(), "Timed-out Droid child survived process-group termination"
 print("Droid plugin checks passed")
