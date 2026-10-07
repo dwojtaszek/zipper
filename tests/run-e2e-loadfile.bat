@@ -293,10 +293,10 @@ set "CANCEL_EVIDENCE_FILTER=*_properties.json"
 
 if exist "%BUILD_DIR%\Zipper.exe" (
     set "CANCEL_EXE=%BUILD_DIR%\Zipper.exe"
-    set "CANCEL_ARGS=--loadfile-only --load-file-formats dat,opt --count 20000 --output-path \"%CANCEL_OUT%\""
+    set CANCEL_ARGS=--loadfile-only --load-file-formats dat,opt --count 20000 --output-path "%CANCEL_OUT%"
 ) else (
     set "CANCEL_EXE=dotnet"
-    set "CANCEL_ARGS=run --project %PROJECT% --no-build -c Release -- --loadfile-only --load-file-formats dat,opt --count 20000 --output-path \"%CANCEL_OUT%\""
+    set CANCEL_ARGS=run --project %PROJECT% --no-build -c Release -- --loadfile-only --load-file-formats dat,opt --count 20000 --output-path "%CANCEL_OUT%"
 )
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CANCEL_WORKER_SCRIPT%"

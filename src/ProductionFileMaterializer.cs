@@ -77,37 +77,59 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
         var parent = sourceInfo.Parent;
         var basePath = parent?.FullName ?? fullSource;
 
-        await using var zipStream = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
-        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: false);
-
-        bool hasEntries = false;
-        foreach (var item in sourceInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            hasEntries = true;
-
-            var relativePath = Path.GetRelativePath(basePath, item.FullName).Replace('\\', '/');
-            if (item is FileInfo fileInfo)
+            await using (var zipStream = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true))
+            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: false))
             {
-                var entry = archive.CreateEntry(relativePath, level);
-                entry.LastWriteTime = new DateTimeOffset(fileInfo.LastWriteTimeUtc);
-                await using var entryStream = entry.Open();
-                await using var fileStream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, PerformanceConstants.DefaultBufferSize, useAsync: true);
-                await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
-            }
-            else if (item is DirectoryInfo subDir)
-            {
-                if (!subDir.EnumerateFileSystemInfos().Any())
+                bool hasEntries = false;
+                foreach (var item in sourceInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    hasEntries = true;
+
+                    var relativePath = Path.GetRelativePath(basePath, item.FullName).Replace('\\', '/');
+                    if (item is FileInfo fileInfo)
+                    {
+                        var entry = archive.CreateEntry(relativePath, level);
+                        // Match ZipFile.CreateFromDirectory, which stored the local file time;
+                        // using UTC here would change entry bytes on non-UTC hosts.
+                        entry.LastWriteTime = new DateTimeOffset(fileInfo.LastWriteTime);
+                        await using var entryStream = entry.Open();
+                        await using var fileStream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, PerformanceConstants.DefaultBufferSize, useAsync: true);
+                        await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
+                    }
+                    else if (item is DirectoryInfo subDir)
+                    {
+                        if (!subDir.EnumerateFileSystemInfos().Any())
+                        {
+                            archive.CreateEntry(relativePath + "/");
+                        }
+                    }
+                }
+
+                if (!hasEntries)
+                {
+                    var relativePath = Path.GetRelativePath(basePath, fullSource).Replace('\\', '/');
                     archive.CreateEntry(relativePath + "/");
                 }
             }
         }
-
-        if (!hasEntries)
+        catch
         {
-            var relativePath = Path.GetRelativePath(basePath, fullSource).Replace('\\', '/');
-            archive.CreateEntry(relativePath + "/");
+            try
+            {
+                if (File.Exists(zipPath))
+                {
+                    File.Delete(zipPath);
+                }
+            }
+            catch
+            {
+                // Preserve original exception
+            }
+
+            throw;
         }
     }
 

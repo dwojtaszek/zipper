@@ -64,7 +64,10 @@ try {
         Start-Sleep -Milliseconds $pollInterval
     }
     if ($signalSent -eq -1) { throw "Generation evidence did not appear within deadline" }
-    $process.WaitForExit()
+    $cleanupTimeoutMs = if ($env:CANCEL_CLEANUP_TIMEOUT_SECONDS) { [int]$env:CANCEL_CLEANUP_TIMEOUT_SECONDS * 1000 } else { 15000 }
+    if (-not $process.WaitForExit($cleanupTimeoutMs)) {
+        throw "Process $processId failed to exit within $cleanupTimeoutMs ms after cancellation signal"
+    }
     [System.IO.File]::WriteAllText($env:CANCEL_RESULT_FILE, "$signalSent,$($process.ExitCode)")
     $workerExit = 0
 } catch {
