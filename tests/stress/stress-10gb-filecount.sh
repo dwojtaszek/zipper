@@ -30,7 +30,7 @@ set -euo pipefail  # Exit on any error, use unset variable as error, and fail on
 # --- Check Required Utilities ---
 check_required_utilities() {
     local missing_utils=()
-    for util in bc df stat unzip grep wc find; do
+    for util in df stat unzip grep wc find; do
         if ! command -v "$util" &> /dev/null; then
             missing_utils+=("$util")
         fi
@@ -39,23 +39,60 @@ check_required_utilities() {
     if [ ${#missing_utils[@]} -gt 0 ]; then
         print_error "Missing required utilities: ${missing_utils[*]}"
         print_info "Install missing utilities:"
-        echo "  Ubuntu/Debian: sudo apt-get install bc unzip"
-        echo "  macOS: brew install bc"
+        echo "  Ubuntu/Debian: sudo apt-get install unzip"
         exit 1
     fi
 }
 
+to_mb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^2" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1048576}"
+    fi
+}
+
+to_gb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^3" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1073741824}"
+    fi
+}
+
+get_file_size() {
+    local file="$1"
+    if [ -z "$file" ] || [ ! -e "$file" ]; then
+        echo "0"
+        return 0
+    fi
+    stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0"
+}
+
 # --- Configuration ---
 TEST_NAME="10GB_Maximum_File_Count_Challenge"
-OUTPUT_DIR="results"
-PROJECT="../../src/Zipper.csproj"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT="${ZIPPER_PROJECT:-$PROJECT_ROOT/src/Zipper.csproj}"
+STRESS_RESULTS_DIR="${STRESS_RESULTS_DIR:-$SCRIPT_DIR/results}"
+OUTPUT_DIR="${OUTPUT_DIR:-$STRESS_RESULTS_DIR/${TEST_NAME}_$(date +%Y%m%d_%H%M%S)_$$}"
+
+# Summary measurement variables (scoped at file level for set -u safety)
+ZIP_SIZE_GB="0.00"
+DAT_SIZE_MB="0.00"
+zip_size_gb="0.00"
+dat_size_mb="0.00"
 
 # Test parameters
-FILE_COUNT=5000000  # 5 million files
-FOLDERS=100
-TARGET_SIZE_GB=10
-FILE_TYPE="pdf"
-DISTRIBUTION="exponential"
+FILE_COUNT="${FILE_COUNT:-5000000}"  # 5 million files
+FOLDERS="${FOLDERS:-100}"
+TARGET_SIZE_GB="${TARGET_SIZE_GB:-10}"
+FILE_TYPE="${FILE_TYPE:-pdf}"
+DISTRIBUTION="${DISTRIBUTION:-exponential}"
 
 # --- Helper Functions ---
 print_header() {
@@ -84,11 +121,18 @@ print_error() {
 check_disk_space() {
     print_info "Checking available disk space..."
 
-    local required_bytes=$(printf "%.0f" $(echo "$TARGET_SIZE_GB * 1024^3 * 1.2" | bc))  # 20% overhead
-    local available_kb=$(df --output=avail . | tail -1 | tr -d ' ')
+    local required_bytes
+    if command -v bc >/dev/null 2>&1; then
+        required_bytes=$(printf "%.0f" $(echo "$TARGET_SIZE_GB * 1024^3 * 1.2" | bc))  # 20% overhead
+    else
+        required_bytes=$(awk "BEGIN {printf \"%.0f\", $TARGET_SIZE_GB * 1073741824 * 1.2}")
+    fi
+    mkdir -p "$OUTPUT_DIR"
+    local available_kb=$(df -k -P "$OUTPUT_DIR" | awk 'NR>1 {print $4; exit}')
+    available_kb=${available_kb:-0}
     local available_bytes=$((available_kb * 1024))
-    local available_gb=$(echo "scale=2; $available_bytes / 1024^3" | bc)
-    local required_gb=$(echo "scale=2; $required_bytes / 1024^3" | bc)
+    local available_gb=$(to_gb "$available_bytes")
+    local required_gb=$(to_gb "$required_bytes")
 
     print_info "Available space: ${available_gb}GB"
     print_info "Required space: ${required_gb}GB"
@@ -104,8 +148,19 @@ check_disk_space() {
 check_system_resources() {
     print_info "Checking system resources..."
 
-    local available_memory=$(free -h | awk '/^Mem:/ {print $7}')
-    local cpu_cores=$(nproc)
+    local available_memory="n/a"
+    local cpu_cores=1
+    if command -v free >/dev/null 2>&1; then
+        available_memory=$(free -h | awk '/^Mem:/ {print $7}' || true)
+    elif command -v sysctl >/dev/null 2>&1; then
+        available_memory="$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))GB"
+    fi
+
+    if command -v nproc >/dev/null 2>&1; then
+        cpu_cores=$(nproc)
+    elif command -v sysctl >/dev/null 2>&1; then
+        cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+    fi
 
     print_info "Available memory: $available_memory"
     print_info "CPU cores: $cpu_cores"
@@ -159,53 +214,66 @@ validate_results() {
 
     print_info "Validating generated files..."
 
-    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit)
-    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit)
+    local zip_file=""
+    local dat_file=""
+    if [ -d "$OUTPUT_DIR" ]; then
+        zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit 2>/dev/null || true)
+        dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit 2>/dev/null || true)
+    fi
 
     if [ -z "$zip_file" ]; then
-        print_error "No .zip file found"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: No .zip file found"
+        return 2 2>/dev/null || exit 2
     fi
 
     if [ -z "$dat_file" ]; then
-        print_error "No .dat file found"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: No .dat file found"
+        return 2 2>/dev/null || exit 2
     fi
 
     # Check file sizes
-    local zip_size=$(stat -c%s "$zip_file")
-    local zip_size_gb=$(echo "scale=2; $zip_size / 1024^3" | bc)
-    local dat_size=$(stat -c%s "$dat_file")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local zip_size=$(get_file_size "$zip_file")
+    local dat_size=$(get_file_size "$dat_file")
+    ZIP_SIZE_GB=$(to_gb "$zip_size")
+    DAT_SIZE_MB=$(to_mb "$dat_size")
+    zip_size_gb="$ZIP_SIZE_GB"
+    dat_size_mb="$DAT_SIZE_MB"
 
     print_info "Generated Archive:"
     echo "  - ZIP file: $(basename "$zip_file")"
-    echo "  - ZIP size: ${zip_size_gb}GB"
+    echo "  - ZIP size: ${ZIP_SIZE_GB}GB"
     echo "  - DAT file: $(basename "$dat_file")"
-    echo "  - DAT size: ${dat_size_mb}MB"
+    echo "  - DAT size: ${DAT_SIZE_MB}MB"
 
-    # Validate target size (within tolerance)
-    local min_size_gb=$(echo "$TARGET_SIZE_GB * 0.9" | bc)
-    local max_size_gb=$(echo "$TARGET_SIZE_GB * 1.1" | bc)
+    # Validate target size (environmental performance observation)
+    local min_size_gb=$(echo "$TARGET_SIZE_GB * 0.9" | bc 2>/dev/null || awk "BEGIN {print $TARGET_SIZE_GB * 0.9}")
+    local max_size_gb=$(echo "$TARGET_SIZE_GB * 1.1" | bc 2>/dev/null || awk "BEGIN {print $TARGET_SIZE_GB * 1.1}")
 
-    if (( $(echo "$zip_size_gb >= $min_size_gb && $zip_size_gb <= $max_size_gb" | bc -l) )); then
-        print_success "Target size achieved: ${zip_size_gb}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    local size_in_range=false
+    if command -v bc >/dev/null 2>&1; then
+        (( $(echo "$ZIP_SIZE_GB >= $min_size_gb && $ZIP_SIZE_GB <= $max_size_gb" | bc -l) )) && size_in_range=true || true
     else
-        print_warning "Size outside target range: ${zip_size_gb}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+        awk "BEGIN {exit !($ZIP_SIZE_GB >= $min_size_gb && $ZIP_SIZE_GB <= $max_size_gb)}" && size_in_range=true || true
     fi
 
-    # Validate file count in zip
+    if [ "$size_in_range" = true ]; then
+        print_success "Target size achieved: ${ZIP_SIZE_GB}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    else
+        print_warning "Size outside target range: ${ZIP_SIZE_GB}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    fi
+
+    # Validate file count in zip (hard product contract assertion)
     print_info "Validating file count in archive..."
     local file_count=$(unzip -l "$zip_file" | grep "\.$FILE_TYPE$" | wc -l)
 
     if [ "$file_count" -eq "$FILE_COUNT" ]; then
         print_success "File count verified: $(printf "%'d" $file_count) files"
     else
-        print_error "File count mismatch. Expected: $(printf "%'d" $FILE_COUNT), Found: $(printf "%'d" $file_count)"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: File count mismatch. Expected: $(printf "%'d" $FILE_COUNT), Found: $(printf "%'d" $file_count)"
+        return 2 2>/dev/null || exit 2
     fi
 
-    # Validate DAT file structure
+    # Validate DAT file structure (hard product contract assertion)
     print_info "Validating load file structure..."
     local line_count=$(wc -l < "$dat_file")
     local expected_lines=$((FILE_COUNT + 1))  # +1 for header
@@ -213,18 +281,19 @@ validate_results() {
     if [ "$line_count" -eq "$expected_lines" ]; then
         print_success "Load file structure validated: $line_count lines"
     else
-        print_error "Load file line count mismatch. Expected: $expected_lines, Found: $line_count"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: Load file line count mismatch. Expected: $expected_lines, Found: $line_count"
+        return 2 2>/dev/null || exit 2
     fi
 
-    # Check for text files
+    # Check for text files (hard product contract assertion)
     local text_count=$(unzip -l "$zip_file" | grep "\.txt$" | wc -l)
     if [ "$text_count" -eq "$FILE_COUNT" ]; then
         print_success "Text files validated: $(printf "%'d" $text_count) files"
     else
-        print_error "Text file count mismatch. Expected: $(printf "%'d" $FILE_COUNT), Found: $(printf "%'d" $text_count)"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: Text file count mismatch. Expected: $(printf "%'d" $FILE_COUNT), Found: $(printf "%'d" $text_count)"
+        return 2 2>/dev/null || exit 2
     fi
+    return 0
 }
 
 # --- Cleanup and Summary ---
@@ -239,8 +308,8 @@ cleanup_and_summary() {
     echo ""
     print_info "Test Results Summary:"
     echo "  ✓ Generated $(printf "%'d" $FILE_COUNT) $FILE_TYPE files"
-    echo "  ✓ Archive size: ${zip_size_gb}GB"
-    echo "  ✓ Load file: ${dat_size_mb}MB"
+    echo "  ✓ Archive size: ${ZIP_SIZE_GB}GB"
+    echo "  ✓ Load file: ${DAT_SIZE_MB}MB"
     echo "  ✓ Metadata and text extraction enabled"
     echo "  ✓ Exponential distribution across $FOLDERS folders"
     echo "  ✓ Zip64 format handling verified"
@@ -269,7 +338,7 @@ main() {
     run_stress_test
 
     # Validate results
-    validate_results
+    validate_results || exit $?
 
     # Show summary
     cleanup_and_summary

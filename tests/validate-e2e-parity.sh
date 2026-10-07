@@ -44,10 +44,13 @@ BAT_RUNNER="$SCRIPT_DIR/run-tests.bat"
 #     Linux-only CI composite action; no Windows counterpart by design.
 #   tests/test-perf-measure — Linux-only regression guard for measure.sh
 #     and perf-guard / baseline-refresh integrations (#826).
+#   tests/test-stress-harness — Linux/bash-only regression guard for stress
+#     test runner and scenario scripts (#1114).
 EXEMPT_SUBSCRIPTS=(
     tests/test-run-tests-fatal
     .github/actions/coverage-gate/test-coverage-gate
     tests/test-perf-measure
+    tests/test-stress-harness
 )
 
 STRICT=0

@@ -38,7 +38,7 @@ set -euo pipefail  # Exit on any error, use unset variable as error, and fail on
 # --- Check Required Utilities ---
 check_required_utilities() {
     local missing_utils=()
-    for util in bc df stat unzip grep wc find; do
+    for util in df stat unzip grep wc find; do
         if ! command -v "$util" &> /dev/null; then
             missing_utils+=("$util")
         fi
@@ -47,25 +47,74 @@ check_required_utilities() {
     if [ ${#missing_utils[@]} -gt 0 ]; then
         print_error "Missing required utilities: ${missing_utils[*]}"
         print_info "Install missing utilities:"
-        echo "  Ubuntu/Debian: sudo apt-get install bc unzip"
-        echo "  macOS: brew install bc"
+        echo "  Ubuntu/Debian: sudo apt-get install unzip"
         exit 1
     fi
 }
 
+to_mb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^2" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1048576}"
+    fi
+}
+
+to_gb() {
+    local bytes="${1:-0}"
+    [[ -z "$bytes" ]] && bytes=0
+    if command -v bc >/dev/null 2>&1; then
+        echo "scale=2; $bytes / 1024^3" | bc
+    else
+        awk "BEGIN {printf \"%.2f\", $bytes / 1073741824}"
+    fi
+}
+
+get_file_size() {
+    local file="$1"
+    if [ -z "$file" ] || [ ! -e "$file" ]; then
+        echo "0"
+        return 0
+    fi
+    stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0"
+}
+
 # --- Configuration ---
 TEST_NAME="30GB_Attachment-Heavy_EML_Focus"
-OUTPUT_DIR="results"
-PROJECT="../../src/Zipper.csproj"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT="${ZIPPER_PROJECT:-$PROJECT_ROOT/src/Zipper.csproj}"
+STRESS_RESULTS_DIR="${STRESS_RESULTS_DIR:-$SCRIPT_DIR/results}"
+OUTPUT_DIR="${OUTPUT_DIR:-$STRESS_RESULTS_DIR/${TEST_NAME}_$(date +%Y%m%d_%H%M%S)_$$}"
+
+# Summary measurement variables (scoped at file level for set -u safety)
+ZIP_SIZE_GB="0.00"
+DAT_SIZE_MB="0.00"
+ATTACHMENT_COUNT=0
+TOTAL_FILES=0
+TEXT_COUNT=0
+PDF_ATTACHMENTS=0
+JPG_ATTACHMENTS=0
+TIFF_ATTACHMENTS=0
+zip_size_gb="0.00"
+dat_size_mb="0.00"
+attachment_count=0
+total_files=0
+text_count=0
+pdf_attachments=0
+jpg_attachments=0
+tiff_attachments=0
 
 # Test parameters
-EML_COUNT=1000000         # 1 million EML files
-ATTACHMENT_RATE=80        # 80% of EMLs will have attachments
-FOLDERS=100
-TARGET_SIZE_GB=30
-DISTRIBUTION="proportional"
-MIN_ATTACHMENT_SIZE_MB=2
-MAX_ATTACHMENT_SIZE_MB=5
+EML_COUNT="${EML_COUNT:-1000000}"         # 1 million EML files
+ATTACHMENT_RATE="${ATTACHMENT_RATE:-80}"   # 80% of EMLs will have attachments
+FOLDERS="${FOLDERS:-100}"
+TARGET_SIZE_GB="${TARGET_SIZE_GB:-30}"
+DISTRIBUTION="${DISTRIBUTION:-proportional}"
+MIN_ATTACHMENT_SIZE_MB="${MIN_ATTACHMENT_SIZE_MB:-2}"
+MAX_ATTACHMENT_SIZE_MB="${MAX_ATTACHMENT_SIZE_MB:-5}"
 
 # Calculated expectations
 EXPECTED_ATTACHMENTS=$((EML_COUNT * ATTACHMENT_RATE / 100))
@@ -99,11 +148,18 @@ print_error() {
 check_disk_space() {
     print_info "Checking available disk space..."
 
-    local required_bytes=$(printf "%.0f" $(echo "$TARGET_SIZE_GB * 1024^3 * 1.2" | bc))  # 20% overhead
-    local available_kb=$(df --output=avail . | tail -1 | tr -d ' ')
+    local required_bytes
+    if command -v bc >/dev/null 2>&1; then
+        required_bytes=$(printf "%.0f" $(echo "$TARGET_SIZE_GB * 1024^3 * 1.2" | bc))  # 20% overhead
+    else
+        required_bytes=$(awk "BEGIN {printf \"%.0f\", $TARGET_SIZE_GB * 1073741824 * 1.2}")
+    fi
+    mkdir -p "$OUTPUT_DIR"
+    local available_kb=$(df -k -P "$OUTPUT_DIR" | awk 'NR>1 {print $4; exit}')
+    available_kb=${available_kb:-0}
     local available_bytes=$((available_kb * 1024))
-    local available_gb=$(echo "scale=2; $available_bytes / 1024^3" | bc)
-    local required_gb=$(echo "scale=2; $required_bytes / 1024^3" | bc)
+    local available_gb=$(to_gb "$available_bytes")
+    local required_gb=$(to_gb "$required_bytes")
 
     print_info "Available space: ${available_gb}GB"
     print_info "Required space: ${required_gb}GB"
@@ -119,8 +175,22 @@ check_disk_space() {
 check_system_resources() {
     print_info "Checking system resources for attachment-heavy processing..."
 
-    local available_memory=$(free -h | awk '/^Mem:/ {print $7}')
-    local cpu_cores=$(nproc)
+    local available_memory="n/a"
+    local memory_gb=0
+    local cpu_cores=1
+    if command -v free >/dev/null 2>&1; then
+        available_memory=$(free -h | awk '/^Mem:/ {print $7}' || true)
+        memory_gb=$(free -g | awk '/^Mem:/ {print $7}' || echo "0")
+    elif command -v sysctl >/dev/null 2>&1; then
+        memory_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
+        available_memory="${memory_gb}GB"
+    fi
+
+    if command -v nproc >/dev/null 2>&1; then
+        cpu_cores=$(nproc)
+    elif command -v sysctl >/dev/null 2>&1; then
+        cpu_cores=$(sysctl -n hw.ncpu 2>/dev/null || echo "1")
+    fi
 
     print_info "Available memory: $available_memory"
     print_info "CPU cores: $cpu_cores"
@@ -130,8 +200,7 @@ check_system_resources() {
     fi
 
     # Check memory (attachment processing requires significant memory)
-    local memory_gb=$(free -g | awk '/^Mem:/ {print $7}')
-    if [ "$memory_gb" -lt 12 ]; then
+    if [[ "$memory_gb" =~ ^[0-9]+$ ]] && [ "$memory_gb" -lt 12 ]; then
         print_warning "Low memory detected. Attachment-heavy stress test may require significant memory"
     fi
 
@@ -183,77 +252,92 @@ validate_results() {
 
     print_info "Validating attachment-heavy archive..."
 
-    local zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit)
-    local dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit)
+    local zip_file=""
+    local dat_file=""
+    if [ -d "$OUTPUT_DIR" ]; then
+        zip_file=$(find "$OUTPUT_DIR" -name "*.zip" -print -quit 2>/dev/null || true)
+        dat_file=$(find "$OUTPUT_DIR" -name "*.dat" -print -quit 2>/dev/null || true)
+    fi
 
     if [ -z "$zip_file" ]; then
-        print_error "No .zip file found"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: No .zip file found"
+        return 2 2>/dev/null || exit 2
     fi
 
     if [ -z "$dat_file" ]; then
-        print_error "No .dat file found"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: No .dat file found"
+        return 2 2>/dev/null || exit 2
     fi
 
     # Check file sizes
-    local zip_size=$(stat -c%s "$zip_file")
-    local zip_size_gb=$(echo "scale=2; $zip_size / 1024^3" | bc)
-    local dat_size=$(stat -c%s "$dat_file")
-    local dat_size_mb=$(echo "scale=2; $dat_size / 1024^2" | bc)
+    local zip_size=$(get_file_size "$zip_file")
+    local dat_size=$(get_file_size "$dat_file")
+    ZIP_SIZE_GB=$(to_gb "$zip_size")
+    DAT_SIZE_MB=$(to_mb "$dat_size")
+    zip_size_gb="$ZIP_SIZE_GB"
+    dat_size_mb="$DAT_SIZE_MB"
 
     print_info "Generated Archive:"
     echo "  - ZIP file: $(basename "$zip_file")"
-    echo "  - ZIP size: ${zip_size_gb}GB"
+    echo "  - ZIP size: ${ZIP_SIZE_GB}GB"
     echo "  - DAT file: $(basename "$dat_file")"
-    echo "  - DAT size: ${dat_size_mb}MB"
+    echo "  - DAT size: ${DAT_SIZE_MB}MB"
 
-    # Validate target size (within tolerance)
-    local min_size_gb=$(echo "$TARGET_SIZE_GB * 0.9" | bc)
-    local max_size_gb=$(echo "$TARGET_SIZE_GB * 1.1" | bc)
+    # Validate target size (environmental performance observation)
+    local min_size_gb=$(echo "$TARGET_SIZE_GB * 0.9" | bc 2>/dev/null || awk "BEGIN {print $TARGET_SIZE_GB * 0.9}")
+    local max_size_gb=$(echo "$TARGET_SIZE_GB * 1.1" | bc 2>/dev/null || awk "BEGIN {print $TARGET_SIZE_GB * 1.1}")
 
-    if (( $(echo "$zip_size_gb >= $min_size_gb && $zip_size_gb <= $max_size_gb" | bc -l) )); then
-        print_success "Target size achieved: ${zip_size_gb}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    local size_in_range=false
+    if command -v bc >/dev/null 2>&1; then
+        (( $(echo "$ZIP_SIZE_GB >= $min_size_gb && $ZIP_SIZE_GB <= $max_size_gb" | bc -l) )) && size_in_range=true || true
     else
-        print_warning "Size outside target range: ${zip_size_gb}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+        awk "BEGIN {exit !($ZIP_SIZE_GB >= $min_size_gb && $ZIP_SIZE_GB <= $max_size_gb)}" && size_in_range=true || true
     fi
 
-    # Validate EML file count
+    if [ "$size_in_range" = true ]; then
+        print_success "Target size achieved: ${ZIP_SIZE_GB}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    else
+        print_warning "Size outside target range: ${ZIP_SIZE_GB}GB (target: ${TARGET_SIZE_GB}GB ±10%)"
+    fi
+
+    # Validate EML file count (hard product contract assertion)
     print_info "Validating EML file count in archive..."
     local eml_count=$(unzip -l "$zip_file" | grep "\.eml$" | wc -l)
 
     if [ "$eml_count" -eq "$EML_COUNT" ]; then
         print_success "EML file count verified: $(printf "%'d" $eml_count) files"
     else
-        print_error "EML file count mismatch. Expected: $(printf "%'d" $EML_COUNT), Found: $(printf "%'d" $eml_count)"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: EML file count mismatch. Expected: $(printf "%'d" $EML_COUNT), Found: $(printf "%'d" $eml_count)"
+        return 2 2>/dev/null || exit 2
     fi
 
     # Validate attachment files
     print_info "Validating attachment files in archive..."
-    local attachment_count=$(unzip -l "$zip_file" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
+    ATTACHMENT_COUNT=$(unzip -l "$zip_file" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
+    attachment_count="$ATTACHMENT_COUNT"
 
     print_info "Attachment Statistics:"
     echo "  - Expected attachments: $(printf "%'d" $EXPECTED_ATTACHMENTS)"
-    echo "  - Found attachments: $(printf "%'d" $attachment_count)"
+    echo "  - Found attachments: $(printf "%'d" $ATTACHMENT_COUNT)"
 
-    if [ "$attachment_count" -ge "$((EXPECTED_ATTACHMENTS / 2))" ]; then
-        print_success "Attachment count within expected range: $(printf "%'d" $attachment_count)"
+    if [ "$ATTACHMENT_COUNT" -ge "$((EXPECTED_ATTACHMENTS / 2))" ]; then
+        print_success "Attachment count within expected range: $(printf "%'d" $ATTACHMENT_COUNT)"
     else
-        print_warning "Lower than expected attachment count: $(printf "%'d" $attachment_count) (expected ~$(printf "%'d" $EXPECTED_ATTACHMENTS))"
+        print_warning "Lower than expected attachment count: $(printf "%'d" $ATTACHMENT_COUNT) (expected ~$(printf "%'d" $EXPECTED_ATTACHMENTS))"
     fi
 
     # Validate total file count
-    local total_files=$((eml_count + attachment_count))
-    print_info "Total files in archive: $(printf "%'d" $total_files)"
+    TOTAL_FILES=$((eml_count + ATTACHMENT_COUNT))
+    total_files="$TOTAL_FILES"
+    print_info "Total files in archive: $(printf "%'d" $TOTAL_FILES)"
 
-    if [ "$total_files" -ge "$EXPECTED_MIN_FILES" ]; then
-        print_success "Total file count meets minimum expectations: $(printf "%'d" $total_files)"
+    if [ "$TOTAL_FILES" -ge "$EXPECTED_MIN_FILES" ]; then
+        print_success "Total file count meets minimum expectations: $(printf "%'d" $TOTAL_FILES)"
     else
-        print_warning "Total file count below minimum: $(printf "%'d" $total_files) (expected min: $(printf "%'d" $EXPECTED_MIN_FILES))"
+        print_warning "Total file count below minimum: $(printf "%'d" $TOTAL_FILES) (expected min: $(printf "%'d" $EXPECTED_MIN_FILES))"
     fi
 
-    # Validate DAT file structure with attachment data
+    # Validate DAT file structure with attachment data (hard product contract assertion)
     print_info "Validating load file with attachment data..."
     local line_count=$(wc -l < "$dat_file")
     local expected_lines=$((EML_COUNT + 1))  # +1 for header
@@ -261,8 +345,8 @@ validate_results() {
     if [ "$line_count" -eq "$expected_lines" ]; then
         print_success "Load file structure validated: $line_count lines"
     else
-        print_error "Load file line count mismatch. Expected: $expected_lines, Found: $line_count"
-        exit 1
+        print_error "PRODUCT CONTRACT VIOLATION: Load file line count mismatch. Expected: $expected_lines, Found: $line_count"
+        return 2 2>/dev/null || exit 2
     fi
 
     # Check for attachment entries in DAT file
@@ -275,31 +359,36 @@ validate_results() {
 
     # Check for text files
     print_info "Validating text file extraction..."
-    local text_count=$(unzip -l "$zip_file" | grep "\.txt$" | wc -l)
+    TEXT_COUNT=$(unzip -l "$zip_file" | grep "\.txt$" | wc -l)
+    text_count="$TEXT_COUNT"
 
     # Should have text files for EMLs and attachments
     local expected_text_min=$eml_count
-    if [ "$text_count" -ge "$expected_text_min" ]; then
-        print_success "Text files validated: $(printf "%'d" $text_count) files"
+    if [ "$TEXT_COUNT" -ge "$expected_text_min" ]; then
+        print_success "Text files validated: $(printf "%'d" $TEXT_COUNT) files"
     else
-        print_warning "Text file count lower than expected: $(printf "%'d" $text_count) (expected min: $(printf "%'d" $expected_text_min))"
+        print_warning "Text file count lower than expected: $(printf "%'d" $TEXT_COUNT) (expected min: $(printf "%'d" $expected_text_min))"
     fi
 
     # Validate attachment file types distribution
     print_info "Analyzing attachment type distribution..."
-    local pdf_attachments=$(unzip -l "$zip_file" | grep "attachment.*\.pdf$" | wc -l)
-    local jpg_attachments=$(unzip -l "$zip_file" | grep "attachment.*\.jpg$" | wc -l)
-    local tiff_attachments=$(unzip -l "$zip_file" | grep "attachment.*\.tiff$" | wc -l)
-    local total_validated=$((pdf_attachments + jpg_attachments + tiff_attachments))
+    PDF_ATTACHMENTS=$(unzip -l "$zip_file" | grep "attachment.*\.pdf$" | wc -l)
+    JPG_ATTACHMENTS=$(unzip -l "$zip_file" | grep "attachment.*\.jpg$" | wc -l)
+    TIFF_ATTACHMENTS=$(unzip -l "$zip_file" | grep "attachment.*\.tiff$" | wc -l)
+    pdf_attachments="$PDF_ATTACHMENTS"
+    jpg_attachments="$JPG_ATTACHMENTS"
+    tiff_attachments="$TIFF_ATTACHMENTS"
+    local total_validated=$((PDF_ATTACHMENTS + JPG_ATTACHMENTS + TIFF_ATTACHMENTS))
 
-    if [ "$total_validated" -eq "$attachment_count" ]; then
+    if [ "$total_validated" -eq "$ATTACHMENT_COUNT" ]; then
         print_success "Attachment type distribution validated:"
-        echo "  - PDF attachments: $(printf "%'d" $pdf_attachments)"
-        echo "  - JPG attachments: $(printf "%'d" $jpg_attachments)"
-        echo "  - TIFF attachments: $(printf "%'d" $tiff_attachments)"
+        echo "  - PDF attachments: $(printf "%'d" $PDF_ATTACHMENTS)"
+        echo "  - JPG attachments: $(printf "%'d" $JPG_ATTACHMENTS)"
+        echo "  - TIFF attachments: $(printf "%'d" $TIFF_ATTACHMENTS)"
     else
-        print_warning "Attachment type count mismatch: $total_validated vs $attachment_count"
+        print_warning "Attachment type count mismatch: $total_validated vs $ATTACHMENT_COUNT"
     fi
+    return 0
 }
 
 # --- Cleanup and Summary ---
@@ -314,10 +403,10 @@ cleanup_and_summary() {
     echo ""
     print_info "Test Results Summary:"
     echo "  ✓ Generated $(printf "%'d" $EML_COUNT) EML files"
-    echo "  ✓ Created $(printf "%'d" $attachment_count) attachment files"
-    echo "  ✓ Total archive files: $(printf "%'d" $total_files)"
-    echo "  ✓ Archive size: ${zip_size_gb}GB"
-    echo "  ✓ Load file: ${dat_size_mb}MB"
+    echo "  ✓ Created $(printf "%'d" $ATTACHMENT_COUNT) attachment files"
+    echo "  ✓ Total archive files: $(printf "%'d" $TOTAL_FILES)"
+    echo "  ✓ Archive size: ${ZIP_SIZE_GB}GB"
+    echo "  ✓ Load file: ${DAT_SIZE_MB}MB"
     echo "  ✓ Attachment rate: $ATTACHMENT_RATE% achieved"
     echo "  ✓ Metadata and text extraction for all files"
     echo "  ✓ Proportional distribution across $FOLDERS folders"
@@ -325,10 +414,10 @@ cleanup_and_summary() {
     echo "  ✓ Attachment type distribution validated"
     echo ""
     print_info "Attachment Processing Highlights:"
-    echo "  ✓ PDF attachments: $(printf "%'d" $pdf_attachments)"
-    echo "  ✓ JPG attachments: $(printf "%'d" $jpg_attachments)"
-    echo "  ✓ TIFF attachments: $(printf "%'d" $tiff_attachments)"
-    echo "  ✓ Text files extracted: $(printf "%'d" $text_count)"
+    echo "  ✓ PDF attachments: $(printf "%'d" $PDF_ATTACHMENTS)"
+    echo "  ✓ JPG attachments: $(printf "%'d" $JPG_ATTACHMENTS)"
+    echo "  ✓ TIFF attachments: $(printf "%'d" $TIFF_ATTACHMENTS)"
+    echo "  ✓ Text files extracted: $(printf "%'d" $TEXT_COUNT)"
 }
 
 # --- Main Execution ---
@@ -356,7 +445,7 @@ main() {
     run_stress_test
 
     # Validate results
-    validate_results
+    validate_results || exit $?
 
     # Show summary
     cleanup_and_summary
