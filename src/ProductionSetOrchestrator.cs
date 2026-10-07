@@ -85,22 +85,21 @@ internal static class ProductionSetOrchestrator
             var productionName = prodIds[i];
             var productionPath = Path.Combine(request.Output.OutputPath, productionName);
 
-            if (await materializer.DirectoryExistsAsync(productionPath, cancellationToken).ConfigureAwait(false))
-            {
-                throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
-            }
-
-            if (request.Production.ProductionZip)
-            {
-                var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
-                if (await materializer.FileExistsAsync(zipPath, cancellationToken).ConfigureAwait(false))
-                {
-                    throw new InvalidOperationException($"Production zip already exists: '{zipPath}'");
-                }
-            }
-
             try
             {
+                if (await materializer.DirectoryExistsAsync(productionPath, cancellationToken).ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException($"Production directory already exists: '{productionPath}'");
+                }
+
+                if (request.Production.ProductionZip)
+                {
+                    var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
+                    if (await materializer.FileExistsAsync(zipPath, cancellationToken).ConfigureAwait(false))
+                    {
+                        throw new InvalidOperationException($"Production zip already exists: '{zipPath}'");
+                    }
+                }
                 long startToUse;
                 if (request.Production.RollingBatesMode == Config.RollingBatesMode.Restart)
                 {
@@ -685,9 +684,14 @@ internal static class ProductionSetOrchestrator
         }
 
         var zipPath = Path.Combine(request.Output.OutputPath, $"{productionName}.zip");
+        if (await materializer.FileExistsAsync(zipPath, cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException($"Production zip already exists: '{zipPath}'");
+        }
+
+        createdZips.Add(zipPath);
         Console.Write("  Creating ZIP archive...");
         await materializer.CreateZipAsync(productionPath, zipPath, request.Output.CompressionMethod, cancellationToken).ConfigureAwait(false);
-        createdZips.Add(zipPath);
         Console.WriteLine(" done.");
         return zipPath;
     }
