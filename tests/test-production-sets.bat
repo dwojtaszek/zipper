@@ -735,6 +735,78 @@ if errorlevel 1 ( echo [ ERROR ] Test 11d: rejection message does not name the B
 
 echo [ SUCCESS ] Test Case 11: Source-driven production set with source path modes passed
 
+:: --- Test Case 12: Active subprocess cancellation ---
+
+echo [ INFO ] Test Case 12: Active subprocess cancellation in Production Set mode
+set "CANCEL_OUT=%TEST_OUTPUT_DIR%\cancel_prod"
+if not exist "%CANCEL_OUT%" mkdir "%CANCEL_OUT%"
+echo sentinel data> "%CANCEL_OUT%\sentinel.txt"
+
+set "CANCEL_WORKER_SCRIPT=%~dp0_generation-cancellation.ps1"
+set "CANCEL_WORKER_PID_FILE=%TEST_OUTPUT_DIR%\cancel_prod_worker.pid"
+set "CANCEL_PID_FILE=%TEST_OUTPUT_DIR%\cancel_prod.pid"
+set "CANCEL_DONE_FILE=%TEST_OUTPUT_DIR%\cancel_prod.done"
+set "CANCEL_RESULT_FILE=%TEST_OUTPUT_DIR%\cancel_prod.result"
+set "CANCEL_ERROR_FILE=%TEST_OUTPUT_DIR%\cancel_prod.err"
+set "CANCEL_WORKDIR=%CD%"
+set "CANCEL_STAGING_TIMEOUT_SECONDS=15"
+set "CANCEL_POLL_INTERVAL_MS=20"
+set "CANCEL_CLEANUP_TIMEOUT_SECONDS=10"
+set "CANCEL_EVIDENCE_PATH=%CANCEL_OUT%"
+set "CANCEL_EVIDENCE_FILTER=*.pdf"
+
+if exist "%ZIPPER_CMD%" (
+    set "CANCEL_EXE=%ZIPPER_CMD%"
+    set CANCEL_ARGS=--production-set --count 500 --output-path "%CANCEL_OUT%" --bates-prefix "PROD" --volume-size 100
+) else (
+    for /f "tokens=1,* delims= " %%E in ("%ZIPPER_CMD%") do (
+        set "CANCEL_EXE=%%E"
+        set CANCEL_ARGS=%%F
+    )
+    set CANCEL_ARGS=!CANCEL_ARGS! --production-set --count 500 --output-path "%CANCEL_OUT%" --bates-prefix "PROD" --volume-size 100
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CANCEL_WORKER_SCRIPT%"
+if errorlevel 1 (
+    echo [ ERROR ] Test 12: PowerShell cancellation worker failed
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    exit /b 1
+)
+
+if not exist "%CANCEL_RESULT_FILE%" (
+    echo [ ERROR ] Test 12: Cancellation result file missing
+    exit /b 1
+)
+
+set "CANCEL_RES="
+set /p CANCEL_RES=<"%CANCEL_RESULT_FILE%"
+for /f "tokens=1,2 delims=," %%A in ("!CANCEL_RES!") do (
+    set "CANCEL_SIGNAL_SENT=%%A"
+    set "CANCEL_EXIT_CODE=%%B"
+)
+
+if "!CANCEL_SIGNAL_SENT!" NEQ "1" (
+    echo [ ERROR ] Test 12: Signal was not sent before exit
+    exit /b 1
+)
+
+if "!CANCEL_EXIT_CODE!" NEQ "130" (
+    echo [ ERROR ] Test 12: Expected exit code 130, got !CANCEL_EXIT_CODE!
+    exit /b 1
+)
+
+for /d %%d in ("%CANCEL_OUT%\PRODUCTION_*") do (
+    echo [ ERROR ] Test 12: Leftover production directory found after cancellation
+    exit /b 1
+)
+
+if not exist "%CANCEL_OUT%\sentinel.txt" (
+    echo [ ERROR ] Test 12: Sentinel file was deleted
+    exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 12: Active subprocess cancellation in Production Set mode passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Production Sets E2E tests passed!

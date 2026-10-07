@@ -230,6 +230,34 @@ public class ProductionSetOrchestratorTests
     }
 
     [Fact]
+    public async Task CreateZipAsync_WithCancelledToken_ThrowsOperationCanceledException()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "ZipCancelTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var sourceDir = Path.Combine(tempDir, "source");
+        Directory.CreateDirectory(sourceDir);
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "doc.txt"), "hello");
+        var zipPath = Path.Combine(tempDir, "output.zip");
+
+        try
+        {
+            var materializer = new ProductionFileMaterializer();
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                materializer.CreateZipAsync(sourceDir, zipPath, cts.Token));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task GenerateAsync_WhenProductionZipExists_ThrowsInvalidOperationException()
     {
         var materializer = new FakeMaterializer { FileExistsResult = true };
@@ -336,6 +364,115 @@ public class ProductionSetOrchestratorTests
             Assert.True(File.Exists(sentinelPath), "Unowned sentinel file must be preserved.");
             var actualSentinelBytes = await File.ReadAllBytesAsync(sentinelPath);
             Assert.Equal(sentinelBytes, actualSentinelBytes);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ActiveCancellationDuringZipCreation_CleansUpOwnedZipAndDirectoryAndPreservesSentinels()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdZipCancelDirect_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sentinelBytes = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
+            var sentinelPath = Path.Combine(tempDir, "unowned_sentinel.bin");
+            await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+            var request = CreateRequest(count: 2, fileType: "pdf", outputPath: tempDir);
+            request.Production = request.Production with { ProductionZip = true, ProductionId = "PROD_ZIP_CANCEL" };
+
+            using var cts = new CancellationTokenSource();
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnCreateZipAsync = async (sourceDir, zipPath, method, ct) =>
+                {
+                    Assert.True(Directory.Exists(sourceDir));
+                    Assert.True(File.Exists(Path.Combine(sourceDir, "_manifest.json")));
+                    cts.Cancel();
+                    await innerMaterializer.CreateZipAsync(sourceDir, zipPath, method, cts.Token);
+                },
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, decorator, new HashComputer(), cts.Token));
+
+            var prodZipPath = Path.Combine(tempDir, "PROD_ZIP_CANCEL.zip");
+            var prodDirPath = Path.Combine(tempDir, "PROD_ZIP_CANCEL");
+
+            Assert.False(File.Exists(prodZipPath), "Owned production zip must be cleaned up on cancellation.");
+            Assert.False(Directory.Exists(prodDirPath), "Owned production directory must be cleaned up on cancellation.");
+            Assert.True(File.Exists(sentinelPath), "Unowned sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ActiveCancellationDuringSecondRollingSet_CleansUpCompletedFirstSetAndPreservesSentinels()
+    {
+        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdRollingCancelDirect_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sentinelBytes = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
+            var sentinelPath = Path.Combine(tempDir, "unowned_sentinel.bin");
+            await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+            var request = CreateRequest(count: 2, fileType: "pdf", outputPath: tempDir);
+            request.Production = request.Production with
+            {
+                ProductionZip = true,
+                ProductionId = "PROD_1,PROD_2",
+                RollingCount = 2,
+            };
+
+            using var cts = new CancellationTokenSource();
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = async (path, content, ct) =>
+                {
+                    if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
+                    {
+                        var prod1DirPath = Path.Combine(tempDir, "PROD_1");
+                        var prod1ZipPath = Path.Combine(tempDir, "PROD_1.zip");
+                        Assert.True(Directory.Exists(prod1DirPath), "Set 1 directory must exist before set 2 is cancelled.");
+                        Assert.True(File.Exists(prod1ZipPath), "Set 1 zip must exist before set 2 is cancelled.");
+                        cts.Cancel();
+                        throw new OperationCanceledException(cts.Token);
+                    }
+                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                },
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, decorator, new HashComputer(), cts.Token));
+
+            var p1Dir = Path.Combine(tempDir, "PROD_1");
+            var p1Zip = Path.Combine(tempDir, "PROD_1.zip");
+            var p2Dir = Path.Combine(tempDir, "PROD_2");
+            var p2Zip = Path.Combine(tempDir, "PROD_2.zip");
+
+            Assert.False(Directory.Exists(p1Dir), "Completed set 1 directory must be cleaned up when run is cancelled.");
+            Assert.False(File.Exists(p1Zip), "Completed set 1 zip must be cleaned up when run is cancelled.");
+            Assert.False(Directory.Exists(p2Dir), "Partial set 2 directory must be cleaned up when run is cancelled.");
+            Assert.False(File.Exists(p2Zip), "Set 2 zip must not exist.");
+            Assert.True(File.Exists(sentinelPath), "Unowned sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
         }
         finally
         {
@@ -501,72 +638,6 @@ public class ProductionSetOrchestratorTests
         }
     }
 
-    private sealed class FaultingMaterializerDecorator : IFileMaterializer
-    {
-        private readonly IFileMaterializer _inner;
-
-        public FaultingMaterializerDecorator(IFileMaterializer inner)
-        {
-            this._inner = inner;
-        }
-
-        public IFileMaterializer Inner => this._inner;
-
-        public Func<string, byte[], CancellationToken, Task>? OnWriteBytesAsync { get; set; }
-
-        public Func<string, string, Config.ZipCompressionMethod, CancellationToken, Task>? OnCreateZipAsync { get; set; }
-
-        public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
-            => this._inner.CreateDirectoryAsync(path, cancellationToken);
-
-        public async Task WriteBytesAsync(string path, byte[] content, CancellationToken cancellationToken = default)
-        {
-            if (this.OnWriteBytesAsync is not null)
-            {
-                await this.OnWriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
-            }
-
-            await this._inner.WriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
-        }
-
-        public Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
-            => this._inner.WriteTextAsync(path, text, encoding, cancellationToken);
-
-        public Stream OpenWriteStream(string path)
-            => this._inner.OpenWriteStream(path);
-
-        public void AddFileData(FileData data)
-            => this._inner.AddFileData(data);
-
-        public Task WriteChildAttachmentAsync(string childNativePath, (string filename, byte[] content) attach, CancellationToken cancellationToken = default)
-            => this._inner.WriteChildAttachmentAsync(childNativePath, attach, cancellationToken);
-
-        public Task DeleteDirectoryAsync(string path, CancellationToken cancellationToken = default)
-            => this._inner.DeleteDirectoryAsync(path, cancellationToken);
-
-        public Task DeleteFileAsync(string path, CancellationToken cancellationToken = default)
-            => this._inner.DeleteFileAsync(path, cancellationToken);
-
-        public Task<bool> DirectoryExistsAsync(string path, CancellationToken cancellationToken = default)
-            => this._inner.DirectoryExistsAsync(path, cancellationToken);
-
-        public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
-            => this._inner.FileExistsAsync(path, cancellationToken);
-
-        public Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
-            => this.CreateZipAsync(sourceDir, zipPath, Config.ZipCompressionMethod.Deflate, cancellationToken);
-
-        public async Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
-        {
-            if (this.OnCreateZipAsync is not null)
-            {
-                await this.OnCreateZipAsync(sourceDir, zipPath, method, cancellationToken).ConfigureAwait(false);
-                return;
-            }
-
-            await this._inner.CreateZipAsync(sourceDir, zipPath, method, cancellationToken).ConfigureAwait(false);
-        }
-    }
 
     private sealed class FakeMaterializer : IFileMaterializer
     {

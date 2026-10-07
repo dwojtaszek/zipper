@@ -36,7 +36,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 mkdir "%TEST_OUTPUT_DIR%"
 
 set TESTS_PASSED=0
-set TESTS_TOTAL=7
+set TESTS_TOTAL=8
 
 REM ================================================================
 REM Test 1: Basic DAT loadfile-only generation
@@ -268,6 +268,85 @@ if errorlevel 1 (
 )
 
 echo [ SUCCESS ] Test 7: Deterministic output — PASSED
+set /a TESTS_PASSED+=1
+
+REM ================================================================
+REM Test 8: Active subprocess cancellation (DAT+OPT)
+REM ================================================================
+echo [ INFO ] START: Active subprocess cancellation (DAT+OPT)
+set "CANCEL_OUT=%TEST_OUTPUT_DIR%\cancel_loadfile"
+if not exist "%CANCEL_OUT%" mkdir "%CANCEL_OUT%"
+echo sentinel data> "%CANCEL_OUT%\sentinel.txt"
+
+set "CANCEL_WORKER_SCRIPT=%~dp0_generation-cancellation.ps1"
+set "CANCEL_WORKER_PID_FILE=%TEST_OUTPUT_DIR%\cancel_lfo_worker.pid"
+set "CANCEL_PID_FILE=%TEST_OUTPUT_DIR%\cancel_lfo.pid"
+set "CANCEL_DONE_FILE=%TEST_OUTPUT_DIR%\cancel_lfo.done"
+set "CANCEL_RESULT_FILE=%TEST_OUTPUT_DIR%\cancel_lfo.result"
+set "CANCEL_ERROR_FILE=%TEST_OUTPUT_DIR%\cancel_lfo.err"
+set "CANCEL_WORKDIR=%CD%"
+set "CANCEL_STAGING_TIMEOUT_SECONDS=15"
+set "CANCEL_POLL_INTERVAL_MS=20"
+set "CANCEL_CLEANUP_TIMEOUT_SECONDS=10"
+set "CANCEL_EVIDENCE_PATH=%CANCEL_OUT%"
+set "CANCEL_EVIDENCE_FILTER=*_properties.json"
+
+if exist "%BUILD_DIR%\Zipper.exe" (
+    set "CANCEL_EXE=%BUILD_DIR%\Zipper.exe"
+    set "CANCEL_ARGS=--loadfile-only --load-file-formats dat,opt --count 20000 --output-path \"%CANCEL_OUT%\""
+) else (
+    set "CANCEL_EXE=dotnet"
+    set "CANCEL_ARGS=run --project %PROJECT% --no-build -c Release -- --loadfile-only --load-file-formats dat,opt --count 20000 --output-path \"%CANCEL_OUT%\""
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CANCEL_WORKER_SCRIPT%"
+if errorlevel 1 (
+    echo [ ERROR ] Test 8: PowerShell cancellation worker failed
+    if exist "%CANCEL_ERROR_FILE%" type "%CANCEL_ERROR_FILE%"
+    goto :cleanup
+)
+
+if not exist "%CANCEL_RESULT_FILE%" (
+    echo [ ERROR ] Test 8: Cancellation result file missing
+    goto :cleanup
+)
+
+set "CANCEL_RES="
+set /p CANCEL_RES=<"%CANCEL_RESULT_FILE%"
+for /f "tokens=1,2 delims=," %%A in ("!CANCEL_RES!") do (
+    set "CANCEL_SIGNAL_SENT=%%A"
+    set "CANCEL_EXIT_CODE=%%B"
+)
+
+if "!CANCEL_SIGNAL_SENT!" NEQ "1" (
+    echo [ ERROR ] Test 8: Signal was not sent before exit
+    goto :cleanup
+)
+
+if "!CANCEL_EXIT_CODE!" NEQ "130" (
+    echo [ ERROR ] Test 8: Expected exit code 130, got !CANCEL_EXIT_CODE!
+    goto :cleanup
+)
+
+if exist "%CANCEL_OUT%\*.dat" (
+    echo [ ERROR ] Test 8: Leftover .dat files found after cancellation
+    goto :cleanup
+)
+if exist "%CANCEL_OUT%\*.opt" (
+    echo [ ERROR ] Test 8: Leftover .opt files found after cancellation
+    goto :cleanup
+)
+if exist "%CANCEL_OUT%\*.json" (
+    echo [ ERROR ] Test 8: Leftover .json files found after cancellation
+    goto :cleanup
+)
+
+if not exist "%CANCEL_OUT%\sentinel.txt" (
+    echo [ ERROR ] Test 8: Sentinel file was deleted
+    goto :cleanup
+)
+
+echo [ SUCCESS ] Test 8: Active subprocess cancellation — PASSED
 set /a TESTS_PASSED+=1
 
 REM --- Cleanup ---

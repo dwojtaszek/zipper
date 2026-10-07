@@ -62,11 +62,53 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
     public Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
         => this.CreateZipAsync(sourceDir, zipPath, Config.ZipCompressionMethod.Deflate, cancellationToken);
 
-    public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
+    public async Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var level = method == Config.ZipCompressionMethod.Store ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
-        ZipFile.CreateFromDirectory(sourceDir, zipPath, level, true);
-        return Task.CompletedTask;
+
+        var fullSource = Path.GetFullPath(sourceDir);
+        var sourceInfo = new DirectoryInfo(fullSource);
+        if (!sourceInfo.Exists)
+        {
+            throw new DirectoryNotFoundException($"Source directory not found: '{sourceDir}'");
+        }
+
+        var parent = sourceInfo.Parent;
+        var basePath = parent?.FullName ?? fullSource;
+
+        await using var zipStream = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true);
+        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: false);
+
+        bool hasEntries = false;
+        foreach (var item in sourceInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            hasEntries = true;
+
+            var relativePath = Path.GetRelativePath(basePath, item.FullName).Replace('\\', '/');
+            if (item is FileInfo fileInfo)
+            {
+                var entry = archive.CreateEntry(relativePath, level);
+                entry.LastWriteTime = new DateTimeOffset(fileInfo.LastWriteTimeUtc);
+                await using var entryStream = entry.Open();
+                await using var fileStream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, PerformanceConstants.DefaultBufferSize, useAsync: true);
+                await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
+            }
+            else if (item is DirectoryInfo subDir)
+            {
+                if (!subDir.EnumerateFileSystemInfos().Any())
+                {
+                    archive.CreateEntry(relativePath + "/");
+                }
+            }
+        }
+
+        if (!hasEntries)
+        {
+            var relativePath = Path.GetRelativePath(basePath, fullSource).Replace('\\', '/');
+            archive.CreateEntry(relativePath + "/");
+        }
     }
 
     public void AddFileData(FileData data)

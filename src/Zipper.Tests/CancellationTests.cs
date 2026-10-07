@@ -141,6 +141,59 @@ public class CancellationTests
         }
     }
 
+    [Fact(Timeout = 15000)]
+    public async Task LoadFileOnlyGenerator_ActiveCancellationAfterFirstFormatWritten_ThrowsAndCleansUpAllOwnedArtifactsAndPreservesSentinels()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "LFOCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0x11, 0x22, 0x33, 0x44 };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildLoadfileOnlyRequest(outputPath);
+            request.Output = request.Output with { FileCount = 5000 };
+            request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
+
+            bool generationStarted = false;
+            using var monitorCts = new CancellationTokenSource();
+            var monitorTask = Task.Run(async () =>
+            {
+                while (!monitorCts.Token.IsCancellationRequested && !cts.IsCancellationRequested)
+                {
+                    var dats = Directory.GetFiles(outputPath, "*.dat");
+                    var jsons = Directory.GetFiles(outputPath, "*_properties.json");
+                    if (dats.Length > 0 && jsons.Length > 0 && new FileInfo(dats[0]).Length > 0 && new FileInfo(jsons[0]).Length > 0)
+                    {
+                        generationStarted = true;
+                        cts.Cancel();
+                        break;
+                    }
+                    await Task.Delay(5);
+                }
+            });
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                LoadFileOnlyGenerator.GenerateAsync(request, cts.Token));
+
+            monitorCts.Cancel();
+            await monitorTask;
+
+            Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
+            Assert.Empty(Directory.GetFiles(outputPath, "*.dat"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.opt"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.json"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // ProductionSetGenerator
     // -----------------------------------------------------------------------
@@ -190,6 +243,157 @@ public class CancellationTests
         }
     }
 
+    [Fact(Timeout = 15000)]
+    public async Task ProductionSetGenerator_ActiveCancellationAfterNativeFileWrite_ThrowsAndCleansUpAllOwnedArtifactsAndPreservesSentinels()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "ProdNativeCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0x55, 0x66, 0x77, 0x88 };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildProductionSetRequest(outputPath);
+            request.Output = request.Output with { FileCount = 10 };
+
+            bool generationStarted = false;
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = async (path, content, ct) =>
+                {
+                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                    if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        generationStarted = true;
+                        cts.Cancel();
+                        throw new OperationCanceledException(cts.Token);
+                    }
+                },
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ProductionSetGenerator.GenerateAsync(request, decorator, cts.Token));
+
+            Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
+            Assert.Empty(Directory.GetDirectories(outputPath, "PRODUCTION_*"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.zip"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
+    }
+
+    [Fact(Timeout = 15000)]
+    public async Task ProductionSetGenerator_ActiveCancellationAfterFirstRollingSetCompletes_ThrowsAndCleansUpEarlierSetsAndPreservesSentinels()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "ProdRollingCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0x99, 0xAA, 0xBB, 0xCC };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildProductionSetRequest(outputPath);
+            request.Output = request.Output with { FileCount = 10 };
+            request.Production = request.Production with
+            {
+                RollingCount = 2,
+                ProductionId = "PROD_1,PROD_2",
+                VolumeSize = 10,
+            };
+
+            bool generationStarted = false;
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = async (path, content, ct) =>
+                {
+                    if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
+                    {
+                        var prod1Manifest = Path.Combine(outputPath, "PROD_1", "_manifest.json");
+                        Assert.True(File.Exists(prod1Manifest), "Active cancellation requires proof that set 1 completed before cancellation.");
+                        generationStarted = true;
+                        cts.Cancel();
+                        throw new OperationCanceledException(cts.Token);
+                    }
+
+                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                },
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ProductionSetGenerator.GenerateAsync(request, decorator, cts.Token));
+
+            Assert.True(generationStarted, "Active cancellation requires proof that set 1 completed before cancellation.");
+            Assert.False(Directory.Exists(Path.Combine(outputPath, "PROD_1")), "Completed set 1 must be cleaned up on cancellation.");
+            Assert.False(Directory.Exists(Path.Combine(outputPath, "PROD_2")), "Partial set 2 must be cleaned up on cancellation.");
+            Assert.Empty(Directory.GetFiles(outputPath, "*.zip"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
+    }
+
+    [Fact(Timeout = 15000)]
+    public async Task ProductionSetGenerator_ActiveCancellationDuringZipCreation_ThrowsAndCleansUpZipAndDirectoryAndPreservesSentinels()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "ProdZipCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0x33, 0x44, 0x55, 0x66 };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildProductionSetRequest(outputPath);
+            request.Output = request.Output with { FileCount = 20 };
+            request.Production = request.Production with
+            {
+                ProductionZip = true,
+                ProductionId = "PROD_ZIP_TEST",
+            };
+
+            bool generationStarted = false;
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnCreateZipAsync = async (sourceDir, zipPath, method, ct) =>
+                {
+                    var manifestPath = Path.Combine(sourceDir, "_manifest.json");
+                    Assert.True(File.Exists(manifestPath), "Active cancellation requires proof that production set files existed before zip cancellation.");
+                    generationStarted = true;
+                    cts.Cancel();
+                    await innerMaterializer.CreateZipAsync(sourceDir, zipPath, method, cts.Token);
+                },
+            };
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                ProductionSetGenerator.GenerateAsync(request, decorator, cts.Token));
+
+            Assert.True(generationStarted, "Active cancellation requires proof that production set files existed before zip cancellation.");
+            Assert.Empty(Directory.GetDirectories(outputPath, "PROD_ZIP_TEST*"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.zip"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // GenerationRunner exit-code contract
     // -----------------------------------------------------------------------
@@ -227,6 +431,131 @@ public class CancellationTests
         }
 
         Assert.Contains("Operation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 15000)]
+    public async Task GenerationRunner_ActiveCancellationDuringLoadfileOnlyMode_Returns130AndCleansUp()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "RunnerLFOCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0x77, 0x88, 0x99, 0x00 };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildLoadfileOnlyRequest(outputPath);
+            request.Output = request.Output with { FileCount = 5000 };
+            request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
+
+            bool generationStarted = false;
+            using var monitorCts = new CancellationTokenSource();
+            var monitorTask = Task.Run(async () =>
+            {
+                while (!monitorCts.Token.IsCancellationRequested && !cts.IsCancellationRequested)
+                {
+                    var dats = Directory.GetFiles(outputPath, "*.dat");
+                    var jsons = Directory.GetFiles(outputPath, "*_properties.json");
+                    if (dats.Length > 0 && jsons.Length > 0 && new FileInfo(dats[0]).Length > 0 && new FileInfo(jsons[0]).Length > 0)
+                    {
+                        generationStarted = true;
+                        cts.Cancel();
+                        break;
+                    }
+                    await Task.Delay(5);
+                }
+            });
+
+            var originalError = Console.Error;
+            using var errWriter = new StringWriter();
+            Console.SetError(errWriter);
+            int exitCode;
+            try
+            {
+                var mode = new LoadFileOnlyMode((req, ct) => LoadFileOnlyGenerator.GenerateAsync(req, ct));
+                exitCode = await GenerationRunner.RunAsync(mode, request, cts.Token);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+
+            monitorCts.Cancel();
+            await monitorTask;
+
+            Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
+            Assert.Equal(130, exitCode);
+            Assert.Contains("Operation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFiles(outputPath, "*.dat"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.opt"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.json"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
+    }
+
+    [Fact(Timeout = 15000)]
+    public async Task GenerationRunner_ActiveCancellationDuringProductionSetMode_Returns130AndCleansUp()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), "RunnerProdCancel_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputPath);
+        var sentinelPath = Path.Combine(outputPath, "sentinel.txt");
+        var sentinelBytes = new byte[] { 0xAA, 0xBB, 0xCC, 0x11 };
+        await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+        try
+        {
+            using var cts = new CancellationTokenSource();
+            var request = BuildProductionSetRequest(outputPath);
+            request.Output = request.Output with { FileCount = 10 };
+
+            bool generationStarted = false;
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = async (path, content, ct) =>
+                {
+                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                    if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        generationStarted = true;
+                        cts.Cancel();
+                        throw new OperationCanceledException(cts.Token);
+                    }
+                },
+            };
+
+            var originalError = Console.Error;
+            using var errWriter = new StringWriter();
+            Console.SetError(errWriter);
+            int exitCode;
+            try
+            {
+                var mode = new ProductionSetMode((req, ct) => ProductionSetGenerator.GenerateAsync(req, decorator, ct));
+                exitCode = await GenerationRunner.RunAsync(mode, request, cts.Token);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+
+            Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
+            Assert.Equal(130, exitCode);
+            Assert.Contains("Operation cancelled.", errWriter.ToString(), StringComparison.Ordinal);
+            Assert.Empty(Directory.GetDirectories(outputPath, "PRODUCTION_*"));
+            Assert.Empty(Directory.GetFiles(outputPath, "*.zip"));
+            Assert.True(File.Exists(sentinelPath), "Pre-existing sentinel file must be preserved.");
+            Assert.Equal(sentinelBytes, await File.ReadAllBytesAsync(sentinelPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath)) Directory.Delete(outputPath, true);
+        }
     }
 
     [Fact]
