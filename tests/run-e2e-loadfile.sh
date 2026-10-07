@@ -267,6 +267,81 @@ print_info "Deterministic output confirmed"
 PASSED=$((PASSED + 1))
 print_success "Test 7: Deterministic output — PASSED"
 
+# ================================================================
+# Test 8: Active subprocess cancellation in Loadfile-Only mode (DAT+OPT)
+# ================================================================
+TOTAL=$((TOTAL + 1))
+print_info "START: Active subprocess cancellation (DAT+OPT)"
+CANCEL_OUT="$TEST_OUTPUT_DIR/cancel_loadfile"
+mkdir -p "$CANCEL_OUT"
+echo "sentinel data" > "$CANCEL_OUT/sentinel.txt"
+
+CANCEL_PID=""
+cleanup_cancel_lfo() {
+  if [[ -n "$CANCEL_PID" ]]; then
+    local cancel_pid="$CANCEL_PID"
+    if ! kill -KILL -- "-$cancel_pid" 2>/dev/null; then
+      kill -KILL "$cancel_pid" 2>/dev/null || true
+    fi
+    wait "$cancel_pid" 2>/dev/null || true
+    CANCEL_PID=""
+  fi
+}
+trap cleanup_cancel_lfo EXIT
+
+set -m
+"${BINARY[@]}" --loadfile-only --load-file-formats dat,opt --count 20000 --output-path "$CANCEL_OUT" >/dev/null 2>&1 &
+CANCEL_PID=$!
+set +m
+
+CANCEL_SIGNAL_SENT=0
+CANCEL_DEADLINE=$((SECONDS + 15))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if compgen -G "$CANCEL_OUT/*.dat" >/dev/null && compgen -G "$CANCEL_OUT/*_properties.json" >/dev/null; then
+    if kill -INT -- "-$CANCEL_PID" 2>/dev/null || kill -INT "$CANCEL_PID" 2>/dev/null; then
+      CANCEL_SIGNAL_SENT=1
+    fi
+    break
+  fi
+  if [[ "$SECONDS" -ge "$CANCEL_DEADLINE" ]]; then
+    print_error "Loadfile-only cancellation evidence did not appear within 15s"
+  fi
+  sleep 0.01
+done
+
+EXIT_DEADLINE=$((SECONDS + 15))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if [[ "$SECONDS" -ge "$EXIT_DEADLINE" ]]; then
+    if ! kill -KILL -- "-$CANCEL_PID" 2>/dev/null; then
+      kill -KILL "$CANCEL_PID" 2>/dev/null || true
+    fi
+    print_error "Loadfile-only cancellation run did not exit within 15s"
+  fi
+  sleep 0.01
+done
+
+CANCEL_EXIT_CODE=0
+wait "$CANCEL_PID" || CANCEL_EXIT_CODE=$?
+CANCEL_PID=""
+trap - EXIT
+
+[[ "$CANCEL_SIGNAL_SENT" -ne 1 ]] && print_error "Signal was not sent before process exited"
+[[ "$CANCEL_EXIT_CODE" -ne 130 ]] && print_error "Loadfile-only cancellation exit code expected 130, got $CANCEL_EXIT_CODE"
+
+rem_dat=$(find "$CANCEL_OUT" -name "*.dat" | wc -l)
+rem_opt=$(find "$CANCEL_OUT" -name "*.opt" | wc -l)
+rem_json=$(find "$CANCEL_OUT" -name "*.json" | wc -l)
+[[ "$rem_dat" -ne 0 ]] && print_error "Found $rem_dat leftover .dat files after cancellation"
+[[ "$rem_opt" -ne 0 ]] && print_error "Found $rem_opt leftover .opt files after cancellation"
+[[ "$rem_json" -ne 0 ]] && print_error "Found $rem_json leftover .json files after cancellation"
+
+if [[ ! -f "$CANCEL_OUT/sentinel.txt" ]] || [[ "$(< "$CANCEL_OUT/sentinel.txt")" != "sentinel data" ]]; then
+  print_error "Sentinel file was missing or modified after cancellation cleanup"
+fi
+
+PASSED=$((PASSED + 1))
+print_success "Test 8: Active subprocess cancellation — PASSED"
+
 # --- Cleanup ---
 
 print_info "Cleaning up..."

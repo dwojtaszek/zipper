@@ -162,7 +162,7 @@ internal static class ProductionSetOrchestrator
                     {
                         try
                         {
-                            await materializer.DeleteFileAsync(zipToDelete, cancellationToken).ConfigureAwait(false);
+                            await materializer.DeleteFileAsync(zipToDelete, CancellationToken.None).ConfigureAwait(false);
                         }
 #pragma warning disable CA1031
 #pragma warning disable RCS1075
@@ -178,7 +178,7 @@ internal static class ProductionSetOrchestrator
                     {
                         try
                         {
-                            await materializer.DeleteDirectoryAsync(dirToDelete, cancellationToken).ConfigureAwait(false);
+                            await materializer.DeleteDirectoryAsync(dirToDelete, CancellationToken.None).ConfigureAwait(false);
                         }
 #pragma warning disable CA1031
 #pragma warning disable RCS1075

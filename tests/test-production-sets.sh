@@ -753,6 +753,78 @@ fi
 
 print_success "Test Case 11: Source-driven production set with source path modes passed"
 
+# --- Test Case 12: Active subprocess cancellation ---
+
+print_info "Test Case 12: Active subprocess cancellation in Production Set mode"
+CANCEL_OUT="$TEST_OUTPUT_DIR/cancel_prod"
+mkdir -p "$CANCEL_OUT"
+echo "sentinel data" > "$CANCEL_OUT/sentinel.txt"
+
+CANCEL_PID=""
+cleanup_cancel_prod() {
+  if [[ -n "$CANCEL_PID" ]]; then
+    local cancel_pid="$CANCEL_PID"
+    if ! kill -KILL -- "-$cancel_pid" 2>/dev/null; then
+      kill -KILL "$cancel_pid" 2>/dev/null || true
+    fi
+    wait "$cancel_pid" 2>/dev/null || true
+    CANCEL_PID=""
+  fi
+}
+trap cleanup_cancel_prod EXIT
+
+set -m
+if [[ -n "${_ZIPPER_BIN:-}" ]] && [[ -x "${_ZIPPER_BIN}" ]]; then
+  "${_ZIPPER_BIN}" --production-set --count 500 --output-path "$CANCEL_OUT" --bates-prefix "PROD" --volume-size 100 >/dev/null 2>&1 &
+else
+  dotnet run -c Release --project "$PROJECT" -- --production-set --count 500 --output-path "$CANCEL_OUT" --bates-prefix "PROD" --volume-size 100 >/dev/null 2>&1 &
+fi
+CANCEL_PID=$!
+set +m
+
+CANCEL_SIGNAL_SENT=0
+CANCEL_DEADLINE=$((SECONDS + 15))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if compgen -G "$CANCEL_OUT/PRODUCTION_*/NATIVES/VOL001/*.pdf" >/dev/null; then
+    if kill -INT -- "-$CANCEL_PID" 2>/dev/null || kill -INT "$CANCEL_PID" 2>/dev/null; then
+      CANCEL_SIGNAL_SENT=1
+    fi
+    break
+  fi
+  if [[ "$SECONDS" -ge "$CANCEL_DEADLINE" ]]; then
+    print_error "Production set cancellation evidence did not appear within 15s"
+  fi
+  sleep 0.01
+done
+
+EXIT_DEADLINE=$((SECONDS + 15))
+while kill -0 "$CANCEL_PID" 2>/dev/null; do
+  if [[ "$SECONDS" -ge "$EXIT_DEADLINE" ]]; then
+    if ! kill -KILL -- "-$CANCEL_PID" 2>/dev/null; then
+      kill -KILL "$CANCEL_PID" 2>/dev/null || true
+    fi
+    print_error "Production set cancellation run did not exit within 15s"
+  fi
+  sleep 0.01
+done
+
+CANCEL_EXIT_CODE=0
+wait "$CANCEL_PID" || CANCEL_EXIT_CODE=$?
+CANCEL_PID=""
+trap - EXIT
+
+[[ "$CANCEL_SIGNAL_SENT" -ne 1 ]] && print_error "Signal was not sent before process exited"
+[[ "$CANCEL_EXIT_CODE" -ne 130 ]] && print_error "Production set cancellation exit code expected 130, got $CANCEL_EXIT_CODE"
+
+rem_dirs=$(find "$CANCEL_OUT" -mindepth 1 -maxdepth 1 -type d -name "PRODUCTION_*" | wc -l)
+[[ "$rem_dirs" -ne 0 ]] && print_error "Found $rem_dirs leftover production directories after cancellation"
+
+if [[ ! -f "$CANCEL_OUT/sentinel.txt" ]] || [[ "$(< "$CANCEL_OUT/sentinel.txt")" != "sentinel data" ]]; then
+  print_error "Sentinel file was missing or modified after cancellation cleanup"
+fi
+
+print_success "Test Case 12: Active subprocess cancellation in Production Set mode passed"
+
 # --- All Tests Passed ---
 
 print_success "All Production Sets E2E tests passed!"

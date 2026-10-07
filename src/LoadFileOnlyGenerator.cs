@@ -54,6 +54,8 @@ internal static class LoadFileOnlyGenerator
         {
             foreach (var format in formatsToGenerate)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var formatRequest = EnsureStableOptPageCounts(request, format);
                 var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
                 var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
@@ -87,6 +89,7 @@ internal static class LoadFileOnlyGenerator
                     chaosEngine?.Anomalies,
                     format).ConfigureAwait(false);
                 createdFiles.Add(propertiesPath);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
                 {
