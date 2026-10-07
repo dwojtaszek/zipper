@@ -319,6 +319,60 @@ class CountReviewThreadsTests(unittest.TestCase):
         self.assertEqual(threads, -1)
 
 
+class BabysitPromptTests(unittest.TestCase):
+    def test_buildBabysitPrompt_withoutError_containsBasicStructure(self):
+        prompt = runner._build_babysit_prompt(
+            issue_number="1117",
+            issue_title="test: cancellation",
+            safe_body="Repro details",
+            branch="fix/ISSUE-1117-test",
+        )
+        self.assertIn("Resume work on GitHub issue #1117.", prompt)
+        self.assertIn("Title: test: cancellation", prompt)
+        self.assertIn("Body and Comments:\nRepro details", prompt)
+        self.assertIn("You are on branch 'fix/ISSUE-1117-test'", prompt)
+        self.assertNotIn("CRITICAL: Direct PR creation failed", prompt)
+
+    def test_buildBabysitPrompt_withError_injectsReviewFeedback(self):
+        prompt = runner._build_babysit_prompt(
+            issue_number="1117",
+            issue_title="test: cancellation",
+            safe_body="Repro details",
+            branch="fix/ISSUE-1117-test",
+            pr_create_err="CodeRabbit found 1 issue",
+        )
+        self.assertIn("CRITICAL: Direct PR creation failed with the following errors/review findings.", prompt)
+        self.assertIn("CodeRabbit found 1 issue", prompt)
+
+
+class WipCommitTests(unittest.TestCase):
+    def test_whenCommitStarts_withWip_returnsTrue(self):
+        with patch("runner.run_cmd", return_value=(0, "wip: progress on issue #1117 by agy\n", "")):
+            self.assertTrue(runner._latest_commit_is_wip("/tmp/fake"))
+
+    def test_whenCommitDoesNotStart_withWip_returnsFalse(self):
+        with patch("runner.run_cmd", return_value=(0, "test: fix cancellation\n", "")):
+            self.assertFalse(runner._latest_commit_is_wip("/tmp/fake"))
+
+    def test_whenCommandFails_returnsFalse(self):
+        with patch("runner.run_cmd", return_value=(1, "", "fatal: not a git repo")):
+            self.assertFalse(runner._latest_commit_is_wip("/tmp/fake"))
+
+    def test_whenPrHeadStarts_withWip_returnsTrue(self):
+        with patch("runner.run_cmd", return_value=(0, "wip: progress on issue #1117 by agy\n", "")):
+            self.assertTrue(runner._pr_head_commit_is_wip(1117))
+
+    def test_whenPrHeadDoesNotStart_withWip_returnsFalse(self):
+        with patch("runner.run_cmd", return_value=(0, "test: clean cancellation\n", "")):
+            self.assertFalse(runner._pr_head_commit_is_wip(1117))
+
+    def test_whenPrHeadCommandFails_returnsFalse(self):
+        with patch("runner.run_cmd", return_value=(1, "", "gh: error")):
+            self.assertFalse(runner._pr_head_commit_is_wip(1117))
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
 
