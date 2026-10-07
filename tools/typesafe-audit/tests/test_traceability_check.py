@@ -69,6 +69,26 @@ class TsvParserTests(unittest.TestCase):
 
 
 class UnitResolverTests(unittest.TestCase):
+    def test_repository_unit_mappings_resolve_real_test_bodies(self):
+        rows = parse_tsv(REPO_ROOT / "tests/req-traceability.tsv")
+        unit_rows = [row for row in rows if row["coverage"] == "unit"]
+        self.assertGreater(len(unit_rows), 0)
+        for row in unit_rows:
+            with self.subTest(req_id=row["req_id"], reference=row["reference"]):
+                resolved = resolve_unit_reference(REPO_ROOT / "src/Zipper.Tests", row["reference"])
+                self.assertTrue(resolved["body"].strip())
+                self.assertEqual(64, len(resolved["sha256"]))
+
+    def test_repository_non_unit_mappings_resolve_real_test_sources(self):
+        rows = parse_tsv(REPO_ROOT / "tests/req-traceability.tsv")
+        for row in (row for row in rows if row["coverage"] != "unit"):
+            with self.subTest(req_id=row["req_id"], reference=row["reference"]):
+                resolved = trace_parse.resolve_reference(REPO_ROOT, row)
+                if row["coverage"] == "exemption":
+                    self.assertIsNone(resolved)
+                else:
+                    self.assertTrue(resolved["body"].strip())
+
     def test_resolves_fact_method_body(self):
         resolved = resolve_unit_reference(CORPUS_DIR / "src", "FixtureTests.Full")
         self.assertIn("Assert.Equal(3, result)", resolved["body"])
@@ -97,6 +117,16 @@ class UnitResolverTests(unittest.TestCase):
 
 
 class E2eResolverTests(unittest.TestCase):
+    def test_resolves_whole_script_reference(self):
+        resolved = resolve_e2e_reference(CORPUS_DIR, "sample.sh")
+        self.assertEqual((CORPUS_DIR / "sample.sh").read_text().strip(), resolved["body"].strip())
+        self.assertEqual(1, resolved["line"])
+
+    def test_resolves_script_under_repository_tests_directory(self):
+        resolved = resolve_e2e_reference(REPO_ROOT, "test-production-sets.sh Test Case 1c")
+        self.assertIn("--production-id", resolved["body"])
+        self.assertIn("tests/test-production-sets.sh", resolved["source"])
+
     def test_resolves_scenario_block(self):
         resolved = resolve_e2e_reference(CORPUS_DIR, "sample.sh full-scenario")
         self.assertIn("assert output A", resolved["body"])

@@ -140,31 +140,35 @@ def resolve_unit_reference(tests_root: Path, reference: str) -> dict:
 
 
 def resolve_e2e_reference(tests_root: Path, reference: str) -> dict:
-    """Resolve `script.sh Scenario` to its scenario block."""
+    """Resolve `script.sh [Scenario]` to the whole script or its scenario block."""
     parts = reference.split(None, 1)
-    if len(parts) != 2:
-        raise ParseError(f"E2E reference '{reference}' must be 'script.sh Scenario'.")
-    script, scenario = parts
+    if not parts:
+        raise ParseError(f"E2E reference '{reference}' must be 'script.sh [Scenario]'.")
+    script = parts[0]
     script_path = tests_root / script
+    if not script_path.is_file():
+        script_path = tests_root / "tests" / script
     if not script_path.is_file():
         script_path = tests_root.parent / script
     if not script_path.is_file():
         raise ParseError(f"E2E script '{script}' not found.")
 
     lines = _read(script_path).splitlines()
-    start = None
-    for idx, line in enumerate(lines):
-        if scenario in line and ("scenario:" in line or "Test Case" in line or "print_info" in line or "INFO" in line):
-            start = idx
-            break
-    if start is None:
-        raise ParseError(f"Scenario '{scenario}' not found in {script_path.name}.")
-
-    block = [lines[start]]
-    for line in lines[start + 1:]:
-        if "scenario:" in line or ("Test Case" in line and "print_info" in line):
-            break
-        block.append(line)
+    start = 0
+    block = lines
+    if len(parts) == 2:
+        scenario = parts[1]
+        start = next((
+            idx for idx, line in enumerate(lines)
+            if scenario in line and ("scenario:" in line or "Test Case" in line or "print_info" in line or "INFO" in line)
+        ), None)
+        if start is None:
+            raise ParseError(f"Scenario '{scenario}' not found in {script_path.name}.")
+        block = [lines[start]]
+        for line in lines[start + 1:]:
+            if "scenario:" in line or ("Test Case" in line and "print_info" in line):
+                break
+            block.append(line)
     text = "\n".join(block)
     return {
         "source": f"tests/{script}",

@@ -8,9 +8,9 @@ REQ-005	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithTextFiles_CreatesText
 REQ-006	unit	PlaceholderFilesTests.ExtractedText_IsNonEmpty	Fixed placeholder extracted text content
 REQ-007	unit	DatComposingWriterTests.WriteAsync_WithText_IncludesExtractedTextColumn	Extracted Text column in .dat
 REQ-008	unit	FileGeneratorFactoryTests.Create_KnownType_ReturnsCorrectGenerator	eml accepted as file type
-REQ-009	unit	Emails.EmailSerializerTests.ToEml_ProducesRfc2822ValidHeaders	Email Native Files with valid headers
+REQ-009	unit	EmailSerializerTests.ToEml_ProducesRfc2822ValidHeaders	Email Native Files with valid headers
 REQ-010	unit	DatComposingWriterTests.WriteAsync_WithEmailType_IncludesEmlColumns	Email header columns in .dat
-REQ-011	unit	Emails.EmailAttachmentPickerTests.Pick_RespectsRate	--attachment-rate percentage control
+REQ-011	unit	EmailAttachmentPickerTests.Pick_RespectsRate	--attachment-rate percentage control
 REQ-021	unit	CliPipelineTests.ValidateAndParseArguments_WithInvalidTargetZipSize_ShouldReturnNull	--target-zip-size argument
 REQ-022	unit	CrossCuttingRulesTests.Validate_TargetZipSizeWithoutCount_ReturnsFalse	Validation error without --count
 REQ-023	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithTargetZipSize_PadsFilesToReachTargetSize	Padding calculation
@@ -42,7 +42,7 @@ REQ-048	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_Shoul
 REQ-049	unit	DatComposingWriterTests.WriteAsync_DefaultDelimiters_UseNonPrintingChars	DAT default ASCII 20/254/174
 REQ-050	unit	DelimiterModuleTests.TryBuild_DatDelimitersCsv_SetsCommaDelimiters	--dat-delimiters standard|csv preset
 REQ-051	unit	OptComposingWriterLoadFileTests.OptWriter_ShouldWriteCommaDelimitedNoHeaderFormat	OPT comma + ANSI default
-REQ-052	unit	LoadFiles.XmlLoadFileWriterTests.XmlLoadFileWriter_Output_ValidatesAgainstEdrm12XsdSchema	EDRM-XML v1.2 well-formed
+REQ-052	unit	XmlLoadFileWriterTests.XmlLoadFileWriter_Output_ValidatesAgainstEdrm12XsdSchema	EDRM-XML v1.2 well-formed
 REQ-053	exemption	-	DEPRECATED, superseded by REQ-124
 REQ-054	exemption	-	DEPRECATED, superseded by REQ-059
 REQ-055	unit	PipelineTests.Build_MultiFormat_CreatesFormatList	--load-file-formats plural argument
@@ -64,8 +64,8 @@ REQ-070	unit	DataGeneratorTests.GenerateRow_WithSeed_ProducesReproducibleOutput	
 REQ-071	unit	DataGeneratorTests.EmptyPercentage_Observed_MatchesConfigured_WithinTolerance	Per-column empty value percentages
 REQ-072	unit	DataGeneratorTests.GenerateRow_MultiValueColumns_UseCorrectDelimiter	Multi-value fields with multiValueCount
 REQ-073	unit	DataGeneratorTests.CustomProfile_WithEveryColumnKind_AllColumnsWithinSpec	Column types (identifier/text/date/number/boolean/coded/email)
-REQ-074	unit	Profiles.Generation.BooleanGeneratorTests.Generate_10Format_Returns1Or0	Boolean formats YN/TrueFalse/10
-REQ-075	unit	Profiles.Generation.DateGeneratorTests.Generate_GivenCustomDateFormat_ReturnsFormattedDate	Configurable date format strings
+REQ-074	unit	BooleanGeneratorTests.Generate_10Format_Returns1Or0	Boolean formats YN/TrueFalse/10
+REQ-075	unit	DateGeneratorTests.Generate_GivenCustomDateFormat_ReturnsFormattedDate	Configurable date format strings
 REQ-076	unit	DatComposingWriterTests.WriteAsync_StandardMode_WithColumnProfile_UsesProfileColumns	Profile precedence over --with-metadata
 REQ-077	unit	DatComposingWriterTests.WriteAsync_WithEmailType_IncludesEmlColumns	Email columns always included with eml
 REQ-078	unit	ColumnProfileLoaderTests.Validate_WithTooManyColumns_ThrowsInvalidOperationException	Max 200 columns validation
@@ -144,9 +144,9 @@ REQ-157	unit	ComparisonTests.Compare_E2EGeneratedManifests_VerifiesSuccessfully	
 REQ-158	unit	ComparisonTests.Compare_ReplacementMode_IdentifiesChangesCorrectly	Replacement workflow comparison
 REQ-159	unit	ComparisonTests.Compare_SupplementalMode_IdentifiesDuplicateBatesNumbers	Supplemental workflow comparison
 REQ-160	unit	ComparisonTests.Compare_ReproductionMode_IdentifiesChangesAndBatesMatches	Reproduction workflow comparison
-REQ-161	unit	ManifestComparison.ProductionManifestComparerTests.CompareAndReportAsync_WithDuplicateRecordsInSets_ShouldIdentifyDuplicates	Added/removed/unchanged/replaced/duplicated/skipped/changed records
+REQ-161	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithDuplicateRecordsInSets_ShouldIdentifyDuplicates	Added/removed/unchanged/replaced/duplicated/skipped/changed records
 REQ-162	unit	BatesRangeAnalyzerTests.FindGapsInSequence_WithGap_ShouldReportSkippedRange	Bates range analysis by Production Set/Volume
-REQ-163	unit	ManifestComparison.ProductionManifestComparerTests.CompareAndReportAsync_WithMarkdownOutput_ShouldWriteMarkdownReport	Machine-readable report + human-readable summary
+REQ-163	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithMarkdownOutput_ShouldWriteMarkdownReport	Machine-readable report + human-readable summary
 REQ-164	unit	PipelineTests.Build_ColumnProfileWithParentTraversal_RejectsPathOutsideCwd	--column-profile path traversal prevention
 REQ-165	unit	HashModuleTests.TryBuild_ValidHashMode_ReturnsTrue	--hash-mode actual|simulated|none
 REQ-166	unit	HashModuleTests.Parse_SimulatedMode_ReturnsDefaultMD5	--hash-algorithms, default md5
@@ -184,13 +184,13 @@ REQ-178	unit	ComparisonModuleTests.TryBuild_CompareManifests_WithoutComparisonOu
 REQ-179	unit	ComparisonModuleTests.TryBuild_ValidTrio_DoesNotTouchOtherModules	Comparison short-circuits type/count/output-path validation
 REQ-179	unit	CliModuleSetTests.Parse_WithComparisonTrigger_IgnoresInvalidGenerationValues	Comparison parse path skips generation value validation
 REQ-179	e2e	test-production-sets.sh Test Case 10b	Comparison ignores invalid --count/--rolling-count/--supplemental-gap-policy, order-independent
-REQ-179	e2e	ComparisonTests.Compare_CommandLineE2E_InvalidGenerationValue_IsIgnoredAndComparisonSucceeds	Program-level comparison dispatch before generation validation
+REQ-179	unit	ComparisonTests.Compare_CommandLineE2E_InvalidGenerationValue_IsIgnoredAndComparisonSucceeds	Program-level comparison dispatch before generation validation
 REQ-180	e2e	test-production-sets.sh	Comma list splitting/trimming cardinality
 REQ-180	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithSurroundingWhitespaceInList_TrimsPathsAndSucceeds	Comma list entries trimmed
 REQ-180	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithEmptyEntriesInList_RemovesEmptiesAndSucceeds	Empty entries removed before cardinality check
 REQ-180	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithOnlyOneNonEmptyEntry_ThrowsWithoutLeavingReport	Minimum-two rule after normalization; no output
 REQ-180	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithWhitespaceOnlyEntries_ThrowsWithoutLeavingReport	Whitespace-only entries normalize to zero; no output
-REQ-180	e2e	ComparisonTests.Compare_CommandLineE2E_WhitespaceOnlyEntries_FailBeforeOutput	Program-level cardinality failure exits non-zero with no report
+REQ-180	unit	ComparisonTests.Compare_CommandLineE2E_WhitespaceOnlyEntries_FailBeforeOutput	Program-level cardinality failure exits non-zero with no report
 REQ-181	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_IncludesCollectionMetadataColumns	--with-collection-metadata five columns
 REQ-182	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues	Synthetic Collection Metadata values
 REQ-183	unit	DatComposingWriterTests.WriteAsync_WithCollectionMetadata_WritesCollectionMetadataValues	Deterministic with --seed
