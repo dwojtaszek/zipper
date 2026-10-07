@@ -31,37 +31,41 @@ def run(command):
         raise RuntimeError(f"{command}: exit {result.returncode}\n{result.stdout}{result.stderr}")
 
 
+def prepare_commands(temp):
+    commands = {}
+    for check in CHECKS:
+        fixtures = temp / check / "fixtures"
+        if check == "foundation":
+            run([TOOL / "record_sample_fixture.py", fixtures])
+            command = [
+                TOOL / "runner.py", "--files", TOOL / "questions/files-sample.list",
+                "--questions", TOOL / "questions/example.json",
+            ]
+        else:
+            directory = TOOL / "checks" / check.replace("-", "_")
+            recorder = [directory / "record_corpus_fixtures.py", fixtures]
+            command = [directory / "run_check.py"]
+            if check == "traceability":
+                corpus = CORPUS / check
+                recorder += [
+                    corpus / "req-traceability.tsv", corpus, corpus,
+                    directory / "questions.json",
+                ]
+                command += [
+                    "--tsv", corpus / "req-traceability.tsv",
+                    "--tests-root", corpus, "--requirements-root", corpus, "--full",
+                ]
+            else:
+                command += ["--corpus", CORPUS / check]
+            run(recorder)
+        commands[check] = command + ["--mode", "fixture", "--fixture-dir", fixtures]
+    return commands
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="zipper-audit-benchmark-") as tmp:
         temp = Path(tmp)
-        commands = {}
-        for check in CHECKS:
-            fixtures = temp / check / "fixtures"
-            if check == "foundation":
-                run([TOOL / "record_sample_fixture.py", fixtures])
-                command = [
-                    TOOL / "runner.py", "--files", TOOL / "questions/files-sample.list",
-                    "--questions", TOOL / "questions/example.json",
-                ]
-            else:
-                directory = TOOL / "checks" / check.replace("-", "_")
-                recorder = [directory / "record_corpus_fixtures.py", fixtures]
-                command = [directory / "run_check.py"]
-                if check == "traceability":
-                    corpus = CORPUS / check
-                    recorder += [
-                        corpus / "req-traceability.tsv", corpus, corpus,
-                        directory / "questions.json",
-                    ]
-                    command += [
-                        "--tsv", corpus / "req-traceability.tsv",
-                        "--tests-root", corpus, "--requirements-root", corpus, "--full",
-                    ]
-                else:
-                    command += ["--corpus", CORPUS / check]
-                run(recorder)
-            commands[check] = command + ["--mode", "fixture", "--fixture-dir", fixtures]
-
+        commands = prepare_commands(temp)
         baseline = None
         samples = {1: [], 2: []}
         # Alternate ordering to reduce warm-cache/order bias.
@@ -70,7 +74,7 @@ def main():
                 output = temp / f"run-{repetition}-{workers}"
                 output.mkdir()
 
-                def replay(check):
+                def replay(check, output=output):
                     run(commands[check] + [
                         "--json-out", output / f"{check}.json",
                         "--md-out", output / f"{check}.md",
