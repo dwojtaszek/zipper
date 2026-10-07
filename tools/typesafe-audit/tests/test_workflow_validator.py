@@ -31,6 +31,31 @@ class TestWorkflowValidator(unittest.TestCase):
         errors = validate_workflow(WORKFLOW_PATH)
         self.assertEqual(errors, [])
 
+    def test_audit_matrix_routes_each_check_once_with_bounded_concurrency(self):
+        audit = self.workflow["jobs"]["audit"]
+        strategy = audit["strategy"]
+        checks = strategy["matrix"]["check"]
+        self.assertEqual(
+            checks,
+            ["foundation", "requirements", "traceability", "architecture", "domain-language"],
+        )
+        self.assertEqual(int(strategy["max-parallel"]), 2)
+        self.assertEqual(str(strategy["fail-fast"]).lower(), "false")
+        commands = [
+            step for step in audit["steps"]
+            if "run" in step and workflow_validator._step_executes_runner(step["run"])
+        ]
+        self.assertEqual(len(commands), len(checks))
+        for check in checks:
+            matching = [
+                step for step in commands
+                if f"matrix.check == '{check}'" in step.get("if", "")
+            ]
+            self.assertEqual(len(matching), 1, check)
+            self.assertIn("steps.secret.outputs.available == 'true'", matching[0]["if"])
+        upload = next(step for step in audit["steps"] if step.get("name") == "Upload audit artifacts")
+        self.assertIn("${{ matrix.check }}", upload["with"]["name"])
+
     def test_all_three_actual_workflows_pass_validations(self):
         workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")
         for fname in ("typesafe-audit.yml", "typesafe-issue-triage.yml", "typesafe-quality-audit.yml"):
