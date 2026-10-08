@@ -51,6 +51,53 @@ class CollectorTests(unittest.TestCase):
         kept = self.collect.filter_files(files)
         self.assertEqual([f["path"] for f in kept], ["src/Cli/Program.cs", "docs/advanced-guide.md"])
 
+    def test_filter_files_excludes_nested_windows_and_mixed_case_env(self):
+        files = [
+            {"path": "src/Cli/Program.cs"},
+            {"path": ".env"},
+            {"path": "tools/service/.env"},
+            {"path": "deep/nested/dir/.env"},
+            {"path": "tools\\service\\.env"},
+            {"path": "deep\\nested\\dir\\.env"},
+            {"path": ".ENV"},
+            {"path": "Tools/Service/.Env"},
+            {"path": "deploy\\staging\\.eNv"},
+            {"path": "tools/service/.env/"},
+            {"path": "tools\\service\\.env\\"},
+            # Legitimate similarly named non-secret controls
+            {"path": ".env.example"},
+            {"path": "tools/service/.env.example"},
+            {"path": "app.env"},
+            {"path": "src/App.env"},
+            {"path": ".environment"},
+            {"path": "tests/env.sample"},
+            {"path": "environment.cs"},
+            {"path": "tools/env_config.py"},
+        ]
+        kept = self.collect.filter_files(files)
+        kept_paths = [f["path"] for f in kept]
+        expected_kept = [
+            "src/Cli/Program.cs",
+            ".env.example",
+            "tools/service/.env.example",
+            "app.env",
+            "src/App.env",
+            ".environment",
+            "tests/env.sample",
+            "environment.cs",
+            "tools/env_config.py",
+        ]
+        self.assertEqual(kept_paths, expected_kept)
+
+    def test_filter_files_handles_missing_or_none_paths(self):
+        files = [
+            {"path": None},
+            {},
+            {"path": "src/Cli/Program.cs"},
+        ]
+        kept = self.collect.filter_files(files)
+        self.assertEqual(len(kept), 3)
+
     def test_filter_files_enforces_size_budget(self):
         files = [{"path": f"src/File{i}.cs", "additions": 5} for i in range(10)]
         kept = self.collect.filter_files(files, max_files=3)
@@ -172,6 +219,69 @@ class RunCheckTests(unittest.TestCase):
             text = summary.read_text()
             self.assertTrue(text.startswith("existing\n"))
             self.assertIn("PR Specification Compliance", text)
+
+    def test_build_request_excludes_nested_and_windows_env_patches_from_serialized_state(self):
+        marker_root = "SYNTHETIC_NONSECRET_ROOT_ENV_MARKER_9f1"
+        marker_nested = "SYNTHETIC_NONSECRET_NESTED_ENV_MARKER_4a2"
+        marker_win = "SYNTHETIC_NONSECRET_WIN_ENV_MARKER_7b3"
+        marker_mixed = "SYNTHETIC_NONSECRET_MIXED_ENV_MARKER_1c8"
+        marker_example = "SYNTHETIC_LEGITIMATE_SAMPLE_MARKER_3d4"
+        marker_app_env = "SYNTHETIC_LEGITIMATE_APP_ENV_MARKER_5e6"
+        marker_program = "SYNTHETIC_LEGITIMATE_PROGRAM_MARKER_6f7"
+
+        case = {
+            "pr": 1132,
+            "body": "Fixes #100",
+            "files": [
+                {"path": ".env", "patch": f"+ ROOT_KEY={marker_root}"},
+                {"path": "tools/service/.env", "patch": f"+ SERVICE_KEY={marker_nested}"},
+                {"path": "deploy\\service\\.ENV", "patch": f"+ DEPLOY_KEY={marker_win}"},
+                {"path": "config/.Env", "patch": f"+ CONFIG_KEY={marker_mixed}"},
+                {"path": "tools/service/.env.example", "patch": f"+ SAMPLE={marker_example}"},
+                {"path": "src/App.env", "patch": f"+ SETTING={marker_app_env}"},
+                {"path": "src/Cli/Program.cs", "patch": f"+ // {marker_program}"},
+            ],
+            "issues": {
+                "100": {
+                    "number": 100,
+                    "body": "Spec for issue 100",
+                    "comments": [],
+                }
+            },
+        }
+
+        policy = self.run_check.load_json(self.run_check.POLICY_PATH)
+        questions = self.run_check.load_json(self.run_check.QUESTIONS_PATH)["questions"]
+        config = {"model": "jev-1.13.0"}
+
+        obligations, status = self.run_check.build_obligations(case, policy, repo_root=None)
+        self.assertEqual(status, "ok")
+        request = self.run_check.build_request(obligations, questions, policy, config)
+
+        serialized_state = json.dumps(request["state"])
+        # Synthetic excluded patch markers must be absent from serialized state
+        self.assertNotIn(marker_root, serialized_state)
+        self.assertNotIn(marker_nested, serialized_state)
+        self.assertNotIn(marker_win, serialized_state)
+        self.assertNotIn(marker_mixed, serialized_state)
+
+        # Legitimate similarly named non-secret controls must remain included
+        self.assertIn(marker_example, serialized_state)
+        self.assertIn(marker_app_env, serialized_state)
+        self.assertIn(marker_program, serialized_state)
+
+        serialized_paths = [
+            f["path"]
+            for state in request["state"].values()
+            for f in state.get("changed_files", [])
+        ]
+        self.assertNotIn(".env", serialized_paths)
+        self.assertNotIn("tools/service/.env", serialized_paths)
+        self.assertNotIn("deploy\\service\\.ENV", serialized_paths)
+        self.assertNotIn("config/.Env", serialized_paths)
+        self.assertIn("tools/service/.env.example", serialized_paths)
+        self.assertIn("src/App.env", serialized_paths)
+        self.assertIn("src/Cli/Program.cs", serialized_paths)
 
 
 class WorkflowWiringTests(unittest.TestCase):
