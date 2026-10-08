@@ -62,6 +62,274 @@ class CoverageGapTests(unittest.TestCase):
         gaps = self.gaps.extract_gaps(CORPUS / "cobertura.xml", CORPUS, max_gaps=1)
         self.assertEqual(len(gaps), 1)
 
+    def test_branch_coverage_fixtures_and_line_ranges(self):
+        cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE coverage SYSTEM "https://coveralls.io/xml/coverage.dtd">
+<coverage line-rate="0.75" branch-rate="0.6" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="Validation/ProductionSetPostValidator.cs">
+          <methods>
+            <method name="PositiveHitHalfBranch" signature="()">
+              <lines>
+                <line number="10" hits="5" branch="False" />
+                <line number="12" hits="1" branch="True" condition-coverage="50% (1/2)" />
+                <line number="14" hits="5" branch="False" />
+              </lines>
+            </method>
+            <method name="PositiveHitThreeQuartersBranch" signature="()">
+              <lines>
+                <line number="20" hits="2" branch="False" />
+                <line number="22" hits="3" branch="True" condition-coverage="75% (3/4)" />
+                <line number="24" hits="2" branch="False" />
+              </lines>
+            </method>
+            <method name="ZeroHitZeroTwoBranch" signature="()">
+              <lines>
+                <line number="30" hits="1" branch="False" />
+                <line number="32" hits="0" branch="True" condition-coverage="0% (0/2)" />
+                <line number="34" hits="1" branch="False" />
+              </lines>
+            </method>
+            <method name="FullyCoveredMethod" signature="()">
+              <lines>
+                <line number="40" hits="3" branch="False" />
+                <line number="42" hits="3" branch="True" condition-coverage="100% (2/2)" />
+                <line number="44" hits="3" branch="False" />
+              </lines>
+            </method>
+            <method name="BranchFreeFullyCovered" signature="()">
+              <lines>
+                <line number="50" hits="4" branch="False" />
+                <line number="52" hits="4" branch="False" />
+              </lines>
+            </method>
+            <method name="BranchFreeWithUncoveredLine" signature="()">
+              <lines>
+                <line number="60" hits="2" branch="False" />
+                <line number="62" hits="0" branch="False" />
+                <line number="64" hits="2" branch="False" />
+              </lines>
+            </method>
+            <method name="MultiLineGapMethod" signature="()">
+              <lines>
+                <line number="70" hits="1" branch="True" condition-coverage="50% (1/2)" />
+                <line number="72" hits="0" branch="False" />
+                <line number="74" hits="0" branch="True" condition-coverage="0% (0/2)" />
+                <line number="76" hits="2" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+"""
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src" / "Validation"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Validation;\n"
+                "public class ProductionSetPostValidator\n"
+                "{\n"
+                + "\n" * 5
+                + "    public void PositiveHitHalfBranch()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        if (x > 0) {}\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 4
+                + "    public void PositiveHitThreeQuartersBranch()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        if (x > 0) {}\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 4
+                + "    public void ZeroHitZeroTwoBranch()\n"
+                + "    {\n"
+                + "        int x = 0;\n"
+                + "        if (x > 0) {}\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 4
+                + "    public void FullyCoveredMethod()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        if (x > 0) {}\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 4
+                + "    public void BranchFreeFullyCovered()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 5
+                + "    public void BranchFreeWithUncoveredLine()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        x++;\n"
+                + "        x++;\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "\n" * 3
+                + "    public void MultiLineGapMethod()\n"
+                + "    {\n"
+                + "        int x = 1;\n"
+                + "        if (x > 0) {}\n"
+                + "        x++;\n"
+                + "        if (x > 1) {}\n"
+                + "        x++;\n"
+                + "        x++;\n"
+                + "    }\n"
+                + "}\n"
+            )
+            (src_dir / "ProductionSetPostValidator.cs").write_text(cs_source, encoding="utf-8")
+            xml_path = repo_dir / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+            by_method = {g["method"]: g for g in gaps}
+
+            # Positive-hit 1/2 yields one uncovered branch and 0 uncovered lines
+            self.assertIn("PositiveHitHalfBranch", by_method)
+            half = by_method["PositiveHitHalfBranch"]
+            self.assertEqual(half["uncovered_branches"], 1)
+            self.assertEqual(half["uncovered_lines"], 0)
+            self.assertEqual((half["first_line"], half["last_line"]), (12, 12))
+
+            # Positive-hit 3/4 yields one uncovered branch and 0 uncovered lines
+            self.assertIn("PositiveHitThreeQuartersBranch", by_method)
+            three_quarters = by_method["PositiveHitThreeQuartersBranch"]
+            self.assertEqual(three_quarters["uncovered_branches"], 1)
+            self.assertEqual(three_quarters["uncovered_lines"], 0)
+            self.assertEqual((three_quarters["first_line"], three_quarters["last_line"]), (22, 22))
+
+            # 0/2 yields two uncovered branches and 1 uncovered line
+            self.assertIn("ZeroHitZeroTwoBranch", by_method)
+            zero_two = by_method["ZeroHitZeroTwoBranch"]
+            self.assertEqual(zero_two["uncovered_branches"], 2)
+            self.assertEqual(zero_two["uncovered_lines"], 1)
+            self.assertEqual((zero_two["first_line"], zero_two["last_line"]), (32, 32))
+
+            # Fully covered method remains excluded
+            self.assertNotIn("FullyCoveredMethod", by_method)
+
+            # Branch-free fully covered method remains excluded
+            self.assertNotIn("BranchFreeFullyCovered", by_method)
+
+            # Branch-free with uncovered line is retained
+            self.assertIn("BranchFreeWithUncoveredLine", by_method)
+            branch_free = by_method["BranchFreeWithUncoveredLine"]
+            self.assertEqual(branch_free["uncovered_branches"], 0)
+            self.assertEqual(branch_free["uncovered_lines"], 1)
+            self.assertEqual((branch_free["first_line"], branch_free["last_line"]), (62, 62))
+
+            # Multi-line gap method spans from first gap line to last gap line
+            self.assertIn("MultiLineGapMethod", by_method)
+            multi = by_method["MultiLineGapMethod"]
+            self.assertEqual(multi["uncovered_branches"], 3)
+            self.assertEqual(multi["uncovered_lines"], 2)
+            self.assertEqual((multi["first_line"], multi["last_line"]), (70, 74))
+
+    def test_uncovered_branches_helper_robustness(self):
+        helper = self.gaps._uncovered_branches
+        self.assertEqual(helper({"condition": None}), 0)
+        self.assertEqual(helper({"condition": ""}), 0)
+        self.assertEqual(helper({}), 0)
+        self.assertEqual(helper({"condition": "50% ( 1 / 2 )"}), 1)
+        self.assertEqual(helper({"condition": "75% (  3 / 4  )"}), 1)
+        self.assertEqual(helper({"condition": "100% ( 2 / 2 )"}), 0)
+        self.assertEqual(helper({"condition": "invalid (not a branch)"}), 0)
+        self.assertEqual(helper({"condition": "0% ( 0 / 2 )"}), 2)
+
+    def test_branch_edge_cases_and_line_zero(self):
+        cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.8" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="Validation/ProductionSetPostValidator.cs">
+          <methods>
+            <method name="WhitespaceAndLowercaseBranch" signature="()">
+              <lines>
+                <line number="10" hits="2" branch="true" condition-coverage="50% ( 1 / 2 )" />
+              </lines>
+            </method>
+            <method name="MultiLineBranchOnlyWithIntermediateCovered" signature="()">
+              <lines>
+                <line number="20" hits="1" branch="true" condition-coverage="50% (1/2)" />
+                <line number="22" hits="5" branch="False" />
+                <line number="24" hits="2" branch="True" condition-coverage="75% (3/4)" />
+              </lines>
+            </method>
+            <method name="CompilerGeneratedLineZero" signature="()">
+              <lines>
+                <line number="0" hits="0" branch="False" />
+                <line number="30" hits="0" branch="False" />
+                <line number="32" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+"""
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src" / "Validation"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Validation;\n"
+                "public class ProductionSetPostValidator\n"
+                "{\n"
+                + "\n" * 6
+                + "    public void WhitespaceAndLowercaseBranch()\n"
+                + "    {\n"
+                + "    }\n"
+                + "\n" * 7
+                + "    public void MultiLineBranchOnlyWithIntermediateCovered()\n"
+                + "    {\n"
+                + "    }\n"
+                + "\n" * 7
+                + "    public void CompilerGeneratedLineZero()\n"
+                + "    {\n"
+                + "    }\n"
+                + "}\n"
+            )
+            (src_dir / "ProductionSetPostValidator.cs").write_text(cs_source, encoding="utf-8")
+            xml_path = repo_dir / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+            by_method = {g["method"]: g for g in gaps}
+
+            # Lowercase branch="true" with padded whitespace in condition
+            self.assertIn("WhitespaceAndLowercaseBranch", by_method)
+            ws = by_method["WhitespaceAndLowercaseBranch"]
+            self.assertEqual(ws["uncovered_branches"], 1)
+            self.assertEqual(ws["uncovered_lines"], 0)
+            self.assertEqual((ws["first_line"], ws["last_line"]), (10, 10))
+
+            # Multi-line branch-only gap with intermediate fully covered line
+            self.assertIn("MultiLineBranchOnlyWithIntermediateCovered", by_method)
+            multi_branch = by_method["MultiLineBranchOnlyWithIntermediateCovered"]
+            self.assertEqual(multi_branch["uncovered_branches"], 2)
+            self.assertEqual(multi_branch["uncovered_lines"], 0)
+            self.assertEqual((multi_branch["first_line"], multi_branch["last_line"]), (20, 24))
+
+            # Line 0 is excluded from first_line when real lines exist
+            self.assertIn("CompilerGeneratedLineZero", by_method)
+            zero_line = by_method["CompilerGeneratedLineZero"]
+            self.assertEqual(zero_line["first_line"], 30)
+            self.assertEqual(zero_line["last_line"], 32)
+
+
 
 class MutationTests(unittest.TestCase):
     """Deterministic Stryker report parsing and category separation."""
@@ -280,6 +548,68 @@ class RunCheckTests(unittest.TestCase):
         self.assertTrue(pm("/repo/src/Foo.cs", {"src/Foo.cs"}))
         self.assertFalse(pm("src/BarFoo.cs", {"Foo.cs"}))
         self.assertFalse(pm("src/Foo.cs", {"BarFoo.cs"}))
+
+    def test_branch_only_candidates_included_in_ranking_input(self):
+        from unittest import mock
+        cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE coverage SYSTEM "https://coveralls.io/xml/coverage.dtd">
+<coverage line-rate="0.75" branch-rate="0.6" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="Validation/ProductionSetPostValidator.cs">
+          <methods>
+            <method name="ValidateDestination" signature="()">
+              <lines>
+                <line number="10" hits="5" branch="False" />
+                <line number="12" hits="1" branch="True" condition-coverage="50% (1/2)" />
+                <line number="14" hits="5" branch="False" />
+              </lines>
+            </method>
+            <method name="FullyCoveredMethod" signature="()">
+              <lines>
+                <line number="40" hits="3" branch="False" />
+                <line number="42" hits="3" branch="True" condition-coverage="100% (2/2)" />
+                <line number="44" hits="3" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+"""
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            xml_path = tmp / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            with mock.patch.object(
+                self.run_check.runner, "run_fixture",
+                side_effect=lambda request, fixture_dir: {
+                    "answers": {
+                        key: {"score": 0.8, "confidence": 0.9}
+                        for key in request["questions"]
+                    }
+                },
+            ):
+                args = [
+                    "--coverage", str(xml_path),
+                    "--repo-root", str(CORPUS),
+                    "--mode", "fixture",
+                    "--json-out", str(tmp / "r.json"), "--md-out", str(tmp / "r.md"),
+                ]
+                code = self.run_check.main(args)
+                self.assertEqual(code, self.run_check.EXIT_OK)
+                report = json.loads((tmp / "r.json").read_text(encoding="utf-8"))
+                self.assertEqual(report["coverage_candidates"], 1)
+                ranked_methods = [c["method"] for c in report["ranked"]]
+                self.assertIn("ValidateDestination", ranked_methods)
+                self.assertNotIn("FullyCoveredMethod", ranked_methods)
+                candidate = report["ranked"][0]
+                self.assertEqual(candidate["lines"], "12-12")
+                self.assertEqual(candidate["origin"], "coverage")
+
 
 
 class WorkflowWiringTests(unittest.TestCase):

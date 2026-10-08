@@ -18,6 +18,18 @@ from pathlib import Path
 _REQ_ID = re.compile(r"\bREQ-\d{3,4}\b")
 _TRIVIAL_METHODS = re.compile(r"^(get_|set_)[A-Z]")
 _GENERATED_MARKERS = ("obj/", "bin/", "generated/", ".Designer.cs", ".AssemblyInfo.cs")
+_BRANCH_RE = re.compile(r"\(\s*(\d+)\s*/\s*(\d+)\s*\)")
+
+
+def _uncovered_branches(line: dict) -> int:
+    """Extract uncovered branch count (total - covered) from a line's condition-coverage string."""
+    condition = line.get("condition") or ""
+    match = _BRANCH_RE.search(condition)
+    if not match:
+        return 0
+    covered = int(match.group(1))
+    total = int(match.group(2))
+    return max(0, total - covered)
 
 
 def parse_cobertura(path: Path) -> list[dict]:
@@ -35,7 +47,7 @@ def parse_cobertura(path: Path) -> list[dict]:
                 lines.append({
                     "number": int(line.get("number")),
                     "hits": int(line.get("hits", 0)),
-                    "branch": line.get("branch") == "True",
+                    "branch": line.get("branch", "").lower() == "true",
                     "condition": line.get("condition-coverage", ""),
                 })
             methods.append({"name": method.get("name", ""), "lines": lines})
@@ -110,18 +122,30 @@ def extract_gaps(cobertura_path: Path, repo_root: Path, max_gaps: int | None = N
             name = method["name"]
             if _TRIVIAL_METHODS.match(name):
                 continue
-            uncovered = [line for line in method["lines"] if line["hits"] == 0]
-            uncovered_branches = sum(1 for line in uncovered if line["branch"] and "50%" in line["condition"])
-            if not uncovered:
+            uncovered_lines = 0
+            uncovered_branches = 0
+            gap_lines: list[dict] = []
+            for line in method["lines"]:
+                branches = _uncovered_branches(line)
+                is_uncovered = line["hits"] == 0
+                if is_uncovered:
+                    uncovered_lines += 1
+                if branches > 0:
+                    uncovered_branches += branches
+                if is_uncovered or branches > 0:
+                    gap_lines.append(line)
+            if not gap_lines:
                 continue
-            resolved = method_for_line(source_root, filename, uncovered[0]["number"])
+            valid_gaps = [l for l in gap_lines if l["number"] > 0]
+            gap_lines_sorted = sorted(valid_gaps or gap_lines, key=lambda l: l["number"])
+            resolved = method_for_line(source_root, filename, gap_lines_sorted[0]["number"])
             gap = {
                 "origin": "coverage",
                 "file": f"src/{filename}" if not filename.startswith("src/") else filename,
                 "method": resolved or name,
-                "first_line": uncovered[0]["number"],
-                "last_line": uncovered[-1]["number"],
-                "uncovered_lines": len(uncovered),
+                "first_line": gap_lines_sorted[0]["number"],
+                "last_line": gap_lines_sorted[-1]["number"],
+                "uncovered_lines": uncovered_lines,
                 "uncovered_branches": uncovered_branches,
             }
             attach_req_evidence(gap, source_root, rows)
