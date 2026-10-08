@@ -154,7 +154,7 @@ public class CancellationTests
         {
             using var cts = new CancellationTokenSource();
             var request = BuildLoadfileOnlyRequest(outputPath);
-            request.Output = request.Output with { FileCount = 5000 };
+            request.Output = request.Output with { FileCount = 300000 };
             request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
 
             bool generationStarted = false;
@@ -171,7 +171,7 @@ public class CancellationTests
                         cts.Cancel();
                         break;
                     }
-                    await Task.Delay(5);
+                    await Task.Delay(1);
                 }
             });
 
@@ -446,7 +446,7 @@ public class CancellationTests
         {
             using var cts = new CancellationTokenSource();
             var request = BuildLoadfileOnlyRequest(outputPath);
-            request.Output = request.Output with { FileCount = 5000 };
+            request.Output = request.Output with { FileCount = 300000 };
             request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
 
             bool generationStarted = false;
@@ -463,7 +463,7 @@ public class CancellationTests
                         cts.Cancel();
                         break;
                     }
-                    await Task.Delay(5);
+                    await Task.Delay(1);
                 }
             });
 
