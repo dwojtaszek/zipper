@@ -15,8 +15,15 @@ internal static class LoadFileOnlyGenerator
     /// <param name="request">File generation request with loadfile-only settings.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Result containing generated file paths and performance metrics.</returns>
-    public static async Task<LoadFileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
+    public static Task<LoadFileOnlyResult> GenerateAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
+        => GenerateAsync(request, LoadFileWriterFactory.CreateWriter, cancellationToken);
+
+    internal static async Task<LoadFileOnlyResult> GenerateAsync(
+        FileGenerationRequest request,
+        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(createWriter);
         request = request.Clone();
 
         var stopwatch = Stopwatch.StartNew();
@@ -71,7 +78,7 @@ internal static class LoadFileOnlyGenerator
 
                 ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
 
-                ILoadFileWriter writer = LoadFileWriterFactory.CreateWriter(
+                ILoadFileWriter writer = createWriter(
                     format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
                     writerMode);
 
