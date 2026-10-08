@@ -55,11 +55,12 @@ def filter_files(files: list[dict], max_files: int | None = None) -> list[dict]:
     """Drop binaries, generated artifacts, and secrets; enforce the file budget."""
     kept = []
     for entry in files or []:
-        path = entry.get("path", "").replace("\\", "/")
+        path = (entry.get("path") or "").replace("\\", "/")
         lowered = path.lower()
         if path.startswith(_GENERATED_PREFIXES) or "/bin/" in f"/{lowered}" or "/obj/" in f"/{lowered}":
             continue
-        if lowered.endswith(_BINARY_SUFFIXES) or lowered in _SECRET_FILES or lowered.endswith(".pem") or lowered.endswith(".key"):
+        basename = lowered.rstrip("/").rsplit("/", 1)[-1]
+        if lowered.endswith(_BINARY_SUFFIXES) or basename in _SECRET_FILES or lowered.endswith(".pem") or lowered.endswith(".key"):
             continue
         kept.append(entry)
     limit = max_files
