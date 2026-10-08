@@ -616,13 +616,34 @@ public class SourceDrivenGenerationTests : IDisposable
             Row("messages/note.eml", "eml"),
             Row("images/photo.jpg", "jpg"),
         };
-        var request = this.CreateSourceRequest(rows, withText: true, seed: 42);
+        var profile = new ColumnProfile
+        {
+            Name = "test-sha256",
+            Columns = new List<ColumnDefinition>
+            {
+                new() { Name = "Control Number", Type = "text" },
+                new() { Name = "File Path", Type = "text" },
+                new() { Name = "SHA256HASH", Type = "text" },
+            },
+        };
+        var request = this.CreateSourceRequest(rows, withText: true, profile: profile, seed: 42);
         request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
         request.Hash = new HashConfig { Mode = HashMode.Actual, Algorithms = new HashSet<HashAlgorithm> { HashAlgorithm.SHA256 } };
 
         var result = await new ParallelFileGenerator().GenerateFilesAsync(request);
 
         Assert.True(File.Exists(result.ZipFilePath));
+
+        var datRows = DatRows(result.LoadFilePath, out var header);
+        Assert.Equal(3, datRows.Count);
+        var pathIndex = Array.IndexOf(header, "File Path");
+        var hashIndex = Array.IndexOf(header, "SHA256HASH");
+        Assert.True(pathIndex >= 0);
+        Assert.True(hashIndex >= 0);
+        Assert.Equal("docs/first.pdf", datRows[0][pathIndex].Trim('þ'));
+        Assert.Equal("messages/note.eml", datRows[1][pathIndex].Trim('þ'));
+        Assert.Equal("images/photo.jpg", datRows[2][pathIndex].Trim('þ'));
+
         using (var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath))
         {
             var entries = archive.Entries.ToDictionary(e => e.FullName, StringComparer.OrdinalIgnoreCase);
@@ -645,14 +666,21 @@ public class SourceDrivenGenerationTests : IDisposable
                 Assert.Equal(entry.Length, ms.Length);
                 Assert.True(ms.Length > 0, $"Entry '{entry.FullName}' should not be empty");
             }
-        }
 
-        var datRows = DatRows(result.LoadFilePath, out var header);
-        Assert.Equal(3, datRows.Count);
-        var pathIndex = Array.IndexOf(header, "File Path");
-        Assert.Equal("docs/first.pdf", datRows[0][pathIndex].Trim('þ'));
-        Assert.Equal("messages/note.eml", datRows[1][pathIndex].Trim('þ'));
-        Assert.Equal("images/photo.jpg", datRows[2][pathIndex].Trim('þ'));
+            // Verify actual SHA-256 digests in load file equal independent hashes of emitted archive entries
+            for (int i = 0; i < datRows.Count; i++)
+            {
+                var relPath = datRows[i][pathIndex].Trim('þ');
+                Assert.True(entries.TryGetValue(relPath, out var nativeEntry), $"Archive missing entry for {relPath}");
+                using var stream = nativeEntry.Open();
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                var expectedSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(ms.ToArray())).ToLowerInvariant();
+                var emittedSha256 = datRows[i][hashIndex].Trim('þ');
+                Assert.Equal(64, emittedSha256.Length);
+                Assert.Equal(expectedSha256, emittedSha256);
+            }
+        }
     }
 }
 
