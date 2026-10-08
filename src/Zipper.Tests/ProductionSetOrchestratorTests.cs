@@ -47,18 +47,41 @@ public class ProductionSetOrchestratorTests
         Assert.Contains("Redacted text", redactedText.text, System.StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task GenerateAsync_HashComputation_UsesSharedHashComputer()
+    [Theory]
+    [InlineData(Config.HashAlgorithm.MD5)]
+    [InlineData(Config.HashAlgorithm.SHA1)]
+    [InlineData(Config.HashAlgorithm.SHA256)]
+    public async Task GenerateAsync_HashComputation_UsesSharedHashComputer(Config.HashAlgorithm algorithm)
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
-        request.Hash = request.Hash with { Mode = Config.HashMode.Actual, Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 } };
+        request.Hash = request.Hash with { Mode = Config.HashMode.Actual, Algorithms = new HashSet<Config.HashAlgorithm> { algorithm } };
         var hashComputer = new HashComputer();
         var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, hashComputer);
 
         var fileData = Assert.Single(materializer.FileDataItems);
-        Assert.False(string.IsNullOrEmpty(fileData.Hash));
-        Assert.Equal(32, fileData.Hash.Length);
+        var writtenNative = Assert.Single(materializer.WrittenBytes, w => w.path.EndsWith("DOC00000001.pdf", StringComparison.Ordinal));
+
+        var expectedHash = algorithm switch
+        {
+#pragma warning disable CA5351 // MD5 tested for e-discovery compatibility
+            Config.HashAlgorithm.MD5 => Convert.ToHexString(System.Security.Cryptography.MD5.HashData(writtenNative.content)).ToLowerInvariant(),
+#pragma warning restore CA5351
+#pragma warning disable CA5350 // SHA-1 tested for e-discovery compatibility
+            Config.HashAlgorithm.SHA1 => Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(writtenNative.content)).ToLowerInvariant(),
+#pragma warning restore CA5350
+            Config.HashAlgorithm.SHA256 => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(writtenNative.content)).ToLowerInvariant(),
+            _ => throw new ArgumentOutOfRangeException(nameof(algorithm)),
+        };
+
+        Assert.NotNull(fileData.Hashes);
+        Assert.True(fileData.Hashes.TryGetValue(algorithm, out var actualDigest));
+        Assert.Equal(expectedHash, actualDigest);
+
+        if (algorithm == Config.HashAlgorithm.MD5)
+        {
+            Assert.Equal(expectedHash, fileData.Hash);
+        }
     }
 
     [Fact]
