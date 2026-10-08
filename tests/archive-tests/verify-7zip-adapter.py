@@ -47,7 +47,11 @@ def check_entry(seven, archive, entry, budget):
 
 
 def check_archive_rejection(seven, archive, case_key):
-    result = subprocess.run([seven, "t", str(archive)], capture_output=True, timeout=30)
+    try:
+        result = subprocess.run([seven, "t", str(archive)], capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError(f"7-Zip timed out testing {case_key}") from error
+
     stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
     stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
     combined_output = f"{stdout}\n{stderr}".lower()

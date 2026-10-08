@@ -1,5 +1,7 @@
 import hashlib
 import json
+import os
+import runpy
 import shlex
 import shutil
 import subprocess
@@ -8,12 +10,36 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("verify-7zip-adapter.py")
+VERIFIER = runpy.run_path(str(SCRIPT))
 
 
 class SevenZipAdapterTests(unittest.TestCase):
+    def test_check_archive_rejection_timeout_reports_classified_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            archive = directory / "archive.zip"
+            archive.write_bytes(b"corrupted")
+            (directory / "t").write_text("import time; time.sleep(10)\n", encoding="utf-8")
+
+            original_run = subprocess.run
+
+            def run_with_short_timeout(*args, **kwargs):
+                kwargs["timeout"] = 0.1
+                return original_run(*args, **kwargs)
+
+            original_cwd = Path.cwd()
+            try:
+                os.chdir(directory)
+                with patch.object(subprocess, "run", side_effect=run_with_short_timeout):
+                    with self.assertRaisesRegex(ValueError, "7-Zip timed out testing timeout-case"):
+                        VERIFIER["check_archive_rejection"](sys.executable, archive, "timeout-case")
+            finally:
+                os.chdir(original_cwd)
+
     def test_verify_declared_actions_checks_real_extraction_and_hash(self):
         seven = shutil.which("7zz") or shutil.which("7z")
         if seven is None:
