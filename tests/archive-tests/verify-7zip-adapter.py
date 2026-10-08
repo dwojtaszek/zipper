@@ -46,6 +46,61 @@ def check_entry(seven, archive, entry, budget):
                 process.communicate()
 
 
+def check_archive_rejection(seven, archive, case_key):
+    result = subprocess.run([seven, "t", str(archive)], capture_output=True, timeout=30)
+    stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+    combined_output = f"{stdout}\n{stderr}".lower()
+
+    if result.returncode == 0:
+        raise ValueError(f"7-Zip accepted {case_key}, expected rejection")
+
+    if result.returncode in (255, 130, -2):
+        raise ValueError(f"7-Zip interrupted testing {case_key}")
+
+    if result.returncode < 0:
+        raise ValueError(f"7-Zip terminated by signal {-result.returncode} testing {case_key}")
+
+    if sys.platform != "win32" and result.returncode > 128 and result.returncode not in (130, 255):
+        raise ValueError(f"7-Zip terminated by signal {result.returncode - 128} testing {case_key}")
+
+    if result.returncode == 8 or "not enough memory" in combined_output or "can't allocate required memory" in combined_output:
+        raise ValueError(f"7-Zip insufficient memory testing {case_key}")
+
+    if result.returncode == 7 or "command line error" in combined_output:
+        raise ValueError(f"7-Zip command-line error testing {case_key}")
+
+    system_error_markers = (
+        "system error:",
+        "permission denied",
+        "access is denied",
+        "no such file or directory",
+        "i/o error",
+    )
+    if any(marker in combined_output for marker in system_error_markers):
+        raise ValueError(f"7-Zip system error testing {case_key}")
+
+    if result.returncode not in (1, 2):
+        raise ValueError(f"7-Zip execution failed with exit code {result.returncode} testing {case_key}")
+
+    content_markers = (
+        "data error",
+        "crc failed",
+        "crc error",
+        "headers error",
+        "is not archive",
+        "cannot open the file as",
+        "cannot open as archive",
+        "can't open as archive",
+        "missing volume",
+        "unavailable data",
+        "unexpected end of data",
+        "unsupported method",
+    )
+    if not any(marker in combined_output for marker in content_markers):
+        raise ValueError(f"7-Zip rejected {case_key} without diagnostic content error")
+
+
 def verify(fixtures, seven):
     checked = 0
     for sidecar in sorted(fixtures.glob("atc-*.json")):
@@ -62,9 +117,7 @@ def verify(fixtures, seven):
                 checked += 1
                 continue
             if action == "test" and outcome == "failure":
-                result = subprocess.run([seven, "t", str(archive)], capture_output=True, timeout=30)
-                if result.returncode == 0:
-                    raise ValueError(f"7-Zip accepted {data['caseKey']}, expected rejection")
+                check_archive_rejection(seven, archive, data["caseKey"])
             elif action in ("extract", "extract-entries") and outcome == "success":
                 entries = [entry for entry in data["entries"] if entry["kind"] == "file"]
                 names = directive.get("entryNames")
