@@ -1,5 +1,6 @@
 using Xunit;
 using Zipper.Config;
+using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
 
@@ -154,32 +155,28 @@ public class CancellationTests
         {
             using var cts = new CancellationTokenSource();
             var request = BuildLoadfileOnlyRequest(outputPath);
-            request.Output = request.Output with { FileCount = 300000 };
             request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
 
             bool generationStarted = false;
-            using var monitorCts = new CancellationTokenSource();
-            var monitorTask = Task.Run(async () =>
+            ILoadFileWriter CreateWriter(LoadFileFormat format, WriterMode writerMode)
             {
-                while (!monitorCts.Token.IsCancellationRequested && !cts.IsCancellationRequested)
-                {
-                    var dats = Directory.GetFiles(outputPath, "*.dat");
-                    var jsons = Directory.GetFiles(outputPath, "*_properties.json");
-                    if (dats.Length > 0 && jsons.Length > 0 && new FileInfo(dats[0]).Length > 0 && new FileInfo(jsons[0]).Length > 0)
+                var writer = LoadFileWriterFactory.CreateWriter(format, writerMode);
+                return format == LoadFileFormat.Opt
+                    ? new CancelAfterWriteLoadFileWriter(writer, () =>
                     {
+                        Assert.False(cts.IsCancellationRequested);
+                        var dat = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+                        var properties = Assert.Single(Directory.GetFiles(outputPath, "*_properties.json"));
+                        Assert.True(new FileInfo(dat).Length > 0);
+                        Assert.True(new FileInfo(properties).Length > 0);
                         generationStarted = true;
                         cts.Cancel();
-                        break;
-                    }
-                    await Task.Delay(1);
-                }
-            });
+                    })
+                    : writer;
+            }
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                LoadFileOnlyGenerator.GenerateAsync(request, cts.Token));
-
-            monitorCts.Cancel();
-            await monitorTask;
+                LoadFileOnlyGenerator.GenerateAsync(request, CreateWriter, cts.Token));
 
             Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
             Assert.Empty(Directory.GetFiles(outputPath, "*.dat"));
@@ -446,26 +443,25 @@ public class CancellationTests
         {
             using var cts = new CancellationTokenSource();
             var request = BuildLoadfileOnlyRequest(outputPath);
-            request.Output = request.Output with { FileCount = 300000 };
             request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
 
             bool generationStarted = false;
-            using var monitorCts = new CancellationTokenSource();
-            var monitorTask = Task.Run(async () =>
+            ILoadFileWriter CreateWriter(LoadFileFormat format, WriterMode writerMode)
             {
-                while (!monitorCts.Token.IsCancellationRequested && !cts.IsCancellationRequested)
-                {
-                    var dats = Directory.GetFiles(outputPath, "*.dat");
-                    var jsons = Directory.GetFiles(outputPath, "*_properties.json");
-                    if (dats.Length > 0 && jsons.Length > 0 && new FileInfo(dats[0]).Length > 0 && new FileInfo(jsons[0]).Length > 0)
+                var writer = LoadFileWriterFactory.CreateWriter(format, writerMode);
+                return format == LoadFileFormat.Opt
+                    ? new CancelAfterWriteLoadFileWriter(writer, () =>
                     {
+                        Assert.False(cts.IsCancellationRequested);
+                        var dat = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+                        var properties = Assert.Single(Directory.GetFiles(outputPath, "*_properties.json"));
+                        Assert.True(new FileInfo(dat).Length > 0);
+                        Assert.True(new FileInfo(properties).Length > 0);
                         generationStarted = true;
                         cts.Cancel();
-                        break;
-                    }
-                    await Task.Delay(1);
-                }
-            });
+                    })
+                    : writer;
+            }
 
             var originalError = Console.Error;
             using var errWriter = new StringWriter();
@@ -473,16 +469,13 @@ public class CancellationTests
             int exitCode;
             try
             {
-                var mode = new LoadFileOnlyMode((req, ct) => LoadFileOnlyGenerator.GenerateAsync(req, ct));
+                var mode = new LoadFileOnlyMode((req, ct) => LoadFileOnlyGenerator.GenerateAsync(req, CreateWriter, ct));
                 exitCode = await GenerationRunner.RunAsync(mode, request, cts.Token);
             }
             finally
             {
                 Console.SetError(originalError);
             }
-
-            monitorCts.Cancel();
-            await monitorTask;
 
             Assert.True(generationStarted, "Active cancellation requires proof that generation started before cancellation.");
             Assert.Equal(130, exitCode);
@@ -636,6 +629,23 @@ public class CancellationTests
                 VolumeSize = 100,
             },
         };
+
+    // ponytail: decorate real writers; cancellation needs no polling or artificial workload.
+    private sealed class CancelAfterWriteLoadFileWriter(ILoadFileWriter writer, Action cancel) : ILoadFileWriter
+    {
+        public string FormatName => writer.FormatName;
+
+        public string FileExtension => writer.FileExtension;
+
+        public async Task WriteAsync(Stream stream, FileGenerationRequest request, IReadOnlyList<FileData> processedFiles, ChaosEngine? chaosEngine = null, CancellationToken cancellationToken = default)
+        {
+            await writer.WriteAsync(stream, request, processedFiles, chaosEngine, cancellationToken);
+            Assert.False(cancellationToken.IsCancellationRequested);
+            Assert.True(stream.Length > 0, "Cancellation must follow real Load File output.");
+            cancel();
+            Assert.True(cancellationToken.IsCancellationRequested);
+        }
+    }
 
     private sealed class TokenCheckingMode : IGenerationMode
     {
