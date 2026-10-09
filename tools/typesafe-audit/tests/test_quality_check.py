@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -57,6 +58,401 @@ class CoverageGapTests(unittest.TestCase):
         # traceability rows also provide owning test names.
         self.assertIn("REQ-171", by_method["ValidateDestination"]["req_ids"])
         self.assertIn("ProductionSetPostValidatorTests.ValidateDestination_MissingDirectory_ShouldThrow", by_method["ValidateDestination"]["tests"])
+
+    def test_source_only_req_evidence_without_tsv_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src" / "Validation"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Validation;\n"
+                "public class ProductionSetPostValidator\n"
+                "{\n"
+                "    // Source-only requirement evidence (REQ-171)\n"
+                "    public void ValidateDestination(string dest)\n"
+                "    {\n"
+                "        if (dest == null) throw new System.ArgumentNullException();\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "ProductionSetPostValidator.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            expected_hash = hashlib.sha256(cs_file.read_bytes()).hexdigest()
+
+            # No TSV file exists in repo_dir/tests/req-traceability.tsv.
+            # Test both source-relative and repository-relative paths, including Windows backslashes.
+            shapes = [
+                "Validation/ProductionSetPostValidator.cs",
+                "src/Validation/ProductionSetPostValidator.cs",
+                "Validation\\ProductionSetPostValidator.cs",
+                "src\\Validation\\ProductionSetPostValidator.cs",
+            ]
+            for shape in shapes:
+                cobertura_content = f"""<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.5" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="{shape}">
+          <methods>
+            <method name="ValidateDestination" signature="()">
+              <lines>
+                <line number="6" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+                xml_path = repo_dir / "cobertura.xml"
+                xml_path.write_text(cobertura_content, encoding="utf-8")
+                gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+                self.assertEqual(len(gaps), 1, f"Failed for shape {shape}")
+                gap = gaps[0]
+                self.assertEqual(gap["file"], "src/Validation/ProductionSetPostValidator.cs", f"Failed file for shape {shape}")
+                self.assertEqual(gap["method"], "ValidateDestination", f"Failed method for shape {shape}")
+                self.assertEqual(gap["req_ids"], ["REQ-171"], f"Failed req_ids for shape {shape}")
+                self.assertEqual(gap["tests"], [], f"Failed tests for shape {shape}")
+                self.assertEqual(gap["source_sha256"], expected_hash, f"Failed sha256 for shape {shape}")
+                self.assertNotEqual(gap["source_sha256"], "")
+
+    def test_tsv_only_req_evidence_without_source_mention(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src" / "Validation"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Validation;\n"
+                "public class ProductionSetPostValidator\n"
+                "{\n"
+                "    public void ValidateDestination(string dest)\n"
+                "    {\n"
+                "        if (dest == null) throw new System.ArgumentNullException();\n"
+                "    }\n"
+                "}\n"
+            )
+            (src_dir / "ProductionSetPostValidator.cs").write_text(cs_source, encoding="utf-8")
+
+            tests_dir = repo_dir / "tests"
+            tests_dir.mkdir(parents=True)
+            tsv_content = (
+                "req_id\tcoverage\treference\tnotes\n"
+                "REQ-333\tunit\tProductionSetPostValidatorTests.Validate_Throws\tdestination validation\n"
+            )
+            (tests_dir / "req-traceability.tsv").write_text(tsv_content, encoding="utf-8")
+
+            cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.5" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Zipper.Validation.ProductionSetPostValidator" filename="src/Validation/ProductionSetPostValidator.cs">
+          <methods>
+            <method name="ValidateDestination" signature="()">
+              <lines>
+                <line number="6" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+            xml_path = repo_dir / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+            self.assertEqual(len(gaps), 1)
+            gap = gaps[0]
+            self.assertEqual(gap["req_ids"], ["REQ-333"])
+            self.assertEqual(gap["tests"], ["ProductionSetPostValidatorTests.Validate_Throws"])
+
+    def test_coverage_out_of_scope_paths_not_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td) / "repo"
+            repo_dir.mkdir(parents=True)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+
+            # File actually exists on disk outside the repository scope
+            outside_file = Path(td) / "outside.cs"
+            outside_file.write_text("// REQ-999\npublic class Outside { public void Foo() {} }", encoding="utf-8")
+            self.assertTrue(outside_file.is_file())
+
+            cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.5" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Outside" filename="../../outside.cs">
+          <methods>
+            <method name="Foo" signature="()">
+              <lines>
+                <line number="1" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+            xml_path = repo_dir / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+            self.assertEqual(len(gaps), 1)
+            gap = gaps[0]
+            self.assertEqual(gap["source_sha256"], "")
+            self.assertEqual(gap["req_ids"], [])
+
+    def test_adjacent_methods_do_not_bleed_req_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "public class Service\n"
+                "{\n"
+                "    // REQ-100\n"
+                "    public void MethodA() { var a = 1; }\n"
+                "\n"
+                "    // REQ-120\n"
+                "    public void MethodEmpty()\n"
+                "    { }\n"
+                "\n"
+                "    // REQ-150\n"
+                "    public int MethodExpr()\n"
+                "        => 42;\n"
+                "\n"
+                "    // REQ-200\n"
+                "    public void MethodB()\n"
+                "    {\n"
+                "        var b = 2;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "Service.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            cobertura_content = """<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.5" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="Service" filename="Service.cs">
+          <methods>
+            <method name="MethodB" signature="()">
+              <lines>
+                <line number="17" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+            xml_path = repo_dir / "cobertura.xml"
+            xml_path.write_text(cobertura_content, encoding="utf-8")
+            gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+            self.assertEqual(len(gaps), 1)
+            gap = gaps[0]
+            self.assertEqual(gap["method"], "MethodB")
+            self.assertEqual(gap["req_ids"], ["REQ-200"])
+            self.assertNotIn("REQ-100", gap["req_ids"])
+            self.assertNotIn("REQ-120", gap["req_ids"])
+            self.assertNotIn("REQ-150", gap["req_ids"])
+
+    def test_normalize_file_path_and_resolve_source_file_direct(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_file = src_dir / "Foo.cs"
+            cs_file.write_text("// REQ-111\npublic class Foo {}", encoding="utf-8")
+            json_file = src_dir / "appsettings.json"
+            json_file.write_text("{}", encoding="utf-8")
+
+            # normalize_file_path assertions across relative, Windows, and absolute styles
+            self.assertEqual(
+                self.gaps.normalize_file_path("Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("src/Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("src\\Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("./src/Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("../src/Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("C:/repo/src/Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("C:/src/repo/src/Foo.cs", repo_dir),
+                ("src/Foo.cs", "Foo.cs"),
+            )
+            self.assertEqual(
+                self.gaps.normalize_file_path("../../outside.cs", repo_dir),
+                ("../../outside.cs", "../../outside.cs"),
+            )
+
+            # resolve_source_file assertions
+            self.assertEqual(self.gaps.resolve_source_file(src_dir, "Foo.cs"), cs_file.resolve())
+            self.assertEqual(self.gaps.resolve_source_file(src_dir, "src/Foo.cs"), cs_file.resolve())
+            self.assertEqual(self.gaps.resolve_source_file(src_dir, "src\\Foo.cs"), cs_file.resolve())
+            self.assertIsNone(self.gaps.resolve_source_file(src_dir, "appsettings.json"))
+            self.assertIsNone(self.gaps.resolve_source_file(src_dir, "../../outside.cs"))
+            self.assertIsNone(self.gaps.resolve_source_file(src_dir, "../secret.txt"))
+
+            # hash_source assertions
+            self.assertEqual(self.gaps.hash_source(None), "")
+            self.assertEqual(self.gaps.hash_source(Path(td) / "nonexistent.cs"), "")
+            self.assertEqual(self.gaps.hash_source(cs_file), hashlib.sha256(cs_file.read_bytes()).hexdigest())
+
+    def test_method_spans_with_string_and_comment_braces(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "public class Service\n"
+                "{\n"
+                "    // REQ-300\n"
+                "    public void MethodWithStringBraces()\n"
+                "    {\n"
+                "        string s = \"{ test }\"; // comment with }\n"
+                "        string verbatim = @\" { multiline\n"
+                "        } \";\n"
+                "    }\n"
+                "\n"
+                "    // REQ-301\n"
+                "    public void NextMethod()\n"
+                "    {\n"
+                "        int x = 1;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "Service.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            self.assertEqual(self.gaps.method_for_line(src_dir, "Service.cs", 6), "MethodWithStringBraces")
+            self.assertEqual(self.gaps.method_for_line(src_dir, "Service.cs", 13), "NextMethod")
+            reqs = self.gaps.extract_method_reqs(cs_file, 6)
+            self.assertEqual(reqs, {"REQ-300"})
+            next_reqs = self.gaps.extract_method_reqs(cs_file, 13)
+            self.assertEqual(next_reqs, {"REQ-301"})
+
+    def test_method_spans_with_multiline_comments_and_char_braces(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "public class Service\n"
+                "{\n"
+                "    /*\n"
+                "       multiline comment with braces {\n"
+                "       }\n"
+                "    */\n"
+                "    char open = '{';\n"
+                "    char close = '}';\n"
+                "\n"
+                "    // REQ-350\n"
+                "    public void Compute()\n"
+                "    {\n"
+                "        char c = '}';\n"
+                "        int y = 2;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "Service.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            self.assertEqual(self.gaps.method_for_line(src_dir, "Service.cs", 13), "Compute")
+            reqs = self.gaps.extract_method_reqs(cs_file, 13)
+            self.assertEqual(reqs, {"REQ-350"})
+
+    def test_record_and_type_declarations_not_treated_as_methods(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Domain;\n"
+                "public record Order(int Id)\n"
+                "{\n"
+                "    // REQ-400\n"
+                "    public void Process()\n"
+                "    {\n"
+                "        int a = 1;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "Order.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            self.assertEqual(self.gaps.method_for_line(src_dir, "Order.cs", 2), "")
+            self.assertEqual(self.gaps.method_for_line(src_dir, "Order.cs", 7), "Process")
+            reqs = self.gaps.extract_method_reqs(cs_file, 7)
+            self.assertEqual(reqs, {"REQ-400"})
+
+    def test_root_src_file_coverage_paths_and_hashes(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "public class A\n"
+                "{\n"
+                "    // REQ-171 root source\n"
+                "    public void Execute()\n"
+                "    {\n"
+                "        int x = 42;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "A.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            expected_hash = hashlib.sha256(cs_file.read_bytes()).hexdigest()
+
+            shapes = ["A.cs", "src/A.cs", "src\\A.cs", ".\\A.cs", "./src/A.cs"]
+            for shape in shapes:
+                cobertura_content = f"""<?xml version="1.0" encoding="utf-8"?>
+<coverage line-rate="0.5" branch-rate="0.5" version="1.9">
+  <packages>
+    <package name="Zipper">
+      <classes>
+        <class name="A" filename="{shape}">
+          <methods>
+            <method name="Execute" signature="()">
+              <lines>
+                <line number="6" hits="0" branch="False" />
+              </lines>
+            </method>
+          </methods>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+                xml_path = repo_dir / "cobertura.xml"
+                xml_path.write_text(cobertura_content, encoding="utf-8")
+                gaps = self.gaps.extract_gaps(xml_path, repo_dir)
+                self.assertEqual(len(gaps), 1, f"Failed for shape {shape}")
+                gap = gaps[0]
+                self.assertEqual(gap["file"], "src/A.cs", f"Failed file for shape {shape}")
+                self.assertEqual(gap["method"], "Execute", f"Failed method for shape {shape}")
+                self.assertEqual(gap["req_ids"], ["REQ-171"], f"Failed req_ids for shape {shape}")
+                self.assertEqual(gap["source_sha256"], expected_hash, f"Failed sha256 for shape {shape}")
 
     def test_gap_budget_enforced(self):
         gaps = self.gaps.extract_gaps(CORPUS / "cobertura.xml", CORPUS, max_gaps=1)
@@ -382,6 +778,146 @@ class MutationTests(unittest.TestCase):
             self.assertEqual(survivor["file"], "src/Validation/ProductionSetPostValidator.cs")
             self.assertFalse(survivor["file"].startswith("src//"))
             self.assertEqual(survivor["method"], "ValidateDestination")
+
+    def test_mutation_paths_normalized_across_shapes_and_separators(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src" / "Validation"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "namespace Zipper.Validation;\n"
+                "public class ProductionSetPostValidator\n"
+                "{\n"
+                "    // Source-only requirement (REQ-171)\n"
+                "    public void ValidateDestination(string dest)\n"
+                "    {\n"
+                "        var p = dest + 1;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "ProductionSetPostValidator.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            expected_hash = hashlib.sha256(cs_file.read_bytes()).hexdigest()
+
+            # No TSV file in tests/ - source-only REQ evidence must be retained
+            shapes = [
+                "Validation/ProductionSetPostValidator.cs",
+                "src/Validation/ProductionSetPostValidator.cs",
+                "Validation\\ProductionSetPostValidator.cs",
+                "src\\Validation\\ProductionSetPostValidator.cs",
+            ]
+            for shape in shapes:
+                stryker_json = repo_dir / "stryker.json"
+                report_data = {
+                    "schemaVersion": "4",
+                    "files": {
+                        shape: {
+                            "language": "csharp",
+                            "mutants": [
+                                {
+                                    "id": 1,
+                                    "mutatorName": "Arithmetic",
+                                    "description": "dest + 1 changed",
+                                    "location": {"start": {"line": 7, "column": 10}, "end": {"line": 7, "column": 20}},
+                                    "status": "Survived"
+                                }
+                            ]
+                        }
+                    }
+                }
+                stryker_json.write_text(json.dumps(report_data), encoding="utf-8")
+                categories = self.mutation.parse_report(stryker_json, repo_dir)
+                self.assertIn("survived", categories, f"Failed for shape {shape}")
+                survivor = categories["survived"][0]
+                self.assertEqual(survivor["file"], "src/Validation/ProductionSetPostValidator.cs", f"Failed file for shape {shape}")
+                self.assertEqual(survivor["method"], "ValidateDestination", f"Failed method for shape {shape}")
+                self.assertEqual(survivor["source_sha256"], expected_hash, f"Failed sha256 for shape {shape}")
+                self.assertNotEqual(survivor["source_sha256"], "")
+                self.assertEqual(survivor["req_ids"], ["REQ-171"], f"Failed req_ids for shape {shape}")
+
+    def test_mutation_out_of_scope_paths_not_read(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td) / "repo"
+            repo_dir.mkdir(parents=True)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+
+            outside_file = Path(td) / "outside.cs"
+            outside_file.write_text("// REQ-999\npublic class Outside { public void Foo() {} }", encoding="utf-8")
+            self.assertTrue(outside_file.is_file())
+
+            stryker_json = repo_dir / "stryker.json"
+            report_data = {
+                "schemaVersion": "4",
+                "files": {
+                    "../../outside.cs": {
+                        "language": "csharp",
+                        "mutants": [
+                            {
+                                "id": 1,
+                                "mutatorName": "Arithmetic",
+                                "description": "outside mutant",
+                                "location": {"start": {"line": 1, "column": 1}, "end": {"line": 1, "column": 10}},
+                                "status": "Survived"
+                            }
+                        ]
+                    }
+                }
+            }
+            stryker_json.write_text(json.dumps(report_data), encoding="utf-8")
+            categories = self.mutation.parse_report(stryker_json, repo_dir)
+            self.assertIn("survived", categories)
+            survivor = categories["survived"][0]
+            self.assertEqual(survivor["source_sha256"], "")
+            self.assertEqual(survivor["req_ids"], [])
+
+    def test_root_src_file_mutation_paths_and_hashes(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_dir = Path(td)
+            src_dir = repo_dir / "src"
+            src_dir.mkdir(parents=True)
+            cs_source = (
+                "public class A\n"
+                "{\n"
+                "    // REQ-171 root source\n"
+                "    public void Execute()\n"
+                "    {\n"
+                "        int x = 42;\n"
+                "    }\n"
+                "}\n"
+            )
+            cs_file = src_dir / "A.cs"
+            cs_file.write_text(cs_source, encoding="utf-8")
+            expected_hash = hashlib.sha256(cs_file.read_bytes()).hexdigest()
+
+            shapes = ["A.cs", "src/A.cs", "src\\A.cs", ".\\A.cs", "./src/A.cs"]
+            for shape in shapes:
+                stryker_json = repo_dir / "stryker.json"
+                report_data = {
+                    "schemaVersion": "4",
+                    "files": {
+                        shape: {
+                            "language": "csharp",
+                            "mutants": [
+                                {
+                                    "id": 1,
+                                    "mutatorName": "Arithmetic",
+                                    "description": "x = 42 changed",
+                                    "location": {"start": {"line": 6, "column": 9}, "end": {"line": 6, "column": 19}},
+                                    "status": "Survived"
+                                }
+                            ]
+                        }
+                    }
+                }
+                stryker_json.write_text(json.dumps(report_data), encoding="utf-8")
+                categories = self.mutation.parse_report(stryker_json, repo_dir)
+                self.assertIn("survived", categories, f"Failed for shape {shape}")
+                survivor = categories["survived"][0]
+                self.assertEqual(survivor["file"], "src/A.cs", f"Failed file for shape {shape}")
+                self.assertEqual(survivor["method"], "Execute", f"Failed method for shape {shape}")
+                self.assertEqual(survivor["source_sha256"], expected_hash, f"Failed sha256 for shape {shape}")
+                self.assertEqual(survivor["req_ids"], ["REQ-171"], f"Failed req_ids for shape {shape}")
 
 
 

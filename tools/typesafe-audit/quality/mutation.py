@@ -8,13 +8,21 @@ surviving-mutant list; it never decides survivor status.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from coverage_gaps import _REQ_ID, _GENERATED_MARKERS, method_for_line, traceability_rows
+from coverage_gaps import (
+    _REQ_ID,
+    _GENERATED_MARKERS,
+    method_for_line,
+    traceability_rows,
+    normalize_file_path,
+    resolve_source_file,
+    extract_method_reqs,
+    hash_source,
+)
 
 _CATEGORY = {
     "Survived": "survived",
@@ -22,37 +30,6 @@ _CATEGORY = {
     "Timeout": "timeout",
     "NoCoverage": "no_coverage",
 }
-
-
-def normalize_file_path(raw_filename: str, repo_root: Path) -> tuple[str, str]:
-    """Returns (file_entry, rel_to_src).
-
-    file_entry: repo-relative path starting with 'src/', e.g. 'src/LoadFiles/Foo.cs'
-    rel_to_src: path relative to src/, e.g. 'LoadFiles/Foo.cs'
-    """
-    raw_filename = raw_filename.replace("\\", "/")
-    p = Path(raw_filename)
-    if p.is_absolute():
-        try:
-            rel = p.resolve().relative_to(repo_root.resolve())
-            norm = str(rel).replace("\\", "/")
-        except ValueError:
-            try:
-                rel = p.resolve().relative_to((repo_root / "src").resolve())
-                norm = f"src/{str(rel).replace('\\', '/')}"
-            except ValueError:
-                norm = raw_filename
-    else:
-        norm = raw_filename
-
-    if norm.startswith("src/"):
-        file_entry = norm
-        rel_to_src = norm[4:]
-    else:
-        file_entry = f"src/{norm}"
-        rel_to_src = norm
-
-    return file_entry, rel_to_src
 
 
 def parse_report(path: Path, repo_root: Path) -> dict[str, list[dict]]:
@@ -64,12 +41,11 @@ def parse_report(path: Path, repo_root: Path) -> dict[str, list[dict]]:
 
     categories: dict[str, list[dict]] = {}
     for raw_filename, data in report.get("files", {}).items():
-        raw_filename = raw_filename.replace("\\", "/")
-        if any(marker in raw_filename for marker in _GENERATED_MARKERS):
+        file_entry, rel_to_src = normalize_file_path(raw_filename, repo_root)
+        if any(marker in file_entry for marker in _GENERATED_MARKERS) or any(marker in rel_to_src for marker in _GENERATED_MARKERS):
             continue
 
-        file_entry, rel_to_src = normalize_file_path(raw_filename, repo_root)
-        source = source_root / rel_to_src
+        source = resolve_source_file(source_root, rel_to_src)
 
         for mutant in data.get("mutants", []):
             category = _CATEGORY.get(mutant.get("status", ""))
@@ -78,12 +54,13 @@ def parse_report(path: Path, repo_root: Path) -> dict[str, list[dict]]:
             line = mutant.get("location", {}).get("start", {}).get("line", 0)
             method = method_for_line(source_root, rel_to_src, line)
             reqs: set[str] = set()
-            if method and source.exists():
-                text = "\n".join(source.read_text(encoding="utf-8", errors="replace").splitlines()[max(0, line - 40): line])
-                reqs.update(_REQ_ID.findall(text))
-            for row in rows:
-                if Path(rel_to_src).stem and row["reference"].split(".")[0].startswith(Path(rel_to_src).stem):
-                    reqs.add(row["req_id"])
+            if source is not None:
+                reqs.update(extract_method_reqs(source, line))
+            stem = Path(rel_to_src).stem
+            if stem:
+                for row in rows:
+                    if row["reference"].split(".")[0].startswith(stem):
+                        reqs.add(row["req_id"])
             entry = {
                 "origin": "mutation",
                 "category": category,
@@ -92,7 +69,7 @@ def parse_report(path: Path, repo_root: Path) -> dict[str, list[dict]]:
                 "line": line,
                 "mutator": mutant.get("mutatorName", ""),
                 "description": mutant.get("description", ""),
-                "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest() if source.exists() else "",
+                "source_sha256": hash_source(source),
                 "req_ids": sorted(reqs),
             }
             categories.setdefault(category, []).append(entry)
