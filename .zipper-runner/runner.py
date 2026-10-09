@@ -47,6 +47,7 @@ ACTIVE_AGENT = os.environ.get("ACTIVE_AGENT", "")
 PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
+MAIN_REMOTE_REF = "origin/main"
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -350,17 +351,17 @@ def check_api_token_health(agent_name: str):
 
     return plugin.check_token_health()
 
-def wait_for_tokens() -> bool:
+def wait_for_tokens() -> None:
     """Checks token health for the current agent. Falls back through candidates on exhaustion."""
     if not AGENT_CANDIDATES:
         AGENT_CANDIDATES[:] = probe_and_select_agents()
-        return True
+        return
     exhausted = []
     while True:
         name = _current_agent()
         print(f"Initializing API token health gateway for {name!r}...")
         if check_api_token_health(name):
-            return True
+            return
         exhausted.append(name)
         if not _fallback():
             print("API is out of tokens for all agents. Exiting to allow next cron cycle to retry.")
@@ -1054,7 +1055,7 @@ def _sync_main_after_merge() -> bool:
     if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
         print("Main sync deferred: repository is not clean on main. User work preserved.")
         return False
-    for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", "origin/main"]):
+    for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
         code, _, error = run_cmd(command, cwd=REPO_PATH)
         if code != 0:
             print(f"Main sync deferred: {error.strip()}")
@@ -1801,17 +1802,17 @@ def main():
     run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
 
     was_clean = _repo_is_clean(REPO_PATH)
-    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", "origin/main"], cwd=REPO_PATH)
+    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", MAIN_REMOTE_REF], cwd=REPO_PATH)
     if rebase_code != 0:
         _cleanup_git_state()
         if was_clean:
             print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
-            run_cmd(["git", "reset", "--hard", "origin/main"], cwd=REPO_PATH)
+            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
         else:
             print(f"Rebase failed ({rebase_err.strip()}) due to leftover uncommitted files. Auto-stashing and resetting to origin/main for autonomous continuity.")
             ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
             run_cmd(["git", "stash", "--include-untracked", "-m", f"runner-auto-recovery-{ts}"], cwd=REPO_PATH)
-            run_cmd(["git", "reset", "--hard", "origin/main"], cwd=REPO_PATH)
+            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
             run_cmd(["git", "clean", "-fd"], cwd=REPO_PATH)
             if _should_send_rate_limited("[Runner] Auto-Recovery: Stashed dirty files and reset main"):
                 send_email(

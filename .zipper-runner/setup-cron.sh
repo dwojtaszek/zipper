@@ -43,7 +43,8 @@ BABYSIT_JOB="*/5 * * * * $WRAPPER_PATH --babysit-only"
 CURRENT_CRON="$(crontab -l 2>/dev/null || true)"
 
 has_runner_job() {
-    printf '%s\n' "$CURRENT_CRON" | awk -v wrapper="$WRAPPER_PATH" -v wanted="$1" '
+    local wanted="$1"
+    printf '%s\n' "$CURRENT_CRON" | awk -v wrapper="$WRAPPER_PATH" -v wanted="$wanted" '
         /^[[:space:]]*(#|$)/ {next}
         {
             cmd = ($1 ~ /^@/) ? 2 : 6

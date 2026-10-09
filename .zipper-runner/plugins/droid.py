@@ -71,102 +71,107 @@ def check_token_health() -> bool:
         return False
 
 
-def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
-    """
-    Runs a coding mission non-interactively using droid exec.
+class _MissionOutput:
+    def __init__(self):
+        self.raw = bytearray()
+        self.stderr = bytearray()
+        self.messages = []
+        self.final_text = None
+        self.structured = False
+        self.pending = bytearray()
+        self.scanned = 0
 
-    This plugin starts a fresh exec even when is_continue is True.
-    The agent reads current worktree state; prior conversation is not resumed.
+    def stdout_text(self):
+        if self.structured:
+            return self.final_text + "\n" if self.final_text is not None else "".join(self.messages)
+        return self.raw.decode(errors="replace")
 
-    Args:
-        prompt: The task description to pass to the agent.
-        cwd: Absolute path to the git worktree where the work happens.
-        is_continue: Currently a no-op for Droid — included for interface parity.
-
-    Returns:
-        (exit_code, stdout, stderr)
-    """
-    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
-    print(f"[droid] Running mission (continue={is_continue}) in {cwd}", flush=True)
-    p = None
-    output = {"stdout": bytearray(), "stderr": bytearray()}
-    messages = []
-    final_text = None
-    structured = False
-    def captured_stdout():
-        if structured:
-            return final_text + "\n" if final_text is not None else "".join(messages)
-        return output["stdout"].decode(errors="replace")
-    def record_event(line):
-        nonlocal structured, final_text
+    def _record_event(self, line):
         try:
             event = json.loads(line)
         except (ValueError, UnicodeDecodeError):
             return
         if not isinstance(event, dict) or not isinstance(event.get("type"), str):
             return
-        structured = True
-        output["stdout"].clear()
+        self.structured = True
+        self.raw.clear()
         # Log event metadata only, never prompts, tool arguments, or results.
         if event.get("type") == "message" and event.get("role") == "assistant":
             if isinstance(event.get("text"), str):
-                messages.append(event["text"] + "\n")
+                self.messages.append(event["text"] + "\n")
             print("[droid] assistant progress", flush=True)
         elif event.get("type") == "completion" and isinstance(event.get("finalText"), str):
-            final_text = event["finalText"]
+            self.final_text = event["finalText"]
+
+    def consume(self, stream, chunk):
+        if stream == "stderr":
+            self.stderr.extend(chunk)
+            return
+        if not chunk:
+            self._record_event(self.pending)
+            return
+        if not self.structured:
+            self.raw.extend(chunk)
+        self.pending.extend(chunk)
+        newline = self.pending.find(b"\n", self.scanned)
+        while newline >= 0:
+            self._record_event(self.pending[:newline])
+            del self.pending[:newline + 1]
+            newline = self.pending.find(b"\n")
+        self.scanned = len(self.pending)
+
+
+def _read_available(selector, output, wait):
+    for key, _ in selector.select(wait):
+        chunk = os.read(key.fd, 65536)
+        output.consume(key.data, chunk)
+        if not chunk:
+            selector.unregister(key.fileobj)
+
+
+def _drain_output(p, cmd, output):
+    started = time.monotonic()
+    heartbeat = started + HEARTBEAT_SECONDS
+    with selectors.DefaultSelector() as selector:
+        selector.register(p.stdout, selectors.EVENT_READ, "stdout")
+        selector.register(p.stderr, selectors.EVENT_READ, "stderr")
+        while selector.get_map():
+            now = time.monotonic()
+            if now - started >= MISSION_TIMEOUT:
+                raise subprocess.TimeoutExpired(cmd, MISSION_TIMEOUT)
+            if now >= heartbeat:
+                print(f"[droid] Mission active ({int(now - started)}s elapsed)", flush=True)
+                heartbeat = now + HEARTBEAT_SECONDS
+            _read_available(selector, output, min(1, MISSION_TIMEOUT - (now - started), heartbeat - now))
+    p.wait(timeout=max(0.01, MISSION_TIMEOUT - (time.monotonic() - started)))
+
+
+def _stop_mission(p):
+    if p is None:
+        return
+    if p.poll() is None or not p.stdout.closed:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.wait()
+    p.stdout.close()
+    p.stderr.close()
+
+
+def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
+    """Run a fresh exec, including continuation requests, and return code/stdout/stderr."""
+    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
+    print(f"[droid] Running mission (continue={is_continue}) in {cwd}", flush=True)
+    p = None
+    output = _MissionOutput()
     try:
-        p = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True,
-        )
-        started = time.monotonic()
-        heartbeat = started + HEARTBEAT_SECONDS
-        pending = bytearray()
-        scanned = 0
-        with selectors.DefaultSelector() as selector:
-            selector.register(p.stdout, selectors.EVENT_READ, "stdout")
-            selector.register(p.stderr, selectors.EVENT_READ, "stderr")
-            while selector.get_map():
-                now = time.monotonic()
-                if now - started >= MISSION_TIMEOUT:
-                    raise subprocess.TimeoutExpired(cmd, MISSION_TIMEOUT)
-                if now >= heartbeat:
-                    print(f"[droid] Mission active ({int(now - started)}s elapsed)", flush=True)
-                    heartbeat = now + HEARTBEAT_SECONDS
-                for key, _ in selector.select(min(1, MISSION_TIMEOUT - (now - started), heartbeat - now)):
-                    chunk = os.read(key.fd, 65536)
-                    if not chunk:
-                        if key.data == "stdout" and pending:
-                            record_event(pending)
-                        selector.unregister(key.fileobj)
-                        continue
-                    if key.data != "stdout" or not structured:
-                        output[key.data].extend(chunk)
-                    if key.data != "stdout":
-                        continue
-                    pending.extend(chunk)
-                    newline = pending.find(b"\n", scanned)
-                    while newline >= 0:
-                        record_event(pending[:newline])
-                        del pending[:newline + 1]
-                        newline = pending.find(b"\n")
-                    scanned = len(pending)
-        p.wait(timeout=max(0.01, MISSION_TIMEOUT - (time.monotonic() - started)))
-        return p.returncode, captured_stdout(), output["stderr"].decode(errors="replace")
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+        _drain_output(p, cmd, output)
+        return p.returncode, output.stdout_text(), output.stderr.decode(errors="replace")
     except subprocess.TimeoutExpired:
-        return -1, captured_stdout(), f"Error: Droid mission timed out after {MISSION_TIMEOUT} seconds."
+        return -1, output.stdout_text(), f"Error: Droid mission timed out after {MISSION_TIMEOUT} seconds."
     except Exception as e:
-        return -1, captured_stdout(), str(e)
+        return -1, output.stdout_text(), str(e)
     finally:
-        if p is not None:
-            if p.poll() is None or (p.stdout is not None and not p.stdout.closed):
-                try:
-                    os.killpg(p.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                p.wait()
-            p.stdout.close()
-            p.stderr.close()
+        _stop_mission(p)
