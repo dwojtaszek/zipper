@@ -13,6 +13,7 @@ runner loads .zipper-runner/.env before importing this module).
 
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 
@@ -53,6 +54,16 @@ COMPLETION_LEVELS = [
 ]
 
 _audit = None
+
+
+def _number_in_range(value, lower, upper):
+    """True for finite numeric values in the inclusive range, excluding bool."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and lower <= value <= upper
+        and math.isfinite(value)
+    )
 
 
 def _audit_runner():
@@ -109,6 +120,10 @@ def _ask(state, questions):
             else:
                 value = answer.get("score")
             confidence = answer.get("confidence")
+            if confidence is None and question["type"] != "noul":
+                return None
+            if confidence is not None and not _number_in_range(confidence, 0.0, 1.0):
+                return None
             if confidence is not None and confidence < threshold:
                 return None
             rows[qid] = {"answer": value, "confidence": confidence}
@@ -208,10 +223,10 @@ def verify_completion(issue_text, diff_text):
     if rows is None:
         return None
     score = rows["requirements_met"]["answer"]
-    if not isinstance(score, (int, float)):
+    if not _number_in_range(score, 0, len(COMPLETION_LEVELS) - 1):
         return None
-    requirements_met = float(score) / (len(COMPLETION_LEVELS) - 1)
     confidence = rows["requirements_met"]["confidence"]
+    requirements_met = float(score) / (len(COMPLETION_LEVELS) - 1)
     return {
         "requirements_met": requirements_met,
         "completed": requirements_met >= COMPLETED_ABOVE and confidence is not None and confidence >= COMPLETED_ABOVE,
@@ -280,12 +295,12 @@ def scan_injection(text):
     if rows is None:
         return None
     value = rows["injection"]["answer"]
-    return float(value) if isinstance(value, (int, float)) else None
+    return float(value) if _number_in_range(value, 0.0, 1.0) else None
 
 
 def injection_verdict(injection_noul):
     """Pure policy from the noul value: block / alert / None (proceed)."""
-    if injection_noul is None:
+    if not _number_in_range(injection_noul, 0.0, 1.0):
         return None
     if injection_noul >= INJECTION_BLOCK_ABOVE:
         return "block"
