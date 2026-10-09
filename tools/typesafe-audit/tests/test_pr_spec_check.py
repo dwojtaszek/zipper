@@ -115,6 +115,170 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("REQ-178", reqs)
         self.assertIn("REQ-179", reqs)
 
+    def test_affected_req_ids_and_obligations_from_tsv_and_changed_test_paths(self):
+        run_check = load_module("pr_spec_run_check_collect_test", CHECK_DIR / "run_check.py")
+        policy = run_check.load_json(run_check.POLICY_PATH)
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            tests_dir = root / "tests"
+            tests_dir.mkdir(parents=True)
+            unit_dir = root / "src" / "Zipper.Tests"
+            unit_dir.mkdir(parents=True)
+            unrelated_dir = root / "other" / "unrelated"
+            unrelated_dir.mkdir(parents=True)
+
+            tsv_content = (
+                "req_id\tcoverage\treference\tnotes\n"
+                "REQ-101\tunit\tATests.TestOne\tUnit test one\n"
+                "REQ-102\tunit\tATests.TestTwo\tUnit test two\n"
+                "REQ-201\te2e\tsample.sh\tE2E test scenario\n"
+                "REQ-301\texemption\t-\tCI release exemption\n"
+            )
+            (tests_dir / "req-traceability.tsv").write_text(tsv_content, encoding="utf-8")
+
+            (unit_dir / "ATests.cs").write_text(
+                "public class ATests {\n"
+                "    public void TestOne() {}\n"
+                "    public void TestTwo() {}\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (unit_dir / "UnrelatedTests.cs").write_text(
+                "public class UnrelatedTests {\n"
+                "    public void Check() {}\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (tests_dir / "sample.sh").write_text("#!/usr/bin/env bash\necho test\n", encoding="utf-8")
+
+            # Same basenames in unrelated directory
+            (unrelated_dir / "ATests.cs").write_text(
+                "public class OtherClass {}\n",
+                encoding="utf-8",
+            )
+            (unrelated_dir / "sample.sh").write_text("#!/usr/bin/env bash\necho other\n", encoding="utf-8")
+
+            # Clean PR/issue context free of textual REQ IDs
+            clean_pr_text = "Fixes #900"
+            clean_issue_texts = {900: "Refactor tests and improve test maintenance."}
+            clean_issues = {
+                900: {
+                    "number": 900,
+                    "body": clean_issue_texts[900],
+                    "comments": [],
+                }
+            }
+
+            # 1. Changed unit test
+            files_unit = [{"path": "src/Zipper.Tests/ATests.cs", "patch": "+ // modified unit test"}]
+            reqs = self.collect.affected_req_ids(
+                files_unit, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=root
+            )
+            self.assertEqual(reqs, ["REQ-101", "REQ-102"])
+            case_unit = {"pr": 900, "body": clean_pr_text, "files": files_unit, "issues": clean_issues}
+            obligations, status = run_check.build_obligations(case_unit, policy, repo_root=root)
+            self.assertEqual(status, "ok")
+            req_obligations = [o for o in obligations if o["kind"] == "requirement"]
+            self.assertEqual([o["ref"] for o in req_obligations], ["REQ-101", "REQ-102"])
+
+            # 2. Changed E2E test
+            files_e2e = [{"path": "tests/sample.sh", "patch": "+ echo updated"}]
+            reqs = self.collect.affected_req_ids(
+                files_e2e, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=root
+            )
+            self.assertEqual(reqs, ["REQ-201"])
+            case_e2e = {"pr": 900, "body": clean_pr_text, "files": files_e2e, "issues": clean_issues}
+            obligations, status = run_check.build_obligations(case_e2e, policy, repo_root=root)
+            self.assertEqual(status, "ok")
+            req_obligations = [o for o in obligations if o["kind"] == "requirement"]
+            self.assertEqual([o["ref"] for o in req_obligations], ["REQ-201"])
+
+            # 3. Exemption: changing tests never derives exemption requirements
+            files_both = files_unit + files_e2e
+            reqs = self.collect.affected_req_ids(
+                files_both, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=root
+            )
+            self.assertEqual(reqs, ["REQ-101", "REQ-102", "REQ-201"])
+            self.assertNotIn("REQ-301", reqs)
+
+            # 4. Unrelated test: no mapped requirements
+            files_unrelated = [{"path": "src/Zipper.Tests/UnrelatedTests.cs", "patch": "+ // unrelated test"}]
+            reqs = self.collect.affected_req_ids(
+                files_unrelated, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=root
+            )
+            self.assertEqual(reqs, [])
+            case_unrelated = {"pr": 900, "body": clean_pr_text, "files": files_unrelated, "issues": clean_issues}
+            obligations, status = run_check.build_obligations(case_unrelated, policy, repo_root=root)
+            self.assertEqual(status, "ok")
+            req_obligations = [o for o in obligations if o["kind"] == "requirement"]
+            self.assertEqual(req_obligations, [])
+
+            # 5. Same-basename unrelated-directory: must not match unit class or e2e script
+            files_same_basename = [
+                {"path": "other/unrelated/ATests.cs", "patch": "+ // unrelated directory"},
+                {"path": "other/unrelated/sample.sh", "patch": "+ echo unrelated"},
+            ]
+            reqs = self.collect.affected_req_ids(
+                files_same_basename, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=root
+            )
+            self.assertEqual(reqs, [])
+            case_same_basename = {"pr": 900, "body": clean_pr_text, "files": files_same_basename, "issues": clean_issues}
+            obligations, status = run_check.build_obligations(case_same_basename, policy, repo_root=root)
+            self.assertEqual(status, "ok")
+            req_obligations = [o for o in obligations if o["kind"] == "requirement"]
+            self.assertEqual(req_obligations, [])
+
+    def test_affected_req_ids_from_actual_repo_traceability_tsv(self):
+        # Testing against real repository REPO_ROOT without textual REQ mentions
+        clean_pr_text = "Fixes #900"
+        clean_issue_texts = {900: "Clean spec body without REQ mentions"}
+
+        files_unit = [{"path": "src/Zipper.Tests/LoadFiles/DatComposingWriterTests.cs", "patch": "+ // clean change"}]
+        reqs = self.collect.affected_req_ids(
+            files_unit, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=REPO_ROOT
+        )
+        self.assertIn("REQ-001", reqs)
+        self.assertIn("REQ-007", reqs)
+        self.assertIn("REQ-010", reqs)
+
+        files_e2e = [{"path": "tests/test-compute-version.sh", "patch": "+ # clean change"}]
+        reqs_e2e = self.collect.affected_req_ids(
+            files_e2e, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=REPO_ROOT
+        )
+        self.assertEqual(reqs_e2e, ["REQ-030"])
+
+        files_same_basename = [{"path": "other/DatComposingWriterTests.cs", "patch": "+ // clean change"}]
+        reqs_same_basename = self.collect.affected_req_ids(
+            files_same_basename, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=REPO_ROOT
+        )
+        self.assertEqual(reqs_same_basename, [])
+
+    def test_affected_req_ids_tolerates_individual_failing_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            tests_dir = root / "tests"
+            tests_dir.mkdir(parents=True)
+            unit_dir = root / "src" / "Zipper.Tests"
+            unit_dir.mkdir(parents=True)
+
+            tsv_content = (
+                "req_id\tcoverage\treference\tnotes\n"
+                "REQ-101\tunit\tValidTests.MethodOne\tValid\n"
+                "REQ-102\tunit\t.BadReference\tInvalid reference\n"
+                "REQ-103\tunit\tValidTests.MethodTwo\tValid\n"
+            )
+            (tests_dir / "req-traceability.tsv").write_text(tsv_content, encoding="utf-8")
+            (unit_dir / "ValidTests.cs").write_text(
+                "public class ValidTests { public void MethodOne() {} public void MethodTwo() {} }\n",
+                encoding="utf-8",
+            )
+
+            files = [{"path": "src/Zipper.Tests/ValidTests.cs", "patch": "+ // test"}]
+            reqs = self.collect.affected_req_ids(files, pr_text="Fixes #900", issue_texts={900: "Clean spec"}, repo_root=root)
+            self.assertEqual(reqs, ["REQ-101", "REQ-103"])
+
+
     def test_spec_evidence_chronological_with_newest_flagged(self):
         issues = {
             42: {

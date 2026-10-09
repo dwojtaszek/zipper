@@ -893,3 +893,50 @@ def resolve_reference(tests_root: Path, row: dict, source_index: SourceIndex | N
     if row["coverage"] == "unit":
         return resolve_unit_reference(tests_root, row["reference"], source_index)
     return resolve_e2e_reference(tests_root, row["reference"], source_index)
+
+
+def resolve_test_paths(
+    repo_root: Path,
+    row: dict,
+    source_index: SourceIndex | None = None,
+) -> set[str]:
+    """Resolve a TSV row to repo-relative file paths for its mapped tests.
+
+    Returns an empty set for exemptions, missing files, or unresolved references.
+    """
+    coverage = row.get("coverage", "").lower()
+    ref = row.get("reference", "").strip()
+    if coverage == "exemption" or not ref or ref == "-":
+        return set()
+
+    root_resolved = repo_root.resolve()
+    if coverage == "unit":
+        parts = ref.split(".")
+        class_spec = ".".join(parts[:-1]) if len(parts) >= 2 else ref
+        cls_name = class_spec.split(".")[-1].strip()
+        if not cls_name:
+            return set()
+        files = _find_class_files(repo_root, cls_name, source_index)
+        paths: set[str] = set()
+        for f in files:
+            try:
+                paths.add(f.resolve().relative_to(root_resolved).as_posix())
+            except ValueError:
+                pass
+        return paths
+
+    if coverage == "e2e":
+        script = ref.split(None, 1)[0].replace("\\", "/")
+        script_path = repo_root / script
+        if not script_path.is_file():
+            script_path = repo_root / "tests" / script
+        if script_path.is_file():
+            try:
+                return {script_path.resolve().relative_to(root_resolved).as_posix()}
+            except ValueError:
+                pass
+        return set()
+
+    return set()
+
+
