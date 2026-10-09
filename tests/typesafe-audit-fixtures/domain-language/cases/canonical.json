@@ -1,4 +1,4 @@
 {
   "case": "canonical",
-  "text": "The ProductionSetOrchestrator generates a Rolling Production Set when the total size exceeds the Volume Size Threshold. Each partition emits an Audit File and manifest."
+  "text": "The ProductionSetOrchestrator generates a Rolling Production Set. Each Volume emits an Audit File and Production Manifest, and Archives adhere to the Target Zip Size."
 }
