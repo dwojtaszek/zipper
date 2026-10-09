@@ -813,9 +813,22 @@ def resolve_unit_reference(tests_root: Path, reference: str, source_index: Sourc
         raise ParseError(f"Test class '{class_spec}' not found under {tests_root}.")
 
     bodies: list[tuple[Path, int, str]] = []
+    by_type: dict[str, list[ClassDeclaration]] = {}
     for decl in matched_classes:
-        for path, start_line, body in find_methods_in_class(decl, method_name):
-            bodies.append((path, start_line, body))
+        by_type.setdefault(decl.full_name, []).append(decl)
+    for parts in by_type.values():
+        direct = [
+            (d.file_path, m.start_line, m.body)
+            for d in parts
+            for m in d.methods
+            if _names_match(method_name, m.name)
+        ]
+        if direct:
+            bodies.extend(direct)
+            continue
+        for d in parts:
+            for nc in d.nested_classes:
+                bodies.extend(find_methods_in_class(nc, method_name))
 
     if not bodies:
         raise ParseError(f"Test method '{reference}' not found (class file: {matched_classes[0].file_path.name}).")

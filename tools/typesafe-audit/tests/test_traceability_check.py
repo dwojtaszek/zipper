@@ -405,6 +405,30 @@ class UnitResolverTests(unittest.TestCase):
             self.assertIn("Assert.True(true)", p1["body"])
             self.assertIn("Assert.False(false)", p2["body"])
 
+            # Partial class: one block has the direct method, another has only a nested
+            # method with the same name — the direct match must win (no ambiguity).
+            (root / "PartDirect.cs").write_text(
+                "public partial class PartialNestedTests {\n"
+                "    public void Shared() { Assert.True(true); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (root / "PartNested.cs").write_text(
+                "public partial class PartialNestedTests {\n"
+                "    public class Inner {\n"
+                "        public void Shared() { Assert.False(false); }\n"
+                "        public void OnlyInNested() { Assert.Equal(2, 2); }\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            direct = resolve_unit_reference(root, "PartialNestedTests.Shared")
+            self.assertIn("Assert.True(true)", direct["body"])
+
+            # When no partial block has a direct match, nested fallback still applies
+            nested_only = resolve_unit_reference(root, "PartialNestedTests.OnlyInNested")
+            self.assertIn("Assert.Equal(2, 2)", nested_only["body"])
+
     def test_unsupported_or_malformed_syntax_raises_parse_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
