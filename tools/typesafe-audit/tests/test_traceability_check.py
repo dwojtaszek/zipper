@@ -173,6 +173,280 @@ class UnitResolverTests(unittest.TestCase):
         with self.assertRaises(ParseError):
             resolve_unit_reference(CORPUS_DIR / "src", "NoDot")
 
+    def test_sibling_class_method_lookup_is_restricted_to_requested_class(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "SharedFile.cs").write_text(
+                "public class ExpectedTests {\n"
+                "    public void OnlyInExpected() { Assert.True(true); }\n"
+                "}\n"
+                "public class OtherTests {\n"
+                "    public void M() { Assert.Equal(1, 2); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            # ExpectedTests.M must fail and not resolve OtherTests.M
+            with self.assertRaises(ParseError) as ctx:
+                resolve_unit_reference(root, "ExpectedTests.M")
+            self.assertIn("not found", str(ctx.exception))
+
+            # OtherTests.M resolves correctly
+            other = resolve_unit_reference(root, "OtherTests.M")
+            self.assertIn("Assert.Equal(1, 2)", other["body"])
+
+            # Sibling classes sharing same method name don't collide or cause false ambiguity
+            (root / "SharedMethods.cs").write_text(
+                "public class SiblingOne {\n"
+                "    public void Common() { Assert.Equal(1, 1); }\n"
+                "}\n"
+                "public class SiblingTwo {\n"
+                "    public void Common() { Assert.Equal(2, 2); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            s1 = resolve_unit_reference(root, "SiblingOne.Common")
+            s2 = resolve_unit_reference(root, "SiblingTwo.Common")
+            self.assertIn("Assert.Equal(1, 1)", s1["body"])
+            self.assertIn("Assert.Equal(2, 2)", s2["body"])
+
+    def test_literal_and_comment_braces_preserve_complete_test_body_and_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "BraceTests.cs").write_text(
+                "public class BraceTests {\n"
+                "    public void WithStringBrace()\n"
+                "    {\n"
+                "        var s = \"}\";\n"
+                "        Assert.Equal(1, 2);\n"
+                "    }\n"
+                "    public void WithCommentBrace()\n"
+                "    {\n"
+                "        // single line brace: }\n"
+                "        /* block brace: } */\n"
+                "        Assert.True(true);\n"
+                "    }\n"
+                "    public void WithRawStringBrace()\n"
+                "    {\n"
+                "        var json = \"\"\"\n"
+                "        {\n"
+                "          \"key\": \"value}\"\n"
+                "        }\n"
+                "        \"\"\";\n"
+                "        Assert.NotNull(json);\n"
+                "    }\n"
+                "    public void WithInterpolatedRawBrace()\n"
+                "    {\n"
+                "        var val = 42;\n"
+                "        var text = $$\"\"\"\n"
+                "        {\n"
+                "          \"k\": \"{{val}}\"\n"
+                "        }\n"
+                "        \"\"\";\n"
+                "        Assert.Contains(\"42\", text);\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            # Test string brace preservation
+            str_case = resolve_unit_reference(root, "BraceTests.WithStringBrace")
+            self.assertIn("Assert.Equal(1, 2);", str_case["body"])
+            expected_body = (
+                "    public void WithStringBrace()\n"
+                "    {\n"
+                "        var s = \"}\";\n"
+                "        Assert.Equal(1, 2);\n"
+                "    }"
+            )
+            self.assertEqual(expected_body, str_case["body"])
+            self.assertEqual(trace_parse.sha256_text(expected_body), str_case["sha256"])
+
+            # Test comment brace preservation
+            comment_case = resolve_unit_reference(root, "BraceTests.WithCommentBrace")
+            self.assertIn("Assert.True(true);", comment_case["body"])
+
+            # Test raw string brace preservation
+            raw_case = resolve_unit_reference(root, "BraceTests.WithRawStringBrace")
+            self.assertIn("Assert.NotNull(json);", raw_case["body"])
+
+            # Test interpolated raw string brace preservation
+            interp_case = resolve_unit_reference(root, "BraceTests.WithInterpolatedRawBrace")
+            self.assertIn("Assert.Contains(\"42\", text);", interp_case["body"])
+
+    def test_expression_bodied_test_methods(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "ExprTests.cs").write_text(
+                "public class ExprTests {\n"
+                "    public void InlineExpr() => Assert.True(true);\n"
+                "    public void MultiLineExpr() =>\n"
+                "        Assert.Equal(42, 40 + 2);\n"
+                "    public async Task AsyncExpr() => await Task.Yield();\n"
+                "    public void LambdaExpr() => Assert.Throws<InvalidOperationException>(() => {\n"
+                "        throw new InvalidOperationException();\n"
+                "    });\n"
+                "    public void InitExpr() => Assert.NotNull(new { Foo = 1 });\n"
+                "    public void SwitchExpr() => Assert.True(1 switch { 1 => true, _ => false });\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            inline_case = resolve_unit_reference(root, "ExprTests.InlineExpr")
+            self.assertEqual("    public void InlineExpr() => Assert.True(true);", inline_case["body"])
+            self.assertEqual(trace_parse.sha256_text(inline_case["body"]), inline_case["sha256"])
+
+            multi_case = resolve_unit_reference(root, "ExprTests.MultiLineExpr")
+            expected_multi = (
+                "    public void MultiLineExpr() =>\n"
+                "        Assert.Equal(42, 40 + 2);"
+            )
+            self.assertEqual(expected_multi, multi_case["body"])
+            self.assertEqual(trace_parse.sha256_text(expected_multi), multi_case["sha256"])
+
+            async_case = resolve_unit_reference(root, "ExprTests.AsyncExpr")
+            self.assertEqual("    public async Task AsyncExpr() => await Task.Yield();", async_case["body"])
+
+            lambda_case = resolve_unit_reference(root, "ExprTests.LambdaExpr")
+            self.assertIn("Assert.Throws<InvalidOperationException>", lambda_case["body"])
+            self.assertIn("throw new InvalidOperationException();", lambda_case["body"])
+            self.assertTrue(lambda_case["body"].endswith("});"))
+            self.assertEqual(trace_parse.sha256_text(lambda_case["body"]), lambda_case["sha256"])
+
+            init_case = resolve_unit_reference(root, "ExprTests.InitExpr")
+            self.assertEqual("    public void InitExpr() => Assert.NotNull(new { Foo = 1 });", init_case["body"])
+
+            switch_case = resolve_unit_reference(root, "ExprTests.SwitchExpr")
+            self.assertEqual("    public void SwitchExpr() => Assert.True(1 switch { 1 => true, _ => false });", switch_case["body"])
+
+    def test_generic_method_with_new_constraint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "GenericTests.cs").write_text(
+                "public class GenericTests {\n"
+                "    public void TestGeneric<T>() where T : new() {\n"
+                "        var item = new T();\n"
+                "        Assert.NotNull(item);\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            case = resolve_unit_reference(root, "GenericTests.TestGeneric")
+            self.assertIn("where T : new()", case["body"])
+            self.assertIn("Assert.NotNull(item);", case["body"])
+
+    def test_nested_and_partial_class_semantics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "NestedTests.cs").write_text(
+                "public class OuterTests {\n"
+                "    public void OuterOnly() { Assert.True(true); }\n"
+                "    public class InnerTests {\n"
+                "        public void InnerOnly() { Assert.Equal(1, 1); }\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            # Method inside nested class resolved via outer class
+            nested_via_outer = resolve_unit_reference(root, "OuterTests.InnerOnly")
+            self.assertIn("Assert.Equal(1, 1)", nested_via_outer["body"])
+
+            # Method inside nested class resolved via qualified class name
+            nested_qualified = resolve_unit_reference(root, "OuterTests.InnerTests.InnerOnly")
+            self.assertIn("Assert.Equal(1, 1)", nested_qualified["body"])
+
+            # Method inside nested class resolved directly via inner class name
+            nested_direct = resolve_unit_reference(root, "InnerTests.InnerOnly")
+            self.assertEqual(nested_qualified["body"], nested_direct["body"])
+
+            # When outer and inner have same method name, Outer resolves outer and Qualified resolves inner
+            (root / "AmbiguousNested.cs").write_text(
+                "public class CollidingOuter {\n"
+                "    public void Clashing() { Assert.True(true); }\n"
+                "    public class CollidingInner {\n"
+                "        public void Clashing() { Assert.False(false); }\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            outer_clash = resolve_unit_reference(root, "CollidingOuter.Clashing")
+            self.assertIn("Assert.True(true)", outer_clash["body"])
+
+            qualified_inner = resolve_unit_reference(root, "CollidingOuter.CollidingInner.Clashing")
+            self.assertIn("Assert.False(false)", qualified_inner["body"])
+
+            # Record struct and record class
+            (root / "RecordTests.cs").write_text(
+                "public record struct RecordStructTests {\n"
+                "    public void StructMethod() { Assert.True(true); }\n"
+                "}\n"
+                "public record class RecordClassTests {\n"
+                "    public void ClassMethod() { Assert.True(true); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            rs = resolve_unit_reference(root, "RecordStructTests.StructMethod")
+            self.assertIn("Assert.True(true)", rs["body"])
+            rc = resolve_unit_reference(root, "RecordClassTests.ClassMethod")
+            self.assertIn("Assert.True(true)", rc["body"])
+
+            # Partial class split across files
+            (root / "Part1.cs").write_text(
+                "public partial class SplitTests {\n"
+                "    public void PartOneMethod() { Assert.True(true); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (root / "Part2.cs").write_text(
+                "public partial class SplitTests {\n"
+                "    public void PartTwoMethod() { Assert.False(false); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            p1 = resolve_unit_reference(root, "SplitTests.PartOneMethod")
+            p2 = resolve_unit_reference(root, "SplitTests.PartTwoMethod")
+            self.assertIn("Assert.True(true)", p1["body"])
+            self.assertIn("Assert.False(false)", p2["body"])
+
+            # Partial class: one block has the direct method, another has only a nested
+            # method with the same name — the direct match must win (no ambiguity).
+            (root / "PartDirect.cs").write_text(
+                "public partial class PartialNestedTests {\n"
+                "    public void Shared() { Assert.True(true); }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            (root / "PartNested.cs").write_text(
+                "public partial class PartialNestedTests {\n"
+                "    public class Inner {\n"
+                "        public void Shared() { Assert.False(false); }\n"
+                "        public void OnlyInNested() { Assert.Equal(2, 2); }\n"
+                "    }\n"
+                "}\n",
+                encoding="utf-8",
+            )
+            direct = resolve_unit_reference(root, "PartialNestedTests.Shared")
+            self.assertIn("Assert.True(true)", direct["body"])
+
+            # When no partial block has a direct match, nested fallback still applies
+            nested_only = resolve_unit_reference(root, "PartialNestedTests.OnlyInNested")
+            self.assertIn("Assert.Equal(2, 2)", nested_only["body"])
+
+    def test_unsupported_or_malformed_syntax_raises_parse_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bad_brace = root / "UnclosedBrace.cs"
+            bad_brace.write_text("public class Broken { public void M() {", encoding="utf-8")
+            with self.assertRaises(ParseError):
+                resolve_unit_reference(root, "Broken.M")
+
+            bad_string = root / "UnclosedString.cs"
+            bad_string.write_text("public class BrokenStr { public void M() { var s = \"unterminated; } }", encoding="utf-8")
+            with self.assertRaises(ParseError):
+                resolve_unit_reference(root, "BrokenStr.M")
+
+            bad_comment = root / "UnclosedComment.cs"
+            bad_comment.write_text("public class BrokenComment { public void M() { /* unterminated } }", encoding="utf-8")
+            with self.assertRaises(ParseError):
+                resolve_unit_reference(root, "BrokenComment.M")
+
 
 class E2eResolverTests(unittest.TestCase):
     def test_resolves_whole_script_reference(self):
