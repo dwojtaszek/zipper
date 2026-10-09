@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import sys
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -36,6 +38,20 @@ def isolate_repo_root(testcase: unittest.TestCase) -> None:
     patcher = mock.patch.object(runner, "REPO_ROOT", repo)
     patcher.start()
     testcase.addCleanup(patcher.stop)
+
+
+class FakeResponse:
+    def __init__(self, data: bytes):
+        self.data = data
+
+    def read(self) -> bytes:
+        return self.data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 
 class ResolveInputsTests(unittest.TestCase):
@@ -91,6 +107,13 @@ class ResolveInputsTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             runner.resolve_inputs(file_list, 1024, 100)
 
+    def test_rejects_file_list_invalid_utf8(self):
+        file_list = self.tmp / "files_invalid.list"
+        file_list.write_bytes(b"\xff\xfe")
+        with self.assertRaises(SystemExit) as ctx:
+            runner.resolve_inputs(file_list, 1024, 4096)
+        self.assertEqual(runner.EXIT_INPUT_ERROR, ctx.exception.code)
+
 
 class QuestionsTests(unittest.TestCase):
     def setUp(self):
@@ -116,6 +139,13 @@ class QuestionsTests(unittest.TestCase):
         path.write_text(json.dumps({"q1": {"type": "essay", "instructions": "x"}}), encoding="utf-8")
         with self.assertRaises(SystemExit):
             runner.load_questions(path)
+
+    def test_rejects_question_invalid_utf8(self):
+        path = self.tmp / "q_invalid.json"
+        path.write_bytes(b"\xff\xfe")
+        with self.assertRaises(SystemExit) as ctx:
+            runner.load_questions(path)
+        self.assertEqual(runner.EXIT_INPUT_ERROR, ctx.exception.code)
 
 
 class RequestTests(unittest.TestCase):
@@ -234,6 +264,198 @@ class ExitCodeTests(unittest.TestCase):
             code = runner.main(base)
         self.assertEqual(runner.EXIT_INPUT_ERROR, code)
 
+    def test_live_mode_real_transport_invalid_utf8_propagates_remote_error(self):
+        base = [
+            "--mode", "live",
+            "--files", str(self.file_list),
+            "--questions", str(self.questions),
+            "--json-out", str(self.tmp / "o.json"),
+            "--md-out", str(self.tmp / "o.md"),
+        ]
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+             mock.patch.object(runner.urllib.request, "urlopen", return_value=FakeResponse(b"\xff")), \
+             mock.patch("sys.stderr", io.StringIO()):
+            with self.assertRaises(SystemExit) as ctx:
+                runner.main(base)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+
+class LiveTransportTests(unittest.TestCase):
+    def setUp(self):
+        self.config = {
+            "endpoint": "https://api.typesafe.example.com/v1/eval",
+            "timeout_seconds": 15,
+            "model": "jev-1.13.0",
+        }
+        self.request = {
+            "state": {"files": [{"path": "a.txt", "sha256": "hash", "content": "hello"}]},
+            "model": "jev-1.13.0",
+            "questions": {"q1": {"type": "noul", "instructions": "test?"}},
+        }
+        self.api_key = "synthetic-secret-token-xyz"
+        self.secrets = [self.api_key]
+        self.valid_response = {"model": "jev-1.13.0", "answers": {"q1": {"noul": 0.85}}}
+
+    def test_valid_response_and_request_construction(self):
+        resp_bytes = json.dumps(self.valid_response).encode("utf-8")
+        with mock.patch.object(runner.urllib.request, "urlopen", return_value=FakeResponse(resp_bytes)) as mock_urlopen:
+            result = runner.run_live(self.request, self.config, self.api_key, self.secrets)
+
+        self.assertEqual(self.valid_response, result)
+        self.assertEqual(1, mock_urlopen.call_count)
+        call_req = mock_urlopen.call_args[0][0]
+        timeout_arg = mock_urlopen.call_args[1].get("timeout")
+        self.assertEqual(15, timeout_arg)
+        self.assertEqual("https://api.typesafe.example.com/v1/eval", call_req.full_url)
+        self.assertEqual("POST", call_req.get_method())
+        self.assertEqual(runner.canonical_payload(self.request), call_req.data)
+        self.assertEqual(f"Bearer {self.api_key}", call_req.headers.get("Authorization"))
+        self.assertEqual("application/json", call_req.headers.get("Content-type"))
+
+    def test_invalid_utf8_response_exits_remote_error(self):
+        with mock.patch.object(runner.urllib.request, "urlopen", return_value=FakeResponse(b"\xff")) as mock_urlopen, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+        self.assertEqual(1, mock_urlopen.call_count)
+        self.assertIn("typesafe-audit: remote error:", stderr.getvalue())
+
+    def test_malformed_json_response_exits_remote_error(self):
+        with mock.patch.object(runner.urllib.request, "urlopen", return_value=FakeResponse(b"{broken-json")) as mock_urlopen, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+        self.assertEqual(1, mock_urlopen.call_count)
+        self.assertIn("typesafe-audit: remote error:", stderr.getvalue())
+
+    def test_timeout_exits_remote_error(self):
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=TimeoutError("gateway timed out")) as mock_urlopen, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+        self.assertEqual(1, mock_urlopen.call_count)
+        self.assertIn("typesafe-audit: remote error: gateway timed out", stderr.getvalue())
+
+    def test_url_error_exits_remote_error(self):
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=urllib.error.URLError("connection refused")) as mock_urlopen, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+        self.assertEqual(1, mock_urlopen.call_count)
+        self.assertIn("typesafe-audit: remote error: <urlopen error connection refused>", stderr.getvalue())
+
+    def make_http_error(self, code: int, msg: str, body: bytes) -> urllib.error.HTTPError:
+        err = urllib.error.HTTPError(self.config["endpoint"], code, msg, {}, io.BytesIO(body))
+        self.addCleanup(err.close)
+        return err
+
+    def test_retryable_429_then_success(self):
+        http_err = self.make_http_error(429, "Too Many Requests", b"rate limit")
+        valid_resp = FakeResponse(json.dumps(self.valid_response).encode("utf-8"))
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=[http_err, valid_resp]) as mock_urlopen, \
+             mock.patch.object(runner.time, "sleep") as mock_sleep:
+            result = runner.run_live(self.request, self.config, self.api_key, self.secrets)
+
+        self.assertEqual(self.valid_response, result)
+        self.assertEqual(2, mock_urlopen.call_count)
+        mock_sleep.assert_called_once_with(2)
+
+    def test_retryable_529_then_success(self):
+        http_err = self.make_http_error(529, "Site Overloaded", b"overloaded")
+        valid_resp = FakeResponse(json.dumps(self.valid_response).encode("utf-8"))
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=[http_err, valid_resp]) as mock_urlopen, \
+             mock.patch.object(runner.time, "sleep") as mock_sleep:
+            result = runner.run_live(self.request, self.config, self.api_key, self.secrets)
+
+        self.assertEqual(self.valid_response, result)
+        self.assertEqual(2, mock_urlopen.call_count)
+        mock_sleep.assert_called_once_with(2)
+
+    def test_retry_exhaustion_on_429_exits_remote_error(self):
+        err1 = self.make_http_error(429, "Too Many Requests", b"rate limit 1")
+        err2 = self.make_http_error(429, "Too Many Requests", b"rate limit 2")
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=[err1, err2]) as mock_urlopen, \
+             mock.patch.object(runner.time, "sleep") as mock_sleep, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+        self.assertEqual(2, mock_urlopen.call_count)
+        mock_sleep.assert_called_once_with(2)
+        self.assertIn("typesafe-audit: remote error: HTTP 429: rate limit 2", stderr.getvalue())
+
+    def test_retry_exhaustion_on_529_exits_remote_error(self):
+        err1 = self.make_http_error(529, "Site Overloaded", b"overloaded 1")
+        err2 = self.make_http_error(529, "Site Overloaded", b"overloaded 2")
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=[err1, err2]) as mock_urlopen, \
+             mock.patch.object(runner.time, "sleep") as mock_sleep, \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+        self.assertEqual(2, mock_urlopen.call_count)
+        mock_sleep.assert_called_once_with(2)
+        self.assertIn("typesafe-audit: remote error: HTTP 529: overloaded 2", stderr.getvalue())
+
+    def test_nonretryable_http_errors_exit_remote_error(self):
+        for code in (400, 401, 403, 404, 500, 503):
+            with self.subTest(code=code):
+                err = self.make_http_error(code, f"HTTP {code}", f"fail {code}".encode("utf-8"))
+                with mock.patch.object(runner.urllib.request, "urlopen", side_effect=err) as mock_urlopen, \
+                     mock.patch.object(runner.time, "sleep") as mock_sleep, \
+                     mock.patch("sys.stderr", io.StringIO()) as stderr:
+                    with self.assertRaises(SystemExit) as ctx:
+                        runner.run_live(self.request, self.config, self.api_key, self.secrets)
+                    self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+                self.assertEqual(1, mock_urlopen.call_count)
+                mock_sleep.assert_not_called()
+                self.assertIn(f"typesafe-audit: remote error: HTTP {code}: fail {code}", stderr.getvalue())
+
+    def test_diagnostics_redact_synthetic_secrets_in_http_error(self):
+        err = self.make_http_error(
+            500, "Internal Server Error",
+            f"crash for key {self.api_key}".encode("utf-8")
+        )
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=err), \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+        output = stderr.getvalue()
+        self.assertNotIn(self.api_key, output)
+        self.assertIn(runner.REDACTED, output)
+
+    def test_diagnostics_redact_synthetic_secrets_in_url_error(self):
+        err = urllib.error.URLError(f"connect failed for {self.api_key}")
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=err), \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+        output = stderr.getvalue()
+        self.assertNotIn(self.api_key, output)
+        self.assertIn(runner.REDACTED, output)
+
+    def test_diagnostics_redact_synthetic_secrets_in_timeout_error(self):
+        err = TimeoutError(f"timed out contacting endpoint with key {self.api_key}")
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=err), \
+             mock.patch("sys.stderr", io.StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as ctx:
+                runner.run_live(self.request, self.config, self.api_key, self.secrets)
+            self.assertEqual(runner.EXIT_REMOTE_ERROR, ctx.exception.code)
+
+        output = stderr.getvalue()
+        self.assertNotIn(self.api_key, output)
+        self.assertIn(runner.REDACTED, output)
+
 
 class FixtureModeTests(unittest.TestCase):
     def setUp(self):
@@ -279,6 +501,38 @@ class FixtureModeTests(unittest.TestCase):
         first = (self.tmp / "o.json").read_text(encoding="utf-8")
         runner.main(base)
         self.assertEqual(first, (self.tmp / "o.json").read_text(encoding="utf-8"))
+
+    def test_invalid_fixture_utf8_is_input_error(self):
+        inputs = runner.resolve_inputs(self.file_list, 1024, 4096)
+        questions = runner.load_questions(self.questions)
+        request = runner.build_request(inputs, questions, "jev-1.13.0")
+        fixture_dir = self.tmp / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+        key = runner.request_fixture_key(request)
+        (fixture_dir / f"{key}.json").write_bytes(b"\xff\xfe")
+        with self.assertRaises(SystemExit) as ctx:
+            runner.run_fixture(request, fixture_dir)
+        self.assertEqual(runner.EXIT_INPUT_ERROR, ctx.exception.code)
+
+
+class ConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_load_config_invalid_utf8_is_input_error(self):
+        path = self.tmp / "bad_config.json"
+        path.write_bytes(b"\xff\xfe")
+        with self.assertRaises(SystemExit) as ctx:
+            runner.load_config(path)
+        self.assertEqual(runner.EXIT_INPUT_ERROR, ctx.exception.code)
+
+    def test_load_config_missing_keys_is_input_error(self):
+        path = self.tmp / "bad_config.json"
+        path.write_text("{}", encoding="utf-8")
+        with self.assertRaises(SystemExit) as ctx:
+            runner.load_config(path)
+        self.assertEqual(runner.EXIT_INPUT_ERROR, ctx.exception.code)
 
 
 if __name__ == "__main__":
