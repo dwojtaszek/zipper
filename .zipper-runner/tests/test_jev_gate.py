@@ -167,6 +167,16 @@ class CiTriageTests(unittest.TestCase):
                 mock.patch.object(jev_gate, "_audit", fake):
             self.assertIsNone(jev_gate.classify_ci_failures(["build (FAILURE)"], "log"))
 
+    def test_classify_missing_confidence_returns_none_and_babysits(self):
+        fake = _fake_audit_module({
+            "check0": {"choice": "flaky", "confidence": None}
+        })
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            triage = jev_gate.classify_ci_failures(["build (FAILURE)"], "log")
+        self.assertIsNone(triage)
+        self.assertEqual(jev_gate.decide_ci_action(triage, 0), "babysit")
+
     def test_decide_ci_action_rerun_only_when_all_retryable_and_budget_left(self):
         retryable = {"a": "flaky", "b": "environment", "c": "dependency", "d": "unrelated"}
         self.assertEqual(jev_gate.decide_ci_action(retryable, 0), "rerun")
@@ -195,6 +205,55 @@ class CompletionTests(unittest.TestCase):
             verdict = jev_gate.verify_completion("issue text", "diff text")
         self.assertFalse(verdict["completed"])
         self.assertEqual(verdict["requirements_met"], 0.0)
+
+    def test_verify_completion_preserves_continuous_score_positions(self):
+        answers = {"requirements_met": _score_answer(1.5, confidence=0.9)}
+        fake = _fake_audit_module(answers)
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            verdict = jev_gate.verify_completion("issue text", "diff text")
+        self.assertEqual(verdict["requirements_met"], 0.75)
+        self.assertTrue(verdict["completed"])
+
+    def test_verify_completion_invalid_score_returns_none(self):
+        invalid_scores = (-0.1, 3.0, True, False, float("nan"), float("inf"), -float("inf"))
+        for score in invalid_scores:
+            with self.subTest(score=score):
+                fake = _fake_audit_module({"requirements_met": _score_answer(score)})
+                with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                        mock.patch.object(jev_gate, "_audit", fake):
+                    self.assertIsNone(jev_gate.verify_completion("issue text", "diff text"))
+
+    def test_verify_completion_invalid_confidence_returns_none(self):
+        invalid_confidences = (-0.1, 1.1, True, False, float("nan"), float("inf"), -float("inf"))
+        for confidence in invalid_confidences:
+            with self.subTest(confidence=confidence):
+                fake = _fake_audit_module({
+                    "requirements_met": _score_answer(2.0, confidence=confidence)
+                })
+                with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                        mock.patch.object(jev_gate, "_audit", fake):
+                    self.assertIsNone(jev_gate.verify_completion("issue text", "diff text"))
+
+    def test_verify_completion_accepts_confidence_endpoints(self):
+        for confidence, expected_completed in ((0.0, False), (1.0, True)):
+            with self.subTest(confidence=confidence):
+                fake = _fake_audit_module(
+                    {"requirements_met": _score_answer(2.0, confidence=confidence)},
+                    confidence_threshold=0.0,
+                )
+                with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                        mock.patch.object(jev_gate, "_audit", fake):
+                    verdict = jev_gate.verify_completion("issue text", "diff text")
+                self.assertIs(verdict["completed"], expected_completed)
+
+    def test_verify_completion_missing_confidence_returns_none(self):
+        fake = _fake_audit_module({
+            "requirements_met": _score_answer(2.0, confidence=None)
+        })
+        with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                mock.patch.object(jev_gate, "_audit", fake):
+            self.assertIsNone(jev_gate.verify_completion("issue text", "diff text"))
 
     def test_verify_completion_low_confidence_returns_none(self):
         answers = {"requirements_met": _score_answer(2.0, confidence=0.4)}
@@ -252,6 +311,36 @@ class InjectionTests(unittest.TestCase):
                 mock.patch.object(jev_gate, "_audit", fake):
             self.assertEqual(jev_gate.scan_injection(long_text), 0.95)
 
+    def test_scan_injection_preserves_probability_endpoints_and_thresholds(self):
+        long_text = "x" * 80
+        cases = (
+            (0.0, None),
+            (0.25, None),
+            (0.5, "alert"),
+            (0.75, "block"),
+            (1.0, "block"),
+        )
+        for probability, expected_verdict in cases:
+            with self.subTest(probability=probability):
+                fake = _fake_audit_module({"injection": _noul_answer(probability)})
+                with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                        mock.patch.object(jev_gate, "_audit", fake):
+                    result = jev_gate.scan_injection(long_text)
+                self.assertEqual(result, probability)
+                self.assertEqual(jev_gate.injection_verdict(result), expected_verdict)
+
+    def test_scan_injection_invalid_probability_returns_none_and_proceeds(self):
+        long_text = "x" * 80
+        invalid_probabilities = (-0.1, 1.1, 2.0, True, False, float("nan"), float("inf"), -float("inf"))
+        for probability in invalid_probabilities:
+            with self.subTest(probability=probability):
+                fake = _fake_audit_module({"injection": _noul_answer(probability)})
+                with mock.patch.dict(os.environ, {"TYPESAFE_API_KEY": "test-key"}, clear=True), \
+                        mock.patch.object(jev_gate, "_audit", fake):
+                    result = jev_gate.scan_injection(long_text)
+                self.assertIsNone(result)
+                self.assertIsNone(jev_gate.injection_verdict(result))
+
     def test_scan_injection_short_text_returns_none(self):
         self.assertIsNone(jev_gate.scan_injection("hi"))
 
@@ -262,6 +351,9 @@ class InjectionTests(unittest.TestCase):
         self.assertIsNone(jev_gate.injection_verdict(0.25))
         self.assertIsNone(jev_gate.injection_verdict(0.1))
         self.assertIsNone(jev_gate.injection_verdict(None))
+        for invalid_probability in (-0.1, 1.1, True, False, float("nan"), float("inf"), -float("inf")):
+            with self.subTest(invalid_probability=invalid_probability):
+                self.assertIsNone(jev_gate.injection_verdict(invalid_probability))
 
 
 class CapTests(unittest.TestCase):
