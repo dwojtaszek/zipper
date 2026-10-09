@@ -18,8 +18,10 @@ PR context JSON shape:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 
 # Explicit closure keywords only (issue #958): never guess from branch names.
@@ -30,7 +32,7 @@ _CLOSURE_KEYWORDS = frozenset({
     "resolved", "resolves", "resolve", "resolving",
 })
 _REQ_ID = re.compile(r"\bREQ-\d{3,4}\b")
-_TSV_REF = re.compile(r"^(?:[^\t]*\t){2}([^\t]+)\t")
+
 
 _GENERATED_PREFIXES = ("bin/", "obj/", "results/", "publish-bin/", ".worktrees/")
 _BINARY_SUFFIXES = (
@@ -67,26 +69,59 @@ def filter_files(files: list[dict], max_files: int | None = None) -> list[dict]:
     return kept[:limit] if limit is not None else kept
 
 
-def _tsv_refs_for_line(line: str) -> tuple[str, set[str]] | None:
-    if not line or line.startswith("req_id") or "\t" not in line:
-        return None
-    row = line.split("\t")
-    if len(row) < 4:
-        return None
-    unit_ref, e2e_ref = row[2], row[3]
-    unit_file = unit_ref.split(".")[0] + ".cs" if "." in unit_ref else unit_ref
-    e2e_file = e2e_ref.split(" ")[0] if " " in e2e_ref else e2e_ref
-    return row[0].strip(), {unit_file, e2e_file}
+def _load_trace_parse():
+    for name in ("tsa_trace_parse_internal", "tsa_trace_parse"):
+        if sys.modules.get(name) is not None:
+            return sys.modules[name]
+    parse_path = Path(__file__).resolve().parents[2] / "checks" / "traceability" / "parse.py"
+    spec = importlib.util.spec_from_file_location("tsa_trace_parse_internal", parse_path)
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["tsa_trace_parse_internal"] = module
+        spec.loader.exec_module(module)
+        return module
+    raise RuntimeError(f"Cannot load traceability parse module from {parse_path}")
 
 
-def _req_ids_from_tsv(tsv_path: Path | None, changed_paths: set[str]) -> set[str]:
+def _req_ids_from_tsv(
+    tsv_path: Path | None,
+    changed_paths: set[str],
+    repo_root: Path | None = None,
+) -> set[str]:
     if not tsv_path or not tsv_path.exists():
         return set()
+    root = repo_root or (tsv_path.parent.parent if tsv_path.parent.name == "tests" else tsv_path.parent)
+    normalized_changed = {
+        p.replace("\\", "/").removeprefix("./").lstrip("/")
+        for p in changed_paths
+        if p
+    }
+    if not normalized_changed:
+        return set()
+
+    trace_parse = _load_trace_parse()
+    try:
+        tsv_rows = trace_parse.parse_tsv(tsv_path)
+    except Exception:
+        return set()
+
+    has_cs_changes = any(p.endswith(".cs") for p in normalized_changed)
+    source_index = None
     reqs: set[str] = set()
-    for line in tsv_path.read_text(encoding="utf-8").splitlines():
-        parsed = _tsv_refs_for_line(line)
-        if parsed and (parsed[1] & changed_paths):
-            reqs.add(parsed[0])
+    for row in tsv_rows:
+        try:
+            if row.get("coverage", "").lower() == "unit":
+                if not has_cs_changes:
+                    continue
+                if source_index is None:
+                    source_index = trace_parse.SourceIndex(root)
+            test_paths = trace_parse.resolve_test_paths(root, row, source_index)
+            if test_paths & normalized_changed:
+                req_id = row.get("req_id")
+                if req_id:
+                    reqs.add(req_id)
+        except Exception:
+            continue
     return reqs
 
 
@@ -101,15 +136,20 @@ def affected_req_ids(
     reqs: set[str] = set()
     changed_paths: set[str] = set()
     for entry in files or []:
-        changed_paths.add(entry.get("path", ""))
+        raw_path = entry.get("path") or ""
+        norm_path = raw_path.replace("\\", "/").removeprefix("./").lstrip("/")
+        if norm_path:
+            changed_paths.add(norm_path)
         reqs.update(_REQ_ID.findall(entry.get("patch", "") or ""))
     reqs.update(_REQ_ID.findall(pr_text or ""))
     for text in issue_texts.values():
         reqs.update(_REQ_ID.findall(text or ""))
 
     tsv_path = repo_root / "tests" / "req-traceability.tsv" if repo_root else None
-    reqs.update(_req_ids_from_tsv(tsv_path, changed_paths))
+    reqs.update(_req_ids_from_tsv(tsv_path, changed_paths, repo_root=repo_root))
     return sorted(reqs)
+
+
 
 
 def spec_evidence(issues: dict[dict] | dict, refs: list[int]) -> list[dict]:
