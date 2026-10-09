@@ -47,65 +47,12 @@ internal static class LoadFileOnlyGenerator
             break;
         }
 
-        var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
-            ? request.LoadFile.Formats
-            : new List<LoadFileFormat> { LoadFileFormat.Dat };
-
-        string primaryLoadFilePath = string.Empty;
-        string primaryPropertiesPath = string.Empty;
-        long totalRecords = 0;
-
         var createdFiles = new List<string>();
 
         try
         {
-            foreach (var format in formatsToGenerate)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var formatRequest = EnsureStableOptPageCounts(request, format);
-                var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
-                var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
-
-                // Source-Driven Generation: rows become FileData shells (no Native File bytes)
-                // and flow through the Standard composers so every Load File Format reflects
-                // source paths, File Types, and record identity.
-                var sourceDriven = formatRequest.SourceRecords is not null;
-                IReadOnlyList<FileData> records = sourceDriven
-                    ? BuildSourceShells(formatRequest)
-                    : Array.Empty<FileData>();
-                var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
-
-                ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
-
-                ILoadFileWriter writer = createWriter(
-                    format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
-                    writerMode);
-
-                var fileStream = new FileStream(loadFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
-                createdFiles.Add(loadFilePath);
-                await using (fileStream.ConfigureAwait(false))
-                {
-                    await writer.WriteAsync(fileStream, formatRequest, records, chaosEngine, cancellationToken).ConfigureAwait(false);
-                }
-
-                string propertiesPath = await LoadFileAuditWriter.WriteAsync(
-                    loadFilePath,
-                    formatRequest,
-                    records,
-                    chaosEngine?.Anomalies,
-                    format).ConfigureAwait(false);
-                createdFiles.Add(propertiesPath);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
-                {
-                    primaryLoadFilePath = loadFilePath;
-                    primaryPropertiesPath = propertiesPath;
-                    var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(formatRequest, records, format);
-                    totalRecords = total;
-                }
-            }
+            var (primaryLoadFilePath, primaryPropertiesPath, totalRecords) = await GenerateLoadFilesAsync(
+                request, baseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
 
             stopwatch.Stop();
 
@@ -140,6 +87,72 @@ internal static class LoadFileOnlyGenerator
 
             throw;
         }
+    }
+
+    private static async Task<(string LoadFilePath, string PropertiesFilePath, long TotalRecords)> GenerateLoadFilesAsync(
+        FileGenerationRequest request,
+        string baseFileName,
+        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
+        List<string> createdFiles,
+        CancellationToken cancellationToken)
+    {
+        var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
+            ? request.LoadFile.Formats
+            : new List<LoadFileFormat> { LoadFileFormat.Dat };
+
+        string primaryLoadFilePath = string.Empty;
+        string primaryPropertiesPath = string.Empty;
+        long totalRecords = 0;
+
+        foreach (var format in formatsToGenerate)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var formatRequest = EnsureStableOptPageCounts(request, format);
+            var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
+            var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
+
+            // Source-Driven Generation: rows become FileData shells (no Native File bytes)
+            // and flow through the Standard composers so every Load File Format reflects
+            // source paths, File Types, and record identity.
+            var sourceDriven = formatRequest.SourceRecords is not null;
+            IReadOnlyList<FileData> records = sourceDriven
+                ? BuildSourceShells(formatRequest)
+                : Array.Empty<FileData>();
+            var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
+
+            ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
+
+            ILoadFileWriter writer = createWriter(
+                format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
+                writerMode);
+
+            var fileStream = new FileStream(loadFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+            createdFiles.Add(loadFilePath);
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await writer.WriteAsync(fileStream, formatRequest, records, chaosEngine, cancellationToken).ConfigureAwait(false);
+            }
+
+            string propertiesPath = await LoadFileAuditWriter.WriteAsync(
+                loadFilePath,
+                formatRequest,
+                records,
+                chaosEngine?.Anomalies,
+                format).ConfigureAwait(false);
+            createdFiles.Add(propertiesPath);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
+            {
+                primaryLoadFilePath = loadFilePath;
+                primaryPropertiesPath = propertiesPath;
+                var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(formatRequest, records, format);
+                totalRecords = total;
+            }
+        }
+
+        return (primaryLoadFilePath, primaryPropertiesPath, totalRecords);
     }
 
     /// <summary>
