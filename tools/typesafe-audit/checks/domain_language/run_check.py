@@ -40,7 +40,7 @@ EXIT_REMOTE_ERROR = runner.EXIT_REMOTE_ERROR
 QUESTIONS_PATH = CHECK_DIR / "questions.json"
 POLICY_PATH = CHECK_DIR / "policy.json"
 
-KNOWN_ALIASES = re.compile(r"\b(rolling sets?|target zip size|redacted mode|audit logs?)\b", re.IGNORECASE)
+KNOWN_ALIASES = re.compile(r"\b(rolling sets?|target sizes?|goal sizes?|redacted mode|audit logs?)\b", re.IGNORECASE)
 
 
 def detect_known_aliases(text: str) -> list[str]:
