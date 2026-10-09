@@ -51,7 +51,7 @@ def load_config(path: Path) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as fh:
             config = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         fail_input(f"Cannot read config {path}: {exc}")
     required = ("model", "endpoint", "runner_version", "max_file_bytes", "max_total_bytes", "timeout_seconds")
     missing = [key for key in required if key not in config]
@@ -73,7 +73,7 @@ def resolve_inputs(file_list: Path, max_file_bytes: int, max_total_bytes: int) -
     """
     try:
         lines = [ln.strip() for ln in file_list.read_text(encoding="utf-8").splitlines()]
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         fail_input(f"Cannot read file list {file_list}: {exc}")
 
     names = [ln for ln in lines if ln and not ln.startswith("#")]
@@ -109,7 +109,7 @@ def load_questions(questions_path: Path) -> dict:
     try:
         with open(questions_path, "r", encoding="utf-8") as fh:
             questions = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         fail_input(f"Cannot read questions {questions_path}: {exc}")
     if not isinstance(questions, dict) or not questions:
         fail_input(f"Questions file {questions_path} must be a non-empty JSON object.")
@@ -161,7 +161,7 @@ def run_live(request: dict, config: dict, api_key: str, secrets: list[str]) -> d
                 continue
             print(f"typesafe-audit: remote error: HTTP {exc.code}: {detail}", file=sys.stderr)
             sys.exit(EXIT_REMOTE_ERROR)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             print(f"typesafe-audit: remote error: {redact(str(exc), secrets)}", file=sys.stderr)
             sys.exit(EXIT_REMOTE_ERROR)
     raise AssertionError("unreachable")
@@ -177,7 +177,7 @@ def run_fixture(request: dict, fixture_dir: Path) -> dict:
         )
     try:
         return json.loads(fixture_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         fail_input(f"Cannot read fixture {fixture_path}: {exc}")
 
 
