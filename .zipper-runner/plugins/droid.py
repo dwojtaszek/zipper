@@ -14,9 +14,14 @@ import os
 import signal
 import subprocess
 import shutil
+import json
+import selectors
+import time
 
 DEFAULT_MODEL = "gpt-6-luna"
 REASONING_EFFORT = "max"
+MISSION_TIMEOUT = 2700
+HEARTBEAT_SECONDS = 60
 
 
 def list_models() -> list[str]:
@@ -81,8 +86,34 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     Returns:
         (exit_code, stdout, stderr)
     """
-    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--cwd", cwd, prompt]
-    print(f"[droid] Running mission (continue={is_continue}) in {cwd}")
+    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
+    print(f"[droid] Running mission (continue={is_continue}) in {cwd}", flush=True)
+    p = None
+    output = {"stdout": bytearray(), "stderr": bytearray()}
+    messages = []
+    final_text = None
+    structured = False
+    def captured_stdout():
+        if structured:
+            return final_text + "\n" if final_text is not None else "".join(messages)
+        return output["stdout"].decode(errors="replace")
+    def record_event(line):
+        nonlocal structured, final_text
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            return
+        if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+            return
+        structured = True
+        output["stdout"].clear()
+        # Log event metadata only, never prompts, tool arguments, or results.
+        if event.get("type") == "message" and event.get("role") == "assistant":
+            if isinstance(event.get("text"), str):
+                messages.append(event["text"] + "\n")
+            print("[droid] assistant progress", flush=True)
+        elif event.get("type") == "completion" and isinstance(event.get("finalText"), str):
+            final_text = event["finalText"]
     try:
         p = subprocess.Popen(
             cmd,
@@ -91,17 +122,51 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             text=True,
             start_new_session=True,
         )
-        stdout, stderr = p.communicate(timeout=2700)
-        print(f"--- [droid stdout] ---\n{stdout}")
-        if stderr:
-            print(f"--- [droid stderr] ---\n{stderr}")
-        return p.returncode, stdout, stderr
+        started = time.monotonic()
+        heartbeat = started + HEARTBEAT_SECONDS
+        pending = bytearray()
+        scanned = 0
+        with selectors.DefaultSelector() as selector:
+            selector.register(p.stdout, selectors.EVENT_READ, "stdout")
+            selector.register(p.stderr, selectors.EVENT_READ, "stderr")
+            while selector.get_map():
+                now = time.monotonic()
+                if now - started >= MISSION_TIMEOUT:
+                    raise subprocess.TimeoutExpired(cmd, MISSION_TIMEOUT)
+                if now >= heartbeat:
+                    print(f"[droid] Mission active ({int(now - started)}s elapsed)", flush=True)
+                    heartbeat = now + HEARTBEAT_SECONDS
+                for key, _ in selector.select(min(1, MISSION_TIMEOUT - (now - started), heartbeat - now)):
+                    chunk = os.read(key.fd, 65536)
+                    if not chunk:
+                        if key.data == "stdout" and pending:
+                            record_event(pending)
+                        selector.unregister(key.fileobj)
+                        continue
+                    if key.data != "stdout" or not structured:
+                        output[key.data].extend(chunk)
+                    if key.data != "stdout":
+                        continue
+                    pending.extend(chunk)
+                    newline = pending.find(b"\n", scanned)
+                    while newline >= 0:
+                        record_event(pending[:newline])
+                        del pending[:newline + 1]
+                        newline = pending.find(b"\n")
+                    scanned = len(pending)
+        p.wait(timeout=max(0.01, MISSION_TIMEOUT - (time.monotonic() - started)))
+        return p.returncode, captured_stdout(), output["stderr"].decode(errors="replace")
     except subprocess.TimeoutExpired:
-        try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except OSError:
-            p.kill()
-        stdout, stderr = p.communicate()
-        return -1, stdout, "Error: Droid mission timed out after 2700 seconds."
+        return -1, captured_stdout(), f"Error: Droid mission timed out after {MISSION_TIMEOUT} seconds."
     except Exception as e:
-        return -1, "", str(e)
+        return -1, captured_stdout(), str(e)
+    finally:
+        if p is not None:
+            if p.poll() is None or (p.stdout is not None and not p.stdout.closed):
+                try:
+                    os.killpg(p.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                p.wait()
+            p.stdout.close()
+            p.stderr.close()
