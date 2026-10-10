@@ -12,7 +12,7 @@ public class MixedFileTypeGenerationTests : IDisposable
 
     public MixedFileTypeGenerationTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_mixed_gen_{Guid.NewGuid():N}");
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_mixed_gen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 

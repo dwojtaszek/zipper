@@ -3,22 +3,13 @@ using Xunit;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class SourceDrivenCliTests : IDisposable
+public class SourceDrivenCliTests : WorkingDirectoryTestBase
 {
     private readonly string tempDir;
 
     public SourceDrivenCliTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_source_cli_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            Directory.Delete(this.tempDir, true);
-        }
+        this.tempDir = this.TempDir;
     }
 
     private string WriteCsv(string content, string name = "input.csv")

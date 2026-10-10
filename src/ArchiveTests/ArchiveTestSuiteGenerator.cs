@@ -24,7 +24,8 @@ internal static class ArchiveTestSuiteGenerator
         ArchiveTestRequest request,
         CancellationToken cancellationToken,
         Action<string>? afterStaging = null,
-        Func<string, Task>? beforeFixtureBuild = null)
+        Func<string, CancellationToken, Task>? beforeFixtureBuild = null,
+        TimeSpan? deadlineOverride = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -46,6 +47,7 @@ internal static class ArchiveTestSuiteGenerator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var definition = ArchiveTestCatalog.GetCase(caseKey);
+                var deadline = deadlineOverride ?? TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds);
 
                 // REQ-213: the per-fixture deadline bounds build + mutation chain + sidecar
                 // serialization + pair write. The deadline is its own timer source feeding the
@@ -58,12 +60,12 @@ internal static class ArchiveTestSuiteGenerator
                 var firstCause = 0; // 0 = none, 1 = user cancellation, 2 = per-fixture deadline
                 cancellationToken.Register(() => Interlocked.CompareExchange(ref firstCause, 1, 0));
                 deadlineTimer.Token.Register(() => Interlocked.CompareExchange(ref firstCause, 2, 0));
-                deadlineTimer.CancelAfter(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds));
+                deadlineTimer.CancelAfter(deadline);
                 var fixtureToken = fixtureDeadline.Token;
 
                 try
                 {
-                    await (beforeFixtureBuild?.Invoke(caseKey) ?? Task.CompletedTask).ConfigureAwait(false);
+                    await (beforeFixtureBuild?.Invoke(caseKey, fixtureToken) ?? Task.CompletedTask).ConfigureAwait(false);
                     var artifact = ArchiveFixtureBuilder.Build(definition, request.Seed, fixtureToken);
                     var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
                         GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,

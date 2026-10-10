@@ -13,7 +13,7 @@ public class FieldNamingTests : IDisposable
 
     public FieldNamingTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 

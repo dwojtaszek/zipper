@@ -8,7 +8,7 @@ public class GoldenBaselineHarnessTests
     [Fact]
     public void Harness_GeneratesDeterministicManifest_ForMixedArtifactTree()
     {
-        var tempDir = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
 
         try
         {
@@ -45,8 +45,8 @@ public class GoldenBaselineHarnessTests
     [Fact]
     public void Harness_ProducesDifferentManifests_WhenFileContentChanges()
     {
-        var tempDir1 = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
-        var tempDir2 = Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir1 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir2 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
 
         try
         {

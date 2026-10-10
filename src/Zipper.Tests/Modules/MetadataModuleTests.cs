@@ -5,7 +5,7 @@ using Zipper.Config;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class MetadataModuleTests
+public class MetadataModuleTests : WorkingDirectoryTestBase
 {
     private static bool TryBuild(bool includesEml, bool hasSourceInput, string[] apply, out MetadataConfig config)
     {

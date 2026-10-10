@@ -5,50 +5,16 @@ using Zipper.Profiles;
 
 namespace Zipper.Tests;
 
-public class AdvancedGuideRecipeTests : IDisposable
+public class AdvancedGuideRecipeTests : WorkingDirectoryTestBase
 {
-    private static readonly string RepoRoot = FindRepoRoot();
+    private static readonly string RepoRoot = RepoRootFinder.Find();
     private static readonly string AdvancedGuidePath = Path.Combine(RepoRoot, "docs", "advanced-guide.md");
 
     private readonly string tempDir;
 
     public AdvancedGuideRecipeTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), "TestGuide_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            try
-            {
-                Directory.Delete(this.tempDir, true);
-            }
-            catch
-            {
-                // Ignore cleanup errors
-            }
-        }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "README.md"))
-                && File.Exists(Path.Combine(dir.FullName, "Requirements.md"))
-                && File.Exists(Path.Combine(dir.FullName, "docs", "advanced-guide.md")))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        throw new FileNotFoundException("Could not locate repo root containing docs/advanced-guide.md.");
+        this.tempDir = this.TempDir;
     }
 
     private static string ExtractJsonFence(string markdown, string sectionHeader)

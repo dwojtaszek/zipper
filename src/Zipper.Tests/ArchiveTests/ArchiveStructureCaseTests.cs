@@ -13,7 +13,7 @@ namespace Zipper.Tests;
 /// valid controls (extra field, signature-like payload); and the capability distinctions
 /// between unsupported codec, corrupt local fields, and truncated structure.
 /// </summary>
-public class ArchiveStructureCaseTests : TempDirectoryTestBase
+public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
 {
     private const ushort UnsupportedMethodCode = 98;
     private const ushort UnsupportedMethodDeflate64Code = 9;

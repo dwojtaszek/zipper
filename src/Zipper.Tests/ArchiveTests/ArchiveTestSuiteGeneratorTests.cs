@@ -5,12 +5,14 @@ using Zipper.ArchiveTests;
 
 namespace Zipper.Tests;
 
-public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
+public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
 {
     private static async Task<ArchiveTestSuiteResult> GenerateAsync(
         ArchiveTestRequest request, CancellationToken cancellationToken = default,
-        Action<string>? afterStaging = null, Func<string, Task>? beforeFixtureBuild = null) =>
-        await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild);
+        Action<string>? afterStaging = null,
+        Func<string, CancellationToken, Task>? beforeFixtureBuild = null,
+        TimeSpan? deadlineOverride = null) =>
+        await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild, deadlineOverride);
 
     [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
@@ -231,15 +233,13 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
             ["valid-empty", "valid-stored"], 42, Path.Combine(TempDir, "out"));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GenerateAsync(request, beforeFixtureBuild: async caseKey =>
+            () => GenerateAsync(request, beforeFixtureBuild: async (caseKey, fixtureToken) =>
             {
                 if (caseKey == "valid-stored")
                 {
-                    // Deadline + 2 s: the delay must deterministically outlast the 10 s
-                    // CancelAfter timer even under threadpool-timer jitter.
-                    await Task.Delay(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                    await Task.Delay(Timeout.InfiniteTimeSpan, fixtureToken);
                 }
-            }));
+            }, deadlineOverride: TimeSpan.FromMilliseconds(5)).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
         Assert.Contains("valid-stored", error.Message, StringComparison.Ordinal);
@@ -261,11 +261,11 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         // a plain OperationCanceledException (exit 130 in the CLI workflow) — never
         // mis-translated into the REQ-213 deadline failure (exit 1).
         var error = await Assert.ThrowsAsync<OperationCanceledException>(
-            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: _ =>
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: (_, _) =>
             {
                 cts.Cancel();
                 return Task.CompletedTask;
-            }));
+            }).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.NotNull(error);
         Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));
@@ -280,16 +280,22 @@ public class ArchiveTestSuiteGeneratorTests : TempDirectoryTestBase
         using var cts = new CancellationTokenSource();
         ArchiveTestRequest request = ArchiveTestRequest.Create(["valid-stored"], 42, Path.Combine(TempDir, "out"));
 
-        // The deadline fires at t=10 s while the fixture sleeps; the cancel arrives at
-        // t=12 s, after the deadline already won. Attribution must stay with the deadline
-        // (InvalidOperationException, exit 1 in the CLI workflow): a late SIGINT/SIGTERM
-        // must not reclassify a genuine REQ-213 violation into the exit-130 cancel path.
+        // User cancellation arrives only after the linked token reports the deadline, so
+        // attribution must stay with REQ-213 rather than the user-cancel path.
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: async _ =>
+            () => GenerateAsync(request, cts.Token, beforeFixtureBuild: async (_, fixtureToken) =>
             {
-                await Task.Delay(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds + 2));
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, fixtureToken);
+                }
+                catch (OperationCanceledException) when (fixtureToken.IsCancellationRequested)
+                {
+                    cts.Cancel();
+                    throw;
+                }
                 cts.Cancel();
-            }));
+            }, deadlineOverride: TimeSpan.FromMilliseconds(5)).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));

@@ -16,7 +16,7 @@ namespace Zipper.Tests;
 /// Platform-marked expectations do not apply on this host and are recorded as
 /// not-applicable, never as passing verifications (REQ-212).
 /// </summary>
-public class ArchiveReferenceReaderTests : TempDirectoryTestBase
+public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 {
     public static readonly IReadOnlyList<string> AllCaseKeyList =
         [.. ArchiveTestCatalog.ListSuite("all").Select(definition => definition.CaseKey)];

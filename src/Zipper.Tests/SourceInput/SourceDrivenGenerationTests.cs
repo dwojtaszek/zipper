@@ -14,7 +14,7 @@ public class SourceDrivenGenerationTests : IDisposable
 
     public SourceDrivenGenerationTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_source_gen_{Guid.NewGuid():N}");
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_source_gen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 

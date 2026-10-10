@@ -9,9 +9,11 @@ public abstract class TempDirectoryTestBase : IDisposable
 
     protected TempDirectoryTestBase()
     {
-        this.TempDir = Path.Combine(Directory.GetCurrentDirectory(), "TestOutput_" + Guid.NewGuid().ToString());
+        this.TempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(this.TempDir);
     }
+
+    protected string GetTempFilePath() => Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}.tmp");
 
     public void Dispose()
     {

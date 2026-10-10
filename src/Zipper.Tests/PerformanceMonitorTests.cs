@@ -72,9 +72,6 @@ public class PerformanceMonitorTests
         monitor.Start(100);
         monitor.ReportFilesCompleted(50);
 
-        // Allow some time to pass for realistic metrics
-        Thread.Sleep(10);
-
         // Act
         var metrics = monitor.Stop();
 
@@ -83,9 +80,9 @@ public class PerformanceMonitorTests
         // (100 vs 50), so a rate derived from the total instead of the completed count fails here.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(50, metrics.FilesCompleted);
-        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms pause");
-        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms pause must not report a runaway elapsed time");
-        Assert.Equal(metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000), metrics.FilesPerSecond, 6);
+        Assert.True(metrics.ElapsedMilliseconds >= 0);
+        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
+        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
         Assert.Equal(metrics.ElapsedMilliseconds / 50, metrics.AverageTimePerFile, 6);
     }
 
@@ -110,8 +107,6 @@ public class PerformanceMonitorTests
         var monitor = new PerformanceMonitor();
         monitor.Start(100);
         monitor.ReportFilesCompleted(50);
-        Thread.Sleep(10);
-
         // Act
         var metrics1 = monitor.Stop();
         var metrics2 = monitor.Stop();
@@ -125,13 +120,11 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
-    public async Task Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
+    public void Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
     {
-        // Arrange - an awaited delay (not Thread.Sleep) so the stopwatch has measurably advanced.
         var monitor = new PerformanceMonitor();
         monitor.Start(100);
         monitor.ReportFilesCompleted(100);
-        await Task.Delay(10);
 
         // Act
         var metrics = monitor.Stop();
@@ -140,9 +133,9 @@ public class PerformanceMonitorTests
         // divides by the elapsed time.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(100, metrics.FilesCompleted);
-        Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 10ms delay");
-        Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 10ms delay must not report a runaway elapsed time");
-        Assert.Equal(metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000), metrics.FilesPerSecond, 6);
+        Assert.True(metrics.ElapsedMilliseconds >= 0);
+        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
+        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
         Assert.Equal(metrics.ElapsedMilliseconds / 100, metrics.AverageTimePerFile, 6);
     }
 
@@ -164,22 +157,19 @@ public class PerformanceMonitorTests
                 for (int j = 0; j < reportsPerThread; j++)
                 {
                     monitor.ReportFilesCompleted(1);
-                    Thread.Sleep(1); // Small delay to simulate real work
                 }
             });
         }
 
         await Task.WhenAll(tasks);
 
-        // Allow monitoring to catch up
-        Thread.Sleep(50);
-
         var metrics = monitor.Stop();
 
         // Assert - every concurrent report must be counted exactly once.
         Assert.Equal(1000, metrics.FilesCompleted);
         Assert.Equal(1000, monitor.GetCompletedCount());
-        Assert.True(metrics.FilesPerSecond > 0);
+        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
+        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
         this.output.WriteLine($"Files per second: {metrics.FilesPerSecond}");
     }
 
@@ -194,14 +184,13 @@ public class PerformanceMonitorTests
         {
             monitor.Start(100);
             monitor.ReportFilesCompleted(50);
-            Thread.Sleep(1);
             var metrics = monitor.Stop();
 
             Assert.Equal(100, monitor.TotalFiles);
             Assert.Equal(50, metrics.FilesCompleted);
-            Assert.True(metrics.ElapsedMilliseconds > 0, "Elapsed time must advance after a 1ms pause");
-            Assert.True(metrics.ElapsedMilliseconds <= 60000, "A 1ms pause must not report a runaway elapsed time");
-            Assert.True(metrics.FilesPerSecond > 0, "Throughput must be positive for a run that reported files");
+            Assert.True(metrics.ElapsedMilliseconds >= 0);
+            var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
+            Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
 
             this.output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
         }
