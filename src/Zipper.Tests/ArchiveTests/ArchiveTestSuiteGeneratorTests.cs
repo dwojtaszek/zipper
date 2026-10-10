@@ -225,10 +225,13 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_SlowFixture_ExceedsDeadlineAndPublishesNothing()
     {
-        // The first case publishes a pair into staging before the second exceeds the
-        // 10 s REQ-213 per-fixture deadline: the whole batch must fail (exit-1 path in
-        // the CLI workflow), the destination must never appear, and the first case's
-        // already-staged pair must be discarded wholesale with the staging directory.
+        // The first case publishes a pair into staging before the second exceeds its
+        // deadline override (REQ-213 per-fixture deadline, shortened to 1 s here so the
+        // test observes the timeout without a wall-clock wait): the whole batch must fail
+        // (exit-1 path in the CLI workflow), the destination must never appear, and the
+        // first case's already-staged pair must be discarded wholesale with the staging
+        // directory. The default (unshortened) deadline value itself is pinned by
+        // ArchiveTestCaseSemanticsTests.
         ArchiveTestRequest request = ArchiveTestRequest.Create(
             ["valid-empty", "valid-stored"], 42, Path.Combine(TempDir, "out"));
 
@@ -282,6 +285,9 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
 
         // User cancellation arrives only after the linked token reports the deadline, so
         // attribution must stay with REQ-213 rather than the user-cancel path.
+        // User cancellation lands only after the deadline has already claimed the fixture
+        // (the catch filter observes the linked token reporting the deadline first), so
+        // attribution must stay with REQ-213 rather than the user-cancel path.
         var error = await Assert.ThrowsAsync<InvalidOperationException>(
             () => GenerateAsync(request, cts.Token, beforeFixtureBuild: async (_, fixtureToken) =>
             {
@@ -294,7 +300,6 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
                     cts.Cancel();
                     throw;
                 }
-                cts.Cancel();
             }, deadlineOverride: TimeSpan.FromSeconds(1)).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);

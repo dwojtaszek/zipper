@@ -17,8 +17,8 @@ public class TempDirectoryTestBaseTests : TempDirectoryTestBase
     [Fact]
     public void TempDir_HasNoSymbolicLinkComponents()
     {
-        // The fixture root must equal its own realpath, otherwise raw expected paths diverge
-        // from the resolved paths the system reports as output paths.
+        // The temp directory root must equal its own realpath, otherwise raw expected paths
+        // diverge from the resolved paths the system reports as output paths.
         Assert.Equal(TestPaths.Canonicalize(this.TempDir), this.TempDir);
     }
 

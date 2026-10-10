@@ -107,6 +107,36 @@ public class PerformanceMonitorTests
     }
 
     [Fact]
+    public void Stop_DefaultMonitor_MeasuresRealElapsedTimeWithinBounds()
+    {
+        // The shipped default (new PerformanceMonitor() -> TimeProvider.System) must measure
+        // real wall-clock time: every exact-value case below pins a manual clock, so without
+        // this one a regression that freezes or zeroes the production clock would pass.
+        var monitor = new PerformanceMonitor();
+        monitor.Start(1);
+        monitor.ReportFilesCompleted(1);
+
+        // Bounded completion barrier: spin until the system clock has measurably advanced
+        // past the monitor's start instant instead of sleeping a fixed interval. The wait
+        // fails fast rather than hanging if the clock never moves.
+        var barrierStart = TimeProvider.System.GetTimestamp();
+        var waitStart = TimeProvider.System.GetTimestamp();
+        while (TimeProvider.System.GetElapsedTime(barrierStart) < TimeSpan.FromMilliseconds(1)
+            && TimeProvider.System.GetElapsedTime(waitStart) < TimeSpan.FromSeconds(5))
+        {
+            Thread.SpinWait(100_000);
+        }
+
+        // Act - a single Stop, because Stop freezes the elapsed time it first measured.
+        var metrics = monitor.Stop();
+
+        // Assert - at least the 1 ms the barrier waited for, never a runaway clock, and a
+        // completion count over a positive elapsed time must yield a positive rate.
+        Assert.InRange(metrics.ElapsedMilliseconds, 1, 60000);
+        Assert.True(metrics.FilesPerSecond > 0, "Throughput must be positive for a run that reported files");
+    }
+
+    [Fact]
     public void Stop_MultipleCalls_ReturnsConsistentResults()
     {
         // Arrange

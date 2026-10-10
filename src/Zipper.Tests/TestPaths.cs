@@ -9,10 +9,10 @@ internal static class TestPaths
 
     /// <summary>
     /// Returns the symbolic-link-free absolute form of <paramref name="path"/> (the equivalent of
-    /// POSIX realpath). Fixture roots are canonicalized at creation so a raw expected path and a
-    /// resolved actual path describe the same directory even when the system temporary directory
-    /// itself sits below a symbolic link (macOS <c>/var</c> -&gt; <c>/private/var</c>), where
-    /// <see cref="Path.GetTempPath"/> reports the unresolved form while
+    /// POSIX realpath). Temp directory roots are canonicalized at creation so a raw expected path
+    /// and a resolved actual path describe the same directory even when the system temporary
+    /// directory itself sits below a symbolic link (macOS <c>/var</c> -&gt; <c>/private/var</c>),
+    /// where <see cref="Path.GetTempPath"/> reports the unresolved form while
     /// <c>PathValidator.ResolveSecurePath</c> reports the resolved one.
     /// Deliberately independent of <see cref="PathValidator"/>: expectations derived from the
     /// system under test would hide a base-resolution regression.
@@ -48,7 +48,7 @@ internal static class TestPaths
         }
 
         // Walking up resolves each ancestor that is itself a symbolic link; only link hops
-        // consume the cycle guard, so arbitrarily deep fixture paths stay within the budget.
+        // consume the cycle guard, so arbitrarily deep temp directory paths stay in budget.
         return Path.Combine(Canonicalize(parent, linkHops), Path.GetFileName(fullPath));
     }
 }

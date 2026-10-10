@@ -10,7 +10,7 @@ public class PathValidatorTests
     // ResolveSecurePath(currentDirectory) == Path.GetFullPath(currentDirectory), which is green
     // on every CI runner, so no runner's checkout sits under an unresolved symbolic link. Using
     // the system under test to build expectations would hide a base-resolution regression. The
-    // one exception is fixture roots below Path.GetTempPath(): those are canonicalized with
+    // one exception is temp directory roots below Path.GetTempPath(): those are canonicalized with
     // TestPaths.Canonicalize, an independent test-side symlink resolver, because the system
     // temporary directory itself sits below a symbolic link on macOS (/var -> /private/var).
 
