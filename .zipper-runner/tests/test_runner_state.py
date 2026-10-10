@@ -340,18 +340,18 @@ class CountReviewThreadsTests(unittest.TestCase):
             mock_run_cmd.assert_not_called()
 
     def test_whenReviewOutputNone_runsCommand(self):
-        output = "[ WARNING ] 2 unresolved review threads on PR #42"
-        with patch("runner.run_cmd", return_value=(1, output, "")) as mock_run_cmd:
+        with patch("runner.run_cmd", return_value=(0, "2", "")) as mock_run_cmd:
             threads = runner._count_review_threads(42, review_output=None)
             self.assertEqual(threads, 2)
             mock_run_cmd.assert_called_once()
             args = mock_run_cmd.call_args[0][0]
-            self.assertEqual(args, ["bash", "tests/wait-for-reviews.sh", "42"])
+            self.assertEqual(args[:3], ["gh", "api", "graphql"])
+            self.assertIn("number=42", args)
 
-    def test_whenNoUnresolvedThreadsInOutput_returnsMinusOne(self):
+    def test_whenNoUnresolvedThreadsInOutput_returnsZero(self):
         output = "[ OK ] No unresolved review threads on PR #42"
         threads = runner._count_review_threads(42, review_output=output)
-        self.assertEqual(threads, -1)
+        self.assertEqual(threads, 0)
 
 
 class BabysitPromptTests(unittest.TestCase):

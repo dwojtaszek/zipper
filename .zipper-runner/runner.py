@@ -48,6 +48,7 @@ PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
 MAIN_REMOTE_REF = "origin/main"
+REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -928,19 +929,75 @@ def _jev_verify_completion(wt_path: str, branch: str, issue_number: int) -> None
         )
 
 
+def _query_review_thread_count(pr_number: int) -> int:
+    query = (
+        'query($number:Int!,$endCursor:String) { repository(owner:"dwojtaszek",name:"zipper") { '
+        'pullRequest(number:$number) { reviewThreads(first:100,after:$endCursor) { '
+        'nodes { isResolved } pageInfo { hasNextPage endCursor } } } } }'
+    )
+    code, out, _ = run_cmd([
+        "gh", "api", "graphql", "--paginate", "-f", f"query={query}", "-F", f"number={pr_number}",
+        "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
+    ], cwd=REPO_PATH)
+    if code != 0:
+        return -1
+    try:
+        counts = [int(value) for value in out.splitlines()]
+        return sum(counts) if counts and all(value >= 0 for value in counts) else -1
+    except ValueError:
+        return -1
+
+
 def _count_review_threads(pr_number: int, review_output: str | None = None) -> int:
     """Return number of unresolved review threads on PR."""
-    if review_output is not None:
-        out = review_output
-    else:
-        code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
-    for line in out.splitlines():
+    if review_output is None:
+        return _query_review_thread_count(pr_number)
+    for line in review_output.splitlines():
+        if "No unresolved review threads" in line:
+            return 0
         if "unresolved review thread" in line:
             import re
             m = re.search(r'(\d+)\s+unresolved', line)
             if m:
                 return int(m.group(1))
     return -1
+
+
+def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int) -> bool:
+    if _latest_commit_is_wip(wt_path):
+        return True
+    review_ok, review_error = _run_coderabbit_pre_pr_check(wt_path)
+    if not review_ok:
+        _record_coderabbit_gate_failure(pr_number, branch, review_error)
+        print(f"[babysit] Completion kept local: {review_error}")
+        return False
+    push_code, _, push_error = run_cmd(["git", "push", "origin", branch], cwd=wt_path)
+    if push_code != 0:
+        _record_coderabbit_gate_failure(pr_number, branch, f"git push failed: {push_error}")
+        print(f"[babysit] Reviewed completion could not be published: {push_error}")
+        return False
+    _clear_coderabbit_gate_failure(pr_number)
+    return True
+
+
+def _babysit_snapshot(wt_path: str, branch: str, pr_number: int, review_output: str | None = None) -> tuple[str, int, str]:
+    code, state, _ = run_cmd(
+        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
+        cwd=REPO_PATH,
+    )
+    head_code, head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    threads = _count_review_threads(pr_number, review_output=review_output) if pr_number else -1
+    return state if code == 0 else "", threads, head if head_code == 0 else ""
+
+
+def _babysit_progressed(pr_number: int, before: tuple[str, int, str], after: tuple[str, int, str]) -> bool:
+    before_state, before_threads, before_head = before
+    after_state, after_threads, after_head = after
+    return bool(
+        (not pr_number and before_head and after_head and after_head != before_head)
+        or (before_state and after_state and after_state != before_state)
+        or (0 <= after_threads < before_threads)
+    )
 
 
 def _babysit_with_fallback(
@@ -950,18 +1007,13 @@ def _babysit_with_fallback(
     issue_number: int,
     pr_number: int = 0,
     before_review_output: str | None = None,
+    publish_local_commits: bool = False,
 ) -> None:
     """Try babysit with each agent candidate until one succeeds.
-    Verifies PR state or local commit changed after exit 0 to catch agents that
-    run out of credits mid-mission and exit 0 without pushing anything.
+    Existing PRs require published head/check/thread progress after exit 0;
+    local commits alone do not publish a completion.
     """
-    before_threads = _count_review_threads(pr_number, review_output=before_review_output) if pr_number else -1
-    before_code, before_out, _ = run_cmd(
-        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
-        cwd=REPO_PATH
-    )
-    before_state = before_out if before_code == 0 else ""
-    before_head_code, before_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    before = _babysit_snapshot(wt_path, branch, pr_number, before_review_output)
 
     for agent_name, model_name in AGENT_CANDIDATES:
         plugin = AGENT_PLUGINS.get(agent_name)
@@ -970,40 +1022,20 @@ def _babysit_with_fallback(
         print(f"[babysit] Trying {agent_name}/{model_name}...")
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
-        after_code, after_out, _ = run_cmd(
-            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
-            cwd=REPO_PATH
-        )
-        after_threads = _count_review_threads(pr_number) if pr_number else -1
-        after_head_code, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+        if code == 0 and publish_local_commits and not _publish_reviewed_completion(wt_path, branch, pr_number):
+            return
 
-        head_changed = (after_head_code == 0 and before_head_code == 0 and after_head != before_head)
-        state_changed = (
-            after_code == 0
-            and before_state
-            and after_out != before_state
-        )
-        threads_improved = (
-            after_threads >= 0
-            and before_threads >= 0
-            and after_threads < before_threads
-        )
-
-        if code == 0 and (head_changed or state_changed or threads_improved):
+        after = _babysit_snapshot(wt_path, branch, pr_number)
+        if code == 0 and _babysit_progressed(pr_number, before, after):
             print(f"[babysit] {agent_name}/{model_name} succeeded (commits/state/threads changed)")
             _jev_verify_completion(wt_path, branch, issue_number)
             return
-        if code == 0:
-            if after_code == 0 and "PENDING" in after_out:
-                print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
-                return
-            print(f"[babysit] {agent_name}/{model_name} exit=0 but no PR progress — treating as failure")
-        else:
-            print(f"[babysit] {agent_name}/{model_name} failed (exit={code})")
+        if code == 0 and "PENDING" in after[0]:
+            print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
+            return
+        print(f"[babysit] {agent_name}/{model_name} did not complete babysit (exit={code})")
 
-        before_state = after_out
-        before_threads = after_threads
-        before_head = after_head
+        before = after
 
     if _should_send_rate_limited(f"[Runner] Babysit Failed: Issue #{issue_number}"):
         send_email(
@@ -1062,6 +1094,9 @@ def _sync_main_after_merge() -> bool:
             return False
     print("Main synchronized after merge.")
     return True
+
+
+_WIP_CONTINUATIONS: set[str] = set()
 
 
 def babysit_active_worktrees():
@@ -1248,7 +1283,29 @@ def babysit_active_worktrees():
             continue
 
         if _pr_head_commit_is_wip(pr_number):
-            print(f"PR #{pr_number} head commit is a WIP checkpoint. Leaving pending until completed.")
+            worktree_key = os.path.realpath(wt_path)
+            if worktree_key in _WIP_CONTINUATIONS:
+                print(f"PR #{pr_number} WIP continuation already attempted in this invocation.")
+                continue
+            if DRY_RUN:
+                print(f"[DRY RUN] Would resume WIP checkpoint for PR #{pr_number}.")
+                continue
+            _WIP_CONTINUATIONS.add(worktree_key)
+            print(f"PR #{pr_number} has unfinished WIP work. Resuming through normal completion gates.")
+            issue_title, safe_body = _fetch_issue_body(issue_number)
+            prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch)
+            prompt += (
+                f"\nExisting PR is #{pr_number}. Finish the actual WIP work; do not create a duplicate PR, "
+                "rename the checkpoint, or make an empty commit merely to unblock merging. "
+                "Preserve existing edits and retain all review and CI gates."
+                "\nPublication override: Do NOT push or create a PR. Finish validation and "
+                "autoreview, commit locally, then return. The runner owns the committed "
+                "CodeRabbit check and will push only after it passes."
+            )
+            wait_for_tokens()
+            _babysit_with_fallback(
+                prompt, wt_path, branch, issue_number, pr_number, publish_local_commits=True,
+            )
             continue
 
         print(f"PR #{pr_number} is open. Evaluating checks...")
@@ -1267,7 +1324,7 @@ def babysit_active_worktrees():
                 )
             else:
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
-                review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=wt_path)
+                review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path)
                 if review_code != 0:
                     before_review_out = review_out
                     print(
@@ -1276,7 +1333,7 @@ def babysit_active_worktrees():
                         f"stderr:\n{review_err}"
                     )
                     prompt = (
-                        f"babysit. CI is passing, but `bash tests/wait-for-reviews.sh {pr_number}` failed. "
+                        f"babysit. CI is passing, but `bash {REVIEW_GATE_SCRIPT} {pr_number}` failed. "
                         f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
                         f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
                         f"stdout:\n{review_out}\n"
@@ -1461,7 +1518,7 @@ def babysit_orphaned_issue_prs():
 
         if ci_status == "SUCCESS":
             print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
             if review_code != 0:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
                 if issue_num_str:
@@ -1530,7 +1587,7 @@ def babysit_dependabot_prs():
 
         if ci_status == "SUCCESS":
             print(f"[dependabot] CI is SUCCESS for Dependabot PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
             if review_code != 0:
                 print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review_out}")
                 continue
