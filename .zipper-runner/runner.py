@@ -48,6 +48,7 @@ PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
 MAIN_REMOTE_REF = "origin/main"
+REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -928,28 +929,30 @@ def _jev_verify_completion(wt_path: str, branch: str, issue_number: int) -> None
         )
 
 
+def _query_review_thread_count(pr_number: int) -> int:
+    query = (
+        'query($number:Int!,$endCursor:String) { repository(owner:"dwojtaszek",name:"zipper") { '
+        'pullRequest(number:$number) { reviewThreads(first:100,after:$endCursor) { '
+        'nodes { isResolved } pageInfo { hasNextPage endCursor } } } } }'
+    )
+    code, out, _ = run_cmd([
+        "gh", "api", "graphql", "--paginate", "-f", f"query={query}", "-F", f"number={pr_number}",
+        "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
+    ], cwd=REPO_PATH)
+    if code != 0:
+        return -1
+    try:
+        counts = [int(value) for value in out.splitlines()]
+        return sum(counts) if counts and all(value >= 0 for value in counts) else -1
+    except ValueError:
+        return -1
+
+
 def _count_review_threads(pr_number: int, review_output: str | None = None) -> int:
     """Return number of unresolved review threads on PR."""
-    if review_output is not None:
-        out = review_output
-    else:
-        query = (
-            'query($number:Int!,$endCursor:String) { repository(owner:"dwojtaszek",name:"zipper") { '
-            'pullRequest(number:$number) { reviewThreads(first:100,after:$endCursor) { '
-            'nodes { isResolved } pageInfo { hasNextPage endCursor } } } } }'
-        )
-        code, out, _ = run_cmd([
-            "gh", "api", "graphql", "--paginate", "-f", f"query={query}", "-F", f"number={pr_number}",
-            "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
-        ], cwd=REPO_PATH)
-        if code != 0:
-            return -1
-        try:
-            counts = [int(value) for value in out.splitlines()]
-            return sum(counts) if counts and all(value >= 0 for value in counts) else -1
-        except ValueError:
-            return -1
-    for line in out.splitlines():
+    if review_output is None:
+        return _query_review_thread_count(pr_number)
+    for line in review_output.splitlines():
         if "No unresolved review threads" in line:
             return 0
         if "unresolved review thread" in line:
@@ -1304,7 +1307,7 @@ def babysit_active_worktrees():
                 )
             else:
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
-                review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=wt_path)
+                review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path)
                 if review_code != 0:
                     before_review_out = review_out
                     print(
@@ -1313,7 +1316,7 @@ def babysit_active_worktrees():
                         f"stderr:\n{review_err}"
                     )
                     prompt = (
-                        f"babysit. CI is passing, but `bash tests/wait-for-reviews.sh {pr_number}` failed. "
+                        f"babysit. CI is passing, but `bash {REVIEW_GATE_SCRIPT} {pr_number}` failed. "
                         f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
                         f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
                         f"stdout:\n{review_out}\n"
@@ -1498,7 +1501,7 @@ def babysit_orphaned_issue_prs():
 
         if ci_status == "SUCCESS":
             print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
             if review_code != 0:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
                 if issue_num_str:
@@ -1567,7 +1570,7 @@ def babysit_dependabot_prs():
 
         if ci_status == "SUCCESS":
             print(f"[dependabot] CI is SUCCESS for Dependabot PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
             if review_code != 0:
                 print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review_out}")
                 continue
