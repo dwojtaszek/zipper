@@ -933,8 +933,24 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
     if review_output is not None:
         out = review_output
     else:
-        code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
+        query = (
+            'query($number:Int!) { repository(owner:"dwojtaszek",name:"zipper") { '
+            'pullRequest(number:$number) { reviewThreads(first:100) { nodes { isResolved } } } } }'
+        )
+        code, out, _ = run_cmd([
+            "gh", "api", "graphql", "-f", f"query={query}", "-F", f"number={pr_number}",
+            "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
+        ], cwd=REPO_PATH)
+        if code != 0:
+            return -1
+        try:
+            count = int(out.strip())
+            return count if count >= 0 else -1
+        except ValueError:
+            return -1
     for line in out.splitlines():
+        if "No unresolved review threads" in line:
+            return 0
         if "unresolved review thread" in line:
             import re
             m = re.search(r'(\d+)\s+unresolved', line)
@@ -1062,6 +1078,9 @@ def _sync_main_after_merge() -> bool:
             return False
     print("Main synchronized after merge.")
     return True
+
+
+_WIP_CONTINUATIONS: set[str] = set()
 
 
 def babysit_active_worktrees():
@@ -1248,7 +1267,24 @@ def babysit_active_worktrees():
             continue
 
         if _pr_head_commit_is_wip(pr_number):
-            print(f"PR #{pr_number} head commit is a WIP checkpoint. Leaving pending until completed.")
+            worktree_key = os.path.realpath(wt_path)
+            if worktree_key in _WIP_CONTINUATIONS:
+                print(f"PR #{pr_number} WIP continuation already attempted in this invocation.")
+                continue
+            if DRY_RUN:
+                print(f"[DRY RUN] Would resume WIP checkpoint for PR #{pr_number}.")
+                continue
+            _WIP_CONTINUATIONS.add(worktree_key)
+            print(f"PR #{pr_number} has unfinished WIP work. Resuming through normal completion gates.")
+            issue_title, safe_body = _fetch_issue_body(issue_number)
+            prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch)
+            prompt += (
+                f"\nExisting PR is #{pr_number}. Finish the actual WIP work; do not create a duplicate PR, "
+                "rename the checkpoint, or make an empty commit merely to unblock merging. "
+                "Preserve existing edits and retain all review and CI gates."
+            )
+            wait_for_tokens()
+            _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
             continue
 
         print(f"PR #{pr_number} is open. Evaluating checks...")
