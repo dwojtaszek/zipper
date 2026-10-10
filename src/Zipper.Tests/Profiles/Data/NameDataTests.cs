@@ -30,20 +30,9 @@ public class NameDataTests
     }
 
     [Fact]
-    public void FirstNamesLower_AllMatchUpperCaseCounterpart()
+    public void LowercaseNamePools_MatchUpperCaseCounterparts()
     {
-        for (int i = 0; i < Names.FirstNames.Length; i++)
-        {
-            Assert.Equal(Names.FirstNames[i].ToLowerInvariant(), Names.FirstNamesLower[i]);
-        }
-    }
-
-    [Fact]
-    public void LastNamesLower_AllMatchUpperCaseCounterpart()
-    {
-        for (int i = 0; i < Names.LastNames.Length; i++)
-        {
-            Assert.Equal(Names.LastNames[i].ToLowerInvariant(), Names.LastNamesLower[i]);
-        }
+        Assert.Equal(Names.FirstNames.Select(n => n.ToLowerInvariant()), Names.FirstNamesLower);
+        Assert.Equal(Names.LastNames.Select(n => n.ToLowerInvariant()), Names.LastNamesLower);
     }
 }
