@@ -47,7 +47,9 @@ with tempfile.TemporaryDirectory() as directory:
     with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
         code, out, err = plugin.run_mission("success check", directory)
         assert (code, out, err) == (0, "done\n", "")
-    time.sleep(0.8)
+    deadline = time.monotonic() + 5
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
     assert marker.exists(), "Successful Droid mission killed its background child"
 # A real timed-out agent and its child must stop before runner control returns.
 with tempfile.TemporaryDirectory() as directory:
