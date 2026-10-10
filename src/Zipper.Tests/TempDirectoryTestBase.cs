@@ -9,9 +9,17 @@ public abstract class TempDirectoryTestBase : IDisposable
 
     protected TempDirectoryTestBase()
     {
-        this.TempDir = Path.Combine(Directory.GetCurrentDirectory(), "TestOutput_" + Guid.NewGuid().ToString());
-        Directory.CreateDirectory(this.TempDir);
+        var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        // The system stores canonical (symlink-free) paths for everything it writes, while
+        // Path.GetTempPath() can sit below a symbolic link (macOS /var -> /private/var).
+        // A canonical temp directory root is a fixed point of both Path.GetFullPath and
+        // PathValidator.ResolveSecurePath, so raw expectations and resolved outputs agree.
+        this.TempDir = TestPaths.Canonicalize(tempDir);
     }
+
+    protected string GetTempFilePath() => Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}.tmp");
 
     public void Dispose()
     {

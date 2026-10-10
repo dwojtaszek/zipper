@@ -24,7 +24,8 @@ internal static class ArchiveTestSuiteGenerator
         ArchiveTestRequest request,
         CancellationToken cancellationToken,
         Action<string>? afterStaging = null,
-        Func<string, Task>? beforeFixtureBuild = null)
+        Func<string, CancellationToken, Task>? beforeFixtureBuild = null,
+        TimeSpan? deadlineOverride = null)
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
@@ -46,6 +47,7 @@ internal static class ArchiveTestSuiteGenerator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var definition = ArchiveTestCatalog.GetCase(caseKey);
+                var deadline = deadlineOverride ?? TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds);
 
                 // REQ-213: the per-fixture deadline bounds build + mutation chain + sidecar
                 // serialization + pair write. The deadline is its own timer source feeding the
@@ -58,12 +60,12 @@ internal static class ArchiveTestSuiteGenerator
                 var firstCause = 0; // 0 = none, 1 = user cancellation, 2 = per-fixture deadline
                 cancellationToken.Register(() => Interlocked.CompareExchange(ref firstCause, 1, 0));
                 deadlineTimer.Token.Register(() => Interlocked.CompareExchange(ref firstCause, 2, 0));
-                deadlineTimer.CancelAfter(TimeSpan.FromSeconds(ArchiveTestCaseSemantics.MaxDeadlineSeconds));
+                deadlineTimer.CancelAfter(deadline);
                 var fixtureToken = fixtureDeadline.Token;
 
                 try
                 {
-                    await (beforeFixtureBuild?.Invoke(caseKey) ?? Task.CompletedTask).ConfigureAwait(false);
+                    await (beforeFixtureBuild?.Invoke(caseKey, fixtureToken) ?? Task.CompletedTask).ConfigureAwait(false);
                     var artifact = ArchiveFixtureBuilder.Build(definition, request.Seed, fixtureToken);
                     var fixtureId = ArchiveTestIdentity.ComputeFixtureId(
                         GeneratorContractVersion, definition.CaseKey, definition.CaseRevision,
@@ -96,7 +98,7 @@ internal static class ArchiveTestSuiteGenerator
                     // token (a few builder paths are straight-line) still exceeds the bound.
                     if (Volatile.Read(ref firstCause) == 2)
                     {
-                        throw DeadlineExceeded(caseKey);
+                        throw DeadlineExceeded(caseKey, deadline);
                     }
 
                     orderedIds.Add(fixtureId);
@@ -107,7 +109,7 @@ internal static class ArchiveTestSuiteGenerator
                     // exit-1 in the CLI workflow — never a 130 that would read as
                     // user-initiated cancellation. A genuine user cancel (firstCause 1)
                     // propagates instead, preserving the exit-130 contract.
-                    throw DeadlineExceeded(caseKey, oce);
+                    throw DeadlineExceeded(caseKey, deadline, oce);
                 }
             }
 
@@ -742,9 +744,11 @@ internal static class ArchiveTestSuiteGenerator
     /// workflow) that stops generation before publication — never a cancellation-style 130.
     /// <paramref name="inner"/> chains the tripping cancellation (token + checkpoint stack)
     /// so deadline-vs-cancel attribution stays forensically visible.</summary>
-    private static InvalidOperationException DeadlineExceeded(string caseKey, OperationCanceledException? inner = null) =>
+    private static InvalidOperationException DeadlineExceeded(
+        string caseKey, TimeSpan deadline, OperationCanceledException? inner = null) =>
         new(
-            $"Case Key '{caseKey}' exceeded the {ArchiveTestCaseSemantics.MaxDeadlineSeconds}s REQ-213 per-fixture deadline; generation stopped and no fixture pair was published.",
+            FormattableString.Invariant(
+                $"Case Key '{caseKey}' exceeded the {deadline.TotalSeconds:0.###}s REQ-213 per-fixture deadline; generation stopped and no fixture pair was published."),
             inner);
 
     private static async Task WritePairAsync(

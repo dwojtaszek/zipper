@@ -9,7 +9,10 @@ public class PathValidatorTests
     // PathValidator itself: ResolveSecurePath_ValidPath_ReturnsDirectoryInfo pins
     // ResolveSecurePath(currentDirectory) == Path.GetFullPath(currentDirectory), which is green
     // on every CI runner, so no runner's checkout sits under an unresolved symbolic link. Using
-    // the system under test to build expectations would hide a base-resolution regression.
+    // the system under test to build expectations would hide a base-resolution regression. The
+    // one exception is temp directory roots below Path.GetTempPath(): those are canonicalized with
+    // TestPaths.Canonicalize, an independent test-side symlink resolver, because the system
+    // temporary directory itself sits below a symbolic link on macOS (/var -> /private/var).
 
     [Fact]
     public void ResolveSecurePath_ValidPath_ReturnsDirectoryInfo()
@@ -59,7 +62,7 @@ public class PathValidatorTests
     public void ResolveSecurePath_RelativePathWithTraversal_ReturnsNull()
     {
         // Arrange
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase_" + Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(baseDir);
@@ -88,7 +91,7 @@ public class PathValidatorTests
     public void ResolveSecurePath_MixedSlashesWithTraversal_ReturnsNull()
     {
         // Arrange
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase_" + Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(baseDir);
@@ -267,7 +270,7 @@ public class PathValidatorTests
     public void ResolveSecurePath_CanonicalTraversalAttempt_ReturnsNull()
     {
         // Arrange
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBase_" + Guid.NewGuid().ToString());
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBase_" + Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(baseDir);
@@ -295,7 +298,7 @@ public class PathValidatorTests
         // characters and resolves it under the current directory - outside this base either way.
         // Using a sibling base (not the current directory itself) is what makes the expected
         // outcome null everywhere instead of only on Windows.
-        var baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperUncBase_" + Guid.NewGuid().ToString("N"));
+        var baseDir = Path.Combine(Path.GetTempPath(), "ZipperUncBase_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(baseDir);
 
         try
@@ -364,8 +367,8 @@ public class PathValidatorTests
     [Fact]
     public void ResolveSecurePath_SymlinkEscapingBase_ReturnsNull()
     {
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSymlinkTest_" + Guid.NewGuid().ToString());
-        string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSymlinkTest_" + Guid.NewGuid().ToString());
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBaseSymlinkTest_" + Guid.NewGuid().ToString("N"));
+        string targetDir = Path.Combine(Path.GetTempPath(), "ZipperTargetSymlinkTest_" + Guid.NewGuid().ToString("N"));
 
         try
         {
@@ -416,8 +419,8 @@ public class PathValidatorTests
     [Fact]
     public void ResolveSecurePath_SymlinkWithChildSuffix_EscapingBase_ReturnsNull()
     {
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseSuffixTest_" + Guid.NewGuid().ToString());
-        string targetDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperTargetSuffixTest_" + Guid.NewGuid().ToString());
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBaseSuffixTest_" + Guid.NewGuid().ToString("N"));
+        string targetDir = Path.Combine(Path.GetTempPath(), "ZipperTargetSuffixTest_" + Guid.NewGuid().ToString("N"));
 
         Directory.CreateDirectory(baseDir);
         Directory.CreateDirectory(targetDir);
@@ -463,7 +466,10 @@ public class PathValidatorTests
     [Fact]
     public void ResolveSecurePath_SymlinkWithChildSuffix_InsideBase_ReturnsDirectoryInfo()
     {
-        string baseDir = Path.Combine(Directory.GetCurrentDirectory(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString());
+        // Canonicalize the fixture root: the resolved result below is symlink-free, while
+        // Path.GetTempPath() is reached through the /var -> /private/var link on macOS.
+        string baseDir = TestPaths.Canonicalize(
+            Path.Combine(Path.GetTempPath(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString("N")));
         string targetDir = Path.Combine(baseDir, "real");
 
         Directory.CreateDirectory(baseDir);

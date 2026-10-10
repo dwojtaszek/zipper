@@ -12,7 +12,7 @@ namespace Zipper.Tests;
 /// 1,000-entry cap — plus at-limit and one-over budget rejection. All reads are
 /// read-only; nothing here extracts to the filesystem.
 /// </summary>
-public class ArchiveResourceCaseTests : TempDirectoryTestBase
+public class ArchiveResourceCaseTests : WorkingDirectoryTestBase
 {
     private const string Oversized = "33554433";
 

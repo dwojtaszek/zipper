@@ -15,7 +15,7 @@ public class LoadFileOnlyGeneratorTests : IDisposable
 
     public LoadFileOnlyGeneratorTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 
@@ -195,7 +195,7 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         var content1 = await File.ReadAllTextAsync(result1.LoadFilePath);
 
         // Reset temp dir
-        var tempDir2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir2 = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir2);
         try
         {

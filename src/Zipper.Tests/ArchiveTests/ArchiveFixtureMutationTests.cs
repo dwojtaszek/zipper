@@ -6,7 +6,7 @@ using Zipper.ArchiveTests;
 
 namespace Zipper.Tests;
 
-public class ArchiveFixtureMutationTests : TempDirectoryTestBase
+public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
 {
     private static ArchiveFixtureArtifact BuildControl() =>
         ArchiveFixtureBuilder.BuildControl("valid-stored", 42, CancellationToken.None);

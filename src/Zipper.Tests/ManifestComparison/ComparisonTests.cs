@@ -83,7 +83,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_ReplacementMode_IdentifiesChangesCorrectly()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -144,7 +144,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_SupplementalMode_IdentifiesDuplicateBatesNumbers()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -194,7 +194,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_ReproductionMode_IdentifiesChangesAndBatesMatches()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -242,7 +242,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_SkippedBatesNumbers_IdentifiesGaps()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -295,7 +295,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_MissingHashBehavior_DoesNotThrow()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -340,7 +340,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_E2EGeneratedManifests_VerifiesSuccessfully()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -424,7 +424,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_CommandLineE2E_VerifiesSuccessfully()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -479,7 +479,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_MultiManifest_LastIsNew_PriorsCombined_OrderPreserved()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -545,7 +545,7 @@ public class ComparisonTests
     public async Task Compare_CommandLineE2E_SingleManifestPath_FailsBeforeOutput()
     {
         // REQ-176: fewer than two resolvable Production Manifest paths shall fail before output generation.
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -580,7 +580,7 @@ public class ComparisonTests
         // REQ-180: after trimming, whitespace-only comma-list entries normalize
         // to zero entries — the request fails as a non-zero exit before any
         // JSON or Markdown report is written.
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -614,7 +614,7 @@ public class ComparisonTests
     {
         // REQ-178: unrecoverable comparison errors shall propagate as a non-zero exit
         // code before a report is written — no lone JSON Comparison Report may remain.
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -655,7 +655,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_CommandLineE2E_InvalidGenerationValue_IsIgnoredAndComparisonSucceeds()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -693,7 +693,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_CommandLineE2E_ProductionArgs_AreIgnoredWithoutSideEffects()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -734,7 +734,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_CommandLineE2E_IgnoredGenerationValues_BeforeComparisonAreOrderIndependent()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -770,7 +770,7 @@ public class ComparisonTests
     [Fact]
     public async Task Compare_CommandLineE2E_InvalidMode_StillFailsWithIgnoredGenerationArgs()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try

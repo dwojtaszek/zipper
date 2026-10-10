@@ -5,7 +5,7 @@ using Zipper.Validation;
 
 namespace Zipper.Tests;
 
-public class PostGenerationValidatorTests
+public class PostGenerationValidatorTests : TempDirectoryTestBase
 {
     // ---- ValidationFinding tests ----
 
@@ -133,7 +133,7 @@ public class PostGenerationValidatorTests
     public void ValidatorRunner_AllValidators_RunsAllCategories()
     {
         var runner = new ValidatorRunner();
-        var loadFilePath = Path.GetTempFileName();
+        var loadFilePath = this.GetTempFilePath();
         try
         {
             File.WriteAllText(loadFilePath, "a,b,c\nd,e,f\n");
@@ -151,7 +151,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void ValidateLoadFile_WithDuplicateIdentifierAndMissingPath_ReportsBothFindings()
     {
-        var loadFilePath = Path.GetTempFileName();
+        var loadFilePath = this.GetTempFilePath();
         try
         {
             File.WriteAllText(loadFilePath, "Control Number,File Path,Bates Number\nDOC001,folder/one.pdf,ABC0001\nDOC001,folder/missing.pdf,ABC0003\n");
@@ -177,7 +177,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void ValidateLoadFile_WithQuotedCsvNewline_DoesNotReportColumnCountError()
     {
-        var loadFilePath = Path.GetTempFileName();
+        var loadFilePath = this.GetTempFilePath();
         try
         {
             File.WriteAllText(loadFilePath, "Control Number,Note\nDOC001,\"first line\nsecond line\"\n");
@@ -197,7 +197,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ValidCsvFromDisk_Passes()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempFile, "a,b,c\nd,e,f\n");
@@ -222,7 +222,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ColumnCountMismatch_ReportsError()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempFile, "a,b,c\nd,e\n");
@@ -248,7 +248,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ChaosMode_ReturnsEmptyResult()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempFile, "a,b\n");
@@ -274,7 +274,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ValidArchiveFromDisk_Passes()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"archive_test_{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(TempDir, $"archive_test_{Guid.NewGuid():N}");
         var zipPath = tempDir + ".zip";
         try
         {
@@ -323,7 +323,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ConcordanceQuoteWrappedRecords_NoFalsePositive()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             var line1 = "\xfeDOCID\xfe\x14\xfeFILEPATH\xfe";
@@ -350,7 +350,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_LargeFile_NoOomCorrectFindings()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             var sb = new System.Text.StringBuilder();
@@ -385,8 +385,8 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_MultipleFormats_ValidatesAll()
     {
-        var tempDat = Path.GetTempFileName();
-        var tempOpt = Path.GetTempFileName();
+        var tempDat = this.GetTempFilePath();
+        var tempOpt = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempDat, "a\u0014b\u0014c\nd\u0014e\u0014f\n");
@@ -418,7 +418,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void Validate_ProductionSet_DelegatesAndMergesFindings()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"validator_test_{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(TempDir, $"validator_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -487,7 +487,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void ValidationOrchestrator_RunAfterGeneration_WithValidContext_DoesNotThrow()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempFile, "a,b,c\n");
@@ -509,7 +509,7 @@ public class PostGenerationValidatorTests
     [Fact]
     public void ValidationOrchestrator_RunAfterGeneration_WithInvalidContext_Throws()
     {
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         try
         {
             File.WriteAllText(tempFile, "a,b,c\nd,e\n");

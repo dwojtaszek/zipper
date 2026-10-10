@@ -5,22 +5,13 @@ using Zipper.Profiles;
 
 namespace Zipper.Tests;
 
-public class ColumnProfileLoaderTests : IDisposable
+public class ColumnProfileLoaderTests : WorkingDirectoryTestBase
 {
     private readonly string tempDir;
 
     public ColumnProfileLoaderTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            Directory.Delete(this.tempDir, true);
-        }
+        this.tempDir = this.TempDir;
     }
 
     [Fact]

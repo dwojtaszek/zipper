@@ -3,7 +3,7 @@ using Xunit;
 
 namespace Zipper.Tests;
 
-public class LoadFileAuditWriterTests
+public class LoadFileAuditWriterTests : TempDirectoryTestBase
 {
     [Fact]
     public void GenerateAuditJson_OptFormat_SetsCorrectDefaultDelimitersAndEncoding()
@@ -249,7 +249,7 @@ public class LoadFileAuditWriterTests
     public async Task WriteAsync_WritesJsonFileToDisk()
     {
         // Arrange
-        var tempFile = Path.GetTempFileName();
+        var tempFile = this.GetTempFilePath();
         var expectedPropertiesFile = Path.ChangeExtension(tempFile, null) + "_properties.json";
 
         var request = new FileGenerationRequest();

@@ -9,7 +9,7 @@ public class SourceCsvReaderTests : IDisposable
 
     public SourceCsvReaderTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_source_csv_{Guid.NewGuid():N}");
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_source_csv_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 

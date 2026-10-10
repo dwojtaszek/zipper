@@ -8,7 +8,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_ShouldCreateCorrectCount()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -46,7 +46,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_WithTargetZipSize_PadsFilesToReachTargetSize()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -105,7 +105,7 @@ public class ParallelFileGeneratorTests
     public async Task GenerateFilesAsync_WithImpossibleTargetSize_ThrowsInvalidOperationException()
     {
         // REQ-026: When estimated minimum compressed size already exceeds target, abort immediately.
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -144,7 +144,7 @@ public class ParallelFileGeneratorTests
     {
         // C1 regression: unbounded work channel materialized ALL work items upfront,
         // causing OOM. Bounded channel with backpressure must still complete.
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -184,7 +184,7 @@ public class ParallelFileGeneratorTests
     {
         // B3 regression: padding per file must apply independently.
         // Previous code mutated shared paddingPerFile var on cap.
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -225,7 +225,7 @@ public class ParallelFileGeneratorTests
     {
         // B1 regression: fire-and-forget Task.Run in CreateWorkChannel could deadlock
         // if an exception prevented writer.Complete(). Verify pipeline always completes.
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -265,7 +265,7 @@ public class ParallelFileGeneratorTests
         // B1 regression: exception inside CreateWorkChannel's Task.Run must propagate
         // via writer.Complete(ex), not hang the pipeline. Folders=0 triggers
         // ArgumentOutOfRangeException in FileDistributionHelper.GetFolderNumber.
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -304,7 +304,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_FileCountZero_ThrowsArgumentException()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -337,7 +337,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_FileCountOne_GeneratesSingleFile()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -372,7 +372,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_UnknownFileType_ThrowsInvalidOperationException()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -405,7 +405,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_ConcurrencyZero_UsesDefaultConcurrency()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -438,7 +438,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_ConcurrencyExceedsFileCount_WorksCorrectly()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -541,7 +541,7 @@ public class ParallelFileGeneratorTests
     [Fact(Timeout = 10000)]
     public async Task GenerateFilesAsync_ConsumerFaults_PipelineTerminatesWithException()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -834,7 +834,7 @@ public class ParallelFileGeneratorTests
     [Fact]
     public async Task GenerateFilesAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 

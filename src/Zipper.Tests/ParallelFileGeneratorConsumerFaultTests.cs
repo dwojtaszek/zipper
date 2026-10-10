@@ -14,7 +14,7 @@ public class ParallelFileGeneratorConsumerFaultTests
     [Fact(Timeout = 15000)]
     public async Task GenerateFilesAsync_ConsumerFaultsAfterOneItem_FeederDoesNotBlock()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
@@ -53,7 +53,7 @@ public class ParallelFileGeneratorConsumerFaultTests
     [Fact(Timeout = 15000)]
     public async Task GenerateFilesAsync_ConsumerFaultsImmediately_FeederDoesNotBlock()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
