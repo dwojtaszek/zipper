@@ -79,7 +79,7 @@ class RunnerCycleTests(unittest.TestCase):
                     "def list_models(): return ['default']\n"
                     "def run_mission(prompt, cwd, **kwargs):\n"
                     "    print('MISSION_CALLED')\n"
-                    "    subprocess.run(['git', 'commit', '--allow-empty', '-m', 'fix: completed'], cwd=cwd, check=True, capture_output=True)\n"
+                    "    subprocess.run(['git', 'commit', '--allow-empty', '-m', 'fix: completed'], cwd=cwd, check=True, stdout=subprocess.PIPE)\n"
                     "    subprocess.run(['git', 'push', 'origin', 'HEAD'], cwd=cwd, check=True, capture_output=True)\n"
                     "    Path(os.environ['OPENED']).touch()\n"
                     "    return 0, 'done', ''\n"
@@ -89,7 +89,7 @@ class RunnerCycleTests(unittest.TestCase):
                 (repo / "tests").mkdir()
                 (repo / "tests" / "wait-for-reviews.sh").write_text("#!/bin/sh\nexit 0\n")
                 subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
-                subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: initial"], check=True, capture_output=True)
+                subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: initial"], check=True, stdout=subprocess.PIPE)
                 subprocess.run(["git", "clone", "--bare", str(repo), str(root / "origin")], check=True, capture_output=True)
                 subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(root / "origin")], check=True)
                 gh = root / "gh"
@@ -154,7 +154,7 @@ class RunnerCycleTests(unittest.TestCase):
             )
             repo = root / "repo"
             subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "test: initial"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "--allow-empty", "-m", "test: initial"], check=True, stdout=subprocess.PIPE)
             subprocess.run(["git", "clone", "--bare", str(repo), str(root / "origin")], check=True, capture_output=True)
             subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(root / "origin")], check=True)
             worktrees = root / "worktrees"
@@ -183,7 +183,7 @@ class MainSyncTests(unittest.TestCase):
             root = Path(directory)
             repo = root / "repo"
             def git(*args, cwd=repo):
-                return subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True).stdout.strip()
+                return subprocess.run(["git", "-C", str(cwd), *args], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
             subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
             git("commit", "--allow-empty", "-m", "test: initial")
             git("clone", "--bare", str(repo), str(root / "origin"))

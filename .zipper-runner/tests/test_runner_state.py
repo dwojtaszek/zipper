@@ -222,7 +222,7 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         os.makedirs(repo)
         subprocess.run(["git", "init", "-b", "main", repo], check=True, capture_output=True)
         def git(*args):
-            subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True)
+            subprocess.run(["git", "-C", repo, *args], check=True, stdout=subprocess.PIPE)
         git("commit", "--allow-empty", "-m", "test: base")
         git("switch", "-c", "fix/review")
         calls = os.path.join(self.temp_dir, "calls")
