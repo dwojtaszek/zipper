@@ -595,7 +595,7 @@ public class ProductionModuleTests
     [Fact]
     public void GenerateProductionIds_CommaList_SplitsTrimmed()
     {
-        Assert.Equal(new[] { "A", "B", "C" }, ProductionModule.GenerateProductionIds("A, B, C", 3));
+        Assert.Equal(new[] { "A", "B", "C" }, ProductionModule.GenerateProductionIds("A, B, C", 2));
     }
 
     [Fact]
@@ -628,13 +628,5 @@ public class ProductionModuleTests
         Assert.Equal(2, multi.Count);
         Assert.Matches("^PRODUCTION_\\d{8}_\\d{6}_001$", multi[0]);
         Assert.Matches("^PRODUCTION_\\d{8}_\\d{6}_002$", multi[1]);
-    }
-
-    [Fact]
-    public void GenerateProductionIds_CommaList_ReturnsAllElementsTrimmed()
-    {
-        var result = ProductionModule.GenerateProductionIds("A,B,C", 2);
-
-        Assert.Equal(new[] { "A", "B", "C" }, result);
     }
 }

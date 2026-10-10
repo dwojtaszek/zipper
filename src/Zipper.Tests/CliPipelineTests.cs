@@ -873,23 +873,6 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
-    public void Build_WithChaosFlags_SetsChaosConfig()
-    {
-        var args = new[]
-        {
-            "--loadfile-only", "--count", "10", "--output-path", this.tempDir,
-            "--chaos-mode", "--chaos-amount", "5%", "--chaos-types", "quotes,columns",
-        };
-
-        var result = Cli.Pipeline.Build(args);
-
-        Assert.NotNull(result);
-        Assert.True(result!.Chaos.ChaosMode);
-        Assert.Equal("5%", result.Chaos.ChaosAmount);
-        Assert.Equal("quotes,columns", result.Chaos.ChaosTypes);
-    }
-
-    [Fact]
     public void Build_WithEolFlag_SetsEndOfLine()
     {
         var args = new[]

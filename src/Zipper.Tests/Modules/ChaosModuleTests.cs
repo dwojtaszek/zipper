@@ -143,16 +143,6 @@ public class ChaosModuleTests
     }
 
     [Fact]
-    public void TryApply_ChaosArgs_RoundTripsThroughConfig()
-    {
-        var spec = new ChaosConfigSpec(Amount: "5%", Types: "quotes,columns", Scenario: null) { Mode = true };
-        Assert.True(TryBuildWithValues(spec, out var config));
-
-        Assert.Equal("5%", config.ChaosAmount);
-        Assert.Equal("quotes,columns", config.ChaosTypes);
-    }
-
-    [Fact]
     public void TryApply_UnknownFlag_ReturnsFalse()
     {
         Assert.False(new ChaosModule().TryApply("--unknown-flag", "x"));

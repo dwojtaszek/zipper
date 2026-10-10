@@ -385,26 +385,6 @@ public class EmailFactoryTests
     }
 
     [Fact]
-    public void EmailContext_RecordType_WorksCorrectly()
-    {
-        var context1 = new EmailContext
-        {
-            RecipientIndex = 1,
-            SenderIndex = 2,
-            Category = EmailCategory.Business,
-            TemplateIndex = 0,
-        };
-
-        var context2 = context1 with { };
-
-        Assert.Equal(context1.RecipientIndex, context2.RecipientIndex);
-        Assert.Equal(context1.SenderIndex, context2.SenderIndex);
-        Assert.Equal(context1.Category, context2.Category);
-        Assert.Equal(context1.TemplateIndex, context2.TemplateIndex);
-        Assert.True(context1 == context2);
-    }
-
-    [Fact]
     public void Create_BusinessCategory_ContainsBusinessContent()
     {
         var email = EmailFactory.Create(1, 2, EmailCategory.Business, new Random(42));

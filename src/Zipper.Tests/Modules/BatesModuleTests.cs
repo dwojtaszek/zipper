@@ -272,19 +272,15 @@ public class BatesModuleTests
     }
 
     [Fact]
-    public void TryBuild_ProductionSet_ContinuousOverlap_ReturnsFalse()
-    {
-        Assert.False(TryBuild(true, 2, "continuous", 10, new[] { "--bates-prefix", "PROD,PROD", "--bates-start", "1,5" }, out _));
-    }
-
-    [Fact]
     public void TryBuild_ProductionSet_ContinuousOverlap_EmitsError()
     {
+        bool result = true;
         var error = CaptureError(() =>
         {
-            TryBuild(true, 2, "continuous", 10, new[] { "--bates-prefix", "PROD,PROD", "--bates-start", "1,5" }, out _);
+            result = TryBuild(true, 2, "continuous", 10, new[] { "--bates-prefix", "PROD,PROD", "--bates-start", "1,5" }, out _);
         });
 
+        Assert.False(result);
         Assert.Contains("Error: Bates ranges overlap for prefix 'PROD': Set 1 (1-10) and Set 2 (5-14).", error, StringComparison.Ordinal);
     }
 

@@ -211,33 +211,6 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task ConcordanceWriter_EscapesQuoteInHeaders()
-    {
-        var request = this.CreateTestRequest();
-        request.Delimiters = new DelimiterConfig
-        {
-            ColumnDelimiter = "\u0014",
-            QuoteDelimiter = "'"
-        };
-        var fileData = new List<FileData>
-        {
-            new FileData
-            {
-                WorkItem = new FileWorkItem
-                {
-                    Index = 1,
-                    FolderNumber = 1,
-                    FilePathInZip = "file.pdf"
-                },
-                Data = Array.Empty<byte>()
-            },
-        };
-        var serializer = new ConcordanceSerializer(request);
-        var header = serializer.RenderHeader(new List<string> { "has'quote", "plain" });
-        Assert.Equal("'has''quote'\u0014'plain'", header);
-    }
-
-    [Fact]
     public async Task ConcordanceWriter_EscapesHeaderQuoteCharacter()
     {
         var serializer = new ConcordanceSerializer(new FileGenerationRequest
@@ -248,9 +221,9 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
                 QuoteDelimiter = "'"
             }
         });
-        var columns = new List<string> { "has'quote" };
+        var columns = new List<string> { "has'quote", "plain" };
         var header = serializer.RenderHeader(columns);
-        Assert.Equal("'has''quote'", header);
+        Assert.Equal("'has''quote'\u0014'plain'", header);
     }
 
     [Fact]
