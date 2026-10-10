@@ -186,7 +186,10 @@ check_system_resources() {
 
     local available_memory_mb cpu_cores
     if command -v free >/dev/null 2>&1; then
-        available_memory_mb=$(free -m | awk '/^Mem:/ {print $7}' || true)
+        if ! available_memory_mb=$(free -m | awk '/^Mem:/ {print $7}'); then
+            available_memory_mb=0
+        fi
+        available_memory_mb=${available_memory_mb:-0}
     elif command -v sysctl >/dev/null 2>&1; then
         available_memory_mb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1048576 ))
     else

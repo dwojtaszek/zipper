@@ -29,25 +29,34 @@ NC='\033[0m' # No Color
 
 # --- Helper Functions ---
 print_header() {
-    echo -e "${BLUE}==============================================================================${NC}"
-    echo -e "${BLUE}${NC}"
-    echo -e "${BLUE}==============================================================================${NC}"
+    local message
+    message=$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')
+    printf '%b%s%b\n' "$BLUE" "==============================================================================" "$NC"
+    printf '%b%s%b\n' "$BLUE" "$message" "$NC"
+    printf '%b%s%b\n' "$BLUE" "==============================================================================" "$NC"
+}
+
+print_message() {
+    local color="$1"
+    local message
+    message=$(printf '%s' "$2" | LC_ALL=C tr -d '[:cntrl:]')
+    printf '%b%s\n' "$color" "$message"
 }
 
 print_warning() {
-    echo -e "${YELLOW}[ WARNING ]${NC} "
+    print_message "${YELLOW}[ WARNING ]${NC} " "$1"
 }
 
 print_info() {
-    echo -e "${BLUE}[ INFO ]${NC} "
+    print_message "${BLUE}[ INFO ]${NC} " "$1"
 }
 
 print_success() {
-    echo -e "${GREEN}[ SUCCESS ]${NC} "
+    print_message "${GREEN}[ SUCCESS ]${NC} " "$1"
 }
 
 print_error() {
-    echo -e "${RED}[ ERROR ]${NC} "
+    print_message "${RED}[ ERROR ]${NC} " "$1"
 }
 
 # --- Stress Test Definitions ---
@@ -81,7 +90,10 @@ check_system_requirements() {
     local memory_gb="n/a"
     local cpu_cores=1
     if command -v free >/dev/null 2>&1; then
-        memory_gb=$(free -g | awk '/^Mem:/ {print $7}' || true)
+        if ! memory_gb=$(free -g | awk '/^Mem:/ {print $7}'); then
+            memory_gb=0
+        fi
+        memory_gb=${memory_gb:-0}
     elif command -v sysctl >/dev/null 2>&1; then
         memory_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
     fi
@@ -163,6 +175,8 @@ main() {
 
     local specific_test_lower
     specific_test_lower=$(printf '%s' "$specific_test" | tr '[:upper:]' '[:lower:]')
+    local specific_test_display
+    printf -v specific_test_display '%q' "$specific_test"
 
     if [[ "$specific_test_lower" == "all" ]]; then
         # Run all tests
@@ -211,12 +225,12 @@ main() {
         fi
 
         if [ "$match_count" -eq 0 ]; then
-            print_error "No stress test found matching '$specific_test'"
+            print_error "No stress test found matching '$specific_test_display'"
             return 1 2>/dev/null || exit 1
         fi
 
         if [ "$match_count" -gt 1 ]; then
-            print_error "Ambiguous stress test selector '$specific_test' matches multiple tests. Specify a unique test name."
+            print_error "Ambiguous stress test selector '$specific_test_display' matches multiple tests. Specify a unique test name."
             return 1 2>/dev/null || exit 1
         fi
 

@@ -39,10 +39,10 @@ t1_out="$SANDBOX/t1.out"
 t1_exit=0
 bash "$STRESS_DIR/run-stress-tests.sh" > "$t1_out" 2>&1 || t1_exit=$?
 
-if [[ $t1_exit -ne 0 ]]; then
-    pass "missing selector failed with nonzero exit ($t1_exit)"
+if [[ $t1_exit -ne 0 ]] && grep -Fq "No stress test selector specified. Provide a test selector" "$t1_out"; then
+    pass "missing selector failed with a diagnostic and nonzero exit ($t1_exit)"
 else
-    fail "missing selector unexpectedly returned 0"
+    fail "missing selector did not emit its diagnostic and fail nonzero (exit: $t1_exit, out: $(cat "$t1_out"))"
 fi
 
 # -----------------------------------------------------------------------------
@@ -51,12 +51,12 @@ fi
 print_info "Test 2: run-stress-tests.sh fails nonzero for unknown test name"
 t2_out="$SANDBOX/t2.out"
 t2_exit=0
-bash "$STRESS_DIR/run-stress-tests.sh" "nonexistent_test_xyz" > "$t2_out" 2>&1 || t2_exit=$?
+STRESS_SKIP_SYSCHECK=1 bash "$STRESS_DIR/run-stress-tests.sh" "nonexistent_test_xyz" > "$t2_out" 2>&1 || t2_exit=$?
 
-if [[ $t2_exit -ne 0 ]]; then
-    pass "unknown selector failed with nonzero exit ($t2_exit)"
+if [[ $t2_exit -ne 0 ]] && grep -Fq "No stress test found matching 'nonexistent_test_xyz'" "$t2_out"; then
+    pass "unknown selector failed with a diagnostic and nonzero exit ($t2_exit)"
 else
-    fail "unknown selector unexpectedly returned 0"
+    fail "unknown selector did not emit its diagnostic and fail nonzero (exit: $t2_exit, out: $(cat "$t2_out"))"
 fi
 
 # -----------------------------------------------------------------------------
@@ -116,10 +116,42 @@ t3b_out="$SANDBOX/t3b.out"
 t3b_exit=0
 (cd "$t3_box" && DISPATCH_LOG="$t3b_log" STRESS_SKIP_SYSCHECK=1 bash "./run-stress-tests.sh" 1 > "$t3b_out" 2>&1) || t3b_exit=$?
 
-if [[ $t3b_exit -eq 0 ]] && grep -q "RAN:10gb" "$t3b_log" && ! grep -q -E "RAN:(30gb|large|100m)" "$t3b_log"; then
+if [[ $t3b_exit -eq 0 ]] && grep -Fqx "RAN:10gb" "$t3b_log" && [[ "$(wc -l < "$t3b_log")" -eq 1 ]]; then
     pass "selecting exact key '1' dispatched only stress-10gb-filecount.sh without ambiguity"
 else
     fail "selecting exact key '1' failed or dispatched unexpected scripts (exit: $t3b_exit, log: $(cat "$t3b_log"), out: $(cat "$t3b_out"))"
+fi
+
+# 3c: Every other exact numeric key dispatches only its associated script
+for selector_case in "3:30gb" "4:large" "5:100m"; do
+    key="${selector_case%%:*}"
+    expected="${selector_case#*:}"
+    key_log="$SANDBOX/dispatch_key_${key}.log"
+    key_out="$SANDBOX/dispatch_key_${key}.out"
+    : > "$key_log"
+    key_exit=0
+    (cd "$t3_box" && DISPATCH_LOG="$key_log" STRESS_SKIP_SYSCHECK=1 bash "./run-stress-tests.sh" "$key" > "$key_out" 2>&1) || key_exit=$?
+
+    if [[ $key_exit -eq 0 ]] && grep -Fqx "RAN:$expected" "$key_log" && [[ "$(wc -l < "$key_log")" -eq 1 ]]; then
+        pass "selecting exact key '$key' dispatched only its associated workload"
+    else
+        fail "selecting exact key '$key' failed or dispatched unexpected scripts (exit: $key_exit, log: $(cat "$key_log"), out: $(cat "$key_out"))"
+    fi
+done
+
+# 3d: The all selector dispatches every workload in table order
+t3all_log="$SANDBOX/dispatch_all.log"
+t3all_out="$SANDBOX/t3all.out"
+: > "$t3all_log"
+t3all_exit=0
+(cd "$t3_box" && DISPATCH_LOG="$t3all_log" STRESS_SKIP_SYSCHECK=1 bash "./run-stress-tests.sh" all > "$t3all_out" 2>&1) || t3all_exit=$?
+t3all_actual=$(<"$t3all_log")
+t3all_expected=$'RAN:10gb\nRAN:30gb\nRAN:large\nRAN:100m'
+
+if [[ $t3all_exit -eq 0 && "$t3all_actual" == "$t3all_expected" ]]; then
+    pass "selecting 'all' dispatched every workload in table order"
+else
+    fail "selecting 'all' failed or dispatched workloads out of table order (exit: $t3all_exit, log: $t3all_actual, out: $(cat "$t3all_out"))"
 fi
 
 # -----------------------------------------------------------------------------
@@ -608,6 +640,106 @@ if [[ $t15_exit -eq 0 ]] && grep -q "RAN:100m" "$t15_log" && ! grep -q -E "RAN:(
     pass "uppercase selector '100M' dispatched only stress-100m-loadfile.sh"
 else
     fail "uppercase selector '100M' failed or dispatched unexpected scripts (exit: $t15_exit, log: $(cat "$t15_log"))"
+fi
+
+# -----------------------------------------------------------------------------
+# Test 16: Selector text is printed literally
+# -----------------------------------------------------------------------------
+print_info "Test 16: Unknown selector text is printed without escape interpretation"
+t16_selector='literal\cselector'
+t16_display=$(printf '%q' "$t16_selector")
+t16_out="$SANDBOX/t16.out"
+t16_exit=0
+STRESS_SKIP_SYSCHECK=1 bash "$STRESS_DIR/run-stress-tests.sh" "$t16_selector" > "$t16_out" 2>&1 || t16_exit=$?
+
+if [[ $t16_exit -ne 0 ]] && grep -Fq "No stress test found matching '$t16_display'" "$t16_out"; then
+    pass "unknown selector containing an escape sequence was printed safely"
+else
+    fail "unknown selector diagnostic was truncated or missing (exit: $t16_exit, out: $(cat "$t16_out"))"
+fi
+
+# -----------------------------------------------------------------------------
+# Test 17: Failed free queries use explicit zero fallbacks
+# -----------------------------------------------------------------------------
+print_info "Test 17: Failed free queries use explicit zero fallbacks"
+t17_bin="$SANDBOX/free_failure_bin"
+mkdir -p "$t17_bin"
+cat <<'EOF' > "$t17_bin/free"
+#!/bin/bash
+printf '%s\n' "$*" >> "$FREE_LOG"
+printf 'Mem: 8192 4096 1024 0 3072 2048\n'
+exit 1
+EOF
+chmod +x "$t17_bin/free"
+
+assert_free_failure_fallback() {
+    local name="$1" script="$2" function="$3" expected_exit="$4"
+    local expected_message="$5" expected_calls="$6" expected_second_message="${7:-}"
+    local free_log="$SANDBOX/free_${name}.log"
+    local free_out="$SANDBOX/free_${name}.out"
+    local free_exit=0
+
+    FREE_LOG="$free_log" PATH="$t17_bin:$PATH" ZIPPER_BIN=/bin/bash STRESS_SKIP_SYSCHECK=0 \
+        bash -c 'source "$1"; "$2"' _ "$script" "$function" > "$free_out" 2>&1 || free_exit=$?
+
+    if [[ $free_exit -eq $expected_exit ]] &&
+        grep -Fq "$expected_message" "$free_out" &&
+        { [[ -z "$expected_second_message" ]] || grep -Fq "$expected_second_message" "$free_out"; } &&
+        [[ "$(wc -l < "$free_log")" -eq $expected_calls ]]; then
+        pass "$name used the fallback after free failed"
+    else
+        fail "$name did not use the expected fallback (exit: $free_exit, calls: $(wc -l < "$free_log"), out: $(cat "$free_out"))"
+    fi
+}
+
+assert_free_failure_fallback "runner" "$STRESS_DIR/run-stress-tests.sh" check_system_requirements 0 "Available Memory: 0GB" 1
+assert_free_failure_fallback "100m" "$STRESS_DIR/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
+assert_free_failure_fallback "10gb" "$STRESS_DIR/stress-10gb-filecount.sh" check_system_resources 0 "Available memory: 0" 1
+assert_free_failure_fallback "30gb" "$STRESS_DIR/stress-30gb-attachments.sh" check_system_resources 0 "Available memory: 0" 2 "Low memory detected"
+t17_quoted_script_dir="$SANDBOX/path's"
+mkdir -p "$t17_quoted_script_dir"
+cp "$STRESS_DIR/stress-100m-loadfile.sh" "$t17_quoted_script_dir/stress-100m-loadfile.sh"
+assert_free_failure_fallback "100m_quoted_path" "$t17_quoted_script_dir/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
+
+# -----------------------------------------------------------------------------
+# Test 18: All print helpers preserve messages
+# -----------------------------------------------------------------------------
+print_info "Test 18: Print helpers preserve their message arguments"
+t18_out="$SANDBOX/t18.out"
+bash -c 'source "$1"; print_warning "$2"; print_info "$3"; print_success "$4"; print_error "$5"; print_header "$6"' \
+    _ "$STRESS_DIR/run-stress-tests.sh" warning-sentinel info-sentinel success-sentinel error-sentinel header-sentinel > "$t18_out" 2>&1
+
+if grep -Fq "warning-sentinel" "$t18_out" &&
+    grep -Fq "info-sentinel" "$t18_out" &&
+    grep -Fq "success-sentinel" "$t18_out" &&
+    grep -Fq "error-sentinel" "$t18_out" &&
+    grep -Fq "header-sentinel" "$t18_out"; then
+    pass "all print helpers included their message arguments"
+else
+    fail "one or more print helpers omitted their message argument: $(cat "$t18_out")"
+fi
+
+# -----------------------------------------------------------------------------
+# Test 19: Selector messages cannot send terminal control sequences
+# -----------------------------------------------------------------------------
+print_info "Test 19: Selector control characters are removed from diagnostics"
+t19_selector=$'\033[2J\033[H\007\177\2350;attacker-title\234'
+t19_display=$(printf '%q' "$t19_selector")
+t19_out="$SANDBOX/t19.out"
+t19_exit=0
+STRESS_SKIP_SYSCHECK=1 bash "$STRESS_DIR/run-stress-tests.sh" "$t19_selector" > "$t19_out" 2>&1 || t19_exit=$?
+
+if [[ $t19_exit -ne 0 ]] &&
+    grep -Fq "No stress test found matching '$t19_display'" "$t19_out" &&
+    ! grep -Fq $'\033[2J' "$t19_out" &&
+    ! grep -Fq $'\033[H' "$t19_out" &&
+    ! grep -Fq $'\007' "$t19_out" &&
+    ! grep -Fq $'\177' "$t19_out" &&
+    ! grep -Fq $'\235' "$t19_out" &&
+    ! grep -Fq $'\234' "$t19_out"; then
+    pass "selector diagnostic omitted terminal control characters"
+else
+    fail "selector diagnostic contained terminal controls or was missing (exit: $t19_exit, out: $(cat "$t19_out"))"
 fi
 
 # -----------------------------------------------------------------------------
