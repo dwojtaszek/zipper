@@ -76,7 +76,10 @@ class RunnerCycleTests(unittest.TestCase):
     def test_repeatedBabysit_doesNotResumeWipTwice(self):
         self._check_wip_resume(exit_code=1, repeat_scan=True)
 
-    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False):
+    def test_babysitOnly_unpublishedCommit_isNotRemotePrProgress(self):
+        self._check_wip_resume(exit_code=0, publish=False)
+
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             base = root / "runner"
@@ -96,6 +99,7 @@ class RunnerCycleTests(unittest.TestCase):
                 f"    if {exit_code} != 0: return {exit_code}, '', 'interrupted'\n"
                 "    subprocess.run(['git','add','progress.txt'],cwd=cwd,check=True)\n"
                 "    subprocess.run(['git','commit','-m','fix: finish work'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                f"    if {publish}: subprocess.run(['git','push','origin','HEAD'],cwd=cwd,check=True,capture_output=True)\n"
                 "    return 0, 'done', ''\n"
             )
             repo = root / "repo"
@@ -111,6 +115,7 @@ class RunnerCycleTests(unittest.TestCase):
             wt = root / "worktrees" / "issue-42"
             git("worktree", "add", "-b", "fix/ISSUE-42-smooth", str(wt), "main")
             git("commit", "--allow-empty", "-m", "wip: unfinished work", cwd=wt)
+            git("push", "--set-upstream", "origin", "HEAD", cwd=wt)
             gh = root / "gh"
             gh.write_text(
                 "#!/usr/bin/env python3\nimport json, os, sys, subprocess\nfrom pathlib import Path\n"
@@ -122,8 +127,10 @@ class RunnerCycleTests(unittest.TestCase):
                 "elif command == ['pr','view']:\n"
                 "    fields=sys.argv[sys.argv.index('--json')+1]\n"
                 "    if fields == 'commits':\n"
-                "        print(subprocess.check_output(['git','-C',os.environ['TEST_WT'],'log','-1','--format=%s'],text=True).strip())\n"
-                "    else: print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':[]}))\n"
+                "        print(subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip())\n"
+                "    else:\n"
+                "        head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                "        print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':[], 'headRefOid': head}))\n"
                 "elif command == ['pr','merge']:\n"
                 "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
                 "    raise AssertionError('merge bypass')\n"
@@ -149,7 +156,8 @@ class RunnerCycleTests(unittest.TestCase):
                      "RUNNER_BASE": str(base), "REPO_PATH": str(repo),
                      "WORKTREES_BASE": str(root / "worktrees"), "PLUGINS_DIR": str(base / "plugins"),
                      "LOCK_FILE_PATH": str(base / "runner.lock"), "STATE_DIR": str(root / "state"),
-                     "TEST_WT": str(wt), "REVIEW_CALLED": str(root / "review-called"),
+                     "TEST_WT": str(wt), "TEST_ORIGIN": str(root / "origin"),
+                     "REVIEW_CALLED": str(root / "review-called"),
                      "FORBIDDEN_COMMAND": str(root / "forbidden-command")},
                 capture_output=True, text=True, timeout=15,
             )
@@ -158,6 +166,11 @@ class RunnerCycleTests(unittest.TestCase):
             self.assertFalse((root / "review-called").exists(), "Progress snapshots ran the blocking merge review gate")
             self.assertFalse((root / "forbidden-command").exists(), "WIP continuation attempted intake or merge")
             self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run else "wip: unfinished work")
+            remote_subject = git("--git-dir", str(root / "origin"), "log", "-1", "--format=%s", "refs/heads/fix/ISSUE-42-smooth")
+            self.assertEqual(remote_subject, "fix: finish work" if exit_code == 0 and not dry_run and publish else "wip: unfinished work")
+            if not publish:
+                self.assertIn("no PR progress", result.stdout)
+                self.assertNotIn("succeeded (", result.stdout)
             if not dry_run:
                 self.assertEqual((wt / "progress.txt").read_text(), "completed work")
             else:

@@ -968,12 +968,12 @@ def _babysit_with_fallback(
     before_review_output: str | None = None,
 ) -> None:
     """Try babysit with each agent candidate until one succeeds.
-    Verifies PR state or local commit changed after exit 0 to catch agents that
-    run out of credits mid-mission and exit 0 without pushing anything.
+    Existing PRs require published head/check/thread progress after exit 0;
+    local commits alone do not publish a completion.
     """
     before_threads = _count_review_threads(pr_number, review_output=before_review_output) if pr_number else -1
     before_code, before_out, _ = run_cmd(
-        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
+        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
         cwd=REPO_PATH
     )
     before_state = before_out if before_code == 0 else ""
@@ -987,13 +987,13 @@ def _babysit_with_fallback(
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
         after_code, after_out, _ = run_cmd(
-            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
+            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
             cwd=REPO_PATH
         )
         after_threads = _count_review_threads(pr_number) if pr_number else -1
         after_head_code, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
 
-        head_changed = (after_head_code == 0 and before_head_code == 0 and after_head != before_head)
+        head_changed = (not pr_number and after_head_code == 0 and before_head_code == 0 and after_head != before_head)
         state_changed = (
             after_code == 0
             and before_state
