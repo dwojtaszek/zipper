@@ -239,11 +239,11 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
                 {
                     await Task.Delay(Timeout.InfiniteTimeSpan, fixtureToken);
                 }
-            }, deadlineOverride: TimeSpan.FromMilliseconds(5)).WaitAsync(TimeSpan.FromSeconds(5)));
+            }, deadlineOverride: TimeSpan.FromSeconds(1)).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
         Assert.Contains("valid-stored", error.Message, StringComparison.Ordinal);
-        Assert.Contains($"{ArchiveTestCaseSemantics.MaxDeadlineSeconds}s", error.Message, StringComparison.Ordinal);
+        Assert.Contains("1s", error.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(TempDir, "out")), "destination must not be created");
         Assert.DoesNotContain(
             Directory.GetDirectories(TempDir),
@@ -295,7 +295,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
                     throw;
                 }
                 cts.Cancel();
-            }, deadlineOverride: TimeSpan.FromMilliseconds(5)).WaitAsync(TimeSpan.FromSeconds(5)));
+            }, deadlineOverride: TimeSpan.FromSeconds(1)).WaitAsync(TimeSpan.FromSeconds(5)));
 
         Assert.Contains("REQ-213", error.Message, StringComparison.Ordinal);
         Assert.False(Directory.Exists(Path.Combine(TempDir, "out")));

@@ -31,16 +31,21 @@ public class PerformanceMonitorTests
     public void Start_ValidTotalFiles_ResetsCompletionCountAndRecordsTotal(long totalFiles)
     {
         // Arrange
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
         monitor.Start(5000);
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
         monitor.ReportFilesCompleted(4321);
 
         // Act
         monitor.Start(totalFiles);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        var metrics = monitor.Stop();
 
         // Assert - Start begins a new operation: the completion count restarts and the total is the new one.
         Assert.Equal(0, monitor.GetCompletedCount());
         Assert.Equal(totalFiles, monitor.TotalFiles);
+        Assert.Equal(1000, metrics.ElapsedMilliseconds);
     }
 
     [Theory]
@@ -68,9 +73,11 @@ public class PerformanceMonitorTests
     public void Stop_AfterStarting_ReturnsValidMetrics()
     {
         // Arrange
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
         monitor.Start(100);
         monitor.ReportFilesCompleted(50);
+        timeProvider.Advance(TimeSpan.FromSeconds(4));
 
         // Act
         var metrics = monitor.Stop();
@@ -80,10 +87,9 @@ public class PerformanceMonitorTests
         // (100 vs 50), so a rate derived from the total instead of the completed count fails here.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(50, metrics.FilesCompleted);
-        Assert.True(metrics.ElapsedMilliseconds >= 0);
-        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
-        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
-        Assert.Equal(metrics.ElapsedMilliseconds / 50, metrics.AverageTimePerFile, 6);
+        Assert.Equal(4000, metrics.ElapsedMilliseconds);
+        Assert.Equal(12.5, metrics.FilesPerSecond, 6);
+        Assert.Equal(80, metrics.AverageTimePerFile, 6);
     }
 
     [Fact]
@@ -104,15 +110,20 @@ public class PerformanceMonitorTests
     public void Stop_MultipleCalls_ReturnsConsistentResults()
     {
         // Arrange
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
         monitor.Start(100);
         monitor.ReportFilesCompleted(50);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+
         // Act
         var metrics1 = monitor.Stop();
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
         var metrics2 = monitor.Stop();
         var metrics3 = monitor.Stop();
 
         // Assert
+        Assert.Equal(1000, metrics1.ElapsedMilliseconds);
         Assert.Equal(metrics1.ElapsedMilliseconds, metrics2.ElapsedMilliseconds);
         Assert.Equal(metrics2.ElapsedMilliseconds, metrics3.ElapsedMilliseconds);
         Assert.Equal(metrics1.FilesPerSecond, metrics2.FilesPerSecond);
@@ -122,9 +133,11 @@ public class PerformanceMonitorTests
     [Fact]
     public void Stop_AfterReportingAllFiles_DerivesEveryMetricFromCountAndElapsed()
     {
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
         monitor.Start(100);
         monitor.ReportFilesCompleted(100);
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
 
         // Act
         var metrics = monitor.Stop();
@@ -133,17 +146,17 @@ public class PerformanceMonitorTests
         // divides by the elapsed time.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(100, metrics.FilesCompleted);
-        Assert.True(metrics.ElapsedMilliseconds >= 0);
-        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
-        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
-        Assert.Equal(metrics.ElapsedMilliseconds / 100, metrics.AverageTimePerFile, 6);
+        Assert.Equal(2000, metrics.ElapsedMilliseconds);
+        Assert.Equal(50, metrics.FilesPerSecond, 6);
+        Assert.Equal(20, metrics.AverageTimePerFile, 6);
     }
 
     [Fact]
     public async Task ReportFilesCompleted_ConcurrentCalls_ThreadSafe()
     {
         // Arrange
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
         monitor.Start(1000);
         const int threadCount = 10;
         const int reportsPerThread = 100;
@@ -163,13 +176,15 @@ public class PerformanceMonitorTests
 
         await Task.WhenAll(tasks);
 
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
         var metrics = monitor.Stop();
 
         // Assert - every concurrent report must be counted exactly once.
         Assert.Equal(1000, metrics.FilesCompleted);
         Assert.Equal(1000, monitor.GetCompletedCount());
-        var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
-        Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
+        Assert.Equal(1000, metrics.ElapsedMilliseconds);
+        Assert.Equal(1000, metrics.FilesPerSecond, 6);
+        Assert.Equal(1, metrics.AverageTimePerFile, 6);
         this.output.WriteLine($"Files per second: {metrics.FilesPerSecond}");
     }
 
@@ -177,20 +192,22 @@ public class PerformanceMonitorTests
     public void StartStopCycle_MultipleCycles_WorksCorrectly()
     {
         // Arrange
-        var monitor = new PerformanceMonitor();
+        var timeProvider = new ManualTimeProvider();
+        var monitor = new PerformanceMonitor(timeProvider);
 
         // Act & Assert
         for (int i = 0; i < 5; i++)
         {
             monitor.Start(100);
             monitor.ReportFilesCompleted(50);
+            timeProvider.Advance(TimeSpan.FromSeconds(1));
             var metrics = monitor.Stop();
 
             Assert.Equal(100, monitor.TotalFiles);
             Assert.Equal(50, metrics.FilesCompleted);
-            Assert.True(metrics.ElapsedMilliseconds >= 0);
-            var expectedRate = metrics.ElapsedMilliseconds > 0 ? metrics.FilesCompleted / (metrics.ElapsedMilliseconds / 1000) : 0;
-            Assert.Equal(expectedRate, metrics.FilesPerSecond, 6);
+            Assert.Equal(1000, metrics.ElapsedMilliseconds);
+            Assert.Equal(50, metrics.FilesPerSecond, 6);
+            Assert.Equal(20, metrics.AverageTimePerFile, 6);
 
             this.output.WriteLine($"Cycle {i + 1}: {metrics.ElapsedMilliseconds}ms, {metrics.FilesPerSecond:F2} files/sec");
         }
@@ -255,5 +272,16 @@ public class PerformanceMonitorTests
         // state. Both values are pinned independently so that resetting both to zero fails.
         Assert.Equal(100, monitor.TotalFiles);
         Assert.Equal(100, monitor.GetCompletedCount());
+    }
+
+    private sealed class ManualTimeProvider : TimeProvider
+    {
+        private long timestamp;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => Interlocked.Read(ref this.timestamp);
+
+        public void Advance(TimeSpan duration) => Interlocked.Add(ref this.timestamp, duration.Ticks);
     }
 }
