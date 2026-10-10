@@ -7,9 +7,19 @@ public class TempDirectoryTestBaseTests : TempDirectoryTestBase
     [Fact]
     public void TempDir_UsesSystemTemporaryDirectory()
     {
+        // Both sides are canonicalized: on macOS the system temporary directory is reached
+        // through the /var -> /private/var symbolic link, and TempDir stores the resolved form.
         Assert.Equal(
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.GetTempPath())),
+            TestPaths.Canonicalize(Path.GetTempPath()),
             Path.GetDirectoryName(Path.GetFullPath(this.TempDir)));
+    }
+
+    [Fact]
+    public void TempDir_HasNoSymbolicLinkComponents()
+    {
+        // The fixture root must equal its own realpath, otherwise raw expected paths diverge
+        // from the resolved paths the system reports as output paths.
+        Assert.Equal(TestPaths.Canonicalize(this.TempDir), this.TempDir);
     }
 
     [Fact]

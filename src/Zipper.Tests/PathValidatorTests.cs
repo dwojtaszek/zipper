@@ -9,7 +9,10 @@ public class PathValidatorTests
     // PathValidator itself: ResolveSecurePath_ValidPath_ReturnsDirectoryInfo pins
     // ResolveSecurePath(currentDirectory) == Path.GetFullPath(currentDirectory), which is green
     // on every CI runner, so no runner's checkout sits under an unresolved symbolic link. Using
-    // the system under test to build expectations would hide a base-resolution regression.
+    // the system under test to build expectations would hide a base-resolution regression. The
+    // one exception is fixture roots below Path.GetTempPath(): those are canonicalized with
+    // TestPaths.Canonicalize, an independent test-side symlink resolver, because the system
+    // temporary directory itself sits below a symbolic link on macOS (/var -> /private/var).
 
     [Fact]
     public void ResolveSecurePath_ValidPath_ReturnsDirectoryInfo()
@@ -463,7 +466,10 @@ public class PathValidatorTests
     [Fact]
     public void ResolveSecurePath_SymlinkWithChildSuffix_InsideBase_ReturnsDirectoryInfo()
     {
-        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString("N"));
+        // Canonicalize the fixture root: the resolved result below is symlink-free, while
+        // Path.GetTempPath() is reached through the /var -> /private/var link on macOS.
+        string baseDir = TestPaths.Canonicalize(
+            Path.Combine(Path.GetTempPath(), "ZipperBaseInsideTest_" + Guid.NewGuid().ToString("N")));
         string targetDir = Path.Combine(baseDir, "real");
 
         Directory.CreateDirectory(baseDir);
