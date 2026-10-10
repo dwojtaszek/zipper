@@ -11,7 +11,7 @@ namespace Zipper.Tests;
 /// log is ordered with every offset on its own before-mutation basis, and the
 /// before/after hash chain proves the composition.
 /// </summary>
-public class ArchiveCombinedCaseTests : TempDirectoryTestBase
+public class ArchiveCombinedCaseTests : WorkingDirectoryTestBase
 {
     private static ArchiveFixtureArtifact BuildControl(string caseKey) =>
         ArchiveFixtureBuilder.BuildControl(caseKey, 42, CancellationToken.None);

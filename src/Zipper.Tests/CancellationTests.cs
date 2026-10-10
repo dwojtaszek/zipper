@@ -13,7 +13,7 @@ namespace Zipper.Tests;
 /// These tests do NOT require real Ctrl-C: they pass a pre-cancelled token.
 /// </summary>
 [Collection("ConsoleTests")]
-public class CancellationTests
+public class CancellationTests : WorkingDirectoryTestBase
 {
     // -----------------------------------------------------------------------
     // ParallelFileGenerator (Standard mode)
@@ -557,7 +557,7 @@ public class CancellationTests
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
-        var destination = Path.Combine(Directory.GetCurrentDirectory(), $"atc-cancel-{Guid.NewGuid():N}");
+        var destination = Path.Combine(this.TempDir, $"atc-cancel-{Guid.NewGuid():N}");
         var modules = Cli.Modules.CliModules.Create();
         Assert.True(modules.Parse(new[] { "--archive-test-suite", "smoke", "--output-path", destination }));
 

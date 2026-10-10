@@ -9,7 +9,7 @@ public class DirectoryTemplateReaderTests : IDisposable
 
     public DirectoryTemplateReaderTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_dir_template_{Guid.NewGuid():N}");
+        this.tempDir = Path.Combine(Path.GetTempPath(), $"zipper_dir_template_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.tempDir);
     }
 

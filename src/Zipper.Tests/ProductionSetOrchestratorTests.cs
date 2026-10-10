@@ -87,8 +87,8 @@ public class ProductionSetOrchestratorTests
     [Fact]
     public async Task GenerateAsync_SeededGoldenBaseline_MatchesGoldenParity()
     {
-        var tempDir1 = Path.Combine(Directory.GetCurrentDirectory(), "ProdSetGolden1_" + Guid.NewGuid().ToString("N"));
-        var tempDir2 = Path.Combine(Directory.GetCurrentDirectory(), "ProdSetGolden2_" + Guid.NewGuid().ToString("N"));
+        var tempDir1 = Path.Combine(Path.GetTempPath(), "ProdSetGolden1_" + Guid.NewGuid().ToString("N"));
+        var tempDir2 = Path.Combine(Path.GetTempPath(), "ProdSetGolden2_" + Guid.NewGuid().ToString("N"));
         try
         {
             var request1 = CreateRequest(count: 3, fileType: "pdf", outputPath: tempDir1);
@@ -298,7 +298,7 @@ public class ProductionSetOrchestratorTests
     [Fact]
     public async Task GenerateAsync_OnPartialProductionZipFailure_CleansUpPartialArchiveAndPreservesSentinels()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdZipPartialFail_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdZipPartialFail_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -344,7 +344,7 @@ public class ProductionSetOrchestratorTests
     [Fact]
     public async Task GenerateAsync_RollingSetNativeWriteFailure_CleansUpCompletedEarlierSetsAndPreservesSentinels()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdRollingFail_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdRollingFail_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -400,7 +400,7 @@ public class ProductionSetOrchestratorTests
     [Fact]
     public async Task GenerateAsync_ActiveCancellationDuringZipCreation_CleansUpOwnedZipAndDirectoryAndPreservesSentinels()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdZipCancelDirect_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdZipCancelDirect_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -447,7 +447,7 @@ public class ProductionSetOrchestratorTests
     [Fact]
     public async Task GenerateAsync_ActiveCancellationDuringSecondRollingSet_CleansUpCompletedFirstSetAndPreservesSentinels()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdRollingCancelDirect_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdRollingCancelDirect_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -511,7 +511,7 @@ public class ProductionSetOrchestratorTests
     [InlineData(false)]
     public async Task GenerateAsync_PreExistingLaterSetOutput_FailsUpfrontWithoutCreatingNewArtifacts(bool preCreateZip)
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdPreExistingLater_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdPreExistingLater_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -585,7 +585,7 @@ public class ProductionSetOrchestratorTests
     [InlineData(false)]
     public async Task GenerateAsync_UnownedLaterSetCollisionAfterUpfrontChecks_CleansOwnedEarlierSetsAndPreservesCollision(bool collideZip)
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), "ProdLaterCollision_" + Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdLaterCollision_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {

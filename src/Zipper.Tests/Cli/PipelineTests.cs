@@ -3,7 +3,7 @@ using Xunit;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class PipelineTests
+public class PipelineTests : WorkingDirectoryTestBase
 {
     [Fact]
     public void Build_StandardMode_SetsAllDefaults()

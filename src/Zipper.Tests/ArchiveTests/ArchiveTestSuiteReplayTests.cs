@@ -11,7 +11,7 @@ namespace Zipper.Tests;
 /// are replay-checked for same-runtime identity only — the contract (#834) makes no
 /// cross-runtime deflate promise.
 /// </summary>
-public class ArchiveTestSuiteReplayTests : TempDirectoryTestBase
+public class ArchiveTestSuiteReplayTests : WorkingDirectoryTestBase
 {
     /// <summary>The valid-stored pair at Seed 42: stored entries plus fixed timestamps
     /// are byte-stable across .NET runtimes, so both the Fixture ID and the final

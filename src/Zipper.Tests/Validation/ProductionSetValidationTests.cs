@@ -12,7 +12,7 @@ public class ProductionSetValidationTests : IDisposable
 
     public ProductionSetValidationTests()
     {
-        this.testOutputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_validation_test_{Guid.NewGuid():N}");
+        this.testOutputPath = Path.Combine(Path.GetTempPath(), $"zipper_validation_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(this.testOutputPath);
     }
 

@@ -11,11 +11,12 @@ public class ParallelFileGeneratorOrderingWindowTests
     [Fact(Timeout = 15000)]
     public async Task GenerateFilesAsync_DelayedFirstItem_BoundsInFlightGenerationToOrderingWindow()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath);
 
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var windowFilled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
@@ -35,7 +36,10 @@ public class ParallelFileGeneratorOrderingWindowTests
                 }
                 else
                 {
-                    Interlocked.Increment(ref itemsGeneratedAfterFirst);
+                    if (Interlocked.Increment(ref itemsGeneratedAfterFirst) == maxInFlight - 1)
+                    {
+                        windowFilled.TrySetResult();
+                    }
                     generatedIndices.Add(workItem.Index);
                 }
 
@@ -66,8 +70,7 @@ public class ParallelFileGeneratorOrderingWindowTests
 
             var generationTask = generator.GenerateFilesAsync(request);
 
-            // Wait briefly to allow workers to generate as much as the pipeline allows
-            await Task.Delay(200);
+            await windowFilled.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             // With maxInFlight = 4, at most (maxInFlight - 1) = 3 items beyond index 1 should be generated.
             // Items 5..50 must NOT have been generated while item 1 is held.
@@ -100,11 +103,12 @@ public class ParallelFileGeneratorOrderingWindowTests
     [Fact(Timeout = 15000)]
     public async Task GenerateFilesAsync_CancellationWhileWaitingForPredecessor_DisposesAllMemoryOwnersAndCleansUpFiles()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath);
 
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var windowFilled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = new CancellationTokenSource();
 
         try
@@ -112,12 +116,17 @@ public class ParallelFileGeneratorOrderingWindowTests
             const int totalFiles = 20;
             const int concurrency = 2;
             const int maxInFlight = 4;
+            int itemsGeneratedAfterFirst = 0;
 
             var delayingGenerator = new DelegatingTestGenerator("pdf", (workItem, request) =>
             {
                 if (workItem.Index == 1)
                 {
                     tcs.Task.GetAwaiter().GetResult();
+                }
+                else if (Interlocked.Increment(ref itemsGeneratedAfterFirst) == maxInFlight - 1)
+                {
+                    windowFilled.TrySetResult();
                 }
 
                 return new GeneratedFileContent
@@ -147,8 +156,7 @@ public class ParallelFileGeneratorOrderingWindowTests
 
             var generationTask = generator.GenerateFilesAsync(request, cts.Token);
 
-            // Wait briefly for out-of-order buffer to receive items
-            await Task.Delay(200);
+            await windowFilled.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
             // Cancel pipeline
             cts.Cancel();
@@ -173,7 +181,7 @@ public class ParallelFileGeneratorOrderingWindowTests
     [Fact(Timeout = 15000)]
     public async Task GenerateFilesAsync_ConsumerFault_UnblocksProducersAndCleansUp()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath);
 
@@ -222,7 +230,7 @@ public class ParallelFileGeneratorOrderingWindowTests
     [Fact(Timeout = 30000)]
     public async Task GenerateFilesAsync_SeededGoldenContentHashParity_MatchesAcrossConcurrencies()
     {
-        var tempDir = Directory.GetCurrentDirectory();
+        var tempDir = Path.GetTempPath();
         var outputPath1 = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
         var outputPath2 = Path.Combine(tempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath1);

@@ -3,7 +3,7 @@ using Xunit;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class ProgramTests
+public class ProgramTests : WorkingDirectoryTestBase
 {
     private static async Task<int> RunWithRedirectedConsole(Func<Task<int>> action)
     {
@@ -87,7 +87,7 @@ public class ProgramTests
     public async Task Main_WithInvalidFileType_ReturnsErrorCode()
     {
         // Arrange
-        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
             "--output", tempPath,
@@ -112,7 +112,7 @@ public class ProgramTests
     public async Task Main_WithInvalidCount_ReturnsErrorCode()
     {
         // Arrange
-        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
             "--output", tempPath,
@@ -137,7 +137,7 @@ public class ProgramTests
     public async Task Main_WithInvalidNumericArgument_ReturnsErrorCode()
     {
         // Arrange
-        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
             "--output", tempPath,
@@ -292,8 +292,8 @@ public class ProgramTests
     public async Task Main_WithSameSeed_ProducesIdenticalOutputSizes()
     {
         // Arrange
-        string tempPath1 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
-        string tempPath2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath1 = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
+        string tempPath2 = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
 
         try
         {
@@ -391,8 +391,8 @@ public class ProgramTests
     public async Task Main_WithSeedAndTargetZipSize_ProducesIdenticalOutputAndHashes()
     {
         // Arrange
-        string tempPath1 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
-        string tempPath2 = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath1 = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
+        string tempPath2 = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
 
         try
         {
@@ -492,7 +492,7 @@ public class ProgramTests
     [Fact]
     public async Task Main_WithArchiveTestSuite_PublishesPairsAndReturnsZero()
     {
-        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             string[] args = { "--archive-test-suite", "smoke", "--seed", "42", "--output-path", tempPath };
@@ -527,7 +527,7 @@ public class ProgramTests
     [Fact]
     public async Task Main_WithArchiveTestSuiteAndGenerationFlag_ReturnsOne()
     {
-        string[] args = { "--archive-test-suite", "smoke", "--folders", "1", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString()) };
+        string[] args = { "--archive-test-suite", "smoke", "--folders", "1", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), $"zipper_{Guid.NewGuid():N}") };
 
         int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
         Assert.Equal(1, exitCode);
@@ -565,7 +565,7 @@ public class ProgramTests
     [Fact]
     public async Task Main_WithArchiveTestCasesWithoutSuite_ReturnsOne()
     {
-        string[] args = { "--archive-test-cases", "valid-empty", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString()) };
+        string[] args = { "--archive-test-cases", "valid-empty", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), $"zipper_{Guid.NewGuid():N}") };
 
         int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
         Assert.Equal(1, exitCode);
@@ -574,7 +574,7 @@ public class ProgramTests
     [Fact]
     public async Task Main_WithArchiveTestSuiteRepeatedRunIntoSameDirectory_ReturnsOneAndPreservesFirstRun()
     {
-        string tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             string[] args = { "--archive-test-suite", "smoke", "--output-path", tempPath };

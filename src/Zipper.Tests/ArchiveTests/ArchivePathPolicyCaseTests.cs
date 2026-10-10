@@ -15,7 +15,7 @@ namespace Zipper.Tests;
 /// through read-only APIs and raw header bytes; <see cref="ZipFileExtensions.ExtractToDirectory"/>
 /// is never called on them (that requires an isolated VM/container, out of scope here).
 /// </summary>
-public class ArchivePathPolicyCaseTests : TempDirectoryTestBase
+public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
 {
     private static readonly string[] PolicyCaseKeys =
     [

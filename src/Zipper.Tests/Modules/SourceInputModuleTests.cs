@@ -6,22 +6,13 @@ using Zipper.SourceInput;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class SourceInputModuleTests : IDisposable
+public class SourceInputModuleTests : WorkingDirectoryTestBase
 {
     private readonly string tempDir;
 
     public SourceInputModuleTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_source_input_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            Directory.Delete(this.tempDir, true);
-        }
+        this.tempDir = this.TempDir;
     }
 
     private string WriteCsv(string content, string name = "input.csv")

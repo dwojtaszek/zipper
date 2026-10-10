@@ -7,7 +7,7 @@ public class ProductionMetadataValidationTests
 {
     private static (ProductionSetValidationReport Report, string TempDir) ValidateManifestJson(string manifestJson)
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         File.WriteAllText(Path.Combine(tempDir, "_manifest.json"), manifestJson);
 
@@ -228,7 +228,7 @@ public class ProductionMetadataValidationTests
             }
             """;
 
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
         File.WriteAllText(Path.Combine(tempDir, "_manifest.json"), manifest);
 

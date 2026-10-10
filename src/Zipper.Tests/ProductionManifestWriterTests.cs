@@ -12,7 +12,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_GeneratesManifestWithExpectedStructure()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -117,7 +117,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_WithEmptyDelimiters_FormatsCorrectly()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -160,7 +160,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_WithNonPrintableDelimiters_FormatsCorrectly()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -203,7 +203,7 @@ public class ProductionManifestWriterTests
     public async Task WriteAsync_EmitsDerivedAzureMetadataBlock()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -245,7 +245,7 @@ public class ProductionManifestWriterTests
         // Arrange: production folder name and Bates range carry non-ASCII and
         // CR/LF characters; the emitted metadata block must be Azure-safe.
         var productionName = $"meta_{Path.GetRandomFileName()}_café";
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), productionName);
+        var tempDir = Path.Combine(Path.GetTempPath(), productionName);
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -289,7 +289,7 @@ public class ProductionManifestWriterTests
     [Fact]
     public async Task WriteAsync_WithControlCharacterValues_NormalizesToAzureSafeSet()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var request = new FileGenerationRequest();
@@ -340,7 +340,7 @@ public class ProductionManifestWriterTests
         const int ProductionIdLength = 255;
         const int VolumeCount = 1;
 
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -380,7 +380,7 @@ public class ProductionManifestWriterTests
         // 59 bytes of keys + 3939 + 3939 + 300 + 1 byte of values = 8,238, four bytes over budget.
         const int ExpectedTotalBytes = 8238;
 
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try

@@ -3,22 +3,13 @@ using Xunit;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class MixedFileTypeCliTests : IDisposable
+public class MixedFileTypeCliTests : WorkingDirectoryTestBase
 {
     private readonly string tempDir;
 
     public MixedFileTypeCliTests()
     {
-        this.tempDir = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_mixed_cli_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(this.tempDir);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.tempDir))
-        {
-            Directory.Delete(this.tempDir, true);
-        }
+        this.tempDir = this.TempDir;
     }
 
     [Fact]

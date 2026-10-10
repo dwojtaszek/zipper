@@ -6,22 +6,13 @@ using Zipper.Config;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class ProductionSetTests : IDisposable
+public class ProductionSetTests : WorkingDirectoryTestBase
 {
     private readonly string testOutputPath;
 
     public ProductionSetTests()
     {
-        this.testOutputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_test_{Guid.NewGuid():N}");
-        Directory.CreateDirectory(this.testOutputPath);
-    }
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.testOutputPath))
-        {
-            Directory.Delete(this.testOutputPath, true);
-        }
+        this.testOutputPath = this.TempDir;
     }
 
     // === CLI Validation Tests ===
@@ -528,7 +519,7 @@ public class ProductionSetTests : IDisposable
     {
         Skip.If(OperatingSystem.IsWindows(), "Directory permissions don't prevent file creation on Windows");
 
-        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var outputPath = Path.Combine(this.TempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath);
 
         try
@@ -611,7 +602,7 @@ public class ProductionSetTests : IDisposable
     {
         // Output path is an existing file, so the first Rolling Production Set's
         // directory creation throws IOException inside the rolling loop.
-        var outputFile = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_ctx_{Guid.NewGuid():N}");
+        var outputFile = Path.Combine(this.TempDir, $"zipper_prod_ctx_{Guid.NewGuid():N}");
         await File.WriteAllTextAsync(outputFile, "not a directory");
         var originalError = Console.Error;
         using var errWriter = new StringWriter();
@@ -647,7 +638,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task GenerateAsync_SourceDrivenOriginalsMode_MirrorsSourcePathsUnderOriginals()
     {
-        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_prod_src_{Guid.NewGuid():N}");
         Directory.CreateDirectory(outputPath);
         try
         {
@@ -683,7 +674,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task GenerateAsync_SourceDrivenPreserveMode_KeepsSourceSubdirsUnderVolume()
     {
-        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_prod_src_{Guid.NewGuid():N}");
         Directory.CreateDirectory(outputPath);
         try
         {
@@ -709,7 +700,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task GenerateAsync_SourceDrivenBatesMode_UsesStandardProductionLayout()
     {
-        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), $"zipper_prod_src_{Guid.NewGuid():N}");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_prod_src_{Guid.NewGuid():N}");
         Directory.CreateDirectory(outputPath);
         try
         {
@@ -756,7 +747,7 @@ public class ProductionSetTests : IDisposable
     public async Task GenerateAsync_WithMultiPageTiff_ShouldWritePageLevelImageFilesToDisk()
     {
         // Arrange
-        var outputPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var outputPath = Path.Combine(this.TempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputPath);
 
         try
@@ -805,8 +796,7 @@ public class ProductionSetTests : IDisposable
     [Fact]
     public async Task GenerateAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
     {
-        var tempDir = Directory.GetCurrentDirectory();
-        var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
+        var outputPath = Path.Combine(this.TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
 
         try

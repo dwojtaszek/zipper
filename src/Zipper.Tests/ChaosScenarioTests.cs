@@ -4,7 +4,7 @@ using Xunit;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class ChaosScenarioTests
+public class ChaosScenarioTests : WorkingDirectoryTestBase
 {
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunWithCapture(string[] args)
     {
@@ -146,7 +146,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_WithoutChaosMode_ReturnsError()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, stderr) = await RunWithCapture(new[]
@@ -169,7 +169,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_WithChaosTypes_ReturnsConflictError()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, stderr) = await RunWithCapture(new[]
@@ -193,7 +193,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_InvalidName_ReturnsError()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, stderr) = await RunWithCapture(new[]
@@ -216,7 +216,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_FormatMismatch_ReturnsError()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, stderr) = await RunWithCapture(new[]
@@ -240,7 +240,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_ValidRun_GeneratesLoadFileWithAnomalies()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, stdout, _) = await RunWithCapture(new[]
@@ -290,7 +290,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_AmountOverride_UsesCustomAmount()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, _) = await RunWithCapture(new[]
@@ -324,7 +324,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_FullChaos_EnablesAllTypes()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, _, _) = await RunWithCapture(new[]
@@ -356,7 +356,7 @@ public class ChaosScenarioTests
     [Fact]
     public async Task ChaosScenario_BrokenBoundaries_WorksWithOpt()
     {
-        var tempPath = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         try
         {
             var (exitCode, stdout, _) = await RunWithCapture(new[]

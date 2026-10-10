@@ -11,7 +11,7 @@ public class SupplementalValidationTests : IDisposable
 
     public SupplementalValidationTests()
     {
-        _tempDir = Path.Combine(Directory.GetCurrentDirectory(), Path.GetRandomFileName());
+        _tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 

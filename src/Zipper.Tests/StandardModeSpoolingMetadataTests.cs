@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Zipper.Tests;
 
-public class StandardModeSpoolingMetadataTests : TempDirectoryTestBase
+public class StandardModeSpoolingMetadataTests : WorkingDirectoryTestBase
 {
     [Fact]
     public async Task StandardMode_EmlWithFamiliesAndMetadata_DatMatchesArchiveCcAndAttachmentFileSize()

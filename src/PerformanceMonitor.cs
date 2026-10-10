@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Zipper;
 
 /// <summary>
@@ -8,12 +6,24 @@ namespace Zipper;
 /// </summary>
 public class PerformanceMonitor
 {
-    private readonly Stopwatch stopwatch = new Stopwatch();
+    private readonly TimeProvider timeProvider;
     private long filesCompleted;
     private long totalFiles;
+    private long startTimestamp;
+    private TimeSpan elapsed;
+    private bool isRunning;
     private DateTime lastProgressUpdate = DateTime.UtcNow;
     private double lastDisplayedPercentage;
     private readonly Lock syncRoot = new();
+
+    public PerformanceMonitor() : this(TimeProvider.System)
+    {
+    }
+
+    internal PerformanceMonitor(TimeProvider timeProvider)
+    {
+        this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+    }
 
     /// <summary>
     /// Starts performance monitoring for a new operation.
@@ -25,7 +35,9 @@ public class PerformanceMonitor
         this.filesCompleted = 0;
         this.lastDisplayedPercentage = 0;
         this.lastProgressUpdate = DateTime.UtcNow;
-        this.stopwatch.Restart();
+        this.startTimestamp = this.timeProvider.GetTimestamp();
+        this.elapsed = TimeSpan.Zero;
+        this.isRunning = true;
     }
 
     /// <summary>
@@ -75,8 +87,8 @@ public class PerformanceMonitor
         }
 
         var percentage = total > 0 ? (double)completed / total * 100 : 0;
-        var elapsed = this.stopwatch.Elapsed;
-        var rate = elapsed.TotalSeconds > 0 ? completed / elapsed.TotalSeconds : 0;
+        var elapsedTime = this.GetElapsedTime();
+        var rate = elapsedTime.TotalSeconds > 0 ? completed / elapsedTime.TotalSeconds : 0;
         var eta = rate > 0 ? TimeSpan.FromSeconds((total - completed) / rate) : TimeSpan.Zero;
 
         lock (this.syncRoot)
@@ -110,19 +122,26 @@ public class PerformanceMonitor
     /// <returns>Performance metrics for the completed operation.</returns>
     public PerformanceMetrics Stop()
     {
-        this.stopwatch.Stop();
+        if (this.isRunning)
+        {
+            this.elapsed = this.timeProvider.GetElapsedTime(this.startTimestamp);
+            this.isRunning = false;
+        }
 
-        var elapsed = this.stopwatch.Elapsed;
-        var rate = elapsed.TotalSeconds > 0 ? this.filesCompleted / elapsed.TotalSeconds : 0;
+        var rate = this.elapsed.TotalSeconds > 0 ? this.filesCompleted / this.elapsed.TotalSeconds : 0;
 
         return new PerformanceMetrics
         {
-            ElapsedMilliseconds = elapsed.TotalMilliseconds,
+            ElapsedMilliseconds = this.elapsed.TotalMilliseconds,
             FilesCompleted = this.filesCompleted,
             FilesPerSecond = rate,
-            AverageTimePerFile = elapsed.TotalMilliseconds / Math.Max(this.filesCompleted, 1),
+            AverageTimePerFile = this.elapsed.TotalMilliseconds / Math.Max(this.filesCompleted, 1),
         };
     }
+
+    private TimeSpan GetElapsedTime() => this.isRunning
+        ? this.timeProvider.GetElapsedTime(this.startTimestamp)
+        : this.elapsed;
 }
 
 /// <summary>

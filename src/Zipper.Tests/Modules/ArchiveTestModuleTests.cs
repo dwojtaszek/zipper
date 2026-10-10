@@ -12,7 +12,7 @@ namespace Zipper.Tests;
 /// ADR-0008).
 /// </summary>
 [Collection("ConsoleTests")]
-public class ArchiveTestModuleTests : TempDirectoryTestBase
+public class ArchiveTestModuleTests : WorkingDirectoryTestBase
 {
     private static readonly System.Text.RegularExpressions.Regex FixturePairPattern =
         new("^atc-[0-9a-f]{64}\\.(zip|json)$", System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));

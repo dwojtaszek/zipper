@@ -6,14 +6,14 @@ using Zipper.Config;
 
 namespace Zipper.Tests;
 
-public class ZipArchiveServiceTests
+public class ZipArchiveServiceTests : TempDirectoryTestBase
 {
     [Fact]
     public async Task CreateArchiveAsync_WithBasicFiles_CreatesValidArchive()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -28,7 +28,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= 5; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -53,8 +53,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -69,7 +69,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= 3; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -100,8 +100,8 @@ public class ZipArchiveServiceTests
         ZipCompressionMethod method, int expectedMethodCode)
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -116,8 +116,8 @@ public class ZipArchiveServiceTests
 
         var testFiles = new List<FileData>
         {
-            this.CreateTestFileData(1),
-            this.CreateTestFileData(2),
+            this.CreateZipTestFileData(1),
+            this.CreateZipTestFileData(2),
         };
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -156,8 +156,8 @@ public class ZipArchiveServiceTests
         ZipCompressionMethod method)
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -172,8 +172,8 @@ public class ZipArchiveServiceTests
 
         var testFiles = new List<FileData>
         {
-            this.CreateTestFileData(1),
-            this.CreateTestFileData(2),
+            this.CreateZipTestFileData(1),
+            this.CreateZipTestFileData(2),
         };
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -197,8 +197,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -213,7 +213,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= 3; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -242,8 +242,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_WithEmlFilesAndAttachments_HandlesAttachmentsCorrectly()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -289,8 +289,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_WithMixedOptions_HandlesAllCombinations()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -306,7 +306,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= 2; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -341,7 +341,7 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_LoadFileIncluded_ReturnsLastFormatEntryName()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -362,7 +362,7 @@ public class ZipArchiveServiceTests
             var channel = Channel.CreateUnbounded<FileData>();
             for (int i = 1; i <= 2; i++)
             {
-                await channel.Writer.WriteAsync(this.CreateTestFileData(i));
+                await channel.Writer.WriteAsync(this.CreateZipTestFileData(i));
             }
 
             channel.Writer.Complete();
@@ -386,7 +386,7 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_LoadFileToDisk_ReturnsLastFormatFullPath()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -407,7 +407,7 @@ public class ZipArchiveServiceTests
             var channel = Channel.CreateUnbounded<FileData>();
             for (int i = 1; i <= 2; i++)
             {
-                await channel.Writer.WriteAsync(this.CreateTestFileData(i));
+                await channel.Writer.WriteAsync(this.CreateZipTestFileData(i));
             }
 
             channel.Writer.Complete();
@@ -427,7 +427,7 @@ public class ZipArchiveServiceTests
         }
     }
 
-    private FileData CreateTestFileData(int index)
+    private FileData CreateZipTestFileData(int index)
     {
         return new FileData
         {
@@ -466,8 +466,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_WithEmlAttachmentsAndText_IncludesAttachmentTextFiles()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -519,8 +519,8 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_MultipleFormats_ProducesLoadFilesWithExpectedRows()
     {
         // Arrange
-        var zipPath = Path.GetTempFileName();
-        var loadPathBase = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPathBase = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig
@@ -536,7 +536,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= 3; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -581,7 +581,7 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_AuditFile_TotalRecordsEqualsFileCount()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
         var zipPath = Path.Combine(tempDir, "test.zip");
         var loadPath = Path.Combine(tempDir, "load.dat");
@@ -601,7 +601,7 @@ public class ZipArchiveServiceTests
         var testFiles = new List<FileData>();
         for (int i = 1; i <= fileCount; i++)
         {
-            testFiles.Add(this.CreateTestFileData(i));
+            testFiles.Add(this.CreateZipTestFileData(i));
         }
 
         var channel = Channel.CreateUnbounded<FileData>();
@@ -629,8 +629,8 @@ public class ZipArchiveServiceTests
     [Fact]
     public async Task CreateArchiveAsync_WhenProcessFileDataThrows_DisposesAllMemoryOwners()
     {
-        var zipPath = Path.GetTempFileName();
-        var loadPath = Path.GetTempFileName();
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
         var request = new FileGenerationRequest
         {
             Output = new OutputConfig { FileType = "pdf", FileCount = 3, Concurrency = 1 }
@@ -663,7 +663,7 @@ public class ZipArchiveServiceTests
     public async Task CreateArchiveAsync_ChaosModeEnabled_DoesNotApplyChaos()
     {
         // Arrange
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -691,7 +691,7 @@ public class ZipArchiveServiceTests
             var testFiles = new List<FileData>();
             for (int i = 1; i <= fileCount; i++)
             {
-                testFiles.Add(this.CreateTestFileData(i));
+                testFiles.Add(this.CreateZipTestFileData(i));
             }
 
             var channel = Channel.CreateUnbounded<FileData>();
@@ -726,7 +726,7 @@ public class ZipArchiveServiceTests
     [Fact]
     public async Task CreateArchiveAsync_DuplicateNativeFilePath_ThrowsInvalidOperationException()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -757,7 +757,7 @@ public class ZipArchiveServiceTests
     [Fact]
     public async Task CreateArchiveAsync_AttachmentCollidesWithExistingNativeFile_ThrowsInvalidOperationException()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {
@@ -795,7 +795,7 @@ public class ZipArchiveServiceTests
     [Fact]
     public async Task CreateArchiveAsync_IncludedLoadFileCollidesWithNativeFile_ThrowsInvalidOperationException()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString("N"));
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
         {

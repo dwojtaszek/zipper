@@ -6,12 +6,12 @@ namespace Zipper.Tests;
 /// End-to-end tests for the generation mode orchestration branches
 /// (StandardMode, ProductionSetMode, LoadFileOnlyMode) driven through Program.Main.
 /// </summary>
-public class GenerationModeTests
+public class GenerationModeTests : WorkingDirectoryTestBase
 {
     [Fact]
     public async Task Main_StandardModeWithIncludeLoadFile_EmbedsLoadFileInArchive()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -42,7 +42,7 @@ public class GenerationModeTests
     [Fact]
     public async Task Main_StandardModeWithTargetZipSizeFarFromActual_WarnsButSucceeds()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -67,7 +67,7 @@ public class GenerationModeTests
     [Fact]
     public async Task Main_ProductionSetModeWithProductionZip_CreatesZipArchive()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -96,7 +96,7 @@ public class GenerationModeTests
     [Fact]
     public async Task Main_LoadFileOnlyModeWithChaosTypes_GeneratesLoadFile()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         try
@@ -123,7 +123,7 @@ public class GenerationModeTests
     [Fact]
     public async Task Main_LoadFileOnlyModeWithChaosScenario_PrintsResolvedChaosAmount()
     {
-        var tempDir = Path.Combine(Directory.GetCurrentDirectory(), Guid.NewGuid().ToString());
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         var originalOut = Console.Out;

@@ -14,7 +14,7 @@ namespace Zipper.Tests;
 /// §4.3.9), UTF-8 and CP437 name encodings (bit 11 / Appendix D), signature-like comment
 /// bytes, a tiny genuine Zip64 Archive, and the three paired malformed cases.
 /// </summary>
-public class ArchiveCompatibilityCaseTests : TempDirectoryTestBase
+public class ArchiveCompatibilityCaseTests : WorkingDirectoryTestBase
 {
     private static ArchiveFixtureArtifact BuildControl(string caseKey) =>
         ArchiveFixtureBuilder.BuildControl(caseKey, 42, CancellationToken.None);
