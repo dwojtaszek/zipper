@@ -2,6 +2,47 @@
 
 This directory contains the autonomous runner pipeline that manages GitHub issues, triggers the AI agent, and creates pull requests.
 
+## Operating contract
+
+Run from the repository root:
+
+```bash
+.zipper-runner/cron-wrapper.sh --agent droid
+.zipper-runner/cron-wrapper.sh --babysit-only
+python3 .zipper-runner/runner.py --status --agent droid
+```
+
+`--agent` prefers that agent for this run only, ahead of other priority tiers. Disabled models (priority 0) and unhealthy agents remain excluded; normal fallbacks remain available. It does not edit `AGENT_PREFERENCES.md` or timers. Configuration precedence is command-line agent preference, process environment, ignored `.env`, then defaults. Existing environment values, including empty values, are preserved.
+
+Agent health probes run only when a coding mission is needed, or during `--status`; idle babysitting and green-PR merge evaluation need no agent credits. `--dry-run` skips health calls. Babysit-only, capacity reached, and no eligible issue each have distinct logs; only issue directories count toward capacity.
+
+After successful intake, the runner immediately evaluates the PR through the existing CI, WIP, local CodeRabbit, and robot-review gates. Pending checks remain pending, not failures. CodeRabbit's successful zero-finding review may be reused within the same runner process only for a clean, unchanged `HEAD` and `main`; a changed commit or base requires another review. After a merge, clean local `main` fast-forwards immediately. Dirty, divergent, or non-main repositories are preserved and sync is deferred.
+
+Droid uses `stream-json`, drains stdout and stderr concurrently, and logs assistant-progress markers plus a 60-second heartbeat. Prompts, message text, tool arguments, and results are not echoed into live logs. The plugin still returns `(exit_code, stdout, stderr)`, with stdout containing final assistant text (partial assistant messages on interrupted runs), not raw tool payloads. The 45-minute mission timeout still terminates the process group.
+
+### Cadence
+
+The recommended schedule is intake every 15 minutes and babysitting every 5 minutes. The existing runner lock and one-worktree limit remain authoritative. A successful intake does not start a second issue in that invocation.
+
+- **Cron:** run `bash .zipper-runner/setup-cron.sh`. It migrates the exact legacy six-hour intake entry, preserves custom schedules and unrelated jobs, and adds babysitting if absent.
+- **Existing systemd user timers:** after the PR is merged, install the checked-in timer drop-ins:
+
+```bash
+mkdir -p "$HOME/.config/systemd/user/zipper-intake.timer.d" "$HOME/.config/systemd/user/zipper-babysit.timer.d"
+cp .zipper-runner/systemd/zipper-intake.timer.d/cadence.conf "$HOME/.config/systemd/user/zipper-intake.timer.d/"
+cp .zipper-runner/systemd/zipper-babysit.timer.d/cadence.conf "$HOME/.config/systemd/user/zipper-babysit.timer.d/"
+systemctl --user daemon-reload
+systemctl --user restart zipper-intake.timer zipper-babysit.timer
+```
+
+Use one scheduler, not both. Committing the drop-ins does not change live timers; installing them replaces the calendar cadence while preserving existing service paths and boot/persistence settings.
+
+### Harness limits
+
+`AGENTS.md` documents bounded tool discovery, native subagent schema mapping, optional RTK, valid GitHub CLI examples, and focused iteration with unchanged final review/test gates. The runner cannot repair Factory's tool catalog, search relevance, or Loop availability. Missing capabilities must be reported rather than retried indefinitely or bypassed against harness policy.
+
+Runner regressions: `cd .zipper-runner && python3 -m unittest discover -s tests`.
+
 ## Jev gate (TypeSafe reflex layer)
 
 `.zipper-runner/jev_gate.py` adds advisory TypeSafe (Jev) judgments to the runner loop. Set `TYPESAFE_API_KEY` in `.zipper-runner/.env` to enable; without it every judgment returns `None` and the runner keeps its deterministic behavior.
@@ -31,8 +72,6 @@ While Bash is excellent for setting up environments, it is notoriously fragile w
 
 ---
 
-## ⚠️ Pre-Commit Warning: Hardcoded Paths
-Currently, these scripts contain paths hardcoded to `/home/dom/...`. 
-Before fully committing these to the repository to be shared with other developers or deployed to a server, the scripts must be refactored to:
-1. Dynamically resolve their own paths (`dirname $0` in bash, `os.path.dirname(__file__)` in Python).
-2. Extract user-specific configurations (like `DOTNET_ROOT` and `EMAIL_RECIPIENT`) into an untracked `.env` file.
+## Configuration
+
+Native checkout paths are resolved relative to the scripts. Override `RUNNER_BASE`, `REPO_PATH`, `WORKTREES_BASE`, `DOTNET_ROOT`, and `EMAIL_RECIPIENT` for another installation. Keep credentials in the ignored `.env` or the process environment. GitHub repository endpoints remain Zipper-specific.

@@ -7,6 +7,7 @@ Run from the .zipper-runner directory:
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -215,6 +216,40 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
         self.assertTrue(ok)
         self.assertEqual(err, "")
+
+    def test_sameReviewedCommits_reusesReview_untilHeadOrBaseChanges(self):
+        repo = os.path.join(self.temp_dir, "repo")
+        os.makedirs(repo)
+        subprocess.run(["git", "init", "-b", "main", repo], check=True, capture_output=True)
+        def git(*args):
+            subprocess.run(["git", "-C", repo, *args], check=True, stdout=subprocess.PIPE)
+        git("commit", "--allow-empty", "-m", "test: base")
+        git("switch", "-c", "fix/review")
+        calls = os.path.join(self.temp_dir, "calls")
+        self._create_fake_cr(f"echo call >> '{calls}'\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}}'")
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertEqual(Path(calls).read_text().splitlines(), ["call"])
+        git("commit", "--allow-empty", "-m", "test: changed head")
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        git("branch", "-f", "main", "HEAD")
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertEqual(len(Path(calls).read_text().splitlines()), 3)
+        dirty = Path(repo) / "uncommitted"
+        dirty.write_text("pending change")
+        ok, err = runner._run_coderabbit_pre_pr_check(repo)
+        self.assertFalse(ok)
+        self.assertIn("Commit all changes", err)
+        self.assertEqual(len(Path(calls).read_text().splitlines()), 3)
+        dirty.unlink()
+        git("commit", "--allow-empty", "-m", "test: next head")
+        self._create_fake_cr(
+            "git commit --allow-empty -m 'test: changed during review' >/dev/null\n"
+            "echo '{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}'"
+        )
+        ok, err = runner._run_coderabbit_pre_pr_check(repo)
+        self.assertFalse(ok)
+        self.assertIn("changed during", err)
 
     def test_whenCoderabbitReviewSkipped_returnsFalse(self):
         output = 'echo \'{"type":"complete","status":"review_skipped","findings":0}\''

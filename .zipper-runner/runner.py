@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import argparse
 import html
 import importlib.util
 import io
@@ -33,7 +34,7 @@ if os.path.exists(env_path):
             if not stripped or stripped.startswith("#") or "=" not in stripped:
                 continue
             key, val = stripped.split("=", 1)
-            os.environ[key] = val
+            os.environ.setdefault(key, val)
 
 RUNNER_BASE = os.environ.get("RUNNER_BASE", os.path.abspath(os.path.dirname(__file__)))
 REPO_PATH = os.environ.get("REPO_PATH", os.path.abspath(os.path.join(RUNNER_BASE, "..")))
@@ -46,6 +47,7 @@ ACTIVE_AGENT = os.environ.get("ACTIVE_AGENT", "")
 PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
+MAIN_REMOTE_REF = "origin/main"
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -102,19 +104,27 @@ def _load_optional_module(name: str, path: str):
 jev = _load_optional_module("zipper_runner_jev_gate", os.path.join(RUNNER_BASE, "jev_gate.py"))
 
 # Parse command line flags
-DRY_RUN = "--dry-run" in sys.argv
+parser = argparse.ArgumentParser(description="Zipper autonomous issue runner")
+parser.add_argument("--dry-run", action="store_true")
+parser.add_argument("--babysit-only", action="store_true")
+parser.add_argument("--refresh-models", action="store_true")
+parser.add_argument("--status", action="store_true")
+parser.add_argument("--agent", choices=sorted(AGENT_PLUGINS), help="Prefer this enabled, healthy agent for this run; retain normal fallbacks.")
+args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
+ACTIVE_AGENT = args.agent or ACTIVE_AGENT
+DRY_RUN = args.dry_run
 if DRY_RUN:
     print("WARNING: Running in DRY-RUN mode. No changes will be committed, pushed, or mailed.")
 
-BABYSIT_ONLY = "--babysit-only" in sys.argv
+BABYSIT_ONLY = args.babysit_only
 if BABYSIT_ONLY:
     print("INFO: Running in BABYSIT-ONLY mode. Bypassing Stage 2 new issue pickup.")
 
-REFRESH_MODELS = "--refresh-models" in sys.argv
+REFRESH_MODELS = args.refresh_models
 if REFRESH_MODELS:
     print("INFO: Running in REFRESH-MODELS mode. Probing all agents and updating AGENT_PREFERENCES.md.")
 
-STATUS_ONLY = "--status" in sys.argv
+STATUS_ONLY = args.status
 if STATUS_ONLY:
     print("INFO: Running in STATUS-ONLY diagnostics mode.")
 
@@ -341,14 +351,17 @@ def check_api_token_health(agent_name: str):
 
     return plugin.check_token_health()
 
-def wait_for_tokens() -> bool:
+def wait_for_tokens() -> None:
     """Checks token health for the current agent. Falls back through candidates on exhaustion."""
+    if not AGENT_CANDIDATES:
+        AGENT_CANDIDATES[:] = probe_and_select_agents()
+        return
     exhausted = []
     while True:
         name = _current_agent()
         print(f"Initializing API token health gateway for {name!r}...")
         if check_api_token_health(name):
-            return True
+            return
         exhausted.append(name)
         if not _fallback():
             print("API is out of tokens for all agents. Exiting to allow next cron cycle to retry.")
@@ -432,17 +445,15 @@ def list_agent_models() -> dict[str, list[str]]:
 def probe_and_select_agents() -> list[tuple[str, str | None]]:
     """Probes all plugins and returns sorted list of healthy (agent, model) candidates.
 
-    Scored by user preferences (lower priority = better). Falls back to ACTIVE_AGENT
-    env var or first plugin if no preferences file exists.
+    Scored by user preferences (lower priority = better); ACTIVE_AGENT is preferred.
+    Without preferences, installed healthy agents receive equal priority.
     """
     prefs = load_preferences()
     if not prefs:
-        print("No preferences loaded. Falling back to ACTIVE_AGENT env var.")
+        print("No preferences loaded. Using installed, healthy agents.")
         if not AGENT_PLUGINS:
             print("FATAL: No agent plugins loaded. Cannot probe agents.")
             sys.exit(1)
-        fallback = ACTIVE_AGENT or next(iter(AGENT_PLUGINS))
-        return [(fallback, None)]
 
     candidates: list[tuple[int, str, str | None]] = []
     for name, module in AGENT_PLUGINS.items():
@@ -471,7 +482,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
 
         for model in models:
             clean_model = _model_key(model)
-            prio = prefs.get((name, clean_model), 0)
+            prio = prefs.get((name, clean_model), 0) if prefs else 1
             if prio == 0:
                 print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
                 continue
@@ -490,8 +501,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
 
     candidates.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[1], x[2] or ""))
 
-    # If ACTIVE_AGENT hint is set, promote that agent's best candidate within
-    # its priority tier to the front.
+    # A run-scoped preference promotes healthy, enabled candidates across tiers.
     if ACTIVE_AGENT:
         hint_tier: list[tuple[int, str, str | None]] = []
         rest: list[tuple[int, str, str | None]] = []
@@ -503,6 +513,8 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
         if hint_tier:
             hint_tier.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[2] or ""))
             candidates = hint_tier + rest
+        else:
+            print(f"[select] Requested agent {ACTIVE_AGENT!r} has no enabled, healthy candidate; using normal fallbacks.")
 
     result = [(name, model) for _, name, model in candidates]
     selected = result[0]
@@ -623,11 +635,24 @@ def _coderabbit_bin() -> str | None:
     return None
 
 
+_CODERABBIT_REVIEW_CACHE: set[tuple[str, str]] = set()
+
+
 def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
     """Run local coderabbit review before PR submit or update, ensuring issues are addressed first."""
     cr_bin = _coderabbit_bin()
     if not cr_bin:
         return False, "coderabbit CLI not found on PATH or ~/.local/bin/coderabbit"
+
+    code, commits, _ = run_cmd(["git", "rev-parse", "HEAD", "main"], cwd=cwd)
+    cache_key = None
+    if code == 0:
+        if not _repo_is_clean(cwd):
+            return False, "Commit all changes before the committed CodeRabbit review."
+        cache_key = (os.path.realpath(cwd), commits.strip())
+        if cache_key in _CODERABBIT_REVIEW_CACHE:
+            print("Reusing successful CodeRabbit review for unchanged HEAD and main in this run.")
+            return True, ""
 
     code, out, err = run_cmd([cr_bin, "review", "--committed", "--base", "main", "--agent"], cwd=cwd, timeout=600)
     if code != 0:
@@ -660,6 +685,11 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
         if complete_status is not None:
             return False, f"coderabbit review completed with status {complete_status!r} and {complete_findings} findings"
         return False, "coderabbit review did not produce a valid completion record with 0 findings"
+    if cache_key is not None:
+        code, current, _ = run_cmd(["git", "rev-parse", "HEAD", "main"], cwd=cwd)
+        if code != 0 or current.strip() != commits.strip() or not _repo_is_clean(cwd):
+            return False, "Repository changed during CodeRabbit review; rerun the review."
+        _CODERABBIT_REVIEW_CACHE.add(cache_key)
     return True, ""
 
 
@@ -1013,6 +1043,27 @@ def _build_babysit_prompt(issue_number: str, issue_title: str, safe_body: str, b
     )
 
 
+def _active_worktree_count() -> int:
+    if not os.path.isdir(WORKTREES_BASE):
+        return 0
+    return sum(1 for name in os.listdir(WORKTREES_BASE)
+               if name.startswith("issue-") and os.path.isdir(os.path.join(WORKTREES_BASE, name)))
+
+
+def _sync_main_after_merge() -> bool:
+    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+    if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
+        print("Main sync deferred: repository is not clean on main. User work preserved.")
+        return False
+    for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
+        code, _, error = run_cmd(command, cwd=REPO_PATH)
+        if code != 0:
+            print(f"Main sync deferred: {error.strip()}")
+            return False
+    print("Main synchronized after merge.")
+    return True
+
+
 def babysit_active_worktrees():
     if not os.path.exists(WORKTREES_BASE):
         return 0
@@ -1185,6 +1236,7 @@ def babysit_active_worktrees():
                 run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
 
             if pr_state == "MERGED":
+                _sync_main_after_merge()
                 send_email(
                     f"[Runner] Success: PR #{pr_number} Merged for Issue #{issue_number}",
                     f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
@@ -1256,6 +1308,7 @@ def babysit_active_worktrees():
                             _clear_coderabbit_gate_failure(pr_number)
                             _remove_worktree(wt_path, branch)
                             run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+                            _sync_main_after_merge()
                             send_email(
                                 f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
                                 f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
@@ -1345,7 +1398,7 @@ def babysit_active_worktrees():
 
     babysit_orphaned_issue_prs()
     babysit_dependabot_prs()
-    return len(active_worktrees)
+    return _active_worktree_count()
 
 def _recreate_worktree_for_pr(issue_number: str, branch: str) -> None:
     wt_path = os.path.join(WORKTREES_BASE, f"issue-{issue_number}")
@@ -1429,6 +1482,7 @@ def babysit_orphaned_issue_prs():
                     if issue_num_str:
                         _clear_pr_state(issue_num_str)
                     run_cmd(["git", "push", "origin", "--delete", head_branch], cwd=REPO_PATH)
+                    _sync_main_after_merge()
                     send_email(
                         f"[Runner] Success: PR #{pr_num} Merged Automatically",
                         f"<h3>PR <a href=\"{pr_url}\">#{pr_num}</a> ({title})</h3>"
@@ -1486,6 +1540,7 @@ def babysit_dependabot_prs():
                 merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_num), "--squash", "--delete-branch", "--admin"], cwd=REPO_PATH)
                 if merge_code == 0:
                     print(f"[dependabot] Successfully merged Dependabot PR #{pr_num} into main.")
+                    _sync_main_after_merge()
                     send_email(
                         f"[Runner] Success: Dependabot PR #{pr_num} Merged",
                         f"<h3>Dependabot PR <a href=\"{pr_url}\">#{pr_num}</a> ({title})</h3>"
@@ -1747,17 +1802,17 @@ def main():
     run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
 
     was_clean = _repo_is_clean(REPO_PATH)
-    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", "origin/main"], cwd=REPO_PATH)
+    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", MAIN_REMOTE_REF], cwd=REPO_PATH)
     if rebase_code != 0:
         _cleanup_git_state()
         if was_clean:
             print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
-            run_cmd(["git", "reset", "--hard", "origin/main"], cwd=REPO_PATH)
+            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
         else:
             print(f"Rebase failed ({rebase_err.strip()}) due to leftover uncommitted files. Auto-stashing and resetting to origin/main for autonomous continuity.")
             ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
             run_cmd(["git", "stash", "--include-untracked", "-m", f"runner-auto-recovery-{ts}"], cwd=REPO_PATH)
-            run_cmd(["git", "reset", "--hard", "origin/main"], cwd=REPO_PATH)
+            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
             run_cmd(["git", "clean", "-fd"], cwd=REPO_PATH)
             if _should_send_rate_limited("[Runner] Auto-Recovery: Stashed dirty files and reset main"):
                 send_email(
@@ -1770,17 +1825,10 @@ def main():
         refresh_models_table()
         sys.exit(0)
 
-    AGENT_CANDIDATES[:] = probe_and_select_agents()
-    print(f"Selected agent: {_current_agent()}, model: {_current_model()}")
-
     babysit_active_worktrees()
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
-    # ponytail: simple directory recount; extract if used more places
-    if os.path.exists(WORKTREES_BASE):
-        active_count = sum(1 for d in os.listdir(WORKTREES_BASE) if d.startswith("issue-"))
-    else:
-        active_count = 0
+    active_count = _active_worktree_count()
 
     if not BABYSIT_ONLY and active_count < MAX_ACTIVE_WORKTREES:
         issue = select_next_issue()
@@ -1855,7 +1903,7 @@ def main():
                 f"Make all commits directly on '{branch_name}' and run 'gh pr create' directly on this branch.\n"
                 f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                 f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
-                f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
+                f"Follow AGENTS.md Runtime Capabilities: use the current tool schemas, optional RTK fallback, and batch accepted review findings before re-review. "
                 f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
                 f"Only after all review findings are resolved, open a PR. "
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
@@ -1908,8 +1956,9 @@ def main():
                             f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
                             f"<p><b>Title:</b> {title}</p>"
                             f"<p><b>Branch:</b> {branch_name}</p>"
-                            f"<p>It will be babysat during the next cron cycles.</p>"
+                            f"<p>Merge gates will be evaluated now and during subsequent runner cycles.</p>"
                         )
+                        babysit_active_worktrees()
                         break
                 elif agy_code == 0 and pr_create_err:
                     print(pr_create_err)
@@ -1997,7 +2046,7 @@ def main():
                         f"Make all commits directly on '{branch_name}' and run 'gh pr create' directly on this branch.\n"
                         f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                         f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
-                        f"Also run the /code-review skill if it exists in the repo; skip it silently if not found. Address all findings from both reviews before proceeding. "
+                        f"Follow AGENTS.md Runtime Capabilities: use the current tool schemas, optional RTK fallback, and batch accepted review findings before re-review. "
                         f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
                         f"Only after all review findings are resolved, open a PR. "
                         f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
@@ -2006,6 +2055,10 @@ def main():
                         f"and make all technical decisions yourself using your best engineering judgment."
                     )
                     continue
+        else:
+            print("No eligible issue available. Runner idle.")
+    elif BABYSIT_ONLY:
+        print(f"Babysit-only: new issue pickup disabled ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees).")
     else:
         print(f"At capacity ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees). Skipping new issue pickup.")
 

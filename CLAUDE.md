@@ -11,9 +11,9 @@ See [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md) for mandatory domain termin
 
 ## Golden Rule
 
-**Always prefix commands with `rtk`**. If RTK has a dedicated filter, it uses it. If not, it passes through unchanged. This means RTK is always safe to use.
+Check `command -v rtk` once per session. When installed, prefix shell commands with `rtk`; otherwise run the original commands directly. RTK is optional, not a build or review prerequisite. Use the harness's dedicated file/search tools when available.
 
-**Important**: Even in command chains with `&&`, use `rtk`:
+**When installed**, prefix each command in chains with `&&`:
 ```bash
 # ❌ Wrong
 git add . && git commit -m "msg" && git push

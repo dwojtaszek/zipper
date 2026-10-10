@@ -32,6 +32,14 @@
 
 **See also:** `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
 
+### Runtime Capabilities
+
+- Treat the current tool catalog and schemas as authoritative. Call already-loaded tools directly. Discover missing tools with one non-empty exact-name lookup, then at most one targeted search. If no matching tool appears, report the missing capability and follow the harness's connector/fallback policy.
+- Map skill examples to the host's native subagent tool. For Droid `Task`, use a catalog-listed `subagent_type` and its actual schema. Review effort `High` is not a tool argument: `complexity` accepts `light`, `medium`, or `heavy` where exposed. Keep reviewers read-only.
+- RTK is optional. Check availability once, then use native commands if absent.
+- For GitHub CLI access allowed by the harness, read issue comments with `gh issue view NNN --json title,body,labels,comments` or `gh issue view NNN --comments`. Use one form, not both. `gh pr checks` exit 8 means pending, not failed.
+- Batch accepted review findings before the next review. Rerun focused tests while iterating; run every required final gate against the final changes. Re-review behavior-changing fixes, stop when no actionable findings remain, and retain the autoreview cycle limit.
+
 ### When Stuck
 
 If you've spent significant effort without progress, follow this protocol before asking for help:
@@ -77,9 +85,9 @@ dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~Cl
 dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # Analyzer tests (must pass when touching src/Zipper.Analyzers/)
 
 # Lint
-dotnet format --verify-no-changes src/   # Format check (run after every code change)
+dotnet format --verify-no-changes src/   # Required final format gate
 
-# Build + lint + test combo (run after every change)
+# Required final gates; use focused tests during iteration
 dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj
 
 # E2E (must pass before push)
@@ -231,7 +239,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
    - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 6. Write a failing test first (TDD), then implement the fix
-7. Run `dotnet format --verify-no-changes src/` and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` after every change
+7. Run focused tests after each behavior change. Before the final commit, run `dotnet build zipper.sln`, `dotnet format --verify-no-changes src/`, and `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj`. Repeat affected final gates after review-driven fixes; always validate the final tree before pushing.
 8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Then run the local CodeRabbit CLI pre-PR gate (see CodeRabbit Local Pre-PR Review below) and fix or skip-with-reason every finding before submitting the PR.
 9. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
 10. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Before pushing any update to a PR, run the local CodeRabbit CLI review gate (`coderabbit review --committed --base main --agent`) and address all findings first. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.

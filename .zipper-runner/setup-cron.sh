@@ -37,14 +37,43 @@ echo "Dependency checks completed."
 
 echo "==== Installing Cron Job ===="
 # Fetch existing crontab
-CRON_JOB="0 */6 * * * $WRAPPER_PATH"
+CRON_JOB="*/15 * * * * $WRAPPER_PATH"
+LEGACY_JOB="0 */6 * * * $WRAPPER_PATH"
+BABYSIT_JOB="*/5 * * * * $WRAPPER_PATH --babysit-only"
+CURRENT_CRON="$(crontab -l 2>/dev/null || true)"
 
-if crontab -l 2>/dev/null | grep -F "$WRAPPER_PATH" &>/dev/null; then
-    echo "Cron job already exists in crontab. Skipping installation."
+has_runner_job() {
+    local wanted="$1"
+    printf '%s\n' "$CURRENT_CRON" | awk -v wrapper="$WRAPPER_PATH" -v wanted="$wanted" '
+        /^[[:space:]]*(#|$)/ {next}
+        {
+            cmd = ($1 ~ /^@/) ? 2 : 6
+            if ($cmd != wrapper) next
+            babysit = 0
+            for (i = cmd + 1; i <= NF; i++) {
+                if ($i ~ /^#/) break
+                if ($i == "--babysit-only") babysit = 1
+            }
+            if (babysit == wanted) found = 1
+        }
+        END {exit !found}'
+}
+
+if printf '%s\n' "$CURRENT_CRON" | grep -Fx "$LEGACY_JOB" &>/dev/null; then
+    CURRENT_CRON="$(printf '%s\n' "$CURRENT_CRON" | awk -v old="$LEGACY_JOB" -v new="$CRON_JOB" '$0 == old {$0 = new} {print}')"
+    echo "Migrated legacy six-hour intake to every 15 minutes."
+elif has_runner_job 0; then
+    echo "Existing intake schedule preserved."
 else
-    (crontab -l 2>/dev/null || true; echo "$CRON_JOB") | crontab -
-    echo "Registered cron job to run every 6 hours successfully."
+    CURRENT_CRON="${CURRENT_CRON}${CURRENT_CRON:+$'\n'}$CRON_JOB"
+    echo "Registered intake every 15 minutes."
 fi
+
+if ! has_runner_job 1; then
+    CURRENT_CRON="${CURRENT_CRON}${CURRENT_CRON:+$'\n'}$BABYSIT_JOB"
+    echo "Registered babysitting every 5 minutes."
+fi
+printf '%s\n' "$CURRENT_CRON" | crontab -
 
 echo "==== Installation Complete! ===="
 echo "You can check the logs of your runs at $RUNNER_BASE/logs/"
