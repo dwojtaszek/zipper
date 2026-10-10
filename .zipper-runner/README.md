@@ -18,6 +18,8 @@ Agent health probes run only when a coding mission is needed, or during `--statu
 
 After successful intake, the runner immediately evaluates the PR through the existing CI, WIP, local CodeRabbit, and robot-review gates. Pending checks remain pending, not failures. CodeRabbit's successful zero-finding review may be reused within the same runner process only for a clean, unchanged `HEAD` and `main`; a changed commit or base requires another review. After a merge, clean local `main` fast-forwards immediately. Dirty, divergent, or non-main repositories are preserved and sync is deferred.
 
+An open PR with a WIP checkpoint resumes its existing worktree through the normal agent completion path, once per worktree per invocation. Failed continuations preserve uncommitted work; dry-run never dispatches a continuation. A local-only commit is not PR progress: the agent must publish updates through the normal local CodeRabbit gate. A completion commit must represent actual finished work, not a renamed checkpoint or empty commit. Readiness still depends on existing CI and reviews, with advisory Jev verification; a tree diff alone cannot prove semantic completion. Progress checks take read-only thread snapshots; the full robot-review wait remains a merge gate, not a delay before or after each repair.
+
 Droid uses `stream-json`, drains stdout and stderr concurrently, and logs assistant-progress markers plus a 60-second heartbeat. Prompts, message text, tool arguments, and results are not echoed into live logs. The plugin still returns `(exit_code, stdout, stderr)`, with stdout containing final assistant text (partial assistant messages on interrupted runs), not raw tool payloads. The 45-minute mission timeout still terminates the process group.
 
 ### Cadence

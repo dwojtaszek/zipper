@@ -71,6 +71,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Initialize missing Git identity for CI fixtures
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if ! git config user.name >/dev/null; then
+            git config --global user.name 'github-actions[bot]'
+          fi
+          if ! git config user.email >/dev/null; then
+            git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          fi
+
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json

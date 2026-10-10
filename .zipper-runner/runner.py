@@ -933,8 +933,25 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
     if review_output is not None:
         out = review_output
     else:
-        code, out, _ = run_cmd(["bash", "tests/wait-for-reviews.sh", str(pr_number)], cwd=REPO_PATH)
+        query = (
+            'query($number:Int!,$endCursor:String) { repository(owner:"dwojtaszek",name:"zipper") { '
+            'pullRequest(number:$number) { reviewThreads(first:100,after:$endCursor) { '
+            'nodes { isResolved } pageInfo { hasNextPage endCursor } } } } }'
+        )
+        code, out, _ = run_cmd([
+            "gh", "api", "graphql", "--paginate", "-f", f"query={query}", "-F", f"number={pr_number}",
+            "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
+        ], cwd=REPO_PATH)
+        if code != 0:
+            return -1
+        try:
+            counts = [int(value) for value in out.splitlines()]
+            return sum(counts) if counts and all(value >= 0 for value in counts) else -1
+        except ValueError:
+            return -1
     for line in out.splitlines():
+        if "No unresolved review threads" in line:
+            return 0
         if "unresolved review thread" in line:
             import re
             m = re.search(r'(\d+)\s+unresolved', line)
@@ -952,12 +969,12 @@ def _babysit_with_fallback(
     before_review_output: str | None = None,
 ) -> None:
     """Try babysit with each agent candidate until one succeeds.
-    Verifies PR state or local commit changed after exit 0 to catch agents that
-    run out of credits mid-mission and exit 0 without pushing anything.
+    Existing PRs require published head/check/thread progress after exit 0;
+    local commits alone do not publish a completion.
     """
     before_threads = _count_review_threads(pr_number, review_output=before_review_output) if pr_number else -1
     before_code, before_out, _ = run_cmd(
-        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
+        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
         cwd=REPO_PATH
     )
     before_state = before_out if before_code == 0 else ""
@@ -971,13 +988,13 @@ def _babysit_with_fallback(
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
         after_code, after_out, _ = run_cmd(
-            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup"],
+            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
             cwd=REPO_PATH
         )
         after_threads = _count_review_threads(pr_number) if pr_number else -1
         after_head_code, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
 
-        head_changed = (after_head_code == 0 and before_head_code == 0 and after_head != before_head)
+        head_changed = (not pr_number and after_head_code == 0 and before_head_code == 0 and after_head != before_head)
         state_changed = (
             after_code == 0
             and before_state
@@ -1062,6 +1079,9 @@ def _sync_main_after_merge() -> bool:
             return False
     print("Main synchronized after merge.")
     return True
+
+
+_WIP_CONTINUATIONS: set[str] = set()
 
 
 def babysit_active_worktrees():
@@ -1248,7 +1268,24 @@ def babysit_active_worktrees():
             continue
 
         if _pr_head_commit_is_wip(pr_number):
-            print(f"PR #{pr_number} head commit is a WIP checkpoint. Leaving pending until completed.")
+            worktree_key = os.path.realpath(wt_path)
+            if worktree_key in _WIP_CONTINUATIONS:
+                print(f"PR #{pr_number} WIP continuation already attempted in this invocation.")
+                continue
+            if DRY_RUN:
+                print(f"[DRY RUN] Would resume WIP checkpoint for PR #{pr_number}.")
+                continue
+            _WIP_CONTINUATIONS.add(worktree_key)
+            print(f"PR #{pr_number} has unfinished WIP work. Resuming through normal completion gates.")
+            issue_title, safe_body = _fetch_issue_body(issue_number)
+            prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch)
+            prompt += (
+                f"\nExisting PR is #{pr_number}. Finish the actual WIP work; do not create a duplicate PR, "
+                "rename the checkpoint, or make an empty commit merely to unblock merging. "
+                "Preserve existing edits and retain all review and CI gates."
+            )
+            wait_for_tokens()
+            _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
             continue
 
         print(f"PR #{pr_number} is open. Evaluating checks...")

@@ -64,6 +64,133 @@ class AgentOverrideTests(unittest.TestCase):
 
 
 class RunnerCycleTests(unittest.TestCase):
+    def test_babysitOnly_resumesWipPr_withoutMergeOrNewIntake(self):
+        self._check_wip_resume(exit_code=0)
+
+    def test_babysitOnly_failedWipResume_preservesUncommittedWork(self):
+        self._check_wip_resume(exit_code=1)
+
+    def test_babysitOnly_dryRun_doesNotDispatchWipResume(self):
+        self._check_wip_resume(exit_code=0, dry_run=True)
+
+    def test_repeatedBabysit_doesNotResumeWipTwice(self):
+        self._check_wip_resume(exit_code=1, repeat_scan=True)
+
+    def test_babysitOnly_unpublishedCommit_isNotRemotePrProgress(self):
+        self._check_wip_resume(exit_code=0, publish=False)
+
+    def test_babysitOnly_laterPageThreadResolution_countsAsProgress(self):
+        self._check_wip_resume(exit_code=0, publish=False, thread_progress=True)
+
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            base = root / "runner"
+            (base / "plugins").mkdir(parents=True)
+            shutil.copy(BASE / "runner.py", base / "runner.py")
+            (base / "AGENT_PREFERENCES.md").write_text("| Agent | Model | Priority |\n| droid | default | 1 |\n")
+            (base / "plugins" / "droid.py").write_text(
+                "from pathlib import Path\nimport subprocess\n"
+                "def check_installation(): return True\n"
+                "def check_token_health(): return True\n"
+                "def list_models(): return ['default']\n"
+                "def run_mission(prompt, cwd, **kwargs):\n"
+                "    assert kwargs['is_continue'] is True\n"
+                "    assert 'Resume work on GitHub issue #42' in prompt\n"
+                "    print('WIP_MISSION_CALLED')\n"
+                "    Path(cwd, 'progress.txt').write_text('completed work')\n"
+                f"    if {exit_code} != 0: return {exit_code}, '', 'interrupted'\n"
+                "    subprocess.run(['git','add','progress.txt'],cwd=cwd,check=True)\n"
+                "    subprocess.run(['git','commit','-m','fix: finish work'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                f"    if {publish}: subprocess.run(['git','push','origin','HEAD'],cwd=cwd,check=True,capture_output=True)\n"
+                "    return 0, 'done', ''\n"
+            )
+            repo = root / "repo"
+            def git(*args, cwd=repo):
+                return subprocess.run(["git", "-C", str(cwd), *args], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+            subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, stdout=subprocess.PIPE)
+            (repo / "tests").mkdir()
+            (repo / "tests" / "wait-for-reviews.sh").write_text('#!/bin/sh\ntouch "$REVIEW_CALLED"\nprintf "[ OK ] No unresolved review threads\\n"\n')
+            git("add", ".")
+            git("commit", "-m", "test: base")
+            git("clone", "--bare", str(repo), str(root / "origin"))
+            git("remote", "add", "origin", str(root / "origin"))
+            wt = root / "worktrees" / "issue-42"
+            git("worktree", "add", "-b", "fix/ISSUE-42-smooth", str(wt), "main")
+            git("commit", "--allow-empty", "-m", "wip: unfinished work", cwd=wt)
+            git("push", "--set-upstream", "origin", "HEAD", cwd=wt)
+            gh = root / "gh"
+            gh.write_text(
+                "#!/usr/bin/env python3\nimport json, os, sys, subprocess\nfrom pathlib import Path\n"
+                "command=sys.argv[1:3]\n"
+                "if command == ['issue','list']:\n"
+                "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
+                "    raise AssertionError('new intake')\n"
+                "elif command == ['issue','view']: print(json.dumps({'title':'Smooth','body':'Finish work','comments':[]}))\n"
+                "elif command == ['pr','view']:\n"
+                "    fields=sys.argv[sys.argv.index('--json')+1]\n"
+                "    if fields == 'commits':\n"
+                "        print(subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip())\n"
+                "    else:\n"
+                "        head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                "        print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':[], 'headRefOid': head}))\n"
+                "elif command == ['pr','merge']:\n"
+                "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
+                "    raise AssertionError('merge bypass')\n"
+                "elif command == ['api','graphql']:\n"
+                "    if os.environ['THREAD_PROGRESS'] == '1':\n"
+                "        assert '--paginate' in sys.argv\n"
+                "        marker=Path(os.environ['THREAD_COUNT_MARKER'])\n"
+                "        print('0\\n1' if marker.exists() else '0\\n2')\n"
+                "        marker.touch()\n"
+                "    else: print('0')\n"
+                "else: print('[]')\n"
+            )
+            gh.chmod(0o755)
+            mail = root / "msmtp"
+            mail.write_text("#!/bin/sh\nexit 0\n")
+            mail.chmod(0o755)
+            invocation = [sys.executable, str(base / "runner.py")]
+            if repeat_scan:
+                invocation = [
+                    sys.executable, "-c",
+                    "import runpy,sys; sys.argv=sys.argv[1:]; "
+                    "runner=runpy.run_path(sys.argv[0]); "
+                    "runner['babysit_active_worktrees'](); runner['babysit_active_worktrees']()",
+                    str(base / "runner.py"),
+                ]
+            result = subprocess.run(
+                [*invocation, "--babysit-only", "--agent", "droid", *(["--dry-run"] if dry_run else [])],
+                env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
+                     "RUNNER_BASE": str(base), "REPO_PATH": str(repo),
+                     "WORKTREES_BASE": str(root / "worktrees"), "PLUGINS_DIR": str(base / "plugins"),
+                     "LOCK_FILE_PATH": str(base / "runner.lock"), "STATE_DIR": str(root / "state"),
+                     "TEST_WT": str(wt), "TEST_ORIGIN": str(root / "origin"),
+                     "REVIEW_CALLED": str(root / "review-called"),
+                     "THREAD_PROGRESS": "1" if thread_progress else "0",
+                     "THREAD_COUNT_MARKER": str(root / "thread-count-marker"),
+                     "FORBIDDEN_COMMAND": str(root / "forbidden-command")},
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.stdout.count("WIP_MISSION_CALLED"), 0 if dry_run else 1, result.stdout)
+            self.assertFalse((root / "review-called").exists(), "Progress snapshots ran the blocking merge review gate")
+            self.assertFalse((root / "forbidden-command").exists(), "WIP continuation attempted intake or merge")
+            self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run else "wip: unfinished work")
+            remote_subject = git("--git-dir", str(root / "origin"), "log", "-1", "--format=%s", "refs/heads/fix/ISSUE-42-smooth")
+            self.assertEqual(remote_subject, "fix: finish work" if exit_code == 0 and not dry_run and publish else "wip: unfinished work")
+            if thread_progress:
+                self.assertIn("succeeded (", result.stdout)
+            elif not publish:
+                self.assertIn("no PR progress", result.stdout)
+                self.assertNotIn("succeeded (", result.stdout)
+            if not dry_run:
+                self.assertEqual((wt / "progress.txt").read_text(), "completed work")
+            else:
+                self.assertFalse((wt / "progress.txt").exists())
+            if not repeat_scan:
+                self.assertIn("Babysit-only: new issue pickup disabled", result.stdout)
+
     def test_intake_evaluatesMergeGatesImmediately_withoutDuplicateMission(self):
         for conclusion in ("SUCCESS", "PENDING"):
             with self.subTest(conclusion=conclusion), tempfile.TemporaryDirectory() as directory:
