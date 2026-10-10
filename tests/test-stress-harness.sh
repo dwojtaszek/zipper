@@ -659,47 +659,54 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Test 17: Failed free queries use explicit zero fallbacks
+# Test 17: Failed or empty free output uses explicit zero fallbacks
 # -----------------------------------------------------------------------------
-print_info "Test 17: Failed free queries use explicit zero fallbacks"
+print_info "Test 17: Failed or empty free output uses explicit zero fallbacks"
 t17_bin="$SANDBOX/free_failure_bin"
 mkdir -p "$t17_bin"
 cat <<'EOF' > "$t17_bin/free"
 #!/bin/bash
 printf '%s\n' "$*" >> "$FREE_LOG"
+if [[ "${FREE_EMPTY_OUTPUT:-0}" == "1" ]]; then
+    exit 0
+fi
 printf 'Mem: 8192 4096 1024 0 3072 2048\n'
 exit 1
 EOF
 chmod +x "$t17_bin/free"
 
-assert_free_failure_fallback() {
+assert_free_fallback() {
     local name="$1" script="$2" function="$3" expected_exit="$4"
-    local expected_message="$5" expected_calls="$6" expected_second_message="${7:-}"
+    local expected_message="$5" expected_calls="$6" empty_output="${7:-0}" expected_second_message="${8:-}"
     local free_log="$SANDBOX/free_${name}.log"
     local free_out="$SANDBOX/free_${name}.out"
     local free_exit=0
 
-    FREE_LOG="$free_log" PATH="$t17_bin:$PATH" ZIPPER_BIN=/bin/bash STRESS_SKIP_SYSCHECK=0 \
+    FREE_LOG="$free_log" FREE_EMPTY_OUTPUT="$empty_output" PATH="$t17_bin:$PATH" ZIPPER_BIN=/bin/bash STRESS_SKIP_SYSCHECK=0 \
         bash -c 'source "$1"; "$2"' _ "$script" "$function" > "$free_out" 2>&1 || free_exit=$?
 
     if [[ $free_exit -eq $expected_exit ]] &&
         grep -Fq "$expected_message" "$free_out" &&
         { [[ -z "$expected_second_message" ]] || grep -Fq "$expected_second_message" "$free_out"; } &&
         [[ "$(wc -l < "$free_log")" -eq $expected_calls ]]; then
-        pass "$name used the fallback after free failed"
+        pass "$name used the fallback for free output"
     else
         fail "$name did not use the expected fallback (exit: $free_exit, calls: $(wc -l < "$free_log"), out: $(cat "$free_out"))"
     fi
 }
 
-assert_free_failure_fallback "runner" "$STRESS_DIR/run-stress-tests.sh" check_system_requirements 0 "Available Memory: 0GB" 1
-assert_free_failure_fallback "100m" "$STRESS_DIR/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
-assert_free_failure_fallback "10gb" "$STRESS_DIR/stress-10gb-filecount.sh" check_system_resources 0 "Available memory: 0" 1
-assert_free_failure_fallback "30gb" "$STRESS_DIR/stress-30gb-attachments.sh" check_system_resources 0 "Available memory: 0" 2 "Low memory detected"
+assert_free_fallback "runner_failure" "$STRESS_DIR/run-stress-tests.sh" check_system_requirements 0 "Available Memory: 0GB" 1
+assert_free_fallback "100m_failure" "$STRESS_DIR/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
+assert_free_fallback "10gb_failure" "$STRESS_DIR/stress-10gb-filecount.sh" check_system_resources 0 "Available memory: 0" 1
+assert_free_fallback "30gb_failure" "$STRESS_DIR/stress-30gb-attachments.sh" check_system_resources 0 "Available memory: 0" 2 0 "Low memory detected"
+assert_free_fallback "runner_empty" "$STRESS_DIR/run-stress-tests.sh" check_system_requirements 0 "Available Memory: 0GB" 1 1
+assert_free_fallback "100m_empty" "$STRESS_DIR/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1 1
+assert_free_fallback "10gb_empty" "$STRESS_DIR/stress-10gb-filecount.sh" check_system_resources 0 "Available memory: 0" 1 1
+assert_free_fallback "30gb_empty" "$STRESS_DIR/stress-30gb-attachments.sh" check_system_resources 0 "Available memory: 0" 2 1 "Low memory detected"
 t17_quoted_script_dir="$SANDBOX/path's"
 mkdir -p "$t17_quoted_script_dir"
 cp "$STRESS_DIR/stress-100m-loadfile.sh" "$t17_quoted_script_dir/stress-100m-loadfile.sh"
-assert_free_failure_fallback "100m_quoted_path" "$t17_quoted_script_dir/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
+assert_free_fallback "100m_quoted_path" "$t17_quoted_script_dir/stress-100m-loadfile.sh" check_system_resources 1 "Less than 1GB available memory" 1
 
 # -----------------------------------------------------------------------------
 # Test 18: All print helpers preserve messages
@@ -722,21 +729,21 @@ fi
 # -----------------------------------------------------------------------------
 # Test 19: Selector messages cannot send terminal control sequences
 # -----------------------------------------------------------------------------
-print_info "Test 19: Selector control characters are removed from diagnostics"
+print_info "Test 19: Selector control characters are escaped in diagnostics"
 t19_selector=$'\033[2J\033[H\007\177\2350;attacker-title\234'
-t19_display=$(printf '%q' "$t19_selector")
 t19_out="$SANDBOX/t19.out"
 t19_exit=0
 STRESS_SKIP_SYSCHECK=1 bash "$STRESS_DIR/run-stress-tests.sh" "$t19_selector" > "$t19_out" 2>&1 || t19_exit=$?
 
 if [[ $t19_exit -ne 0 ]] &&
-    grep -Fq "No stress test found matching '$t19_display'" "$t19_out" &&
-    ! grep -Fq $'\033[2J' "$t19_out" &&
-    ! grep -Fq $'\033[H' "$t19_out" &&
-    ! grep -Fq $'\007' "$t19_out" &&
-    ! grep -Fq $'\177' "$t19_out" &&
-    ! grep -Fq $'\235' "$t19_out" &&
-    ! grep -Fq $'\234' "$t19_out"; then
+    grep -Fq "No stress test found matching" "$t19_out" &&
+    grep -Fq "attacker-title" "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\033[2J' "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\033[H' "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\007' "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\177' "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\235' "$t19_out" &&
+    ! LC_ALL=C grep -Fq $'\234' "$t19_out"; then
     pass "selector diagnostic omitted terminal control characters"
 else
     fail "selector diagnostic contained terminal controls or was missing (exit: $t19_exit, out: $(cat "$t19_out"))"

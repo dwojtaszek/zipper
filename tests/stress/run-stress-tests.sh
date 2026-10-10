@@ -29,34 +29,33 @@ NC='\033[0m' # No Color
 
 # --- Helper Functions ---
 print_header() {
-    local message
-    message=$(printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]')
     printf '%b%s%b\n' "$BLUE" "==============================================================================" "$NC"
-    printf '%b%s%b\n' "$BLUE" "$message" "$NC"
+    printf '%b%s%b\n' "$BLUE" "$1" "$NC"
     printf '%b%s%b\n' "$BLUE" "==============================================================================" "$NC"
 }
 
 print_message() {
-    local color="$1"
-    local message
-    message=$(printf '%s' "$2" | LC_ALL=C tr -d '[:cntrl:]')
-    printf '%b%s\n' "$color" "$message"
+    printf '%b%s\n' "$1" "$2"
 }
 
 print_warning() {
-    print_message "${YELLOW}[ WARNING ]${NC} " "$1"
+    local message="$1"
+    print_message "${YELLOW}[ WARNING ]${NC} " "$message"
 }
 
 print_info() {
-    print_message "${BLUE}[ INFO ]${NC} " "$1"
+    local message="$1"
+    print_message "${BLUE}[ INFO ]${NC} " "$message"
 }
 
 print_success() {
-    print_message "${GREEN}[ SUCCESS ]${NC} " "$1"
+    local message="$1"
+    print_message "${GREEN}[ SUCCESS ]${NC} " "$message"
 }
 
 print_error() {
-    print_message "${RED}[ ERROR ]${NC} " "$1"
+    local message="$1"
+    print_message "${RED}[ ERROR ]${NC} " "$message"
 }
 
 # --- Stress Test Definitions ---
@@ -174,7 +173,7 @@ main() {
     print_warning "These are manual stress tests that consume significant resources and time."
 
     local specific_test_lower
-    specific_test_lower=$(printf '%s' "$specific_test" | tr '[:upper:]' '[:lower:]')
+    specific_test_lower=$(printf '%s' "$specific_test" | LC_ALL=C tr '[:upper:]' '[:lower:]')
     local specific_test_display
     printf -v specific_test_display '%q' "$specific_test"
 
