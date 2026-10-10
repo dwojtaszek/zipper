@@ -963,6 +963,43 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
     return -1
 
 
+def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int) -> bool:
+    if _latest_commit_is_wip(wt_path):
+        return True
+    review_ok, review_error = _run_coderabbit_pre_pr_check(wt_path)
+    if not review_ok:
+        _record_coderabbit_gate_failure(pr_number, branch, review_error)
+        print(f"[babysit] Completion kept local: {review_error}")
+        return False
+    push_code, _, push_error = run_cmd(["git", "push", "origin", branch], cwd=wt_path)
+    if push_code != 0:
+        _record_coderabbit_gate_failure(pr_number, branch, f"git push failed: {push_error}")
+        print(f"[babysit] Reviewed completion could not be published: {push_error}")
+        return False
+    _clear_coderabbit_gate_failure(pr_number)
+    return True
+
+
+def _babysit_snapshot(wt_path: str, branch: str, pr_number: int, review_output: str | None = None) -> tuple[str, int, str]:
+    code, state, _ = run_cmd(
+        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
+        cwd=REPO_PATH,
+    )
+    head_code, head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    threads = _count_review_threads(pr_number, review_output=review_output) if pr_number else -1
+    return state if code == 0 else "", threads, head if head_code == 0 else ""
+
+
+def _babysit_progressed(pr_number: int, before: tuple[str, int, str], after: tuple[str, int, str]) -> bool:
+    before_state, before_threads, before_head = before
+    after_state, after_threads, after_head = after
+    return bool(
+        (not pr_number and before_head and after_head and after_head != before_head)
+        or (before_state and after_state and after_state != before_state)
+        or (0 <= after_threads < before_threads)
+    )
+
+
 def _babysit_with_fallback(
     prompt: str,
     wt_path: str,
@@ -970,18 +1007,13 @@ def _babysit_with_fallback(
     issue_number: int,
     pr_number: int = 0,
     before_review_output: str | None = None,
+    publish_local_commits: bool = False,
 ) -> None:
     """Try babysit with each agent candidate until one succeeds.
     Existing PRs require published head/check/thread progress after exit 0;
     local commits alone do not publish a completion.
     """
-    before_threads = _count_review_threads(pr_number, review_output=before_review_output) if pr_number else -1
-    before_code, before_out, _ = run_cmd(
-        ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
-        cwd=REPO_PATH
-    )
-    before_state = before_out if before_code == 0 else ""
-    before_head_code, before_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    before = _babysit_snapshot(wt_path, branch, pr_number, before_review_output)
 
     for agent_name, model_name in AGENT_CANDIDATES:
         plugin = AGENT_PLUGINS.get(agent_name)
@@ -990,40 +1022,20 @@ def _babysit_with_fallback(
         print(f"[babysit] Trying {agent_name}/{model_name}...")
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
-        after_code, after_out, _ = run_cmd(
-            ["gh", "pr", "view", branch, "--json", "state,mergeable,statusCheckRollup,headRefOid"],
-            cwd=REPO_PATH
-        )
-        after_threads = _count_review_threads(pr_number) if pr_number else -1
-        after_head_code, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+        if code == 0 and publish_local_commits and not _publish_reviewed_completion(wt_path, branch, pr_number):
+            return
 
-        head_changed = (not pr_number and after_head_code == 0 and before_head_code == 0 and after_head != before_head)
-        state_changed = (
-            after_code == 0
-            and before_state
-            and after_out != before_state
-        )
-        threads_improved = (
-            after_threads >= 0
-            and before_threads >= 0
-            and after_threads < before_threads
-        )
-
-        if code == 0 and (head_changed or state_changed or threads_improved):
+        after = _babysit_snapshot(wt_path, branch, pr_number)
+        if code == 0 and _babysit_progressed(pr_number, before, after):
             print(f"[babysit] {agent_name}/{model_name} succeeded (commits/state/threads changed)")
             _jev_verify_completion(wt_path, branch, issue_number)
             return
-        if code == 0:
-            if after_code == 0 and "PENDING" in after_out:
-                print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
-                return
-            print(f"[babysit] {agent_name}/{model_name} exit=0 but no PR progress — treating as failure")
-        else:
-            print(f"[babysit] {agent_name}/{model_name} failed (exit={code})")
+        if code == 0 and "PENDING" in after[0]:
+            print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
+            return
+        print(f"[babysit] {agent_name}/{model_name} did not complete babysit (exit={code})")
 
-        before_state = after_out
-        before_threads = after_threads
-        before_head = after_head
+        before = after
 
     if _should_send_rate_limited(f"[Runner] Babysit Failed: Issue #{issue_number}"):
         send_email(
@@ -1286,9 +1298,14 @@ def babysit_active_worktrees():
                 f"\nExisting PR is #{pr_number}. Finish the actual WIP work; do not create a duplicate PR, "
                 "rename the checkpoint, or make an empty commit merely to unblock merging. "
                 "Preserve existing edits and retain all review and CI gates."
+                "\nPublication override: Do NOT push or create a PR. Finish validation and "
+                "autoreview, commit locally, then return. The runner owns the committed "
+                "CodeRabbit check and will push only after it passes."
             )
             wait_for_tokens()
-            _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
+            _babysit_with_fallback(
+                prompt, wt_path, branch, issue_number, pr_number, publish_local_commits=True,
+            )
             continue
 
         print(f"PR #{pr_number} is open. Evaluating checks...")

@@ -64,7 +64,7 @@ class AgentOverrideTests(unittest.TestCase):
 
 
 class RunnerCycleTests(unittest.TestCase):
-    def test_babysitOnly_resumesWipPr_withoutMergeOrNewIntake(self):
+    def test_babysitOnly_reviewsLocalWipCompletion_beforeRunnerPublication(self):
         self._check_wip_resume(exit_code=0)
 
     def test_babysitOnly_failedWipResume_preservesUncommittedWork(self):
@@ -79,10 +79,13 @@ class RunnerCycleTests(unittest.TestCase):
     def test_babysitOnly_unpublishedCommit_isNotRemotePrProgress(self):
         self._check_wip_resume(exit_code=0, publish=False)
 
+    def test_babysitOnly_rejectedPush_preservesReviewedLocalCompletion(self):
+        self._check_wip_resume(exit_code=0, reject_push=True)
+
     def test_babysitOnly_laterPageThreadResolution_countsAsProgress(self):
         self._check_wip_resume(exit_code=0, publish=False, thread_progress=True)
 
-    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False):
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False, reject_push=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             base = root / "runner"
@@ -97,12 +100,13 @@ class RunnerCycleTests(unittest.TestCase):
                 "def run_mission(prompt, cwd, **kwargs):\n"
                 "    assert kwargs['is_continue'] is True\n"
                 "    assert 'Resume work on GitHub issue #42' in prompt\n"
+                "    assert 'Do NOT push' in prompt\n"
                 "    print('WIP_MISSION_CALLED')\n"
+                f"    if {thread_progress}: return 0, 'threads resolved', ''\n"
                 "    Path(cwd, 'progress.txt').write_text('completed work')\n"
                 f"    if {exit_code} != 0: return {exit_code}, '', 'interrupted'\n"
                 "    subprocess.run(['git','add','progress.txt'],cwd=cwd,check=True)\n"
                 "    subprocess.run(['git','commit','-m','fix: finish work'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
-                f"    if {publish}: subprocess.run(['git','push','origin','HEAD'],cwd=cwd,check=True,capture_output=True)\n"
                 "    return 0, 'done', ''\n"
             )
             repo = root / "repo"
@@ -119,6 +123,23 @@ class RunnerCycleTests(unittest.TestCase):
             git("worktree", "add", "-b", "fix/ISSUE-42-smooth", str(wt), "main")
             git("commit", "--allow-empty", "-m", "wip: unfinished work", cwd=wt)
             git("push", "--set-upstream", "origin", "HEAD", cwd=wt)
+            review_marker = root / "local-review-passed"
+            (root / "origin" / "hooks" / "pre-receive").write_text(
+                f"#!/bin/sh\ntouch '{root / 'push-attempted'}'\n"
+                f"test -f '{review_marker}' || exit 1\n"
+                f"exit {1 if reject_push else 0}\n"
+            )
+            (root / "origin" / "hooks" / "pre-receive").chmod(0o755)
+            reviewer = root / "coderabbit"
+            reviewer.write_text(
+                "#!/usr/bin/env python3\nimport json, subprocess\nfrom pathlib import Path\n"
+                "assert subprocess.check_output(['git','status','--porcelain'],text=True).strip() == ''\n"
+                "assert subprocess.check_output(['git','log','-1','--format=%s'],text=True).strip() == 'fix: finish work'\n"
+                f"assert subprocess.check_output(['git','--git-dir','{root / 'origin'}','log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip().startswith('wip:')\n"
+                f"if {publish}: Path('{review_marker}').touch()\n"
+                f"print(json.dumps({{'type':'complete','status':'review_completed','findings':{0 if publish else 1}}}))\n"
+            )
+            reviewer.chmod(0o755)
             gh = root / "gh"
             gh.write_text(
                 "#!/usr/bin/env python3\nimport json, os, sys, subprocess\nfrom pathlib import Path\n"
@@ -176,15 +197,23 @@ class RunnerCycleTests(unittest.TestCase):
             self.assertEqual(result.stdout.count("WIP_MISSION_CALLED"), 0 if dry_run else 1, result.stdout)
             self.assertFalse((root / "review-called").exists(), "Progress snapshots ran the blocking merge review gate")
             self.assertFalse((root / "forbidden-command").exists(), "WIP continuation attempted intake or merge")
-            self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run else "wip: unfinished work")
+            self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run and not thread_progress else "wip: unfinished work")
             remote_subject = git("--git-dir", str(root / "origin"), "log", "-1", "--format=%s", "refs/heads/fix/ISSUE-42-smooth")
-            self.assertEqual(remote_subject, "fix: finish work" if exit_code == 0 and not dry_run and publish else "wip: unfinished work")
+            self.assertEqual(remote_subject, "fix: finish work" if exit_code == 0 and not dry_run and publish and not thread_progress and not reject_push else "wip: unfinished work")
+            gate_file = root / "state" / "pr-99-coderabbit-gate.json"
+            if reject_push:
+                self.assertTrue((root / "push-attempted").exists())
+                self.assertIn("git push failed", gate_file.read_text())
+                self.assertNotIn("succeeded (", result.stdout)
+            elif not publish and not thread_progress:
+                self.assertFalse((root / "push-attempted").exists(), "Failed review attempted publication")
+                self.assertIn("1 findings", gate_file.read_text())
             if thread_progress:
                 self.assertIn("succeeded (", result.stdout)
             elif not publish:
-                self.assertIn("no PR progress", result.stdout)
+                self.assertIn("Completion kept local", result.stdout)
                 self.assertNotIn("succeeded (", result.stdout)
-            if not dry_run:
+            if not dry_run and not thread_progress:
                 self.assertEqual((wt / "progress.txt").read_text(), "completed work")
             else:
                 self.assertFalse((wt / "progress.txt").exists())
