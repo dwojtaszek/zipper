@@ -79,7 +79,10 @@ class RunnerCycleTests(unittest.TestCase):
     def test_babysitOnly_unpublishedCommit_isNotRemotePrProgress(self):
         self._check_wip_resume(exit_code=0, publish=False)
 
-    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True):
+    def test_babysitOnly_laterPageThreadResolution_countsAsProgress(self):
+        self._check_wip_resume(exit_code=0, publish=False, thread_progress=True)
+
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             base = root / "runner"
@@ -134,7 +137,13 @@ class RunnerCycleTests(unittest.TestCase):
                 "elif command == ['pr','merge']:\n"
                 "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
                 "    raise AssertionError('merge bypass')\n"
-                "elif command == ['api','graphql']: print('0')\n"
+                "elif command == ['api','graphql']:\n"
+                "    if os.environ['THREAD_PROGRESS'] == '1':\n"
+                "        assert '--paginate' in sys.argv\n"
+                "        marker=Path(os.environ['THREAD_COUNT_MARKER'])\n"
+                "        print('0\\n1' if marker.exists() else '0\\n2')\n"
+                "        marker.touch()\n"
+                "    else: print('0')\n"
                 "else: print('[]')\n"
             )
             gh.chmod(0o755)
@@ -158,6 +167,8 @@ class RunnerCycleTests(unittest.TestCase):
                      "LOCK_FILE_PATH": str(base / "runner.lock"), "STATE_DIR": str(root / "state"),
                      "TEST_WT": str(wt), "TEST_ORIGIN": str(root / "origin"),
                      "REVIEW_CALLED": str(root / "review-called"),
+                     "THREAD_PROGRESS": "1" if thread_progress else "0",
+                     "THREAD_COUNT_MARKER": str(root / "thread-count-marker"),
                      "FORBIDDEN_COMMAND": str(root / "forbidden-command")},
                 capture_output=True, text=True, timeout=15,
             )
@@ -168,7 +179,9 @@ class RunnerCycleTests(unittest.TestCase):
             self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run else "wip: unfinished work")
             remote_subject = git("--git-dir", str(root / "origin"), "log", "-1", "--format=%s", "refs/heads/fix/ISSUE-42-smooth")
             self.assertEqual(remote_subject, "fix: finish work" if exit_code == 0 and not dry_run and publish else "wip: unfinished work")
-            if not publish:
+            if thread_progress:
+                self.assertIn("succeeded (", result.stdout)
+            elif not publish:
                 self.assertIn("no PR progress", result.stdout)
                 self.assertNotIn("succeeded (", result.stdout)
             if not dry_run:

@@ -934,18 +934,19 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
         out = review_output
     else:
         query = (
-            'query($number:Int!) { repository(owner:"dwojtaszek",name:"zipper") { '
-            'pullRequest(number:$number) { reviewThreads(first:100) { nodes { isResolved } } } } }'
+            'query($number:Int!,$endCursor:String) { repository(owner:"dwojtaszek",name:"zipper") { '
+            'pullRequest(number:$number) { reviewThreads(first:100,after:$endCursor) { '
+            'nodes { isResolved } pageInfo { hasNextPage endCursor } } } } }'
         )
         code, out, _ = run_cmd([
-            "gh", "api", "graphql", "-f", f"query={query}", "-F", f"number={pr_number}",
+            "gh", "api", "graphql", "--paginate", "-f", f"query={query}", "-F", f"number={pr_number}",
             "--jq", "[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length",
         ], cwd=REPO_PATH)
         if code != 0:
             return -1
         try:
-            count = int(out.strip())
-            return count if count >= 0 else -1
+            counts = [int(value) for value in out.splitlines()]
+            return sum(counts) if counts and all(value >= 0 for value in counts) else -1
         except ValueError:
             return -1
     for line in out.splitlines():
