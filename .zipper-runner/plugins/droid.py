@@ -146,10 +146,10 @@ def _drain_output(p, cmd, output):
     p.wait(timeout=max(0.01, MISSION_TIMEOUT - (time.monotonic() - started)))
 
 
-def _stop_mission(p):
+def _stop_mission(p, terminate):
     if p is None:
         return
-    if p.poll() is None or not p.stdout.closed:
+    if terminate:
         try:
             os.killpg(p.pid, signal.SIGKILL)
         except ProcessLookupError:
@@ -164,14 +164,17 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
     print(f"[droid] Running mission (continue={is_continue}) in {cwd}", flush=True)
     p = None
+    terminate = True
     output = _MissionOutput()
     try:
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
         _drain_output(p, cmd, output)
-        return p.returncode, output.stdout_text(), output.stderr.decode(errors="replace")
+        result = p.returncode, output.stdout_text(), output.stderr.decode(errors="replace")
+        terminate = p.returncode != 0
+        return result
     except subprocess.TimeoutExpired:
         return -1, output.stdout_text(), f"Error: Droid mission timed out after {MISSION_TIMEOUT} seconds."
     except Exception as e:
         return -1, output.stdout_text(), str(e)
     finally:
-        _stop_mission(p)
+        _stop_mission(p, terminate)

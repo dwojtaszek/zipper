@@ -38,6 +38,17 @@ with tempfile.TemporaryDirectory() as directory:
             args = json.loads(out.splitlines()[0])
             assert args == ["exec", "--model", model or "gpt-6-luna", "--reasoning-effort", "max", "--auto", "high", "--output-format", "stream-json", "--cwd", directory, prompt]
         assert plugin.check_token_health()
+# Successful missions preserve background children that release captured pipes.
+with tempfile.TemporaryDirectory() as directory:
+    marker = Path(directory) / "child-survived"
+    fake = Path(directory) / "droid"
+    fake.write_text("#!/usr/bin/env python3\nimport subprocess, sys\nsubprocess.Popen([sys.executable, '-c', \"import time; from pathlib import Path; time.sleep(0.5); Path(" + repr(str(marker)) + ").touch()\"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\nprint('done', flush=True)\n")
+    fake.chmod(0o755)
+    with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
+        code, out, err = plugin.run_mission("success check", directory)
+        assert (code, out, err) == (0, "done\n", "")
+    time.sleep(0.8)
+    assert marker.exists(), "Successful Droid mission killed its background child"
 # A real timed-out agent and its child must stop before runner control returns.
 with tempfile.TemporaryDirectory() as directory:
     marker = Path(directory) / "child-survived"
