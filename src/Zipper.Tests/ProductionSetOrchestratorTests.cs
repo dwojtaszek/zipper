@@ -118,12 +118,16 @@ public class ProductionSetOrchestratorTests
             var manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result2.ProductionPath);
 
             Assert.NotEmpty(manifest1);
-            var lines1 = FilterNonJsonManifestLines(manifest1);
-            var lines2 = FilterNonJsonManifestLines(manifest2);
+            var lines1 = manifest1.Split('\n').Select(static line => line.TrimEnd('\r')).ToArray();
+            var lines2 = manifest2.Split('\n').Select(static line => line.TrimEnd('\r')).ToArray();
             Assert.NotEmpty(lines1);
             Assert.Equal(lines1, lines2);
             Assert.Contains("DATA/loadfile.dat", manifest1, StringComparison.Ordinal);
+            Assert.Contains("DATA/loadfile_properties.json", manifest1, StringComparison.Ordinal);
             Assert.Contains("DATA/loadfile.opt", manifest1, StringComparison.Ordinal);
+            Assert.Contains("DATA/loadfile.opt_properties.json", manifest1, StringComparison.Ordinal);
+            Assert.Contains("_manifest.json", manifest1, StringComparison.Ordinal);
+            Assert.Contains("_validation_report.json", manifest1, StringComparison.Ordinal);
             Assert.Contains("NATIVES/VOL001/GOLD000001.pdf", manifest1, StringComparison.Ordinal);
             Assert.Contains("NATIVES/VOL002/GOLD000003.pdf", manifest1, StringComparison.Ordinal);
             Assert.Contains("TEXT/VOL001/GOLD000001.txt", manifest1, StringComparison.Ordinal);

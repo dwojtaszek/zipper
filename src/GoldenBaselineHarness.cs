@@ -1,5 +1,7 @@
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace Zipper;
 
@@ -10,12 +12,45 @@ namespace Zipper;
 /// </summary>
 public static class GoldenBaselineHarness
 {
+    private static readonly HashSet<string> TransientJsonProperties = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "productionDate",
+        "production_date",
+        "generationTime",
+        "generation_time",
+        "dateGenerated",
+        "date_generated",
+        "timestamp",
+    };
+
+    private static readonly byte[] NormalizedValueBytes = Encoding.UTF8.GetBytes("\"__normalized__\"");
+
+    private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
+
     /// <summary>
-    /// Generates a deterministic SHA-256 manifest for every artifact in <paramref name="rootDir"/>.
+    /// Generates a deterministic SHA-256 manifest for every artifact in <paramref name="rootDir"/>,
+    /// normalizing transient timestamp and wall-clock execution values in JSON artifacts in-place
+    /// while preserving all other original JSON formatting, key ordering, indentation, and non-JSON bytes.
     /// </summary>
     /// <param name="rootDir">The root directory produced by a Zipper run.</param>
     /// <returns>A manifest string of <c>sha256  relative-path</c> lines, path-sorted.</returns>
     public static string GenerateTimestampNormalizedSha256Manifest(string rootDir)
+    {
+        return GenerateManifestCore(rootDir, normalizeTimestamps: true);
+    }
+
+    /// <summary>
+    /// Generates a SHA-256 manifest for every artifact in <paramref name="rootDir"/>
+    /// without normalizing timestamps or transient fields.
+    /// </summary>
+    /// <param name="rootDir">The root directory produced by a Zipper run.</param>
+    /// <returns>A manifest string of <c>sha256  relative-path</c> lines, path-sorted.</returns>
+    public static string GenerateRawSha256Manifest(string rootDir)
+    {
+        return GenerateManifestCore(rootDir, normalizeTimestamps: false);
+    }
+
+    private static string GenerateManifestCore(string rootDir, bool normalizeTimestamps)
     {
         ArgumentNullException.ThrowIfNull(rootDir);
 
@@ -23,63 +58,166 @@ public static class GoldenBaselineHarness
 
         foreach (var fullPath in Directory.EnumerateFiles(rootDir, "*", SearchOption.AllDirectories))
         {
-            var relPath = Path.GetRelativePath(rootDir, fullPath).Replace('\\', '/');
-            if (relPath.StartsWith("./", StringComparison.Ordinal))
+            var relPath = NormalizeRelativePath(rootDir, fullPath);
+            if (normalizeTimestamps && IsArchive(fullPath))
             {
-                relPath = relPath[2..];
-            }
-
-            var ext = Path.GetExtension(fullPath);
-            if (string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(ext, ".docx", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(ext, ".xlsx", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
-                    foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
-                    {
-                        if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-
-                        using var stream = entry.Open();
-                        using var sha256 = System.Security.Cryptography.SHA256.Create();
-                        var hash = sha256.ComputeHash(stream);
-                        var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
-                        var entryKey = $"{relPath}::{entry.FullName}";
-                        entries.Add((entryKey, $"{hashHex}  {entryKey}"));
-                    }
-                }
-                catch
-                {
-                    // Skip unreadable archives
-                }
+                CollectArchiveEntries(fullPath, relPath, normalizeTimestamps, entries);
             }
             else
             {
-                using var stream = File.OpenRead(fullPath);
-                using var sha256 = System.Security.Cryptography.SHA256.Create();
-                var hash = sha256.ComputeHash(stream);
-                var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
-                entries.Add((relPath, $"{hashHex}  {relPath}"));
+                AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
             }
         }
 
         entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
+        return string.Join('\n', entries.Select(e => e.Line));
+    }
 
-        var sb = new StringBuilder();
-        for (var i = 0; i < entries.Count; i++)
+    private static void AddFileEntry(
+        string fullPath,
+        string relPath,
+        bool normalizeTimestamps,
+        List<(string Key, string Line)> entries)
+    {
+        using var stream = File.OpenRead(fullPath);
+        var hashHex = ComputeHash(relPath, stream, normalizeTimestamps);
+        entries.Add((relPath, $"{hashHex}  {relPath}"));
+    }
+
+    private static string NormalizeRelativePath(string rootDir, string fullPath)
+    {
+        var relPath = Path.GetRelativePath(rootDir, fullPath).Replace('\\', '/');
+        return relPath.StartsWith("./", StringComparison.Ordinal) ? relPath[2..] : relPath;
+    }
+
+    private static bool IsArchive(string fullPath)
+    {
+        var ext = Path.GetExtension(fullPath);
+        return string.Equals(ext, ".zip", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(ext, ".docx", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(ext, ".xlsx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void CollectArchiveEntries(
+        string fullPath,
+        string relPath,
+        bool normalizeTimestamps,
+        List<(string Key, string Line)> entries)
+    {
+        try
         {
-            sb.Append(entries[i].Line);
-            if (i < entries.Count - 1)
+            var archiveEntries = new List<(string Key, string Line)>();
+            using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
+            foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
-                sb.AppendLine();
+                if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                using var entryStream = entry.Open();
+                var hashHex = ComputeHash(entry.FullName, entryStream, normalizeTimestamps);
+                var entryKey = $"{relPath}::{entry.FullName}";
+                archiveEntries.Add((entryKey, $"{hashHex}  {entryKey}"));
+            }
+
+            if (archiveEntries.Count == 0)
+            {
+                AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
+            }
+            else
+            {
+                entries.AddRange(archiveEntries);
+            }
+        }
+        catch (InvalidDataException)
+        {
+            AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
+        }
+    }
+
+    private static string ComputeHash(string pathOrName, Stream stream, bool normalizeTimestamps)
+    {
+        if (normalizeTimestamps && pathOrName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            var rawBytes = ms.ToArray();
+            var normalizedBytes = NormalizeTransientJsonValues(rawBytes);
+            return HashBytes(normalizedBytes);
+        }
+
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string HashBytes(byte[] bytes)
+    {
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static byte[] NormalizeTransientJsonValues(byte[] jsonBytes)
+    {
+        try
+        {
+            var replacements = FindTransientJsonReplacements(jsonBytes);
+            return replacements.Count == 0 ? jsonBytes : ApplyReplacements(jsonBytes, replacements);
+        }
+        catch (JsonException)
+        {
+            return jsonBytes;
+        }
+    }
+
+    private static List<(int Start, int Length)> FindTransientJsonReplacements(byte[] jsonBytes)
+    {
+        int bomOffset = jsonBytes.AsSpan().StartsWith(Utf8Bom) ? 3 : 0;
+        var reader = new Utf8JsonReader(jsonBytes.AsSpan(bomOffset));
+        var replacements = new List<(int Start, int Length)>();
+
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var propName = reader.GetString();
+                if (propName is not null && TransientJsonProperties.Contains(propName) && reader.Read())
+                {
+                    int valueStart = bomOffset + (int)reader.TokenStartIndex;
+                    if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+                    {
+                        reader.Skip();
+                    }
+
+                    int valueEnd = bomOffset + (int)reader.BytesConsumed;
+                    replacements.Add((valueStart, valueEnd - valueStart));
+                }
             }
         }
 
-        return sb.ToString();
+        return replacements;
+    }
+
+    private static byte[] ApplyReplacements(byte[] jsonBytes, List<(int Start, int Length)> replacements)
+    {
+        replacements.Sort((a, b) => a.Start.CompareTo(b.Start));
+        using var ms = new MemoryStream();
+        int currentOffset = 0;
+        foreach (var (start, length) in replacements)
+        {
+            ms.Write(jsonBytes, currentOffset, start - currentOffset);
+            ms.Write(NormalizedValueBytes, 0, NormalizedValueBytes.Length);
+            currentOffset = start + length;
+        }
+
+        if (currentOffset < jsonBytes.Length)
+        {
+            ms.Write(jsonBytes, currentOffset, jsonBytes.Length - currentOffset);
+        }
+
+        return ms.ToArray();
     }
 }
