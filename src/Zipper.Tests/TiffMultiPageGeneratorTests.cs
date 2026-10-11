@@ -4,100 +4,24 @@ namespace Zipper.Tests;
 
 public class TiffMultiPageGeneratorTests
 {
-    [Fact]
-    public void ParsePageRange_WithValidRange_ShouldReturnParsedRange()
+    [Theory]
+    [InlineData("ParsePageRange_WithValidRange_ShouldReturnParsedRange", "1-20", 1, 20)]
+    [InlineData("ParsePageRange_WithSinglePage_ShouldReturnParsedRange", "1-1", 1, 1)]
+    [InlineData("ParsePageRange_WithLargeRange_ShouldReturnParsedRange", "100-1000", 100, 1000)]
+    [InlineData("ParsePageRange_WithInvalidFormat_ShouldReturnNull", "invalid", null, null)]
+    [InlineData("ParsePageRange_WithMissingMax_ShouldReturnNull", "1-", null, null)]
+    [InlineData("ParsePageRange_WithMissingMin_ShouldReturnNull", "-20", null, null)]
+    [InlineData("ParsePageRange_WithMinGreaterThanMax_ShouldReturnNull", "20-1", null, null)]
+    [InlineData("ParsePageRange_WithMinLessThanOne_ShouldReturnNull", "0-10", null, null)]
+    [InlineData("ParsePageRange_WithMaxGreaterThan1000_ShouldReturnNull", "1-1001", null, null)]
+    public void ParsePageRange_WithRange_ReturnsExpectedRange(string scenario, string range, int? expectedMin, int? expectedMax)
     {
         // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("1-20");
+        var result = TiffMultiPageGenerator.ParsePageRange(range);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(1, result.Value.Min);
-        Assert.Equal(20, result.Value.Max);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithSinglePage_ShouldReturnParsedRange()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("1-1");
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(1, result.Value.Min);
-        Assert.Equal(1, result.Value.Max);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithLargeRange_ShouldReturnParsedRange()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("100-1000");
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal(100, result.Value.Min);
-        Assert.Equal(1000, result.Value.Max);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithInvalidFormat_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("invalid");
-
-        // Assert
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithMissingMax_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("1-");
-
-        // Assert
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithMissingMin_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("-20");
-
-        // Assert
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithMinGreaterThanMax_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("20-1");
-
-        // Assert
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithMinLessThanOne_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("0-10");
-
-        // Assert
-        Assert.Null(result);
-    }
-
-    [Fact]
-    public void ParsePageRange_WithMaxGreaterThan1000_ShouldReturnNull()
-    {
-        // Act
-        var result = TiffMultiPageGenerator.ParsePageRange("1-1001");
-
-        // Assert
-        Assert.Null(result);
+        Assert.True(expectedMin == result?.Min, $"{scenario}: expected minimum {expectedMin} but got {result?.Min}.");
+        Assert.True(expectedMax == result?.Max, $"{scenario}: expected maximum {expectedMax} but got {result?.Max}.");
     }
 
     [Fact]

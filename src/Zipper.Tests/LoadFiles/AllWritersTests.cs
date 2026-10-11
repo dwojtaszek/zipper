@@ -31,8 +31,13 @@ public class AllWritersTests : TempDirectoryTestBase
         Assert.Equal("CONCORDANCE", concordanceWriter.FormatName);
     }
 
-    [Fact]
-    public async Task AllWriters_WithBatesConfig_ShouldIncludeBatesNumber()
+    [Theory]
+    [InlineData(LoadFileFormat.Dat)]
+    [InlineData(LoadFileFormat.Opt)]
+    [InlineData(LoadFileFormat.Csv)]
+    [InlineData(LoadFileFormat.EdrmXml)]
+    [InlineData(LoadFileFormat.Concordance)]
+    public async Task AllWriters_WithBatesConfig_ShouldIncludeBatesNumber(LoadFileFormat format)
     {
         var request = this.CreateTestRequest();
         request.Bates = new BatesNumberConfig
@@ -44,25 +49,27 @@ public class AllWritersTests : TempDirectoryTestBase
         };
         var fileData = this.CreateTestFileData();
 
-        foreach (LoadFileFormat format in Enum.GetValues<LoadFileFormat>())
+        var writer = LoadFileWriterFactory.CreateWriter(format);
+        var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");
+
+        await using (var stream = File.OpenWrite(outputPath))
         {
-            var writer = LoadFileWriterFactory.CreateWriter(format);
-            var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");
-
-            await using (var stream = File.OpenWrite(outputPath))
-            {
-                await writer.WriteAsync(stream, request, fileData);
-            }
-
-            var content = await File.ReadAllTextAsync(outputPath);
-
-            Assert.Contains("TEST", content, StringComparison.Ordinal);
-            Assert.Contains("000001", content, StringComparison.Ordinal);
+            await writer.WriteAsync(stream, request, fileData);
         }
+
+        var content = await File.ReadAllTextAsync(outputPath);
+
+        Assert.Contains("TEST", content, StringComparison.Ordinal);
+        Assert.Contains("000001", content, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task AllWriters_WithTiffPageRange_ShouldIncludePageCount()
+    [Theory]
+    [InlineData(LoadFileFormat.Dat)]
+    [InlineData(LoadFileFormat.Opt)]
+    [InlineData(LoadFileFormat.Csv)]
+    [InlineData(LoadFileFormat.EdrmXml)]
+    [InlineData(LoadFileFormat.Concordance)]
+    public async Task AllWriters_WithTiffPageRange_ShouldIncludePageCount(LoadFileFormat format)
     {
         var request = this.CreateTestRequest("tiff");
         request.Tiff = request.Tiff with { PageRange = (1, 10) };
@@ -71,84 +78,81 @@ public class AllWritersTests : TempDirectoryTestBase
         fileData[1] = fileData[1] with { PageCount = 7 };
         fileData[2] = fileData[2] with { PageCount = 3 };
 
-        foreach (LoadFileFormat format in Enum.GetValues<LoadFileFormat>())
+        var writer = LoadFileWriterFactory.CreateWriter(format);
+        var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");
+
+        await using (var stream = File.OpenWrite(outputPath))
         {
-            var writer = LoadFileWriterFactory.CreateWriter(format);
-            var outputPath = Path.Combine(this.TempDir, $"test.{format.ToString().ToLowerInvariant()}");
+            await writer.WriteAsync(stream, request, fileData);
+        }
 
-            await using (var stream = File.OpenWrite(outputPath))
+        var content = await File.ReadAllTextAsync(outputPath);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        if (format == LoadFileFormat.EdrmXml)
+        {
+            var doc1Index = content.IndexOf("DocID=\"DOC00000001\"", StringComparison.Ordinal);
+            var doc2Index = content.IndexOf("DocID=\"DOC00000002\"", StringComparison.Ordinal);
+            var doc3Index = content.IndexOf("DocID=\"DOC00000003\"", StringComparison.Ordinal);
+
+            Assert.True(doc1Index != -1);
+            Assert.True(doc2Index != -1);
+            Assert.True(doc3Index != -1);
+
+            var doc1Content = content.Substring(doc1Index, doc2Index - doc1Index);
+            var doc2Content = content.Substring(doc2Index, doc3Index - doc2Index);
+            var doc3Content = content.Substring(doc3Index);
+
+            Assert.Contains("TagName=\"PageCount\"", doc1Content, StringComparison.Ordinal);
+            Assert.Contains("TagValue=\"5\"", doc1Content, StringComparison.Ordinal);
+
+            Assert.Contains("TagName=\"PageCount\"", doc2Content, StringComparison.Ordinal);
+            Assert.Contains("TagValue=\"7\"", doc2Content, StringComparison.Ordinal);
+
+            Assert.Contains("TagName=\"PageCount\"", doc3Content, StringComparison.Ordinal);
+            Assert.Contains("TagValue=\"3\"", doc3Content, StringComparison.Ordinal);
+        }
+        else if (format == LoadFileFormat.Opt)
+        {
+            var line1 = lines.FirstOrDefault(l => l.StartsWith("DOC00000001_001", StringComparison.Ordinal));
+            var line2 = lines.FirstOrDefault(l => l.StartsWith("DOC00000002_001", StringComparison.Ordinal));
+            var line3 = lines.FirstOrDefault(l => l.StartsWith("DOC00000003_001", StringComparison.Ordinal));
+
+            Assert.NotNull(line1);
+            Assert.NotNull(line2);
+            Assert.NotNull(line3);
+
+            Assert.EndsWith(",5", line1, StringComparison.Ordinal);
+            Assert.EndsWith(",7", line2, StringComparison.Ordinal);
+            Assert.EndsWith(",3", line3, StringComparison.Ordinal);
+        }
+        else
+        {
+            var line1 = lines.FirstOrDefault(l => l.Contains("DOC00000001", StringComparison.Ordinal));
+            var line2 = lines.FirstOrDefault(l => l.Contains("DOC00000002", StringComparison.Ordinal));
+            var line3 = lines.FirstOrDefault(l => l.Contains("DOC00000003", StringComparison.Ordinal));
+
+            Assert.NotNull(line1);
+            Assert.NotNull(line2);
+            Assert.NotNull(line3);
+
+            var delimiter = format == LoadFileFormat.Csv ? ',' : (char)20;
+            if (format == LoadFileFormat.Concordance)
             {
-                await writer.WriteAsync(stream, request, fileData);
+                delimiter = (char)20;
             }
 
-            var content = await File.ReadAllTextAsync(outputPath);
-            var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            var headerFields = lines[0].Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
+            var pageCountColIdx = headerFields.FindIndex(f => string.Equals(f.Replace(" ", string.Empty), "PAGECOUNT", StringComparison.OrdinalIgnoreCase));
+            Assert.True(pageCountColIdx != -1, $"PAGECOUNT column not found in header for format {format}");
 
-            if (format == LoadFileFormat.EdrmXml)
-            {
-                var doc1Index = content.IndexOf("DocID=\"DOC00000001\"", StringComparison.Ordinal);
-                var doc2Index = content.IndexOf("DocID=\"DOC00000002\"", StringComparison.Ordinal);
-                var doc3Index = content.IndexOf("DocID=\"DOC00000003\"", StringComparison.Ordinal);
+            var fields1 = line1.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
+            var fields2 = line2.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
+            var fields3 = line3.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
 
-                Assert.True(doc1Index != -1);
-                Assert.True(doc2Index != -1);
-                Assert.True(doc3Index != -1);
-
-                var doc1Content = content.Substring(doc1Index, doc2Index - doc1Index);
-                var doc2Content = content.Substring(doc2Index, doc3Index - doc2Index);
-                var doc3Content = content.Substring(doc3Index);
-
-                Assert.Contains("TagName=\"PageCount\"", doc1Content, StringComparison.Ordinal);
-                Assert.Contains("TagValue=\"5\"", doc1Content, StringComparison.Ordinal);
-
-                Assert.Contains("TagName=\"PageCount\"", doc2Content, StringComparison.Ordinal);
-                Assert.Contains("TagValue=\"7\"", doc2Content, StringComparison.Ordinal);
-
-                Assert.Contains("TagName=\"PageCount\"", doc3Content, StringComparison.Ordinal);
-                Assert.Contains("TagValue=\"3\"", doc3Content, StringComparison.Ordinal);
-            }
-            else if (format == LoadFileFormat.Opt)
-            {
-                var line1 = lines.FirstOrDefault(l => l.StartsWith("DOC00000001_001", StringComparison.Ordinal));
-                var line2 = lines.FirstOrDefault(l => l.StartsWith("DOC00000002_001", StringComparison.Ordinal));
-                var line3 = lines.FirstOrDefault(l => l.StartsWith("DOC00000003_001", StringComparison.Ordinal));
-
-                Assert.NotNull(line1);
-                Assert.NotNull(line2);
-                Assert.NotNull(line3);
-
-                Assert.EndsWith(",5", line1, StringComparison.Ordinal);
-                Assert.EndsWith(",7", line2, StringComparison.Ordinal);
-                Assert.EndsWith(",3", line3, StringComparison.Ordinal);
-            }
-            else
-            {
-                var line1 = lines.FirstOrDefault(l => l.Contains("DOC00000001", StringComparison.Ordinal));
-                var line2 = lines.FirstOrDefault(l => l.Contains("DOC00000002", StringComparison.Ordinal));
-                var line3 = lines.FirstOrDefault(l => l.Contains("DOC00000003", StringComparison.Ordinal));
-
-                Assert.NotNull(line1);
-                Assert.NotNull(line2);
-                Assert.NotNull(line3);
-
-                var delimiter = format == LoadFileFormat.Csv ? ',' : (char)20;
-                if (format == LoadFileFormat.Concordance)
-                {
-                    delimiter = (char)20;
-                }
-
-                var headerFields = lines[0].Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
-                var pageCountColIdx = headerFields.FindIndex(f => string.Equals(f.Replace(" ", string.Empty), "PAGECOUNT", StringComparison.OrdinalIgnoreCase));
-                Assert.True(pageCountColIdx != -1, $"PAGECOUNT column not found in header for format {format}");
-
-                var fields1 = line1.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
-                var fields2 = line2.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
-                var fields3 = line3.Split(delimiter).Select(f => f.Trim('\"', (char)254)).ToList();
-
-                Assert.Equal("5", fields1[pageCountColIdx]);
-                Assert.Equal("7", fields2[pageCountColIdx]);
-                Assert.Equal("3", fields3[pageCountColIdx]);
-            }
+            Assert.Equal("5", fields1[pageCountColIdx]);
+            Assert.Equal("7", fields2[pageCountColIdx]);
+            Assert.Equal("3", fields3[pageCountColIdx]);
         }
     }
 }

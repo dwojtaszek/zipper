@@ -6,64 +6,20 @@ namespace Zipper.Tests;
 
 public class OfficeFileGeneratorTests
 {
-    [Fact]
-    public void IsOfficeFormat_WithDocx_ShouldReturnTrue()
+    [Theory]
+    [InlineData("IsOfficeFormat_WithDocx_ShouldReturnTrue", "docx", true)]
+    [InlineData("IsOfficeFormat_WithXlsx_ShouldReturnTrue", "xlsx", true)]
+    [InlineData("IsOfficeFormat_WithPptx_ShouldReturnFalse", "pptx", false)]
+    [InlineData("IsOfficeFormat_WithPdf_ShouldReturnFalse", "pdf", false)]
+    [InlineData("IsOfficeFormat_WithUpperCaseExtension_ShouldReturnTrue", "DOCX", true)]
+    [InlineData("IsOfficeFormat_WithMixedCaseExtension_ShouldReturnTrue", "DocX", true)]
+    public void IsOfficeFormat_WithExtension_ReturnsExpectedResult(string scenario, string extension, bool expected)
     {
         // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("docx");
+        var result = OfficeFileGenerator.IsOfficeFormat(extension);
 
         // Assert
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsOfficeFormat_WithXlsx_ShouldReturnTrue()
-    {
-        // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("xlsx");
-
-        // Assert
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsOfficeFormat_WithPptx_ShouldReturnFalse()
-    {
-        // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("pptx");
-
-        // Assert
-        Assert.False(result); // PPTX is not yet implemented
-    }
-
-    [Fact]
-    public void IsOfficeFormat_WithPdf_ShouldReturnFalse()
-    {
-        // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("pdf");
-
-        // Assert
-        Assert.False(result);
-    }
-
-    [Fact]
-    public void IsOfficeFormat_WithUpperCaseExtension_ShouldReturnTrue()
-    {
-        // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("DOCX");
-
-        // Assert
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsOfficeFormat_WithMixedCaseExtension_ShouldReturnTrue()
-    {
-        // Act
-        var result = OfficeFileGenerator.IsOfficeFormat("DocX");
-
-        // Assert
-        Assert.True(result);
+        Assert.True(expected == result, $"{scenario}: expected {expected} but got {result}.");
     }
 
     [Fact]

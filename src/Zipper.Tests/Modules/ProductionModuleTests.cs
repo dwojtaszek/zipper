@@ -70,60 +70,19 @@ public class ProductionModuleTests
         Assert.Contains("Error: Invalid value for --rolling-count: 'notanumber'", error, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void TryApply_MissingVolumeSizeValue_ReturnsFalse()
+    [Theory]
+    [InlineData("TryApply_MissingVolumeSizeValue_ReturnsFalse", "--volume-size", "Error: --volume-size requires a value.")]
+    [InlineData("TryApply_MissingRollingCountValue_ReturnsFalse", "--rolling-count", "Error: --rolling-count requires a value.")]
+    [InlineData("TryApply_MissingPriorManifestValue_ReturnsFalse", "--prior-manifest", "Error: --prior-manifest requires a value.")]
+    [InlineData("TryApply_MissingSupplementalGapPolicyValue_ReturnsFalse", "--supplemental-gap-policy", "Error: --supplemental-gap-policy requires a value.")]
+    [InlineData("TryApply_MissingProductionIdValue_ReturnsFalse", "--production-id", "Error: --production-id requires a value.")]
+    [InlineData("TryApply_MissingRollingBatesModeValue_ReturnsFalse", "--rolling-bates-mode", "Error: --rolling-bates-mode requires a value.")]
+    [InlineData("TryApply_MissingWithheldNativePolicyValue_ReturnsFalse", "--withheld-native-policy", "Error: --withheld-native-policy requires a value.")]
+    [InlineData("TryApply_MissingSourcePathModeValue_ReturnsFalse", "--source-path-mode", "Error: --source-path-mode requires a value.")]
+    public void TryApply_MissingValue_ReturnsFalse(string scenario, string flag, string expectedError)
     {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--volume-size", null)));
-        Assert.Contains("Error: --volume-size requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingRollingCountValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--rolling-count", null)));
-        Assert.Contains("Error: --rolling-count requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingPriorManifestValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--prior-manifest", null)));
-        Assert.Contains("Error: --prior-manifest requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingSupplementalGapPolicyValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--supplemental-gap-policy", null)));
-        Assert.Contains("Error: --supplemental-gap-policy requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingProductionIdValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--production-id", null)));
-        Assert.Contains("Error: --production-id requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingRollingBatesModeValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--rolling-bates-mode", null)));
-        Assert.Contains("Error: --rolling-bates-mode requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingWithheldNativePolicyValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--withheld-native-policy", null)));
-        Assert.Contains("Error: --withheld-native-policy requires a value.", error, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void TryApply_MissingSourcePathModeValue_ReturnsFalse()
-    {
-        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply("--source-path-mode", null)));
-        Assert.Contains("Error: --source-path-mode requires a value.", error, StringComparison.Ordinal);
+        var error = CaptureError(() => Assert.False(new ProductionModule().TryApply(flag, null)));
+        Assert.True(error.Contains(expectedError, StringComparison.Ordinal), $"{scenario}: expected <{expectedError}> but got <{error}>.");
     }
 
     [Fact]

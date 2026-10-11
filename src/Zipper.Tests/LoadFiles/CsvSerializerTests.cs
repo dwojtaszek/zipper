@@ -6,109 +6,26 @@ namespace Zipper.Tests;
 
 public class CsvSerializerTests
 {
-    [Fact]
-    public void RenderRecord_PlainField_Unchanged()
+    [Theory]
+    [InlineData("RenderRecord_PlainField_Unchanged", "Alice", "Alice")]
+    [InlineData("RenderRecord_FieldWithComma_Quoted", "Smith, John", "\"Smith, John\"")]
+    [InlineData("RenderRecord_FieldWithQuote_DoubledAndQuoted", "She said \"hi\"", "\"She said \"\"hi\"\"\"")]
+    [InlineData("RenderRecord_FieldWithEmbeddedNewline_Quoted", "line1\nline2", "\"line1\nline2\"")]
+    [InlineData("RenderRecord_FieldWithCarriageReturn_Quoted", "a\rb", "\"a\rb\"")]
+    [InlineData("RenderRecord_MixedDelimitersAndQuotes_AllEscaped", "Smith, \"John\"\nNew", "\"Smith, \"\"John\"\"\nNew\"")]
+    [InlineData("RenderRecord_EmptyField_EmitsNothing", "", "")]
+    public void RenderRecord_EscapingRules(string scenario, string input, string expected)
     {
         var serializer = new CsvSerializer();
         var record = new LoadFileRecord
         {
             Columns = new List<string> { "Name" },
-            Values = new[] { "Alice" },
+            Values = new[] { input },
         };
 
         var content = serializer.RenderRecord(record);
 
-        Assert.Equal("Alice", content);
-    }
-
-    [Fact]
-    public void RenderRecord_FieldWithComma_Quoted()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { "Smith, John" },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal("\"Smith, John\"", content);
-    }
-
-    [Fact]
-    public void RenderRecord_FieldWithQuote_DoubledAndQuoted()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { "She said \"hi\"" },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal("\"She said \"\"hi\"\"\"", content);
-    }
-
-    [Fact]
-    public void RenderRecord_FieldWithEmbeddedNewline_Quoted()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { "line1\nline2" },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal("\"line1\nline2\"", content);
-    }
-
-    [Fact]
-    public void RenderRecord_FieldWithCarriageReturn_Quoted()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { "a\rb" },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal("\"a\rb\"", content);
-    }
-
-    [Fact]
-    public void RenderRecord_MixedDelimitersAndQuotes_AllEscaped()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { "Smith, \"John\"\nNew" },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal("\"Smith, \"\"John\"\"\nNew\"", content);
-    }
-
-    [Fact]
-    public void RenderRecord_EmptyField_EmitsNothing()
-    {
-        var serializer = new CsvSerializer();
-        var record = new LoadFileRecord
-        {
-            Columns = new List<string> { "Name" },
-            Values = new[] { string.Empty },
-        };
-
-        var content = serializer.RenderRecord(record);
-
-        Assert.Equal(string.Empty, content);
+        Assert.True(string.Equals(expected, content, StringComparison.Ordinal), $"{scenario}: expected <{expected}> but got <{content}>.");
     }
 
     [Fact]
