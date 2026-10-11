@@ -41,6 +41,20 @@ internal static class ArchiveFixtureBuilder
     private static readonly DateTimeOffset FixedDosTimestamp = new(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>
+    /// External attributes the standard writer records for a plain entry on a Unix host:
+    /// <c>S_IFREG | 0644</c> for a file and <c>S_IFDIR | 0755</c> for a trailing-slash
+    /// name, shifted into the high 16 bits. Pinned explicitly so the Archive bytes never
+    /// depend on the build host's <c>ZipArchive</c> defaults, which are zero on Windows
+    /// (issue #1178).
+    /// </summary>
+    private const uint UnixFileExternalAttributes = (0x8000u | 0x1A4u) << 16;
+
+    private const uint UnixDirectoryExternalAttributes = (0x4000u | 0x1EDu) << 16;
+
+    internal static uint UnixDefaultExternalAttributes(string entryName) =>
+        entryName.EndsWith('/') ? UnixDirectoryExternalAttributes : UnixFileExternalAttributes;
+
+    /// <summary>
     /// The 64-byte non-Archive prefix for the prefixed cases (ticket #873): ASCII text
     /// carrying no ZIP signatures, so it is inert data, never a structure. Shared with
     /// the unrebased mutation so both cases carry the identical prefix bytes.
@@ -250,12 +264,16 @@ internal static class ArchiveFixtureBuilder
                 var level = code == ArchiveTestCodec.Stored ? CompressionLevel.NoCompression : CompressionLevel.Optimal;
                 var entry = archive.CreateEntry(recipeEntry.Name, level);
                 entry.LastWriteTime = FixedDosTimestamp;
-                if (recipeEntry.ExternalAttributes != 0)
-                {
-                    // Documented Unix mode bits (e.g. S_IFLNK | 0777 for symlink entries);
-                    // pure metadata bytes — no filesystem object is ever created.
-                    entry.ExternalAttributes = unchecked((int)recipeEntry.ExternalAttributes);
-                }
+                // Pin the external attributes to a host-independent value: the standard
+                // writer synthesizes host-OS metadata (Unix mode bits on Linux/macOS,
+                // zero on Windows), which would otherwise make the frozen goldens differ
+                // by build host (issue #1178). Documented Unix mode bits win (e.g.
+                // S_IFLNK | 0777 for symlink entries); every other entry gets the Unix
+                // default the writer produced when the goldens were frozen. Pure metadata
+                // bytes — no filesystem object is ever created.
+                entry.ExternalAttributes = unchecked((int)(recipeEntry.ExternalAttributes != 0
+                    ? recipeEntry.ExternalAttributes
+                    : UnixDefaultExternalAttributes(recipeEntry.Name)));
                 using (var entryStream = entry.Open())
                 {
                     entryStream.Write(content);
@@ -348,14 +366,11 @@ internal static class ArchiveFixtureBuilder
             ? ArchiveTestCatalog.SignatureCommentLength
             : 0;
         var layout = ArchiveFixtureLayout.Read(archiveBytes, expectedCommentLength);
-        // Policy-sensitive Unix metadata (ticket #842): the standard writer always
-        // records the DOS host; symlink entries additionally declare the Unix host so
-        // the attribute type bits are read as Unix mode bits. Only the central
-        // version-made-by host byte changes — no captured layout field moves.
-        if (definition.Recipe.Entries.Any(e => e.HostSystem != 0))
-        {
-            PatchUnixHostSystem(archiveBytes, definition.Recipe.Entries, layout);
-        }
+        // Host-dependent Unix metadata (ticket #842, issue #1178): the standard writer
+        // records the build host in the central version-made-by host byte, so pin it to
+        // the Unix host — or a recipe's declared host system (also Unix) — for every
+        // entry. Only that host byte changes; no captured layout field moves.
+        PatchHostSystem(archiveBytes, definition.Recipe.Entries, layout);
         if (definition.Construction is ArchiveControlConstruction.Cp437Name)
         {
             // The raw name bytes are CP437: record the legacy-decoded readable name while
@@ -386,31 +401,61 @@ internal static class ArchiveFixtureBuilder
 
     /// <summary>
     /// Rewrites the central version-made-by host byte (upper byte at central + 4) to the
-    /// recipe's declared host system for entries that carry one (Unix, for symlink
-    /// metadata). The version low byte and every other field stay untouched, so the
-    /// previously captured layout remains valid without a re-read. Patches the freshly
-    /// built buffer in place — no other holder of these bytes exists.
+    /// Unix host for every entry, or to a recipe's declared host system when one aligns
+    /// with the entry ordinal (pass an empty recipe list for Archives with no declared
+    /// hosts). The standard writer records the build host there (<c>Unix</c> on
+    /// Linux/macOS, <c>Windows</c> on Windows), so pinning it keeps the Archive bytes
+    /// host-independent (issue #1178). The version low byte and every other field stay
+    /// untouched, so the previously captured layout remains valid without a re-read.
+    /// Patches the freshly built buffer in place — no other holder of these bytes exists.
     /// </summary>
-    private static void PatchUnixHostSystem(
+    private static void PatchHostSystem(
         byte[] archiveBytes,
         IReadOnlyList<ArchiveTestRecipeEntry> recipeEntries,
         ArchiveFixtureLayout layout)
     {
-        for (var ordinal = 0; ordinal < recipeEntries.Count; ordinal++)
+        for (var ordinal = 0; ordinal < layout.Entries.Count; ordinal++)
         {
-            var recipeEntry = recipeEntries[ordinal];
-            if (recipeEntry.HostSystem == 0)
-            {
-                continue;
-            }
+            var hostSystem = ordinal < recipeEntries.Count && recipeEntries[ordinal].HostSystem != 0
+                ? recipeEntries[ordinal].HostSystem
+                : ArchiveTestCatalog.UnixHostSystem;
 
             var entry = layout.Entries[ordinal];
             var versionMadeBy = BinaryPrimitives.ReadUInt16LittleEndian(
                 archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 4, 2));
             BinaryPrimitives.WriteUInt16LittleEndian(
                 archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 4, 2),
-                (ushort)((recipeEntry.HostSystem << 8) | (versionMadeBy & 0xFF)));
+                (ushort)((hostSystem << 8) | (versionMadeBy & 0xFF)));
         }
+    }
+
+    /// <summary>
+    /// Builds an Archive whose entry metadata is host-independent (issue #1178): the
+    /// callback creates the entries, then every entry gets the Unix default external
+    /// attributes (trailing-slash names are directories) and the Unix version-made-by
+    /// host byte. Used for the inner Archives embedded as fixture payloads, whose bytes
+    /// would otherwise vary by build host and make the enclosing case host-dependent too.
+    /// </summary>
+    internal static byte[] BuildHostIndependentArchive(Action<ZipArchive> writeEntries)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            writeEntries(archive);
+        }
+
+        var archiveBytes = stream.ToArray();
+        var layout = ArchiveFixtureLayout.Read(archiveBytes);
+        for (var ordinal = 0; ordinal < layout.Entries.Count; ordinal++)
+        {
+            var entry = layout.Entries[ordinal];
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 38, 4),
+                UnixDefaultExternalAttributes(entry.Name));
+        }
+
+        PatchHostSystem(archiveBytes, [], layout);
+        return archiveBytes;
     }
 
     /// <summary>
@@ -1383,6 +1428,9 @@ internal static class ArchiveFixtureBuilder
             {
                 var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
                 entry.LastWriteTime = FixedDosTimestamp;
+                // Pin host-dependent metadata (issue #1178): the nested-budget control
+                // would otherwise vary by build host like the frozen stored control.
+                entry.ExternalAttributes = unchecked((int)UnixDefaultExternalAttributes(name));
                 using var entryStream = entry.Open();
                 entryStream.Write(innerBytes);
                 expectations.Add(new ArchiveFixtureEntryExpectation(
@@ -1398,6 +1446,7 @@ internal static class ArchiveFixtureBuilder
             var pad = new byte[padLength];
             var padEntry = archive.CreateEntry(definition.Recipe.Entries[2].Name, CompressionLevel.NoCompression);
             padEntry.LastWriteTime = FixedDosTimestamp;
+            padEntry.ExternalAttributes = unchecked((int)UnixDefaultExternalAttributes(definition.Recipe.Entries[2].Name));
             using (var entryStream = padEntry.Open())
             {
                 entryStream.Write(pad);
@@ -1420,6 +1469,7 @@ internal static class ArchiveFixtureBuilder
         }
 
         var layout = ArchiveFixtureLayout.Read(bytes);
+        PatchHostSystem(bytes, [], layout);
         return new ArchiveFixtureArtifact(
             ArchiveBytes: bytes,
             ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
@@ -1429,11 +1479,10 @@ internal static class ArchiveFixtureBuilder
     }
 
     /// <summary>Builds one deterministic inner Archive holding a single deflated
-    /// zero entry of the given expanded length.</summary>
-    private static byte[] BuildNestedInnerArchive(int expandedLength)
-    {
-        using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+    /// zero entry of the given expanded length. Metadata is pinned host-independent
+    /// (issue #1178), so the enclosing nested-budget case is host-independent too.</summary>
+    private static byte[] BuildNestedInnerArchive(int expandedLength) =>
+        BuildHostIndependentArchive(archive =>
         {
             var entry = archive.CreateEntry("big.bin", CompressionLevel.Optimal);
             entry.LastWriteTime = FixedDosTimestamp;
@@ -1446,10 +1495,7 @@ internal static class ArchiveFixtureBuilder
                 entryStream.Write(zeros, 0, chunk);
                 remaining -= chunk;
             }
-        }
-
-        return stream.ToArray();
-    }
+        });
 
     /// <summary>
     /// Baseline construction for recipes naming Deflate64 or BZip2 entries (ticket
