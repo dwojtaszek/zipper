@@ -32,11 +32,12 @@ python3 -m unittest discover -s "$TOOL_DIR/tests" 2>&1 || {
 }
 print_success "TypeSafe runner unit tests passed."
 
-python3 -m unittest discover -s "$SCRIPT_DIR/../.zipper-runner/tests" 2>&1 || {
-    print_error "Zipper runner unit tests failed."
-    exit 1
-}
-print_success "Zipper runner unit tests passed."
+# NOTE: the `.zipper-runner/tests` suites (runner CLI, subprocess, and Git
+# boundary regressions) no longer run here. They now have their own
+# `runner-tests` job in the shared CI workflow (ci.yml), which runs them on an
+# isolated checkout with its own Git fixture identity. They used to run inside
+# this .NET E2E suite, which masked a Git-environment failure as a product
+# failure (main CI, #1173).
 
 # --- Part 2: fixture-mode audit end to end (no credential, no network) ---
 

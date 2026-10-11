@@ -13,6 +13,8 @@ import time
 import unittest
 from unittest.mock import patch
 
+import gitenv  # noqa: F401  # Git identity for fixture repositories
+
 BASE = Path(__file__).resolve().parents[1]
 
 

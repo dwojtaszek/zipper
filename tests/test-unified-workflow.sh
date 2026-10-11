@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test script to validate the new unified build-and-test.yml workflow
+# Test script to validate the unified build-and-test.yml workflow
 # This script validates that the new unified workflow functions correctly
 
 set -e
@@ -8,12 +8,34 @@ set -e
 echo "=== Unified Workflow Validation Test (Unix) ==="
 echo "Testing new build-and-test.yml workflow"
 
-# Check if unified workflow exists
-echo "1. Checking unified workflow file existence..."
-if [ -f ".github/workflows/build-and-test.yml" ]; then
+# The shared job graph lives in a reusable workflow; both callers (PR Checks
+# and Build and Test) invoke it, so assertions must target the right file.
+# Assertions about the job graph below are assertions about ONE shared
+# definition instead of two copies that can drift (see ci.yml's header).
+SHARED_WORKFLOW_FILE=".github/workflows/ci.yml"
+CALLER_WORKFLOW_FILE=".github/workflows/build-and-test.yml"
+PR_WORKFLOW_FILE=".github/workflows/pr.yml"
+
+# Check if the reusable workflow exists
+echo "1. Checking workflow files exist..."
+if [ -f "$SHARED_WORKFLOW_FILE" ]; then
+    echo "✓ ci.yml exists"
+else
+    echo "✗ ci.yml missing"
+    exit 1
+fi
+
+if [ -f "$CALLER_WORKFLOW_FILE" ]; then
     echo "✓ build-and-test.yml exists"
 else
     echo "✗ build-and-test.yml missing"
+    exit 1
+fi
+
+if [ -f "$PR_WORKFLOW_FILE" ]; then
+    echo "✓ pr.yml exists"
+else
+    echo "✗ pr.yml missing"
     exit 1
 fi
 
@@ -33,36 +55,62 @@ fi
 
 # Validate unified workflow structure
 echo "3. Validating unified workflow structure..."
-if grep -q "name: Build and Test" .github/workflows/build-and-test.yml; then
+if grep -q "name: Build and Test" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Unified workflow has correct name"
 else
     echo "✗ Unified workflow name incorrect"
     exit 1
 fi
 
-# Check for all required jobs
+# Check for all required jobs. The shared graph (lint, runner-tests,
+# build-and-test) lives in ci.yml; the caller keeps prepare and tag-and-release.
 echo "4. Checking for all required jobs..."
-REQUIRED_JOBS=("prepare:" "lint:" "build-and-test:" "tag-and-release:")
-
-for job in "${REQUIRED_JOBS[@]}"; do
-    if grep -q "$job" .github/workflows/build-and-test.yml; then
-        echo "✓ Found $job job"
+for job in "prepare:" "tag-and-release:"; do
+    if grep -q "$job" "$CALLER_WORKFLOW_FILE"; then
+        echo "✓ Found $job job in build-and-test.yml"
     else
-        echo "✗ Missing $job job"
+        echo "✗ Missing $job job in build-and-test.yml"
+        exit 1
+    fi
+done
+
+for job in "lint:" "runner-tests:" "build-and-test:"; do
+    if grep -q "$job" "$SHARED_WORKFLOW_FILE"; then
+        echo "✓ Found $job job in ci.yml"
+    else
+        echo "✗ Missing $job job in ci.yml"
+        exit 1
+    fi
+done
+
+# The reusable hook and both call sites are what keep the two callers in sync.
+echo "5. Checking reusable workflow wiring..."
+if grep -q "workflow_call:" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ ci.yml is a reusable workflow (workflow_call)"
+else
+    echo "✗ ci.yml must be triggered by workflow_call"
+    exit 1
+fi
+
+for caller in "$CALLER_WORKFLOW_FILE" "$PR_WORKFLOW_FILE"; do
+    if grep -q "uses: ./.github/workflows/ci.yml" "$caller"; then
+        echo "✓ $caller calls ci.yml"
+    else
+        echo "✗ $caller must call ./.github/workflows/ci.yml"
         exit 1
     fi
 done
 
 # Check job dependencies
-echo "5. Checking job dependencies..."
-if grep -q "needs: \[prepare, lint\]" .github/workflows/build-and-test.yml; then
-    echo "✓ Build-and-test job depends on prepare and lint"
+echo "6. Checking job dependencies..."
+if grep -q "needs: lint" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ Build-and-test job depends on lint"
 else
     echo "✗ Build-and-test job missing correct dependencies"
     exit 1
 fi
 
-if grep -q "needs: \[prepare, lint, build-and-test\]" .github/workflows/build-and-test.yml; then
+if grep -q "needs: \[prepare, ci\]" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Release job depends on all previous jobs"
 else
     echo "✗ Release job missing dependencies"
@@ -70,8 +118,8 @@ else
 fi
 
 # Check for matrix strategy in build-and-test job
-echo "6. Checking build-and-test job matrix strategy..."
-if grep -A 10 "build-and-test:" .github/workflows/build-and-test.yml | grep -q "matrix:"; then
+echo "7. Checking build-and-test job matrix strategy..."
+if grep -A 10 "build-and-test:" "$SHARED_WORKFLOW_FILE" | grep -q "matrix:"; then
     echo "✓ Build-and-test job has matrix strategy"
 else
     echo "✗ Build-and-test job missing matrix strategy"
@@ -79,11 +127,11 @@ else
 fi
 
 # Check platforms in matrix
-echo "7. Checking platform support..."
+echo "8. Checking platform support..."
 PLATFORMS=("win-x64" "linux-x64" "osx-arm64")
 
 for platform in "${PLATFORMS[@]}"; do
-    if grep -q "$platform" .github/workflows/build-and-test.yml; then
+    if grep -q "$platform" "$SHARED_WORKFLOW_FILE"; then
         echo "✓ Found $platform in workflow"
     else
         echo "✗ Missing $platform in workflow"
@@ -92,15 +140,15 @@ for platform in "${PLATFORMS[@]}"; do
 done
 
 # Check for artifact handling
-echo "8. Checking artifact handling..."
-if grep -q "actions/upload-artifact@" .github/workflows/build-and-test.yml; then
+echo "9. Checking artifact handling..."
+if grep -q "actions/upload-artifact@" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Uses upload-artifact"
 else
     echo "✗ Missing upload-artifact"
     exit 1
 fi
 
-if grep -q "actions/download-artifact@" .github/workflows/build-and-test.yml; then
+if grep -q "actions/download-artifact@" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Uses download-artifact"
 else
     echo "✗ Missing download-artifact"
@@ -108,8 +156,8 @@ else
 fi
 
 # Check for artifact retention
-echo "9. Checking artifact retention configuration..."
-if grep -q "retention-days: 7" .github/workflows/build-and-test.yml; then
+echo "10. Checking artifact retention configuration..."
+if grep -q "retention-days: 7" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Artifact retention set to 7 days"
 else
     echo "✗ Missing artifact retention configuration"
@@ -117,15 +165,15 @@ else
 fi
 
 # Check for branch triggers
-echo "10. Checking branch triggers..."
-if grep -q "branches:" .github/workflows/build-and-test.yml; then
+echo "11. Checking branch triggers..."
+if grep -q "branches:" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Has branch triggers configured"
 else
     echo "✗ Missing branch triggers"
     exit 1
 fi
 
-if grep -q "main" .github/workflows/build-and-test.yml; then
+if grep -q "main" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Main branch trigger found"
 else
     echo "✗ Missing main branch trigger"
@@ -133,8 +181,8 @@ else
 fi
 
 # Check for release conditions
-echo "11. Checking release conditions..."
-if grep -q "if: github.ref == 'refs/heads/main'" .github/workflows/build-and-test.yml; then
+echo "12. Checking release conditions..."
+if grep -q "if: github.ref == 'refs/heads/main'" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Release job runs on main"
 else
     echo "✗ Release job missing main branch condition"
@@ -142,15 +190,15 @@ else
 fi
 
 # Check for permissions
-echo "12. Checking release permissions..."
-if grep -q "permissions:" .github/workflows/build-and-test.yml; then
+echo "13. Checking release permissions..."
+if grep -q "permissions:" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Release job has permissions"
 else
     echo "✗ Release job missing permissions"
     exit 1
 fi
 
-if grep -q "contents: write" .github/workflows/build-and-test.yml; then
+if grep -q "contents: write" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Release job has contents write permission"
 else
     echo "✗ Release job missing contents write permission"
@@ -160,7 +208,7 @@ fi
 # Check for caching. The reportgenerator cache moved into the shared composite
 # action (.github/actions/coverage-gate); match a tag or SHA-pinned
 # `actions/cache@` ref anywhere under .github/.
-echo "13. Checking caching configuration..."
+echo "14. Checking caching configuration..."
 if grep -rq "actions/cache@" .github/; then
     echo "✓ Uses caching"
 else
@@ -169,8 +217,8 @@ else
 fi
 
 # Check for version handling
-echo "14. Checking version handling..."
-if grep -q "Set Version" .github/workflows/build-and-test.yml; then
+echo "15. Checking version handling..."
+if grep -q "Set Version" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Has version handling"
 else
     echo "✗ Missing version handling"

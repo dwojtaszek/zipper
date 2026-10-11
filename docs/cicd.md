@@ -21,10 +21,10 @@ flowchart TD
 
     subgraph prpipe["PR Checks (pr.yml) — on pull_request to main"]
         docsonly["docs-only?<br/>(skip build/test if all docs)"]
-        lint["lint:<br/>actionlint + restore --locked + dotnet format<br/>+ oversized-file guard"]
-        bt["build-and-test (matrix: linux/win/macos):<br/>build Release + unit tests<br/>+ full E2E + vuln scan<br/>(coverage + 80% gate on Linux)"]
+        shared["ci.yml (reusable workflow):<br/>lint + runner-tests + build-and-test matrix<br/>linux/win/macos, full E2E<br/>(coverage gate + goldens CLI on Linux)"]
         gold["goldens:<br/>content-hash parity check"]
-        docsonly -->|not docs-only| lint --> bt --> gold
+        gate["ci-gate<br/>(required merge gate)"]
+        docsonly -->|not docs-only| shared --> gold --> gate
     end
 
     subgraph side["Side checks (parallel, on PR)"]
@@ -42,10 +42,9 @@ flowchart TD
 
     subgraph btmain["Build and Test (build-and-test.yml) — on push to main / tag v*"]
         prep["prepare: compute version<br/>(tag → exact, else bump patch + -dev)"]
-        lint2["lint"]
-        bt2["build-and-test (matrix):<br/>build + tests + coverage gate<br/>+ full E2E + self-contained publish per platform"]
+        sharedmain["ci.yml (same reusable workflow)<br/>+ self-contained publish per platform"]
         rel["tag-and-release:<br/>bump patch, push vX.Y.Z tag,<br/>GitHub Release w/ 3 platform binaries"]
-        prep --> lint2 --> bt2 --> rel
+        prep --> sharedmain --> rel
     end
 
     subgraph sched["Scheduled / bot"]
@@ -75,9 +74,12 @@ Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Full
 Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs are gated on `docs-only` so a pure-docs PR skips build/test entirely.
 
 1. **docs-only** — diffs base..head; if **every** changed file matches a docs pattern, sets `only_docs=true` and the rest of the pipeline is skipped. A failed diff or zero changed files is treated as non-docs (fail-safe).
-2. **lint** — `actionlint`, `dotnet restore --locked-mode`, `dotnet format --verify-no-changes`, and an oversized-file guard (>500 KB under `src/`, excluding `*.json`/`*.dat`/`*.opt`).
-3. **build-and-test** — matrix over `ubuntu` / `windows` / `macOS`. Builds Release (includes tests), runs unit tests, full E2E suite. **Linux leg only** also: code coverage + **80% total line-coverage gate** and **50% per-file coverage floor** ([coverage-gate action](../.github/actions/coverage-gate/action.yml)), vulnerable-package scan (hard gate), test-timing report, and publishes the CLI as an artifact for goldens.
-4. **goldens** — downloads the Linux CLI artifact and runs golden scenarios (content-hash parity). See [CI.md](../CI.md#goldens) to regenerate.
+2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — the shared job graph, identical for PRs and main. Keeping it in one file is what stops the two callers drifting apart: the `git config user.name` guard that reddened main CI for 15 hours (#1173) existed on the PR side only, and both callers now get every gate from the same definition. Inputs: `publish_mode: goldens` on PRs (publishes the framework-dependent Linux CLI as `zipper-cli-linux`), `self-contained` on main (publishes per-RID release binaries), `version` on main. A PR that edits `ci.yml` is checked out with a read-only token, so a change is validated by the version it ships with.
+   - **lint** — `actionlint`, `dotnet restore --locked-mode`, `dotnet format --verify-no-changes`, requirement-traceability validation, `.sh`/`.bat` E2E parity, an oversized-file guard (>500 KB under `src/`, excluding `*.json`/`*.dat`/`*.opt`), and a swallowed-test-output guard.
+   - **runner-tests** — `.zipper-runner/tests` (runner CLI, subprocess, and Git-boundary regressions) on an isolated checkout, on both `ubuntu-latest` and `macos-latest`. The suites carry their own fixture Git identity (`.zipper-runner/tests/gitenv.py`), which is what actually makes them pass on a machine with no global `user.name`/`user.email`; the job also fills a missing global identity as defence in depth for Git work outside those suites. Output is teed to a log so a non-zero exit never loses its traceback. These suites deliberately do **not** run inside the .NET E2E suite: a Git-environment failure then reported as a product regression, which is how #1173 was misdiagnosed as a code bug for a day.
+   - **build-and-test** — matrix over `ubuntu` / `windows` / `macOS`. Builds Release (includes tests), runs unit tests, full E2E suite. **Linux leg only** also: code coverage + **80% total line-coverage gate** and **50% per-file coverage floor** ([coverage-gate action](../.github/actions/coverage-gate/action.yml)), vulnerable-package scan (hard gate), test-timing report, and the Linux CLI publish consumed by `goldens`.
+3. **goldens** — downloads the Linux CLI artifact and runs golden scenarios (content-hash parity). See [CI.md](../CI.md#goldens) to regenerate.
+4. **ci-gate** — aggregate merge gate; branch protection requires exactly this check context and nothing else. It always runs (even on docs-only PRs where everything above is skipped), and fails if any needed job failed or was cancelled.
 
 ### 3. Side checks (parallel on PR)
 
@@ -99,9 +101,10 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 Trigger: `push` → `main`, and tags `v*`.
 
 1. **prepare** — computes version. Tag push → exact `vX.Y.Z`; main push → next patch with `-dev` suffix.
-2. **lint** — restore (locked) + format check.
-3. **build-and-test** — same matrix as PR, plus a **self-contained per-platform publish** (`linux-x64`, `win-x64`, `osx-arm64`) uploaded as artifacts (7-day retention).
-4. **tag-and-release** — main only, skipped on `[skip ci]`. Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with the three platform binaries. The release body is sourced in priority order: (1) the merged PR's `## Release Notes` section, (2) GitHub Models AI summary of commits since the previous tag (model: `gpt-4o-mini`), (3) static fallback `"See commit history for changes in this release."` Agents and humans must include a `## Release Notes` section in every PR body — see [Release Notes Mandate](../AGENTS.md#release-notes-mandate). Idempotent: skips if the tag already exists. Release history is on the GitHub Releases page; there is no `CHANGELOG.md`.
+2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — the same shared job graph a PR ran, invoked with `version` and `publish_mode: self-contained`, which publishes the three per-platform Release binaries (`linux-x64`, `win-x64`, `osx-arm64`) as artifacts (7-day retention). Because the gate definitions are shared, a PR that passes `ci-gate` cannot be broken by a main-side job difference that only exists after merge.
+
+   The trade-off is that main now runs **strictly more gates than it did before** the shared workflow existed — its old `lint` job was restore + format only, while `ci` also runs `actionlint`, the requirement-traceability and `.sh`/`.bat` parity checks, the oversized-file and swallowed-output guards, the vulnerable-package scan, and `runner-tests`. Most of these can turn a main push red **without any repository change**: `dotnet list package --vulnerable` consults the live NuGet vulnerability database, so a CVE disclosed for a transitive package after merge reddens main with no PR to point at, and `runner-tests` spawns real subprocesses. Expect this: a red `Build and Test` check after a quiet period is not automatically a regression from the last merge. If it happens, re-run first to distinguish a new CVE from a real break.
+3. **tag-and-release** — main only, skipped on `[skip ci]` and skipped whenever `ci` failed or was cancelled, so a release is never published from a red build — it waits, and the red `Build and Test` check is what surfaces the wait (watchers are notified by GitHub's default-branch watch). Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with the three platform binaries. The release body is sourced in priority order: (1) the merged PR's `## Release Notes` section, (2) GitHub Models AI summary of commits since the previous tag (model: `gpt-4o-mini`), (3) static fallback `"See commit history for changes in this release."` Agents and humans must include a `## Release Notes` section in every PR body — see [Release Notes Mandate](../AGENTS.md#release-notes-mandate). Idempotent: skips if the tag already exists. Release history is on the GitHub Releases page; there is no `CHANGELOG.md`.
 
 ### 5. Scheduled / bot
 
@@ -118,11 +121,13 @@ Trigger: `push` → `main`, and tags `v*`.
 |------|-------|-----------|
 | Format (`dotnet format`) | pre-commit, lint | Yes |
 | Unit tests | pre-commit/pre-push, build-and-test | Yes |
+| Runner CLI/subprocess/Git regressions | runner-tests | Yes |
 | Line coverage ≥ 80% | build-and-test (Linux) | Yes |
 | Full E2E (all 3 OS) | build-and-test | Yes |
 | Golden parity | goldens | Yes |
 | Oversized file (>500 KB) | lint | Yes |
 | Vulnerable NuGet packages | build-and-test (Linux) | Yes |
+| E2E `.sh`/`.bat` parity | lint | Yes |
 | Perf RSS ≤ 1.20× | perf-guard | No (advisory; measurement errors block) |
 | Perf wall_s | perf-guard | No (informational) |
 | SonarCloud BLOCKER/MAJOR | external | Yes (manual fetch) |
@@ -139,16 +144,19 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 | lint (format) | `dotnet format --verify-no-changes src/` |
 | build | `dotnet build zipper.sln -c Release` |
 | unit tests + coverage gate | `dotnet test src/Zipper.Tests/Zipper.Tests.csproj --collect:"XPlat Code Coverage" --results-directory ./TestResults && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` (then run `dotnet reportgenerator -reports:TestResults/*/coverage.cobertura.xml -targetdir:TestResults/coverage-report -reporttypes:TextSummary` and check line coverage ≥ 80%) |
+| runner-tests | `HOME=/nonexistent python3 -m unittest discover -s .zipper-runner/tests` (the empty `HOME` proves the suite carries its own fixture Git identity; run once from `.zipper-runner` and once from the repo root, matching both CI legs) |
 | full E2E | `dotnet build -c Release && ./tests/run-tests.sh` (Unix) / `dotnet build -c Release && tests\run-tests.bat` (Windows) |
 | basic E2E smoke (pre-push) | `./tests/run-e2e-basic.sh` (Unix) / `tests\run-e2e-basic.bat` (Windows) |
 | goldens | `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin && ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh` |
 | perf-guard | `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin && ./tests/perf/measure.sh ./publish-bin/Zipper` |
+| self-contained release publish | `dotnet publish src/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64` (also `win-x64`, `osx-arm64`) |
 
 **Rules of the road:**
 - Install the hooks once (`./setup-hook.sh`) so format + tests run before every commit/push.
 - A docs-only PR skips the build matrix — don't wait on jobs that won't run.
 - Don't merge until PR Checks **and** side checks are green and all reviewer comments are addressed ([AGENTS.md workflow steps 9–12](../AGENTS.md#workflow-for-github-issues)).
-- Changing a workflow? `actionlint` runs in `lint`; pin any new action to a full commit SHA (SonarCloud flags unpinned actions as security hotspots — see [CI.md](../CI.md#quality-gate-vs-code-issues)).
+- Changing a shared gate? Edit [ci.yml](../.github/workflows/ci.yml) — it applies to PRs **and** main, so one diff covers both. Main therefore inherits every PR gate, including the time-varying ones (see §4). Editing a caller (`pr.yml`, `build-and-test.yml`) is only for wiring: triggers, `docs-only` gating, `goldens`, version computation, and release publication.
+- Changing a workflow? `actionlint` runs in `lint`; pin any new action to a full commit SHA (SonarCloud flags unpinned actions as security hotspots — see [CI.md](../CI.md#quality-gate-vs-code-issues)). Local check before pushing: `actionlint`.
 - A behavior change that alters output **bytes** will trip goldens; performance changes produce advisory warnings from perf-guard.
 
 ### Audit concurrency measurement and limits
