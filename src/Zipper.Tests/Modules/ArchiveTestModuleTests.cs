@@ -29,18 +29,8 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
 
     private static async Task<(int ExitCode, string Stderr)> RunWithCapturedErrorAsync(params string[] args)
     {
-        var originalError = Console.Error;
-        using var errorWriter = new StringWriter();
-        try
-        {
-            Console.SetError(errorWriter);
-            var exitCode = await RunAsync(args);
-            return (exitCode, errorWriter.ToString());
-        }
-        finally
-        {
-            Console.SetError(originalError);
-        }
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => RunAsync(args));
+        return (exitCode, stderr);
     }
 
     private static List<string> SuiteKeys(string suite) =>
@@ -200,27 +190,17 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
     [Fact]
     public async Task RunAsync_UnknownSuite_ListsEverySupportedSuite()
     {
-        var originalError = Console.Error;
-        using var errorWriter = new StringWriter();
-        try
-        {
-            Console.SetError(errorWriter);
+        var outputPath = Path.Combine(TempDir, "x");
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(
+            () => RunAsync("--archive-test-suite", "encodign", "--output-path", outputPath));
 
-            var exitCode = await RunAsync(
-                "--archive-test-suite", "encodign", "--output-path", Path.Combine(TempDir, "x"));
-
-            Assert.Equal(1, exitCode);
-            Assert.False(Directory.Exists(Path.Combine(TempDir, "x")));
-            Assert.Equal(
-                "Error: Invalid --archive-test-suite 'encodign'. Supported suites: "
-                + string.Join(", ", ArchiveTestCatalog.SupportedSuites) + "."
-                + Environment.NewLine,
-                errorWriter.ToString());
-        }
-        finally
-        {
-            Console.SetError(originalError);
-        }
+        Assert.Equal(1, exitCode);
+        Assert.False(Directory.Exists(outputPath));
+        Assert.Equal(
+            "Error: Invalid --archive-test-suite 'encodign'. Supported suites: "
+            + string.Join(", ", ArchiveTestCatalog.SupportedSuites) + "."
+            + Environment.NewLine,
+            stderr);
     }
 
     [Fact]

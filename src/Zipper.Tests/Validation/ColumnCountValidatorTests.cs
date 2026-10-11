@@ -18,7 +18,15 @@ public class ColumnCountValidatorTests
 
         validator.ValidateCsv(csvContent, expectedColumns, "test.csv", result);
 
-        Assert.Equal(shouldPass, !result.HasErrors);
+        if (shouldPass)
+        {
+            Assert.False(result.HasErrors);
+        }
+        else
+        {
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding => finding.Severity == ValidationSeverity.Error && finding.Category == "ColumnCount");
+        }
     }
 
     [Theory]
@@ -31,7 +39,15 @@ public class ColumnCountValidatorTests
 
         validator.ValidateDat(datContent, expectedColumns, '\x1e', "test.dat", result);
 
-        Assert.Equal(shouldPass, !result.HasErrors);
+        if (shouldPass)
+        {
+            Assert.False(result.HasErrors);
+        }
+        else
+        {
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding => finding.Severity == ValidationSeverity.Error && finding.Category == "ColumnCount");
+        }
     }
 
     [Theory]
@@ -44,7 +60,15 @@ public class ColumnCountValidatorTests
 
         validator.ValidateConcordance(content, '\x14', "test.dat", result);
 
-        Assert.Equal(shouldPass, !result.HasErrors);
+        if (shouldPass)
+        {
+            Assert.False(result.HasErrors);
+        }
+        else
+        {
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding => finding.Severity == ValidationSeverity.Error && finding.Category == "ColumnCount");
+        }
     }
 
     [Fact]

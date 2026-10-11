@@ -101,58 +101,31 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
     [Fact]
     public void TryBuild_WithFamiliesWithoutEml_EmitsWarning()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.True(TryBuild(false, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
-                Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(false, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
+
+        Assert.True(isValid);
+        Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public void TryBuild_WithFamiliesWithEmlAndAttachmentRateZero_EmitsWarning()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.True(TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "0" }, out _));
-                Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "0" }, out _));
+
+        Assert.True(isValid);
+        Assert.Contains("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public void TryBuild_WithFamiliesWithEmlAndAttachmentRatePositive_DoesNotEmitWarning()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.True(TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
-                Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", errWriter.ToString(), StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(true, false, new[] { "--with-families", "--attachment-rate", "50" }, out _));
+
+        Assert.True(isValid);
+        Assert.DoesNotContain("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -175,20 +148,11 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
         try
         {
             File.WriteAllText(tempProfilePath, "{ not valid json");
-            var originalError = Console.Error;
-            using (var errWriter = new StringWriter())
-            {
-                Console.SetError(errWriter);
-                try
-                {
-                    Assert.False(TryBuild(false, false, new[] { "--column-profile", tempProfilePath }, out _));
-                    Assert.Contains("Error: Invalid JSON in column profile", errWriter.ToString(), StringComparison.Ordinal);
-                }
-                finally
-                {
-                    Console.SetError(originalError);
-                }
-            }
+            var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+                () => TryBuild(false, false, new[] { "--column-profile", tempProfilePath }, out _));
+
+            Assert.False(isValid);
+            Assert.Contains("Error: Invalid JSON in column profile", stderr, StringComparison.Ordinal);
         }
         finally
         {
@@ -234,21 +198,14 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
     [Fact]
     public void TryBuild_ProfileWithMetadata_PrecedenceWarning()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
+        var (config, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() =>
         {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.True(TryBuild(false, false, new[] { "--with-metadata", "--column-profile", "standard" }, out var config));
-                Assert.Contains("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.", errWriter.ToString(), StringComparison.Ordinal);
-                Assert.False(config.WithMetadata);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+            Assert.True(TryBuild(false, false, new[] { "--with-metadata", "--column-profile", "standard" }, out var builtConfig));
+            return builtConfig;
+        });
+
+        Assert.Contains("Warning: --column-profile takes precedence over --with-metadata. --with-metadata will be ignored.", stderr, StringComparison.Ordinal);
+        Assert.False(config.WithMetadata);
     }
 
     [Fact]

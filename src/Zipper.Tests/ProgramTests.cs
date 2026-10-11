@@ -7,80 +7,48 @@ public class ProgramTests : WorkingDirectoryTestBase
 {
     private static async Task<int> RunWithRedirectedConsole(Func<Task<int>> action)
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            return await action().ConfigureAwait(false);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var (exitCode, _, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(action).ConfigureAwait(false);
+        return exitCode;
     }
 
     private static async Task<(int ExitCode, string Output)> RunWithRedirectedConsoleAndCapture(Func<Task<int>> action)
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            int exitCode = await action().ConfigureAwait(false);
-            return (exitCode, outWriter.ToString() + errWriter.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(action).ConfigureAwait(false);
+        return (exitCode, stdout + stderr);
     }
 
     [Fact]
-    public async Task Main_WithHelpFlag_ReturnsOne()
+    public async Task Main_WithUnknownHelpFlag_ReturnsErrorCode()
     {
-        // Arrange
         string[] args = { "--help" };
 
-        // Act
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-        // Assert
-        Assert.Equal(1, exitCode); // Help shows usage and returns 1
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Unknown argument or unconsumed value '--help'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Main_WithInvalidArguments_ReturnsErrorCode()
     {
-        // Arrange - Missing required arguments
         string[] args = Array.Empty<string>();
 
-        // Act
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-        // Assert
-        Assert.Equal(1, exitCode); // Should return error code for invalid args
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Missing required arguments.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Usage:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Main_WithMissingOutputPath_ReturnsErrorCode()
     {
-        // Arrange - Missing required --output argument
         string[] args = { "--count", "10", "--type", "pdf" };
 
-        // Act
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-        // Assert
-        Assert.Equal(1, exitCode); // Should return error code
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Output path is required.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -90,21 +58,26 @@ public class ProgramTests : WorkingDirectoryTestBase
         string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
-            "--output", tempPath,
+            "--output-path", tempPath,
             "--count", "1",
             "--type", "invalid_type",
         };
 
-        // Act
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
-
-        // Assert
-        Assert.Equal(1, exitCode); // Should return error code for invalid type
-
-        // Cleanup
-        if (Directory.Exists(tempPath))
+        try
         {
-            Directory.Delete(tempPath, true);
+            var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Error: Unsupported file type 'invalid_type'", stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("Unknown argument or unconsumed value", stderr, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(tempPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
         }
     }
 
@@ -115,21 +88,26 @@ public class ProgramTests : WorkingDirectoryTestBase
         string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
-            "--output", tempPath,
+            "--output-path", tempPath,
             "--count", "-1",  // Invalid count
             "--type", "pdf",
         };
 
-        // Act
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
-
-        // Assert
-        Assert.Equal(1, exitCode); // Should return error code
-
-        // Cleanup
-        if (Directory.Exists(tempPath))
+        try
         {
-            Directory.Delete(tempPath, true);
+            var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Error: --count must be a positive number.", stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("Unknown argument or unconsumed value", stderr, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(tempPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
         }
     }
 
@@ -140,18 +118,19 @@ public class ProgramTests : WorkingDirectoryTestBase
         string tempPath = Path.Combine(TempDir, $"zipper_{Guid.NewGuid():N}");
         string[] args =
         {
-            "--output", tempPath,
+            "--output-path", tempPath,
             "--count", "abc",  // Invalid count (must be integer string)
             "--type", "pdf",
         };
 
         try
         {
-            // Act
-            int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+            var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-            // Assert
-            Assert.Equal(1, exitCode); // Should return error code
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Error: Invalid value for --count: 'abc'", stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("Unknown argument or unconsumed value", stderr, StringComparison.Ordinal);
+            Assert.False(Directory.Exists(tempPath));
         }
         finally
         {
@@ -214,8 +193,11 @@ public class ProgramTests : WorkingDirectoryTestBase
     public async Task Main_WithChaosListAndUnknownFlag_BypassesValidationAndReturnsZero()
     {
         string[] args = { "--chaos-list", "--unknown-flag" };
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, stdout, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(0, exitCode);
+        Assert.Contains("structured-import-failures", stdout, StringComparison.Ordinal);
+        Assert.Contains("All anomaly types enabled at high density for stress testing", stdout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -223,28 +205,8 @@ public class ProgramTests : WorkingDirectoryTestBase
     {
         // Arrange
         string[] args = { "--version" };
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        string output;
-        int exitCode;
+        var (exitCode, output, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-        // Act
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            exitCode = await Program.Main(args);
-            output = outWriter.ToString();
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
-
-        // Assert
         Assert.Equal(0, exitCode);
         Assert.Contains("Zipper v", output, StringComparison.Ordinal);
     }
@@ -264,27 +226,8 @@ public class ProgramTests : WorkingDirectoryTestBase
         // version banner (REQ-034). Empty args fail fast to the help path,
         // proving banner suppression without touching the filesystem.
         string[] args = [];
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        string output;
+        var (_, output, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
-        // Act
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            _ = await Program.Main(args);
-            output = outWriter.ToString();
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
-
-        // Assert
         Assert.DoesNotContain("https://github.com/dwojtaszek/zipper/", output, StringComparison.Ordinal);
     }
 

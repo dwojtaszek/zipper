@@ -26,22 +26,8 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
         return path;
     }
 
-    private static string CaptureError(Action action)
-    {
-        var original = Console.Error;
-        using var writer = new StringWriter();
-        Console.SetError(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
-
-        return writer.ToString();
-    }
+    private static string CaptureError(Action action) =>
+        ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 
     [Fact]
     public void Parse_InputCsvAndDirectoryTemplate_StoreRawValues()

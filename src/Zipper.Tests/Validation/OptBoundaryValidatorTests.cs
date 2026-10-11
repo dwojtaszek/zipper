@@ -17,7 +17,15 @@ public class OptBoundaryValidatorTests
 
         validator.Validate(optContent, "test.opt", result);
 
-        Assert.Equal(shouldPass, !result.HasErrors);
+        if (shouldPass)
+        {
+            Assert.False(result.HasErrors);
+        }
+        else
+        {
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding => finding.Severity == ValidationSeverity.Error && finding.Category == "OptBoundary");
+        }
     }
 
     [Fact]
@@ -49,7 +57,8 @@ public class OptBoundaryValidatorTests
         validator.Validate("\"a,b\",c,d,e,f,g,h\n", "test.opt", result);
 
         Assert.True(result.HasErrors);
-        Assert.Contains(result.Findings, f => f.Category == "OptBoundary");
+        Assert.Contains(result.Findings, finding =>
+            finding.Severity == ValidationSeverity.Error && finding.Category == "OptBoundary");
     }
 
     [Fact]
@@ -63,5 +72,7 @@ public class OptBoundaryValidatorTests
         validator.Validate("a,b,c,d,e,f,g\n   \na,b,c,d,e,f,g\n", "test.opt", result);
 
         Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding =>
+            finding.Severity == ValidationSeverity.Error && finding.Category == "OptBoundary");
     }
 }

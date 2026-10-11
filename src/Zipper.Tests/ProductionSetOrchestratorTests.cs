@@ -118,8 +118,8 @@ public class ProductionSetOrchestratorTests
             var manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result2.ProductionPath);
 
             Assert.NotEmpty(manifest1);
-            var lines1 = manifest1.Split('\n').Where(l => !l.EndsWith(".json", StringComparison.Ordinal)).ToArray();
-            var lines2 = manifest2.Split('\n').Where(l => !l.EndsWith(".json", StringComparison.Ordinal)).ToArray();
+            var lines1 = FilterNonJsonManifestLines(manifest1);
+            var lines2 = FilterNonJsonManifestLines(manifest2);
             Assert.NotEmpty(lines1);
             Assert.Equal(lines1, lines2);
             Assert.Contains("DATA/loadfile.dat", manifest1, StringComparison.Ordinal);
@@ -141,6 +141,24 @@ public class ProductionSetOrchestratorTests
                 Directory.Delete(tempDir2, true);
             }
         }
+    }
+
+    [Fact]
+    public void FilterNonJsonManifestLines_WindowsCrLfManifest_ExcludesJsonArtifacts()
+    {
+        var manifest = string.Join(
+            "\r\n",
+            new[]
+            {
+                "aaaa  DATA/loadfile.dat",
+                "bbbb  _manifest.json",
+                "cccc  _validation_report.json",
+                "dddd  NATIVES/VOL001/GOLD000001.pdf",
+            });
+
+        var lines = FilterNonJsonManifestLines(manifest);
+
+        Assert.Equal(new[] { "aaaa  DATA/loadfile.dat", "dddd  NATIVES/VOL001/GOLD000001.pdf" }, lines);
     }
 
     [Fact]
@@ -752,6 +770,23 @@ public class ProductionSetOrchestratorTests
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) { }
+    }
+
+    /// <summary>
+    /// Splits a golden manifest into comparable lines, dropping the <c>.json</c> artifacts the
+    /// parity check excludes (notably the wall-clock-dependent <c>_manifest.json</c>).
+    /// The <c>'\r'</c> trim is required: the harness joins lines with
+    /// <c>StringBuilder.AppendLine()</c> (<c>Environment.NewLine</c>), so on Windows every line
+    /// except the last keeps a trailing <c>'\r'</c> after splitting on <c>'\n'</c> and the
+    /// <c>.json</c> suffix check would never match.
+    /// </summary>
+    internal static string[] FilterNonJsonManifestLines(string manifest)
+    {
+        return manifest
+            .Split('\n')
+            .Select(static line => line.TrimEnd('\r'))
+            .Where(static line => !line.EndsWith(".json", StringComparison.Ordinal))
+            .ToArray();
     }
 
     private static FileGenerationRequest CreateRequest(int count, string fileType, string outputPath)

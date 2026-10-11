@@ -21,6 +21,15 @@ public class CrossCuttingRulesTests
         modules.Output.TryApply("--output-path", Directory.GetCurrentDirectory());
     }
 
+    private static void AssertValidationError(Action<CliModuleSet> configure, string expectedError)
+    {
+        var modules = CreateModules(configure);
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => CrossCuttingRules.Validate(modules));
+
+        Assert.False(isValid);
+        Assert.Contains(expectedError, stderr, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Validate_ValidArgs_ReturnsTrue()
     {
@@ -31,12 +40,11 @@ public class CrossCuttingRulesTests
     [Fact]
     public void Validate_MissingType_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             m.Output.TryApply("--count", "10");
             m.Output.TryApply("--output-path", Directory.GetCurrentDirectory());
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --type is required.");
     }
 
     [Fact]
@@ -67,94 +75,87 @@ public class CrossCuttingRulesTests
     [Fact]
     public void Validate_MissingCount_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             m.Output.TryApply("--type", "pdf");
             m.Output.TryApply("--output-path", Directory.GetCurrentDirectory());
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --count is required.");
     }
 
     [Fact]
     public void Validate_TargetZipSizeWithoutCount_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             m.Output.TryApply("--type", "pdf");
             m.Output.TryApply("--target-zip-size", "10MB");
             m.Output.TryApply("--output-path", Directory.GetCurrentDirectory());
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --count is required.");
     }
 
     [Fact]
     public void Validate_ProductionSet_ConflictsWithLoadfileOnly_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Production.TryApply("--production-set", null);
             m.LoadFile.TryApply("--loadfile-only", null);
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --production-set conflicts with --loadfile-only.");
     }
 
     [Fact]
     public void Validate_RedactedProduction_ConflictsWithLoadfileOnly_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Production.TryApply("--redacted-production", null);
             m.LoadFile.TryApply("--loadfile-only", null);
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --redacted-production conflicts with --loadfile-only.");
     }
 
     [Fact]
     public void Validate_ProductionSet_WithoutBatesPrefix_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Production.TryApply("--production-set", null);
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --production-set requires --bates-prefix.");
     }
 
     [Fact]
     public void Validate_Types_WithLoadfileOnly_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Output.TryApply("--types", "pdf:70,xls:30");
             m.LoadFile.TryApply("--loadfile-only", null);
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --types is not supported with --loadfile-only.");
     }
 
     [Fact]
     public void Validate_Types_WithColumnProfile_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Output.TryApply("--types", "pdf:70,xls:30");
             m.Metadata.TryApply("--column-profile", "standard");
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --types is not supported with --column-profile. Use --type for profile-driven generation.");
     }
 
     [Fact]
     public void Validate_ColumnProfile_WithProductionSet_ReturnsFalse()
     {
-        var modules = CreateModules(m =>
+        AssertValidationError(m =>
         {
             ApplyValidBase(m);
             m.Production.TryApply("--production-set", null);
+            m.Bates.TryApply("--bates-prefix", "PREFIX");
             m.Metadata.TryApply("--column-profile", "edrm-standard");
-        });
-        Assert.False(CrossCuttingRules.Validate(modules));
+        }, "Error: --column-profile is not supported with --production-set.");
     }
 }

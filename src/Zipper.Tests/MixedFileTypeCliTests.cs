@@ -190,19 +190,6 @@ public class MixedFileTypeCliTests : WorkingDirectoryTestBase
         Assert.Contains("--types requires a value", error, StringComparison.Ordinal);
     }
 
-    private static string CaptureError(Action action)
-    {
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
-        try
-        {
-            action();
-            return errorOutput.ToString();
-        }
-        finally
-        {
-            Console.SetError(originalError);
-        }
-    }
+    private static string CaptureError(Action action) =>
+        ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 }
