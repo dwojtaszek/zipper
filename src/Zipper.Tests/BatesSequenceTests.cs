@@ -30,7 +30,8 @@ public class BatesSequenceTests
             Increment = increment,
         };
 
-        var result = BatesSequence.FromConfig(config).Format(index).ToString();
+        var sequence = BatesSequence.FromConfig(config);
+        var result = sequence.Format(index).ToString();
 
         Assert.True(string.Equals(expected, result, StringComparison.Ordinal), $"{scenario}: expected <{expected}> but got <{result}>.");
     }
@@ -50,9 +51,28 @@ public class BatesSequenceTests
             Increment = increment,
         };
 
-        var result = BatesSequence.FromConfig(config).Format(index).WithoutPrefix();
+        var sequence = BatesSequence.FromConfig(config);
+        var result = sequence.Format(index).WithoutPrefix();
 
         Assert.True(string.Equals(expected, result, StringComparison.Ordinal), $"{scenario}: expected <{expected}> but got <{result}>.");
+    }
+
+    [Fact]
+    public void Format_WithMultipleIndicesSequentiallyOnSameSequence_ReturnsIncrementedValues()
+    {
+        var config = new BatesNumberConfig
+        {
+            Prefix = "PREFIX",
+            Start = 100L,
+            Digits = 6,
+            Increment = 10L,
+        };
+
+        var sequence = BatesSequence.FromConfig(config);
+
+        Assert.Equal("000100", sequence.Format(0).WithoutPrefix());
+        Assert.Equal("000110", sequence.Format(1).WithoutPrefix());
+        Assert.Equal("000120", sequence.Format(2).WithoutPrefix());
     }
 
     [Fact]
