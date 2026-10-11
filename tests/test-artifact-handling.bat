@@ -163,7 +163,9 @@ if !errorlevel! equ 0 (
 
 echo 8. Checking for PDB file cleanup...
 
-findstr /C:"rm.*\.pdb" "%SHARED_WORKFLOW_FILE%" >nul
+REM Use regex mode (/R): findstr /C: treats its pattern as literal text, so a
+REM regex-style pattern would never match the cleanup command.
+findstr /R /C:"rm.*\.pdb" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Removes PDB files from artifacts
 ) else (
