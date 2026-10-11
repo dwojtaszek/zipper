@@ -31,6 +31,16 @@ internal static class TestPaths
             throw new IOException($"Too many levels of symbolic links while resolving '{fullPath}'.");
         }
 
+        var parent = Path.GetDirectoryName(fullPath);
+
+        // Resolved first: a filesystem root cannot be a symbolic link, and
+        // ResolveLinkTarget throws DirectoryNotFoundException for one on
+        // Windows (`C:\`), which the walk reaches on every temp path.
+        if (string.IsNullOrEmpty(parent))
+        {
+            return fullPath;
+        }
+
         if (Directory.Exists(fullPath) || File.Exists(fullPath))
         {
             FileSystemInfo entry = File.Exists(fullPath) ? new FileInfo(fullPath) : new DirectoryInfo(fullPath);
@@ -39,12 +49,6 @@ internal static class TestPaths
             {
                 return Canonicalize(Path.TrimEndingDirectorySeparator(target.FullName), linkHops + 1);
             }
-        }
-
-        var parent = Path.GetDirectoryName(fullPath);
-        if (string.IsNullOrEmpty(parent))
-        {
-            return fullPath;
         }
 
         // Walking up resolves each ancestor that is itself a symbolic link; only link hops

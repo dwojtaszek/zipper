@@ -19,7 +19,6 @@ set WORKFLOW_FILE=%SCRIPT_DIR%..\.github\workflows\typesafe-audit.yml
 REM --- Part 1: Python unit tests (no network) ---
 
 set TYPESAFE_UNIT_LOG=%TEMP_DIR%\typesafe-unit.log
-set ZIPPER_UNIT_LOG=%TEMP_DIR%\zipper-unit.log
 
 echo Running TypeSafe runner unit tests...
 python3 -m unittest discover -s "%TOOL_DIR%\tests" >"%TYPESAFE_UNIT_LOG%" 2>&1
@@ -30,14 +29,9 @@ if errorlevel 1 (
 )
 echo [ SUCCESS ] TypeSafe runner unit tests passed.
 
-echo Running Zipper runner unit tests...
-python3 -m unittest discover -s "%SCRIPT_DIR%..\.zipper-runner\tests" >"%ZIPPER_UNIT_LOG%" 2>&1
-if errorlevel 1 (
-    echo [ ERROR ] Zipper runner unit tests failed.
-    type "%ZIPPER_UNIT_LOG%" >&2
-    exit /b 1
-)
-echo [ SUCCESS ] Zipper runner unit tests passed.
+REM NOTE: the .zipper-runner tests no longer run here. They now have their own
+REM runner-tests job in the shared CI workflow (ci.yml), so a Git-environment
+REM failure no longer masks as a .NET E2E failure (main CI, #1173).
 
 REM --- Part 2: fixture-mode audit end to end (no credential, no network) ---
 

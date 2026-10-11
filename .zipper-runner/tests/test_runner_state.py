@@ -1,7 +1,7 @@
 """Unit tests for runner.py state helpers (rerun budget, injection marker).
 
 Run from the .zipper-runner directory:
-    python3 -m unittest discover -s tests -t .
+    python3 -m unittest discover -s tests
 """
 
 import json
@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import gitenv  # noqa: F401  # Git identity for fixture repositories
 
 # STATE_DIR must be pinned before runner.py reads it at import time.
 _STATE_DIR = tempfile.mkdtemp(prefix="zipper-runner-state-")

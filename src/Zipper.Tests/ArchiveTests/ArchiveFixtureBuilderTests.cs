@@ -280,6 +280,48 @@ public class ArchiveFixtureBuilderTests
     }
 
     [Fact]
+    public void BuildControl_ValidStored_PinsHostIndependentUnixEntryMetadata()
+    {
+        // The standard writer derives two central-directory fields from the build host:
+        // the version-made-by host byte (Unix 3 vs Windows 0) and the default external
+        // file attributes (Unix 0x81A40000 vs Windows 0). Pinning both at the producer is
+        // what keeps the frozen goldens equal on every host — issue #1178.
+        var artifact = ArchiveFixtureBuilder.BuildControl("valid-stored", 42, CancellationToken.None);
+
+        Assert.Equal(2, artifact.Layout.EntryCount);
+        foreach (var entry in artifact.Layout.Entries)
+        {
+            var central = entry.CentralDirectoryOffset;
+            Assert.Equal(3, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)central + 4, 2)) >> 8);
+            Assert.Equal(0x81A4_0000u, BinaryPrimitives.ReadUInt32LittleEndian(artifact.ArchiveBytes.AsSpan((int)central + 38, 4)));
+        }
+    }
+
+    [Fact]
+    public void BuildControl_NestedArchives_PinHostIndependentUnixEntryMetadataInsideAndOut()
+    {
+        // The nested control embeds an inner Archive as payload content, so both the
+        // outer entries and the embedded inner entries must be metadata-pinned, or the
+        // case bytes vary by build host even though the outer entry is on the standard
+        // writer path — issue #1178.
+        var artifact = ArchiveFixtureBuilder.BuildControl("nested-archives-depth-two", 42, CancellationToken.None);
+
+        Assert.Equal(2, artifact.Layout.EntryCount);
+        foreach (var entry in artifact.Layout.Entries)
+        {
+            Assert.Equal(3, BinaryPrimitives.ReadUInt16LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 4, 2)) >> 8);
+            Assert.Equal(0x81A4_0000u, BinaryPrimitives.ReadUInt32LittleEndian(artifact.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 38, 4)));
+        }
+
+        var innerBytes = ReadEntryContent(artifact.ArchiveBytes, "inner.zip");
+        var innerLayout = ArchiveFixtureLayout.Read(innerBytes);
+        var innerEntry = Assert.Single(innerLayout.Entries);
+        Assert.Equal("inner.txt", innerEntry.Name);
+        Assert.Equal(3, BinaryPrimitives.ReadUInt16LittleEndian(innerBytes.AsSpan((int)innerEntry.CentralDirectoryOffset + 4, 2)) >> 8);
+        Assert.Equal(0x81A4_0000u, BinaryPrimitives.ReadUInt32LittleEndian(innerBytes.AsSpan((int)innerEntry.CentralDirectoryOffset + 38, 4)));
+    }
+
+    [Fact]
     public void BuildControl_UnknownCaseKey_ThrowsNamingKnownKeys()
     {
         var error = Assert.Throws<KeyNotFoundException>(

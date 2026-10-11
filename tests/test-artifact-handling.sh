@@ -8,20 +8,29 @@ set -e
 echo "=== Artifact Handling Test (Unix) ==="
 echo "Testing artifact creation and handling patterns"
 
-# Use the unified build-and-test.yml workflow
-WORKFLOW_FILE=".github/workflows/build-and-test.yml"
+# The publish/upload steps live in the reusable ci.yml; the release job's
+# download and its file patterns live in the main caller. Each assertion must
+# read the file that actually declares it, otherwise a passing gate can be
+# asserting against a structure that no longer exists.
+SHARED_WORKFLOW_FILE=".github/workflows/ci.yml"
+RELEASE_WORKFLOW_FILE=".github/workflows/build-and-test.yml"
 
-# Check if workflow exists
-if [ ! -f "$WORKFLOW_FILE" ]; then
-    echo "✗ Workflow file not found: $WORKFLOW_FILE"
+# Check if workflows exist
+if [ ! -f "$SHARED_WORKFLOW_FILE" ]; then
+    echo "✗ Workflow file not found: $SHARED_WORKFLOW_FILE"
     exit 1
 fi
 
-# Check build-and-test.yml for artifact patterns
-echo "1. Analyzing $WORKFLOW_FILE artifact patterns..."
+if [ ! -f "$RELEASE_WORKFLOW_FILE" ]; then
+    echo "✗ Workflow file not found: $RELEASE_WORKFLOW_FILE"
+    exit 1
+fi
+
+# Check ci.yml for artifact patterns
+echo "1. Analyzing $SHARED_WORKFLOW_FILE artifact patterns..."
 
 # Check for artifact upload steps
-if grep -q "actions/upload-artifact@" "$WORKFLOW_FILE"; then
+if grep -q "actions/upload-artifact@" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Uses actions/upload-artifact"
 else
     echo "✗ Missing actions/upload-artifact"
@@ -29,7 +38,7 @@ else
 fi
 
 # Check for artifact names
-ARTIFACT_NAMES=$(grep -A 2 "name:" "$WORKFLOW_FILE" | grep -E "name:|zipper-" | wc -l)
+ARTIFACT_NAMES=$(grep -A 2 "name:" "$SHARED_WORKFLOW_FILE" | grep -E "name:|zipper-" | wc -l)
 if [ "$ARTIFACT_NAMES" -ge 3 ]; then
     echo "✓ Found expected artifact names"
 else
@@ -43,7 +52,7 @@ PLATFORMS=("win-x64" "linux-x64" "osx-arm64")
 EXPECTED_ARTIFACTS=("zipper-win-x64" "zipper-linux-x64" "zipper-osx-arm64")
 
 for platform in "${PLATFORMS[@]}"; do
-    if grep -q "$platform" "$WORKFLOW_FILE"; then
+    if grep -q "$platform" "$SHARED_WORKFLOW_FILE"; then
         echo "✓ Found $platform configuration"
     else
         echo "✗ Missing $platform configuration"
@@ -52,7 +61,7 @@ for platform in "${PLATFORMS[@]}"; do
 done
 
 for artifact in "${EXPECTED_ARTIFACTS[@]}"; do
-    if grep -q "$artifact" "$WORKFLOW_FILE"; then
+    if grep -q "$artifact" "$SHARED_WORKFLOW_FILE"; then
         echo "✓ Found $artifact naming"
     else
         echo "✗ Missing $artifact naming"
@@ -90,7 +99,7 @@ fi
 echo "4. Checking cache paths..."
 
 # Check for publish directory pattern with template variable
-if grep -q "publish/\${{ matrix.platform }}" "$WORKFLOW_FILE"; then
+if grep -q "publish/\${{ matrix.platform }}" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Found publish/ directory structure with platform variable"
 else
     echo "✗ Missing publish/ directory structure"
@@ -98,7 +107,7 @@ else
 fi
 
 # Also verify publish/ is used
-if grep -q "publish/" "$WORKFLOW_FILE"; then
+if grep -q "publish/" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Uses publish/ directory"
 else
     echo "✗ Missing publish/ directory"
@@ -107,7 +116,7 @@ fi
 
 # Check for artifact download in release job
 echo "5. Checking release job artifact handling..."
-if grep -q "actions/download-artifact@" "$WORKFLOW_FILE"; then
+if grep -q "actions/download-artifact@" "$RELEASE_WORKFLOW_FILE"; then
     echo "✓ Uses actions/download-artifact"
 else
     echo "✗ Missing actions/download-artifact"
@@ -119,7 +128,7 @@ echo "6. Checking release file patterns..."
 RELEASE_FILES=("artifacts/zipper-win-x64/zipper-win-x64.exe" "artifacts/zipper-linux-x64/zipper-linux-x64" "artifacts/zipper-osx-arm64/zipper-osx-arm64")
 
 for file in "${RELEASE_FILES[@]}"; do
-    if grep -q "$file" "$WORKFLOW_FILE"; then
+    if grep -q "$file" "$RELEASE_WORKFLOW_FILE"; then
         echo "✓ Found release file pattern: $file"
     else
         echo "✗ Missing release file pattern: $file"
@@ -129,7 +138,7 @@ done
 
 # Check for artifact cleanup
 echo "7. Checking for PDB file cleanup..."
-if grep -q "rm.*\.pdb" "$WORKFLOW_FILE"; then
+if grep -q "rm.*\.pdb" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Removes PDB files from artifacts"
 else
     echo "✗ Missing PDB file cleanup"
@@ -139,14 +148,14 @@ fi
 # Check for executable renaming
 echo "8. Checking executable renaming patterns..."
 # The workflow uses case statement with platform-specific renaming
-if grep -q "mv publish/\${{ matrix.platform }}/Zipper.exe" "$WORKFLOW_FILE"; then
+if grep -q "mv publish/\${{ matrix.platform }}/Zipper.exe" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Found Windows executable renaming pattern"
 else
     echo "✗ Missing Windows executable renaming pattern"
     exit 1
 fi
 
-if grep -q "mv publish/\${{ matrix.platform }}/Zipper" "$WORKFLOW_FILE"; then
+if grep -q "mv publish/\${{ matrix.platform }}/Zipper" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Found Unix executable renaming pattern"
 else
     echo "✗ Missing Unix executable renaming pattern"
@@ -155,7 +164,7 @@ fi
 
 # Check for cache dependency path (enables cache hits/restores in setup-dotnet)
 echo "9. Checking cache dependency configuration..."
-if grep -q "cache-dependency-path:" "$WORKFLOW_FILE"; then
+if grep -q "cache-dependency-path:" "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Found cache dependency path for precise cache keys"
 else
     echo "✗ Missing cache dependency path"

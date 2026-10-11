@@ -7,20 +7,29 @@ REM This script checks artifact creation, naming, and retention patterns
 echo === Artifact Handling Test (Windows) ===
 echo Testing artifact creation and handling patterns
 
-REM Use the unified build-and-test.yml workflow
-set WORKFLOW_FILE=.github\workflows\build-and-test.yml
+REM The publish/upload steps live in the reusable ci.yml; the release job's
+REM download and its file patterns live in the main caller. Each assertion must
+REM read the file that actually declares it, otherwise a passing gate can be
+REM asserting against a structure that no longer exists.
+set SHARED_WORKFLOW_FILE=.github\workflows\ci.yml
+set RELEASE_WORKFLOW_FILE=.github\workflows\build-and-test.yml
 
-REM Check if workflow exists
-if not exist "%WORKFLOW_FILE%" (
-    echo [X] Workflow file not found: %WORKFLOW_FILE%
+REM Check if workflows exist
+if not exist "%SHARED_WORKFLOW_FILE%" (
+    echo [X] Workflow file not found: %SHARED_WORKFLOW_FILE%
     exit /b 1
 )
 
-REM Check build-and-test.yml for artifact patterns
-echo 1. Analyzing %WORKFLOW_FILE% artifact patterns...
+if not exist "%RELEASE_WORKFLOW_FILE%" (
+    echo [X] Workflow file not found: %RELEASE_WORKFLOW_FILE%
+    exit /b 1
+)
+
+REM Check ci.yml for artifact patterns
+echo 1. Analyzing %SHARED_WORKFLOW_FILE% artifact patterns...
 
 REM Check for artifact upload steps
-findstr /C:"actions/upload-artifact@" "%WORKFLOW_FILE%" >nul
+findstr /C:"actions/upload-artifact@" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses actions/upload-artifact
 ) else (
@@ -30,7 +39,7 @@ if !errorlevel! equ 0 (
 
 echo 2. Checking platform-specific artifact configuration...
 
-findstr /C:"win-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"win-x64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found win-x64 configuration
 ) else (
@@ -38,7 +47,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"linux-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"linux-x64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found linux-x64 configuration
 ) else (
@@ -46,7 +55,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"osx-arm64" "%WORKFLOW_FILE%" >nul
+findstr /C:"osx-arm64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found osx-arm64 configuration
 ) else (
@@ -54,7 +63,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"zipper-win-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"zipper-win-x64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found zipper-win-x64 naming
 ) else (
@@ -62,7 +71,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"zipper-linux-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"zipper-linux-x64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found zipper-linux-x64 naming
 ) else (
@@ -70,7 +79,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"zipper-osx-arm64" "%WORKFLOW_FILE%" >nul
+findstr /C:"zipper-osx-arm64" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found zipper-osx-arm64 naming
 ) else (
@@ -90,7 +99,7 @@ if !errorlevel! equ 0 (
 
 echo 4. Checking cache paths...
 
-findstr /C:"publish/" "%WORKFLOW_FILE%" >nul
+findstr /C:"publish/" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found publish/ directory structure
 ) else (
@@ -98,7 +107,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"matrix.platform" "%WORKFLOW_FILE%" >nul
+findstr /C:"matrix.platform" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses platform matrix variable
 ) else (
@@ -108,7 +117,7 @@ if !errorlevel! equ 0 (
 
 echo 5. Checking release job artifact handling...
 
-findstr /C:"actions/download-artifact@" "%WORKFLOW_FILE%" >nul
+findstr /C:"actions/download-artifact@" "%RELEASE_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses actions/download-artifact
 ) else (
@@ -118,7 +127,7 @@ if !errorlevel! equ 0 (
 
 echo 6. Checking release file patterns...
 
-findstr /C:"artifacts/zipper-win-x64/zipper-win-x64.exe" "%WORKFLOW_FILE%" >nul
+findstr /C:"artifacts/zipper-win-x64/zipper-win-x64.exe" "%RELEASE_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found release file pattern: win-x64
 ) else (
@@ -126,7 +135,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"artifacts/zipper-linux-x64/zipper-linux-x64" "%WORKFLOW_FILE%" >nul
+findstr /C:"artifacts/zipper-linux-x64/zipper-linux-x64" "%RELEASE_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found release file pattern: linux-x64
 ) else (
@@ -134,7 +143,7 @@ if !errorlevel! equ 0 (
     exit /b 1
 )
 
-findstr /C:"artifacts/zipper-osx-arm64/zipper-osx-arm64" "%WORKFLOW_FILE%" >nul
+findstr /C:"artifacts/zipper-osx-arm64/zipper-osx-arm64" "%RELEASE_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found release file pattern: osx-arm64
 ) else (
@@ -144,7 +153,7 @@ if !errorlevel! equ 0 (
 
 echo 7. Validating build output structure...
 
-findstr /C:"publish/" "%WORKFLOW_FILE%" >nul
+findstr /C:"publish/" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Uses publish/ directory structure
 ) else (
@@ -154,7 +163,9 @@ if !errorlevel! equ 0 (
 
 echo 8. Checking for PDB file cleanup...
 
-findstr /C:"rm.*\.pdb" "%WORKFLOW_FILE%" >nul
+REM Use regex mode (/R): findstr /C: treats its pattern as literal text, so a
+REM regex-style pattern would never match the cleanup command.
+findstr /R /C:"rm.*\.pdb" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Removes PDB files from artifacts
 ) else (
@@ -164,7 +175,7 @@ if !errorlevel! equ 0 (
 
 echo 9. Checking cache dependency configuration...
 
-findstr /C:"cache-dependency-path:" "%WORKFLOW_FILE%" >nul
+findstr /C:"cache-dependency-path:" "%SHARED_WORKFLOW_FILE%" >nul
 if !errorlevel! equ 0 (
     echo [OK] Found cache dependency path for precise cache keys
 ) else (

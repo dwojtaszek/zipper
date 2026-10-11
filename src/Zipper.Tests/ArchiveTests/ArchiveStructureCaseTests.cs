@@ -941,9 +941,11 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Equal((uint)"atc-dir-slash-payload".Length, entry.UncompressedSize);
         Assert.False(artifact.Entries[0].IsDirectory);
 
-        // Central external attributes are deliberately not pinned: the standard
-        // writer synthesizes host-OS directory mode bits for trailing-slash names
-        // (Unix 0x41ED0000 on Linux), so the exact value varies by build host.
+        // Central external attributes are pinned to the Unix directory default for the
+        // trailing-slash name (0x41ED0000 = (S_IFDIR | 0755) << 16), never the build
+        // host's default (0 on Windows) — issue #1178.
+        Assert.Equal(0x41ED_0000u, ReadUInt32(artifact.ArchiveBytes, entry.CentralDirectoryOffset + 38));
+        Assert.Equal(ArchiveTestCatalog.UnixHostSystem, ReadUInt16(artifact.ArchiveBytes, entry.CentralDirectoryOffset + 4) >> 8);
         Assert.Equal(
             "atc-dir-slash-payload",
             Encoding.ASCII.GetString(ReadEntryContent(artifact.ArchiveBytes, "testdir/")));
@@ -959,10 +961,12 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Equal((uint)"atc-dir-attr-payload".Length, entry.UncompressedSize);
 
         // Raw value 0x10 in the central external attributes (central + 38); the local
-        // header carries no such field. The version-made-by host byte is deliberately
-        // not pinned: it is the writer's OS default (Unix on Linux), so whether an
-        // extractor reads 0x10 as a DOS directory attribute varies by build host.
+        // header carries no such field. The version-made-by host byte is pinned to the
+        // Unix host for every entry (issue #1178), so — as it already did on Linux, where
+        // the goldens live — the entry carries 0x10 under a Unix host rather than as a
+        // DOS directory attribute.
         Assert.Equal(0x10u, ReadUInt32(artifact.ArchiveBytes, entry.CentralDirectoryOffset + 38));
+        Assert.Equal(ArchiveTestCatalog.UnixHostSystem, ReadUInt16(artifact.ArchiveBytes, entry.CentralDirectoryOffset + 4) >> 8);
         Assert.Equal(
             "atc-dir-attr-payload",
             Encoding.ASCII.GetString(ReadEntryContent(artifact.ArchiveBytes, "testfile")));

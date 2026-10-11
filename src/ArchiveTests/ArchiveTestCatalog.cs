@@ -870,21 +870,17 @@ internal static class ArchiveTestCatalog
         }
     }
 
-    // Built with the standard writer and a fixed timestamp so the inner Archive's
-    // bytes are deterministic recipe content, like every other payload.
-    private static byte[] BuildInnerArchiveBytes()
-    {
-        using var stream = new MemoryStream();
-        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+    // Built with a fixed timestamp and host-independent entry metadata (issue #1178) so
+    // the inner Archive's bytes are deterministic recipe content, like every other
+    // payload.
+    private static byte[] BuildInnerArchiveBytes() =>
+        ArchiveFixtureBuilder.BuildHostIndependentArchive(archive =>
         {
             var entry = archive.CreateEntry("inner.txt", CompressionLevel.NoCompression);
             entry.LastWriteTime = new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero);
             using var entryStream = entry.Open();
             entryStream.Write("atc-nested-inner"u8);
-        }
-
-        return stream.ToArray();
-    }
+        });
 
     // Exactly the 1,000-entry cap: small, distinct, honest members; no hidden extras.
     private static ArchiveTestRecipe ManySmallEntriesRecipe => new(
@@ -1056,9 +1052,8 @@ internal static class ArchiveTestCatalog
 
     // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a
     // payload, and a slash-less entry carrying the raw attribute value 0x10 (the DOS
-    // directory attribute under a DOS host; the writer's host byte stays its OS
-    // default) with a payload. Both are valid ZIP syntax; only extractor
-    // classification is in question.
+    // directory attribute value, carried under the pinned Unix host bit) with a payload.
+    // Both are valid ZIP syntax; only extractor classification is in question.
     private static ArchiveTestRecipe DirectorySlashWithPayloadRecipe => new(
     [
         ArchiveTestRecipeEntry.PolicyFile("testdir/", "atc-dir-slash-payload"),

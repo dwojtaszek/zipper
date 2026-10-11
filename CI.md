@@ -39,6 +39,17 @@ curl -s "https://sonarcloud.io/api/qualitygates/project_status?projectKey=dwojta
 2. Amend the last commit and force-push **your PR branch** (not `main`): `git commit --amend --no-edit && git push --force-with-lease`
 3. Re-check after CI re-runs
 
+## Zipper Runner Tests
+
+The `.zipper-runner/tests` suites (runner CLI, subprocess, and Git-boundary regressions) run in their own `runner-tests` job in [ci.yml](.github/workflows/ci.yml), on an isolated checkout — **not** inside the .NET E2E suite, where a Git-environment failure used to look like a product failure (#1173). They carry their own fixture Git identity via `.zipper-runner/tests/gitenv.py`, so they pass on a machine with no global `user.name`/`user.email`; the job additionally fills a missing identity as a second line of defence for any Git work outside the tests.
+
+```bash
+# Empty HOME = no global Git identity, the exact CI failure mode.
+HOME=/nonexistent python3 -m unittest discover -s .zipper-runner/tests
+```
+
+Adding a new test file to that directory? Do not run it through `tests/test-typesafe-audit.sh` — it will not be picked up there anymore, and the suite is deliberately scoped to the TypeSafe audit tool.
+
 ## Robot Reviews
 
 After creating a PR — and after every subsequent push — run the review-wait gate:
@@ -53,7 +64,7 @@ Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
 
-Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`lint`, the three `build-and-test` matrix legs running the full E2E suite, `goldens`) failed or was cancelled — so a red E2E leg always blocks the merge, and the required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
+Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. The required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
 
 ```bash
 gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
@@ -144,7 +155,7 @@ Bot infra errors — retry, don't block merge.
 
 ## GitHub Advanced Security (Copilot code-scanning agent)
 
-`dynamic/agents/github-advanced-security` ("Code scanning AI findings on PR #N") is GitHub-owned infra, not a repo workflow — it cannot be edited from this repo and it is **not** in `ci-gate`'s needs, not in branch protection (required: `ci-gate` only), and not even surfaced in `gh pr checks`. Its failures are Copilot agent runtime flakes (proxy/runtime download, sandbox setup), failing on most PRs including ones that merge green (#1000–#1003). Treat exactly like factory-droid: advisory noise, never a merge blocker, never worth chasing. Do not investigate its logs during PR closeout; if curious, re-run the workflow instead.
+`dynamic/agents/github-advanced-security` ("Code scanning AI findings on PR #N") is GitHub-owned infrastructure, not a repo workflow — it cannot be edited from this repo, so no `concurrency:` group and no retry policy can be added to it, and it re-runs on every `pull_request` event regardless of repo-level cancellation. It is **not** in `ci-gate`'s needs, not in branch protection (required: `ci-gate` only), and not even surfaced in `gh pr checks`. Its failures are Copilot agent runtime flakes (proxy/runtime download, sandbox setup) and, when the monthly Copilot quota is exhausted, `SessionModelError: You have exceeded your monthly quota` — both outside this repository's control. Treat exactly like factory-droid: advisory noise, never a merge blocker, never worth chasing. Do not investigate its logs during PR closeout; if curious, re-run the workflow instead. The only in-repo lever is a repo setting (disable the dynamic agent), which is an admin action, not a PR.
 
 ## Goldens
 
