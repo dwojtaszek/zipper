@@ -93,12 +93,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS keeps the second leg these suites lost when they moved out of
-        # the three-OS E2E matrix. The suites are pure Python plus local Git,
-        # and gitenv.py is OS-agnostic, so both legs run the same assertions.
-        # Windows is not included: the suites install `#!/bin/sh` fake scripts
-        # that only make sense on a POSIX runner.
-        os: [ubuntu-latest, macos-latest]
+        # Keep all three OS legs from the former E2E matrix. The runner suites
+        # were previously exercised on Windows by test-typesafe-audit.bat.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
