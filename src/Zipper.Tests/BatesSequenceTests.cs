@@ -5,206 +5,74 @@ namespace Zipper.Tests;
 
 public class BatesSequenceTests
 {
-    [Fact]
-    public void Generate_WithDefaultConfig_ShouldGenerateCorrectNumber()
+    [Theory]
+    [InlineData("Generate_WithDefaultConfig_ShouldGenerateCorrectNumber", "DOC", 1L, 8, 1L, 0L, "DOC00000001")]
+    [InlineData("Generate_WithCustomPrefix_ShouldIncludePrefix", "CLIENT001", 1L, 8, 1L, 0L, "CLIENT00100000001")]
+    [InlineData("Generate_WithMultipleIndices_ShouldIncrementCorrectly", "DOC", 1L, 8, 1L, 0L, "DOC00000001")]
+    [InlineData("Generate_WithMultipleIndices_ShouldIncrementCorrectly", "DOC", 1L, 8, 1L, 1L, "DOC00000002")]
+    [InlineData("Generate_WithMultipleIndices_ShouldIncrementCorrectly", "DOC", 1L, 8, 1L, 2L, "DOC00000003")]
+    [InlineData("Generate_WithCustomStart_ShouldStartFromCorrectNumber", "DOC", 100L, 8, 1L, 0L, "DOC00000100")]
+    [InlineData("Generate_WithCustomIncrement_ShouldIncrementByStep", "DOC", 1L, 8, 5L, 0L, "DOC00000001")]
+    [InlineData("Generate_WithCustomIncrement_ShouldIncrementByStep", "DOC", 1L, 8, 5L, 1L, "DOC00000006")]
+    [InlineData("Generate_WithCustomIncrement_ShouldIncrementByStep", "DOC", 1L, 8, 5L, 2L, "DOC00000011")]
+    [InlineData("Generate_WithDifferentDigitCounts_ShouldPadCorrectly", "A", 1L, 4, 1L, 0L, "A0001")]
+    [InlineData("Generate_WithDifferentDigitCounts_ShouldPadCorrectly", "B", 1L, 6, 1L, 0L, "B000001")]
+    [InlineData("Generate_WithDifferentDigitCounts_ShouldPadCorrectly", "C", 1L, 10, 1L, 0L, "C0000000001")]
+    [InlineData("Generate_WithLargeNumber_ShouldHandleCorrectly", "DOC", 999999L, 8, 1L, 0L, "DOC00999999")]
+    [InlineData("Generate_WithZeroStart_ShouldGenerateCorrectly", "DOC", 0L, 8, 1L, 0L, "DOC00000000")]
+    public void Generate_WithConfigAndIndex_ReturnsExpectedNumber(string scenario, string prefix, long start, int digits, long increment, long index, string expected)
     {
-        // Arrange
         var config = new BatesNumberConfig
         {
-            Prefix = "DOC",
-            Start = 1,
-            Digits = 8,
-            Increment = 1,
+            Prefix = prefix,
+            Start = start,
+            Digits = digits,
+            Increment = increment,
         };
 
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).ToString();
+        var sequence = BatesSequence.FromConfig(config);
+        var result = sequence.Format(index).ToString();
 
-        // Assert
-        Assert.Equal("DOC00000001", result);
+        Assert.True(string.Equals(expected, result, StringComparison.Ordinal), $"{scenario}: expected <{expected}> but got <{result}>.");
     }
 
-    [Fact]
-    public void Generate_WithCustomPrefix_ShouldIncludePrefix()
+    [Theory]
+    [InlineData("Format_WithDefaultConfig_ShouldGenerateNumberOnly", "DOC", 1L, 8, 1L, 0L, "00000001")]
+    [InlineData("Format_WithMultipleIndices_ShouldIncrementCorrectly", "PREFIX", 100L, 6, 10L, 0L, "000100")]
+    [InlineData("Format_WithMultipleIndices_ShouldIncrementCorrectly", "PREFIX", 100L, 6, 10L, 1L, "000110")]
+    [InlineData("Format_WithMultipleIndices_ShouldIncrementCorrectly", "PREFIX", 100L, 6, 10L, 2L, "000120")]
+    public void Format_WithConfigAndIndex_ReturnsNumberOnly(string scenario, string prefix, long start, int digits, long increment, long index, string expected)
     {
-        // Arrange
         var config = new BatesNumberConfig
         {
-            Prefix = "CLIENT001",
-            Start = 1,
-            Digits = 8,
-            Increment = 1,
+            Prefix = prefix,
+            Start = start,
+            Digits = digits,
+            Increment = increment,
         };
 
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).ToString();
+        var sequence = BatesSequence.FromConfig(config);
+        var result = sequence.Format(index).WithoutPrefix();
 
-        // Assert
-        Assert.Equal("CLIENT00100000001", result);
+        Assert.True(string.Equals(expected, result, StringComparison.Ordinal), $"{scenario}: expected <{expected}> but got <{result}>.");
     }
 
     [Fact]
-    public void Generate_WithMultipleIndices_ShouldIncrementCorrectly()
+    public void Format_WithMultipleIndicesSequentiallyOnSameSequence_ReturnsIncrementedValues()
     {
-        // Arrange
         var config = new BatesNumberConfig
         {
-            Prefix = "DOC",
-            Start = 1,
-            Digits = 8,
-            Increment = 1,
-        };
-
-        // Act
-        var result1 = BatesSequence.FromConfig(config).Format(0).ToString();
-        var result2 = BatesSequence.FromConfig(config).Format(1).ToString();
-        var result3 = BatesSequence.FromConfig(config).Format(2).ToString();
-
-        // Assert
-        Assert.Equal("DOC00000001", result1);
-        Assert.Equal("DOC00000002", result2);
-        Assert.Equal("DOC00000003", result3);
-    }
-
-    [Fact]
-    public void Generate_WithCustomStart_ShouldStartFromCorrectNumber()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "DOC",
-            Start = 100,
-            Digits = 8,
-            Increment = 1,
-        };
-
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).ToString();
-
-        // Assert
-        Assert.Equal("DOC00000100", result);
-    }
-
-    [Fact]
-    public void Generate_WithCustomIncrement_ShouldIncrementByStep()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "DOC",
-            Start = 1,
-            Digits = 8,
-            Increment = 5,
-        };
-
-        // Act
-        var result1 = BatesSequence.FromConfig(config).Format(0).ToString();
-        var result2 = BatesSequence.FromConfig(config).Format(1).ToString();
-        var result3 = BatesSequence.FromConfig(config).Format(2).ToString();
-
-        // Assert
-        Assert.Equal("DOC00000001", result1);
-        Assert.Equal("DOC00000006", result2);
-        Assert.Equal("DOC00000011", result3);
-    }
-
-    [Fact]
-    public void Generate_WithDifferentDigitCounts_ShouldPadCorrectly()
-    {
-        // Arrange
-        var config4Digits = new BatesNumberConfig { Prefix = "A", Start = 1, Digits = 4 };
-        var config6Digits = new BatesNumberConfig { Prefix = "B", Start = 1, Digits = 6 };
-        var config10Digits = new BatesNumberConfig { Prefix = "C", Start = 1, Digits = 10 };
-
-        // Act
-        var result4 = BatesSequence.FromConfig(config4Digits).Format(0).ToString();
-        var result6 = BatesSequence.FromConfig(config6Digits).Format(0).ToString();
-        var result10 = BatesSequence.FromConfig(config10Digits).Format(0).ToString();
-
-        // Assert
-        Assert.Equal("A0001", result4);
-        Assert.Equal("B000001", result6);
-        Assert.Equal("C0000000001", result10);
-    }
-
-    [Fact]
-    public void Generate_WithLargeNumber_ShouldHandleCorrectly()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "DOC",
-            Start = 999999,
-            Digits = 8,
-            Increment = 1,
-        };
-
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).ToString();
-
-        // Assert
-        Assert.Equal("DOC00999999", result);
-    }
-
-    [Fact]
-    public void Generate_WithZeroStart_ShouldGenerateCorrectly()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "DOC",
-            Start = 0,
-            Digits = 8,
-            Increment = 1,
-        };
-
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).ToString();
-
-        // Assert
-        Assert.Equal("DOC00000000", result);
-    }
-
-    [Fact]
-    public void Format_WithDefaultConfig_ShouldGenerateNumberOnly()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "DOC",
-            Start = 1,
-            Digits = 8,
-            Increment = 1,
-        };
-
-        // Act
-        var result = BatesSequence.FromConfig(config).Format(0).WithoutPrefix();
-
-        // Assert
-        Assert.Equal("00000001", result);
-    }
-
-    [Fact]
-    public void Format_WithMultipleIndices_ShouldIncrementCorrectly()
-    {
-        // Arrange
-        var config = new BatesNumberConfig
-        {
-            Prefix = "PREFIX",  // Prefix should be ignored
-            Start = 100,
+            Prefix = "PREFIX",
+            Start = 100L,
             Digits = 6,
-            Increment = 10,
+            Increment = 10L,
         };
 
-        // Act
-        var result1 = BatesSequence.FromConfig(config).Format(0).WithoutPrefix();
-        var result2 = BatesSequence.FromConfig(config).Format(1).WithoutPrefix();
-        var result3 = BatesSequence.FromConfig(config).Format(2).WithoutPrefix();
+        var sequence = BatesSequence.FromConfig(config);
 
-        // Assert
-        Assert.Equal("000100", result1);
-        Assert.Equal("000110", result2);
-        Assert.Equal("000120", result3);
+        Assert.Equal("000100", sequence.Format(0).WithoutPrefix());
+        Assert.Equal("000110", sequence.Format(1).WithoutPrefix());
+        Assert.Equal("000120", sequence.Format(2).WithoutPrefix());
     }
 
     [Fact]

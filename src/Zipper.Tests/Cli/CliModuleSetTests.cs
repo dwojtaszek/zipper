@@ -22,27 +22,60 @@ public class CliModuleSetTests
         Assert.False(CliModules.Create().Parse(new[] { "--type" }));
     }
 
-    [Fact]
-    public void Parse_MissingValueForValueTakingFlags_ReturnsFalse()
+    public static TheoryData<string> ValueTakingFlags => new()
     {
-        var flags = new[]
-        {
-            "--type", "--count", "--output-path", "--delimiter-column", "--delimiter-quote", "--delimiter-newline",
-            "--folders", "--encoding", "--distribution", "--attachment-rate", "--target-zip-size",
-            "--load-file-format", "--bates-prefix", "--bates-start", "--bates-digits", "--tiff-pages",
-            "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
-                "--load-file-formats", "--dat-delimiters", "--loadfile-format", "--eol", "--col-delim",
-            "--quote-delim", "--newline-delim", "--multi-delim", "--nested-delim", "--chaos-amount",
-            "--chaos-types", "--chaos-scenario", "--volume-size", "--hash-mode", "--hash-algorithms",
-            "--compare-production-manifests", "--comparison-mode", "--comparison-output",
-            "--types", "--input-csv", "--directory-template", "--source-path-mode",
-            "--archive-test-suite", "--archive-test-cases"
-        };
+        "--type",
+        "--count",
+        "--output-path",
+        "--delimiter-column",
+        "--delimiter-quote",
+        "--delimiter-newline",
+        "--folders",
+        "--encoding",
+        "--distribution",
+        "--attachment-rate",
+        "--target-zip-size",
+        "--load-file-format",
+        "--bates-prefix",
+        "--bates-start",
+        "--bates-digits",
+        "--tiff-pages",
+        "--column-profile",
+        "--seed",
+        "--date-format",
+        "--empty-percentage",
+        "--custodian-count",
+        "--load-file-formats",
+        "--dat-delimiters",
+        "--loadfile-format",
+        "--eol",
+        "--col-delim",
+        "--quote-delim",
+        "--newline-delim",
+        "--multi-delim",
+        "--nested-delim",
+        "--chaos-amount",
+        "--chaos-types",
+        "--chaos-scenario",
+        "--volume-size",
+        "--hash-mode",
+        "--hash-algorithms",
+        "--compare-production-manifests",
+        "--comparison-mode",
+        "--comparison-output",
+        "--types",
+        "--input-csv",
+        "--directory-template",
+        "--source-path-mode",
+        "--archive-test-suite",
+        "--archive-test-cases",
+    };
 
-        foreach (var flag in flags)
-        {
-            Assert.False(CliModules.Create().Parse(new[] { flag }), $"Expected false when {flag} is missing a value");
-        }
+    [Theory]
+    [MemberData(nameof(ValueTakingFlags))]
+    public void Parse_MissingValueForValueTakingFlags_ReturnsFalse(string flag)
+    {
+        Assert.False(CliModules.Create().Parse(new[] { flag }), $"Expected false when {flag} is missing a value");
     }
 
     [Fact]
@@ -84,58 +117,26 @@ public class CliModuleSetTests
         Assert.False(CliModules.Create().Parse(new[] { "--type", "--benchmark" }));
     }
 
-    [Fact]
-    public void Parse_InvalidCount_ReturnsFalse()
+    [Theory]
+    [InlineData("Parse_InvalidCount_ReturnsFalse", "--count", "not-a-number")]
+    [InlineData("Parse_InvalidFolders_ReturnsFalse", "--folders", "notanumber")]
+    [InlineData("Parse_InvalidAttachmentRate_ReturnsFalse", "--attachment-rate", "notanumber")]
+    [InlineData("Parse_InvalidBatesStart_ReturnsFalse", "--bates-start", "notanumber")]
+    [InlineData("Parse_InvalidBatesDigits_ReturnsFalse", "--bates-digits", "notanumber")]
+    [InlineData("Parse_InvalidSeed_ReturnsFalse", "--seed", "notanumber")]
+    [InlineData("Parse_InvalidEmptyPercentage_ReturnsFalse", "--empty-percentage", "notanumber")]
+    [InlineData("Parse_InvalidCustodianCount_ReturnsFalse", "--custodian-count", "notanumber")]
+    [InlineData("Parse_InvalidVolumeSize_ReturnsFalse", "--volume-size", "notanumber")]
+    public void Parse_InvalidValueForOption_ReturnsFalse(string scenario, string flag, string value)
     {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "not-a-number", "--output-path", Directory.GetCurrentDirectory() }));
-    }
+        string[] args = flag switch
+        {
+            "--count" => new[] { "--type", "pdf", flag, value, "--output-path", Directory.GetCurrentDirectory() },
+            "--bates-start" or "--bates-digits" or "--volume-size" => new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), flag, value },
+            _ => new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), flag, value },
+        };
 
-    [Fact]
-    public void Parse_InvalidFolders_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--folders", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidAttachmentRate_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--attachment-rate", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidBatesStart_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--bates-start", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidBatesDigits_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--bates-digits", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidSeed_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--seed", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidEmptyPercentage_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--empty-percentage", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidCustodianCount_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--custodian-count", "notanumber" }));
-    }
-
-    [Fact]
-    public void Parse_InvalidVolumeSize_ReturnsFalse()
-    {
-        Assert.False(CliModules.Create().Parse(new[] { "--production-set", "--bates-prefix", "CL001", "--count", "5", "--output-path", Directory.GetCurrentDirectory(), "--volume-size", "notanumber" }));
+        Assert.False(CliModules.Create().Parse(args), $"{scenario}: expected {flag} to reject '{value}'");
     }
 
     [Fact]

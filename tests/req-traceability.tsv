@@ -29,12 +29,12 @@ REQ-035	exemption	-	CI auto GitHub Release creation (release process)
 REQ-036	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly	--load-file-format argument
 REQ-037	unit	CliPipelineTests.ValidateAndParseArguments_WithLoadFileFormat_ShouldParseCorrectly	dat/opt/csv/edrm-xml/concordance support
 REQ-038	e2e	test-load-file-formats.sh	Format conformance to industry specifications
-REQ-039	unit	CliModuleSetTests.Parse_InvalidBatesStart_ReturnsFalse	Bates numbering arguments
+REQ-039	unit	CliModuleSetTests.Parse_InvalidValueForOption_ReturnsFalse	Bates numbering arguments
 REQ-040	unit	DatComposingWriterTests.WriteAsync_WithBatesConfig_IncludesBatesNumberColumn	Bates Number column when enabled
-REQ-041	unit	BatesSequenceTests.Generate_WithCustomPrefix_ShouldIncludePrefix	PREFIX + zero-padded number format
-REQ-042	unit	BatesSequenceTests.Generate_WithMultipleIndices_ShouldIncrementCorrectly	Sequential Bates increment
+REQ-041	unit	BatesSequenceTests.Generate_WithConfigAndIndex_ReturnsExpectedNumber	PREFIX + zero-padded number format
+REQ-042	unit	BatesSequenceTests.Generate_WithConfigAndIndex_ReturnsExpectedNumber	Sequential Bates increment
 REQ-043	unit	CliPipelineTests.ValidateAndParseArguments_WithTiffPagesRange_ShouldParseCorrectly	--tiff-pages argument
-REQ-044	unit	TiffMultiPageGeneratorTests.ParsePageRange_WithValidRange_ShouldReturnParsedRange	Range specification parsing
+REQ-044	unit	TiffMultiPageGeneratorTests.ParsePageRange_WithRange_ReturnsExpectedRange	Range specification parsing
 REQ-045	unit	TiffMultiPageGeneratorTests.GetPageCount_WithRange_ShouldReturnCountWithinRange	Random page count within range
 REQ-046	unit	DatComposingWriterTests.WriteAsync_WithTiffPageRange_IncludesPageCountColumn	Page Count column with --tiff-pages
 REQ-047	unit	TiffMultiPageGeneratorTests.GetPageCount_WithNullRange_ShouldReturnOne	Default 1-1 page range
