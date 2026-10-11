@@ -93,9 +93,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Keep all three OS legs from the former E2E matrix. The runner suites
-        # were previously exercised on Windows by test-typesafe-audit.bat.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # POSIX runners only. These suites install fake executables with a
+        # `#!/usr/bin/env python3` shebang and chmod +x (test_droid_plugin.py,
+        # test_runner_friction.py's `_create_fake_cr`); Windows has no shebang
+        # support, so `subprocess` cannot execute them and the module-level
+        # assertions fail at import. Verified on the Windows leg: the suites
+        # were never actually exercised on Windows — the run-tests.bat that
+        # supposedly ran them was a no-op (see ci.yml's E2E steps).
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
