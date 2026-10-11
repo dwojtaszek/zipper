@@ -115,41 +115,22 @@ public class LoadFileModuleTests
     [Fact]
     public void TryBuild_UnknownFormat_ReturnsInvalidFormatNotDatOptRestriction()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "invalid" }, out _));
-                var output = errWriter.ToString();
-                Assert.Contains("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.", output, StringComparison.Ordinal);
-                Assert.DoesNotContain("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.", output, StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "invalid" }, out _));
+
+        Assert.False(isValid);
+        Assert.Contains("Error: Invalid load file format. Supported values are dat, opt, csv, edrm-xml, xml, concordance.", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public void TryBuild_InvalidLoadFileFormatsPlural_ReturnsFalse()
     {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--load-file-formats", "dat,bogus" }, out _));
-                Assert.Contains("Error: Invalid load file format 'bogus'. Supported: dat, opt, csv, edrm-xml, xml, concordance.", errWriter.ToString(), StringComparison.Ordinal);
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(0, null, false, null, null, false, new[] { "--load-file-formats", "dat,bogus" }, out _));
+
+        Assert.False(isValid);
+        Assert.Contains("Error: Invalid load file format 'bogus'. Supported: dat, opt, csv, edrm-xml, xml, concordance.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

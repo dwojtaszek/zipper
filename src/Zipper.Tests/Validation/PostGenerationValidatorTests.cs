@@ -164,9 +164,12 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
                 new[] { "folder/one.pdf" },
                 new BatesNumberConfig { Prefix = "ABC", Start = 1, Digits = 4 });
 
-            Assert.Contains(result.Findings, finding => finding.Category == "UniqueId");
-            Assert.Contains(result.Findings, finding => finding.Category == "PathReconciliation");
-            Assert.Contains(result.Findings, finding => finding.Category == "BatesContinuity");
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "UniqueId");
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "PathReconciliation");
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "BatesContinuity");
         }
         finally
         {
@@ -237,7 +240,82 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
             var result = validator.Validate(ctx);
 
             Assert.True(result.HasErrors);
-            Assert.Contains(result.Findings, f => f.Category == "ColumnCount");
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "ColumnCount");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void Validate_OptBoundaryMismatch_ReportsError()
+    {
+        var tempFile = this.GetTempFilePath();
+        try
+        {
+            File.WriteAllText(tempFile, "a,b,c,d,e,f\n");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["opt"] = tempFile },
+                Request = new FileGenerationRequest(),
+                SkipEolValidation = true,
+            };
+
+            var result = new PostGenerationValidator().Validate(ctx);
+
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "OptBoundary");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void Validate_InconsistentLineEnding_ReportsError()
+    {
+        var tempFile = this.GetTempFilePath();
+        try
+        {
+            File.WriteAllText(tempFile, "a,b\r\nc,d\n");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
+                Request = new FileGenerationRequest(),
+            };
+
+            var result = new PostGenerationValidator().Validate(ctx);
+
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
+    public void Validate_ConsistentCrlfLineEnding_NoLineEndingFinding()
+    {
+        var tempFile = this.GetTempFilePath();
+        try
+        {
+            File.WriteAllText(tempFile, "a,b\r\nc,d\r\n");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
+                Request = new FileGenerationRequest(),
+            };
+
+            var result = new PostGenerationValidator().Validate(ctx);
+
+            Assert.DoesNotContain(result.Findings, finding => finding.Category == "LineEnding");
         }
         finally
         {
@@ -251,12 +329,14 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
         var tempFile = this.GetTempFilePath();
         try
         {
-            File.WriteAllText(tempFile, "a,b\n");
+            // A column-count mismatch would normally report an error; chaos mode must short-circuit it.
+            File.WriteAllText(tempFile, "a,b\nc\n");
             var ctx = new ValidationContext
             {
                 LoadFiles = new Dictionary<string, string> { ["csv"] = tempFile },
                 Request = new FileGenerationRequest(),
                 SkipEolValidation = true,
+                IsChaosMode = true,
             };
 
             var validator = new PostGenerationValidator();

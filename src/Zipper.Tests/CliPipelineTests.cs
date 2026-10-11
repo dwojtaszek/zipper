@@ -369,28 +369,12 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [InlineData("10-5")] // min > max
     public void ValidateAndParseArguments_WithInvalidTiffPagesRange_ShouldReturnNull(string range)
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
 
-        try
-        {
-            var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--tiff-pages", range };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-            var output = errorOutput.ToString();
-            Assert.Contains("Error: Invalid TIFF pages range", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: Invalid TIFF pages range", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -415,28 +399,12 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [Fact]
     public void ValidateAndParseArguments_WithInvalidLoadFileFormat_ShouldReturnNull()
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
 
-        try
-        {
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--load-file-format", "invalid" };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-            var output = errorOutput.ToString();
-            Assert.Contains("Error: Invalid load file format", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: Invalid load file format", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -482,29 +450,12 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [Fact]
     public void ValidateAndParseArguments_WithUnknownArgument_ShouldFail()
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
 
-        try
-        {
-            // --unknown-arg is an invalid parameter
-            var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--unknown-arg" };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result); // The parse should fail
-            var output = errorOutput.ToString();
-            Assert.Contains("Error: Unknown argument or unconsumed value '--unknown-arg'", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: Unknown argument or unconsumed value '--unknown-arg'", stderr, StringComparison.Ordinal);
     }
 
     // === Loadfile-Only CLI Validation Tests ===
@@ -675,82 +626,34 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [Fact]
     public void ValidateAndParseArguments_WithCountZero_ShouldReturnNull()
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
 
-        try
-        {
-            var args = new[] { "--type", "pdf", "--count", "0", "--output-path", this.tempDir };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-            var output = errorOutput.ToString();
-            Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: --count must be a positive number.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ValidateAndParseArguments_WithCountNegative_ShouldReturnNull()
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
 
-        try
-        {
-            var args = new[] { "--type", "pdf", "--count", "-5", "--output-path", this.tempDir };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-            var output = errorOutput.ToString();
-            Assert.Contains("--count must be a positive number", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: --count must be a positive number.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ValidateAndParseArguments_WithCountExceedingMax_ShouldReturnNull()
     {
-        // Arrange
-        var originalError = Console.Error;
-        var errorOutput = new StringWriter();
-        Console.SetError(errorOutput);
+        var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
 
-        try
-        {
-            var args = new[] { "--type", "pdf", "--count", "2147483647", "--output-path", this.tempDir };
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-            // Act
-            var result = Cli.Pipeline.Build(args);
-
-            // Assert
-            Assert.Null(result);
-            var output = errorOutput.ToString();
-            Assert.Contains("--count must not exceed", output, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Console.SetError(originalError);
-            errorOutput.Dispose();
-        }
+        Assert.Null(result);
+        Assert.Contains("Error: --count must not exceed 2147483646.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

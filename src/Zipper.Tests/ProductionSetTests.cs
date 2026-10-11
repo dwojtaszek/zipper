@@ -257,22 +257,7 @@ public class ProductionSetTests : WorkingDirectoryTestBase
             "--bates-prefix", "E2E", "--type", "pdf", "--seed", "99",
         };
 
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        int exitCode;
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            exitCode = await Program.Main(args);
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var (exitCode, _, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
         Assert.Equal(0, exitCode);
 
@@ -604,33 +589,31 @@ public class ProductionSetTests : WorkingDirectoryTestBase
         // directory creation throws IOException inside the rolling loop.
         var outputFile = Path.Combine(this.TempDir, $"zipper_prod_ctx_{Guid.NewGuid():N}");
         await File.WriteAllTextAsync(outputFile, "not a directory");
-        var originalError = Console.Error;
-        using var errWriter = new StringWriter();
         try
         {
-            Console.SetError(errWriter);
-            var request = new FileGenerationRequest
+            var (_, errorOutput) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(async () =>
             {
-                Output = new OutputConfig
+                var request = new FileGenerationRequest
                 {
-                    OutputPath = outputFile,
-                    FileCount = 10,
-                    FileType = "pdf",
-                },
-                Production = new ProductionConfig { ProductionSet = true, VolumeSize = 10, ProductionId = "PROD_A,PROD_B", RollingCount = 2 },
-                Bates = new BatesNumberConfig { Prefix = "CTX", Start = 1, Digits = 8 },
-            };
+                    Output = new OutputConfig
+                    {
+                        OutputPath = outputFile,
+                        FileCount = 10,
+                        FileType = "pdf",
+                    },
+                    Production = new ProductionConfig { ProductionSet = true, VolumeSize = 10, ProductionId = "PROD_A,PROD_B", RollingCount = 2 },
+                    Bates = new BatesNumberConfig { Prefix = "CTX", Start = 1, Digits = 8 },
+                };
 
-            await Assert.ThrowsAnyAsync<IOException>(() => ProductionSetGenerator.GenerateAsync(request));
+                await Assert.ThrowsAnyAsync<IOException>(() => ProductionSetGenerator.GenerateAsync(request));
+            });
 
-            var errorOutput = errWriter.ToString();
             Assert.Contains("PROD_A", errorOutput, StringComparison.Ordinal);
             Assert.Contains("(1 of 2)", errorOutput, StringComparison.Ordinal);
             Assert.Contains("failed:", errorOutput, StringComparison.Ordinal);
         }
         finally
         {
-            Console.SetError(originalError);
             File.Delete(outputFile);
         }
     }

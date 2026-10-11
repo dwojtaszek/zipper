@@ -37,22 +37,8 @@ public class SourceInputModuleTests : WorkingDirectoryTestBase
         return module.TryBuild(count, productionSet, bates, out records);
     }
 
-    private static string CaptureError(Action action)
-    {
-        var original = Console.Error;
-        using var writer = new StringWriter();
-        Console.SetError(writer);
-        try
-        {
-            action();
-        }
-        finally
-        {
-            Console.SetError(original);
-        }
-
-        return writer.ToString();
-    }
+    private static string CaptureError(Action action) =>
+        ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 
     // --- TryApply raw storage ---
 

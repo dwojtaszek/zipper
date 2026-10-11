@@ -10,23 +10,8 @@ public class BatesModuleTests
     private const int MaxBatesPrefixBytes = 200;
     private static readonly string PrefixTooLongError = $"Error: --bates-prefix must not exceed {MaxBatesPrefixBytes} UTF-8 bytes.";
 
-    private static string CaptureError(Action action)
-    {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                action();
-                return errWriter.ToString();
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
-    }
+    private static string CaptureError(Action action) =>
+        ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 
     private static bool TryBuild(bool productionSet, int rollingCount, string? rollingBatesMode, long? count, string[] apply, out BatesNumberConfig? config)
     {

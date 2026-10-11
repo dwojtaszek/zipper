@@ -8,22 +8,9 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
 {
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunWithCapture(string[] args)
     {
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        try
-        {
-            using var outWriter = new StringWriter();
-            using var errWriter = new StringWriter();
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            int exitCode = await Program.Main(args).ConfigureAwait(false);
-            return (exitCode, outWriter.ToString(), errWriter.ToString());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(
+            () => Program.Main(args)).ConfigureAwait(false);
+        return (exitCode, stdout, stderr);
     }
 
     // --- Scenario registry tests ---

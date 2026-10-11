@@ -18,7 +18,15 @@ public class LineEndingValidatorTests
 
         validator.Validate(content, expectedEol, "test.dat", result);
 
-        Assert.Equal(shouldPass, !result.HasErrors);
+        if (shouldPass)
+        {
+            Assert.False(result.HasErrors);
+        }
+        else
+        {
+            Assert.True(result.HasErrors);
+            Assert.Contains(result.Findings, finding => finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
+        }
     }
 
     [Fact]
@@ -65,6 +73,8 @@ public class LineEndingValidatorTests
         validator.Validate("line1\rline2\r", "\n", "test.dat", result);
 
         Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding =>
+            finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
     }
 
     [Fact]
@@ -79,6 +89,8 @@ public class LineEndingValidatorTests
         validator.Validate("line1\rline2\r", "\r", "test.dat", result);
 
         Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding =>
+            finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
     }
 
     [Fact]

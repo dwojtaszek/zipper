@@ -309,24 +309,9 @@ public class AdvancedGuideRecipeTests : WorkingDirectoryTestBase
             argsList.Add(tokens[i]);
         }
 
-        var originalOut = Console.Out;
-        var originalError = Console.Error;
-        using var outWriter = new StringWriter();
-        using var errWriter = new StringWriter();
-        int exitCode;
-        try
-        {
-            Console.SetOut(outWriter);
-            Console.SetError(errWriter);
-            exitCode = await Program.Main(argsList.ToArray());
-        }
-        finally
-        {
-            Console.SetOut(originalOut);
-            Console.SetError(originalError);
-        }
-
-        var output = outWriter.ToString() + errWriter.ToString();
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(
+            () => Program.Main(argsList.ToArray()));
+        var output = stdout + stderr;
         Assert.True(exitCode == 0, $"Program.Main failed with exit code {exitCode}. Output: {output}. Args: {string.Join(" ", argsList)}");
 
         var profileOutputDir = Path.Combine(this.tempDir, "litigation_archive");

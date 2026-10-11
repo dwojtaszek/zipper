@@ -18,23 +18,8 @@ public class OutputModuleTests
         return module.TryBuild(null, out config);
     }
 
-    private static string CaptureError(Action action)
-    {
-        var originalError = Console.Error;
-        using (var errWriter = new StringWriter())
-        {
-            Console.SetError(errWriter);
-            try
-            {
-                action();
-                return errWriter.ToString();
-            }
-            finally
-            {
-                Console.SetError(originalError);
-            }
-        }
-    }
+    private static string CaptureError(Action action) =>
+        ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 
     // --- TryApply raw storage ---
 
