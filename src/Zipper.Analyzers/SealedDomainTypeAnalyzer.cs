@@ -39,7 +39,9 @@ public sealed class SealedDomainTypeAnalyzer : ZipperAnalyzerBase
             return;
         }
 
-        if (classDecl.Modifiers.Any(SyntaxKind.SealedKeyword))
+        if (classDecl.Modifiers.Any(SyntaxKind.SealedKeyword)
+            || classDecl.Modifiers.Any(SyntaxKind.AbstractKeyword)
+            || classDecl.Modifiers.Any(SyntaxKind.StaticKeyword))
         {
             return;
         }

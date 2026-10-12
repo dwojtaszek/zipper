@@ -16,13 +16,70 @@ namespace Zipper.Analyzers.Tests;
 /// </summary>
 public class FgrFlatAccessAnalyzerTests
 {
+    private static readonly IReadOnlyDictionary<string, string> ExpectedContractTable =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            // Output sub-config (8)
+            ["OutputPath"] = "Output",
+            ["FileCount"] = "Output",
+            ["FileType"] = "Output",
+            ["Folders"] = "Output",
+            ["Concurrency"] = "Output",
+            ["WithText"] = "Output",
+            ["TargetZipSize"] = "Output",
+            ["IncludeLoadFile"] = "Output",
+
+            // Metadata sub-config (7)
+            ["WithMetadata"] = "Metadata",
+            ["ColumnProfile"] = "Metadata",
+            ["Seed"] = "Metadata",
+            ["DateFormatOverride"] = "Metadata",
+            ["EmptyPercentageOverride"] = "Metadata",
+            ["CustodianCountOverride"] = "Metadata",
+            ["WithFamilies"] = "Metadata",
+
+            // LoadFile sub-config (6)
+            ["LoadFileFormat"] = "LoadFile",
+            ["LoadFileFormats"] = "LoadFile",
+            ["Formats"] = "LoadFile",
+            ["Encoding"] = "LoadFile",
+            ["Distribution"] = "LoadFile",
+            ["AttachmentRate"] = "LoadFile",
+
+            // Delimiters sub-config (6)
+            ["ColumnDelimiter"] = "Delimiters",
+            ["QuoteDelimiter"] = "Delimiters",
+            ["NewlineDelimiter"] = "Delimiters",
+            ["MultiValueDelimiter"] = "Delimiters",
+            ["NestedValueDelimiter"] = "Delimiters",
+            ["EndOfLine"] = "Delimiters",
+
+            // Bates sub-config (1)
+            ["BatesConfig"] = "Bates",
+
+            // Tiff sub-config (1)
+            ["TiffPageRange"] = "Tiff",
+
+            // Chaos sub-config (4)
+            ["ChaosMode"] = "Chaos",
+            ["ChaosAmount"] = "Chaos",
+            ["ChaosTypes"] = "Chaos",
+            ["ChaosScenario"] = "Chaos",
+
+            // Production sub-config (3)
+            ["ProductionSet"] = "Production",
+            ["ProductionZip"] = "Production",
+            ["VolumeSize"] = "Production",
+        };
+
     /// <summary>
-    /// For every flat property name in FlatPropertyNames, verify that accessing
-    /// that property on a FileGenerationRequest receiver triggers one diagnostic.
+    /// For every flat property name in the independent contract table, verify that accessing
+    /// that property on a FileGenerationRequest receiver triggers one diagnostic with the
+    /// expected sub-config argument.
     /// </summary>
     [Theory]
     [MemberData(nameof(GetFlatPropertyTestData))]
-    public async Task FlatProperty_OnFgr_ReportsDiagnostic(string propertyName)
+    public async Task FlatProperty_OnFgr_ReportsDiagnostic(string propertyName, string expectedSubConfig)
     {
         var source = $@"
 class FileGenerationRequest
@@ -34,26 +91,34 @@ class T
 {{
     void M(FileGenerationRequest r)
     {{
-        var x = {{|FGR_FLAT_ACCESS:r.{propertyName}|}};
+        var x = r.{propertyName};
     }}
 }}
 ";
-        await VerifyCS.VerifyAnalyzerAsync(source);
+        var expected = VerifyCS.Diagnostic(FgrFlatAccessAnalyzer.DiagnosticId)
+            .WithLocation(11, 17)
+            .WithArguments(propertyName, expectedSubConfig);
+
+        await VerifyCS.VerifyAnalyzerAsync(source, expected);
     }
 
     /// <summary>MemberData for the Theory above.</summary>
     public static IEnumerable<object[]> GetFlatPropertyTestData() =>
-        FgrFlatAccessAnalyzer.FlatPropertyNames
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .Select(name => new object[] { name });
+        ExpectedContractTable
+            .OrderBy(kvp => kvp.Key, StringComparer.Ordinal)
+            .Select(kvp => new object[] { kvp.Key, kvp.Value });
 
     /// <summary>
-    /// Exactly 36 flat pass-through property names are tracked.
+    /// Exactly 36 flat pass-through property names are tracked and match the independent contract table.
     /// </summary>
     [Fact]
-    public void FlatPropertyNames_Contains36Names()
+    public void FlatPropertyNames_MatchesIndependentContractTableExactly()
     {
+        Assert.Equal(36, ExpectedContractTable.Count);
         Assert.Equal(36, FgrFlatAccessAnalyzer.FlatPropertyNames.Count);
+        Assert.Equal(
+            ExpectedContractTable.Keys.OrderBy(n => n, StringComparer.Ordinal),
+            FgrFlatAccessAnalyzer.FlatPropertyNames.OrderBy(n => n, StringComparer.Ordinal));
     }
 
     /// <summary>
