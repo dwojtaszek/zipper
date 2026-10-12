@@ -23,6 +23,17 @@ public static class GoldenBaselineHarness
         "timestamp",
     };
 
+    private static readonly string[] TransientJsonArtifactPrefixes = new[]
+    {
+        "_manifest.json",
+        "_validation_report.json",
+        "loadfile_properties.json",
+        "loadfile.opt_properties.json",
+        "manifest.json",
+        "audit.json",
+        "data.json",
+    };
+
     private static readonly byte[] NormalizedValueBytes = Encoding.UTF8.GetBytes("\"__normalized__\"");
 
     private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
@@ -141,7 +152,7 @@ public static class GoldenBaselineHarness
 
     private static string ComputeHash(string pathOrName, Stream stream, bool normalizeTimestamps)
     {
-        if (normalizeTimestamps && pathOrName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        if (normalizeTimestamps && pathOrName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) && ShouldNormalizeJsonArtifact(pathOrName))
         {
             using var ms = new MemoryStream();
             stream.CopyTo(ms);
@@ -221,5 +232,18 @@ public static class GoldenBaselineHarness
         }
 
         return ms.ToArray();
+    }
+
+    private static bool ShouldNormalizeJsonArtifact(string pathOrName)
+    {
+        foreach (var prefix in TransientJsonArtifactPrefixes)
+        {
+            if (pathOrName.EndsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
