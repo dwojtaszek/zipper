@@ -97,6 +97,25 @@ jobs:
           print(f"Drift detected. Updating baselines.")
           SCRIPT
 
+      - name: Require human-scoped token for PR branch push
+        if: steps.drift.outputs.drifted == 'true'
+        shell: bash
+        run: |
+          # A branch pushed with the default GITHUB_TOKEN makes the PR author
+          # github-actions[bot]. GitHub holds workflow runs on such PRs at
+          # 'action_required', so PR Checks never runs, ci-gate never posts, and
+          # the PR silently cannot merge (observed on PR #1187). A PAT scoped
+          # contents:pull-requests:write pushes as a human, so checks run.
+          # Fail loudly instead of re-creating an unmergeable PR.
+          if [ -z "${PERF_BASELINE_TOKEN}" ]; then
+            echo "::error file=.github/workflows/perf-baseline-refresh.yml::PERF_BASELINE_TOKEN secret is not configured."
+            echo "A baselines PR cannot be opened without it: the default GITHUB_TOKEN would be held at 'action_required' and never become mergeable."
+            echo "Create a fine-grained PAT with contents:pull-requests:write for dwojtraszek/zipper and store it as the PERF_BASELINE_TOKEN repository secret."
+            exit 1
+          fi
+        env:
+          PERF_BASELINE_TOKEN: ${{ secrets.PERF_BASELINE_TOKEN }}
+
       - name: Create Pull Request
         if: steps.drift.outputs.drifted == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
@@ -106,3 +125,4 @@ jobs:
           body-path: results/pr_body.md
           labels: perf,automated
           commit-message: 'chore: refresh perf baselines'
+          token: ${{ secrets.PERF_BASELINE_TOKEN }}
