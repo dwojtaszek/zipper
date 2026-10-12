@@ -121,6 +121,14 @@ public static class GoldenBaselineHarness
             {
                 if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
                 {
+                    if (normalizeTimestamps)
+                    {
+                        // Directories have no content bytes to hash; canonicalize by
+                        // relative-path-in-archive and full directory name to keep parity stable.
+                        var dirKey = $"{relPath}::{entry.FullName}";
+                        var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}");
+                        archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
+                    }
                     continue;
                 }
 
@@ -135,8 +143,9 @@ public static class GoldenBaselineHarness
                 // A directory-only archive has no file entries to hash and its raw bytes
                 // embed per-entry LastWriteTime (ZipArchive.CreateEntry stamps the current
                 // time with 2-second DOS granularity), which would break timestamp
-                // normalization. Hash the canonical directory-entry name set instead;
-                // raw mode keeps hashing the bytes as-is.
+                // normalization. In normalized mode we already emitted canonical entries for
+                // directory-only archives above. If none were added, canonicalize by the
+                // directory name set; raw mode keeps hashing the bytes as-is.
                 if (normalizeTimestamps)
                 {
                     var directoryNames = string.Join('\n', zip.Entries.Select(static e => e.FullName).OrderBy(static n => n, StringComparer.Ordinal));
