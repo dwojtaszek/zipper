@@ -1,16 +1,16 @@
 {
-  "_captured_on": "ubuntu-latest (5-run max, 2026-10-05)",
+  "_captured_on": "ubuntu-latest (5-run max, 2026-10-12)",
   "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
   "pdf_50k": {
-    "wall_s": 1.88,
-    "rss_kb": 138624
+    "wall_s": 2.85,
+    "rss_kb": 138396
   },
   "eml_20k": {
-    "wall_s": 1.55,
-    "rss_kb": 108048
+    "wall_s": 2.19,
+    "rss_kb": 101348
   },
   "loadfile_200k": {
-    "wall_s": 3.86,
-    "rss_kb": 113180
+    "wall_s": 4.81,
+    "rss_kb": 113284
   }
 }
