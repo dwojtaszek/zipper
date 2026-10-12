@@ -246,6 +246,10 @@ if [[ -z "$zip_file" ]]; then
   print_error "Test 2: No ZIP archive generated."
 fi
 
+if ! unzip -t -q "$zip_file"; then
+  print_error "Test 2: ZIP archive integrity test failed (unzip -t)."
+fi
+
 # Make sure manifest exists and matches
 prod_dir=$(find "$TEST_OUTPUT_DIR/test2" -type d -name "PRODUCTION_*" -print -quit)
 if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
@@ -447,6 +451,9 @@ zipper \
 # Verify zip files exist
 if [[ ! -f "$TEST_OUTPUT_DIR/test6/ROLLZIP_01.zip" ]]; then print_error "Missing ROLLZIP_01.zip"; fi
 if [[ ! -f "$TEST_OUTPUT_DIR/test6/ROLLZIP_02.zip" ]]; then print_error "Missing ROLLZIP_02.zip"; fi
+
+if ! unzip -t -q "$TEST_OUTPUT_DIR/test6/ROLLZIP_01.zip"; then print_error "ROLLZIP_01.zip failed integrity check (unzip -t)"; fi
+if ! unzip -t -q "$TEST_OUTPUT_DIR/test6/ROLLZIP_02.zip"; then print_error "ROLLZIP_02.zip failed integrity check (unzip -t)"; fi
 
 print_success "Test Case 6: Rolling production sets zip packaging passed"
 

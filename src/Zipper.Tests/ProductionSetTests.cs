@@ -2,6 +2,7 @@ using System.Text.Json;
 using Xunit;
 
 using Zipper.Config;
+using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
 
@@ -214,8 +215,24 @@ public class ProductionSetTests : WorkingDirectoryTestBase
         var result = await ProductionSetGenerator.GenerateAsync(request);
 
         Assert.NotNull(result.ZipFilePath);
-        Assert.True(File.Exists(result.ZipFilePath));
+        ZipAssert.AssertValidZip(result.ZipFilePath);
         Assert.True(new FileInfo(result.ZipFilePath).Length > 0);
+    }
+
+    [Theory]
+    [InlineData(ZipCompressionMethod.Store)]
+    [InlineData(ZipCompressionMethod.Deflate)]
+    public async Task ProductionSet_WithZip_MultiVolumeWithFamiliesAndText_MatchesDiskTreeAndCompressionMethod(ZipCompressionMethod method)
+    {
+        var request = this.CreateTestRequest(count: 4, volumeSize: 2, fileType: "eml");
+        request.Output = request.Output with { WithText = true, CompressionMethod = method };
+        request.Production = request.Production with { ProductionZip = true };
+
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        Assert.NotNull(result.ZipFilePath);
+        Assert.NotNull(result.ProductionPath);
+        ZipAssert.AssertProductionZipMatchesDisk(result.ZipFilePath, result.ProductionPath, method);
     }
 
     [Fact]
