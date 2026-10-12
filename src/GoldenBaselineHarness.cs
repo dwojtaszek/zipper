@@ -124,7 +124,9 @@ public static class GoldenBaselineHarness
 
             if (archiveEntries.Count == 0)
             {
-                AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
+                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                var hashHex = ComputeHash(relPath, fs, normalizeTimestamps);
+                entries.Add((relPath, $"{hashHex}  {relPath}"));
             }
             else
             {
