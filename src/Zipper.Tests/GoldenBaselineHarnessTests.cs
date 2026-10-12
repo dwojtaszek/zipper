@@ -445,4 +445,74 @@ public class GoldenBaselineHarnessTests
             }
         }
     }
+
+    [Fact]
+    public void GenerateTimestampNormalizedSha256Manifest_DirectoryOnlyArchivesWithDifferentEntryTimes_Match()
+    {
+        var tempDir1 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir2 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            CreateDirectoryOnlyZip(tempDir1.FullName, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            CreateDirectoryOnlyZip(tempDir2.FullName, new DateTimeOffset(2030, 6, 2, 12, 30, 0, TimeSpan.Zero));
+
+            string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir1.FullName);
+            string manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir2.FullName);
+
+            Assert.Contains("empty.zip", manifest1, StringComparison.Ordinal);
+            Assert.Equal(manifest1, manifest2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir1.FullName))
+            {
+                Directory.Delete(tempDir1.FullName, true);
+            }
+
+            if (Directory.Exists(tempDir2.FullName))
+            {
+                Directory.Delete(tempDir2.FullName, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateRawSha256Manifest_DirectoryOnlyArchivesWithDifferentEntryTimes_Differ()
+    {
+        var tempDir1 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir2 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            CreateDirectoryOnlyZip(tempDir1.FullName, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            CreateDirectoryOnlyZip(tempDir2.FullName, new DateTimeOffset(2030, 6, 2, 12, 30, 0, TimeSpan.Zero));
+
+            string manifest1 = GoldenBaselineHarness.GenerateRawSha256Manifest(tempDir1.FullName);
+            string manifest2 = GoldenBaselineHarness.GenerateRawSha256Manifest(tempDir2.FullName);
+
+            Assert.NotEqual(manifest1, manifest2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir1.FullName))
+            {
+                Directory.Delete(tempDir1.FullName, true);
+            }
+
+            if (Directory.Exists(tempDir2.FullName))
+            {
+                Directory.Delete(tempDir2.FullName, true);
+            }
+        }
+    }
+
+    private static void CreateDirectoryOnlyZip(string dir, DateTimeOffset lastWriteTime)
+    {
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "empty.zip");
+        using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
+        var entry = zip.CreateEntry("emptyfolder/");
+        entry.LastWriteTime = lastWriteTime;
+    }
 }

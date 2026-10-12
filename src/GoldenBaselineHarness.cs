@@ -132,9 +132,23 @@ public static class GoldenBaselineHarness
 
             if (archiveEntries.Count == 0)
             {
-                using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                var hashHex = ComputeHash(relPath, fs, normalizeTimestamps);
-                entries.Add((relPath, $"{hashHex}  {relPath}"));
+                // A directory-only archive has no file entries to hash and its raw bytes
+                // embed per-entry LastWriteTime (ZipArchive.CreateEntry stamps the current
+                // time with 2-second DOS granularity), which would break timestamp
+                // normalization. Hash the canonical directory-entry name set instead;
+                // raw mode keeps hashing the bytes as-is.
+                if (normalizeTimestamps)
+                {
+                    var directoryNames = string.Join('\n', zip.Entries.Select(static e => e.FullName).OrderBy(static n => n, StringComparer.Ordinal));
+                    var payload = Encoding.UTF8.GetBytes($"{relPath}\n{directoryNames}");
+                    entries.Add((relPath, $"{HashBytes(payload)}  {relPath}"));
+                }
+                else
+                {
+                    using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    var hashHex = ComputeHash(relPath, fs, normalizeTimestamps: false);
+                    entries.Add((relPath, $"{hashHex}  {relPath}"));
+                }
             }
             else
             {
