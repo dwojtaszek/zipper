@@ -245,9 +245,12 @@ public static class GoldenBaselineHarness
         return ms.ToArray();
     }
 
+    private static readonly char[] PathSeparators = ['/', '\\'];
+
     private static bool ShouldNormalizeJsonArtifact(string pathOrName)
     {
-        var fileName = Path.GetFileName(pathOrName);
+        int lastSlash = pathOrName.LastIndexOfAny(PathSeparators);
+        var fileName = lastSlash >= 0 ? pathOrName[(lastSlash + 1)..] : pathOrName;
         foreach (var name in TransientJsonArtifactNames)
         {
             if (fileName.Equals(name, StringComparison.OrdinalIgnoreCase))

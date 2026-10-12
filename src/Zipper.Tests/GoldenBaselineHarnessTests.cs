@@ -515,4 +515,50 @@ public class GoldenBaselineHarnessTests
         var entry = zip.CreateEntry("emptyfolder/");
         entry.LastWriteTime = lastWriteTime;
     }
+
+    [Fact]
+    public void Harness_NormalizesTransientJsonValues_WhenZipEntryHasBackslashSeparators()
+    {
+        var tempDir1 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir2 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var zip1Path = Path.Combine(tempDir1.FullName, "archive.zip");
+            var zip2Path = Path.Combine(tempDir2.FullName, "archive.zip");
+
+            using (var zip1 = ZipFile.Open(zip1Path, ZipArchiveMode.Create))
+            {
+                var entry = zip1.CreateEntry("subfolder\\_manifest.json");
+                using var stream = entry.Open();
+                using var writer = new StreamWriter(stream);
+                writer.Write("{\n  \"productionDate\": \"2026-10-11T20:00:00Z\",\n  \"id\": \"TEST\"\n}");
+            }
+
+            using (var zip2 = ZipFile.Open(zip2Path, ZipArchiveMode.Create))
+            {
+                var entry = zip2.CreateEntry("subfolder\\_manifest.json");
+                using var stream = entry.Open();
+                using var writer = new StreamWriter(stream);
+                writer.Write("{\n  \"productionDate\": \"2026-10-12T23:59:59Z\",\n  \"id\": \"TEST\"\n}");
+            }
+
+            string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir1.FullName);
+            string manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir2.FullName);
+
+            Assert.Equal(manifest1, manifest2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir1.FullName))
+            {
+                Directory.Delete(tempDir1.FullName, true);
+            }
+
+            if (Directory.Exists(tempDir2.FullName))
+            {
+                Directory.Delete(tempDir2.FullName, true);
+            }
+        }
+    }
 }
