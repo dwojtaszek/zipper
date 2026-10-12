@@ -12,13 +12,13 @@
 #
 # scenarios.tsv contract:
 #   - Header row first (pipe-delimited): scenario_name | cli_args | seed | description
-#   - Empty body OK — exits 0 with no work done.
+#   - At least one scenario data row is required.
 #   - Comment lines start with `#` and are ignored.
 #
 # Exit codes:
-#   0  all scenarios matched their fixtures (or scenarios.tsv was empty).
+#   0  all selected scenarios matched their fixtures.
 #   1  one or more scenarios diverged.
-#   2  bad arguments / scenarios.tsv missing / Zipper CLI not runnable.
+#   2  bad arguments / invalid scenarios.tsv / Zipper CLI not runnable.
 
 set -euo pipefail
 
@@ -33,7 +33,14 @@ ONLY_SCENARIO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --capture) CAPTURE=1; shift ;;
-    --scenario) ONLY_SCENARIO="${2:-}"; shift 2 ;;
+    --scenario)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        echo "run-goldens.sh: --scenario requires a non-empty name" >&2
+        exit 2
+      fi
+      ONLY_SCENARIO="$2"
+      shift 2
+      ;;
     -h|--help)
       sed -n '1,30p' "${BASH_SOURCE[0]}"
       exit 0
@@ -49,6 +56,74 @@ if [[ ! -f "$SCENARIOS_FILE" ]]; then
   echo "run-goldens.sh: scenarios.tsv not found at $SCENARIOS_FILE" >&2
   exit 2
 fi
+
+parse_scenario_row() {
+  IFS='|' read -r scenario_name cli_args seed description <<<"$1"
+  scenario_name="$(echo "$scenario_name" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  cli_args="$(echo "$cli_args" | sed 's/^ *//;s/ *$//')"
+  seed="$(echo "$seed" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  description="$(echo "$description" | sed 's/^ *//;s/ *$//')"
+}
+
+# Validate the complete table and selected scenario before invoking the CLI.
+header_seen=0
+total=0
+scenario_found=0
+while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+  line="${raw_line%$'\r'}"
+  [[ -z "$line" ]] && continue
+  [[ "${line:0:1}" == "#" ]] && continue
+
+  if [[ $header_seen -eq 0 ]]; then
+    header_seen=1
+    parse_scenario_row "$line"
+    if [[ "$scenario_name" != "scenario_name" || "$cli_args" != "cli_args" || \
+          "$seed" != "seed" || "$description" != "description" ]]; then
+      echo "run-goldens.sh: scenarios.tsv has an invalid header" >&2
+      exit 2
+    fi
+    continue
+  fi
+
+  parse_scenario_row "$line"
+  if [[ -z "$scenario_name" ]]; then
+    echo "run-goldens.sh: scenarios.tsv contains a row with an empty scenario name" >&2
+    exit 2
+  fi
+
+  total=$((total + 1))
+  if [[ -n "$ONLY_SCENARIO" && "$ONLY_SCENARIO" == "$scenario_name" ]]; then
+    scenario_found=1
+  fi
+done <"$SCENARIOS_FILE"
+
+if [[ $header_seen -eq 0 ]]; then
+  echo "run-goldens.sh: scenarios.tsv has no scenario rows or header row" >&2
+  exit 2
+fi
+
+if [[ $total -eq 0 ]]; then
+  echo "run-goldens.sh: scenarios.tsv has no scenario rows" >&2
+  exit 2
+fi
+
+if [[ -n "$ONLY_SCENARIO" && $scenario_found -eq 0 ]]; then
+  echo "run-goldens.sh: unknown scenario: $ONLY_SCENARIO" >&2
+  exit 2
+fi
+
+zipper_cli="${ZIPPER_CLI:-}"
+if [[ -z "$zipper_cli" ]]; then
+  echo "run-goldens.sh: ZIPPER_CLI env var must point at the Zipper executable" >&2
+  exit 2
+fi
+if [[ ! -f "$zipper_cli" || ! -x "$zipper_cli" ]]; then
+  echo "run-goldens.sh: ZIPPER_CLI is not an executable file: $zipper_cli" >&2
+  exit 2
+fi
+zipper_cli="$(cd "$(dirname "$zipper_cli")" && pwd)/$(basename "$zipper_cli")"
+
+header_seen=0
 
 # ── Normalisation helpers ────────────────────────────────────────────────
 # The Zipper CLI embeds timestamps in output filenames and JSON content.
@@ -132,8 +207,6 @@ snapshot_fixture() {
 
 # ── Main loop ────────────────────────────────────────────────────────────
 
-header_seen=0
-total=0
 ran=0
 failed=0
 
@@ -148,13 +221,8 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
     continue
   fi
 
-  total=$((total + 1))
-
   # Pipe-delimited per the issue spec.
-  IFS='|' read -r scenario_name cli_args seed description <<<"$line"
-  scenario_name="$(echo "$scenario_name" | xargs)"
-  cli_args="$(echo "$cli_args" | sed 's/^ *//;s/ *$//')"
-  seed="$(echo "$seed" | xargs)"
+  parse_scenario_row "$line"
 
   if [[ -n "$ONLY_SCENARIO" && "$ONLY_SCENARIO" != "$scenario_name" ]]; then
     continue
@@ -166,13 +234,6 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
   fixture_dir="$FIXTURES_DIR/$scenario_name"
   work_dir="$(mktemp -d)"
   trap 'rm -rf "$work_dir"' EXIT
-
-  # Resolve the Zipper CLI.
-  zipper_cli="${ZIPPER_CLI:-}"
-  if [[ -z "$zipper_cli" ]]; then
-    echo "run-goldens.sh: ZIPPER_CLI env var must point at the Zipper executable" >&2
-    exit 2
-  fi
 
   # Execute the CLI. Catch non-zero exits so `set -e` doesn't abort the whole suite.
   # shellcheck disable=SC2086 # cli_args is intentionally word-split here.
@@ -249,9 +310,9 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
   trap - EXIT
 done <"$SCENARIOS_FILE"
 
-if [[ $total -eq 0 ]]; then
-  echo "run-goldens.sh: scenarios.tsv has no data rows; nothing to do."
-  exit 0
+if [[ $ran -eq 0 ]]; then
+  echo "run-goldens.sh: no scenarios were executed" >&2
+  exit 2
 fi
 
 echo "ran=$ran  failed=$failed  total=$total"
