@@ -699,6 +699,13 @@ if ! bash ./tests/test-typesafe-audit.sh; then
 fi
 print_success "TypeSafe audit foundation tests passed."
 
+print_info "Running golden helper and runner regression tests..."
+if python3 -m unittest discover -s tests/goldens/lib/_test -p 'test_*.py'; then
+    print_success "Golden helper and runner regression tests passed."
+else
+    print_error "Golden helper and runner regression tests failed."
+fi
+
 # FGR guard: FileGenerationRequest must not have flat pass-through properties (see #213).
 print_info "Checking for flat pass-through properties on FileGenerationRequest..."
 if grep -q 'get => this\.[A-Z][a-z]*\.' src/FileGenerationRequest.cs; then

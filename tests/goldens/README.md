@@ -11,7 +11,7 @@ end-to-end output. The existing E2E suite under `tests/` validates structure
 tests/goldens/
 ├── README.md              # this file
 ├── run-goldens.sh         # the runner — drives scenarios.tsv
-├── scenarios.tsv          # pipe-delimited table (20 scenarios)
+├── scenarios.tsv          # pipe-delimited table (22 scenarios)
 ├── fixtures/              # checked-in golden output, one dir per scenario
 │   ├── pdf-basic/
 │   ├── pdf-metadata/
@@ -20,9 +20,10 @@ tests/goldens/
 └── lib/
     ├── diff-loadfile.sh   # bounded byte-diff with first-divergence context
     ├── sha-manifest.sh    # deterministic sha256 manifest of a tree
-    └── _test/             # bats-core unit tests for the helpers
-        ├── diff-loadfile.bats
-        └── sha-manifest.bats
+    └── _test/             # standard-library Python tests for helpers and runner
+        ├── test_diff_loadfile.py
+        ├── test_run_goldens.py
+        └── test_sha_manifest.py
 ```
 
 ## CI
@@ -30,6 +31,9 @@ tests/goldens/
 The `goldens` job in `.github/workflows/pr.yml` runs on every PR after unit
 tests pass. It publishes the CLI, then executes `run-goldens.sh` in diff mode
 against the committed fixtures.
+
+The shared Linux CI workflow also runs the golden helper and runner regression
+tests on PRs and pushes to `main`.
 
 ## scenarios.tsv
 
@@ -49,7 +53,11 @@ scenario_name | cli_args | seed | description
 
 Lines starting with `#` and blank lines are ignored.
 
-### Current scenarios (20)
+The table must contain the header and at least one scenario row. Empty and
+header-only tables fail instead of passing without running the CLI. A
+`--scenario NAME` selector must name a scenario in the table.
+
+### Current scenarios (22)
 
 | # | Name | Mode |
 |---|------|------|
@@ -73,6 +81,8 @@ Lines starting with `#` and blank lines are ignored.
 | 18 | redacted-prod | Production Set (Redacted) |
 | 19 | custom-delim | Loadfile-Only (custom delimiters) |
 | 20 | families-eml | Standard (families) |
+| 21 | loadfile-only-tiff-profile-constant | Loadfile-Only (TIFF profile, constant page range) |
+| 22 | loadfile-only-tiff-profile-variable | Loadfile-Only (TIFF profile, variable page range) |
 
 ## Running scenarios
 
@@ -137,13 +147,11 @@ The runner normalises timestamped output before comparison:
 - `PRODUCTION_YYYYMMDD_HHMMSS/` → `PRODUCTION/`
 - `productionDate` in JSON → `"NORMALIZED"`
 
-## Helper unit tests
+## Helper and runner tests
 
-The lib helpers carry their own [bats-core][bats] tests under
-`lib/_test/`. They run locally with:
+The helper scripts and golden runner have standard-library Python regression
+tests under `lib/_test/`. Run them locally with:
 
 ```sh
-bats tests/goldens/lib/_test/
+python3 -m unittest discover -s tests/goldens/lib/_test -p 'test_*.py' -v
 ```
-
-[bats]: https://github.com/bats-core/bats-core
