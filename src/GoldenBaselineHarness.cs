@@ -23,16 +23,13 @@ public static class GoldenBaselineHarness
         "timestamp",
     };
 
-    private static readonly string[] TransientJsonArtifactPrefixes = new[]
+    private static readonly string[] TransientJsonArtifactNames = new[]
     {
         "_manifest.json",
         "_validation_report.json",
-        "loadfile_properties.json",
-        "loadfile.opt_properties.json",
-        "manifest.json",
-        "audit.json",
-        "data.json",
     };
+
+    private const string TransientJsonPropertiesSuffix = "_properties.json";
 
     private static readonly byte[] NormalizedValueBytes = Encoding.UTF8.GetBytes("\"__normalized__\"");
 
@@ -144,7 +141,7 @@ public static class GoldenBaselineHarness
                 entries.AddRange(archiveEntries);
             }
         }
-        catch (InvalidDataException)
+        catch (Exception ex) when (ex is InvalidDataException or NotSupportedException)
         {
             AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
         }
@@ -236,14 +233,18 @@ public static class GoldenBaselineHarness
 
     private static bool ShouldNormalizeJsonArtifact(string pathOrName)
     {
-        foreach (var prefix in TransientJsonArtifactPrefixes)
+        var fileName = Path.GetFileName(pathOrName);
+        foreach (var name in TransientJsonArtifactNames)
         {
-            if (pathOrName.EndsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (fileName.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
         }
 
-        return false;
+        // Load File properties artifacts are named <load-file>_properties.json, so the
+        // suffix pattern is required; matching on the file-name segment keeps sibling
+        // artifacts such as metadata.json or userdata.json out of the allowlist.
+        return fileName.EndsWith(TransientJsonPropertiesSuffix, StringComparison.OrdinalIgnoreCase);
     }
 }

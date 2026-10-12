@@ -241,10 +241,10 @@ public class GoldenBaselineHarnessTests
         try
         {
             File.WriteAllText(
-                Path.Combine(tempDir1.FullName, "data.json"),
+                Path.Combine(tempDir1.FullName, "_manifest.json"),
                 "{\n  \"timestamp\": { \"utc\": \"2026-10-11T20:00:00Z\", \"ticks\": 12345 },\n  \"id\": \"TEST\"\n}");
             File.WriteAllText(
-                Path.Combine(tempDir2.FullName, "data.json"),
+                Path.Combine(tempDir2.FullName, "_manifest.json"),
                 "{\n  \"timestamp\": { \"utc\": \"2026-10-12T23:59:59Z\", \"ticks\": 67890 },\n  \"id\": \"TEST\"\n}");
 
             string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir1.FullName);
@@ -278,8 +278,8 @@ public class GoldenBaselineHarnessTests
             var json1Bytes = bom.Concat(System.Text.Encoding.UTF8.GetBytes("{\n  \"productionDate\": \"2026-10-11T20:00:00Z\",\n  \"id\": \"TEST\"\n}")).ToArray();
             var json2Bytes = bom.Concat(System.Text.Encoding.UTF8.GetBytes("{\n  \"productionDate\": \"2026-10-12T23:59:59Z\",\n  \"id\": \"TEST\"\n}")).ToArray();
 
-            File.WriteAllBytes(Path.Combine(tempDir1.FullName, "data.json"), json1Bytes);
-            File.WriteAllBytes(Path.Combine(tempDir2.FullName, "data.json"), json2Bytes);
+            File.WriteAllBytes(Path.Combine(tempDir1.FullName, "_manifest.json"), json1Bytes);
+            File.WriteAllBytes(Path.Combine(tempDir2.FullName, "_manifest.json"), json2Bytes);
 
             string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir1.FullName);
             string manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir2.FullName);
@@ -296,6 +296,95 @@ public class GoldenBaselineHarnessTests
             if (Directory.Exists(tempDir2.FullName))
             {
                 Directory.Delete(tempDir2.FullName, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateTimestampNormalizedSha256Manifest_UnsupportedCompressionEntry_FallsBackToArchiveHash()
+    {
+        var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            var zipPath = Path.Combine(tempDir.FullName, "unsupported.zip");
+            using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+            {
+                var entry = zip.CreateEntry("doc.txt");
+                using var stream = entry.Open();
+                using var writer = new StreamWriter(stream);
+                writer.Write("PDF content");
+            }
+
+            // Patch both headers to LZMA (14): ZipArchiveEntry.Open() rejects it
+            // (net10 surfaces InvalidDataException; NotSupportedException is also
+            // caught), so the harness must fall back to hashing the whole file.
+            var zipBytes = File.ReadAllBytes(zipPath);
+            SetCompressionMethod(zipBytes, 14);
+            File.WriteAllBytes(zipPath, zipBytes);
+
+            string manifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir.FullName);
+
+            var manifestLines = manifest.Split('\n');
+            Assert.Contains(manifestLines, line => line.EndsWith("  unsupported.zip", StringComparison.Ordinal));
+            Assert.DoesNotContain(manifestLines, line => line.Contains("unsupported.zip::", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir.FullName))
+            {
+                Directory.Delete(tempDir.FullName, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void GenerateTimestampNormalizedSha256Manifest_TransientFieldsInUnlistedJsonArtifact_KeepsOriginalBytes()
+    {
+        var tempDir1 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+        var tempDir2 = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenHarness_" + Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(tempDir1.FullName, "metadata.json"),
+                "{\n  \"timestamp\": \"2026-10-11T20:00:00Z\",\n  \"id\": \"TEST\"\n}");
+            File.WriteAllText(
+                Path.Combine(tempDir2.FullName, "metadata.json"),
+                "{\n  \"timestamp\": \"2026-10-12T23:59:59Z\",\n  \"id\": \"TEST\"\n}");
+
+            string manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir1.FullName);
+            string manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(tempDir2.FullName);
+
+            Assert.NotEqual(manifest1, manifest2);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir1.FullName))
+            {
+                Directory.Delete(tempDir1.FullName, true);
+            }
+
+            if (Directory.Exists(tempDir2.FullName))
+            {
+                Directory.Delete(tempDir2.FullName, true);
+            }
+        }
+    }
+
+    private static void SetCompressionMethod(byte[] zipBytes, ushort method)
+    {
+        for (int i = 0; i <= zipBytes.Length - 4; i++)
+        {
+            if (zipBytes[i] == 0x50 && zipBytes[i + 1] == 0x4B && zipBytes[i + 2] == 0x03 && zipBytes[i + 3] == 0x04)
+            {
+                zipBytes[i + 8] = (byte)(method & 0xFF);
+                zipBytes[i + 9] = (byte)(method >> 8);
+            }
+            else if (zipBytes[i] == 0x50 && zipBytes[i + 1] == 0x4B && zipBytes[i + 2] == 0x01 && zipBytes[i + 3] == 0x02)
+            {
+                zipBytes[i + 10] = (byte)(method & 0xFF);
+                zipBytes[i + 11] = (byte)(method >> 8);
             }
         }
     }
