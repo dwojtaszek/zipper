@@ -89,4 +89,53 @@ class MySerializer
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
+
+    [Fact]
+    public async Task DirectTextWriterWriteLineInComposer_ReportsDiagnostic()
+    {
+        const string source = @"
+class MyComposer
+{
+    public void WriteSomething(System.IO.TextWriter writer)
+    {
+        {|ZIP001:writer.WriteLine|}(""hello"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task DirectStreamWriteAsyncInComposer_ReportsDiagnostic()
+    {
+        const string source = @"
+using System.Threading.Tasks;
+
+class MyComposer
+{
+    public async Task WriteSomethingAsync(System.IO.Stream stream)
+    {
+        await {|ZIP001:stream.WriteAsync|}(new byte[] { 1, 2, 3 }, 0, 3);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task DirectTextWriterWriteLineAsyncInEmitter_ReportsDiagnostic()
+    {
+        const string source = @"
+using System.Threading.Tasks;
+
+class MyEmitter
+{
+    public async Task EmitAsync(System.IO.TextWriter writer)
+    {
+        await {|ZIP001:writer.WriteLineAsync|}(""hello"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
 }

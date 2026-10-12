@@ -84,4 +84,139 @@ class MyFormatter
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
+
+    [Fact]
+    public async Task StringFormatWithInvariantCulture_NoDiagnostic()
+    {
+        const string source = @"
+using System.Globalization;
+
+class MyFormatter
+{
+    public string FormatSomething(string value)
+    {
+        return string.Format(CultureInfo.InvariantCulture, ""{0}"", value);
+    }
 }
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task ToStringWithInvariantCulture_NoDiagnostic()
+    {
+        const string source = @"
+using System.Globalization;
+
+class MyFormatter
+{
+    public string Format(int value)
+    {
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatWithNullProviderInFormatter_ReportsDiagnostic()
+    {
+        const string source = @"
+using System;
+
+class MyFormatter
+{
+    public string FormatSomething(string value)
+    {
+        return {|ZIP002:string.Format((IFormatProvider)null, ""{0}"", value)|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatInLoadFileComposer_ReportsDiagnostic()
+    {
+        const string source = @"
+class LoadFileDatComposer
+{
+    public string FormatSomething(string value)
+    {
+        return {|ZIP002:string.Format(""{0}"", value)|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatWithReorderedNamedArgumentsNullProvider_ReportsDiagnostic()
+    {
+        const string source = @"
+using System;
+
+class MyFormatter
+{
+    public string FormatSomething(string value)
+    {
+        return {|ZIP002:string.Format(format: ""{0}"", provider: null, arg0: value)|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatWithReorderedNamedArgumentsInvariantCulture_NoDiagnostic()
+    {
+        const string source = @"
+using System.Globalization;
+
+class MyFormatter
+{
+    public string FormatSomething(string value)
+    {
+        return string.Format(format: ""{0}"", provider: CultureInfo.InvariantCulture, arg0: value);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatWithCurrentCultureInFormatter_ReportsDiagnostic()
+    {
+        const string source = @"
+using System.Globalization;
+
+class MyFormatter
+{
+    public string FormatSomething(string value)
+    {
+        return {|ZIP002:string.Format(CultureInfo.CurrentCulture, ""{0}"", value)|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringFormatWithArbitraryVariableProvider_ReportsDiagnostic()
+    {
+        const string source = @"
+using System;
+
+class MyFormatter
+{
+    public string FormatSomething(IFormatProvider provider, string value)
+    {
+        return {|ZIP002:string.Format(provider, ""{0}"", value)|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+}
+

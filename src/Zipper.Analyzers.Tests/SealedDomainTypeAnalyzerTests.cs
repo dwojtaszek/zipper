@@ -45,4 +45,57 @@ class SomeRandomClass
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
+
+    [Fact]
+    public async Task RecordClass_NoDiagnostic()
+    {
+        const string source = @"
+record class MyConfig
+{
+    public string Value { get; set; }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task RecordStruct_NoDiagnostic()
+    {
+        const string source = @"
+record struct MyConfig
+{
+    public string Value { get; set; }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task AbstractClassBaseConfig_NoDiagnostic()
+    {
+        const string source = @"
+abstract class BaseConfig
+{
+    public string Value { get; set; }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StaticClassDefaults_NoDiagnostic()
+    {
+        const string source = @"
+static class Defaults
+{
+    public static string Value { get; set; }
+}
+
+static class DefaultConfig
+{
+    public static string Value { get; set; }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
 }

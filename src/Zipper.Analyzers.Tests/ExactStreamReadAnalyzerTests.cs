@@ -64,4 +64,75 @@ class SomeHelper
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
     }
+
+    [Fact]
+    public async Task StreamReadExactlyInSink_NoDiagnostic()
+    {
+        const string source = @"
+using System.IO;
+
+public static class StreamExtensions
+{
+    public static void ReadExactly(this Stream stream, byte[] buffer, int offset, int count) { }
+}
+
+class MySink
+{
+    public void ReadFrom(Stream stream)
+    {
+        var buffer = new byte[1024];
+        stream.ReadExactly(buffer, 0, buffer.Length);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StreamReadAtLeastInSink_NoDiagnostic()
+    {
+        const string source = @"
+using System.IO;
+
+public static class StreamExtensions
+{
+    public static int ReadAtLeast(this Stream stream, byte[] buffer, int minBytes) => minBytes;
+}
+
+class MySink
+{
+    public void ReadFrom(Stream stream)
+    {
+        var buffer = new byte[1024];
+        stream.ReadAtLeast(buffer, buffer.Length);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StreamReadExactlyAsyncInWriter_NoDiagnostic()
+    {
+        const string source = @"
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class StreamExtensions
+{
+    public static ValueTask ReadExactlyAsync(this Stream stream, byte[] buffer, int offset, int count, CancellationToken cancellationToken = default) => default;
+}
+
+class MyWriter
+{
+    public async Task ReadFromAsync(Stream stream)
+    {
+        var buffer = new byte[1024];
+        await stream.ReadExactlyAsync(buffer, 0, buffer.Length);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
 }

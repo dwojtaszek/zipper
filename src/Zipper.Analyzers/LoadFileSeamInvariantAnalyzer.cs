@@ -36,7 +36,8 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
     private static void AnalyzeWriteAccess(SyntaxNodeAnalysisContext context)
     {
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
-        if (memberAccess.Name.Identifier.Text != "Write")
+        var memberName = memberAccess.Name.Identifier.Text;
+        if (memberName != "Write" && memberName != "WriteLine" && memberName != "WriteAsync" && memberName != "WriteLineAsync")
         {
             return;
         }

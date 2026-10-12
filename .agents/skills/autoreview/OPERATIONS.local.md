@@ -200,3 +200,11 @@
 - **skill changes**: added a mandatory "Hard constraints — you are a READ-ONLY reviewer" block to all 9 `agents/*.md` files (defense in depth for standalone dispatch) and to the SKILL.md dispatch appendix (the chokepoint every prompt passes through); added a mandatory **Tree-integrity gate** to SKILL.md step 4 with a 4-step divergence protocol; added the no-mutation insight to `OPERATIONS.md` so it reaches agents through the insights channel too.
 - **deferred (flagged in PR, maintainer's call)**: reading `SupportedSuites` triggers `beforefieldinit` on `ArchiveTestCatalog`, so the help path builds all 106 cases + a 4 KiB buffer — measured **+26 ms** median on `zipper` with no args (65.7→91.6, interleaved, no overlap; `--version` unchanged). No documented cold-start budget, human-error path, `perf-guard` passed — accepted deliberately rather than adding a holder type.
 - **suppressions**: none
+
+### 2026-10-12 antigravity:branch:feat/ISSUE-1093-test-expand-coverage-for-roslyn-analyzer
+
+- **findings**: 0 ACTION, 5 INFO across 4 specialists (correctness, adversarial, testing, maintainability) — null provider handling in DeterministicFormattableAnalyzer, static class naming matching domain pattern in SealedDomainTypeAnalyzerTests, SourceFileTypes property coverage in MetadataConfigTests/TiffConfigTests.
+- **outcome**: accepted all — fixed null provider handling with IsNullArgument expression unwrapping, added static class DefaultConfig test, and added SourceFileTypes mixed-type tests. All 2,967 unit + 74 analyzer tests pass cleanly.
+- **telemetry**: host=antigravity mode=branch specialists=4 bundle=~12000c
+- **lessons**: Passing `(IFormatProvider)null` to `string.Format` falls back to `CultureInfo.CurrentCulture`. The analyzer must inspect the argument expression syntax (`IsNullArgument`) rather than only checking parameter type definition to prevent unflagged culture-sensitive calls.
+- **suppressions**: none
