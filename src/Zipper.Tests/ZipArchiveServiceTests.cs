@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Xunit;
 
 using Zipper.Config;
+using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
 
@@ -44,9 +45,10 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
-        Assert.Equal(5, archive.Entries.Count(e => e.FullName.EndsWith(".pdf", StringComparison.Ordinal)));
+        ZipAssert.AssertValidZip(zipPath, 5, archive =>
+        {
+            Assert.Equal(5, archive.Entries.Count(e => e.FullName.EndsWith(".pdf", StringComparison.Ordinal)));
+        });
     }
 
     [Fact]
@@ -85,12 +87,11 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
-        Assert.Equal(5, archive.Entries.Count); // 3 PDF files + 1 load file + 1 properties file
-
-        var loadEntry = archive.GetEntry("load.dat");
-        Assert.NotNull(loadEntry);
+        ZipAssert.AssertValidZip(zipPath, 5, archive =>
+        {
+            var loadEntry = archive.GetEntry("load.dat");
+            Assert.NotNull(loadEntry);
+        });
     }
 
     [Theory]
@@ -229,13 +230,11 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
-        Assert.Equal(6, archive.Entries.Count); // 3 PDF files + 3 text files
-
-        // Verify text files exist
-        var textEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
-        Assert.Equal(3, textEntries.Count);
+        ZipAssert.AssertValidZip(zipPath, 6, archive =>
+        {
+            var textEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            Assert.Equal(3, textEntries.Count);
+        });
     }
 
     [Fact]
@@ -274,15 +273,15 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
+        ZipAssert.AssertValidZip(zipPath, 4, archive =>
+        {
+            // Should have 2 EML files and 2 attachments
+            var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
 
-        // Should have 2 EML files and 2 attachments
-        var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
-        var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
-
-        Assert.Equal(2, emlEntries.Count);
-        Assert.Equal(2, attachmentEntries.Count);
+            Assert.Equal(2, emlEntries.Count);
+            Assert.Equal(2, attachmentEntries.Count);
+        });
     }
 
     [Fact]
@@ -322,19 +321,16 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
+        ZipAssert.AssertValidZip(zipPath, 6, archive =>
+        {
+            var pdfEntries = archive.Entries.Where(e => e.FullName.EndsWith(".pdf", StringComparison.Ordinal)).ToList();
+            var textEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            var loadEntry = archive.GetEntry("load.dat");
 
-        // Should have: 2 PDF files + 2 text files + 1 load file + 1 properties file = 6 total files
-        Assert.Equal(6, archive.Entries.Count);
-
-        var pdfEntries = archive.Entries.Where(e => e.FullName.EndsWith(".pdf", StringComparison.Ordinal)).ToList();
-        var textEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
-        var loadEntry = archive.GetEntry("load.dat");
-
-        Assert.Equal(2, pdfEntries.Count);
-        Assert.Equal(2, textEntries.Count);
-        Assert.NotNull(loadEntry);
+            Assert.Equal(2, pdfEntries.Count);
+            Assert.Equal(2, textEntries.Count);
+            Assert.NotNull(loadEntry);
+        });
     }
 
     [Fact]
@@ -498,21 +494,19 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        Assert.True(File.Exists(zipPath));
-        using var archive = ZipFile.OpenRead(zipPath);
+        ZipAssert.AssertValidZip(zipPath, 8, archive =>
+        {
+            // Should have: 2 EML files + 2 EML text files + 2 attachments + 2 attachment text files = 8 total
+            var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
+            var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal) && !e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
+            var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && !e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
+            var attachmentTextEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
 
-        // Should have: 2 EML files + 2 EML text files + 2 attachments + 2 attachment text files = 8 total
-        Assert.Equal(8, archive.Entries.Count);
-
-        var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
-        var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal) && !e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
-        var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && !e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
-        var attachmentTextEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
-
-        Assert.Equal(2, emlEntries.Count);
-        Assert.Equal(2, emlTextEntries.Count);
-        Assert.Equal(2, attachmentEntries.Count);
-        Assert.Equal(2, attachmentTextEntries.Count);
+            Assert.Equal(2, emlEntries.Count);
+            Assert.Equal(2, emlTextEntries.Count);
+            Assert.Equal(2, attachmentEntries.Count);
+            Assert.Equal(2, attachmentTextEntries.Count);
+        });
     }
 
     [Fact]
@@ -821,6 +815,92 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
                 Directory.Delete(tempDir, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_WithCancelledToken_TerminatesPromptlyAndCleansUpFileHandles()
+    {
+        // Arrange
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 5,
+                Concurrency = 1,
+                IncludeLoadFile = false,
+            },
+        };
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        for (int i = 1; i <= 5; i++)
+        {
+            await channel.Writer.WriteAsync(this.CreateZipTestFileData(i));
+        }
+        channel.Writer.Complete();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await new ZipArchiveSink().CreateArchiveAsync(
+                zipPath, "load.dat", loadPath, request, channel.Reader, cancellationToken: cts.Token);
+        });
+
+        // Verify prompt termination and file handle cleanup
+        using (var fs = new FileStream(zipPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.NotNull(fs);
+        }
+        File.Delete(zipPath);
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_WhenCancelledDuringProcessing_CleansUpFileHandles()
+    {
+        // Arrange
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 10,
+                Concurrency = 1,
+                IncludeLoadFile = false,
+            },
+        };
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        using var cts = new CancellationTokenSource();
+
+        // Cancel token after first item is committed
+        Action<FileData> onItemCommitted = _ => cts.Cancel();
+
+        for (int i = 1; i <= 10; i++)
+        {
+            await channel.Writer.WriteAsync(this.CreateZipTestFileData(i));
+        }
+        channel.Writer.Complete();
+
+        // Act & Assert
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await new ZipArchiveSink().CreateArchiveAsync(
+                zipPath, "load.dat", loadPath, request, channel.Reader, onItemCommitted: onItemCommitted, cancellationToken: cts.Token);
+        });
+
+        // Verify file handle cleanup
+        using (var fs = new FileStream(zipPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+        {
+            Assert.NotNull(fs);
+        }
+        File.Delete(zipPath);
     }
 
     private class MockMemoryOwner : System.Buffers.IMemoryOwner<byte>

@@ -247,6 +247,9 @@ if errorlevel 1 (
   exit /b 1
 )
 
+powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $z = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path '%TEST_OUTPUT_DIR%\test2\*.zip').Path); foreach ($e in $z.Entries) { $s = $e.Open(); $nullStream = [System.IO.Stream]::Null; $s.CopyTo($nullStream); $s.Dispose(); } $z.Dispose(); exit 0 } catch { exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] Test 2: ZIP integrity check failed & exit /b 1 )
+
 :: Make sure manifest exists and matches
 set PROD_DIR2=
 for /d %%d in ("%TEST_OUTPUT_DIR%\test2\PRODUCTION_*") do set PROD_DIR2=%%d
@@ -427,6 +430,9 @@ if errorlevel 1 (
 
 if not exist "%TEST_OUTPUT_DIR%\test6\ROLLZIP_01.zip" ( echo [ ERROR ] Missing ROLLZIP_01.zip & exit /b 1 )
 if not exist "%TEST_OUTPUT_DIR%\test6\ROLLZIP_02.zip" ( echo [ ERROR ] Missing ROLLZIP_02.zip & exit /b 1 )
+
+powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { foreach ($f in @('%TEST_OUTPUT_DIR%\test6\ROLLZIP_01.zip', '%TEST_OUTPUT_DIR%\test6\ROLLZIP_02.zip')) { $z = [System.IO.Compression.ZipFile]::OpenRead($f); foreach ($e in $z.Entries) { $s = $e.Open(); $nullStream = [System.IO.Stream]::Null; $s.CopyTo($nullStream); $s.Dispose(); } $z.Dispose(); } exit 0 } catch { exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] Test 6: ZIP integrity check failed & exit /b 1 )
 
 echo [ SUCCESS ] Test Case 6: Rolling production sets zip packaging passed
 

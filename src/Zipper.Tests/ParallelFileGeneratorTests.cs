@@ -1,5 +1,6 @@
 using Xunit;
 using Zipper.Config;
+using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
 
@@ -28,11 +29,7 @@ public class ParallelFileGeneratorTests
             });
 
             Assert.Equal(10, result.FilesGenerated);
-            Assert.True(File.Exists(result.ZipFilePath));
-
-            // Verify zip contains correct number of files
-            using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
-            Assert.Equal(10, archive.Entries.Count); // Count should match requested files
+            ZipAssert.AssertValidZip(result.ZipFilePath, 10);
         }
         finally
         {
@@ -205,10 +202,7 @@ public class ParallelFileGeneratorTests
             });
 
             Assert.Equal(25, result.FilesGenerated);
-            Assert.True(File.Exists(result.ZipFilePath));
-
-            using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
-            Assert.Equal(25, archive.Entries.Count);
+            ZipAssert.AssertValidZip(result.ZipFilePath, 25);
         }
         finally
         {
@@ -356,9 +350,7 @@ public class ParallelFileGeneratorTests
             });
 
             Assert.Equal(1, result.FilesGenerated);
-
-            using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
-            Assert.Single(archive.Entries);
+            ZipAssert.AssertValidZip(result.ZipFilePath, 1);
         }
         finally
         {
@@ -458,9 +450,7 @@ public class ParallelFileGeneratorTests
             });
 
             Assert.Equal(3, result.FilesGenerated);
-
-            using var archive = System.IO.Compression.ZipFile.OpenRead(result.ZipFilePath);
-            Assert.Equal(3, archive.Entries.Count);
+            ZipAssert.AssertValidZip(result.ZipFilePath, 3);
         }
         finally
         {
