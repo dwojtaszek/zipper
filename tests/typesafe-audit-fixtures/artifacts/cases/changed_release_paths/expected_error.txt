@@ -1,0 +1,1 @@
+artifacts/zipper-win-x64/zipper-win-x64.exe

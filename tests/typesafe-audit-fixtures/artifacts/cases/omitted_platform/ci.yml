@@ -1,0 +1,40 @@
+name: CI
+on:
+  workflow_call:
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: win-x64
+    steps:
+      - uses: actions/setup-dotnet@v6
+        with:
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Publish self-contained binaries
+        run: |
+          dotnet publish src/Zipper.csproj -c Release -r ${{ matrix.platform }} --self-contained true -o publish/${{ matrix.platform }}
+          rm -f publish/${{ matrix.platform }}/*.pdb
+          case "${{ matrix.platform }}" in
+            win-x64)   mv publish/${{ matrix.platform }}/Zipper.exe publish/${{ matrix.platform }}/zipper-win-x64.exe ;;
+            linux-x64) mv publish/${{ matrix.platform }}/Zipper     publish/${{ matrix.platform }}/zipper-linux-x64 ;;
+            osx-arm64) mv publish/${{ matrix.platform }}/Zipper     publish/${{ matrix.platform }}/zipper-osx-arm64 ;;
+          esac
+      - name: Upload self-contained binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: zipper-${{ matrix.platform }}
+          path: publish/${{ matrix.platform }}
+          retention-days: 7
