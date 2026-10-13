@@ -2,6 +2,7 @@
 import importlib.util
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import selectors
@@ -84,10 +85,46 @@ class RunnerCycleTests(unittest.TestCase):
     def test_babysitOnly_rejectedPush_preservesReviewedLocalCompletion(self):
         self._check_wip_resume(exit_code=0, reject_push=True)
 
+    def test_babysitOnly_laterCycleRetriesRetainedReviewedCompletion(self):
+        self._check_wip_resume(exit_code=0, reject_push=True, retry_push=True)
+
+    def test_babysitOnly_ordinaryRepairRenewsProvenance_andMergesNextCycle(self):
+        self._check_wip_resume(exit_code=0, ordinary_repair=True)
+
+    def test_babysitOnly_reviewedRepairClearsPriorGate_andMergesNextCycle(self):
+        self._check_wip_resume(exit_code=0, ordinary_repair=True, prior_gate_failure=True)
+
+    def test_babysitOnly_remoteHeadChangesDuringRepair_doesNotRenewProvenance(self):
+        self._check_wip_resume(exit_code=0, ordinary_repair=True, remote_changed=True)
+
+    def test_babysitOnly_remoteHeadChangesDuringReview_atomicLeasePreservesIt(self):
+        self._check_wip_resume(exit_code=0, ordinary_repair=True, late_remote_change=True)
+
+    def test_babysitOnly_agentCreatedPrWithFailedReview_remainsRepairable(self):
+        self._check_wip_resume(exit_code=0, no_pr=True, publish=False)
+
+    def test_babysitOnly_agentCreatedWipPr_remainsRepairable(self):
+        self._check_wip_resume(exit_code=0, no_pr=True, keep_wip=True)
+
+    def test_babysitOnly_initialUnpublishedCompletion_preservesRemoteProvenance(self):
+        self._check_wip_resume(exit_code=0, no_pr=True, publish=False, initial_unpublished=True)
+
+    def test_babysitOnly_interruptedCommittedRepair_resumesBeforePublication(self):
+        self._check_wip_resume(exit_code=1, committed_failure=True)
+
+    def test_babysitOnly_interruptedPublishedInitialMission_resumesIssueCompletion(self):
+        self._check_wip_resume(exit_code=1, no_pr=True, committed_failure=True)
+
+    def test_babysitOnly_interruptedCommittedAndDirtyRepair_preservesAndResumesEdits(self):
+        self._check_wip_resume(exit_code=1, committed_failure=True, dirty_failure=True)
+
+    def test_babysitOnly_approvalRevokedDuringReview_doesNotPublishOrRenewProvenance(self):
+        self._check_wip_resume(exit_code=0, ordinary_repair=True, revoke_approval=True)
+
     def test_babysitOnly_laterPageThreadResolution_countsAsProgress(self):
         self._check_wip_resume(exit_code=0, publish=False, thread_progress=True)
 
-    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False, reject_push=False):
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False, reject_push=False, retry_push=False, ordinary_repair=False, prior_gate_failure=False, remote_changed=False, no_pr=False, keep_wip=False, late_remote_change=False, initial_unpublished=False, committed_failure=False, dirty_failure=False, revoke_approval=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             base = root / "runner"
@@ -101,15 +138,31 @@ class RunnerCycleTests(unittest.TestCase):
                 "def list_models(): return ['default']\n"
                 "def run_mission(prompt, cwd, **kwargs):\n"
                 "    assert kwargs['is_continue'] is True\n"
-                "    assert 'Resume work on GitHub issue #42' in prompt\n"
-                "    assert 'Do NOT push' in prompt\n"
+                f"    if not {ordinary_repair} and (not {no_pr} or not Path('{root / 'pr-opened'}').exists()): assert 'Resume work on GitHub issue #42' in prompt\n"
+                f"    if not {no_pr}: assert 'Do NOT push' in prompt\n"
                 "    print('WIP_MISSION_CALLED')\n"
+                f"    if {committed_failure} and Path(cwd, 'progress.txt').exists():\n"
+                "        assert 'Resume work on GitHub issue #42' in prompt\n"
+                f"        if {dirty_failure}:\n"
+                "            assert Path(cwd, 'unfinished.txt').read_text() == 'preserved edits'\n"
+                "            subprocess.run(['git','add','unfinished.txt'],cwd=cwd,check=True)\n"
+                "            subprocess.run(['git','commit','-m','fix: finish work'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                "        return 0, 'repair finished', ''\n"
+                f"    if {no_pr} and Path('{root / 'pr-opened'}').exists(): return 0, 'repair', ''\n"
+                f"    if {no_pr}: Path('{root / 'pr-opened'}').touch()\n"
+                f"    if {keep_wip}: return 0, 'checkpoint PR created', ''\n"
+                f"    if {remote_changed}:\n"
+                "        subprocess.run(['git','commit','--allow-empty','-m','fix: outside contributor'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                "        subprocess.run(['git','push','origin','HEAD'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                f"    if {late_remote_change}: subprocess.run(['git','commit','--allow-empty','-m','fix: intermediate repair'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
                 f"    if {thread_progress}: return 0, 'threads resolved', ''\n"
                 "    Path(cwd, 'progress.txt').write_text('completed work')\n"
-                f"    if {exit_code} != 0: return {exit_code}, '', 'interrupted'\n"
+                f"    if {exit_code} != 0 and not {committed_failure}: return {exit_code}, '', 'interrupted'\n"
                 "    subprocess.run(['git','add','progress.txt'],cwd=cwd,check=True)\n"
                 "    subprocess.run(['git','commit','-m','fix: finish work'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
-                "    return 0, 'done', ''\n"
+                f"    if {no_pr} and not {initial_unpublished}: subprocess.run(['git','push','origin','HEAD'],cwd=cwd,check=True,stdout=subprocess.PIPE)\n"
+                f"    if {dirty_failure}: Path(cwd, 'unfinished.txt').write_text('preserved edits')\n"
+                f"    return {exit_code}, 'done', ''\n"
             )
             repo = root / "repo"
             def git(*args, cwd=repo):
@@ -123,7 +176,7 @@ class RunnerCycleTests(unittest.TestCase):
             git("remote", "add", "origin", str(root / "origin"))
             wt = root / "worktrees" / "issue-42"
             git("worktree", "add", "-b", "fix/ISSUE-42-smooth", str(wt), "main")
-            git("commit", "--allow-empty", "-m", "wip: unfinished work", cwd=wt)
+            git("commit", "--allow-empty", "-m", "fix: unfinished work" if ordinary_repair else "wip: unfinished work", cwd=wt)
             git("push", "--set-upstream", "origin", "HEAD", cwd=wt)
             review_marker = root / "local-review-passed"
             (root / "origin" / "hooks" / "pre-receive").write_text(
@@ -137,8 +190,12 @@ class RunnerCycleTests(unittest.TestCase):
                 "#!/usr/bin/env python3\nimport json, subprocess\nfrom pathlib import Path\n"
                 "assert subprocess.check_output(['git','status','--porcelain'],text=True).strip() == ''\n"
                 "assert subprocess.check_output(['git','log','-1','--format=%s'],text=True).strip() == 'fix: finish work'\n"
-                f"assert subprocess.check_output(['git','--git-dir','{root / 'origin'}','log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip().startswith('wip:')\n"
+                f"assert subprocess.check_output(['git','--git-dir','{root / 'origin'}','log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip().startswith('fix: finish work' if Path('{root / 'review-called'}').exists() else {'fix: finish work' if no_pr and not initial_unpublished else 'fix: unfinished work' if ordinary_repair else 'wip:'!r})\n"
                 f"if {publish}: Path('{review_marker}').touch()\n"
+                f"if {late_remote_change}:\n"
+                "    parent = subprocess.check_output(['git','rev-parse','HEAD^'],text=True).strip()\n"
+                "    subprocess.run(['git','push','origin',parent+':refs/heads/fix/ISSUE-42-smooth'],check=True,stdout=subprocess.PIPE)\n"
+                f"if {revoke_approval}: Path('{root / 'approval-revoked'}').touch()\n"
                 f"print(json.dumps({{'type':'complete','status':'review_completed','findings':{0 if publish else 1}}}))\n"
             )
             reviewer.chmod(0o755)
@@ -151,15 +208,31 @@ class RunnerCycleTests(unittest.TestCase):
                 "    raise AssertionError('new intake')\n"
                 "elif command == ['issue','view']: print(json.dumps({'title':'Smooth','body':'Finish work','comments':[]}))\n"
                 "elif command == ['pr','view']:\n"
+                f"    if {no_pr} and not Path('{root / 'pr-opened'}').exists(): sys.exit(1)\n"
                 "    fields=sys.argv[sys.argv.index('--json')+1]\n"
                 "    if fields == 'commits':\n"
                 "        print(subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip())\n"
                 "    else:\n"
                 "        head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
-                "        print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':[], 'headRefOid': head}))\n"
+                "        subject = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                f"        checks = [{{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS' if subject == 'fix: finish work' else 'FAILURE'}}] if {ordinary_repair or (no_pr and not keep_wip)} else []\n"
+                "        print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':checks, 'headRefOid': head}))\n"
                 "elif command == ['pr','merge']:\n"
-                "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
-                "    raise AssertionError('merge bypass')\n"
+                f"    if not {ordinary_repair}:\n"
+                "        Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
+                "        raise AssertionError('merge bypass')\n"
+                "    assert '--admin' not in sys.argv and '--match-head-commit' in sys.argv\n"
+                "    head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                "    assert sys.argv[sys.argv.index('--match-head-commit')+1] == head\n"
+                "    subprocess.run(['git','--git-dir',os.environ['TEST_ORIGIN'],'update-ref','refs/heads/main',head],check=True)\n"
+                "    Path(os.environ['MERGED_MARKER']).touch()\n"
+                "elif command[0] == 'api' and command[1].startswith('repos/'):\n"
+                "    head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                "    if command[1].endswith('/reviews'):\n"
+                f"        print(json.dumps([[{{'user':{{'login':'dwojtaszek'}},'state':'DISMISSED' if Path('{root / 'approval-revoked'}').exists() else 'APPROVED','commit_id':head}}]]) if {revoke_approval} else '[]')\n"
+                "    else:\n"
+                f"        if {late_remote_change}: head = os.environ['INITIAL_AUTH_HEAD']\n"
+                "        print(json.dumps({'number':99,'state':'open','draft':False,'user':{'login':'dwojtaszek'},'base':{'ref':'main','repo':{'full_name':'dwojtaszek/zipper'}},'head':{'sha':head,'ref':'fix/ISSUE-42-smooth','repo':{'full_name':'dwojtaszek/zipper'}}}))\n"
                 "elif command == ['api','graphql']:\n"
                 "    if os.environ['THREAD_PROGRESS'] == '1':\n"
                 "        assert '--paginate' in sys.argv\n"
@@ -173,6 +246,18 @@ class RunnerCycleTests(unittest.TestCase):
             mail = root / "msmtp"
             mail.write_text("#!/bin/sh\nexit 0\n")
             mail.chmod(0o755)
+            if ordinary_repair or no_pr:
+                (root / "origin" / "hooks" / "pre-receive").write_text("#!/bin/sh\nexit 0\n")
+            (root / "state").mkdir()
+            original_head = git("rev-parse", "HEAD", cwd=wt)
+            if not no_pr and not revoke_approval:
+                (root / "state/issue-42.json").write_text(json.dumps({
+                    "pr_number": "99", "branch": "fix/ISSUE-42-smooth", "authorized_head": original_head,
+                }))
+            if prior_gate_failure:
+                (root / "state/pr-99-coderabbit-gate.json").write_text(json.dumps({
+                    "branch": "fix/ISSUE-42-smooth", "local_head": original_head, "error": "previous review failed",
+                }))
             invocation = [sys.executable, str(base / "runner.py")]
             if repeat_scan:
                 invocation = [
@@ -182,9 +267,7 @@ class RunnerCycleTests(unittest.TestCase):
                     "runner['babysit_active_worktrees'](); runner['babysit_active_worktrees']()",
                     str(base / "runner.py"),
                 ]
-            result = subprocess.run(
-                [*invocation, "--babysit-only", "--agent", "droid", *(["--dry-run"] if dry_run else [])],
-                env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
+            env = {**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"],
                      "RUNNER_BASE": str(base), "REPO_PATH": str(repo),
                      "WORKTREES_BASE": str(root / "worktrees"), "PLUGINS_DIR": str(base / "plugins"),
                      "LOCK_FILE_PATH": str(base / "runner.lock"), "STATE_DIR": str(root / "state"),
@@ -192,11 +275,65 @@ class RunnerCycleTests(unittest.TestCase):
                      "REVIEW_CALLED": str(root / "review-called"),
                      "THREAD_PROGRESS": "1" if thread_progress else "0",
                      "THREAD_COUNT_MARKER": str(root / "thread-count-marker"),
-                     "FORBIDDEN_COMMAND": str(root / "forbidden-command")},
+                     "FORBIDDEN_COMMAND": str(root / "forbidden-command"),
+                     "MERGED_MARKER": str(root / "merged")}
+            env["INITIAL_AUTH_HEAD"] = original_head
+            arguments = [*invocation, "--babysit-only", "--agent", "droid", *(["--dry-run"] if dry_run else [])]
+            result = subprocess.run(
+                arguments, env=env,
                 capture_output=True, text=True, timeout=15,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.count("WIP_MISSION_CALLED"), 0 if dry_run else 1, result.stdout)
+            if no_pr:
+                state = json.loads((root / "state/issue-42.json").read_text())
+                self.assertEqual(state["authorized_head"], git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth"))
+                self.assertTrue((root / "state/pr-99-coderabbit-gate.json").exists())
+                if committed_failure:
+                    gate = json.loads((root / "state/pr-99-coderabbit-gate.json").read_text())
+                    self.assertFalse(gate["completion_ready"])
+                    self.assertEqual(gate["local_head"], state["authorized_head"])
+                    self.assertEqual(gate["local_head"], git("rev-parse", "HEAD", cwd=wt))
+                    self.assertFalse((root / "forbidden-command").exists())
+                    self.assertFalse((root / "merged").exists())
+                again = subprocess.run(arguments, env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+                self.assertIn("WIP_MISSION_CALLED", again.stdout)
+                self.assertNotIn("is not authorized", again.stdout)
+                self.assertFalse((root / "forbidden-command").exists())
+                self.assertFalse((root / "merged").exists())
+                if committed_failure:
+                    self.assertEqual((wt / "progress.txt").read_text(), "completed work")
+                    self.assertEqual(git("rev-parse", "HEAD", cwd=wt), state["authorized_head"])
+                    self.assertFalse((root / "state/pr-99-coderabbit-gate.json").exists())
+                return
+            if committed_failure:
+                gate = json.loads((root / "state/pr-99-coderabbit-gate.json").read_text())
+                self.assertFalse(gate["completion_ready"])
+                self.assertEqual(gate["local_head"], git("rev-parse", "HEAD", cwd=wt))
+                self.assertFalse((root / "push-attempted").exists())
+                if dirty_failure:
+                    self.assertEqual((wt / "unfinished.txt").read_text(), "preserved edits")
+                again = subprocess.run(arguments, env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+                self.assertIn("WIP_MISSION_CALLED", again.stdout)
+                self.assertEqual(git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth"), git("rev-parse", "HEAD", cwd=wt))
+                self.assertFalse((root / "state/pr-99-coderabbit-gate.json").exists())
+                return
+            if revoke_approval:
+                self.assertTrue((root / "approval-revoked").exists())
+                self.assertFalse((root / "state/issue-42.json").exists())
+                self.assertEqual(git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth"), original_head)
+                self.assertNotIn("succeeded (", result.stdout)
+                return
+            if remote_changed or late_remote_change:
+                state = json.loads((root / "state/issue-42.json").read_text())
+                self.assertEqual(state["authorized_head"], original_head)
+                self.assertNotEqual(state["authorized_head"], git("rev-parse", "HEAD", cwd=wt))
+                self.assertEqual(git("--git-dir", str(root / "origin"), "log", "-1", "--format=%s", "refs/heads/fix/ISSUE-42-smooth"), "fix: intermediate repair" if late_remote_change else "fix: outside contributor")
+                self.assertNotIn("succeeded (", result.stdout)
+                self.assertFalse((root / "merged").exists())
+                return
             self.assertFalse((root / "review-called").exists(), "Progress snapshots ran the blocking merge review gate")
             self.assertFalse((root / "forbidden-command").exists(), "WIP continuation attempted intake or merge")
             self.assertEqual(git("log", "-1", "--format=%s", cwd=wt), "fix: finish work" if exit_code == 0 and not dry_run and not thread_progress else "wip: unfinished work")
@@ -221,9 +358,24 @@ class RunnerCycleTests(unittest.TestCase):
                 self.assertFalse((wt / "progress.txt").exists())
             if not repeat_scan:
                 self.assertIn("Babysit-only: new issue pickup disabled", result.stdout)
+            if ordinary_repair:
+                self.assertFalse(gate_file.exists(), "Successful reviewed publication retained a failed gate")
+                state = json.loads((root / "state/issue-42.json").read_text())
+                self.assertEqual(state["authorized_head"], git("rev-parse", "HEAD", cwd=wt))
+                again = subprocess.run(arguments, env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+                self.assertTrue((root / "merged").exists(), again.stdout)
+                self.assertEqual(git("rev-parse", "main"), state["authorized_head"])
+            if retry_push:
+                (root / "origin" / "hooks" / "pre-receive").write_text("#!/bin/sh\nexit 0\n")
+                again = subprocess.run(arguments, env=env, capture_output=True, text=True, timeout=15)
+                self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+                self.assertIn("Retained completion published", again.stdout)
+                self.assertNotIn("WIP_MISSION_CALLED", again.stdout)
+                self.assertEqual(git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth"), git("rev-parse", "HEAD", cwd=wt))
 
     def test_intake_evaluatesMergeGatesImmediately_withoutDuplicateMission(self):
-        for conclusion in ("SUCCESS", "PENDING"):
+        for conclusion in ("SUCCESS", "PENDING", "REVIEW_FAILED"):
             with self.subTest(conclusion=conclusion), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 base = root / "runner"
@@ -262,8 +414,14 @@ class RunnerCycleTests(unittest.TestCase):
                     "    fields = sys.argv[sys.argv.index('--json') + 1]\n"
                     "    if fields == 'commits': print('fix: completed')\n"
                     "    else:\n"
-                    f"        print(json.dumps({{'number':99,'url':'https://example.test/99','state':'OPEN','updatedAt':'2099-01-01T00:00:00Z', 'statusCheckRollup':[{{'__typename':'CheckRun','name':'ci','status': {'COMPLETED' if conclusion == 'SUCCESS' else 'IN_PROGRESS'!r},'conclusion':{conclusion!r}}}]}}))\n"
+                    "        head = subprocess.check_output(['git','--git-dir',os.environ['ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                    f"        print(json.dumps({{'number':99,'url':'https://example.test/99','state':'OPEN','headRefOid':head,'updatedAt':'2099-01-01T00:00:00Z', 'statusCheckRollup':[{{'__typename':'CheckRun','name':'ci','status': {'COMPLETED' if conclusion == 'SUCCESS' else 'IN_PROGRESS'!r},'conclusion':{conclusion!r}}}]}}))\n"
+                    "elif command[0] == 'api' and command[1].startswith('repos/'):\n"
+                    "    head = subprocess.check_output(['git','--git-dir',os.environ['ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
+                    "    print(json.dumps({'number':99,'state':'open','draft':False,'user':{'login':'dwojtaszek'},'base':{'ref':'main','repo':{'full_name':'dwojtaszek/zipper'}},'head':{'sha':head,'ref':'fix/ISSUE-42-smooth','repo':{'full_name':'dwojtaszek/zipper'}}}))\n"
                     "elif command == ['pr', 'merge']:\n"
+                    "    assert '--admin' not in sys.argv\n"
+                    "    assert '--match-head-commit' in sys.argv\n"
                     "    sha = subprocess.check_output(['git','--git-dir',os.environ['ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'], text=True).strip()\n"
                     "    subprocess.run(['git','--git-dir',os.environ['ORIGIN'],'update-ref','refs/heads/main',sha], check=True)\n"
                     "    Path(os.environ['MERGED']).touch()\n"
@@ -272,7 +430,7 @@ class RunnerCycleTests(unittest.TestCase):
                 gh.chmod(0o755)
                 for name, body in (
                     ("msmtp", "exit 0"),
-                    ("coderabbit", "echo '{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}'"),
+                    ("coderabbit", f"echo '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":{1 if conclusion == 'REVIEW_FAILED' else 0}}}'"),
                 ):
                     path = root / name
                     path.write_text(f"#!/bin/sh\n{body}\n")
@@ -289,14 +447,18 @@ class RunnerCycleTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(result.stdout.count("MISSION_CALLED"), 1)
-                self.assertIn("PR #99 is open. Evaluating checks", result.stdout)
+                if conclusion != "REVIEW_FAILED":
+                    self.assertIn("PR #99 is open. Evaluating checks", result.stdout)
                 self.assertEqual((root / "merged").exists(), conclusion == "SUCCESS")
                 if conclusion == "SUCCESS":
                     self.assertIn("Reusing successful CodeRabbit review", result.stdout)
                     self.assertIn("Main synchronized after merge", result.stdout)
                     self.assertFalse((root / "worktrees" / "issue-42").exists())
-                else:
+                elif conclusion == "PENDING":
                     self.assertIn("checks are still pending", result.stdout)
+                else:
+                    self.assertTrue((root / "state/pr-99-coderabbit-gate.json").exists())
+                    self.assertTrue((root / "worktrees/issue-42").exists())
 
     def test_babysitOnly_idleDoesNotReportCapacity_orProbeAgents(self):
         with tempfile.TemporaryDirectory() as directory:

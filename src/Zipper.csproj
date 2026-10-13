@@ -6,10 +6,8 @@
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
-    <Version>2.0.0</Version>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
-    <InformationalVersion>2.0.0</InformationalVersion>
+    <Version Condition="'$(Version)' == ''">2.0.0</Version>
+    <InformationalVersion>$(Version)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ServerGarbageCollection>false</ServerGarbageCollection>
@@ -33,6 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="SourceRevisionId" Value="$(SourceRevisionId)" />
     <InternalsVisibleTo Include="Zipper.Tests" />
   </ItemGroup>
 

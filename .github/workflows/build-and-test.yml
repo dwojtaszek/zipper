@@ -4,10 +4,22 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Existing release intent source SHA to recover (empty for current main)
+        type: string
+        default: ''
+      release_tag:
+        description: Existing intent tag, required only when a source SHA has multiple intents
+        type: string
+        default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # One allocator/publisher across main, manual tags, and recovery. Publication
+  # must not be cancelled between creating the tag and completing the release.
+  group: zipper-release
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -21,92 +33,95 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      release_version: ${{ steps.version.outputs.release_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prev_tag: ${{ steps.version.outputs.prev_tag }}
+      release_id: ${{ steps.version.outputs.release_id }}
+      artifact_run: ${{ steps.version.outputs.artifact_run }}
+      artifact_ids: ${{ steps.version.outputs.artifact_ids }}
+      skip: ${{ steps.version.outputs.skip }}
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Set Version
+          ref: ${{ inputs.source_sha || github.sha }}
+      - name: Identify source
+        id: source
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Reserve or resume release intent
         id: version
         shell: bash
-        run: bash .github/scripts/compute-version.sh
+        run: |
+          flags=()
+          if [[ "$RECOVER" == "true" ]]; then flags+=("--recover"); fi
+          if [[ -n "$INTENT_TAG" ]]; then flags+=("--intent-tag" "$INTENT_TAG"); fi
+          python3 .github/scripts/release.py prepare --sha "$SOURCE_SHA" "${flags[@]}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          RECOVER: ${{ inputs.source_sha != '' }}
+          INTENT_TAG: ${{ inputs.release_tag }}
 
   # Single source of truth for the shared gates (lint, runner-tests, the
   # three-OS build-and-test matrix). See ci.yml. Main pushes always run it:
   # unlike pr.yml, the version and the self-contained publish are supplied.
   ci:
     needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     uses: ./.github/workflows/ci.yml
     with:
       version: ${{ needs.prepare.outputs.version }}
+      release_version: ${{ needs.prepare.outputs.release_version }}
+      source_sha: ${{ needs.prepare.outputs.source_sha }}
       publish_mode: self-contained
 
   tag-and-release:
     needs: [prepare, ci]
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, '[skip ci]')
+    if: needs.prepare.outputs.skip != 'true'
     permissions:
       contents: write
+      actions: read
       pull-requests: read
       models: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: needs.prepare.outputs.artifact_ids == ''
         with:
           path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.prepare.outputs.artifact_run || github.run_id }}
+          pattern: zipper-*
 
-      - name: Bump and Tag
-        id: tag_step
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-
-          LATEST_TAG=$(git tag -l 'v*' | sort -V | tail -1)
-          if [[ -z "$LATEST_TAG" ]]; then
-            LATEST_TAG="v0.0.0"
-          fi
-          echo "Latest tag: $LATEST_TAG"
-
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r major minor patch <<< "$VERSION"
-
-          if [[ -z "$major" || -z "$minor" || -z "$patch" ]]; then
-             echo "Could not parse version: $VERSION"
-             major=0
-             minor=0
-             patch=0
-          fi
-
-          NEW_PATCH=$((patch + 1))
-          NEW_TAG="v$major.$minor.$NEW_PATCH"
-
-          echo "New tag: $NEW_TAG"
-
-          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
-            echo "Tag $NEW_TAG already exists, skipping"
-            exit 0
-          fi
-
-          git tag "$NEW_TAG"
-          git push origin "$NEW_TAG"
-          echo "tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
-          echo "prev_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: needs.prepare.outputs.artifact_ids != ''
+        with:
+          path: artifacts
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.prepare.outputs.artifact_run }}
+          artifact-ids: ${{ needs.prepare.outputs.artifact_ids }}
 
       - name: Extract PR Release Notes
         id: pr_notes
-        if: steps.tag_step.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ needs.prepare.outputs.source_sha }}
           # Passed via env to avoid template injection in bash (step output could contain $() etc.)
-          PREV_TAG_FROM_STEP: ${{ steps.tag_step.outputs.prev_tag }}
+          PREV_TAG_FROM_STEP: ${{ needs.prepare.outputs.prev_tag }}
         shell: bash
         run: |
           set -eo pipefail
@@ -167,7 +182,7 @@ jobs:
 
       - name: Generate Release Notes via AI
         id: ai_notes
-        if: steps.tag_step.outputs.tag != '' && steps.pr_notes.outputs.use_ai == 'true'
+        if: steps.pr_notes.outputs.use_ai == 'true'
         continue-on-error: true
         uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3
         with:
@@ -178,18 +193,14 @@ jobs:
             Commits:
             ${{ steps.pr_notes.outputs.commit_log }}
 
-      - name: Create Release
-        if: steps.tag_step.outputs.tag != ''
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+      - name: Verify and complete reserved release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag_step.outputs.tag }}
-          name: Release ${{ steps.tag_step.outputs.tag }}
-          body: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/zipper-win-x64/zipper-win-x64.exe
-            artifacts/zipper-linux-x64/zipper-linux-x64
-            artifacts/zipper-osx-arm64/zipper-osx-arm64
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+          ARTIFACT_RUN: ${{ needs.prepare.outputs.artifact_run || github.run_id }}
+          RELEASE_NOTES: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
+        run: |
+          printf '%s\n' "$RELEASE_NOTES" > release-notes.txt
+          python3 .github/scripts/release.py publish --release-id "$RELEASE_ID" \
+            --run-id "$ARTIFACT_RUN" --artifacts artifacts --notes release-notes.txt

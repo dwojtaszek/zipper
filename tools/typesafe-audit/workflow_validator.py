@@ -514,21 +514,50 @@ def _validate_consumer_download(steps: list) -> str:
     if not download_steps:
         raise WorkflowValidationError("Consumer job 'tag-and-release' missing executable 'actions/download-artifact' step")
 
-    download_step = download_steps[0]
-    d_with = download_step.get("with", {})
-    if not isinstance(d_with, dict):
-        raise WorkflowValidationError("Download-artifact step missing 'with' mapping")
-    if d_with.get("name"):
-        raise WorkflowValidationError(
-            "Download-artifact step should omit 'name' to download all platform artifacts into subdirectories"
-        )
-    download_path = str(d_with.get("path", "")).strip().rstrip("/")
-    if not download_path:
-        raise WorkflowValidationError("Download-artifact step missing 'path' property")
-    return download_path
+    paths = set()
+    for download_step in download_steps:
+        d_with = download_step.get("with", {})
+        if not isinstance(d_with, dict):
+            raise WorkflowValidationError("Download-artifact step missing 'with' mapping")
+        if d_with.get("name"):
+            raise WorkflowValidationError(
+                "Download-artifact step should omit 'name' to download all platform artifacts into subdirectories"
+            )
+        download_path = str(d_with.get("path", "")).strip().rstrip("/")
+        if not download_path:
+            raise WorkflowValidationError("Download-artifact step missing 'path' property")
+        paths.add(download_path)
+    if len(paths) != 1:
+        raise WorkflowValidationError("Download-artifact steps must use the same release directory")
+    return paths.pop()
 
 
 def _validate_consumer_release(steps: list, download_path: str, expected_release_files: list[str] | None = None) -> None:
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        for command in _extract_commands(str(step.get("run", ""))):
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                continue
+            if tokens[:3] != ["python3", ".github/scripts/release.py", "publish"]:
+                continue
+            if ("--artifacts" not in tokens or tokens.index("--artifacts") + 1 >= len(tokens)
+                    or tokens[tokens.index("--artifacts") + 1] != download_path):
+                raise WorkflowValidationError("Release controller artifact directory must match download path")
+            if not all(flag in tokens for flag in ("--release-id", "--run-id", "--notes")):
+                raise WorkflowValidationError("Release controller missing intent/run/notes arguments")
+            if not any(
+                isinstance(download, dict)
+                and str(download.get("uses", "")).startswith("actions/download-artifact@")
+                and (download.get("with") or {}).get("artifact-ids")
+                for download in steps
+            ):
+                raise WorkflowValidationError("Release controller requires immutable artifact-ids download")
+            return
+
+    # Keep the historical fixture contracts guarding every per-platform path.
     release_steps = [
         step for step in steps
         if isinstance(step, dict) and str(step.get("uses", "")).startswith("softprops/action-gh-release@")

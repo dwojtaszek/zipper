@@ -15,7 +15,7 @@ PROJECT="src/Zipper.csproj"
 readonly EXPECTED_HEADER="Control Number,File Path"
 
 # Dynamically locate the built framework directory
-BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit)
+BUILD_DIR=$(find src/bin/Release -mindepth 1 -maxdepth 1 -type d -name "net*" -print -quit 2>/dev/null || true)
 [[ -z "$BUILD_DIR" ]] && BUILD_DIR="src/bin/Release/net10.0" # Fallback
 
 # --- Helper Functions ---
@@ -142,6 +142,10 @@ function verify_load_file_included() {
 
 # --- Build Once ---
 
+if [[ -n "${ZIPPER_EXECUTABLE+x}" ]]; then
+    source "$(dirname "$0")/_zipper-cli.sh"
+    BINARY=("$ZIPPER_EXECUTABLE")
+else
 print_info "Building project (one-time)..."
 dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null || {
     echo "Build failed. Run 'dotnet build $PROJECT -c Release' for details."
@@ -156,6 +160,7 @@ elif [[ -f "$BUILD_DIR/Zipper.exe" ]]; then
 else
     # Fallback: use dotnet run (slower)
     BINARY=("dotnet" "run" "--project" "$PROJECT" "--no-build" "-c" "Release" "--")
+fi
 fi
 print_info "Using binary: ${BINARY[*]}"
 

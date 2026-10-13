@@ -15,6 +15,14 @@ on:
           self-contained release artifacts. Empty for PR builds.
         type: string
         default: ''
+      release_version:
+        description: Exact stable version of the reserved release candidate
+        type: string
+        default: ''
+      source_sha:
+        description: Source SHA for release/recovery (empty for PR checkout)
+        type: string
+        default: ''
       publish_mode:
         description: >-
           self-contained = publish per-RID binaries for the release job;
@@ -39,6 +47,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -105,6 +114,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Initialize missing Git identity for CI fixtures
         shell: bash
@@ -128,6 +138,10 @@ jobs:
         shell: bash
         run: python3 -m unittest discover -s .zipper-runner/tests 2>&1 | tee zipper-runner-tests.log
 
+      - name: Run release recovery and executable override regressions
+        shell: bash
+        run: python3 -m unittest discover -s tests/ci -v
+
   golden-tests:
     name: Golden helper and runner tests
     runs-on: ubuntu-latest
@@ -136,6 +150,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Run golden helper and runner tests
         shell: bash
@@ -167,6 +182,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Initialize missing Git identity for CI fixtures
         if: runner.os == 'Linux'
@@ -191,8 +207,20 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore zipper.sln --locked-mode
 
+      - name: Compiled development and stable version regressions (Linux)
+        if: matrix.coverage == true
+        shell: bash
+        run: bash tests/test-build-version.sh
+
       - name: Build solution (Release, includes tests)
-        run: dotnet build zipper.sln -c Release --no-restore
+        shell: bash
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          flags=("-p:SourceRevisionId=$SOURCE_SHA")
+          if [[ -n "$BUILD_VERSION" ]]; then flags+=("-p:Version=$BUILD_VERSION"); fi
+          dotnet build zipper.sln -c Release --no-restore "${flags[@]}"
 
       # Unit tests + coverage on Linux only (single pass with the coverage collector).
       - name: Unit tests + coverage (Linux)
@@ -270,16 +298,18 @@ jobs:
       - name: Run full E2E suite (Unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: bash ./tests/run-tests.sh
+        run: ZIPPER_EXECUTABLE="$PWD/src/bin/Release/net10.0/Zipper" bash ./tests/run-tests.sh
 
       - name: Run full E2E suite (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: tests\run-tests.bat
+        run: |
+          set "ZIPPER_EXECUTABLE=%CD%\src\bin\Release\net10.0\Zipper.exe"
+          call tests\run-tests.bat
 
       # Publish self-contained per platform, for the release job on main.
       - name: Publish self-contained binaries
-        if: inputs.publish_mode == 'self-contained'
+        if: inputs.publish_mode != 'none'
         shell: bash
         run: |
           set -euo pipefail
@@ -296,7 +326,7 @@ jobs:
           # VERSION_FLAG must expand to zero arguments.
           dotnet publish src/Zipper.csproj -c Release -r ${{ matrix.platform }} \
             --self-contained true -o publish/${{ matrix.platform }} \
-            $VERSION_FLAG --no-restore
+            $VERSION_FLAG "-p:SourceRevisionId=$SOURCE_SHA" --no-restore
           rm -f publish/${{ matrix.platform }}/*.pdb
 
           case "${{ matrix.platform }}" in
@@ -305,15 +335,64 @@ jobs:
             osx-arm64) mv publish/${{ matrix.platform }}/Zipper     publish/${{ matrix.platform }}/zipper-osx-arm64 ;;
           esac
         env:
-          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_VERSION: ${{ inputs.release_version || inputs.version || '2.0.0' }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+
+      - name: Build independent artifact metadata reader
+        if: inputs.publish_mode != 'none'
+        run: dotnet build tools/artifact-metadata -c Release
+
+      - name: Accept exact self-contained executable (Unix)
+        if: inputs.publish_mode != 'none' && runner.os != 'Windows'
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ inputs.release_version || inputs.version || '2.0.0' }}
+          EXPECTED_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          export ZIPPER_EXECUTABLE="$PWD/publish/${{ matrix.platform }}/zipper-${{ matrix.platform }}"
+          bash tests/test-published-artifact.sh
+
+      - name: Accept exact self-contained executable (Windows)
+        if: inputs.publish_mode != 'none' && runner.os == 'Windows'
+        shell: cmd
+        env:
+          EXPECTED_VERSION: ${{ inputs.release_version || inputs.version || '2.0.0' }}
+          EXPECTED_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          set "ZIPPER_EXECUTABLE=%CD%\publish\win-x64\zipper-win-x64.exe"
+          call tests\test-published-artifact.bat
+
+      - name: Golden parity against shipped Linux candidate
+        if: inputs.publish_mode != 'none' && matrix.coverage == true
+        shell: bash
+        run: ZIPPER_CLI="$PWD/publish/linux-x64/zipper-linux-x64" bash tests/goldens/run-goldens.sh
 
       - name: Upload self-contained binaries
+        id: upload_release_artifact
         if: inputs.publish_mode == 'self-contained'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: zipper-${{ matrix.platform }}
           path: publish/${{ matrix.platform }}
-          retention-days: 7
+          retention-days: 30
+
+      - name: Record immutable uploaded artifact identity
+        if: inputs.publish_mode == 'self-contained'
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.upload_release_artifact.outputs.artifact-id }}
+          PLATFORM: ${{ matrix.platform }}
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          python3 -c 'import json,os; from pathlib import Path; p=os.environ["PLATFORM"]; Path(f"artifact-identity-{p}.json").write_text(json.dumps({"artifact_id":int(os.environ["ARTIFACT_ID"]),"name":f"zipper-{p}","source_sha":os.environ["SOURCE_SHA"],"run_id":os.environ["GITHUB_RUN_ID"]}))'
+
+      - name: Upload immutable artifact receipt
+        if: inputs.publish_mode == 'self-contained'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: zipper-receipt-${{ matrix.platform }}
+          path: artifact-identity-${{ matrix.platform }}.json
+          retention-days: 30
 
       # Publish the CLI once on Linux and hand it to the caller's `goldens`
       # job as an artifact, so goldens does not re-restore + re-publish (#397).

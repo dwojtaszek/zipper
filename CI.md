@@ -50,6 +50,14 @@ HOME=/nonexistent python3 -m unittest discover -s .zipper-runner/tests
 
 Adding a new test file to that directory? Do not run it through `tests/test-typesafe-audit.sh` — it will not be picked up there anymore, and the suite is deliberately scoped to the TypeSafe audit tool.
 
+## Release recovery and exact-artifact acceptance
+
+Release allocation/publication is serialized across main, manual stable tags, and recovery runs without cancelling in-progress runs. GitHub may replace a pending run before it starts; it has not reserved an intent or entered publication. Re-dispatch if that source still needs a release. `.github/scripts/release.py` stores its SHA-bound intent in a validated terminal record in the draft release body; release notes are not state. See [docs/cicd.md](docs/cicd.md#4-build-and-test-main--build-and-testyml) for the state transitions.
+
+Re-run an interrupted Build and Test workflow, or dispatch it on main with `source_sha` set to the existing intent's source SHA. Set `release_tag` to the existing intent tag when that source has multiple intents (for example, both main and a manual tag). Recovery requires an existing, unambiguous intent. A sealed intent downloads the original accepted artifacts using immutable artifact IDs and their original `artifact_run`, not mutable names that reruns may reuse. It checks the tag SHA, preserves already uploaded assets, verifies every remote asset by downloading and hashing it, then completes the draft. Only an empty `starter` failed-upload placeholder on that draft may be deleted and re-uploaded. A completed intent does not rebuild or republish. An old main intent can finish but cannot become newest. Artifact retention is 30 days; after expiry, a sealed intent fails closed if the original accepted bytes are unavailable. Do not delete/reallocate the intent or overwrite its tag/assets to bypass that failure.
+
+Local offline regressions: `python3 -m unittest discover -s tests/ci -v` and `bash tests/test-build-version.sh`. Native acceptance uses an absolute `ZIPPER_EXECUTABLE`, `EXPECTED_VERSION`, and `EXPECTED_SHA` with `tests/test-published-artifact.sh` or `.bat`. Explicit executable overrides never build or fall back to `dotnet run`. The independent metadata reader inspects `Zipper.dll` extracted from the actual single-file bundle; the target CLI runs as the native executable. Linux also runs the checked-in golden scenarios against that same candidate. Windows/macOS acceptance must pass on native CI runners; a Linux cross-publish alone is not evidence of execution there.
+
 ## Robot Reviews
 
 After creating a PR — and after every subsequent push — run the review-wait gate:

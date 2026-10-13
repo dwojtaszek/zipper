@@ -8,6 +8,14 @@ REM
 REM After call, %ZIPPER_CMD% holds the preferred invocation (pre-built binary or
 REM dotnet-run fallback). Only builds once per run.
 
+if defined ZIPPER_EXECUTABLE (
+    REM Never build or fall back when testing an explicitly supplied artifact.
+    set "ZIPPER_CMD="%ZIPPER_EXECUTABLE%""
+    if not exist "%ZIPPER_EXECUTABLE%" exit /b 1
+    for %%F in ("%ZIPPER_EXECUTABLE%") do if not "%%~fF"=="%ZIPPER_EXECUTABLE%" exit /b 1
+    exit /b 0
+)
+
 if not "%_ZIPPER_CLI_READY%"=="" goto :eof
 
 if "%ZIPPER_PROJECT%"=="" set "ZIPPER_PROJECT=src\Zipper.csproj"

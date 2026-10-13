@@ -41,9 +41,9 @@ flowchart TD
     merge --> btmain
 
     subgraph btmain["Build and Test (build-and-test.yml) — on push to main / tag v*"]
-        prep["prepare: compute version<br/>(tag → exact, else bump patch + -dev)"]
-        sharedmain["ci.yml (same reusable workflow)<br/>+ self-contained publish per platform"]
-        rel["tag-and-release:<br/>bump patch, push vX.Y.Z tag,<br/>GitHub Release w/ 3 platform binaries"]
+        prep["prepare: reserve/resume SHA-bound draft intent<br/>(main development version, exact stable candidate)"]
+        sharedmain["ci.yml (same reusable workflow)<br/>+ native exact-binary acceptance per platform"]
+        rel["tag-and-release:<br/>seal accepted hashes, verify tag and remote assets,<br/>complete draft with 3 platform binaries"]
         prep --> sharedmain --> rel
     end
 
@@ -98,13 +98,13 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs ar
 
 ### 4. Build and Test (main) — [`build-and-test.yml`](../.github/workflows/build-and-test.yml)
 
-Trigger: `push` → `main`, and tags `v*`.
+Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_dispatch`. One repository-wide release concurrency group serializes allocation/publication; in-progress runs are never superseded/cancelled. GitHub can replace a pending run before it starts (and before it reserves an intent). The pinned actionlint does not support `queue: max`; the workflow does not claim an unbounded pending queue.
 
-1. **prepare** — computes version. Tag push → exact `vX.Y.Z`; main push → next patch with `-dev` suffix.
-2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — the same shared job graph a PR ran, invoked with `version` and `publish_mode: self-contained`, which publishes the three per-platform Release binaries (`linux-x64`, `win-x64`, `osx-arm64`) as artifacts (7-day retention). Because the gate definitions are shared, a PR that passes `ci-gate` cannot be broken by a main-side job difference that only exists after merge.
+1. **prepare** — `.github/scripts/release.py` reserves or resumes a draft release intent for the exact checked-out SHA. Main development builds retain the next patch from the latest Git tag plus `-dev` (REQ-033); the stable candidate gets the intent's separately reserved version. Tag pushes use the exact stable tag and verify its source. Draft reservations count toward stable allocation so failed builds cannot reuse another intent's version. A stale main SHA without an intent is skipped rather than allocated a newer version. Completed intents skip CI/publication.
+2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — shared gates plus self-contained native candidates on Linux, Windows, and macOS. Build and publish receive explicit version/source metadata. The candidate's native executable, not a framework-dependent build fallback, must pass independent bundle-metadata inspection, `--version`, invalid invocation, Standard Archive/Load File checks, Loadfile-Only Load File/Audit File checks, and Production Set checks. Acceptance records bind each executable to its SHA-256, version, and source SHA. Linux runs golden parity against the same candidate. PRs also exercise native candidate acceptance; main uploads accepted candidates with 30-day retention.
 
    The trade-off is that main now runs **strictly more gates than it did before** the shared workflow existed — its old `lint` job was restore + format only, while `ci` also runs `actionlint`, the requirement-traceability and `.sh`/`.bat` parity checks, the oversized-file and swallowed-output guards, the vulnerable-package scan, and `runner-tests`. Most of these can turn a main push red **without any repository change**: `dotnet list package --vulnerable` consults the live NuGet vulnerability database, so a CVE disclosed for a transitive package after merge reddens main with no PR to point at, and `runner-tests` spawns real subprocesses. Expect this: a red `Build and Test` check after a quiet period is not automatically a regression from the last merge. If it happens, re-run first to distinguish a new CVE from a real break.
-3. **tag-and-release** — main only, skipped on `[skip ci]` and skipped whenever `ci` failed or was cancelled, so a release is never published from a red build — it waits, and the red `Build and Test` check is what surfaces the wait (watchers are notified by GitHub's default-branch watch). Bumps the patch, pushes a `vX.Y.Z` tag, and creates a GitHub Release with the three platform binaries. The release body is sourced in priority order: (1) the merged PR's `## Release Notes` section, (2) GitHub Models AI summary of commits since the previous tag (model: `gpt-4o-mini`), (3) static fallback `"See commit history for changes in this release."` Agents and humans must include a `## Release Notes` section in every PR body — see [Release Notes Mandate](../AGENTS.md#release-notes-mandate). Idempotent: skips if the tag already exists. Release history is on the GitHub Releases page; there is no `CHANGELOG.md`.
+3. **tag-and-release** — runs only after all shared gates pass. Seals the accepted artifact hashes, immutable artifact IDs, and original artifact run into the draft intent before pushing its exact source-SHA tag. Existing tags must match; uploaded assets are never overwritten. An empty draft `starter` placeholder from a failed upload may be deleted and retried. Each uploaded asset is downloaded and hashed before the draft becomes public, with exactly the three expected executables. The intent transitions `reserved → sealed → completed`; a partial retry resumes the same tag/assets, downloading the sealed artifact IDs rather than reusable artifact names. Completed retries are no-ops, and old main recovery cannot promote a release as newest. Manual tags use this same tested publication path. Recovery dispatch requires an existing `source_sha`; add `release_tag` when the source has multiple intents. Accepted artifacts have 30-day retention; expiry fails closed rather than silently replacing sealed bytes. Release notes still prefer the PR's `## Release Notes`, then the GitHub Models summary, then the static fallback. The notes and validated terminal intent remain in the same release body; notes cannot supply intent state.
 
 ### 5. Scheduled / bot
 
@@ -122,6 +122,8 @@ Trigger: `push` → `main`, and tags `v*`.
 | Format (`dotnet format`) | pre-commit, lint | Yes |
 | Unit tests | pre-commit/pre-push, build-and-test | Yes |
 | Runner CLI/subprocess/Git regressions | runner-tests | Yes |
+| Release recovery / explicit executable regressions | runner-tests | Yes |
+| Native shipped-binary acceptance + Linux candidate goldens | build-and-test | Yes |
 | Line coverage ≥ 80% | build-and-test (Linux) | Yes |
 | Full E2E (all 3 OS) | build-and-test | Yes |
 | Golden parity | goldens | Yes |
@@ -150,6 +152,9 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 | goldens | `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin && ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh` |
 | perf-guard | `dotnet publish src/Zipper.csproj -c Release -o ./publish-bin && ./tests/perf/measure.sh ./publish-bin/Zipper` |
 | self-contained release publish | `dotnet publish src/Zipper.csproj -c Release -r linux-x64 --self-contained true -o publish/linux-x64` (also `win-x64`, `osx-arm64`) |
+| release recovery | `python3 -m unittest discover -s tests/ci -v` (offline Git/CLI/file-transfer boundaries) |
+| compiled version metadata | `bash tests/test-build-version.sh` |
+| exact published-binary acceptance | `ZIPPER_EXECUTABLE=/absolute/path/to/binary EXPECTED_VERSION=X.Y.Z EXPECTED_SHA=<source-sha> bash tests/test-published-artifact.sh` (native Windows: `.bat`) |
 
 **Rules of the road:**
 - Install the hooks once (`./setup-hook.sh`) so format + tests run before every commit/push.

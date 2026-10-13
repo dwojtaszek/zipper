@@ -16,7 +16,7 @@ public static class Program
             var infoVer = asm.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             var fileVer = asm.GetCustomAttribute<System.Reflection.AssemblyFileVersionAttribute>()?.Version;
             var asmVer = asm.GetName().Version?.ToString();
-            var version = (!string.IsNullOrEmpty(infoVer) && infoVer != "1.0.0.0" && infoVer != "1.0.0") ? infoVer : (fileVer ?? asmVer ?? "2.0.0");
+            var version = !string.IsNullOrEmpty(infoVer) ? infoVer : (fileVer ?? asmVer ?? "2.0.0");
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             return 0;
         }
