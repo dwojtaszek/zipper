@@ -28,6 +28,15 @@ public class ProductionFileMaterializerTests
         foreach (var file in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
         {
             File.SetLastWriteTimeUtc(file, fixedTime);
+            if (!OperatingSystem.IsWindows())
+            {
+                // ZipFile.CreateFromDirectory preserves the source Unix mode in the entry's
+                // external attributes while ZipArchive.CreateEntry writes the 0644 default;
+                // pin the mode so byte parity does not depend on the host umask.
+                File.SetUnixFileMode(
+                    file,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            }
         }
 
         try
