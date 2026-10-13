@@ -218,10 +218,20 @@ fi
 
 # Check for version handling
 echo "15. Checking version handling..."
-if grep -q "python3 .github/scripts/release.py prepare" "$CALLER_WORKFLOW_FILE"; then
+if grep -q "python3 .controller/.github/scripts/release.py prepare" "$CALLER_WORKFLOW_FILE"; then
     echo "✓ Version handling uses the durable release controller"
 else
     echo "✗ Missing version handling"
+    exit 1
+fi
+
+# Recovery dispatches check out the historical source SHA; the controller
+# itself must come from the triggering ref (the fixed pipeline), so both
+# release jobs need the second checkout at .controller.
+if [ "$(grep -c "path: .controller" "$CALLER_WORKFLOW_FILE")" -eq 2 ]; then
+    echo "✓ Release controller runs from the triggering ref in both release jobs"
+else
+    echo "✗ Release jobs must check out the controller from the triggering ref"
     exit 1
 fi
 

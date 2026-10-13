@@ -187,8 +187,8 @@ jobs:
 
     def test_commented_release_controller_fails(self):
         mutated = self.release_text.replace(
-            "python3 .github/scripts/release.py publish",
-            "# python3 .github/scripts/release.py publish",
+            "python3 .controller/.github/scripts/release.py publish",
+            "# python3 .controller/.github/scripts/release.py publish",
         )
         with self.assertRaises(WorkflowValidationError):
             validate_artifact_consumer(parse_workflow_yaml(mutated))

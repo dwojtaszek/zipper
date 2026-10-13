@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline GitHub release boundary for the real release controller."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,10 +32,17 @@ if args[0] == "api":
     else:
         release = next(r for r in releases if r["id"] == int(endpoint.split("/")[1]))
         if method == "PATCH":
+            if "tag_name" not in payload:
+                # Real server behavior: a PATCH without tag_name discards the draft's
+                # tag and assigns an auto-generated untagged-<hex> name.
+                release["tag_name"] = "untagged-" + hashlib.sha1(
+                    f"{release['id']}:{release.get('tag_name')}".encode()).hexdigest()[:20]
             release.update(payload)
         result = release
 elif args[:2] == ["release", "upload"]:
-    release = next(r for r in releases if r["tag_name"] == args[2])
+    release = next((r for r in releases if r["tag_name"] == args[2]), None)
+    if release is None:
+        sys.exit(f"release not found: {args[2]}")
     if len(release["assets"]) + 1 == int(os.environ.get("FAIL_UPLOAD_AT", "0")):
         sys.exit(1)
     path = Path(args[3])
@@ -51,7 +59,9 @@ elif args[:2] == ["release", "upload"]:
                               "size": path.stat().st_size, "state": "uploaded"})
     result = {}
 elif args[:2] == ["release", "download"]:
-    release = next(r for r in releases if r["tag_name"] == args[2])
+    release = next((r for r in releases if r["tag_name"] == args[2]), None)
+    if release is None:
+        sys.exit(f"release not found: {args[2]}")
     name = args[args.index("--pattern") + 1]
     dest = Path(args[args.index("--dir") + 1]) / name
     shutil.copyfile(root / "remote-assets" / str(release["id"]) / name, dest)
