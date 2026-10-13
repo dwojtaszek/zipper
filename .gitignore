@@ -54,6 +54,8 @@ coverage*
 # ...and the audit module whose file name collides with coverage*
 !tools/typesafe-audit/quality/coverage_gaps.py
 publish-bin/
+publish/
+release-intent.json
 
 # OS files
 .DS_Store

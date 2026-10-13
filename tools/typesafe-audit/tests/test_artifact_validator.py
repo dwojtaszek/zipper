@@ -88,14 +88,14 @@ class TestArtifactValidator(unittest.TestCase):
         self.assertIn("name", str(ctx.exception).lower())
 
     def test_missing_retention_days_fails(self):
-        mutated_ci = self.ci_text.replace("retention-days: 7", "retention-days: 0")
+        mutated_ci = re.sub(r"retention-days: \d+", "retention-days: 0", self.ci_text)
         parsed_ci = parse_workflow_yaml(mutated_ci)
         with self.assertRaises(WorkflowValidationError) as ctx:
             validate_artifact_producer(parsed_ci)
         self.assertIn("retention-days", str(ctx.exception).lower())
 
     def test_boolean_retention_days_fails(self):
-        mutated_ci = self.ci_text.replace("retention-days: 7", "retention-days: true")
+        mutated_ci = re.sub(r"retention-days: \d+", "retention-days: true", self.ci_text)
         parsed_ci = parse_workflow_yaml(mutated_ci)
         with self.assertRaises(WorkflowValidationError) as ctx:
             validate_artifact_producer(parsed_ci)
@@ -166,7 +166,7 @@ jobs:
 
     def test_consumer_download_with_name_fails(self):
         mutated_rel = re.sub(
-            r"(uses:\s*actions/download-artifact@[^\n]+\n\s+with:\n)",
+            r"(uses:\s*actions/download-artifact@[^\n]+\n(?:\s+if:[^\n]+\n)?\s+with:\n)",
             r"\1          name: custom-name\n",
             self.release_text,
         )
@@ -177,13 +177,30 @@ jobs:
 
     def test_changed_release_paths_fails(self):
         mutated_rel = self.release_text.replace(
-            "artifacts/zipper-win-x64/zipper-win-x64.exe",
-            "artifacts/zipper-win-x64/different.exe",
+            "--artifacts artifacts",
+            "--artifacts different",
         )
         parsed_rel = parse_workflow_yaml(mutated_rel)
         with self.assertRaises(WorkflowValidationError) as ctx:
             validate_artifact_consumer(parsed_rel)
         self.assertIn("release", str(ctx.exception).lower())
+
+    def test_commented_release_controller_fails(self):
+        mutated = self.release_text.replace(
+            "python3 .github/scripts/release.py publish",
+            "# python3 .github/scripts/release.py publish",
+        )
+        with self.assertRaises(WorkflowValidationError):
+            validate_artifact_consumer(parse_workflow_yaml(mutated))
+
+    def test_release_controller_without_immutable_download_fails(self):
+        mutated = self.release_text.replace(
+            "artifact-ids: ${{ needs.prepare.outputs.artifact_ids }}",
+            "pattern: zipper-*",
+        )
+        with self.assertRaises(WorkflowValidationError) as ctx:
+            validate_artifact_consumer(parse_workflow_yaml(mutated))
+        self.assertIn("artifact-ids", str(ctx.exception))
 
     def test_missing_pdb_cleanup_fails(self):
         mutated_ci = self.ci_text.replace(

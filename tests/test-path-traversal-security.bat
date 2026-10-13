@@ -16,18 +16,10 @@ mkdir "%TEST_DIR%"
 echo Created test directory: %TEST_DIR%
 echo.
 
-REM Build the application
-echo Building Zipper...
-dotnet build src\Zipper.csproj --configuration Release > nul 2>&1
+REM Resolve the CLI without rebuilding an explicit executable.
+call "%~dp0_zipper-cli.bat"
 if errorlevel 1 (
-    echo Build failed
-    rmdir /s /q "%TEST_DIR%"
-    exit /b 1
-)
-
-set ZIPPER_DLL=src\bin\Release\net10.0\Zipper.dll
-if not exist "%ZIPPER_DLL%" (
-    echo Could not find Zipper DLL at %ZIPPER_DLL%
+    echo CLI resolution failed
     rmdir /s /q "%TEST_DIR%"
     exit /b 1
 )
@@ -35,7 +27,7 @@ if not exist "%ZIPPER_DLL%" (
 REM Test 1: Normal path should work
 echo.
 echo Test 1: Normal path should work
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "%TEST_DIR%\normal" > nul 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_DIR%\normal" > nul 2>&1
 if exist "%TEST_DIR%\normal\archive_*.zip" (
     echo [OK] Normal path works correctly
     del /q "%TEST_DIR%\normal\*.*" > nul 2>&1
@@ -46,7 +38,7 @@ if exist "%TEST_DIR%\normal\archive_*.zip" (
 REM Test 2: Path traversal with ..\ should be blocked
 echo.
 echo Test 2: Path traversal with ..\ should be blocked
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "%TEST_DIR%\..\security_test" > "%TEMP%\security_output.txt" 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_DIR%\..\security_test" > "%TEMP%\security_output.txt" 2>&1
 set SECURITY_EXIT_CODE=%errorlevel%
 findstr /C:"Path traversal detected" "%TEMP%\security_output.txt" > nul
 if !errorlevel! equ 0 if !SECURITY_EXIT_CODE! neq 0 (
@@ -60,7 +52,7 @@ if !errorlevel! equ 0 if !SECURITY_EXIT_CODE! neq 0 (
 REM Test 3: Path traversal with absolute path should be blocked
 echo.
 echo Test 3: Absolute path traversal attempt should be blocked
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "C:\Windows\System32\security_test" > "%TEMP%\system_output.txt" 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "C:\Windows\System32\security_test" > "%TEMP%\system_output.txt" 2>&1
 set SYSTEM_EXIT_CODE=%errorlevel%
 findstr /C:"Path traversal detected" "%TEMP%\system_output.txt" > nul
 if !errorlevel! equ 0 if !SYSTEM_EXIT_CODE! neq 0 (
@@ -81,7 +73,7 @@ if !errorlevel! equ 0 if !SYSTEM_EXIT_CODE! neq 0 (
 REM Test 4: Path with invalid characters should be blocked
 echo.
 echo Test 4: Path with invalid characters should be blocked
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "%TEST_DIR%\invalid<name" > "%TEMP%\invalid_output.txt" 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_DIR%\invalid<name" > "%TEMP%\invalid_output.txt" 2>&1
 set INVALID_EXIT_CODE=%errorlevel%
 findstr /C:"Invalid character" "%TEMP%\invalid_output.txt" > nul
 if !errorlevel! equ 0 if !INVALID_EXIT_CODE! neq 0 (
@@ -95,7 +87,7 @@ if !errorlevel! equ 0 if !INVALID_EXIT_CODE! neq 0 (
 REM Test 5: Empty path should be blocked
 echo.
 echo Test 5: Empty path should be blocked
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "" > "%TEMP%\empty_output.txt" 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "" > "%TEMP%\empty_output.txt" 2>&1
 set EMPTY_EXIT_CODE=%errorlevel%
 findstr /C:"cannot be null or empty" "%TEMP%\empty_output.txt" > nul
 if !errorlevel! equ 0 if !EMPTY_EXIT_CODE! neq 0 (
@@ -115,7 +107,7 @@ if !errorlevel! equ 0 if !EMPTY_EXIT_CODE! neq 0 (
 REM Test 7: Custom column profile path traversal with ..\ should be blocked
 echo.
 echo Test 7: Custom column profile path traversal with ..\ should be blocked
-dotnet "%ZIPPER_DLL%" --type pdf --count 5 --output-path "%TEST_DIR%\profile_test" --column-profile "..\outside-profile.json" > "%TEMP%\profile_output.txt" 2>&1
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_DIR%\profile_test" --column-profile "..\outside-profile.json" > "%TEMP%\profile_output.txt" 2>&1
 set PROF_EXIT_CODE=%errorlevel%
 findstr /C:"Path traversal detected" "%TEMP%\profile_output.txt" > nul
 if !errorlevel! equ 0 if !PROF_EXIT_CODE! neq 0 (

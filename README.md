@@ -158,7 +158,7 @@ All command-line flags recognized by Zipper:
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
 | `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
-| `--version` | `false` | flag | Print version string and exit |
+| `--version` | `false` | flag | Print full embedded version string and exit |
 
 ### Standard Load File Columns
 

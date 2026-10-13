@@ -15,6 +15,13 @@ set BUILD_DIR=src\bin\Release\net10.0
 
 REM --- Build Once ---
 
+if defined ZIPPER_EXECUTABLE (
+    call "%~dp0_zipper-cli.bat"
+    if errorlevel 1 exit /b 1
+    set "BINARY=!ZIPPER_CMD!"
+    goto :binary_ready
+)
+
 echo [ INFO ] Building project (one-time)...
 dotnet build %PROJECT% -c Release --nologo -v quiet 2>nul
 if errorlevel 1 (
@@ -28,6 +35,7 @@ if exist "%BUILD_DIR%\Zipper.exe" (
 ) else (
     set BINARY=dotnet run --project %PROJECT% --no-build -c Release --
 )
+:binary_ready
 echo [ INFO ] Using binary: %BINARY%
 
 REM --- Setup ---

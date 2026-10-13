@@ -167,11 +167,11 @@ To enforce the pre-commit testing requirement, the repository will include a scr
 
 ### FR-024: Semantic Versioning and Release Automation
 - **REQ-030**: The application's version will follow Semantic Versioning in the format `MAJOR.MINOR.PATCH`.
-- **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically increments the patch version.
-- **REQ-032**: Manual version control is supported by pushing specific tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`).
+- **REQ-031**: Version numbers are managed through Git tags (e.g., `v1.2.3`). When a PR is merged to `main`, the CI/CD pipeline automatically reserves the next available patch version once for that source SHA. Recovery reuses that reservation, never allocates another version to the same source.
+- **REQ-032**: Manual version control is supported by pushing specific stable tags (e.g., `git tag v1.1.0 && git push origin v1.1.0`). The tag pipeline tests and publishes that exact version and source SHA without incrementing it.
 - **REQ-033**: On every push to the `main` branch, the CI/CD pipeline will build the application, embedding a development version (next patch from the latest tag with a `-dev` suffix) into the assembly as the `InformationalVersion`. On tag pushes (`v*`), the pipeline embeds the exact tag version.
-- **REQ-034**: The application must display its full version string when invoked with `--version` (or equivalent version flag), and must embed it as the assembly `InformationalVersion` so it appears in diagnostic output. It need not print a startup banner on normal invocations.
-- **REQ-035**: The CI/CD pipeline will automatically create a new GitHub Release for each successful `main` branch build. The release tag and title will be named according to the version (e.g., `v1.2.3`).
+- **REQ-034**: The application must display its full version string when invoked with `--version` (or equivalent version flag), and must embed it as the assembly `InformationalVersion` so it appears in diagnostic output. Assembly/File versions use its numeric `MAJOR.MINOR.PATCH.0`; CI also embeds the source SHA as assembly `SourceRevisionId` metadata without changing the displayed version. It need not print a startup banner on normal invocations.
+- **REQ-035**: The CI/CD pipeline will automatically create a new GitHub Release for each successful, current `main` branch build. The release tag and title will be named according to the reserved stable version (e.g., `v1.2.3`). Main's development build remains distinct from the stable release candidate. A durable draft intent records source SHA, version, accepted artifact identities, original artifact run, and completion state. Only native, self-contained binaries that pass version/metadata, invalid-invocation, Standard, Loadfile-Only, and Production Set acceptance may be uploaded. All three remote assets must match the accepted SHA-256 hashes before the release becomes public. Interrupted publication resumes the same intent; completed retries are no-ops. Recovering an older main SHA must not promote it as the newest release.
 
 ---
 

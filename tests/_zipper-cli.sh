@@ -12,6 +12,15 @@
 _zipper_project="${ZIPPER_PROJECT:-src/Zipper.csproj}"
 
 _zipper_resolve_bin() {
+    if [[ -n "${ZIPPER_EXECUTABLE+x}" ]]; then
+        if [[ "$ZIPPER_EXECUTABLE" != /* || ! -f "$ZIPPER_EXECUTABLE" || ! -x "$ZIPPER_EXECUTABLE" ]]; then
+            echo "[_zipper-cli] ZIPPER_EXECUTABLE must be an absolute executable file" >&2
+            export _ZIPPER_OVERRIDE_INVALID=1
+            return 1
+        fi
+        export _ZIPPER_BIN="$ZIPPER_EXECUTABLE"
+        return 0
+    fi
     # Already resolved (e.g. parent script sourced this) keep it.
     if [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
         return 0
@@ -42,7 +51,12 @@ _zipper_resolve_bin() {
 }
 
 zipper() {
-    if [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
+    if [[ -n "${ZIPPER_EXECUTABLE+x}" ]]; then
+        if [[ "${_ZIPPER_OVERRIDE_INVALID:-}" == 1 || ! -x "$ZIPPER_EXECUTABLE" ]]; then
+            return 1
+        fi
+        "$ZIPPER_EXECUTABLE" "$@"
+    elif [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
         "${_ZIPPER_BIN}" "$@"
     else
         # Build failed or binary not found: fall back to `dotnet run` WITHOUT

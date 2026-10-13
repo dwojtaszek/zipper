@@ -157,8 +157,8 @@ fi
 
 # Check for artifact retention
 echo "10. Checking artifact retention configuration..."
-if grep -q "retention-days: 7" "$SHARED_WORKFLOW_FILE"; then
-    echo "✓ Artifact retention set to 7 days"
+if grep -q "retention-days: 30" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ Accepted release artifacts retained for 30 days"
 else
     echo "✗ Missing artifact retention configuration"
     exit 1
@@ -182,10 +182,10 @@ fi
 
 # Check for release conditions
 echo "12. Checking release conditions..."
-if grep -q "if: github.ref == 'refs/heads/main'" "$CALLER_WORKFLOW_FILE"; then
-    echo "✓ Release job runs on main"
+if grep -q "if: needs.prepare.outputs.skip != 'true'" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Release job requires an incomplete reserved intent"
 else
-    echo "✗ Release job missing main branch condition"
+    echo "✗ Release job missing reserved intent condition"
     exit 1
 fi
 
@@ -218,8 +218,8 @@ fi
 
 # Check for version handling
 echo "15. Checking version handling..."
-if grep -q "Set Version" "$CALLER_WORKFLOW_FILE"; then
-    echo "✓ Has version handling"
+if grep -q "python3 .github/scripts/release.py prepare" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Version handling uses the durable release controller"
 else
     echo "✗ Missing version handling"
     exit 1

@@ -46,9 +46,11 @@ MAX_ACTIVE_WORKTREES = int(os.environ.get("MAX_ACTIVE_WORKTREES", "1"))
 ACTIVE_AGENT = os.environ.get("ACTIVE_AGENT", "")
 PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
+MERGE_MAINTAINERS = set(filter(None, os.environ.get("MERGE_MAINTAINERS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
 MAIN_REMOTE_REF = "origin/main"
 REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
+GITHUB_REPOSITORY = "dwojtaszek/zipper"
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -698,14 +700,18 @@ def _coderabbit_gate_path(pr_number: int) -> str:
     return os.path.join(STATE_DIR, f"pr-{pr_number}-coderabbit-gate.json")
 
 
-def _record_coderabbit_gate_failure(pr_number: int, branch: str, error: str) -> None:
+def _record_coderabbit_gate_failure(pr_number: int, branch: str, error: str, completion_ready: bool = True) -> None:
     os.makedirs(STATE_DIR, exist_ok=True)
     state = {
         "pr_number": pr_number,
         "branch": branch,
         "error": error,
+        "completion_ready": completion_ready,
         "failed_at": datetime.now(timezone.utc).isoformat(),
     }
+    code, head, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if code == 0 and re.fullmatch(r"[0-9a-f]{40}", head.strip()):
+        state["local_head"] = head.strip()
     try:
         with open(_coderabbit_gate_path(pr_number), "w") as f:
             json.dump(state, f)
@@ -758,12 +764,43 @@ def _state_path(issue_number: str) -> str:
     return os.path.join(STATE_DIR, f"issue-{issue_number}.json")
 
 
-def _save_pr_state(issue_number: str, pr_num: str, branch: str) -> None:
+def _save_pr_state(issue_number: str, pr_num: str, branch: str, authorized_head: str | None = None) -> None:
     os.makedirs(STATE_DIR, exist_ok=True)
     state = {"pr_number": pr_num, "branch": branch, "created_at": datetime.now(timezone.utc).isoformat()}
+    # Local state is provenance, not a wildcard authorization for future heads.
+    code, head = 0, authorized_head
+    if head is None:
+        code, head, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if code == 0 and re.fullmatch(r"[0-9a-f]{40}", head.strip()):
+        state["authorized_head"] = head.strip()
     with open(_state_path(issue_number), "w") as f:
         json.dump(state, f)
     print(f"[state] Saved PR #{pr_num} for issue #{issue_number} to {_state_path(issue_number)}")
+
+def _record_initial_pr_origin(issue_number: str, pr_num: str, branch: str, completion_ready: bool) -> str | None:
+    """Keep published origin distinct from unfinished local mission progress."""
+    code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}"], cwd=REPO_PATH)
+    try:
+        pr = json.loads(out) if code == 0 else {}
+        head, base = pr.get("head") or {}, pr.get("base") or {}
+        sha = head.get("sha", "")
+        if (pr.get("state") != "open" or (pr.get("user") or {}).get("login") not in TRUSTED_AUTHORS
+                or head.get("ref") != branch or base.get("ref") != "main"
+                or (head.get("repo") or {}).get("full_name") != GITHUB_REPOSITORY
+                or (base.get("repo") or {}).get("full_name") != GITHUB_REPOSITORY
+                or not re.fullmatch(r"[0-9a-f]{40}", sha)):
+            return None
+        ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", sha, f"refs/heads/{branch}"], cwd=REPO_PATH)
+        if ancestor_code != 0:
+            return None
+        _save_pr_state(issue_number, pr_num, branch, sha)
+        local_code, local, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
+        if local_code != 0 or local.strip() != sha or not completion_ready:
+            _record_coderabbit_gate_failure(int(pr_num), branch, "Initial local progress requires completion/review", completion_ready)
+        return sha
+    except (ValueError, TypeError, AttributeError):
+        return None
+
 
 
 def _load_pr_state(issue_number: str) -> dict | None:
@@ -786,6 +823,84 @@ def _clear_pr_state(issue_number: str) -> None:
             print(f"[state] Cleared state for issue #{issue_number}")
         except Exception as e:
             print(f"[state] Failed to clear state for issue #{issue_number}: {e}")
+
+
+def _authorized_pr(pr_number, issue_number=None, expected_head=None):
+    """Fail closed on origin, base, provenance, and head-bound authorization."""
+    code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}"], cwd=REPO_PATH)
+    try:
+        pr = json.loads(out) if code == 0 else {}
+        head, base, user = pr.get("head") or {}, pr.get("base") or {}, pr.get("user") or {}
+        sha, branch = head.get("sha", ""), head.get("ref", "")
+        if (pr.get("state") != "open" or pr.get("draft") is not False
+                or base.get("ref") != "main"
+                or (base.get("repo") or {}).get("full_name") != GITHUB_REPOSITORY
+                or (head.get("repo") or {}).get("full_name") != GITHUB_REPOSITORY
+                or not re.fullmatch(r"[0-9a-f]{40}", sha)
+                or not branch or (expected_head is not None and sha != expected_head)):
+            return None
+        # REST's immutable account ID and Bot type, not a branch-name convention.
+        if user.get("login") == "dependabot[bot]" and user.get("id") == 49699333 and user.get("type") == "Bot":
+            code, out, _ = run_cmd(
+                ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}/commits", "--paginate", "--slurp"],
+                cwd=REPO_PATH,
+            )
+            pages = json.loads(out) if code == 0 else []
+            commits = [commit for page in pages for commit in (page if isinstance(page, list) else [page])]
+            # A bot-created PR can receive non-bot commits. Every contributing
+            # commit must have signed bot provenance, not merely the PR creator.
+            bot = ("dependabot[bot]", 49699333, "Bot")
+            signers = (bot, ("web-flow", 19864447, "User"))
+            if (commits and commits[-1].get("sha") == sha and all(
+                    tuple((commit.get("author") or {}).get(k) for k in ("login", "id", "type")) == bot
+                    and tuple((commit.get("committer") or {}).get(k) for k in ("login", "id", "type")) in signers
+                    and (commit.get("commit", {}).get("verification") or {}).get("verified") is True
+                    and (commit.get("commit", {}).get("verification") or {}).get("reason") == "valid"
+                    for commit in commits)):
+                return pr
+        state = _load_pr_state(str(issue_number)) if issue_number is not None else None
+        if (user.get("login") in TRUSTED_AUTHORS and state
+                and str(state.get("pr_number")) == str(pr_number)
+                and state.get("branch") == branch and state.get("authorized_head") == sha):
+            return pr
+        # Unknown/legacy origins need a maintainer's explicit approval of this SHA.
+        code, out, _ = run_cmd(
+            ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}/reviews", "--paginate", "--slurp"],
+            cwd=REPO_PATH,
+        )
+        pages = json.loads(out) if code == 0 else []
+        reviews = [review for page in pages for review in (page if isinstance(page, list) else [page])]
+        latest = {}
+        for review in reviews:
+            login = (review.get("user") or {}).get("login")
+            if login in MERGE_MAINTAINERS and review.get("state") != "COMMENTED":
+                latest[login] = review
+        if any(r.get("state") == "APPROVED" and r.get("commit_id") == sha for r in latest.values()):
+            return pr
+    except (ValueError, TypeError, AttributeError):
+        pass
+    print(f"[authorization] PR #{pr_number} is not authorized for automated action.")
+    return None
+
+
+def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=False):
+    if _is_coderabbit_gate_failed(pr_number):
+        return 1, "", "Local CodeRabbit/publication gate remains blocked"
+    if not _authorized_pr(pr_number, issue_number, reviewed_head):
+        return 1, "", "PR origin, provenance, or reviewed head is no longer authorized"
+    code, out, _ = run_cmd(
+        ["gh", "pr", "view", str(pr_number), "--json", "headRefOid,statusCheckRollup"], cwd=REPO_PATH,
+    )
+    try:
+        current = json.loads(out) if code == 0 else {}
+        if current.get("headRefOid") != reviewed_head or _ci_status_from_rollup(current.get("statusCheckRollup", []))[0] != "SUCCESS":
+            return 1, "", "CI is not successful on the authorized reviewed head"
+    except (ValueError, AttributeError):
+        return 1, "", "Cannot verify current CI/head"
+    command = ["gh", "pr", "merge", str(pr_number), "--squash", "--match-head-commit", reviewed_head]
+    if delete_branch:
+        command.append("--delete-branch")
+    return run_cmd(command, cwd=REPO_PATH)
 
 
 def _rerun_count_path(pr_number: int) -> str:
@@ -963,15 +1078,35 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
     return -1
 
 
-def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int) -> bool:
+def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int,
+                                 issue_number: str, expected_head: str, completion_head: str) -> bool:
     if _latest_commit_is_wip(wt_path):
-        return True
+        _record_coderabbit_gate_failure(pr_number, branch, "Completion remains a local WIP checkpoint", False)
+        return False
+    remote_code, remote, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=wt_path)
+    local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", expected_head, completion_head], cwd=wt_path)
+    if (remote_code != 0 or not remote.split() or remote.split()[0] != expected_head
+            or local_code != 0 or local.strip() != completion_head
+            or ancestor_code != 0 or not _worktree_is_clean(wt_path)):
+        _record_coderabbit_gate_failure(pr_number, branch, "Authorized remote head changed or local completion is not a clean descendant")
+        print("[authorization] Completion kept local; captured remote head no longer matches.")
+        return False
     review_ok, review_error = _run_coderabbit_pre_pr_check(wt_path)
     if not review_ok:
         _record_coderabbit_gate_failure(pr_number, branch, review_error)
         print(f"[babysit] Completion kept local: {review_error}")
         return False
-    push_code, _, push_error = run_cmd(["git", "push", "origin", branch], cwd=wt_path)
+    authorized = _authorized_pr(pr_number, issue_number, expected_head)
+    if not authorized or authorized["head"]["ref"] != branch:
+        _record_coderabbit_gate_failure(pr_number, branch, "Publication authorization was revoked or changed")
+        return False
+    # The ancestor check makes this a fast-forward only. The lease is an atomic
+    # compare-and-swap, not permission to overwrite another contributor's head.
+    push_code, _, push_error = run_cmd([
+        "git", "push", "origin", f"{completion_head}:refs/heads/{branch}",
+        f"--force-with-lease=refs/heads/{branch}:{expected_head}",
+    ], cwd=wt_path)
     if push_code != 0:
         _record_coderabbit_gate_failure(pr_number, branch, f"git push failed: {push_error}")
         print(f"[babysit] Reviewed completion could not be published: {push_error}")
@@ -1007,25 +1142,42 @@ def _babysit_with_fallback(
     issue_number: int,
     pr_number: int = 0,
     before_review_output: str | None = None,
-    publish_local_commits: bool = False,
 ) -> None:
     """Try babysit with each agent candidate until one succeeds.
     Existing PRs require published head/check/thread progress after exit 0;
     local commits alone do not publish a completion.
     """
     before = _babysit_snapshot(wt_path, branch, pr_number, before_review_output)
+    authorized = _authorized_pr(pr_number, str(issue_number)) if pr_number else None
+    if pr_number and not authorized:
+        return
+    if pr_number:
+        prompt += (
+            "\nPublication override: Do NOT push, pull, merge a remote PR branch, or create a PR. "
+            "Finish validation and autoreview, commit locally, then return. The runner owns "
+            "review and atomic publication against the captured authorized head."
+        )
 
     for agent_name, model_name in AGENT_CANDIDATES:
         plugin = AGENT_PLUGINS.get(agent_name)
         if plugin is None:
             continue
+        if pr_number and not _authorized_pr(pr_number, str(issue_number), authorized["head"]["sha"]):
+            return
         print(f"[babysit] Trying {agent_name}/{model_name}...")
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
-        if code == 0 and publish_local_commits and not _publish_reviewed_completion(wt_path, branch, pr_number):
-            return
-
         after = _babysit_snapshot(wt_path, branch, pr_number)
+        if code != 0 and pr_number and after[2].strip() != before[2].strip():
+            _record_coderabbit_gate_failure(pr_number, branch, "Repair mission interrupted before completion", False)
+        if code == 0 and pr_number and (
+                after[2].strip() != before[2].strip() or _is_coderabbit_gate_failed(pr_number)):
+            completion_head = after[2].strip()
+            if _publish_reviewed_completion(wt_path, branch, pr_number, str(issue_number), authorized["head"]["sha"], completion_head):
+                _save_pr_state(str(issue_number), str(pr_number), branch, completion_head)
+                print(f"[babysit] {agent_name}/{model_name} succeeded (reviewed completion published)")
+                _jev_verify_completion(wt_path, branch, issue_number)
+            return
         if code == 0 and _babysit_progressed(pr_number, before, after):
             print(f"[babysit] {agent_name}/{model_name} succeeded (commits/state/threads changed)")
             _jev_verify_completion(wt_path, branch, issue_number)
@@ -1179,6 +1331,8 @@ def babysit_active_worktrees():
                         pattern_issue = f"issue {issue_number}"
                         if (pattern in head_ref.lower() or f"issue_{issue_number}" in head_ref.lower() or head_ref.endswith(f"-{issue_number}") or
                             pattern_hash in title or pattern_issue in title or pattern_hash in body or pattern_issue in body):
+                            if not _authorized_pr(pr_info.get("number"), issue_number):
+                                continue
                             matched_branch = head_ref
                             print(f"Found existing open PR #{pr_info.get('number')} on branch '{matched_branch}' by trusted author '{pr_author}'. Aligning worktree...")
                             break
@@ -1226,23 +1380,22 @@ def babysit_active_worktrees():
             if agy_code == 0 and not pr_num_val and had_prior_work and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
                 pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
 
-            if agy_code == 0 and pr_num_val:
+            if pr_num_val:
+                ready = agy_code == 0 and not _latest_commit_is_wip(wt_path)
+                origin = _record_initial_pr_origin(issue_number, pr_num_val, branch, ready)
+                if agy_code != 0:
+                    _record_coderabbit_gate_failure(int(pr_num_val), branch, "Initial mission interrupted before completion", False)
+                    continue
                 if _latest_commit_is_wip(wt_path):
                     print(f"Branch '{branch}' has WIP checkpoint commit; leaving PR #{pr_num_val} pending until complete.")
                 else:
-                    cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
-                    if not cr_ok:
-                        print(f"Agent updated PR #{pr_num_val} but failed CodeRabbit pre-PR gate: {cr_err}")
-                        _record_coderabbit_gate_failure(int(pr_num_val), branch, cr_err)
+                    local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+                    if origin and local_code == 0 and _publish_reviewed_completion(
+                            wt_path, branch, int(pr_num_val), issue_number, origin, local.strip()):
+                        _save_pr_state(issue_number, pr_num_val, branch, local.strip())
+                        print(f"PR #{pr_num_val} updated for issue #{issue_number}.")
                     else:
-                        push_code, _, push_err = run_cmd(["git", "push", "origin", branch], cwd=wt_path)
-                        if push_code != 0:
-                            print(f"Failed to push updated branch '{branch}' for PR #{pr_num_val}: {push_err}")
-                            _record_coderabbit_gate_failure(int(pr_num_val), branch, f"git push failed:\n{push_err}")
-                        else:
-                            _clear_coderabbit_gate_failure(int(pr_num_val))
-                            _save_pr_state(issue_number, pr_num_val, branch)
-                            print(f"PR #{pr_num_val} updated for issue #{issue_number}.")
+                        print(f"Initial publication for PR #{pr_num_val} remains blocked; preserving work.")
             elif agy_code == 0 and pr_create_err:
                 print(f"PR creation failed: {pr_create_err}")
             elif agy_code == 0 and not had_prior_work:
@@ -1282,7 +1435,38 @@ def babysit_active_worktrees():
                 )
             continue
 
-        if _pr_head_commit_is_wip(pr_number):
+        authorized = _authorized_pr(pr_number, issue_number)
+        if not authorized:
+            continue
+        reviewed_head = authorized["head"]["sha"]
+        local_code, local_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+        try:
+            with open(_coderabbit_gate_path(pr_number)) as stream:
+                pending = json.load(stream)
+        except (OSError, ValueError):
+            pending = {}
+        resume_local_progress = (
+            local_code == 0 and pending.get("branch") == branch
+            and pending.get("local_head") == local_head.strip()
+            and pending.get("completion_ready") is False
+        )
+        if local_code != 0 or local_head.strip() != reviewed_head:
+            # Only a recorded runner-owned completion may be ahead of the
+            # authorized remote head. Arbitrary local divergence stays blocked.
+            ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", reviewed_head, "HEAD"], cwd=wt_path)
+            if (local_code != 0 or pending.get("branch") != branch
+                    or pending.get("local_head") != local_head.strip()
+                    or ancestor_code != 0):
+                print(f"[authorization] Local worktree does not match PR #{pr_number} head. Waiting.")
+                continue
+            if pending.get("completion_ready", True) and _worktree_is_clean(wt_path):
+                if _publish_reviewed_completion(wt_path, branch, pr_number, issue_number, reviewed_head, local_head.strip()):
+                    _save_pr_state(issue_number, str(pr_number), branch, local_head.strip())
+                    print(f"[babysit] Retained completion published for PR #{pr_number}; waiting for current CI.")
+                    continue
+            resume_local_progress = True
+
+        if _pr_head_commit_is_wip(pr_number) or resume_local_progress:
             worktree_key = os.path.realpath(wt_path)
             if worktree_key in _WIP_CONTINUATIONS:
                 print(f"PR #{pr_number} WIP continuation already attempted in this invocation.")
@@ -1291,20 +1475,17 @@ def babysit_active_worktrees():
                 print(f"[DRY RUN] Would resume WIP checkpoint for PR #{pr_number}.")
                 continue
             _WIP_CONTINUATIONS.add(worktree_key)
-            print(f"PR #{pr_number} has unfinished WIP work. Resuming through normal completion gates.")
+            print(f"PR #{pr_number} has unfinished WIP/local work. Resuming through normal completion gates.")
             issue_title, safe_body = _fetch_issue_body(issue_number)
             prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch)
             prompt += (
                 f"\nExisting PR is #{pr_number}. Finish the actual WIP work; do not create a duplicate PR, "
                 "rename the checkpoint, or make an empty commit merely to unblock merging. "
                 "Preserve existing edits and retain all review and CI gates."
-                "\nPublication override: Do NOT push or create a PR. Finish validation and "
-                "autoreview, commit locally, then return. The runner owns the committed "
-                "CodeRabbit check and will push only after it passes."
             )
             wait_for_tokens()
             _babysit_with_fallback(
-                prompt, wt_path, branch, issue_number, pr_number, publish_local_commits=True,
+                prompt, wt_path, branch, issue_number, pr_number,
             )
             continue
 
@@ -1352,7 +1533,7 @@ def babysit_active_worktrees():
                     else:
                         _clear_coderabbit_gate_failure(pr_number)
                         print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
-                        merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_number), "--squash", "--admin"], cwd=REPO_PATH)
+                        merge_code, merge_out, merge_err = _merge_authorized_pr(pr_number, issue_number, reviewed_head)
                         is_merged = (merge_code == 0)
                         if not is_merged:
                             st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
@@ -1457,12 +1638,24 @@ def babysit_active_worktrees():
     babysit_dependabot_prs()
     return _active_worktree_count()
 
-def _recreate_worktree_for_pr(issue_number: str, branch: str) -> None:
+def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expected_head) -> None:
+    authorized = _authorized_pr(pr_number, issue_number, expected_head)
+    if not authorized or authorized["head"]["ref"] != branch:
+        return
     wt_path = os.path.join(WORKTREES_BASE, f"issue-{issue_number}")
     if os.path.exists(wt_path):
         return
     print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
-    run_cmd(["git", "fetch", "origin", f"{branch}:{branch}"], cwd=REPO_PATH)
+    fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    head_code, head_out, _ = run_cmd(["git", "rev-parse", "FETCH_HEAD"], cwd=REPO_PATH)
+    if fetch_code != 0 or head_code != 0 or head_out.strip() != expected_head:
+        return
+    # Do not replace any existing local branch with externally fetched content.
+    branch_code, branch_head, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if branch_code == 0 and branch_head.strip() != expected_head:
+        return
+    if branch_code != 0:
+        run_cmd(["git", "branch", branch, expected_head], cwd=REPO_PATH)
     wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, branch], cwd=REPO_PATH)
     if wt_code == 0:
         print(f"Successfully recreated worktree at {wt_path} on branch '{branch}'.")
@@ -1496,7 +1689,7 @@ def babysit_orphaned_issue_prs():
         body = pr.get("body", "")
         pr_url = pr.get("url", f"https://github.com/dwojtaszek/zipper/pull/{pr_num}")
 
-        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]") or head_branch.startswith("dependabot/")
+        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]")
         if is_dependabot:
             continue
 
@@ -1511,6 +1704,12 @@ def babysit_orphaned_issue_prs():
         issue_num_str = m.group(1) if m else None
         if issue_num_str and issue_num_str in existing_wt_issues:
             continue
+        if not issue_num_str:
+            continue
+        authorized = _authorized_pr(pr_num, issue_num_str)
+        if not authorized or authorized["head"]["ref"] != head_branch:
+            continue
+        reviewed_head = authorized["head"]["sha"]
 
         print(f"[orphan-pr] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
         rollup = pr.get("statusCheckRollup", [])
@@ -1522,12 +1721,12 @@ def babysit_orphaned_issue_prs():
             if review_code != 0:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
                 if issue_num_str:
-                    _recreate_worktree_for_pr(issue_num_str, head_branch)
+                    _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
                 continue
 
             print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
-                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_num), "--squash", "--admin"], cwd=REPO_PATH)
+                merge_code, merge_out, merge_err = _merge_authorized_pr(pr_num, issue_num_str, reviewed_head)
                 is_merged = (merge_code == 0)
                 if not is_merged:
                     st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_num), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
@@ -1548,13 +1747,13 @@ def babysit_orphaned_issue_prs():
                 else:
                     print(f"[orphan-pr] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
                     if issue_num_str:
-                        _recreate_worktree_for_pr(issue_num_str, head_branch)
+                        _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
             else:
                 print(f"[DRY RUN] Would auto-merge PR #{pr_num} ({head_branch})")
         elif ci_status == "FAILED":
             print(f"[orphan-pr] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}. Recreating worktree for babysitting.")
             if issue_num_str:
-                _recreate_worktree_for_pr(issue_num_str, head_branch)
+                _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
         else:
             print(f"[orphan-pr] PR #{pr_num} CI checks still pending...")
 
@@ -1577,9 +1776,13 @@ def babysit_dependabot_prs():
         title = pr.get("title", "")
         pr_url = pr.get("url", f"https://github.com/dwojtaszek/zipper/pull/{pr_num}")
 
-        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]") or head_branch.startswith("dependabot/")
+        is_dependabot = author_login in ("app/dependabot", "dependabot", "dependabot[bot]")
         if not is_dependabot:
             continue
+        authorized = _authorized_pr(pr_num)
+        if not authorized or authorized["user"].get("id") != 49699333:
+            continue
+        reviewed_head = authorized["head"]["sha"]
 
         print(f"[dependabot] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
         rollup = pr.get("statusCheckRollup", [])
@@ -1594,7 +1797,7 @@ def babysit_dependabot_prs():
 
             print(f"[dependabot] Robot review gate passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
-                merge_code, merge_out, merge_err = run_cmd(["gh", "pr", "merge", str(pr_num), "--squash", "--delete-branch", "--admin"], cwd=REPO_PATH)
+                merge_code, merge_out, merge_err = _merge_authorized_pr(pr_num, None, reviewed_head, delete_branch=True)
                 if merge_code == 0:
                     print(f"[dependabot] Successfully merged Dependabot PR #{pr_num} into main.")
                     _sync_main_after_merge()
@@ -1998,14 +2201,20 @@ def main():
                     pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch_name, str(num), title, cwd=wt_path)
                     work_done = bool(pr_num_val) or work_done
 
+                origin = None
+                if pr_num_val:
+                    origin = _record_initial_pr_origin(str(num), pr_num_val, branch_name,
+                                                       agy_code == 0 and not _latest_commit_is_wip(wt_path))
+                    if agy_code != 0:
+                        _record_coderabbit_gate_failure(int(pr_num_val), branch_name, "Initial mission interrupted before completion", False)
                 if agy_code == 0 and pr_num_val:
-                    cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
-                    if not cr_ok:
-                        print(f"Agent created PR #{pr_num_val} but failed CodeRabbit pre-PR gate: {cr_err}")
-                        _record_coderabbit_gate_failure(int(pr_num_val), branch_name, cr_err)
-                        pr_create_err = f"Agent created PR #{pr_num_val} but failed CodeRabbit pre-PR gate:\n{cr_err}"
+                    local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+                    if not origin or local_code != 0 or not _publish_reviewed_completion(
+                            wt_path, branch_name, int(pr_num_val), str(num), origin, local.strip()):
+                        print(f"Initial publication for PR #{pr_num_val} remains blocked; preserving work for authorized babysitting.")
+                        break
                     else:
-                        _clear_coderabbit_gate_failure(int(pr_num_val))
+                        _save_pr_state(str(num), pr_num_val, branch_name, local.strip())
                         send_email(
                             f"[Runner] PR #{pr_num_val} Created: Issue #{num}",
                             f"<h3>PR <a href=\"{pr_url}\">#{pr_num_val}</a> successfully created for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>!</h3>"

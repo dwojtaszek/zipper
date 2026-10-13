@@ -180,12 +180,12 @@ if errorlevel 1 (
 REM Check for artifact retention
 echo.
 echo 10. Checking artifact retention configuration...
-findstr /C:"retention-days: 7" "%SHARED_WORKFLOW_FILE%" > nul
+findstr /C:"retention-days: 30" "%SHARED_WORKFLOW_FILE%" > nul
 if errorlevel 1 (
     echo [FAIL] Missing artifact retention configuration
     exit /b 1
 ) else (
-    echo [OK] Artifact retention set to 7 days
+    echo [OK] Accepted release artifacts retained for 30 days
 )
 
 REM Check for branch triggers
@@ -210,12 +210,12 @@ if errorlevel 1 (
 REM Check for release conditions
 echo.
 echo 12. Checking release conditions...
-findstr /C:"if: github.ref == 'refs/heads/main'" "%CALLER_WORKFLOW_FILE%" > nul
+findstr /C:"if: needs.prepare.outputs.skip != 'true'" "%CALLER_WORKFLOW_FILE%" > nul
 if errorlevel 1 (
-    echo [FAIL] Release job missing main branch condition
+    echo [FAIL] Release job missing reserved intent condition
     exit /b 1
 ) else (
-    echo [OK] Release job runs on main
+    echo [OK] Release job requires an incomplete reserved intent
 )
 
 REM Check for permissions
@@ -251,12 +251,12 @@ if errorlevel 1 (
 REM Check for version handling
 echo.
 echo 15. Checking version handling...
-findstr /C:"Set Version" "%CALLER_WORKFLOW_FILE%" > nul
+findstr /C:"python3 .github/scripts/release.py prepare" "%CALLER_WORKFLOW_FILE%" > nul
 if errorlevel 1 (
     echo [FAIL] Missing version handling
     exit /b 1
 ) else (
-    echo [OK] Has version handling
+    echo [OK] Version handling uses the durable release controller
 )
 
 echo.
