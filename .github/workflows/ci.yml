@@ -309,7 +309,7 @@ jobs:
 
       - name: Upload self-contained binaries
         if: inputs.publish_mode == 'self-contained'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: zipper-${{ matrix.platform }}
           path: publish/${{ matrix.platform }}
@@ -323,7 +323,7 @@ jobs:
 
       - name: Upload CLI artifact for goldens (Linux)
         if: inputs.publish_mode == 'goldens' && matrix.coverage == true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: zipper-cli-linux
           path: publish-bin/
