@@ -1,0 +1,21 @@
+name: Build and Test
+on: [push]
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      publish_mode: self-contained
+  tag-and-release:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/zipper-win-x64.exe
+            artifacts/zipper-linux-x64/zipper-linux-x64
+            artifacts/zipper-osx-arm64/zipper-osx-arm64
