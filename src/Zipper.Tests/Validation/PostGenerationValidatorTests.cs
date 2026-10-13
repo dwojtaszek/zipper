@@ -127,26 +127,9 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
         Assert.False(ctx.IsChaosMode);
     }
 
-    // ---- Full integration smoke test ----
+    // Note: Vacuous ValidatorRunner_AllValidators_RunsAllCategories was replaced by
+    // independent malformed fixtures and complete live-pipeline matrices in ValidatorRunnerTests.cs.
 
-    [Fact]
-    public void ValidatorRunner_AllValidators_RunsAllCategories()
-    {
-        var runner = new ValidatorRunner();
-        var loadFilePath = this.GetTempFilePath();
-        try
-        {
-            File.WriteAllText(loadFilePath, "a,b,c\nd,e,f\n");
-
-            var result = runner.ValidateLoadFile(loadFilePath, "csv", new[] { "col1", "col2", "col3" }, null);
-
-            Assert.NotNull(result);
-        }
-        finally
-        {
-            File.Delete(loadFilePath);
-        }
-    }
 
     [Fact]
     public void ValidateLoadFile_WithDuplicateIdentifierAndMissingPath_ReportsBothFindings()
