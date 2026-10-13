@@ -19,7 +19,7 @@ AUDITED_FILES = (
     "docs/architecture.md",
 )
 
-REQ_ID_PATTERN = re.compile(r"REQ-\d+", re.IGNORECASE)
+REQ_ID_PATTERN = re.compile(r"REQ(?:_E)?-\d+", re.IGNORECASE)
 CONTEXT_LINES_BEFORE = 2
 CONTEXT_LINES_AFTER = 2
 

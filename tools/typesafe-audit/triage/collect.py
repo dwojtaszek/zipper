@@ -13,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-_REQ_ID = re.compile(r"\bREQ-\d{3,4}\b")
+_REQ_ID = re.compile(r"\bREQ(?:_E)?-\d{3,4}\b")
 _PATH = re.compile(r"\b[\w.-]+(?:/[\w.-]+)+\.(?:cs|py|md|yml|sh|bat|json)\b")
 _MARKUP_PATTERNS = (
     (re.compile(r"<!--.*?-->", re.DOTALL), ""),

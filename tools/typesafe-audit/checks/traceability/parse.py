@@ -9,8 +9,10 @@ deterministically BEFORE any model call.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import re
+import sys
 from pathlib import Path
 
 TSV_HEADER = ("req_id", "coverage", "reference", "notes")
@@ -46,7 +48,7 @@ def parse_tsv(path: Path) -> list[dict]:
             "notes": cols[3].strip(),
             "line_no": line_no,
         }
-        if not re.fullmatch(r"REQ-\d+", row["req_id"]):
+        if not re.fullmatch(r"REQ(?:_E)?-\d+", row["req_id"]):
             raise ParseError(f"{path}:{line_no}: malformed REQ id '{row['req_id']}'.")
         if row["coverage"] not in VALID_COVERAGES:
             raise ParseError(f"{path}:{line_no}: coverage must be one of {sorted(VALID_COVERAGES)}, got '{row['coverage']}'.")
@@ -839,12 +841,49 @@ def resolve_unit_reference(tests_root: Path, reference: str, source_index: Sourc
         )
 
     cs_file, start_line, body = bodies[0]
+    try:
+        source_str = f"{cs_file.relative_to(tests_root.parents[0])}" if tests_root.parents else str(cs_file)
+    except (ValueError, IndexError):
+        try:
+            source_str = f"{cs_file.relative_to(tests_root)}"
+        except ValueError:
+            source_str = str(cs_file)
     return {
-        "source": f"{cs_file.relative_to(tests_root.parents[0])}",
+        "source": source_str,
         "line": start_line,
         "body": body,
         "sha256": sha256_text(body),
     }
+
+
+SCENARIO_MARKER = "scenario:"
+TEST_CASE_MARKER = "Test Case"
+
+
+def _find_script_path(tests_root: Path, script: str) -> Path:
+    for candidate in (tests_root / script, tests_root / "tests" / script, tests_root.parent / script):
+        if candidate.is_file():
+            return candidate
+    raise ParseError(f"E2E script '{script}' not found.")
+
+
+def _find_scenario_matching_lines(lines: list[str], scenario: str) -> list[int]:
+    escaped = re.escape(scenario)
+    exact_pattern = re.compile(
+        r'(?:scenario:\s*[\"\\\x27]?|Test Case\s+[\"\\\x27]?|[\"\\\x27]|^)\s*'
+        + escaped
+        + r'(?:\s*:|\s*[\"\\\x27]|#|$)'
+    )
+    matching = [
+        idx for idx, line in enumerate(lines)
+        if exact_pattern.search(line) and (SCENARIO_MARKER in line or (TEST_CASE_MARKER in line and "print_info" in line))
+    ]
+    if not matching:
+        matching = [
+            idx for idx, line in enumerate(lines)
+            if exact_pattern.search(line) and any(m in line for m in (SCENARIO_MARKER, TEST_CASE_MARKER, "print_info", "INFO"))
+        ]
+    return matching
 
 
 def resolve_e2e_reference(tests_root: Path, reference: str, source_index: SourceIndex | None = None) -> dict:
@@ -852,14 +891,8 @@ def resolve_e2e_reference(tests_root: Path, reference: str, source_index: Source
     parts = reference.split(None, 1)
     if not parts:
         raise ParseError(f"E2E reference '{reference}' must be 'script.sh [Scenario]'.")
-    script = parts[0]
-    script_path = tests_root / script
-    if not script_path.is_file():
-        script_path = tests_root / "tests" / script
-    if not script_path.is_file():
-        script_path = tests_root.parent / script
-    if not script_path.is_file():
-        raise ParseError(f"E2E script '{script}' not found.")
+    script = parts[0].replace("\\", "/")
+    script_path = _find_script_path(tests_root, script)
 
     content = _read_source(script_path, source_index)
     lines = content.splitlines()
@@ -867,15 +900,17 @@ def resolve_e2e_reference(tests_root: Path, reference: str, source_index: Source
     block = lines
     if len(parts) == 2:
         scenario = parts[1]
-        start = next((
-            idx for idx, line in enumerate(lines)
-            if scenario in line and any(marker in line for marker in ("scenario:", "Test Case", "print_info", "INFO"))
-        ), None)
-        if start is None:
+        matching = _find_scenario_matching_lines(lines, scenario)
+        if not matching:
             raise ParseError(f"Scenario '{scenario}' not found in {script_path.name}.")
+        if len(matching) > 1:
+            raise ParseError(
+                f"Scenario '{scenario}' in {script_path.name} is ambiguous: {len(matching)} occurrences found."
+            )
+        start = matching[0]
         block = [lines[start]]
         for line in lines[start + 1:]:
-            if "scenario:" in line or ("Test Case" in line and "print_info" in line):
+            if SCENARIO_MARKER in line or (TEST_CASE_MARKER in line and "print_info" in line):
                 break
             block.append(line)
     text = "\n".join(block)
@@ -937,6 +972,26 @@ def resolve_test_paths(
                 pass
         return set()
 
-    return set()
+def validate_traceability(*args, **kwargs):
+    import importlib.util
+    validate_path = Path(__file__).resolve().parent / "validate.py"
+    spec = importlib.util.spec_from_file_location("tsa_trace_validate", validate_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.validate_traceability(*args, **kwargs)
+
+
+def main(*args, **kwargs):
+    import importlib.util
+    validate_path = Path(__file__).resolve().parent / "validate.py"
+    spec = importlib.util.spec_from_file_location("tsa_trace_validate", validate_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.main(*args, **kwargs)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
 
 

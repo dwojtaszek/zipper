@@ -13,8 +13,8 @@ import re
 import subprocess
 from pathlib import Path
 
-REQ_ID_PATTERN = re.compile(r"REQ-\d+", re.IGNORECASE)
-REQ_DEFINITION_PATTERN = re.compile(r"\*\*(REQ-\d+)\*\*\s*:", re.IGNORECASE)
+REQ_ID_PATTERN = re.compile(r"REQ(?:_E)?-\d+", re.IGNORECASE)
+REQ_DEFINITION_PATTERN = re.compile(r"\*\*(REQ(?:_E)?-\d+)\*\*\s*:", re.IGNORECASE)
 
 
 def _run_git(args: list[str], repo_root: Path) -> str:
