@@ -43,7 +43,7 @@ def load_requirements_ids(repo_root: Path) -> list[str]:
         return []
     import re
 
-    return sorted(set(re.findall(r"\bREQ-\d{3,4}\b", path.read_text(encoding="utf-8"))))
+    return sorted(set(re.findall(r"\bREQ(?:_E)?-\d{3,4}\b", path.read_text(encoding="utf-8"))))
 
 
 def prepare(issue: dict, corpus: list[dict], policy: dict, req_ids: list[str]) -> dict:

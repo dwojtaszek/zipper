@@ -67,6 +67,23 @@ class TsvParserTests(unittest.TestCase):
             with self.assertRaises(ParseError):
                 parse_tsv(bad)
 
+    def test_parses_legacy_req_e_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tsv = Path(tmp) / "legacy.tsv"
+            tsv.write_text("req_id\tcoverage\treference\tnotes\nREQ_E-008\tunit\tFixtureTests.Full\tlegacy contract\n", encoding="utf-8")
+            rows = parse_tsv(tsv)
+            self.assertEqual(1, len(rows))
+            self.assertEqual("REQ_E-008", rows[0]["req_id"])
+
+    def test_rejects_malformed_req_id_formats(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for bad_id in ("REQ-abc", "REQ_X-001", "INVALID", "REQ", "REQ-", "REQ_E"):
+                bad = Path(tmp) / "bad.tsv"
+                bad.write_text(f"req_id\tcoverage\treference\tnotes\n{bad_id}\tunit\tFixtureTests.Full\tnotes\n", encoding="utf-8")
+                with self.subTest(bad_id=bad_id):
+                    with self.assertRaises(ParseError):
+                        parse_tsv(bad)
+
 
 class UnitResolverTests(unittest.TestCase):
     def test_source_index_reuses_reads_and_preserves_method_evidence(self):
@@ -608,6 +625,227 @@ class WorkflowWiringTests(unittest.TestCase):
         workflow = (REPO_ROOT / ".github/workflows/typesafe-audit.yml").read_text(encoding="utf-8")
         self.assertIn("validate-req-traceability.sh --strict", workflow)
         self.assertIn("checks/traceability/run_check.py", workflow)
+
+
+class DeterministicGateRegressions(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        # Create minimal valid setup
+        (self.root / "Requirements.md").write_text(
+            "- **REQ-001**: Modern requirement one.\n"
+            "- **REQ-002**: Modern requirement two.\n"
+            "- **REQ_E-008**: Legacy requirement eight.\n",
+            encoding="utf-8",
+        )
+        (self.root / "src").mkdir()
+        (self.root / "src/FixtureTests.cs").write_text(
+            "public class FixtureTests {\n"
+            "    public void ValidTest() { Assert.True(true); }\n"
+            "    public void RenamedTest() { Assert.True(true); }\n"
+            "}\n"
+            "public class DupTests {\n"
+            "    public void Dup() { Assert.Equal(1, 1); }\n"
+            "    public void Dup() { Assert.Equal(2, 2); }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        (self.root / "tests").mkdir()
+        (self.root / "tests/sample.sh").write_text(
+            "#!/bin/bash\n"
+            "echo 'scenario: valid-scenario'\n"
+            "echo '  done'\n",
+            encoding="utf-8",
+        )
+        self.tsv_path = self.root / "tests/req-traceability.tsv"
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid test mapping\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid scenario mapping\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption rationale\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_gate(self, strict: bool = True, tsv: Path | None = None, reqs: Path | None = None) -> tuple[int, dict]:
+        validate_fn = getattr(trace_parse, "validate_traceability", None)
+        if validate_fn is None:
+            self.fail("trace_parse.validate_traceability is not implemented")
+        return validate_fn(
+            tsv_path=tsv or self.tsv_path,
+            requirements_path=reqs or (self.root / "Requirements.md"),
+            tests_root=self.root / "src",
+            repo_root=self.root,
+            strict=strict,
+        )
+
+    def test_valid_manifest_passes_strict(self):
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(0, code)
+        self.assertEqual(3, report["active_total"])
+        self.assertEqual(2, report["mapped_count"])
+        self.assertEqual(1, report["exempted_count"])
+        self.assertEqual(100, report["coverage_pct"])
+
+    def test_deleted_or_renamed_test_fails_strict(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.WasRenamedAway\tRenamed away test\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertGreater(len(report["missing_refs"]), 0)
+        self.assertIn("FixtureTests.WasRenamedAway", report["missing_refs"][0]["reference"])
+
+    def test_missing_scenario_fails_strict(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid\n"
+            "REQ-002\te2e\tsample.sh missing-scenario\tMissing scenario\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertGreater(len(report["missing_refs"]), 0)
+        self.assertIn("missing-scenario", report["missing_refs"][0]["reference"])
+
+    def test_duplicate_ambiguous_symbols_fails_strict(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tDupTests.Dup\tAmbiguous test\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertGreater(len(report["ambiguous_refs"]), 0)
+        self.assertIn("DupTests.Dup", report["ambiguous_refs"][0]["reference"])
+
+    def test_unknown_requirement_id_fails_strict(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n"
+            "REQ-999\tunit\tFixtureTests.ValidTest\tUnknown requirement\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertGreater(len(report["unknown_refs"]), 0)
+        self.assertEqual("REQ-999", report["unknown_refs"][0]["req_id"])
+
+    def test_unexplained_exemption_fails_strict(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\t\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertGreater(len(report["unexplained_exemptions"]), 0)
+
+    def test_legitimate_multiple_mappings_succeeds(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tFirst mapping\n"
+            "REQ-001\tunit\tFixtureTests.RenamedTest\tSecond mapping for same REQ\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(0, code)
+        self.assertIn("REQ-001", report["duplicate_entries"])
+
+    def test_e2e_scenario_prefix_does_not_falsely_ambiguate(self):
+        (self.root / "tests/sample.sh").write_text(
+            "#!/bin/bash\n"
+            "echo 'scenario: valid-scenario'\n"
+            "echo '  done'\n"
+            "echo 'scenario: valid-scenario-extended'\n"
+            "echo '  done extended'\n",
+            encoding="utf-8",
+        )
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid\n"
+            "REQ-002\te2e\tsample.sh valid-scenario\tValid\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(0, code)
+        self.assertEqual(0, len(report["ambiguous_refs"]))
+
+    def test_e2e_scenario_partial_substring_fails_to_resolve(self):
+        (self.root / "tests/sample.sh").write_text(
+            "#!/bin/bash\n"
+            "# scenario: Smoke Test\n"
+            "echo 'done'\n",
+            encoding="utf-8",
+        )
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tFixtureTests.ValidTest\tValid\n"
+            "REQ-002\te2e\tsample.sh Smoke\tPartial scenario name\n"
+            "REQ_E-008\texemption\t-\tLegacy exemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertEqual(1, len(report["missing_refs"]))
+        self.assertIn("Smoke", report["missing_refs"][0]["reference"])
+
+    def test_all_nonexistent_reference_reproduction_fails_offline(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tMissingTests.DoesNotExist\tFake test\n"
+            "REQ-002\te2e\tmissing.sh Missing scenario\tFake script\n"
+            "REQ_E-008\texemption\t-\tExemption\n",
+            encoding="utf-8",
+        )
+        code, report = self.run_gate(strict=True)
+        self.assertEqual(1, code)
+        self.assertEqual(2, len(report["missing_refs"]))
+
+    def test_shell_script_gate_fails_strict_on_nonexistent_reference(self):
+        self.tsv_path.write_text(
+            "req_id\tcoverage\treference\tnotes\n"
+            "REQ-001\tunit\tMissingTests.DoesNotExist\tFake test\n"
+            "REQ-002\te2e\tmissing.sh Missing scenario\tFake script\n"
+            "REQ_E-008\texemption\t-\tExemption\n",
+            encoding="utf-8",
+        )
+        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
+        res = subprocess.run(
+            ["bash", str(script_path), "--strict", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(1, res.returncode)
+        self.assertIn("missing test references found", res.stderr)
+
+    def test_shell_script_gate_succeeds_on_valid_setup(self):
+        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
+        res = subprocess.run(
+            ["bash", str(script_path), "--strict", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, res.returncode)
+        self.assertIn("Coverage: 100%", res.stdout)
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ _CLOSURE_KEYWORDS = frozenset({
     "closes", "closed", "close", "closing",
     "resolved", "resolves", "resolve", "resolving",
 })
-_REQ_ID = re.compile(r"\bREQ-\d{3,4}\b")
+_REQ_ID = re.compile(r"\bREQ(?:_E)?-\d{3,4}\b")
 
 
 _GENERATED_PREFIXES = ("bin/", "obj/", "results/", "publish-bin/", ".worktrees/")
