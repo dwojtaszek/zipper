@@ -178,4 +178,98 @@ public class DirectoryTemplateReaderTests : IDisposable
             }
         }
     }
+
+    [SkippableFact]
+    public void TryRead_SymbolicLinksExternalTargetsAndCycles_SkippedAndOrdinaryEntriesPreserved()
+    {
+        var templateDir = Path.Combine(this.tempDir, "template");
+        var outsideDir = Path.Combine(this.tempDir, "outside");
+        Directory.CreateDirectory(templateDir);
+        Directory.CreateDirectory(outsideDir);
+
+        const string ordinarySentinel = "ordinary-template-native-file-content";
+        const string hiddenSentinel = "hidden-template-native-file-content";
+        const string outsideSentinel = "outside-unsupported-sentinel-content";
+
+        var ordinaryFile = Path.Combine(templateDir, "doc.pdf");
+        File.WriteAllText(ordinaryFile, ordinarySentinel);
+
+        var hiddenFile = Path.Combine(templateDir, ".hidden.pdf");
+        File.WriteAllText(hiddenFile, hiddenSentinel);
+
+        var outsideFile = Path.Combine(outsideDir, "outside_unsupported.txt");
+        File.WriteAllText(outsideFile, outsideSentinel);
+
+        var outsideDirLink = Path.Combine(templateDir, "link_to_outside");
+        var ancestorCycleLink = Path.Combine(templateDir, "cycle_to_root");
+        var fileSymlink = Path.Combine(templateDir, "file_symlink.pdf");
+        var danglingTarget = Path.Combine(this.tempDir, $"dangling_target_{Guid.NewGuid():N}.pdf");
+        var danglingLink = Path.Combine(templateDir, "dangling_link.pdf");
+
+        try
+        {
+            Directory.CreateSymbolicLink(outsideDirLink, outsideDir);
+            Directory.CreateSymbolicLink(ancestorCycleLink, templateDir);
+            File.CreateSymbolicLink(fileSymlink, ordinaryFile);
+            File.CreateSymbolicLink(danglingLink, danglingTarget);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException
+                                or PlatformNotSupportedException
+                                or System.ComponentModel.Win32Exception
+                                or IOException)
+        {
+            Skip.If(true, $"Symbolic link creation is not supported or permitted on this platform/environment: {ex.Message}");
+        }
+
+        try
+        {
+            var deadline = TimeSpan.FromSeconds(5);
+            var readTask = Task.Run(() =>
+            {
+                var success = DirectoryTemplateReader.TryRead(templateDir, out var r, out var err);
+                return (success, records: r, error: err);
+            });
+
+            Assert.True(readTask.Wait(deadline), "DirectoryTemplateReader exceeded bounded completion deadline (possible cycle traversal loop).");
+
+            var (ok, records, error) = readTask.Result;
+            Assert.True(ok, error);
+            Assert.NotNull(records);
+            Assert.Equal(2, records.Count);
+            Assert.Equal(new[] { ".hidden.pdf", "doc.pdf" }, records.Select(r => r.RelativePath).ToArray());
+            Assert.Equal("pdf", records[0].FileType);
+            Assert.Equal("pdf", records[1].FileType);
+
+            // Keep target sentinels unchanged
+            Assert.True(File.Exists(ordinaryFile));
+            Assert.Equal(ordinarySentinel, File.ReadAllText(ordinaryFile));
+            Assert.True(File.Exists(hiddenFile));
+            Assert.Equal(hiddenSentinel, File.ReadAllText(hiddenFile));
+            Assert.True(File.Exists(outsideFile));
+            Assert.Equal(outsideSentinel, File.ReadAllText(outsideFile));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(ancestorCycleLink))
+                {
+                    Directory.Delete(ancestorCycleLink);
+                }
+
+                if (Directory.Exists(outsideDirLink))
+                {
+                    Directory.Delete(outsideDirLink);
+                }
+
+                File.Delete(fileSymlink);
+                File.Delete(danglingLink);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+        }
+    }
 }
+
