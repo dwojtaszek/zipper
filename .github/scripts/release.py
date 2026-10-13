@@ -57,7 +57,11 @@ def body(state, notes=""):
 
 def update(release, state, notes=None, **fields):
     existing_notes = (release.get("body") or "").rsplit(MARKER, 1)[0] if notes is None else notes
-    return api(f"releases/{release['id']}", "PATCH", {"body": body(state, existing_notes), **fields})
+    # A PATCH without tag_name makes the server discard the draft's tag and assign an
+    # auto-generated untagged-<hex> name, so always pin tag and source explicitly.
+    return api(f"releases/{release['id']}", "PATCH", {
+        "tag_name": state["tag"], "target_commitish": state["source_sha"],
+        "body": body(state, existing_notes), **fields})
 
 
 def version_tuple(tag):
@@ -90,8 +94,10 @@ def prepare(sha, ref, recover=False, intent_tag=None):
         version_tuple(requested)
         if remote_tag(requested) != sha:
             raise ValueError("Manual release tag does not identify the source SHA")
+    # Select by the terminal intent's tag, never the mutable release tag_name: a draft
+    # whose tag drifted to an auto-generated untagged-<hex> name is still recoverable.
     matching = [r for r in all_releases if intent(r) and intent(r)["source_sha"] == sha
-                and (r["tag_name"] == (intent_tag or requested) if (intent_tag or requested)
+                and (intent(r)["tag"] == (intent_tag or requested) if (intent_tag or requested)
                      else (recover or intent(r)["origin"] == "main"))]
     if len(matching) > 1:
         raise ValueError("Ambiguous release intents for source SHA")
@@ -108,11 +114,12 @@ def prepare(sha, ref, recover=False, intent_tag=None):
                 if re.fullmatch(r"v\d+\.\d+\.\d+", t)]
         latest_tag = max(tags, key=version_tuple) if tags else "v0.0.0"
         dev_major, dev_minor, dev_patch = version_tuple(latest_tag)
-        tags += [r["tag_name"] for r in all_releases if re.fullmatch(r"v\d+\.\d+\.\d+", r["tag_name"])]
+        tags += [t for r in all_releases for t in [intent(r)["tag"] if intent(r) else r["tag_name"]]
+                 if re.fullmatch(r"v\d+\.\d+\.\d+", t)]
         previous = max(tags, key=version_tuple) if tags else "v0.0.0"
         major, minor, patch = version_tuple(previous)
         tag = requested or f"v{major}.{minor}.{patch + 1}"
-        if any(r["tag_name"] == tag for r in all_releases):
+        if any(r["tag_name"] == tag or (intent(r) and intent(r)["tag"] == tag) for r in all_releases):
             raise ValueError("Tag already has a release without matching intent")
         state = {"schema": 1, "source_sha": sha, "tag": tag, "previous_tag": previous,
                  "origin": "tag" if requested else "main", "phase": "reserved", "assets": {},
@@ -155,8 +162,15 @@ def validated_assets(directory, state):
 def publish(release_id, directory, run_id, notes):
     release = api(f"releases/{release_id}")
     state = intent(release)
-    if not state or state["tag"] != release["tag_name"]:
+    if not state:
         raise ValueError("Release intent missing or inconsistent")
+    # Tolerate only the server's auto-generated untagged-<hex> drift on a sealed draft
+    # still bound to the intent's source; any other tag drift fails closed.
+    drifted = release["tag_name"] != state["tag"]
+    if drifted and not (release["draft"] and state["phase"] == "sealed"
+                        and re.fullmatch(r"untagged-[0-9a-f]+", release["tag_name"])
+                        and release.get("target_commitish") == state["source_sha"]):
+        raise ValueError("Release tag drifted from its intent")
     if state["phase"] == "completed":
         print("Release already completed; no-op")
         return
@@ -193,6 +207,13 @@ def publish(release_id, directory, run_id, notes):
         command("git", "push", "origin", f"refs/tags/{state['tag']}")
     if remote_tag(state["tag"]) != state["source_sha"]:
         raise ValueError("Cannot verify published tag identity")
+    if drifted:
+        # Restore the drifted draft's tag and source (body and intent stay byte-identical)
+        # before any upload addresses the release by tag.
+        update(release, state)
+        release = api(f"releases/{release_id}")
+        if release["tag_name"] != state["tag"] or release.get("target_commitish") != state["source_sha"]:
+            raise ValueError("Could not restore drifted release tag")
     # Never overwrite a uploaded asset, even on a partial retry.
     for name in ASSETS:
         release = api(f"releases/{release_id}")

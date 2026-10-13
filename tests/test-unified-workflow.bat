@@ -251,12 +251,23 @@ if errorlevel 1 (
 REM Check for version handling
 echo.
 echo 15. Checking version handling...
-findstr /C:"python3 .github/scripts/release.py prepare" "%CALLER_WORKFLOW_FILE%" > nul
+findstr /C:"python3 .controller/.github/scripts/release.py prepare" "%CALLER_WORKFLOW_FILE%" > nul
 if errorlevel 1 (
     echo [FAIL] Missing version handling
     exit /b 1
 ) else (
     echo [OK] Version handling uses the durable release controller
+)
+
+REM Recovery dispatches check out the historical source SHA; the controller
+REM itself must come from the triggering ref (the fixed pipeline), so both
+REM release jobs need the second checkout at .controller.
+powershell -NoProfile -Command "if ((Select-String -Path '%CALLER_WORKFLOW_FILE%' -Pattern 'path: .controller').Count -eq 2) { exit 0 } else { exit 1 }" > nul
+if errorlevel 1 (
+    echo [FAIL] Release jobs must check out the controller from the triggering ref
+    exit /b 1
+) else (
+    echo [OK] Release controller runs from the triggering ref in both release jobs
 )
 
 echo.

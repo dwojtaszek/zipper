@@ -51,6 +51,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
           ref: ${{ inputs.source_sha || github.sha }}
+      # Recovery must run the current controller, not the one baked into the
+      # historical source SHA that may have failed. For push/tag events this
+      # second checkout resolves to the same commit as the source checkout.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: .controller
       - name: Identify source
         id: source
         shell: bash
@@ -62,7 +69,7 @@ jobs:
           flags=()
           if [[ "$RECOVER" == "true" ]]; then flags+=("--recover"); fi
           if [[ -n "$INTENT_TAG" ]]; then flags+=("--intent-tag" "$INTENT_TAG"); fi
-          python3 .github/scripts/release.py prepare --sha "$SOURCE_SHA" "${flags[@]}"
+          python3 .controller/.github/scripts/release.py prepare --sha "$SOURCE_SHA" "${flags[@]}"
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
@@ -97,6 +104,11 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.source_sha }}
+      # Same controller source as the prepare job: the triggering ref.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: .controller
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         if: needs.prepare.outputs.artifact_ids == ''
@@ -202,5 +214,5 @@ jobs:
           RELEASE_NOTES: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
         run: |
           printf '%s\n' "$RELEASE_NOTES" > release-notes.txt
-          python3 .github/scripts/release.py publish --release-id "$RELEASE_ID" \
+          python3 .controller/.github/scripts/release.py publish --release-id "$RELEASE_ID" \
             --run-id "$ARTIFACT_RUN" --artifacts artifacts --notes release-notes.txt

@@ -541,7 +541,7 @@ def _validate_consumer_release(steps: list, download_path: str, expected_release
                 tokens = shlex.split(command)
             except ValueError:
                 continue
-            if tokens[:3] != ["python3", ".github/scripts/release.py", "publish"]:
+            if tokens[:3] != ["python3", ".controller/.github/scripts/release.py", "publish"]:
                 continue
             if ("--artifacts" not in tokens or tokens.index("--artifacts") + 1 >= len(tokens)
                     or tokens[tokens.index("--artifacts") + 1] != download_path):

@@ -68,6 +68,19 @@ class ReleaseRecoveryTests(unittest.TestCase):
         return self.run_controller("publish", "--release-id", str(state["release_id"]),
                                    "--artifacts", str(directory), "--run-id", "100", **kwargs)
 
+    def drift(self, release_id, **fields):
+        # Replays the incident through the trusted boundary: a body-only PATCH makes the
+        # server discard the draft's tag and assign an untagged-<hex> name.
+        release = next(r for r in json.loads((self.root / "github.json").read_text()) if r["id"] == release_id)
+        subprocess.run([str(self.root / "gh"), "api",
+                        f"repos/{self.env['GITHUB_REPOSITORY']}/releases/{release_id}",
+                        "--method", "PATCH", "--input", "-"],
+                       input=json.dumps({"body": release["body"], **fields}),
+                       env=self.env, check=True, capture_output=True, text=True)
+
+    def release(self, index=0):
+        return json.loads((self.root / "github.json").read_text())[index]
+
     def test_prepare_mainDevelopmentVersionIsIndependentOfDraftReservations(self):
         first = self.prepare()
         self.assertEqual(first["build_version"], "1.2.4-dev")
@@ -243,6 +256,125 @@ class ReleaseRecoveryTests(unittest.TestCase):
         resumed = json.loads((self.repo / "release-intent.json").read_text())
         self.assertEqual((resumed["release_id"], resumed["tag"]), (state["release_id"], "v3.0.0"))
         self.assertEqual(len(json.loads((self.root / "github.json").read_text())), 1)
+
+    def test_publish_sealAndCompletionRetainDraftTag(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        sealed = self.release()
+        self.assertEqual((sealed["tag_name"], sealed["target_commitish"]), (state["tag"], self.sha))
+        self.assertTrue(sealed["draft"])
+        self.publish(state, artifacts)
+        completed = self.release()
+        self.assertEqual((completed["tag_name"], completed["target_commitish"]), (state["tag"], self.sha))
+        self.assertFalse(completed["draft"])
+        self.assertNotIn("untagged", json.dumps(json.loads((self.root / "github.json").read_text())))
+
+    def test_publish_sealedUntaggedDrift_recoversSameReleaseByIntentTag(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        self.drift(state["release_id"])
+        self.assertRegex(self.release()["tag_name"], r"\Auntagged-[0-9a-f]+\Z")
+        # Recovery selects by the terminal intent's tag, never the drifted tag_name.
+        self.run_controller("prepare", "--sha", self.sha, "--ref", "refs/heads/main",
+                            "--recover", "--intent-tag", state["tag"])
+        resumed = json.loads((self.repo / "release-intent.json").read_text())
+        self.assertEqual((resumed["release_id"], resumed["tag"], resumed["phase"]),
+                         (state["release_id"], state["tag"], "sealed"))
+        self.assertEqual(resumed["artifact_run"], "100")
+        self.assertEqual(set(resumed["artifact_ids"].values()), {101, 102, 103})
+        self.publish(resumed, artifacts)
+        release = self.release()
+        self.assertEqual((release["id"], release["tag_name"], release["target_commitish"]),
+                         (state["release_id"], state["tag"], self.sha))
+        self.assertFalse(release["draft"])
+        self.assertEqual({a["name"] for a in release["assets"]},
+                         {"zipper-linux-x64", "zipper-win-x64.exe", "zipper-osx-arm64"})
+        self.assertEqual(self.git("ls-remote", "origin", "refs/tags/" + state["tag"]).split()[0], self.sha)
+        # No new release was allocated and nothing was resealed.
+        self.assertEqual(len(json.loads((self.root / "github.json").read_text())), 1)
+        self.assertIn('"phase":"completed"', release["body"])
+
+    def test_publish_driftedSourceMismatch_failsClosed(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        self.git("commit", "--allow-empty", "-m", "test: other source")
+        other = self.git("rev-parse", "HEAD")
+        self.drift(state["release_id"], target_commitish=other)
+        result = self.publish(state, artifacts, success=False)
+        self.assertIn("drifted", result.stderr)
+        release = self.release()
+        self.assertTrue(release["tag_name"].startswith("untagged-"))
+        self.assertEqual(release["target_commitish"], other)
+        self.assertEqual(release["assets"], [])
+
+    def test_publish_namedTagDrift_failsClosed(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        self.drift(state["release_id"], tag_name="v9.9.9")
+        result = self.publish(state, artifacts, success=False)
+        self.assertIn("drifted", result.stderr)
+        release = self.release()
+        self.assertEqual(release["tag_name"], "v9.9.9")
+        self.assertTrue(release["draft"])
+        self.assertEqual(release["assets"], [])
+
+    def test_publish_unsealedDrift_failsClosed(self):
+        state = self.prepare()
+        self.drift(state["release_id"])
+        result = self.publish(state, self.artifacts(state), success=False)
+        self.assertIn("drifted", result.stderr)
+        release = self.release()
+        self.assertTrue(release["tag_name"].startswith("untagged-"))
+        self.assertEqual(release["assets"], [])
+        self.assertIn('"phase":"reserved"', release["body"])
+
+    def test_publish_publicDrift_failsClosed(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts)
+        self.drift(state["release_id"])
+        result = self.publish(state, artifacts, success=False)
+        self.assertIn("drifted", result.stderr)
+        release = self.release()
+        self.assertTrue(release["tag_name"].startswith("untagged-"))
+        self.assertFalse(release["draft"])
+
+    def test_publish_driftedWrongTagSha_noRestoration(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        self.drift(state["release_id"])
+        self.git("commit", "--allow-empty", "-m", "test: other source")
+        other = self.git("rev-parse", "HEAD")
+        self.git("tag", "-f", state["tag"], other)
+        self.git("push", "-f", "origin", state["tag"])
+        result = self.publish(state, artifacts, success=False)
+        self.assertIn("different SHA", result.stderr)
+        release = self.release()
+        self.assertTrue(release["tag_name"].startswith("untagged-"))
+        self.assertEqual(release["assets"], [])
+        self.assertEqual(self.git("ls-remote", "origin", "refs/tags/" + state["tag"]).split()[0], other)
+
+    def test_publish_driftedChangedAcceptedBytes_noRestoration(self):
+        state = self.prepare()
+        artifacts = self.artifacts(state)
+        self.publish(state, artifacts, success=False, FAIL_UPLOAD_AT="1")
+        self.drift(state["release_id"])
+        path = next(p for p in artifacts.rglob("zipper-linux-x64") if p.is_file())
+        path.write_bytes(b"replacement bytes")
+        record_path = path.parent / "acceptance.json"
+        record = json.loads(record_path.read_text())
+        record["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        record_path.write_text(json.dumps(record))
+        result = self.publish(state, artifacts, success=False)
+        self.assertIn("differ from sealed", result.stderr)
+        release = self.release()
+        self.assertTrue(release["tag_name"].startswith("untagged-"))
+        self.assertEqual(release["assets"], [])
 
 
 if __name__ == "__main__":
