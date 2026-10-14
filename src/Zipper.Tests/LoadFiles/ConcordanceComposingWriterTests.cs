@@ -206,8 +206,34 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
         }
 
         var content = await File.ReadAllTextAsync(outputPath);
-        Assert.Contains("''", content, StringComparison.Ordinal);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var headerFields = lines[0].Split('\u0014');
+        var dataFields = lines[1].Split('\u0014');
+        Assert.Equal("'PATH'", headerFields[3]);
+        Assert.Equal("'folder_001/file_with_''char.pdf'", dataFields[3]);
         Assert.DoesNotContain("\u00fe", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderRecord_CustomQuoteDelimiter_DoublesEmbeddedDelimiterExactly()
+    {
+        var serializer = new ConcordanceSerializer(new FileGenerationRequest
+        {
+            Delimiters = new DelimiterConfig
+            {
+                ColumnDelimiter = "\u0014",
+                QuoteDelimiter = "'"
+            }
+        });
+        var record = new LoadFileRecord
+        {
+            Columns = new[] { "BEGATTY", "ENDATTY", "CONTROLNUMBER", "PATH" },
+            Values = new[] { string.Empty, string.Empty, "DOC00000001", "folder_001/file_with_'char.pdf" },
+        };
+
+        var line = serializer.RenderRecord(record);
+
+        Assert.Equal("''\u0014''\u0014'DOC00000001'\u0014'folder_001/file_with_''char.pdf'", line);
     }
 
     [Fact]
