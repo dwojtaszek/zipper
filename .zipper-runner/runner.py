@@ -113,8 +113,10 @@ parser.add_argument("--babysit-only", action="store_true")
 parser.add_argument("--refresh-models", action="store_true")
 parser.add_argument("--status", action="store_true")
 parser.add_argument("--agent", choices=sorted(AGENT_PLUGINS), help="Prefer this enabled, healthy agent for this run; retain normal fallbacks.")
+parser.add_argument("--model", type=str, default=None, help="Prefer this model for the selected agent; retain normal fallbacks.")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 ACTIVE_AGENT = args.agent or ACTIVE_AGENT
+ACTIVE_MODEL = args.model or os.environ.get("ACTIVE_MODEL")
 DRY_RUN = args.dry_run
 if DRY_RUN:
     print("WARNING: Running in DRY-RUN mode. No changes will be committed, pushed, or mailed.")
@@ -135,8 +137,78 @@ if STATUS_ONLY:
 # Agent selection — ordered list of (agent_name, model_or_None) candidates
 # populated during main() startup. On failure, the front candidate is popped
 # and the next one takes over.
+def _model_key(model: str) -> str:
+    # Normalize model string for lookup in preferences table
+    # Strip any comment in parentheses e.g. "claude-sonnet-4 (Sonnet 4)" -> "claude-sonnet-4"
+    # Preserves dots, colons, slashes, hyphens, underscores needed by CLI model identifiers
+    key = model.split("(")[0].strip().strip("`").strip().lower()
+    return key
+
+# ---------------------------------------------------------------------------
+# Multi-agent fallback queue
+# AGENT_CANDIDATES holds (agent_name, model_name) pairs discovered at startup,
+# sorted by priority (lowest integer = highest priority). The first element is
+# always the active candidate. When an agent fails or runs out of tokens, it is popped
+# and the next one takes over.
 # ---------------------------------------------------------------------------
 AGENT_CANDIDATES: list[tuple[str, str | None]] = []
+EXHAUSTED_MODELS: set[tuple[str, str | None]] = set()
+
+QUOTA_EXHAUSTION_KEYWORDS = [
+    "resource_exhausted",
+    "individual quota reached",
+    "quota exceeded",
+    "exceeded your current quota",
+    "exceeded quota",
+    "insufficient quota",
+    "insufficient credits",
+    "credit balance is too low",
+    "rate limit",
+    "rate_limit",
+    "too many requests",
+    "subscription limit",
+    "upgrade your subscription",
+    "run out of",
+    "code 429",
+    "status 429",
+    "error 429",
+    "http 429",
+    "(code 429)",
+    '"error_code":429',
+    '"error_code": 429',
+    "429 too many requests",
+]
+
+def is_quota_exhausted(output: str, stderr: str = "") -> bool:
+    """Returns True if the output or stderr indicates model quota or rate limit exhaustion."""
+    combined = (output + "\n" + stderr).lower()
+    if any(kw in combined for kw in QUOTA_EXHAUSTION_KEYWORDS):
+        return True
+    if re.search(r"\b429\b", combined) and any(w in combined for w in ("quota", "rate", "limit", "exhaust", "credit", "subscription", "resource")):
+        return True
+    return False
+
+def mark_model_exhausted(agent_name: str, model_name: str | None) -> None:
+    """Marks a specific (agent, model) as exhausted for the current run cycle."""
+    EXHAUSTED_MODELS.add((agent_name, model_name))
+    if model_name:
+        clean = _model_key(model_name)
+        EXHAUSTED_MODELS.add((agent_name, clean))
+        clean_suffix = clean.split("/")[-1]
+        EXHAUSTED_MODELS.add((agent_name, clean_suffix))
+    print(f"[quota] Marked {agent_name}/{model_name or 'default'} as exhausted.")
+
+def is_model_exhausted(agent_name: str, model_name: str | None) -> bool:
+    """Returns True if the given (agent, model) is marked exhausted."""
+    if (agent_name, model_name) in EXHAUSTED_MODELS:
+        return True
+    if model_name:
+        clean = _model_key(model_name)
+        if (agent_name, clean) in EXHAUSTED_MODELS:
+            return True
+        if (agent_name, clean.split("/")[-1]) in EXHAUSTED_MODELS:
+            return True
+    return False
 
 def _current_agent() -> str:
     if AGENT_CANDIDATES:
@@ -150,11 +222,15 @@ def _current_model() -> str | None:
     return AGENT_CANDIDATES[0][1] if AGENT_CANDIDATES else None
 
 def _fallback() -> bool:
-    """Drop the current candidate and advance to the next. Returns False if exhausted."""
-    if len(AGENT_CANDIDATES) > 1:
+    """Drop the current candidate and advance to the next non-exhausted candidate. Returns False if exhausted."""
+    if AGENT_CANDIDATES:
         AGENT_CANDIDATES.pop(0)
-        print(f"[fallback] Switching to next candidate: {_current_agent()}/{_current_model()}")
-        return True
+        while AGENT_CANDIDATES and is_model_exhausted(AGENT_CANDIDATES[0][0], AGENT_CANDIDATES[0][1]):
+            skipped = AGENT_CANDIDATES.pop(0)
+            print(f"[fallback] Candidate {skipped[0]}/{skipped[1]} is already exhausted, skipping...")
+        if AGENT_CANDIDATES:
+            print(f"[fallback] Switching to next candidate: {_current_agent()}/{_current_model()}")
+            return True
     print("[fallback] No more candidates.")
     return False
 
@@ -338,10 +414,14 @@ def _cleanup_git_state():
         run_cmd(cmd, cwd=cwd)
 
 
-def check_api_token_health(agent_name: str):
-    print(f"Checking API token health via plugin {agent_name!r}...")
+def check_api_token_health(agent_name: str, model_name: str | None = None):
+    print(f"Checking API token health via plugin {agent_name!r} (model={model_name!r})...")
     if DRY_RUN:
         return True
+
+    if is_model_exhausted(agent_name, model_name):
+        print(f"[quota] {agent_name}/{model_name or 'default'} is already marked exhausted.")
+        return False
 
     plugin = AGENT_PLUGINS.get(agent_name)
     if plugin is None:
@@ -352,22 +432,33 @@ def check_api_token_health(agent_name: str):
         print(f"ERROR: Agent {agent_name!r} is not installed or not on PATH.")
         return False
 
-    return plugin.check_token_health()
+    check_fn = getattr(plugin, "check_token_health", None)
+    if check_fn:
+        try:
+            healthy = check_fn(model=model_name)
+        except TypeError:
+            healthy = check_fn()
+        if not healthy:
+            mark_model_exhausted(agent_name, model_name)
+            return False
+        return True
+    return True
 
 def wait_for_tokens() -> None:
-    """Checks token health for the current agent. Falls back through candidates on exhaustion."""
+    """Checks token health for the current agent/model. Falls back through candidates on exhaustion."""
     if not AGENT_CANDIDATES:
         AGENT_CANDIDATES[:] = probe_and_select_agents()
         return
     exhausted = []
     while True:
         name = _current_agent()
-        print(f"Initializing API token health gateway for {name!r}...")
-        if check_api_token_health(name):
+        model = _current_model()
+        print(f"Initializing API token health gateway for {name!r} (model={model!r})...")
+        if check_api_token_health(name, model):
             return
-        exhausted.append(name)
+        exhausted.append(f"{name}/{model}" if model else name)
         if not _fallback():
-            print("API is out of tokens for all agents. Exiting to allow next cron cycle to retry.")
+            print("API is out of tokens for all agents/models. Exiting to allow next cron cycle to retry.")
             agents = ", ".join(exhausted)
             if _should_send_rate_limited("[Runner] All Agents Exhausted"):
                 send_email(
@@ -383,13 +474,6 @@ def slugify(text):
     text = re.sub(r'[^a-z0-9\s-]', '', text)
     text = re.sub(r'[\s-]+', '-', text).strip('-')
     return text[:40]
-
-def _model_key(model: str) -> str:
-    # Normalize model string for lookup in preferences table
-    # Strip any comment in parentheses e.g. "claude-sonnet-4 (Sonnet 4)" -> "claude-sonnet-4"
-    # Preserves dots, colons, slashes, hyphens, underscores needed by CLI model identifiers
-    key = model.split("(")[0].strip().strip("`").strip().lower()
-    return key
 
 
 PREFS_ORDER: dict[tuple[str, str], int] = {}
@@ -445,10 +529,31 @@ def list_agent_models() -> dict[str, list[str]]:
     return result
 
 
+def get_model_priority(prefs: dict[tuple[str, str], int], agent: str, model: str) -> tuple[int, str]:
+    """Look up priority for (agent, model) in preferences with prefix tolerance.
+
+    Returns (priority, matched_pref_model_key). Priority 0 means disabled/unmatched.
+    """
+    if not prefs:
+        return 1, _model_key(model)
+    clean = _model_key(model)
+    # 1. Exact match
+    if (agent, clean) in prefs:
+        return prefs[(agent, clean)], clean
+    # 2. Suffix match after '/' e.g. opencode/gemini-3.8-flash matches google/gemini-3.8-flash
+    clean_suffix = clean.split("/")[-1]
+    for (ag, pref_model), prio in prefs.items():
+        if ag == agent:
+            pref_suffix = pref_model.split("/")[-1]
+            if pref_suffix == clean_suffix:
+                return prio, pref_model
+    return 0, clean
+
+
 def probe_and_select_agents() -> list[tuple[str, str | None]]:
     """Probes all plugins and returns sorted list of healthy (agent, model) candidates.
 
-    Scored by user preferences (lower priority = better); ACTIVE_AGENT is preferred.
+    Scored by user preferences (lower priority = better); ACTIVE_AGENT / ACTIVE_MODEL is preferred.
     Without preferences, installed healthy agents receive equal priority.
     """
     prefs = load_preferences()
@@ -483,9 +588,19 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
         else:
             models = ["default"]
 
-        for model in models:
-            clean_model = _model_key(model)
-            prio = prefs.get((name, clean_model), 0) if prefs else 1
+        known_models = list(models)
+        if prefs:
+            for (ag, pref_model), prio in prefs.items():
+                if ag == name and prio > 0:
+                    pref_suffix = pref_model.split("/")[-1]
+                    if not any(_model_key(m).split("/")[-1] == pref_suffix for m in known_models):
+                        known_models.append(pref_model)
+
+        for model in known_models:
+            if is_model_exhausted(name, model):
+                print(f"[select] {name}/{model}: already marked exhausted, skipping")
+                continue
+            prio, _ = get_model_priority(prefs, name, model)
             if prio == 0:
                 print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
                 continue
@@ -502,22 +617,47 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             )
         sys.exit(0)
 
-    candidates.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[1], x[2] or ""))
+    def _sort_key(c: tuple[int, str, str | None]) -> tuple[int, int, str, str]:
+        prio, ag, mod = c
+        clean = _model_key(mod or "")
+        _, matched_key = get_model_priority(prefs, ag, mod or "")
+        order = PREFS_ORDER.get((ag, matched_key), PREFS_ORDER.get((ag, clean), 9999))
+        return (prio, order, ag, mod or "")
+
+    candidates.sort(key=_sort_key)
 
     # A run-scoped preference promotes healthy, enabled candidates across tiers.
-    if ACTIVE_AGENT:
-        hint_tier: list[tuple[int, str, str | None]] = []
-        rest: list[tuple[int, str, str | None]] = []
-        for c in candidates:
-            if c[1] == ACTIVE_AGENT:
-                hint_tier.append(c)
-            else:
-                rest.append(c)
-        if hint_tier:
-            hint_tier.sort(key=lambda x: (x[0], PREFS_ORDER.get((x[1], _model_key(x[2] or "")), 9999), x[2] or ""))
-            candidates = hint_tier + rest
+    if ACTIVE_AGENT or ACTIVE_MODEL:
+        def _match_score(c: tuple[int, str, str | None]) -> int:
+            _, ag, mod = c
+            ag_match = bool(ACTIVE_AGENT and ag == ACTIVE_AGENT)
+            mod_key = _model_key(mod or "")
+            active_mod_key = _model_key(ACTIVE_MODEL or "")
+            mod_match = bool(ACTIVE_MODEL and (mod_key == active_mod_key or mod_key.split("/")[-1] == active_mod_key.split("/")[-1]))
+            if ACTIVE_AGENT and ACTIVE_MODEL:
+                if ag_match and mod_match:
+                    return 3
+                if ag_match:
+                    return 2
+                if mod_match:
+                    return 1
+                return 0
+            elif ACTIVE_AGENT:
+                return 2 if ag_match else 0
+            elif ACTIVE_MODEL:
+                return 2 if mod_match else 0
+            return 0
+
+        preferred = [c for c in candidates if _match_score(c) > 0]
+        rest = [c for c in candidates if _match_score(c) == 0]
+        if preferred:
+            preferred.sort(key=lambda c: (-_match_score(c), _sort_key(c)))
+            candidates = preferred + rest
         else:
-            print(f"[select] Requested agent {ACTIVE_AGENT!r} has no enabled, healthy candidate; using normal fallbacks.")
+            desc = f"agent={ACTIVE_AGENT!r}" if ACTIVE_AGENT else ""
+            if ACTIVE_MODEL:
+                desc += f" model={ACTIVE_MODEL!r}"
+            print(f"[select] Requested {desc.strip()} has no enabled, healthy candidate; using normal fallbacks.")
 
     result = [(name, model) for _, name, model in candidates]
     selected = result[0]
@@ -1162,10 +1302,18 @@ def _babysit_with_fallback(
         plugin = AGENT_PLUGINS.get(agent_name)
         if plugin is None:
             continue
+        if is_model_exhausted(agent_name, model_name):
+            print(f"[babysit] Skipping exhausted {agent_name}/{model_name}")
+            continue
         if pr_number and not _authorized_pr(pr_number, str(issue_number), authorized["head"]["sha"]):
             return
         print(f"[babysit] Trying {agent_name}/{model_name}...")
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
+
+        if code != 0 and is_quota_exhausted(out, err):
+            mark_model_exhausted(agent_name, model_name)
+            print(f"[babysit] {agent_name}/{model_name} exhausted quota. Trying next candidate...")
+            continue
 
         after = _babysit_snapshot(wt_path, branch, pr_number)
         if code != 0 and pr_number and after[2].strip() != before[2].strip():
@@ -1360,51 +1508,67 @@ def babysit_active_worktrees():
 
             print(f"No open PR found matching issue #{issue_number}. Re-invoking agent to implement and open PR.")
             prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch, pr_create_err)
-            wait_for_tokens()
-            agent_name = _current_agent()
-            plugin = AGENT_PLUGINS.get(agent_name)
-            if plugin is None:
-                print(f"FATAL: Agent {agent_name!r} not loaded. Available: {list(AGENT_PLUGINS)}")
-                sys.exit(1)
-            agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=True, model=_current_model())
+            while True:
+                wait_for_tokens()
+                agent_name = _current_agent()
+                model_name = _current_model()
+                plugin = AGENT_PLUGINS.get(agent_name)
+                if plugin is None:
+                    print(f"FATAL: Agent {agent_name!r} not loaded. Available: {list(AGENT_PLUGINS)}")
+                    sys.exit(1)
+                agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
-            if not _worktree_is_clean(wt_path):
-                print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
-                run_cmd(["git", "add", "-A"], cwd=wt_path)
-                run_cmd(["git", "commit", "-m", f"wip: progress on issue #{issue_number} by {agent_name}"], cwd=wt_path)
+                if not _worktree_is_clean(wt_path):
+                    print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
+                    run_cmd(["git", "add", "-A"], cwd=wt_path)
+                    run_cmd(["git", "commit", "-m", f"wip: progress on issue #{issue_number} by {agent_name}"], cwd=wt_path)
 
-            pr_num_val, pr_url = _check_pr(branch)
+                pr_num_val, pr_url = _check_pr(branch)
 
-            had_prior_work = _branch_has_commits(branch)
-            pr_create_err = ""
-            if agy_code == 0 and not pr_num_val and had_prior_work and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
-                pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
+                had_prior_work = _branch_has_commits(branch)
+                pr_create_err = ""
+                if agy_code == 0 and not pr_num_val and had_prior_work and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
+                    pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
 
-            if pr_num_val:
-                ready = agy_code == 0 and not _latest_commit_is_wip(wt_path)
-                origin = _record_initial_pr_origin(issue_number, pr_num_val, branch, ready)
-                if agy_code != 0:
-                    _record_coderabbit_gate_failure(int(pr_num_val), branch, "Initial mission interrupted before completion", False)
-                    continue
-                if _latest_commit_is_wip(wt_path):
-                    print(f"Branch '{branch}' has WIP checkpoint commit; leaving PR #{pr_num_val} pending until complete.")
-                else:
-                    local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
-                    if origin and local_code == 0 and _publish_reviewed_completion(
-                            wt_path, branch, int(pr_num_val), issue_number, origin, local.strip()):
-                        _save_pr_state(issue_number, pr_num_val, branch, local.strip())
-                        print(f"PR #{pr_num_val} updated for issue #{issue_number}.")
+                if pr_num_val:
+                    ready = agy_code == 0 and not _latest_commit_is_wip(wt_path)
+                    origin = _record_initial_pr_origin(issue_number, pr_num_val, branch, ready)
+                    if agy_code != 0:
+                        _record_coderabbit_gate_failure(int(pr_num_val), branch, "Initial mission interrupted before completion", False)
+                        break
+                    if _latest_commit_is_wip(wt_path):
+                        print(f"Branch '{branch}' has WIP checkpoint commit; leaving PR #{pr_num_val} pending until complete.")
                     else:
-                        print(f"Initial publication for PR #{pr_num_val} remains blocked; preserving work.")
-            elif agy_code == 0 and pr_create_err:
-                print(f"PR creation failed: {pr_create_err}")
-            elif agy_code == 0 and not had_prior_work:
-                print(f"Agent exited 0 but no work done on branch '{branch}'.")
-                _fallback()
-            elif agy_code != 0:
-                if not _fallback():
-                    print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}'.")
-                    _remove_worktree(wt_path, branch)
+                        local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+                        if origin and local_code == 0 and _publish_reviewed_completion(
+                                wt_path, branch, int(pr_num_val), issue_number, origin, local.strip()):
+                            _save_pr_state(issue_number, pr_num_val, branch, local.strip())
+                            print(f"PR #{pr_num_val} updated for issue #{issue_number}.")
+                        else:
+                            print(f"Initial publication for PR #{pr_num_val} remains blocked; preserving work.")
+                    break
+                elif agy_code == 0 and pr_create_err:
+                    print(f"PR creation failed: {pr_create_err}")
+                    break
+                elif agy_code != 0 and is_quota_exhausted(agy_out, agy_err):
+                    mark_model_exhausted(agent_name, model_name)
+                    print(f"Agent {agent_name}/{model_name} exhausted quota on orphaned issue #{issue_number}.")
+                    if not _fallback():
+                        print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}'.")
+                        _remove_worktree(wt_path, branch)
+                        break
+                    print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
+                elif agy_code == 0 and not had_prior_work:
+                    print(f"Agent exited 0 but no work done on branch '{branch}'.")
+                    if not _fallback():
+                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}'.")
+                        _remove_worktree(wt_path, branch)
+                        break
+                elif agy_code != 0:
+                    if not _fallback():
+                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}'.")
+                        _remove_worktree(wt_path, branch)
+                    break
             continue
 
         pr_data = json.loads(pr_out)
@@ -2181,7 +2345,8 @@ def main():
 
                 _, before_commits, _ = run_cmd(["git", "rev-list", "--count", f"main..{branch_name}"], cwd=REPO_PATH)
                 before_count = int(before_commits.strip() or "0")
-                agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=False, model=_current_model())
+                model_name = _current_model()
+                agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=False, model=model_name)
 
                 if not _worktree_is_clean(wt_path):
                     print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
@@ -2237,6 +2402,20 @@ def main():
                         f"<pre>{pr_create_err}</pre>"
                     )
                     break
+                elif agy_code != 0 and is_quota_exhausted(agy_out, agy_err):
+                    mark_model_exhausted(agent_name, model_name)
+                    print(f"Agent {agent_name}/{model_name} exhausted quota on issue #{num}.")
+                    if not _fallback():
+                        print(f"All agents/models exhausted for issue #{num}. Removing worktree.")
+                        _remove_worktree(wt_path, branch_name)
+                        if _should_send_rate_limited(f"[Runner] Step 1 Implementation Failed: Issue #{num}"):
+                            send_email(
+                                f"[Runner] Step 1 Implementation Failed: Issue #{num}",
+                                f"<h3>All agents and models failed or exhausted quota while implementing Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>.</h3>"
+                                f"<p>Exhausted: {', '.join(f'{a}/{m}' for a, m in EXHAUSTED_MODELS)}</p>"
+                            )
+                        break
+                    print(f"Switching to {_current_agent()}/{_current_model()} and continuing issue #{num}...")
                 elif work_done:
                     print(f"Progress recorded on issue #{num} ({added_commits} new commit(s)). Preserving worktree for next cycle/agent.")
                     send_email(

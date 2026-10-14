@@ -29,7 +29,7 @@ def check_installation() -> bool:
     return shutil.which("claude") is not None
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """
     Returns True if Claude Code token actually works against the API.
 
@@ -40,13 +40,17 @@ def check_token_health() -> bool:
     tmp = tempfile.NamedTemporaryFile(suffix=".log", delete=False)
     tmp_path = tmp.name
     tmp.close()
+    cmd = ["claude", "-p", "say ok", "--permission-mode", "acceptEdits"]
+    if model and model != "default":
+        cmd += ["--model", model]
     try:
-        result = subprocess.run(
-            ["claude", "-p", "say ok", "--permission-mode", "acceptEdits"],
-            stdout=open(tmp_path, "w"),
-            stderr=subprocess.STDOUT,
-            timeout=30,
-        )
+        with open(tmp_path, "w") as log_f:
+            result = subprocess.run(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                timeout=30,
+            )
         with open(tmp_path, "r") as f:
             output = f.read().strip()
         if result.returncode == 0 and output:

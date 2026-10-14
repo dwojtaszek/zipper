@@ -16,18 +16,27 @@ import shutil
 
 def list_models() -> list[str]:
     """Returns list of available model strings (agent/model format)."""
-    try:
-        stdout = subprocess.check_output(
-            ["opencode", "models"],
-            text=True, stderr=subprocess.DEVNULL, timeout=15,
-        )
-        return [
-            line.strip()
-            for line in stdout.strip().splitlines()
-            if "/" in line and not line.startswith("Error")
-        ]
-    except Exception:
-        return []
+    for attempt in range(2):
+        try:
+            stdout = subprocess.check_output(
+                ["opencode", "models"],
+                text=True, stderr=subprocess.DEVNULL, timeout=15,
+            )
+            models = [
+                line.strip()
+                for line in stdout.strip().splitlines()
+                if "/" in line and not line.startswith("Error")
+            ]
+            if models:
+                return models
+            if attempt == 0:
+                import time
+                time.sleep(1)
+        except Exception:
+            if attempt == 0:
+                import time
+                time.sleep(1)
+    return []
 
 
 def check_installation() -> bool:
@@ -35,40 +44,50 @@ def check_installation() -> bool:
     return shutil.which("opencode") is not None
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """
     Returns True if opencode is installed and can list models (server reachable).
 
-    We use `opencode models opencode` as a lightweight connectivity probe —
+    We use `opencode models` as a lightweight connectivity probe —
     it hits the opencode API to enumerate models and fails fast if the server
     is down or credentials are missing. Avoids launching a full run session
     which hangs when the server returns UnknownError on health probes.
     """
-    try:
-        result = subprocess.run(
-            ["opencode", "models"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=15,
-        )
-        combined = (result.stdout + "\n" + result.stderr).strip()
-        if result.returncode != 0:
-            print(f"[opencode] API health check: server error — {combined[:200]}")
+    for attempt in range(2):
+        try:
+            result = subprocess.run(
+                ["opencode", "models"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=15,
+            )
+            combined = (result.stdout + "\n" + result.stderr).strip()
+            if result.returncode != 0:
+                print(f"[opencode] API health check: server error — {combined[:200]}")
+                return False
+            # Need at least one model returned
+            models = [l.strip() for l in result.stdout.splitlines() if "/" in l and not l.startswith("Error")]
+            if models:
+                print(f"[opencode] API health check: SUCCESS ({len(models)} models available)")
+                return True
+            if attempt == 0:
+                import time
+                time.sleep(1)
+                continue
+            print("[opencode] API health check: no models returned")
             return False
-        # Need at least one model returned
-        models = [l.strip() for l in result.stdout.splitlines() if "/" in l and not l.startswith("Error")]
-        if models:
-            print(f"[opencode] API health check: SUCCESS ({len(models)} models available)")
-            return True
-        print(f"[opencode] API health check: no models returned")
-        return False
-    except subprocess.TimeoutExpired:
-        print("[opencode] API health check: timed out (15s)")
-        return False
-    except Exception as e:
-        print(f"[opencode] API health check: exception — {e}")
-        return False
+        except subprocess.TimeoutExpired:
+            if attempt == 0:
+                import time
+                time.sleep(1)
+                continue
+            print("[opencode] API health check: timed out (15s)")
+            return False
+        except Exception as e:
+            print(f"[opencode] API health check: exception — {e}")
+            return False
+    return False
 
 
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
@@ -87,7 +106,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     base = ["opencode", "run"]
     if is_continue:
         base += ["--continue"]
-    if model:
+    if model and model != "default":
         base += ["--model", model]
     base += ["--auto", prompt]
 

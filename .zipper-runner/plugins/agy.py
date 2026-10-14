@@ -117,16 +117,19 @@ def _probe_model(model: str) -> bool:
             pass
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """
-    Returns True if agy has active API tokens on at least one candidate model.
+    Returns True if agy has active API tokens.
 
-    Probes models in priority order, falling back to other candidate models
+    If a specific model is requested, probes that model directly.
+    Otherwise probes models in priority order, falling back to other candidate models
     if the primary model hits quota.
     """
+    if model and model != "default":
+        return _probe_model(model)
     candidates = ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gemini-3.7-flash-high"]
-    for model in candidates:
-        if _probe_model(model):
+    for m in candidates:
+        if _probe_model(m):
             return True
     print("[agy] API health check: all candidate models failed")
     return False
@@ -148,7 +151,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     base = ["agy"]
     if is_continue:
         base += ["--continue"]
-    if model:
+    if model and model != "default":
         base += ["--model", model]
     base += ["--prompt", prompt, "--print-timeout", "30m", "--dangerously-skip-permissions"]
 
