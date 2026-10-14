@@ -31,16 +31,21 @@ def check_installation() -> bool:
     return shutil.which("codex") is not None
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """
     Returns True if Codex can actually reach the API and get a response.
 
     Sends a trivial prompt to verify end-to-end connectivity.
     Token-cost: negligible (~1 output token).
     """
+    cmd = ["codex", "exec", "--ephemeral"]
+    if model and model != "default":
+        model_name = model.split("/", 1)[-1] if "/" in model else model
+        cmd += ["-m", model_name]
+    cmd.append("say ok")
     try:
         result = subprocess.run(
-            ["codex", "exec", "--ephemeral", "say ok"],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -77,7 +82,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         (exit_code, stdout, stderr)
     """
     base = ["codex", "exec", "--ephemeral"]
-    if model:
+    if model and model != "default":
         # Strip provider prefix if present (e.g. "openai/gpt-5.6-terra" -> "gpt-5.6-terra")
         model_name = model.split("/", 1)[-1] if "/" in model else model
         base += ["-m", model_name]

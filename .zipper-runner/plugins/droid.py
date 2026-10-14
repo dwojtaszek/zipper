@@ -33,7 +33,7 @@ def check_installation() -> bool:
     return shutil.which("droid") is not None
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """
     Returns True if droid has active API tokens.
 
@@ -41,9 +41,10 @@ def check_token_health() -> bool:
     Requires a successful response containing pong within 30 seconds;
     failures can reflect authentication, quota, connectivity, or latency.
     """
+    target_model = model if (model and model != "default") else DEFAULT_MODEL
     try:
         result = subprocess.run(
-            ["droid", "exec", "--model", DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "Reply only with pong. Do not use tools."],
+            ["droid", "exec", "--model", target_model, "--reasoning-effort", REASONING_EFFORT, "Reply only with pong. Do not use tools."],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -161,7 +162,8 @@ def _stop_mission(p, terminate):
 
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
     """Run a fresh exec, including continuation requests, and return code/stdout/stderr."""
-    cmd = ["droid", "exec", "--model", model or DEFAULT_MODEL, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
+    model_arg = model if (model and model != "default") else DEFAULT_MODEL
+    cmd = ["droid", "exec", "--model", model_arg, "--reasoning-effort", REASONING_EFFORT, "--auto", "high", "--output-format", "stream-json", "--cwd", cwd, prompt]
     print(f"[droid] Running mission (continue={is_continue}) in {cwd}", flush=True)
     p = None
     terminate = True

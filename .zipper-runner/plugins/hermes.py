@@ -29,13 +29,16 @@ def check_installation() -> bool:
     return HERMES_BIN is not None
 
 
-def check_token_health() -> bool:
+def check_token_health(model: str | None = None) -> bool:
     """Returns True if hermes can execute a quick prompt successfully."""
     if not HERMES_BIN:
         return False
+    cmd = [HERMES_BIN, "-z", "say ok", "--yolo"]
+    if model and model != "default":
+        cmd += ["-m", model]
     try:
         result = subprocess.run(
-            [HERMES_BIN, "-z", "say ok", "--yolo"],
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
