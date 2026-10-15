@@ -58,6 +58,10 @@ jobs:
             echo "Non-docs change detected ($docs of $total files are docs); running full PR pipeline."
             echo "only_docs=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Validate requirement traceability
+        if: steps.check.outputs.only_docs == 'true'
+        shell: bash
+        run: bash tests/validate-req-traceability.sh --strict
 
   # Single source of truth for the shared gates (lint, runner-tests, the
   # three-OS build-and-test matrix, goldens CLI publish). See ci.yml.

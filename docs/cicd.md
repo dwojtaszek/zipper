@@ -25,6 +25,7 @@ flowchart TD
         gold["goldens:<br/>content-hash parity check"]
         gate["ci-gate<br/>(required merge gate)"]
         docsonly -->|not docs-only| shared --> gold --> gate
+        docsonly -->|docs-only: req traceability gate| gate
     end
 
     subgraph side["Side checks (parallel, on PR)"]
@@ -73,13 +74,13 @@ Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Full
 
 Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs are gated on `docs-only` so a pure-docs PR skips build/test entirely.
 
-1. **docs-only** — diffs base..head; if **every** changed file matches a docs pattern, sets `only_docs=true` and the rest of the pipeline is skipped. A failed diff or zero changed files is treated as non-docs (fail-safe).
+1. **docs-only** — diffs base..head; if **every** changed file matches a docs pattern, sets `only_docs=true`, runs `tests/validate-req-traceability.sh --strict` to ensure requirement traceability and reference integrity remain intact, and skips the rest of the pipeline. A failed diff or zero changed files is treated as non-docs (fail-safe).
 2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — the shared job graph, identical for PRs and main. Keeping it in one file is what stops the two callers drifting apart: the `git config user.name` guard that reddened main CI for 15 hours (#1173) existed on the PR side only, and both callers now get every gate from the same definition. Inputs: `publish_mode: goldens` on PRs (publishes the framework-dependent Linux CLI as `zipper-cli-linux`), `self-contained` on main (publishes per-RID release binaries), `version` on main. A PR that edits `ci.yml` is checked out with a read-only token, so a change is validated by the version it ships with.
    - **lint** — `actionlint`, `dotnet restore --locked-mode`, `dotnet format --verify-no-changes`, requirement-traceability validation, `.sh`/`.bat` E2E parity, an oversized-file guard (>500 KB under `src/`, excluding `*.json`/`*.dat`/`*.opt`), and a swallowed-test-output guard.
    - **runner-tests** — `.zipper-runner/tests` (runner CLI, subprocess, and Git-boundary regressions) on an isolated checkout, on `ubuntu-latest` and `macos-latest`. The suites carry their own fixture Git identity (`.zipper-runner/tests/gitenv.py`), which is what actually makes them pass on a machine with no global `user.name`/`user.email`; the job also fills a missing global identity as defence in depth for Git work outside those suites. Output is teed to a log so a non-zero exit never loses its traceback. These suites deliberately do **not** run inside the .NET E2E suite: a Git-environment failure then reported as a product regression, which is how #1173 was misdiagnosed as a code bug for a day. Windows is excluded because the suites install fake executables with a shebang and `chmod +x`, which Windows cannot execute — see the comment on the matrix.
    - **build-and-test** — matrix over `ubuntu` / `windows` / `macOS`. Builds Release (includes tests), runs unit tests, full E2E suite. **Linux leg only** also: code coverage + **80% total line-coverage gate** and **50% per-file coverage floor** ([coverage-gate action](../.github/actions/coverage-gate/action.yml)), vulnerable-package scan (hard gate), test-timing report, and the Linux CLI publish consumed by `goldens`.
 3. **goldens** — downloads the Linux CLI artifact and runs golden scenarios (content-hash parity). See [CI.md](../CI.md#goldens) to regenerate.
-4. **ci-gate** — aggregate merge gate; branch protection requires exactly this check context and nothing else. It always runs (even on docs-only PRs where everything above is skipped), and fails if any needed job failed or was cancelled.
+4. **ci-gate** — aggregate merge gate; branch protection requires exactly this check context and nothing else. It always runs (even on docs-only PRs where the other build/test jobs are skipped), and fails if any needed job failed or was cancelled.
 
 ### 3. Side checks (parallel on PR)
 
@@ -120,6 +121,7 @@ Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_
 | Gate | Where | Blocking? |
 |------|-------|-----------|
 | Format (`dotnet format`) | pre-commit, lint | Yes |
+| Requirement traceability | docs-only, lint | Yes |
 | Unit tests | pre-commit/pre-push, build-and-test | Yes |
 | Runner CLI/subprocess/Git regressions | runner-tests | Yes |
 | Release recovery / explicit executable regressions | runner-tests | Yes |
@@ -144,6 +146,7 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 | CI gate | Local equivalent |
 |---------|------------------|
 | lint (format) | `dotnet format --verify-no-changes src/` |
+| requirement traceability | `bash tests/validate-req-traceability.sh --strict` |
 | build | `dotnet build zipper.sln -c Release` |
 | unit tests + coverage gate | `dotnet test src/Zipper.Tests/Zipper.Tests.csproj --collect:"XPlat Code Coverage" --results-directory ./TestResults && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj` (then run `dotnet reportgenerator -reports:TestResults/*/coverage.cobertura.xml -targetdir:TestResults/coverage-report -reporttypes:TextSummary` and check line coverage ≥ 80%) |
 | runner-tests | `HOME=/nonexistent python3 -m unittest discover -s .zipper-runner/tests` (the empty `HOME` proves the suite carries its own fixture Git identity). Windows is not covered: the suites install shebang'd fake executables. |
