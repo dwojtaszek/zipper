@@ -208,3 +208,12 @@
 - **telemetry**: host=antigravity mode=branch specialists=4 bundle=~12000c
 - **lessons**: Passing `(IFormatProvider)null` to `string.Format` falls back to `CultureInfo.CurrentCulture`. The analyzer must inspect the argument expression syntax (`IsNullArgument`) rather than only checking parameter type definition to prevent unflagged culture-sensitive calls.
 - **suppressions**: none
+
+### 2026-10-15 antigravity:branch:feat/ISSUE-1121-test-independently-cover-production-mani
+
+- **findings**: 0 ACTION, 1 INFO across 4 specialists (correctness, adversarial, testing, maintainability) — testing specialist suggested asserting individual properties on Changed details in missing-hash changed test.
+- **outcome**: accepted and applied — added pathChanged and controlChanged property assertions. All 3,072 unit + 78 analyzer tests pass cleanly. All 4 mutation tests (isPathMatch, isControlMatch, match precedence, duplicate-control) failed as required before restoring.
+- **telemetry**: host=antigravity mode=branch specialists=4 bundle=~15000c
+- **lessons**: Explicit assertions on each detail collection entry prevent false negatives where count matches but fields are misassigned.
+- **suppressions**: none
+

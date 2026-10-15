@@ -800,4 +800,194 @@ public class ComparisonTests
             }
         }
     }
+
+    [Fact]
+    public async Task Compare_ReplacementMode_IndependentPathControlAndMissingHash_EmitsAccurateJsonReport()
+    {
+        // REQ-158/REQ-161/REQ-163: Integration test verifying that the emitted JSON Comparison Report
+        // agrees with the ComparisonEngine on independent path-only, control-only, replaced, missing-hash,
+        // added, and removed classifications.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var oldRecords = new List<(string, string, string, string, string)>
+            {
+                ("PR000001", "DOC001", "NATIVES/VOL001/doc1.pdf", "hash1", "VOL001"),
+                ("PR000002", "DOC002", "NATIVES/VOL001/doc2.pdf", "hash2", "VOL001"),
+                ("PR000003", "DOC003", "NATIVES/VOL001/doc3.pdf", "hash3", "VOL001"),
+                ("PR000004", "DOC004", "NATIVES/VOL001/doc4.pdf", "hash4", "VOL001"),
+                ("PR000005", "DOC005", "NATIVES/VOL001/doc5.pdf", "hash5", "VOL001")
+            };
+
+            var newRecords = new List<(string, string, string, string, string)>
+            {
+                ("PR000001", "DOC001", "NATIVES/VOL001/doc1_moved.pdf", "hash1", "VOL001"), // Path-only changed
+                ("PR000002", "DOC002_MOD", "NATIVES/VOL001/doc2.pdf", "hash2", "VOL001"), // Control-only changed
+                ("PR000099", "DOC003", "NATIVES/VOL001/doc3.pdf", "hash3", "VOL001"),      // Replaced (DOC003 match, different Bates)
+                ("PR000004", "DOC004", "NATIVES/VOL001/doc4.pdf", "", "VOL001"),           // Unchanged (missing new hash)
+                ("PR000006", "DOC006", "NATIVES/VOL001/doc6.pdf", "hash6", "VOL001")       // Added
+                // PR000005 omitted -> Removed
+            };
+
+            var oldManifest = CreateTempProductionSet(tempDir, "ProdOld", "PR000001", "PR000005", "PR", 6, oldRecords);
+            var newManifest = CreateTempProductionSet(tempDir, "ProdNew", "PR000001", "PR000099", "PR", 6, newRecords);
+
+            var reportPath = Path.Combine(tempDir, "report_integration.json");
+
+            var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
+                $"{oldManifest},{newManifest}",
+                "replacement",
+                reportPath);
+
+            Assert.True(success);
+            Assert.True(File.Exists(reportPath));
+
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var root = doc.RootElement;
+
+            Assert.Equal("replacement", root.GetProperty("comparisonMode").GetString());
+
+            var summary = root.GetProperty("summary");
+            Assert.Equal(5, summary.GetProperty("totalPriorRecords").GetInt32());
+            Assert.Equal(5, summary.GetProperty("totalNewRecords").GetInt32());
+            Assert.Equal(1, summary.GetProperty("addedCount").GetInt32());
+            Assert.Equal(1, summary.GetProperty("removedCount").GetInt32());
+            Assert.Equal(1, summary.GetProperty("unchangedCount").GetInt32());
+            Assert.Equal(2, summary.GetProperty("changedCount").GetInt32());
+            Assert.Equal(1, summary.GetProperty("replacedCount").GetInt32());
+            Assert.Equal(0, summary.GetProperty("duplicateCount").GetInt32());
+
+            var details = root.GetProperty("details");
+
+            var unchanged = details.GetProperty("unchanged");
+            Assert.Equal(1, unchanged.GetArrayLength());
+            Assert.Equal("PR000004", unchanged[0].GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC004", unchanged[0].GetProperty("controlNumber").GetString());
+
+            var changed = details.GetProperty("changed");
+            Assert.Equal(2, changed.GetArrayLength());
+
+            var pathChanged = changed[0];
+            Assert.Equal("PR000001", pathChanged.GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC001", pathChanged.GetProperty("controlNumber").GetString());
+            Assert.Equal("NATIVES/VOL001/doc1.pdf", pathChanged.GetProperty("priorPath").GetString());
+            Assert.Equal("NATIVES/VOL001/doc1_moved.pdf", pathChanged.GetProperty("newPath").GetString());
+            Assert.Equal("hash1", pathChanged.GetProperty("priorHash").GetString());
+            Assert.Equal("hash1", pathChanged.GetProperty("newHash").GetString());
+
+            var controlChanged = changed[1];
+            Assert.Equal("PR000002", controlChanged.GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC002_MOD", controlChanged.GetProperty("controlNumber").GetString());
+            Assert.Equal("NATIVES/VOL001/doc2.pdf", controlChanged.GetProperty("priorPath").GetString());
+            Assert.Equal("NATIVES/VOL001/doc2.pdf", controlChanged.GetProperty("newPath").GetString());
+            Assert.Equal("hash2", controlChanged.GetProperty("priorHash").GetString());
+            Assert.Equal("hash2", controlChanged.GetProperty("newHash").GetString());
+
+            var replaced = details.GetProperty("replaced");
+            Assert.Equal(1, replaced.GetArrayLength());
+            Assert.Equal("PR000003", replaced[0].GetProperty("priorBatesNumber").GetString());
+            Assert.Equal("PR000099", replaced[0].GetProperty("newBatesNumber").GetString());
+            Assert.Equal("DOC003", replaced[0].GetProperty("controlNumber").GetString());
+
+            var added = details.GetProperty("added");
+            Assert.Equal(1, added.GetArrayLength());
+            Assert.Equal("PR000006", added[0].GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC006", added[0].GetProperty("controlNumber").GetString());
+
+            var removed = details.GetProperty("removed");
+            Assert.Equal(1, removed.GetArrayLength());
+            Assert.Equal("PR000005", removed[0].GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC005", removed[0].GetProperty("controlNumber").GetString());
+
+            var duplicates = details.GetProperty("duplicates");
+            Assert.Equal(0, duplicates.GetArrayLength());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Compare_SupplementalMode_ControlOnlyOverlap_EmitsDuplicateAndAddedWithoutRemovalsInJsonReport()
+    {
+        // REQ-159/REQ-161/REQ-163: Integration test verifying that supplemental mode overlapping on
+        // Control Number alone emits a duplicate warning and added record in the JSON Comparison Report
+        // with zero removals.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var oldRecords = new List<(string, string, string, string, string)>
+            {
+                ("PR000001", "DOC001", "NATIVES/VOL001/doc1.pdf", "hash1", "VOL001")
+            };
+
+            var newRecords = new List<(string, string, string, string, string)>
+            {
+                ("PR000099", "DOC001", "NATIVES/VOL001/doc99.pdf", "hash99", "VOL001") // Distinct Bates, overlapping Control Number
+            };
+
+            var oldManifest = CreateTempProductionSet(tempDir, "ProdOld", "PR000001", "PR000001", "PR", 6, oldRecords);
+            var newManifest = CreateTempProductionSet(tempDir, "ProdNew", "PR000099", "PR000099", "PR", 6, newRecords);
+
+            var reportPath = Path.Combine(tempDir, "report_supplemental_ctrl.json");
+
+            var success = await ManifestComparison.ProductionManifestComparer.CompareAndReportAsync(
+                $"{oldManifest},{newManifest}",
+                "supplemental",
+                reportPath);
+
+            Assert.True(success);
+            Assert.True(File.Exists(reportPath));
+
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var root = doc.RootElement;
+
+            Assert.Equal("supplemental", root.GetProperty("comparisonMode").GetString());
+
+            var summary = root.GetProperty("summary");
+            Assert.Equal(1, summary.GetProperty("totalPriorRecords").GetInt32());
+            Assert.Equal(1, summary.GetProperty("totalNewRecords").GetInt32());
+            Assert.Equal(1, summary.GetProperty("addedCount").GetInt32());
+            Assert.Equal(0, summary.GetProperty("removedCount").GetInt32());
+            Assert.Equal(0, summary.GetProperty("unchangedCount").GetInt32());
+            Assert.Equal(0, summary.GetProperty("changedCount").GetInt32());
+            Assert.Equal(0, summary.GetProperty("replacedCount").GetInt32());
+            Assert.Equal(1, summary.GetProperty("duplicateCount").GetInt32());
+
+            var details = root.GetProperty("details");
+
+            var duplicates = details.GetProperty("duplicates");
+            Assert.Equal(1, duplicates.GetArrayLength());
+            Assert.Equal("new", duplicates[0].GetProperty("set").GetString());
+            Assert.Equal("PR000099", duplicates[0].GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC001", duplicates[0].GetProperty("controlNumber").GetString());
+            Assert.Contains("Supplemental overlap", duplicates[0].GetProperty("message").GetString(), StringComparison.Ordinal);
+
+            var added = details.GetProperty("added");
+            Assert.Equal(1, added.GetArrayLength());
+            Assert.Equal("PR000099", added[0].GetProperty("batesNumber").GetString());
+            Assert.Equal("DOC001", added[0].GetProperty("controlNumber").GetString());
+
+            var removed = details.GetProperty("removed");
+            Assert.Equal(0, removed.GetArrayLength());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
+
