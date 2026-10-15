@@ -344,6 +344,8 @@ def run_cmd(args, cwd=None, timeout=None):
         if "reset" in a:
             return True
         if a[:2] == ["git", "stash"]:
+            if len(a) >= 3 and a[2] in ("list", "show"):
+                return False
             return True
         if a[:2] == ["git", "checkout"] or a[:2] == ["git", "switch"]:
             return True
@@ -2249,6 +2251,132 @@ def verify_repo_on_main():
     )
     return True
 
+
+def sync_main_repo():
+    print("Fetching latest from origin...")
+    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
+    if fetch_code != 0:
+        print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}). Aborting startup.")
+        send_email(
+            "[Runner] Safety Abort: Failed to fetch origin",
+            f"<h3>Main repository at {REPO_PATH} failed to fetch from origin.</h3>"
+            f"<p>Fetch error: {fetch_err.strip()}</p>"
+            f"<p>Startup aborted to prevent operating on stale state.</p>"
+        )
+        sys.exit(1)
+
+    diff_code, diff_out, _ = run_cmd(["git", "diff", "--name-only", "HEAD", MAIN_REMOTE_REF], cwd=REPO_PATH)
+    ignored_code, ignored_out, _ = run_cmd(["git", "ls-files", "-o", "-i", "--exclude-standard"], cwd=REPO_PATH)
+    if diff_code != 0 or ignored_code != 0:
+        print(f"RECOVERY: Could not compute ignored-file collisions (diff={diff_code}, ls-files={ignored_code}). Aborting recovery.")
+        send_email(
+            "[Runner] Safety Abort: Failed to check ignored files during recovery",
+            f"<h3>Main repository at {REPO_PATH}: collision check failed (diff={diff_code}, ls-files={ignored_code}).</h3>"
+            f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
+        )
+        sys.exit(1)
+
+    remote_changed = set(diff_out.splitlines())
+    ignored_files = set(ignored_out.splitlines())
+    collisions = remote_changed.intersection(ignored_files)
+    if collisions:
+        print(f"RECOVERY: Ignored files collide with {MAIN_REMOTE_REF}: {sorted(collisions)}. Aborting recovery.")
+        send_email(
+            "[Runner] Safety Abort: Ignored files collide with remote changes",
+            f"<h3>Main repository at {REPO_PATH} has ignored files colliding with {MAIN_REMOTE_REF}.</h3>"
+            f"<p>Colliding files: {sorted(collisions)}</p>"
+            f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
+        )
+        sys.exit(1)
+
+    was_clean = _repo_is_clean(REPO_PATH)
+    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", MAIN_REMOTE_REF], cwd=REPO_PATH)
+    if rebase_code != 0:
+        _cleanup_git_state()
+        if was_clean:
+            print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
+            rev_code, rev_out, _ = run_cmd(["git", "rev-list", f"{MAIN_REMOTE_REF}..HEAD"], cwd=REPO_PATH)
+            if rev_code == 0 and rev_out.strip():
+                ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+                backup_branch = f"runner-backup-{ts}"
+                b_code, _, b_err = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=REPO_PATH)
+                if b_code != 0 and not DRY_RUN:
+                    print(f"RECOVERY: Failed to create backup branch {backup_branch}: {b_err.strip()}. Aborting reset.")
+                    send_email(
+                        "[Runner] Safety Abort: Failed to back up local commits before reset",
+                        f"<h3>Main repository at {REPO_PATH} has local commits that could not be backed up.</h3>"
+                        f"<p>Branch creation error: {b_err.strip()}</p>"
+                        f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>"
+                    )
+                    sys.exit(1)
+                print(f"RECOVERY: Backed up unmerged local commits to branch '{backup_branch}'.")
+                send_email(
+                    "[Runner] Auto-Recovery: Backed up local commits before resetting main",
+                    f"<h3>Main repository at {REPO_PATH} had local commits blocking rebase.</h3>"
+                    f"<p>The local commits were backed up to branch <code>{backup_branch}</code> before resetting 'main' to <code>{MAIN_REMOTE_REF}</code>.</p>"
+                )
+
+            reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
+            if reset_code != 0:
+                print(f"RECOVERY: git reset --hard {MAIN_REMOTE_REF} failed ({reset_err.strip()}). Aborting.")
+                send_email(
+                    "[Runner] Safety Abort: Failed to reset main branch",
+                    f"<h3>Main repository at {REPO_PATH} failed to reset to {MAIN_REMOTE_REF}.</h3>"
+                    f"<p>Reset error: {reset_err.strip()}</p>"
+                    f"<p>Manual intervention required.</p>"
+                )
+                sys.exit(1)
+        else:
+            print(f"Rebase failed ({rebase_err.strip()}) due to leftover uncommitted files. Auto-stashing and resetting to origin/main for autonomous continuity.")
+            ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+            stash_msg = f"runner-auto-recovery-{ts}"
+            stash_code, stash_out, stash_err = run_cmd(["git", "stash", "--include-untracked", "-m", stash_msg], cwd=REPO_PATH)
+
+            stash_verified = False
+            if DRY_RUN:
+                stash_verified = True
+            elif stash_code == 0:
+                list_code, list_out, _ = run_cmd(["git", "stash", "list"], cwd=REPO_PATH)
+                if list_code == 0 and list_out.strip():
+                    first_stash = list_out.splitlines()[0]
+                    if stash_msg in first_stash:
+                        show_code, _, _ = run_cmd(["git", "stash", "show", "stash@{0}"], cwd=REPO_PATH)
+                        if show_code == 0:
+                            stash_verified = True
+
+            if stash_code != 0 or not stash_verified:
+                print(f"RECOVERY: git stash failed or could not be verified (code {stash_code}): {stash_err.strip() or stash_out.strip()}. Aborting recovery to preserve uncommitted work.")
+                send_email(
+                    "[Runner] Safety Abort: Failed to stash dirty files during recovery",
+                    f"<h3>Main repository at {REPO_PATH} had uncommitted changes blocking rebase, but automatic stash backup failed or could not be verified.</h3>"
+                    f"<p>Rebase error: {rebase_err.strip()}</p>"
+                    f"<p>Stash return code: {stash_code}</p>"
+                    f"<p>Stash output: {stash_out.strip()}</p>"
+                    f"<p>Stash error: {stash_err.strip()}</p>"
+                    f"<p>Destructive reset/clean aborted to prevent data loss. Working tree left untouched. Manual intervention required.</p>"
+                )
+                sys.exit(1)
+
+            reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
+            if reset_code != 0:
+                print(f"RECOVERY: git reset --hard {MAIN_REMOTE_REF} failed ({reset_err.strip()}). Aborting.")
+                send_email(
+                    "[Runner] Safety Abort: Failed to reset main branch",
+                    f"<h3>Main repository at {REPO_PATH} failed to reset to {MAIN_REMOTE_REF}.</h3>"
+                    f"<p>Reset error: {reset_err.strip()}</p>"
+                    f"<p>Manual intervention required.</p>"
+                )
+                sys.exit(1)
+
+            run_cmd(["git", "clean", "-fd"], cwd=REPO_PATH)
+            if _should_send_rate_limited("[Runner] Auto-Recovery: Stashed dirty files and reset main"):
+                send_email(
+                    "[Runner] Auto-Recovery: Stashed dirty files and reset main",
+                    f"<h3>Main repository at {REPO_PATH} had uncommitted changes blocking rebase.</h3>"
+                    f"<p>The runner automatically created a git stash (<code>{stash_msg}</code>), cleaned untracked files, and reset 'main' to <code>origin/main</code> so autonomous execution can proceed without human intervention.</p>"
+                )
+
+
 def show_status():
     print("=== Zipper Runner Diagnostics ===")
     locked = False
@@ -2342,29 +2470,7 @@ def main():
     os.makedirs(WORKTREES_BASE, exist_ok=True)
 
     verify_repo_on_main()
-
-    print("Fetching latest from origin...")
-    run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
-
-    was_clean = _repo_is_clean(REPO_PATH)
-    rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", MAIN_REMOTE_REF], cwd=REPO_PATH)
-    if rebase_code != 0:
-        _cleanup_git_state()
-        if was_clean:
-            print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
-            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
-        else:
-            print(f"Rebase failed ({rebase_err.strip()}) due to leftover uncommitted files. Auto-stashing and resetting to origin/main for autonomous continuity.")
-            ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-            run_cmd(["git", "stash", "--include-untracked", "-m", f"runner-auto-recovery-{ts}"], cwd=REPO_PATH)
-            run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
-            run_cmd(["git", "clean", "-fd"], cwd=REPO_PATH)
-            if _should_send_rate_limited("[Runner] Auto-Recovery: Stashed dirty files and reset main"):
-                send_email(
-                    "[Runner] Auto-Recovery: Stashed dirty files and reset main",
-                    f"<h3>Main repository at {REPO_PATH} had uncommitted changes blocking rebase.</h3>"
-                    f"<p>The runner automatically created a git stash (<code>runner-auto-recovery-{ts}</code>), cleaned untracked files, and reset 'main' to <code>origin/main</code> so autonomous execution can proceed without human intervention.</p>"
-                )
+    sync_main_repo()
 
     if REFRESH_MODELS:
         refresh_models_table()
