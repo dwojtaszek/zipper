@@ -626,6 +626,11 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertIn("validate-req-traceability.sh --strict", workflow)
         self.assertIn("checks/traceability/run_check.py", workflow)
 
+    def test_pr_workflow_runs_strict_traceability_gate_on_docs_only(self):
+        workflow = (REPO_ROOT / ".github/workflows/pr.yml").read_text(encoding="utf-8")
+        self.assertIn("bash tests/validate-req-traceability.sh --strict", workflow)
+        self.assertIn("steps.check.outputs.only_docs == 'true'", workflow)
+
 
 class DeterministicGateRegressions(unittest.TestCase):
     def setUp(self):
