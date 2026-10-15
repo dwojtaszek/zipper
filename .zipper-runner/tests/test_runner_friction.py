@@ -544,6 +544,196 @@ class MainSyncTests(unittest.TestCase):
             self.assertEqual((repo / "user-notes").read_text(), "Keep this.")
 
 
+class WorktreeResilienceTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def _runner_env(self, gh_script="#!/bin/sh\nexit 1\n"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+
+            def git(*args, cwd=repo):
+                return subprocess.run(["git", "-C", str(cwd), *args], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+
+            spec = importlib.util.spec_from_file_location("friction_runner", BASE / "runner.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.REPO_PATH = str(repo)
+            module.WORKTREES_BASE = str(root / "worktrees")
+            module.STATE_DIR = str(root / "state")
+            module.DRY_RUN = False
+
+            gh = root / "gh"
+            gh.write_text(gh_script)
+            gh.chmod(0o755)
+            mail = root / "msmtp"
+            mail.write_text("#!/bin/sh\nexit 0\n")
+            mail.chmod(0o755)
+            old_path = os.environ["PATH"]
+            os.environ["PATH"] = directory + os.pathsep + old_path
+            try:
+                yield root, repo, git, module
+            finally:
+                os.environ["PATH"] = old_path
+
+    def test_babysit_detachedWorktree_alreadyMergedIntoMain_isCleanedUp(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            git("commit", "--allow-empty", "-m", "test: feature commit already in main")
+            head_commit = git("rev-parse", "HEAD")
+
+            worktree = root / "worktrees" / "issue-1125"
+            git("worktree", "add", "--detach", str(worktree), head_commit)
+
+            module.babysit_active_worktrees()
+            self.assertFalse(worktree.exists())
+
+    def test_babysit_detachedWorktree_recoversBranch_ifBranchExists(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            git("checkout", "-b", "fix/ISSUE-1125-assert-quote")
+            git("commit", "--allow-empty", "-m", "test: work on issue 1125")
+            feature_sha = git("rev-parse", "HEAD")
+            git("checkout", "main")
+
+            worktree = root / "worktrees" / "issue-1125"
+            git("worktree", "add", "--detach", str(worktree), feature_sha)
+
+            module.babysit_active_worktrees()
+            current_branch = git("branch", "--show-current", cwd=worktree)
+            self.assertEqual(current_branch, "fix/ISSUE-1125-assert-quote")
+
+    def test_babysit_stateMergedOrClosedPr_removesWorktree(self):
+        gh_script = (
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "if sys.argv[1:4] == ['pr', 'view', '500']:\n"
+            "    print(json.dumps({'number': 500, 'headRefName': 'fix/ISSUE-500-test', 'state': 'MERGED'}))\n"
+            "    sys.exit(0)\n"
+            "sys.exit(1)\n"
+        )
+        with self._runner_env(gh_script=gh_script) as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-500"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-500-test")
+
+            state_dir = root / "state"
+            state_dir.mkdir()
+            (state_dir / "issue-500.json").write_text(json.dumps({"pr_number": 500, "branch": "fix/ISSUE-500-test"}))
+            module.STATE_DIR = str(state_dir)
+
+            module.babysit_active_worktrees()
+            self.assertFalse(worktree.exists())
+            self.assertFalse((state_dir / "issue-500.json").exists())
+
+    def test_babysit_closedIssueOnGithub_withCleanWorktree_removesWorktree(self):
+        gh_script = (
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "if sys.argv[1:3] == ['issue', 'view']:\n"
+            "    print(json.dumps({'state': 'CLOSED', 'title': 'Closed issue', 'body': 'Done'}))\n"
+            "    sys.exit(0)\n"
+            "if sys.argv[1:3] == ['pr', 'list']:\n"
+            "    print('[]')\n"
+            "    sys.exit(0)\n"
+            "sys.exit(1)\n"
+        )
+        with self._runner_env(gh_script=gh_script) as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-700"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-700-test")
+
+            module.babysit_active_worktrees()
+            self.assertFalse(worktree.exists())
+
+    def test_babysit_detachedWorktree_squashedIntoMain_isCleanedUp(self):
+        with self._runner_env() as (root, repo, git, module):
+            (repo / "file.txt").write_text("initial\n")
+            git("add", "file.txt")
+            git("commit", "-m", "test: initial")
+
+            git("checkout", "-b", "feat/change")
+            (repo / "file.txt").write_text("change\n")
+            git("commit", "-am", "test: feature commit")
+            feature_sha = git("rev-parse", "HEAD")
+
+            git("checkout", "main")
+            (repo / "file.txt").write_text("change\n")
+            git("commit", "-am", "test: squash merge of feature")
+
+            worktree = root / "worktrees" / "issue-888"
+            git("worktree", "add", "--detach", str(worktree), feature_sha)
+
+            module.babysit_active_worktrees()
+            self.assertFalse(worktree.exists())
+
+    def test_babysit_stateMergedPr_dirtyWorktree_preservesWorktree(self):
+        gh_script = (
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "if sys.argv[1:4] == ['pr', 'view', '500']:\n"
+            "    print(json.dumps({'number': 500, 'headRefName': 'fix/ISSUE-500-test', 'state': 'MERGED'}))\n"
+            "    sys.exit(0)\n"
+            "sys.exit(1)\n"
+        )
+        with self._runner_env(gh_script=gh_script) as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-500"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-500-test")
+            (worktree / "dirty.txt").write_text("uncommitted work")
+
+            state_dir = root / "state"
+            state_dir.mkdir()
+            (state_dir / "issue-500.json").write_text(json.dumps({"pr_number": 500, "branch": "fix/ISSUE-500-test"}))
+            module.STATE_DIR = str(state_dir)
+
+            module.babysit_active_worktrees()
+            self.assertTrue(worktree.exists())
+            self.assertTrue((state_dir / "issue-500.json").exists())
+
+    def test_babysit_closedIssueOnGithub_unpushedBranch_retainsBranch(self):
+        gh_script = (
+            "#!/usr/bin/env python3\nimport json, sys\n"
+            "if sys.argv[1:3] == ['issue', 'view']:\n"
+            "    print(json.dumps({'state': 'CLOSED', 'title': 'Closed issue', 'body': 'Done'}))\n"
+            "    sys.exit(0)\n"
+            "if sys.argv[1:3] == ['pr', 'list']:\n"
+            "    print('[]')\n"
+            "    sys.exit(0)\n"
+            "sys.exit(1)\n"
+        )
+        with self._runner_env(gh_script=gh_script) as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-700"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-700-test")
+            (worktree / "committed.txt").write_text("committed content")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: committed work on branch", cwd=worktree)
+
+            module.babysit_active_worktrees()
+            self.assertFalse(worktree.exists())
+            branches = git("branch", "--list", "fix/ISSUE-700-test")
+            self.assertIn("fix/ISSUE-700-test", branches)
+
+    def test_babysit_detachedWorktree_recoversLowercaseBranch_ifHeadContained(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            git("checkout", "-b", "fix/issue-1125-lowercase")
+            git("commit", "--allow-empty", "-m", "test: work on issue 1125")
+            feature_sha = git("rev-parse", "HEAD")
+            git("checkout", "main")
+
+            worktree = root / "worktrees" / "issue-1125"
+            git("worktree", "add", "--detach", str(worktree), feature_sha)
+
+            module.babysit_active_worktrees()
+            current_branch = git("branch", "--show-current", cwd=worktree)
+            self.assertEqual(current_branch, "fix/issue-1125-lowercase")
+
+
+
+
 class ScheduleTests(unittest.TestCase):
     def test_setupCron_migratesOnlyLegacyIntake_andIsIdempotent(self):
         with tempfile.TemporaryDirectory() as directory:
