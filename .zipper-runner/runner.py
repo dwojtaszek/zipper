@@ -245,11 +245,17 @@ def send_email(subject, body_html):
     msg = f"To: {EMAIL_RECIPIENT}\nSubject: {subject}\nContent-Type: text/html\n\n{body_html}"
     try:
         p = subprocess.Popen(["msmtp", EMAIL_RECIPIENT], stdin=subprocess.PIPE, text=True)
-        p.communicate(msg)
-        if p.returncode != 0:
-            print(f"msmtp failed with exit code {p.returncode}")
+        try:
+            p.communicate(msg, timeout=10)
+            if p.returncode != 0:
+                print(f"msmtp failed with exit code {p.returncode}")
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.communicate()
+            print("WARNING: msmtp timed out and was killed")
     except Exception as e:
         print(f"Failed to send email via msmtp: {e}")
+
 
 def _rate_key(subject: str) -> str:
     """Stable key for rate-limiting by subject prefix."""
@@ -388,6 +394,7 @@ def _remove_worktree(wt_path: str, branch: str) -> None:
     run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
     if not DRY_RUN:
         shutil.rmtree(wt_path, ignore_errors=True)
+    run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
 
 
 def _cleanup_git_state():
@@ -1418,14 +1425,85 @@ def babysit_active_worktrees():
         code, branch_out, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
         branch = branch_out.strip()
         if not branch:
-            print(f"Could not determine branch for worktree {wt_path}")
+            # Handle detached HEAD or worktree with missing/deleted branch
+            head_code, head_sha, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+            head_sha = head_sha.strip()
+            is_clean = _worktree_is_clean(wt_path)
+
+            # Check if all commits in HEAD are already incorporated in main
+            is_merged_into_main = False
+            if head_code == 0 and head_sha:
+                ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", head_sha, "main"], cwd=REPO_PATH)
+                if ancestor_code == 0:
+                    is_merged_into_main = True
+                else:
+                    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", "main", head_sha], cwd=REPO_PATH)
+                    if cherry_code == 0:
+                        cherry_lines = [l.strip() for l in cherry_out.splitlines() if l.strip()]
+                        if cherry_lines and all(l.startswith("-") for l in cherry_lines):
+                            is_merged_into_main = True
+
+            if is_merged_into_main and is_clean:
+                print(f"SAFETY: Worktree {wt_path} is detached and already incorporated in 'main'. Removing stale worktree.")
+                run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
+                if not DRY_RUN:
+                    shutil.rmtree(wt_path, ignore_errors=True)
+                run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
+                _clear_pr_state(issue_number)
+                send_email(
+                    f"[Runner] Safety: Removed stale detached worktree for issue #{issue_number}",
+                    f"<h3>Worktree at {wt_path} was detached and its changes are already merged in 'main'. It has been cleanly removed.</h3>"
+                )
+                continue
+
+            # If not yet merged, search all matching candidate branches (local and remote)
+            candidates = []
+            patterns = [
+                f"*ISSUE-{issue_number}*",
+                f"*issue-{issue_number}*",
+                f"*issue_{issue_number}*",
+            ]
+            for pat in patterns:
+                _, b_out, _ = run_cmd(["git", "branch", "--list", pat], cwd=REPO_PATH)
+                for b in b_out.splitlines():
+                    cand = b.strip().lstrip("* ")
+                    if cand and cand not in [c[0] for c in candidates]:
+                        candidates.append((cand, False))
+
+            for pat in patterns:
+                _, rb_out, _ = run_cmd(["git", "branch", "-r", "--list", f"origin/{pat}"], cwd=REPO_PATH)
+                for b in rb_out.splitlines():
+                    cand = b.strip().replace("origin/", "")
+                    if cand and cand not in [c[0] for c in candidates]:
+                        candidates.append((cand, True))
+
+            recovered_branch = None
+            if head_code == 0 and head_sha:
+                for cand_branch, is_remote in candidates:
+                    ref = f"origin/{cand_branch}" if is_remote else cand_branch
+                    contains_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", head_sha, ref], cwd=REPO_PATH)
+                    if contains_code == 0:
+                        co_code, _, co_err = run_cmd(["git", "checkout", cand_branch], cwd=wt_path)
+                        if co_code == 0:
+                            recovered_branch = cand_branch
+                            print(f"Recovered branch '{recovered_branch}' for detached worktree {wt_path}. Re-evaluating in next cycle.")
+                            break
+                        else:
+                            print(f"Failed to checkout candidate branch '{cand_branch}': {co_err}")
+
+            if recovered_branch:
+                continue
+
+            print(f"Could not determine or recover branch containing HEAD for worktree {wt_path}; preserving worktree.")
             continue
+
 
         if branch == "main":
             print(f"SAFETY: Worktree {wt_path} is on branch 'main'. Removing stale worktree.")
             run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
             if not DRY_RUN:
                 shutil.rmtree(wt_path, ignore_errors=True)
+            run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
             send_email(
                 f"[Runner] Safety: Removed worktree on main branch",
                 f"<h3>Worktree at {wt_path} was incorrectly on the 'main' branch. It has been removed to prevent corruption.</h3>"
@@ -1440,7 +1518,7 @@ def babysit_active_worktrees():
             saved_state = _load_pr_state(issue_number)
             if saved_state and saved_state.get("pr_number"):
                 # Verify the persisted PR still exists and matches our branch
-                state_pr = saved_state["pr_number"]
+                state_pr = str(saved_state["pr_number"])
                 state_branch = saved_state.get("branch", "")
                 verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state"], cwd=REPO_PATH)
                 if verify_code == 0:
@@ -1451,10 +1529,17 @@ def babysit_active_worktrees():
                             pr_out = verify_out
                             pr_code = 0
                         elif verify_data.get("state") in ("MERGED", "CLOSED"):
-                            print(f"PR #{state_pr} (from state) is {verify_data.get('state')}. Clearing state and cleaning up.")
-                            _clear_pr_state(issue_number)
-                        else:
-                            print(f"PR #{state_pr} (from state) branch mismatch: expected '{branch}', got '{verify_data.get('headRefName')}'. Ignoring state.")
+                            if verify_data.get("headRefName") == branch:
+                                if _worktree_is_clean(wt_path):
+                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} and worktree is clean. Clearing state and cleaning up worktree.")
+                                    _clear_pr_state(issue_number)
+                                    _remove_worktree(wt_path, branch)
+                                    continue
+                                else:
+                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} but worktree has uncommitted changes. Preserving worktree.")
+                                    continue
+                            else:
+                                print(f"PR #{state_pr} (from state) branch mismatch: expected '{branch}', got '{verify_data.get('headRefName')}'. Ignoring state.")
                     except json.JSONDecodeError:
                         print(f"WARNING: Failed to parse PR #{state_pr} verification JSON.")
 
@@ -1494,6 +1579,41 @@ def babysit_active_worktrees():
                 else:
                     print(f"Failed to checkout branch '{matched_branch}' in worktree: {checkout_err}")
 
+            # Before creating PR or re-invoking agent: verify if issue is already closed on GitHub
+            issue_state_code, issue_state_out, _ = run_cmd(["gh", "issue", "view", str(issue_number), "--json", "state"], cwd=REPO_PATH)
+            if issue_state_code == 0:
+                try:
+                    iss_state = json.loads(issue_state_out).get("state")
+                    if iss_state == "CLOSED" and _worktree_is_clean(wt_path):
+                        print(f"Issue #{issue_number} is CLOSED on GitHub and worktree is clean. Removing worktree {wt_path}.")
+                        run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
+                        if not DRY_RUN:
+                            shutil.rmtree(wt_path, ignore_errors=True)
+                        run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
+
+                        # Delete branch only if merged into main or already on origin, preventing loss of local work
+                        is_safe_to_delete_branch = False
+                        merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, "main"], cwd=REPO_PATH)
+                        if merged_code == 0:
+                            is_safe_to_delete_branch = True
+                        else:
+                            rev_local, local_sha, _ = run_cmd(["git", "rev-parse", branch], cwd=REPO_PATH)
+                            ls_code, ls_out, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH)
+                            if rev_local == 0 and ls_code == 0 and ls_out.strip():
+                                remote_sha = ls_out.split()[0].strip()
+                                if local_sha.strip() == remote_sha:
+                                    is_safe_to_delete_branch = True
+
+                        if is_safe_to_delete_branch:
+                            run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
+                        else:
+                            print(f"Branch '{branch}' has unpushed commits; retaining branch while removing worktree.")
+                        _clear_pr_state(issue_number)
+                        continue
+
+                except json.JSONDecodeError:
+                    pass
+
             issue_title, safe_body = _fetch_issue_body(issue_number)
             pr_create_err = ""
             if _branch_has_commits(branch) and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
@@ -1507,6 +1627,7 @@ def babysit_active_worktrees():
                     print(f"PR creation failed: {pr_create_err}")
 
             print(f"No open PR found matching issue #{issue_number}. Re-invoking agent to implement and open PR.")
+
             prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch, pr_create_err)
             while True:
                 wait_for_tokens()
