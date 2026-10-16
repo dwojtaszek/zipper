@@ -931,14 +931,53 @@ class MainRepoRecoveryTests(unittest.TestCase):
             finally:
                 os.environ["PATH"] = old_path
 
+    @staticmethod
+    def _setup_conflicting_commit(repo, publisher, git):
+        (repo / "local.txt").write_text("local commit\n")
+        git("add", "local.txt")
+        git("commit", "-m", "local commit")
+
+        (publisher / "local.txt").write_text("remote conflicting commit\n")
+        git("add", "local.txt", cwd=publisher)
+        git("commit", "-m", "remote conflicting commit", cwd=publisher)
+        git("push", "origin", "main", cwd=publisher)
+
+    @staticmethod
+    def _setup_dirty_tree(repo, publisher, git, tracked_text="local uncommitted modification\n", untracked_text="untracked work\n"):
+        (publisher / "tracked.txt").write_text("remote content\n")
+        git("commit", "-am", "remote update", cwd=publisher)
+        git("push", "origin", "main", cwd=publisher)
+
+        (repo / "tracked.txt").write_text(tracked_text)
+        if untracked_text is not None:
+            (repo / "untracked.txt").write_text(untracked_text)
+
+    @staticmethod
+    def _setup_ignored_collision(repo, publisher, git):
+        (publisher / "ignored_file.txt").write_text("remote tracked content\n")
+        git("add", "ignored_file.txt", cwd=publisher)
+        git("commit", "-m", "remote adds ignored_file.txt", cwd=publisher)
+        git("push", "origin", "main", cwd=publisher)
+
+        (repo / ".gitignore").write_text("ignored_file.txt\n")
+        git("add", ".gitignore")
+        git("commit", "-m", "ignore ignored_file.txt")
+        (repo / "ignored_file.txt").write_text("local user ignored content\n")
+
+    def _assert_sync_aborts(self, module, mock_run_cmd=None):
+        if mock_run_cmd is not None:
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
+                with self.assertRaises(SystemExit) as cm:
+                    module.sync_main_repo()
+                self.assertEqual(cm.exception.code, 1)
+        else:
+            with self.assertRaises(SystemExit) as cm:
+                module.sync_main_repo()
+            self.assertEqual(cm.exception.code, 1)
+
     def test_syncMainRepo_stashFails_abortsRecoveryPreservingWorkAndSendsEmail(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (publisher / "tracked.txt").write_text("remote content\n")
-            git("commit", "-am", "remote update", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
-
-            (repo / "tracked.txt").write_text("local uncommitted modification\n")
-            (repo / "untracked.txt").write_text("untracked work\n")
+            self._setup_dirty_tree(repo, publisher, git)
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
@@ -946,10 +985,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "Cannot save the current status"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             self.assertEqual((repo / "tracked.txt").read_text(), "local uncommitted modification\n")
             self.assertTrue((repo / "untracked.txt").exists())
@@ -961,12 +997,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_stashVerificationFails_abortsRecoveryPreservingWorkAndSendsEmail(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (publisher / "tracked.txt").write_text("remote content\n")
-            git("commit", "-am", "remote update", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
-
-            (repo / "tracked.txt").write_text("local uncommitted modification\n")
-            (repo / "untracked.txt").write_text("untracked work\n")
+            self._setup_dirty_tree(repo, publisher, git)
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
@@ -976,10 +1007,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 0, "", ""
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             self.assertEqual((repo / "tracked.txt").read_text(), "local uncommitted modification\n")
             self.assertTrue((repo / "untracked.txt").exists())
@@ -989,12 +1017,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_stashSucceedsAndVerifies_resetsAndCleansTree(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (publisher / "tracked.txt").write_text("remote content\n")
-            git("commit", "-am", "remote update", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
-
-            (repo / "tracked.txt").write_text("local uncommitted modification\n")
-            (repo / "untracked.txt").write_text("untracked work\n")
+            self._setup_dirty_tree(repo, publisher, git)
 
             module.sync_main_repo()
 
@@ -1009,14 +1032,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_cleanRepoRebaseFails_resetsToOriginMain(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (repo / "local.txt").write_text("local commit\n")
-            git("add", "local.txt")
-            git("commit", "-m", "local commit")
-
-            (publisher / "local.txt").write_text("remote conflicting commit\n")
-            git("add", "local.txt", cwd=publisher)
-            git("commit", "-m", "remote conflicting commit", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
+            self._setup_conflicting_commit(repo, publisher, git)
 
             module.sync_main_repo()
 
@@ -1032,10 +1048,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "fatal: could not read from remote"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
@@ -1043,19 +1056,9 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_cleanIgnoredFileCollision_abortsRecovery(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (publisher / "ignored_file.txt").write_text("remote tracked content\n")
-            git("add", "ignored_file.txt", cwd=publisher)
-            git("commit", "-m", "remote adds ignored_file.txt", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
+            self._setup_ignored_collision(repo, publisher, git)
 
-            (repo / ".gitignore").write_text("ignored_file.txt\n")
-            git("add", ".gitignore")
-            git("commit", "-m", "ignore ignored_file.txt")
-            (repo / "ignored_file.txt").write_text("local user ignored content\n")
-
-            with self.assertRaises(SystemExit) as cm:
-                module.sync_main_repo()
-            self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module)
 
             self.assertEqual((repo / "ignored_file.txt").read_text(), "local user ignored content\n")
             emails = emails_file.read_text()
@@ -1064,21 +1067,10 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_dirtyIgnoredFileCollision_abortsRecovery(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (publisher / "ignored_file.txt").write_text("remote tracked content\n")
-            git("add", "ignored_file.txt", cwd=publisher)
-            git("commit", "-m", "remote adds ignored_file.txt", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
-
-            (repo / ".gitignore").write_text("ignored_file.txt\n")
-            git("add", ".gitignore")
-            git("commit", "-m", "ignore ignored_file.txt")
-            (repo / "ignored_file.txt").write_text("local user ignored content\n")
-
+            self._setup_ignored_collision(repo, publisher, git)
             (repo / "tracked.txt").write_text("local uncommitted\n")
 
-            with self.assertRaises(SystemExit) as cm:
-                module.sync_main_repo()
-            self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module)
 
             self.assertEqual((repo / "ignored_file.txt").read_text(), "local user ignored content\n")
             self.assertEqual((repo / "tracked.txt").read_text(), "local uncommitted\n")
@@ -1115,14 +1107,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_backupBranchFails_aborts(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (repo / "local.txt").write_text("local commit\n")
-            git("add", "local.txt")
-            git("commit", "-m", "local commit")
-
-            (publisher / "local.txt").write_text("remote conflicting commit\n")
-            git("add", "local.txt", cwd=publisher)
-            git("commit", "-m", "remote conflicting commit", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
+            self._setup_conflicting_commit(repo, publisher, git)
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
@@ -1130,10 +1115,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "fatal: cannot create branch"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
@@ -1163,14 +1145,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
     def test_syncMainRepo_revListFails_aborts(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
-            (repo / "local.txt").write_text("local commit\n")
-            git("add", "local.txt")
-            git("commit", "-m", "local commit")
-
-            (publisher / "local.txt").write_text("remote conflicting commit\n")
-            git("add", "local.txt", cwd=publisher)
-            git("commit", "-m", "remote conflicting commit", cwd=publisher)
-            git("push", "origin", "main", cwd=publisher)
+            self._setup_conflicting_commit(repo, publisher, git)
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
@@ -1178,10 +1153,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "fatal: rev-list failed"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
@@ -1201,10 +1173,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "fatal: could not reset"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
@@ -1224,10 +1193,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return 1, "", "fatal: ls-files error"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
-                with self.assertRaises(SystemExit) as cm:
-                    module.sync_main_repo()
-                self.assertEqual(cm.exception.code, 1)
+            self._assert_sync_aborts(module, mock_run_cmd)
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
