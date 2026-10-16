@@ -853,6 +853,30 @@ class WorktreeResilienceTests(unittest.TestCase):
             finally:
                 module.run_cmd = orig_run_cmd
 
+    def test_removeWorktree_staleRemoteTrackingRef_deletedOnOrigin_preservesWorktree(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            origin = root / "origin"
+            git("clone", "--bare", str(repo), str(origin))
+            git("remote", "add", "origin", str(origin))
+
+            worktree = root / "worktrees" / "issue-994"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-994-stale")
+            (worktree / "committed.txt").write_text("branch work")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: branch work", cwd=worktree)
+            git("push", "origin", "fix/ISSUE-994-stale", cwd=worktree)
+
+            # Delete branch from remote origin without pruning local tracking refs,
+            # simulating stale origin/fix/ISSUE-994-stale ref locally.
+            git("push", "origin", "--delete", "fix/ISSUE-994-stale")
+
+            # Live origin no longer has it. Cleanup must preserve the branch!
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-994-stale")
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertIn("fix/ISSUE-994-stale", git("branch", "--list", "fix/ISSUE-994-stale"))
+
 
 
 

@@ -414,19 +414,7 @@ def _is_branch_safe_to_delete(branch: str) -> bool:
         if lines and all(l.startswith("-") for l in lines):
             return True
 
-    # 3. Check if any local remote tracking branch contains this branch's tip
-    contains_code, contains_out, _ = run_cmd(["git", "branch", "-r", "--contains", branch], cwd=REPO_PATH)
-    if contains_code == 0 and contains_out.strip():
-        remote_refs = [l.strip() for l in contains_out.splitlines() if l.strip()]
-        if any(r.startswith("origin/") for r in remote_refs):
-            return True
-
-    # 4. Check local remote-tracking ref origin/<branch>
-    rb_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, f"origin/{branch}"], cwd=REPO_PATH)
-    if rb_code == 0:
-        return True
-
-    # 5. Check ls-remote against origin (network query with timeout to prevent hang)
+    # 3. Live check against origin: verify branch is present on remote origin
     ls_code, ls_out, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=15)
     if ls_code == 0 and ls_out.strip():
         remote_sha = ls_out.split()[0].strip()
