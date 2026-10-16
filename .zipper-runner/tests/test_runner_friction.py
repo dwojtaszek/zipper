@@ -566,8 +566,9 @@ class WorktreeResilienceTests(unittest.TestCase):
             gh = root / "gh"
             gh.write_text(gh_script)
             gh.chmod(0o755)
+            emails_file = root / "emails.txt"
             mail = root / "msmtp"
-            mail.write_text("#!/bin/sh\nexit 0\n")
+            mail.write_text(f"#!/bin/sh\ncat >> '{emails_file}'\nprintf '\\n---EMAIL-END---\\n' >> '{emails_file}'\nexit 0\n")
             mail.chmod(0o755)
             old_path = os.environ["PATH"]
             os.environ["PATH"] = directory + os.pathsep + old_path
@@ -730,6 +731,173 @@ class WorktreeResilienceTests(unittest.TestCase):
             module.babysit_active_worktrees()
             current_branch = git("branch", "--show-current", cwd=worktree)
             self.assertEqual(current_branch, "fix/issue-1125-lowercase")
+
+    def test_removeWorktree_exhaustedAgent_unpushedAndDirty_survivesCleanupAndEmitsSafetyEmail(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            origin = root / "origin"
+            git("clone", "--bare", str(repo), str(origin))
+            git("remote", "add", "origin", str(origin))
+
+            worktree = root / "worktrees" / "issue-999"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-999-exhausted")
+            (worktree / "committed.txt").write_text("unpushed commit content")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: unpushed agent work", cwd=worktree)
+            (worktree / "dirty.txt").write_text("uncommitted dirty work")
+
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-999-exhausted")
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertTrue((worktree / "dirty.txt").exists())
+            self.assertEqual((worktree / "dirty.txt").read_text(), "uncommitted dirty work")
+            self.assertIn("fix/ISSUE-999-exhausted", git("branch", "--list", "fix/ISSUE-999-exhausted"))
+
+            emails = (root / "emails.txt").read_text()
+            self.assertIn("Safety", emails)
+            self.assertIn("fix/ISSUE-999-exhausted", emails)
+
+    def test_removeWorktree_cleanFullyPushed_isRemoved(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            origin = root / "origin"
+            git("clone", "--bare", str(repo), str(origin))
+            git("remote", "add", "origin", str(origin))
+
+            worktree = root / "worktrees" / "issue-1000"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-1000-clean")
+            (worktree / "committed.txt").write_text("clean work")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: clean pushed work", cwd=worktree)
+            git("push", "origin", "fix/ISSUE-1000-clean", cwd=worktree)
+
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-1000-clean")
+            self.assertTrue(removed)
+            self.assertFalse(worktree.exists())
+            self.assertNotIn("fix/ISSUE-1000-clean", git("branch", "--list", "fix/ISSUE-1000-clean"))
+
+    def test_babysit_mainBranchWorktree_dirty_stashesAndPreserves(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            git("checkout", "-b", "temp-branch")
+
+            worktree = root / "worktrees" / "issue-998"
+            git("worktree", "add", str(worktree), "main")
+            (worktree / "dirty_on_main.txt").write_text("important uncommitted work")
+
+            module.babysit_active_worktrees()
+            # Stash should have captured the dirty changes
+            stashes = git("stash", "list")
+            self.assertIn("runner-safety-main-worktree", stashes)
+            self.assertFalse(worktree.exists())
+            emails = (root / "emails.txt").read_text()
+            self.assertIn("Safety", emails)
+
+    def test_removeWorktree_cleanWorktree_unpushedCommits_survivesCleanup(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            origin = root / "origin"
+            git("clone", "--bare", str(repo), str(origin))
+            git("remote", "add", "origin", str(origin))
+
+            worktree = root / "worktrees" / "issue-997"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-997-unpushed")
+            (worktree / "committed.txt").write_text("committed content not pushed")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: committed work", cwd=worktree)
+
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-997-unpushed")
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertIn("fix/ISSUE-997-unpushed", git("branch", "--list", "fix/ISSUE-997-unpushed"))
+            emails = (root / "emails.txt").read_text()
+            self.assertIn("Safety", emails)
+            self.assertIn("fix/ISSUE-997-unpushed", emails)
+
+    def test_removeWorktree_squashMergedPr_isMergedTrue_removesWorktreeAndBranch(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-995"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-995-squashed")
+            (worktree / "committed.txt").write_text("squashed content")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: squashed work", cwd=worktree)
+            merged_sha = git("rev-parse", "HEAD", cwd=worktree)
+
+            # Passing merged_head matching local tip allows cleanup even if remote ref is gone
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-995-squashed", is_merged=True, merged_head=merged_sha)
+            self.assertTrue(removed)
+            self.assertFalse(worktree.exists())
+            self.assertNotIn("fix/ISSUE-995-squashed", git("branch", "--list", "fix/ISSUE-995-squashed"))
+
+    def test_removeWorktree_squashMergedPr_unpushedLocalCommitsAfterMergedHead_preservesWorktree(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-993"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-993-extra")
+            (worktree / "committed.txt").write_text("pr content")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: merged pr work", cwd=worktree)
+            merged_sha = git("rev-parse", "HEAD", cwd=worktree)
+
+            # Agent made an extra unpushed commit after the PR was merged at merged_sha
+            (worktree / "extra.txt").write_text("extra local commit")
+            git("add", "extra.txt", cwd=worktree)
+            git("commit", "-m", "test: extra work", cwd=worktree)
+
+            # Local tip is ahead of merged_sha; cleanup must abort to prevent losing the extra commit
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-993-extra", is_merged=True, merged_head=merged_sha)
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertIn("fix/ISSUE-993-extra", git("branch", "--list", "fix/ISSUE-993-extra"))
+
+    def test_removeWorktree_gitWorktreeRemoveFails_neverRmtreesDirectory(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-996"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-996-fail")
+
+            # Mock run_cmd to simulate git worktree remove failing
+            orig_run_cmd = module.run_cmd
+            def mock_run_cmd(cmd, cwd=None, **kwargs):
+                if len(cmd) >= 3 and cmd[0] == "git" and cmd[1] == "worktree" and cmd[2] == "remove":
+                    return 1, "", "fatal: failed to remove worktree"
+                return orig_run_cmd(cmd, cwd=cwd, **kwargs)
+
+            module.run_cmd = mock_run_cmd
+            try:
+                removed = module._remove_worktree(str(worktree), "fix/ISSUE-996-fail")
+                self.assertFalse(removed)
+                self.assertTrue(worktree.exists())
+            finally:
+                module.run_cmd = orig_run_cmd
+
+    def test_removeWorktree_staleRemoteTrackingRef_deletedOnOrigin_preservesWorktree(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+            origin = root / "origin"
+            git("clone", "--bare", str(repo), str(origin))
+            git("remote", "add", "origin", str(origin))
+
+            worktree = root / "worktrees" / "issue-994"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-994-stale")
+            (worktree / "committed.txt").write_text("branch work")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: branch work", cwd=worktree)
+            git("push", "origin", "fix/ISSUE-994-stale", cwd=worktree)
+
+            # Delete branch from remote origin without pruning local tracking refs,
+            # simulating stale origin/fix/ISSUE-994-stale ref locally.
+            git("push", "origin", "--delete", "fix/ISSUE-994-stale")
+
+            # Live origin no longer has it. Cleanup must preserve the branch!
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-994-stale")
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertIn("fix/ISSUE-994-stale", git("branch", "--list", "fix/ISSUE-994-stale"))
 
 
 

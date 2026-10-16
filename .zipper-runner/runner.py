@@ -387,16 +387,126 @@ def _repo_is_clean(cwd: str) -> bool:
     return code == 0 and not out.strip()
 
 
-def _remove_worktree(wt_path: str, branch: str) -> None:
-    """Remove git worktree and its branch, then delete the directory.
+def _is_branch_safe_to_delete(branch: str) -> bool:
+    """Returns True if branch is merged into main or safely present on origin.
 
-    ponytail: simple cleanup helper; extracted from retry-loop dup pattern.
+    Never allows deleting unpushed commits or unmerged branches (#1223).
     """
-    run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-    run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
-    if not DRY_RUN:
+    if not branch or branch == "HEAD" or branch == "main":
+        return False
+
+    rev_code, local_sha, _ = run_cmd(["git", "rev-parse", "--verify", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if rev_code != 0:
+        # Branch does not exist locally; nothing to lose
+        return True
+
+    local_sha = local_sha.strip()
+
+    # 1. Is branch merged into main?
+    merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, "main"], cwd=REPO_PATH)
+    if merged_code == 0:
+        return True
+
+    # 2. Check if squashed/cherry-picked into main (all commits accounted for)
+    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", "main", branch], cwd=REPO_PATH)
+    if cherry_code == 0:
+        lines = [l.strip() for l in cherry_out.splitlines() if l.strip()]
+        if lines and all(l.startswith("-") for l in lines):
+            return True
+
+    # 3. Live check against origin: verify branch is present on remote origin
+    ls_code, ls_out, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=15)
+    if ls_code == 0 and ls_out.strip():
+        remote_sha = ls_out.split()[0].strip()
+        if local_sha == remote_sha:
+            return True
+        anc_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, remote_sha], cwd=REPO_PATH)
+        if anc_code == 0:
+            return True
+
+    return False
+
+
+def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False, merged_head: str = "") -> bool:
+    """Remove git worktree and its branch, then delete the directory if safe.
+
+    Verifies the worktree is clean and branch is merged or on origin before removal (#1223).
+    Aborts, preserves work, and sends safety email on any dirty/unpushed state or failure.
+    Returns True if worktree was removed, False if preserved or failed.
+    """
+    if os.path.exists(wt_path):
+        clean_code, clean_out, clean_err = run_cmd(["git", "status", "--porcelain"], cwd=wt_path)
+        if clean_code != 0:
+            print(f"SAFETY: Failed to verify git status for worktree {wt_path} (exit code {clean_code}): {clean_err}. Preserving worktree.")
+            subject = f"[Runner] Safety: Preserved worktree {wt_path} (git status failed)"
+            if _should_send_rate_limited(subject):
+                send_email(
+                    subject,
+                    f"<h3>Safety: Preserved worktree at {wt_path}</h3>"
+                    f"<p>Failed to verify worktree cleanliness. Worktree preserved to prevent data loss.</p>"
+                    f"<pre>{clean_err}</pre>",
+                )
+            return False
+
+        if clean_out.strip():
+            print(f"SAFETY: Worktree {wt_path} has uncommitted changes. Preserving worktree and branch '{branch}'.")
+            subject = f"[Runner] Safety: Preserved dirty worktree on branch '{branch}'"
+            if _should_send_rate_limited(subject):
+                send_email(
+                    subject,
+                    f"<h3>Safety: Preserved dirty worktree at {wt_path}</h3>"
+                    f"<p>Worktree on branch '{branch}' has uncommitted changes. Cleanup was aborted and work was preserved to prevent data loss.</p>"
+                    f"<pre>{clean_out.strip()}</pre>",
+                )
+            return False
+
+        if not branch:
+            _, cur_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
+            branch = cur_branch.strip()
+
+    if branch and branch != "main":
+        merged_ok = False
+        if is_merged and merged_head:
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", merged_head], cwd=REPO_PATH)
+            merged_ok = (anc == 0)
+        elif is_merged and not merged_head:
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", "main"], cwd=REPO_PATH)
+            merged_ok = (anc == 0)
+
+        if not merged_ok and not _is_branch_safe_to_delete(branch):
+            print(f"SAFETY: Branch '{branch}' has unpushed commits or is not merged into main. Preserving worktree {wt_path} and branch.")
+            subject = f"[Runner] Safety: Preserved worktree with unpushed branch '{branch}'"
+            if _should_send_rate_limited(subject):
+                send_email(
+                    subject,
+                    f"<h3>Safety: Preserved unpushed branch and worktree for '{branch}'</h3>"
+                    f"<p>Branch '{branch}' has unpushed commits and is not merged into main. Worktree at {wt_path} and branch preserved to prevent data loss.</p>",
+                )
+            return False
+
+    wt_rc, wt_out, wt_err = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
+    if wt_rc != 0:
+        print(f"SAFETY: git worktree remove failed for {wt_path} (exit code {wt_rc}): {wt_err}. Preserving directory.")
+        subject = f"[Runner] Safety: Failed to remove worktree {wt_path}"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>Safety: Failed to remove worktree at {wt_path}</h3>"
+                f"<p><code>git worktree remove</code> failed with exit code {wt_rc}. Directory preserved to prevent data loss.</p>"
+                f"<pre>{wt_err}</pre>",
+            )
+        return False
+
+    if branch and branch != "main":
+        br_rc, br_out, br_err = run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
+        if br_rc != 0:
+            print(f"WARNING: git branch -D failed for '{branch}' (exit code {br_rc}): {br_err}")
+
+    if not DRY_RUN and os.path.exists(wt_path):
         shutil.rmtree(wt_path, ignore_errors=True)
+
     run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
+    return True
 
 
 def _cleanup_git_state():
@@ -1501,20 +1611,43 @@ def babysit_active_worktrees():
 
 
         if branch == "main":
-            print(f"SAFETY: Worktree {wt_path} is on branch 'main'. Removing stale worktree.")
-            run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-            if not DRY_RUN:
+            print(f"SAFETY: Worktree {wt_path} is on branch 'main'.")
+            if not _worktree_is_clean(wt_path):
+                stash_msg = f"runner-safety-main-worktree-{folder_name}-{int(time.time())}"
+                stash_code, _, stash_err = run_cmd(
+                    ["git", "stash", "push", "--include-untracked", "-m", stash_msg],
+                    cwd=wt_path,
+                )
+                if not _is_stash_verified(stash_code, stash_msg) or not _worktree_is_clean(wt_path):
+                    print(f"SAFETY: Worktree {wt_path} on 'main' has uncommitted changes that could not be stashed ({stash_err}). Preserving worktree.")
+                    send_email(
+                        f"[Runner] Safety: Preserved dirty worktree on 'main' branch",
+                        f"<h3>Worktree at {wt_path} is on 'main' with uncommitted changes that could not be stashed. Preserving worktree to prevent data loss.</h3>"
+                    )
+                    continue
+                print(f"SAFETY: Stashed uncommitted changes for worktree {wt_path} on 'main' ({stash_msg}).")
+
+            wt_rc, _, wt_err = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
+            if wt_rc != 0:
+                print(f"SAFETY: git worktree remove failed for {wt_path} on 'main' (exit code {wt_rc}): {wt_err}. Preserving directory.")
+                send_email(
+                    f"[Runner] Safety: Failed to remove worktree on main branch",
+                    f"<h3>Failed to remove worktree at {wt_path}: {wt_err}. Preserving directory.</h3>"
+                )
+                continue
+
+            if not DRY_RUN and os.path.exists(wt_path):
                 shutil.rmtree(wt_path, ignore_errors=True)
             run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
             send_email(
                 f"[Runner] Safety: Removed worktree on main branch",
-                f"<h3>Worktree at {wt_path} was incorrectly on the 'main' branch. It has been removed to prevent corruption.</h3>"
+                f"<h3>Worktree at {wt_path} was incorrectly on the 'main' branch. It has been removed.</h3>"
             )
             continue
 
         print(f"Processing active worktree: {folder_name} (Branch: {branch})")
 
-        pr_code, pr_out, pr_err = run_cmd(["gh", "pr", "view", branch, "--json", "number,state,mergeable,statusCheckRollup,reviews,comments,updatedAt"], cwd=REPO_PATH)
+        pr_code, pr_out, pr_err = run_cmd(["gh", "pr", "view", branch, "--json", "number,state,mergeable,statusCheckRollup,reviews,comments,updatedAt,headRefOid"], cwd=REPO_PATH)
 
         if pr_code != 0:
             saved_state = _load_pr_state(issue_number)
@@ -1522,7 +1655,7 @@ def babysit_active_worktrees():
                 # Verify the persisted PR still exists and matches our branch
                 state_pr = str(saved_state["pr_number"])
                 state_branch = saved_state.get("branch", "")
-                verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state"], cwd=REPO_PATH)
+                verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state,headRefOid"], cwd=REPO_PATH)
                 if verify_code == 0:
                     try:
                         verify_data = json.loads(verify_out)
@@ -1533,10 +1666,15 @@ def babysit_active_worktrees():
                         elif verify_data.get("state") in ("MERGED", "CLOSED"):
                             if verify_data.get("headRefName") == branch:
                                 if _worktree_is_clean(wt_path):
-                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} and worktree is clean. Clearing state and cleaning up worktree.")
-                                    _clear_pr_state(issue_number)
-                                    _remove_worktree(wt_path, branch)
-                                    continue
+                                    is_merged = verify_data.get("state") == "MERGED"
+                                    merged_head = verify_data.get("headRefOid", "")
+                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} and worktree is clean. Cleaning up worktree.")
+                                    if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
+                                        _clear_pr_state(issue_number)
+                                        continue
+                                    else:
+                                        print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed. Preserving.")
+                                        continue
                                 else:
                                     print(f"PR #{state_pr} (from state) is {verify_data.get('state')} but worktree has uncommitted changes. Preserving worktree.")
                                     continue
@@ -1588,25 +1726,15 @@ def babysit_active_worktrees():
                     iss_state = json.loads(issue_state_out).get("state")
                     if iss_state == "CLOSED" and _worktree_is_clean(wt_path):
                         print(f"Issue #{issue_number} is CLOSED on GitHub and worktree is clean. Removing worktree {wt_path}.")
-                        run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-                        if not DRY_RUN:
+                        wt_rc, _, wt_err = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
+                        if wt_rc != 0:
+                            print(f"SAFETY: git worktree remove failed for {wt_path}: {wt_err}. Preserving directory.")
+                            continue
+                        if not DRY_RUN and os.path.exists(wt_path):
                             shutil.rmtree(wt_path, ignore_errors=True)
                         run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
 
-                        # Delete branch only if merged into main or already on origin, preventing loss of local work
-                        is_safe_to_delete_branch = False
-                        merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, "main"], cwd=REPO_PATH)
-                        if merged_code == 0:
-                            is_safe_to_delete_branch = True
-                        else:
-                            rev_local, local_sha, _ = run_cmd(["git", "rev-parse", branch], cwd=REPO_PATH)
-                            ls_code, ls_out, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH)
-                            if rev_local == 0 and ls_code == 0 and ls_out.strip():
-                                remote_sha = ls_out.split()[0].strip()
-                                if local_sha.strip() == remote_sha:
-                                    is_safe_to_delete_branch = True
-
-                        if is_safe_to_delete_branch:
+                        if _is_branch_safe_to_delete(branch):
                             run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
                         else:
                             print(f"Branch '{branch}' has unpushed commits; retaining branch while removing worktree.")
@@ -1677,20 +1805,23 @@ def babysit_active_worktrees():
                     mark_model_exhausted(agent_name, model_name)
                     print(f"Agent {agent_name}/{model_name} exhausted quota on orphaned issue #{issue_number}.")
                     if not _fallback():
-                        print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}'.")
-                        _remove_worktree(wt_path, branch)
+                        print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                        if not _remove_worktree(wt_path, branch):
+                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
                         break
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                 elif agy_code == 0 and not had_prior_work:
                     print(f"Agent exited 0 but no work done on branch '{branch}'.")
                     if not _fallback():
-                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}'.")
-                        _remove_worktree(wt_path, branch)
+                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                        if not _remove_worktree(wt_path, branch):
+                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
                         break
                 elif agy_code != 0:
                     if not _fallback():
-                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}'.")
-                        _remove_worktree(wt_path, branch)
+                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                        if not _remove_worktree(wt_path, branch):
+                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
                     break
             continue
 
@@ -1700,15 +1831,20 @@ def babysit_active_worktrees():
 
         if pr_state in ("MERGED", "CLOSED"):
             print(f"PR #{pr_number} is {pr_state}. Cleaning up worktree.")
-            _clear_pr_state(issue_number)
-            _clear_rerun_count(pr_number)
-            _clear_coderabbit_gate_failure(pr_number)
-            wt_rc, _, _ = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-            if wt_rc == 0:
-                run_cmd(["git", "branch", "-D", branch], cwd=REPO_PATH)
-
-            if pr_state == "CLOSED":
-                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+            if not _worktree_is_clean(wt_path):
+                print(f"PR #{pr_number} is {pr_state} but worktree has uncommitted changes. Preserving worktree.")
+                continue
+            is_merged = (pr_state == "MERGED")
+            merged_head = pr_data.get("headRefOid", "")
+            if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
+                _clear_pr_state(issue_number)
+                _clear_rerun_count(pr_number)
+                _clear_coderabbit_gate_failure(pr_number)
+                if pr_state == "CLOSED":
+                    print(f"PR #{pr_number} closed without merge; retaining origin/{branch}.")
+            else:
+                print(f"PR #{pr_number} is {pr_state} but worktree or branch '{branch}' could not be safely removed. Preserving.")
+                continue
 
             if pr_state == "MERGED":
                 _sync_main_after_merge()
@@ -1828,21 +1964,24 @@ def babysit_active_worktrees():
                                 is_merged = True
 
                         if is_merged:
-                            _clear_pr_state(issue_number)
-                            _clear_rerun_count(pr_number)
-                            _clear_coderabbit_gate_failure(pr_number)
-                            _remove_worktree(wt_path, branch)
-                            run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
-                            _sync_main_after_merge()
-                            send_email(
-                                f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
-                                f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
-                                f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
-                                f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
-                                f"<p><b>Branch:</b> {branch}</p>"
-                                f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
-                            )
-                            continue
+                            if _remove_worktree(wt_path, branch, is_merged=True, merged_head=reviewed_head):
+                                _clear_pr_state(issue_number)
+                                _clear_rerun_count(pr_number)
+                                _clear_coderabbit_gate_failure(pr_number)
+                                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+                                _sync_main_after_merge()
+                                send_email(
+                                    f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
+                                    f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
+                                    f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
+                                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
+                                    f"<p><b>Branch:</b> {branch}</p>"
+                                    f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
+                                )
+                                continue
+                            else:
+                                print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed after merge. Preserving.")
+                                continue
                         else:
                             print(
                                 f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
@@ -2660,8 +2799,9 @@ def main():
                     mark_model_exhausted(agent_name, model_name)
                     print(f"Agent {agent_name}/{model_name} exhausted quota on issue #{num}.")
                     if not _fallback():
-                        print(f"All agents/models exhausted for issue #{num}. Removing worktree.")
-                        _remove_worktree(wt_path, branch_name)
+                        print(f"All agents/models exhausted for issue #{num}. Removing worktree if safe.")
+                        if not _remove_worktree(wt_path, branch_name):
+                            print(f"Worktree '{branch_name}' preserved due to uncommitted changes or unpushed commits.")
                         if _should_send_rate_limited(f"[Runner] Step 1 Implementation Failed: Issue #{num}"):
                             send_email(
                                 f"[Runner] Step 1 Implementation Failed: Issue #{num}",
@@ -2697,8 +2837,9 @@ def main():
                         print(f"Agent stuck: {reason}")
                     tag = f" (stuck: {jev_class})" if stuck else ""
                     if not _fallback():
-                        print(f"All agents failed for issue #{num}. Removing worktree.")
-                        _remove_worktree(wt_path, branch_name)
+                        print(f"All agents failed for issue #{num}. Removing worktree if safe.")
+                        if not _remove_worktree(wt_path, branch_name):
+                            print(f"Worktree '{branch_name}' preserved due to uncommitted changes or unpushed commits.")
                         if _should_send_rate_limited(f"[Runner] Step 1 Implementation Failed: Issue #{num}"):
                             send_email(
                                 f"[Runner] Step 1 Implementation Failed: Issue #{num}{tag}",
@@ -2710,23 +2851,24 @@ def main():
                             )
                         break
                     print(f"Retrying with {_current_agent()}...")
-                    # Preserve partial work: only recreate worktree if branch has no commits
+                    # Preserve partial work: only recreate worktree if branch has no commits and worktree is clean
                     if _branch_has_commits(branch_name):
                         print(f"Branch '{branch_name}' has commits from failed agent — preserving work, retrying in-place.")
+                    elif not _worktree_is_clean(wt_path):
+                        print(f"Worktree {wt_path} has uncommitted changes from failed agent — preserving work, retrying in-place.")
                     else:
-                        run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
-                        run_cmd(["git", "branch", "-D", branch_name], cwd=REPO_PATH)
-                        if not DRY_RUN:
-                            shutil.rmtree(wt_path, ignore_errors=True)
-                        wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
-                        if wt_code != 0:
-                            send_email(
-                                f"[Runner] Worktree Recreation Failed: Issue #{num}",
-                                f"<h3>Failed to recreate git worktree during retry for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
-                                f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                                f"<pre>{wt_out}\n{wt_err}</pre>"
-                            )
-                            sys.exit(1)
+                        if _remove_worktree(wt_path, branch_name):
+                            wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
+                            if wt_code != 0:
+                                send_email(
+                                    f"[Runner] Worktree Recreation Failed: Issue #{num}",
+                                    f"<h3>Failed to recreate git worktree during retry for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
+                                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                                    f"<pre>{wt_out}\n{wt_err}</pre>"
+                                )
+                                sys.exit(1)
+                        else:
+                            print(f"Worktree {wt_path} or branch '{branch_name}' could not be removed — retrying in-place.")
                     _, safe_body = _fetch_issue_body(str(num))
                     retry_hint = (
                         f"Note: a previous agent attempt looked {jev_class or 'stuck'} — change your approach rather than repeating it.\n"
