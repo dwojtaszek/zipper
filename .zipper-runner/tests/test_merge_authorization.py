@@ -1,4 +1,5 @@
 """Exercise authorization with real Git refs and subprocess CLI boundaries."""
+from contextlib import contextmanager
 import importlib.util
 import json
 import os
@@ -6,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import gitenv  # noqa: F401
 
@@ -187,5 +188,216 @@ class MergeAuthorizationTests(unittest.TestCase):
             self.assertEqual((root / "merged").exists(), expected)
 
 
+
+class WorktreeReconciliationTests(unittest.TestCase):
+    @contextmanager
+    def _setup_fixture(self, coderabbit_findings=0):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repo = root / "repo"
+            subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+            (repo / "tests").mkdir()
+            (repo / "tests/wait-for-reviews.sh").write_text('#!/bin/sh\nexit 0\n')
+            (repo / "initial.txt").write_text("initial")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: initial"], check=True, capture_output=True)
+
+            gh = root / "gh"
+            gh.write_text(
+                "#!/usr/bin/env python3\nimport json, os, subprocess, sys\nfrom pathlib import Path\nroot = Path(__file__).resolve().parent\n"
+                "args = sys.argv[1:]\n"
+                "if args[:2] == ['api', 'graphql']:\n"
+                "    print(json.dumps([0]))\n"
+                "elif args[:2] == ['pr', 'merge']:\n"
+                "    sha = args[args.index('--match-head-commit')+1]\n"
+                "    subprocess.run(['git', '--git-dir', str(root/'origin'), 'update-ref', 'refs/heads/main', sha], check=True)\n"
+                "    (root / 'merged').write_text(args[2])\n"
+                "    print('merged')\n"
+                "elif args[0] == 'api':\n"
+                "    if args[1].endswith('/reviews'):\n"
+                "        print(json.dumps([]))\n"
+                "    elif args[1].endswith('/commits'): print(json.dumps([]))\n"
+                "    else: print((root/'pr.json').read_text())\n"
+                "elif args[:2] == ['pr','view']:\n"
+                "    pr=json.loads((root/'pr.json').read_text())\n"
+                "    if args[args.index('--json')+1] == 'commits': print('fix: proof')\n"
+                "    else: print(json.dumps({'number':99,'state':'OPEN','headRefOid':pr.get('head',{}).get('sha'), 'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}))\n"
+                "elif args[:2] == ['pr','list']:\n"
+                "    pr=json.loads((root/'pr.json').read_text())\n"
+                "    print(json.dumps([{'number':99,'title':'Fix #42','body':'Closes #42','author':{'login':pr['user']['login']},'headRefName':pr.get('head',{}).get('ref','fix/ISSUE-42-proof'),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
+                "else: raise AssertionError(args)\n"
+            )
+            gh.chmod(0o755)
+
+            cr = root / "coderabbit"
+            cr.write_text(
+                f"#!/bin/sh\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":{coderabbit_findings}}}'\n"
+                + ("exit 1\n" if coderabbit_findings > 0 else "exit 0\n")
+            )
+            cr.chmod(0o755)
+
+            msmtp = root / "msmtp"
+            msmtp.write_text("#!/bin/sh\ncat > /dev/null\nexit 0\n")
+            msmtp.chmod(0o755)
+
+            spec = importlib.util.spec_from_file_location("authorization_runner", BASE / "runner.py")
+            runner = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(runner)
+            runner.REPO_PATH = str(repo)
+            runner.STATE_DIR = str(root / "state")
+            runner.WORKTREES_BASE = str(root / "worktrees")
+            runner.TRUSTED_AUTHORS = {"dwojtaszek"}
+            runner.DRY_RUN = False
+            runner.REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
+            runner.wait_for_tokens = lambda: None
+            runner._babysit_with_fallback = MagicMock()
+            (root / "state").mkdir()
+
+            yield root, repo, runner, directory
+
+    def _create_tracked_pr_worktree(
+        self, root, repo, wt_commit=None, remote_files=None, branch="fix/ISSUE-42-proof", pr_number=99, gate_error=None
+    ):
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(repo), *args], text=True, stderr=subprocess.DEVNULL).strip()
+
+        git("branch", branch)
+        git("checkout", branch)
+        if remote_files:
+            for path, content in remote_files.items():
+                (repo / path).write_text(content)
+            git("add", ".")
+            git("commit", "-m", "fix: remote change")
+        head = git("rev-parse", "HEAD")
+        git("checkout", "main")
+        git("clone", "--bare", str(repo), str(root / "origin"))
+        git("remote", "add", "origin", str(root / "origin"))
+
+        wt_path = root / "worktrees/issue-42"
+        target = wt_commit if wt_commit is not None else head
+        subprocess.run(["git", "-C", str(repo), "worktree", "add", str(wt_path), target], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wt_path), "checkout", "-B", branch], check=True, capture_output=True)
+
+        pr = {
+            "number": pr_number, "state": "open", "draft": False,
+            "user": {"login": "dwojtaszek", "type": "User", "id": 1},
+            "base": {"ref": "main", "repo": {"full_name": "dwojtaszek/zipper"}},
+            "head": {"ref": branch, "sha": head, "repo": {"full_name": "dwojtaszek/zipper"}},
+        }
+        (root / "pr.json").write_text(json.dumps(pr))
+        (root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": str(pr_number), "branch": branch, "authorized_head": head,
+        }))
+        if gate_error is not None:
+            (root / "state" / f"pr-{pr_number}-coderabbit-gate.json").write_text(json.dumps({
+                "pr_number": pr_number, "branch": branch, "error": gate_error, "completion_ready": True
+            }))
+        return wt_path, head
+
+    def test_babysit_activeWorktree_behindAuthorizedHead_fastForwardsAndMerges(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            wt_path, head = self._create_tracked_pr_worktree(root, repo, wt_commit=initial, remote_files={"remote.txt": "remote"})
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            self.assertTrue((root / "merged").exists())
+            main_head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
+            self.assertEqual(main_head, head)
+
+    def test_babysit_activeWorktree_divergedConflict_backsUpAndBlocksMerge(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            (repo / "conflict.txt").write_text("initial")
+            subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: base"], check=True, capture_output=True)
+            initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, wt_commit=initial, remote_files={"conflict.txt": "remote version"}
+            )
+            (wt_path / "conflict.txt").write_text("local conflicting version")
+            subprocess.run(["git", "-C", str(wt_path), "commit", "-am", "local diverge"], check=True, capture_output=True)
+            local_diverged_sha = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            # Merge must be blocked because rebase conflicted!
+            self.assertFalse((root / "merged").exists())
+            # Verify backup branch was created and points to the diverged commit
+            backup_branches = [b.strip() for b in subprocess.check_output(["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True).strip().split()]
+            self.assertTrue(len(backup_branches) >= 1)
+            backup_sha = subprocess.check_output(["git", "-C", str(repo), "rev-parse", backup_branches[0]], text=True).strip()
+            self.assertEqual(backup_sha, local_diverged_sha)
+
+    def test_babysit_activeWorktree_divergedClean_rebasesAndPublishes(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, wt_commit=initial, remote_files={"remote_change.txt": "remote"}
+            )
+            (wt_path / "local_change.txt").write_text("local")
+            subprocess.run(["git", "-C", str(wt_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(wt_path), "commit", "-m", "local non-conflicting change"], check=True, capture_output=True)
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            # Clean rebase succeeds, publishes to remote, and clears gate failure
+            self.assertFalse((root / "state" / "pr-99-coderabbit-gate.json").exists())
+            remote_sha = subprocess.check_output(["git", "--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-proof"], text=True).strip()
+            local_sha = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(remote_sha, local_sha)
+            saved_state = json.loads((root / "state" / "issue-42.json").read_text())
+            self.assertEqual(saved_state.get("authorized_head"), local_sha)
+
+    def test_babysit_activeWorktree_dirtyWorktree_doesNotReconcileOrReset(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, wt_commit=initial, remote_files={"remote_change.txt": "remote"}
+            )
+            (wt_path / "uncommitted.txt").write_text("uncommitted dirty work")
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            # Merge blocked, uncommitted file preserved, worktree not reset
+            self.assertFalse((root / "merged").exists())
+            self.assertTrue((wt_path / "uncommitted.txt").exists())
+            self.assertEqual((wt_path / "uncommitted.txt").read_text(), "uncommitted dirty work")
+
+    def test_babysit_activeWorktree_staleCodeRabbitFailure_clearedWhenClean(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"}, gate_error="stale failure"
+            )
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "state" / "pr-99-coderabbit-gate.json").exists())
+            self.assertTrue((root / "merged").exists())
+            main_head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
+            self.assertEqual(main_head, head)
+
+    def test_babysit_activeWorktree_persistentCodeRabbitFailure_blocksMerge(self):
+        with self._setup_fixture(coderabbit_findings=3) as (root, repo, runner, directory):
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"}, gate_error="prior failure"
+            )
+
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+                runner.babysit_active_worktrees()
+
+            # Gate failure persists and merge is blocked!
+            self.assertTrue((root / "state" / "pr-99-coderabbit-gate.json").exists())
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_called_once()
+            self.assertIn("local CodeRabbit review gate failed for PR #99", runner._babysit_with_fallback.call_args[0][0])
+
+
 if __name__ == "__main__":
     unittest.main()
+
