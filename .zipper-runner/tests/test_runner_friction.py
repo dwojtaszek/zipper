@@ -942,7 +942,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
-                if args[:2] == ["git", "stash"] and len(args) > 2 and args[2] == "--include-untracked":
+                if args[:2] == ["git", "stash"] and "--include-untracked" in args:
                     return 1, "", "Cannot save the current status"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
@@ -970,7 +970,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
             original_run_cmd = module.run_cmd
             def mock_run_cmd(args, cwd=None, timeout=None):
-                if args[:2] == ["git", "stash"] and len(args) > 2 and args[2] == "--include-untracked":
+                if args[:2] == ["git", "stash"] and "--include-untracked" in args:
                     return 0, "Saved working directory", ""
                 if args[:3] == ["git", "stash", "list"]:
                     return 0, "", ""
@@ -1085,6 +1085,107 @@ class MainRepoRecoveryTests(unittest.TestCase):
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
             self.assertIn("Ignored files collide", emails)
+
+    def test_syncMainRepo_localCommitDoesNotTriggerFalseCollision(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            (repo / ".gitignore").write_text("scratch.log\n")
+            git("add", ".gitignore")
+            git("commit", "-m", "ignore scratch.log")
+            git("push", "origin", "main")
+
+            (repo / "scratch.log").write_text("local untracked ignored content\n")
+            (repo / "my_feature.txt").write_text("local feature\n")
+            git("add", "my_feature.txt")
+            git("commit", "-m", "local feature commit")
+
+            # Remote added unrelated file
+            git("pull", "origin", "main", cwd=publisher)
+            (publisher / "unrelated.txt").write_text("unrelated\n")
+            git("add", "unrelated.txt", cwd=publisher)
+            git("commit", "-m", "remote adds unrelated.txt", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            # Rebase should succeed without collision abort and preserve ignored file
+            module.sync_main_repo()
+            self.assertEqual((repo / "scratch.log").read_text(), "local untracked ignored content\n")
+            self.assertEqual((repo / "my_feature.txt").read_text(), "local feature\n")
+            self.assertEqual((repo / "unrelated.txt").read_text(), "unrelated\n")
+            if emails_file.exists():
+                self.assertNotIn("Ignored files collide", emails_file.read_text())
+
+    def test_syncMainRepo_backupBranchFails_aborts(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            (repo / "local.txt").write_text("local commit\n")
+            git("add", "local.txt")
+            git("commit", "-m", "local commit")
+
+            (publisher / "local.txt").write_text("remote conflicting commit\n")
+            git("add", "local.txt", cwd=publisher)
+            git("commit", "-m", "remote conflicting commit", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            original_run_cmd = module.run_cmd
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:2] == ["git", "branch"] and len(args) == 4:
+                    return 1, "", "fatal: cannot create branch"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
+                with self.assertRaises(SystemExit) as cm:
+                    module.sync_main_repo()
+                self.assertEqual(cm.exception.code, 1)
+
+            emails = emails_file.read_text()
+            self.assertIn("Safety Abort", emails)
+            self.assertIn("Failed to back up local commits before reset", emails)
+
+    def test_syncMainRepo_dirtyRepoWithLocalCommits_backsUpCommitsAndStashesChanges(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            (repo / "local.txt").write_text("local commit\n")
+            git("add", "local.txt")
+            git("commit", "-m", "local commit")
+
+            (publisher / "tracked.txt").write_text("remote commit\n")
+            git("commit", "-am", "remote commit", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            (repo / "tracked.txt").write_text("dirty uncommitted\n")
+            (repo / "dirty_untracked.txt").write_text("dirty untracked\n")
+
+            module.sync_main_repo()
+
+            self.assertEqual((repo / "tracked.txt").read_text(), "remote commit\n")
+            self.assertFalse((repo / "dirty_untracked.txt").exists())
+            branches = git("branch", "--list", "runner-backup-*")
+            self.assertTrue(bool(branches.strip()))
+            stash_list = git("stash", "list")
+            self.assertIn("runner-auto-recovery-", stash_list)
+
+    def test_syncMainRepo_revListFails_aborts(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            (repo / "local.txt").write_text("local commit\n")
+            git("add", "local.txt")
+            git("commit", "-m", "local commit")
+
+            (publisher / "local.txt").write_text("remote conflicting commit\n")
+            git("add", "local.txt", cwd=publisher)
+            git("commit", "-m", "remote conflicting commit", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            original_run_cmd = module.run_cmd
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:2] == ["git", "rev-list"]:
+                    return 1, "", "fatal: rev-list failed"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
+                with self.assertRaises(SystemExit) as cm:
+                    module.sync_main_repo()
+                self.assertEqual(cm.exception.code, 1)
+
+            emails = emails_file.read_text()
+            self.assertIn("Safety Abort", emails)
+            self.assertIn("Failed to check local commits before reset", emails)
 
     def test_syncMainRepo_resetFails_aborts(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):

@@ -2265,7 +2265,7 @@ def sync_main_repo():
         )
         sys.exit(1)
 
-    diff_code, diff_out, _ = run_cmd(["git", "diff", "--name-only", "HEAD", MAIN_REMOTE_REF], cwd=REPO_PATH)
+    diff_code, diff_out, _ = run_cmd(["git", "diff", "--name-only", f"HEAD...{MAIN_REMOTE_REF}"], cwd=REPO_PATH)
     ignored_code, ignored_out, _ = run_cmd(["git", "ls-files", "-o", "-i", "--exclude-standard"], cwd=REPO_PATH)
     if diff_code != 0 or ignored_code != 0:
         print(f"RECOVERY: Could not compute ignored-file collisions (diff={diff_code}, ls-files={ignored_code}). Aborting recovery.")
@@ -2293,14 +2293,21 @@ def sync_main_repo():
     rebase_code, rebase_out, rebase_err = run_cmd(["git", "rebase", MAIN_REMOTE_REF], cwd=REPO_PATH)
     if rebase_code != 0:
         _cleanup_git_state()
-        if was_clean:
-            print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
-            rev_code, rev_out, _ = run_cmd(["git", "rev-list", f"{MAIN_REMOTE_REF}..HEAD"], cwd=REPO_PATH)
-            if rev_code == 0 and rev_out.strip():
+        def _backup_local_commits_before_reset(reason: str = "blocking rebase"):
+            rev_code, rev_out, rev_err = run_cmd(["git", "rev-list", f"{MAIN_REMOTE_REF}..HEAD"], cwd=REPO_PATH)
+            if rev_code != 0:
+                print(f"RECOVERY: Failed to check unmerged local commits: {rev_err.strip()}. Aborting reset.")
+                send_email(
+                    "[Runner] Safety Abort: Failed to check local commits before reset",
+                    f"<h3>Main repository at {REPO_PATH}: rev-list failed ({rev_err.strip()}).</h3>"
+                    f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>"
+                )
+                sys.exit(1)
+            if rev_out.strip():
                 ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
                 backup_branch = f"runner-backup-{ts}"
                 b_code, _, b_err = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=REPO_PATH)
-                if b_code != 0 and not DRY_RUN:
+                if b_code != 0:
                     print(f"RECOVERY: Failed to create backup branch {backup_branch}: {b_err.strip()}. Aborting reset.")
                     send_email(
                         "[Runner] Safety Abort: Failed to back up local commits before reset",
@@ -2312,9 +2319,13 @@ def sync_main_repo():
                 print(f"RECOVERY: Backed up unmerged local commits to branch '{backup_branch}'.")
                 send_email(
                     "[Runner] Auto-Recovery: Backed up local commits before resetting main",
-                    f"<h3>Main repository at {REPO_PATH} had local commits blocking rebase.</h3>"
+                    f"<h3>Main repository at {REPO_PATH} had local commits {reason}.</h3>"
                     f"<p>The local commits were backed up to branch <code>{backup_branch}</code> before resetting 'main' to <code>{MAIN_REMOTE_REF}</code>.</p>"
                 )
+
+        if was_clean:
+            print(f"Rebase failed ({rebase_err.strip()}). Repo was clean — falling back to reset --hard origin/main.")
+            _backup_local_commits_before_reset("blocking rebase")
 
             reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
             if reset_code != 0:
@@ -2357,6 +2368,7 @@ def sync_main_repo():
                 )
                 sys.exit(1)
 
+            _backup_local_commits_before_reset("alongside uncommitted changes")
             reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
             if reset_code != 0:
                 print(f"RECOVERY: git reset --hard {MAIN_REMOTE_REF} failed ({reset_err.strip()}). Aborting.")
