@@ -823,13 +823,35 @@ class WorktreeResilienceTests(unittest.TestCase):
             (worktree / "committed.txt").write_text("squashed content")
             git("add", "committed.txt", cwd=worktree)
             git("commit", "-m", "test: squashed work", cwd=worktree)
+            merged_sha = git("rev-parse", "HEAD", cwd=worktree)
 
-            # Even though branch is not merged into main and not pushed to origin,
-            # is_merged=True explicitly signals that PR was merged (e.g. squash-merged).
-            removed = module._remove_worktree(str(worktree), "fix/ISSUE-995-squashed", is_merged=True)
+            # Passing merged_head matching local tip allows cleanup even if remote ref is gone
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-995-squashed", is_merged=True, merged_head=merged_sha)
             self.assertTrue(removed)
             self.assertFalse(worktree.exists())
             self.assertNotIn("fix/ISSUE-995-squashed", git("branch", "--list", "fix/ISSUE-995-squashed"))
+
+    def test_removeWorktree_squashMergedPr_unpushedLocalCommitsAfterMergedHead_preservesWorktree(self):
+        with self._runner_env() as (root, repo, git, module):
+            git("commit", "--allow-empty", "-m", "test: initial")
+
+            worktree = root / "worktrees" / "issue-993"
+            git("worktree", "add", str(worktree), "-b", "fix/ISSUE-993-extra")
+            (worktree / "committed.txt").write_text("pr content")
+            git("add", "committed.txt", cwd=worktree)
+            git("commit", "-m", "test: merged pr work", cwd=worktree)
+            merged_sha = git("rev-parse", "HEAD", cwd=worktree)
+
+            # Agent made an extra unpushed commit after the PR was merged at merged_sha
+            (worktree / "extra.txt").write_text("extra local commit")
+            git("add", "extra.txt", cwd=worktree)
+            git("commit", "-m", "test: extra work", cwd=worktree)
+
+            # Local tip is ahead of merged_sha; cleanup must abort to prevent losing the extra commit
+            removed = module._remove_worktree(str(worktree), "fix/ISSUE-993-extra", is_merged=True, merged_head=merged_sha)
+            self.assertFalse(removed)
+            self.assertTrue(worktree.exists())
+            self.assertIn("fix/ISSUE-993-extra", git("branch", "--list", "fix/ISSUE-993-extra"))
 
     def test_removeWorktree_gitWorktreeRemoveFails_neverRmtreesDirectory(self):
         with self._runner_env() as (root, repo, git, module):

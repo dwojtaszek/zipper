@@ -427,7 +427,7 @@ def _is_branch_safe_to_delete(branch: str) -> bool:
     return False
 
 
-def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False) -> bool:
+def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False, merged_head: str = "") -> bool:
     """Remove git worktree and its branch, then delete the directory if safe.
 
     Verifies the worktree is clean and branch is merged or on origin before removal (#1223).
@@ -464,8 +464,16 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False)
             _, cur_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
             branch = cur_branch.strip()
 
-    if branch and branch != "main" and not is_merged:
-        if not _is_branch_safe_to_delete(branch):
+    if branch and branch != "main":
+        merged_ok = False
+        if is_merged and merged_head:
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", merged_head], cwd=REPO_PATH)
+            merged_ok = (anc == 0)
+        elif is_merged and not merged_head:
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", "main"], cwd=REPO_PATH)
+            merged_ok = (anc == 0)
+
+        if not merged_ok and not _is_branch_safe_to_delete(branch):
             print(f"SAFETY: Branch '{branch}' has unpushed commits or is not merged into main. Preserving worktree {wt_path} and branch.")
             subject = f"[Runner] Safety: Preserved worktree with unpushed branch '{branch}'"
             if _should_send_rate_limited(subject):
@@ -1639,7 +1647,7 @@ def babysit_active_worktrees():
 
         print(f"Processing active worktree: {folder_name} (Branch: {branch})")
 
-        pr_code, pr_out, pr_err = run_cmd(["gh", "pr", "view", branch, "--json", "number,state,mergeable,statusCheckRollup,reviews,comments,updatedAt"], cwd=REPO_PATH)
+        pr_code, pr_out, pr_err = run_cmd(["gh", "pr", "view", branch, "--json", "number,state,mergeable,statusCheckRollup,reviews,comments,updatedAt,headRefOid"], cwd=REPO_PATH)
 
         if pr_code != 0:
             saved_state = _load_pr_state(issue_number)
@@ -1647,7 +1655,7 @@ def babysit_active_worktrees():
                 # Verify the persisted PR still exists and matches our branch
                 state_pr = str(saved_state["pr_number"])
                 state_branch = saved_state.get("branch", "")
-                verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state"], cwd=REPO_PATH)
+                verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state,headRefOid"], cwd=REPO_PATH)
                 if verify_code == 0:
                     try:
                         verify_data = json.loads(verify_out)
@@ -1659,8 +1667,9 @@ def babysit_active_worktrees():
                             if verify_data.get("headRefName") == branch:
                                 if _worktree_is_clean(wt_path):
                                     is_merged = verify_data.get("state") == "MERGED"
+                                    merged_head = verify_data.get("headRefOid", "")
                                     print(f"PR #{state_pr} (from state) is {verify_data.get('state')} and worktree is clean. Cleaning up worktree.")
-                                    if _remove_worktree(wt_path, branch, is_merged=is_merged):
+                                    if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
                                         _clear_pr_state(issue_number)
                                         continue
                                     else:
@@ -1826,7 +1835,8 @@ def babysit_active_worktrees():
                 print(f"PR #{pr_number} is {pr_state} but worktree has uncommitted changes. Preserving worktree.")
                 continue
             is_merged = (pr_state == "MERGED")
-            if _remove_worktree(wt_path, branch, is_merged=is_merged):
+            merged_head = pr_data.get("headRefOid", "")
+            if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
                 _clear_pr_state(issue_number)
                 _clear_rerun_count(pr_number)
                 _clear_coderabbit_gate_failure(pr_number)
@@ -1954,21 +1964,24 @@ def babysit_active_worktrees():
                                 is_merged = True
 
                         if is_merged:
-                            _clear_pr_state(issue_number)
-                            _clear_rerun_count(pr_number)
-                            _clear_coderabbit_gate_failure(pr_number)
-                            _remove_worktree(wt_path, branch, is_merged=True)
-                            run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
-                            _sync_main_after_merge()
-                            send_email(
-                                f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
-                                f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
-                                f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
-                                f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
-                                f"<p><b>Branch:</b> {branch}</p>"
-                                f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
-                            )
-                            continue
+                            if _remove_worktree(wt_path, branch, is_merged=True, merged_head=reviewed_head):
+                                _clear_pr_state(issue_number)
+                                _clear_rerun_count(pr_number)
+                                _clear_coderabbit_gate_failure(pr_number)
+                                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+                                _sync_main_after_merge()
+                                send_email(
+                                    f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
+                                    f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
+                                    f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
+                                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
+                                    f"<p><b>Branch:</b> {branch}</p>"
+                                    f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
+                                )
+                                continue
+                            else:
+                                print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed after merge. Preserving.")
+                                continue
                         else:
                             print(
                                 f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
