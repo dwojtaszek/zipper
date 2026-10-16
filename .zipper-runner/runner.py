@@ -2257,12 +2257,13 @@ def _fetch_origin_or_abort():
     fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
     if fetch_code != 0:
         print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}). Aborting startup.")
-        send_email(
-            "[Runner] Safety Abort: Failed to fetch origin",
-            f"<h3>Main repository at {REPO_PATH} failed to fetch from origin.</h3>"
-            f"<p>Fetch error: {fetch_err.strip()}</p>"
-            f"<p>Startup aborted to prevent operating on stale state.</p>"
-        )
+        if _should_send_rate_limited("[Runner] Safety Abort: Failed to fetch origin"):
+            send_email(
+                "[Runner] Safety Abort: Failed to fetch origin",
+                f"<h3>Main repository at {REPO_PATH} failed to fetch from origin.</h3>"
+                f"<p>Fetch error: {fetch_err.strip()}</p>"
+                f"<p>Startup aborted to prevent operating on stale state.</p>"
+            )
         sys.exit(1)
 
 
@@ -2271,11 +2272,12 @@ def _check_ignored_file_collisions():
     ignored_code, ignored_out, _ = run_cmd(["git", "ls-files", "-o", "-i", "--exclude-standard"], cwd=REPO_PATH)
     if diff_code != 0 or ignored_code != 0:
         print(f"RECOVERY: Could not compute ignored-file collisions (diff={diff_code}, ls-files={ignored_code}). Aborting recovery.")
-        send_email(
-            "[Runner] Safety Abort: Failed to check ignored files during recovery",
-            f"<h3>Main repository at {REPO_PATH}: collision check failed (diff={diff_code}, ls-files={ignored_code}).</h3>"
-            f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
-        )
+        if _should_send_rate_limited("[Runner] Safety Abort: Failed to check ignored files during recovery"):
+            send_email(
+                "[Runner] Safety Abort: Failed to check ignored files during recovery",
+                f"<h3>Main repository at {REPO_PATH}: collision check failed (diff={diff_code}, ls-files={ignored_code}).</h3>"
+                f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
+            )
         sys.exit(1)
 
     remote_changed = set(diff_out.splitlines())
@@ -2283,12 +2285,13 @@ def _check_ignored_file_collisions():
     collisions = remote_changed.intersection(ignored_files)
     if collisions:
         print(f"RECOVERY: Ignored files collide with {MAIN_REMOTE_REF}: {sorted(collisions)}. Aborting recovery.")
-        send_email(
-            "[Runner] Safety Abort: Ignored files collide with remote changes",
-            f"<h3>Main repository at {REPO_PATH} has ignored files colliding with {MAIN_REMOTE_REF}.</h3>"
-            f"<p>Colliding files: {sorted(collisions)}</p>"
-            f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
-        )
+        if _should_send_rate_limited("[Runner] Safety Abort: Ignored files collide with remote changes"):
+            send_email(
+                "[Runner] Safety Abort: Ignored files collide with remote changes",
+                f"<h3>Main repository at {REPO_PATH} has ignored files colliding with {MAIN_REMOTE_REF}.</h3>"
+                f"<p>Colliding files: {sorted(collisions)}</p>"
+                f"<p>Reset/rebase aborted to prevent data loss. Manual intervention required.</p>"
+            )
         sys.exit(1)
 
 
