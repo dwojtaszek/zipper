@@ -1,6 +1,7 @@
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
+using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
 
@@ -336,7 +337,7 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
     {
         var request = new FileGenerationRequest
         {
-            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "eml" },
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 2, FileType = "eml" },
             LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
             Metadata = new MetadataConfig { WithFamilies = true, Seed = 42 },
         };
@@ -353,8 +354,19 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
                     FilePathInZip = "folder/doc1.eml",
                 },
                 Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
-                DataLength = 100
-            }
+                DataLength = 100,
+            },
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 2,
+                    FolderNumber = 1,
+                    FileName = "doc2.eml",
+                    FilePathInZip = "folder/doc2.eml",
+                },
+                DataLength = 100,
+            },
         };
 
         var writer = new ConcordanceComposingWriter();
@@ -364,18 +376,52 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
         var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(3, lines.Length);
-        Assert.Contains("þBEGATTACHþ", lines[0], StringComparison.Ordinal);
-        Assert.Contains("þENDATTACHþ", lines[0], StringComparison.Ordinal);
-        Assert.Contains("þPARENTDOCIDþ", lines[0], StringComparison.Ordinal);
+        // Cardinality: 1 header + 2 parent records + 1 attachment record = 4 rows
+        Assert.Equal(4, lines.Length);
 
-        var parentLine = lines[1];
-        Assert.Contains("þDOC00000001þ", parentLine, StringComparison.Ordinal);
-        Assert.Contains("þDOC00000001_A001þ", parentLine, StringComparison.Ordinal);
+        const char ColumnDelimiter = '\u0014';
+        const char QuoteDelimiter = 'þ';
+        var headers = DelimitedTestParser.ParseLine(lines[0], ColumnDelimiter, QuoteDelimiter);
 
-        var childLine = lines[2];
-        Assert.Contains("þDOC00000001_A001þ", childLine, StringComparison.Ordinal);
-        Assert.Contains("þDOC00000001þ", childLine, StringComparison.Ordinal);
+        // Format-specific headers and Concordance leading fields
+        Assert.Equal("BEGATTY", headers[0]);
+        Assert.Equal("ENDATTY", headers[1]);
+        Assert.Equal("CONTROLNUMBER", headers[2]);
+        Assert.Contains("BEGATTACH", headers);
+        Assert.Contains("ENDATTACH", headers);
+        Assert.Contains("PARENTDOCID", headers);
+
+        var parent1 = DelimitedTestParser.ParseRecord(headers, lines[1], ColumnDelimiter, QuoteDelimiter);
+        var child1 = DelimitedTestParser.ParseRecord(headers, lines[2], ColumnDelimiter, QuoteDelimiter);
+        var parent2 = DelimitedTestParser.ParseRecord(headers, lines[3], ColumnDelimiter, QuoteDelimiter);
+
+        // Concordance leading fields (BEGATTY and ENDATTY) match the attachment range
+        Assert.Equal("DOC00000001", parent1["BEGATTY"]);
+        Assert.Equal("DOC00000001_A001", parent1["ENDATTY"]);
+        Assert.Equal("DOC00000001", child1["BEGATTY"]);
+        Assert.Equal("DOC00000001_A001", child1["ENDATTY"]);
+        Assert.Equal("DOC00000002", parent2["BEGATTY"]);
+        Assert.Equal("DOC00000002", parent2["ENDATTY"]);
+
+        // Parent 1 (with attachment)
+        Assert.Equal("DOC00000001", parent1["CONTROLNUMBER"]);
+        Assert.Equal("DOC00000001", parent1["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", parent1["ENDATTACH"]);
+        Assert.Empty(parent1["PARENTDOCID"]);
+
+        // Child 1 (attachment of Parent 1)
+        Assert.Equal("DOC00000001_A001", child1["CONTROLNUMBER"]);
+        Assert.Equal("DOC00000001", child1["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", child1["ENDATTACH"]);
+        Assert.Equal("DOC00000001", child1["PARENTDOCID"]);
+        // Child must not self-parent: PARENTDOCID points to parent, not child's own Control Number
+        Assert.NotEqual(child1["CONTROLNUMBER"], child1["PARENTDOCID"]);
+
+        // Parent 2 (without attachment: no child record, no spurious parent/child links)
+        Assert.Equal("DOC00000002", parent2["CONTROLNUMBER"]);
+        Assert.Equal("DOC00000002", parent2["BEGATTACH"]);
+        Assert.Equal("DOC00000002", parent2["ENDATTACH"]);
+        Assert.Empty(parent2["PARENTDOCID"]);
     }
 }
 
