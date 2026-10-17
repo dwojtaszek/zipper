@@ -1,5 +1,7 @@
+using System.Text;
 using Xunit;
 using Zipper.Config;
+using Zipper.Emails;
 using Zipper.LoadFiles;
 using Zipper.Tests.TestHelpers;
 
@@ -226,11 +228,32 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task CsvWriter_WithAnsiEncoding_ProducesAnsiOutput()
+    public async Task WriteAsync_AnsiWithNonAsciiMetadata_EmitsWindows1252Bytes()
     {
-        var request = this.CreateTestRequest();
+        var request = this.CreateTestRequest("eml");
         request.LoadFile = request.LoadFile with { Encoding = "ANSI" };
-        var fileData = this.CreateTestFileData();
+        var fileData = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "00000001.eml",
+                    FilePathInZip = "folder_001/00000001.eml",
+                },
+                Data = Encoding.UTF8.GetBytes("content"),
+                DataLength = 7,
+                Email = new Email
+                {
+                    To = "recipient@example.com",
+                    From = "sender@example.com",
+                    Subject = "café €",
+                    SentDate = new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc),
+                },
+            },
+        };
         var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
         var outputPath = Path.Combine(this.TempDir, "test_ansi.csv");
 
@@ -241,23 +264,93 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
 
         var bytes = await File.ReadAllBytesAsync(outputPath);
 
-        // Not a UTF-8 BOM
-        if (bytes.Length >= 3)
+        // Absence of BOM (not UTF-8 BOM, not UTF-16 BOM)
+        Assert.True(bytes.Length >= 3);
+        Assert.False(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);
+        Assert.False(bytes[0] == 0xFF && bytes[1] == 0xFE);
+        Assert.False(bytes[0] == 0xFE && bytes[1] == 0xFF);
+
+        // Expected byte sequence for "café €" in Windows-1252: 63 61 66 E9 20 80
+        // Derived independently of the production Encoding instance.
+        var expectedWindows1252Bytes = new byte[] { 0x63, 0x61, 0x66, 0xE9, 0x20, 0x80 };
+        Assert.True(bytes.AsSpan().IndexOf(expectedWindows1252Bytes) >= 0);
+
+        // Windows-1252 must not contain multi-byte UTF-8 sequences for 'é' (C3 A9) or '€' (E2 82 AC)
+        Assert.True(bytes.AsSpan().IndexOf(new byte[] { 0xC3, 0xA9 }) < 0);
+        Assert.True(bytes.AsSpan().IndexOf(new byte[] { 0xE2, 0x82, 0xAC }) < 0);
+
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var encoding = Encoding.GetEncoding(1252);
+        var content = encoding.GetString(bytes);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var headers = DelimitedTestParser.ParseLine(lines[0], ',', '"');
+        var record = DelimitedTestParser.ParseRecord(headers, lines[1], ',', '"');
+
+        Assert.Equal("café €", record["SUBJECT"]);
+        Assert.Contains("café €", content, StringComparison.Ordinal);
+        Assert.Contains("CONTROL NUMBER", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_Utf8WithNonAsciiMetadata_EmitsUtf8Bytes()
+    {
+        var request = this.CreateTestRequest("eml");
+        request.LoadFile = request.LoadFile with { Encoding = "UTF-8" };
+        var fileData = new List<FileData>
         {
-            Assert.False(bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF);
-        }
-        // Not a UTF-16 BOM
-        if (bytes.Length >= 2)
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "00000001.eml",
+                    FilePathInZip = "folder_001/00000001.eml",
+                },
+                Data = Encoding.UTF8.GetBytes("content"),
+                DataLength = 7,
+                Email = new Email
+                {
+                    To = "recipient@example.com",
+                    From = "sender@example.com",
+                    Subject = "café €",
+                    SentDate = new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc),
+                },
+            },
+        };
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Csv);
+        var outputPath = Path.Combine(this.TempDir, "test_utf8.csv");
+
+        await using (var stream = File.OpenWrite(outputPath))
         {
-            Assert.False(bytes[0] == 0xFF && bytes[1] == 0xFE);
-            Assert.False(bytes[0] == 0xFE && bytes[1] == 0xFF);
+            await writer.WriteAsync(stream, request, fileData);
         }
 
-        System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
-        var encoding = System.Text.Encoding.GetEncoding(1252);
-        var content = encoding.GetString(bytes);
-        var roundTripBytes = encoding.GetBytes(content);
-        Assert.Equal(bytes, roundTripBytes);
+        var bytes = await File.ReadAllBytesAsync(outputPath);
+
+        // UTF-8 BOM preamble (EF BB BF)
+        Assert.True(bytes.Length >= 3);
+        Assert.Equal(0xEF, bytes[0]);
+        Assert.Equal(0xBB, bytes[1]);
+        Assert.Equal(0xBF, bytes[2]);
+
+        // Expected byte sequence for "café €" in UTF-8: 63 61 66 C3 A9 20 E2 82 AC
+        // Derived independently of the production Encoding instance.
+        var expectedUtf8Bytes = new byte[] { 0x63, 0x61, 0x66, 0xC3, 0xA9, 0x20, 0xE2, 0x82, 0xAC };
+        Assert.True(bytes.AsSpan().IndexOf(expectedUtf8Bytes) >= 0);
+        Assert.True(bytes.AsSpan().IndexOf(new byte[] { 0xC3, 0xA9 }) >= 0);
+        Assert.True(bytes.AsSpan().IndexOf(new byte[] { 0xE2, 0x82, 0xAC }) >= 0);
+
+        // UTF-8 output must not contain the single-byte Windows-1252 encoding (63 61 66 E9 20 80)
+        Assert.True(bytes.AsSpan().IndexOf(new byte[] { 0x63, 0x61, 0x66, 0xE9, 0x20, 0x80 }) < 0);
+
+        var content = await File.ReadAllTextAsync(outputPath, Encoding.UTF8);
+        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var headers = DelimitedTestParser.ParseLine(lines[0], ',', '"');
+        var record = DelimitedTestParser.ParseRecord(headers, lines[1], ',', '"');
+
+        Assert.Equal("café €", record["SUBJECT"]);
+        Assert.Contains("café €", content, StringComparison.Ordinal);
         Assert.Contains("CONTROL NUMBER", content, StringComparison.Ordinal);
     }
 
