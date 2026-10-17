@@ -217,3 +217,11 @@
 - **lessons**: Explicit assertions on each detail collection entry prevent false negatives where count matches but fields are misassigned.
 - **suppressions**: none
 
+
+### 2026-10-17 antigravity:branch:feat/ISSUE-1123-test-decode-serialized-email-attach
+
+- **findings**: 1 ACTION (adversarial), 1 INFO (adversarial), 0 other across 4 specialists (correctness, adversarial, testing, maintainability). Adversarial noted that `(i * 31 + 7) & 0xFF` cycles modulo 256, meaning 58,368-byte chunks (which are multiples of 256) were identical across multi-chunk boundary tests, and that repeated-chunk corruption test should duplicate chunk 1 into chunk 2 keeping total length equal.
+- **outcome**: accepted and applied both — mixed higher-order bits `(i >> 8) ^ (i >> 16)` into payload generation and updated `WhenChunkIsRepeated` to duplicate chunk 1 into chunk 2 keeping length at 116,736 bytes. All 3,097 unit tests and 78 analyzer tests pass cleanly.
+- **telemetry**: host=antigravity mode=branch specialists=4 bundle=~11000c
+- **lessons**: When generating test payloads for chunk-boundary testing, ensure the generator's period exceeds the chunk size (and is coprime to chunk boundaries) so chunk offset advancement defects cannot be masked by cyclic repetition.
+- **suppressions**: none

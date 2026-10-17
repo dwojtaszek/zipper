@@ -1,5 +1,7 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Xunit;
+using Xunit.Sdk;
 using Zipper.Emails;
 
 namespace Zipper.Tests;
@@ -75,6 +77,8 @@ public class EmailSerializerTests
         Assert.Contains("Content-Disposition: attachment; filename=\"data.pdf\"", content, StringComparison.Ordinal);
         Assert.Contains("application/pdf", content, StringComparison.Ordinal);
         Assert.True(result.Length > 0);
+
+        AssertAttachmentDecodesCorrectly(content, attachment.Content);
     }
 
     [Fact]
@@ -282,30 +286,302 @@ public class EmailSerializerTests
         Assert.Contains("application/custom-type", content, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ToEml_LargeAttachment_HandlesCorrectly()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(56)]
+    [InlineData(57)]
+    [InlineData(58)]
+    [InlineData(58367)]
+    [InlineData(58368)]
+    [InlineData(58369)]
+    [InlineData(116736)]
+    [InlineData(116737)]
+    public void ToEml_Attachment_DecodesPayloadAndCoversChunkBoundaries(int payloadLength)
     {
+        var expectedBytes = CreateDeterministicPayload(payloadLength);
         var email = new Email
         {
             To = "test@example.com",
             From = "sender@example.com",
-            Subject = "Large Attachment",
+            Subject = "Attachment Boundary Test",
             SentDate = new DateTime(2024, 1, 1),
-            Body = "Email with large attachment",
+            Body = "Email with attachment",
         };
-        var largeContent = new byte[1024 * 1024]; // 1MB
-        Random.Shared.NextBytes(largeContent);
         var attachment = new EmailAttachment
         {
-            FileName = "large.dat",
-            Content = largeContent,
+            FileName = "payload.bin",
+            Content = expectedBytes,
         };
 
         var result = EmailSerializer.ToEml(email, attachment);
 
-        Assert.True(result.Length > largeContent.Length);
+        Assert.NotNull(result);
         var content = Encoding.UTF8.GetString(result);
-        Assert.Contains("base64", content.ToLowerInvariant(), StringComparison.Ordinal);
+
+        Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
+        Assert.Contains("Content-Transfer-Encoding: base64", content, StringComparison.Ordinal);
+        Assert.Contains("Content-Disposition: attachment; filename=\"payload.bin\"", content, StringComparison.Ordinal);
+        Assert.Contains("application/octet-stream", content, StringComparison.Ordinal);
+
+        AssertAttachmentDecodesCorrectly(content, expectedBytes);
+    }
+
+    private static byte[] CreateDeterministicPayload(int length)
+    {
+        var buffer = new byte[length];
+        for (int i = 0; i < length; i++)
+        {
+            buffer[i] = (byte)(((i * 31 + 7) ^ (i >> 8) ^ (i >> 16)) & 0xFF);
+        }
+        return buffer;
+    }
+
+    private static void AssertAttachmentDecodesCorrectly(string content, byte[] expectedBytes)
+    {
+        // 1. Extract MIME boundary from root Content-Type header
+        var boundaryMatch = Regex.Match(
+            content,
+            @"^Content-Type:\s*multipart/mixed;\s*boundary=""([^""]+)""",
+            RegexOptions.Multiline | RegexOptions.IgnoreCase,
+            TimeSpan.FromSeconds(2));
+        Assert.True(boundaryMatch.Success, "Expected root Content-Type header with multipart/mixed and boundary parameter.");
+        string boundary = boundaryMatch.Groups[1].Value;
+        Assert.False(string.IsNullOrWhiteSpace(boundary), "Extracted MIME boundary must not be empty or whitespace.");
+
+        // 2. Assert closing boundary is present and at the end of the multipart content
+        string closingBoundary = $"--{boundary}--";
+        Assert.Contains(closingBoundary, content, StringComparison.Ordinal);
+        Assert.True(content.TrimEnd().EndsWith(closingBoundary, StringComparison.Ordinal),
+            $"EML content must end with closing boundary '{closingBoundary}'.");
+
+        // 3. Independently identify and extract MIME parts
+        string delimiter = $"--{boundary}";
+        var parts = new List<string>();
+        int searchPos = 0;
+
+        while (true)
+        {
+            int delimPos = content.IndexOf(delimiter, searchPos, StringComparison.Ordinal);
+            if (delimPos < 0)
+            {
+                break;
+            }
+
+            int afterDelim = delimPos + delimiter.Length;
+            if (afterDelim + 1 < content.Length && content[afterDelim] == '-' && content[afterDelim + 1] == '-')
+            {
+                // Reached closing boundary: --boundary--
+                break;
+            }
+
+            // Consume line break immediately following boundary delimiter
+            if (afterDelim + 1 < content.Length && content[afterDelim] == '\r' && content[afterDelim + 1] == '\n')
+            {
+                afterDelim += 2;
+            }
+            else if (afterDelim < content.Length && content[afterDelim] == '\n')
+            {
+                afterDelim += 1;
+            }
+
+            int nextDelim = content.IndexOf(delimiter, afterDelim, StringComparison.Ordinal);
+            Assert.True(nextDelim >= 0, "MIME part must be terminated by a subsequent boundary delimiter.");
+
+            string partContent = content.Substring(afterDelim, nextDelim - afterDelim);
+            parts.Add(partContent);
+
+            searchPos = nextDelim;
+        }
+
+        // 4. Independently identify Attachment part by Content-Transfer-Encoding: base64
+        string? attachmentPart = null;
+        foreach (var part in parts)
+        {
+            int headerSep = part.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            if (headerSep < 0)
+            {
+                headerSep = part.IndexOf("\n\n", StringComparison.Ordinal);
+            }
+
+            string partHeaders = headerSep >= 0 ? part.Substring(0, headerSep) : part;
+            if (partHeaders.Contains("Content-Transfer-Encoding: base64", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.True(attachmentPart is null, "Expected exactly one attachment part with base64 encoding.");
+                attachmentPart = part;
+            }
+        }
+
+        Assert.NotNull(attachmentPart);
+
+        // 5. Separate attachment headers from payload
+        int separatorIndex = attachmentPart.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        int separatorLen = 4;
+        if (separatorIndex < 0)
+        {
+            separatorIndex = attachmentPart.IndexOf("\n\n", StringComparison.Ordinal);
+            separatorLen = 2;
+        }
+
+        Assert.True(separatorIndex >= 0, "Attachment part must contain header/body separator.");
+        string rawPayload = attachmentPart.Substring(separatorIndex + separatorLen);
+        string trimmedPayload = rawPayload.TrimEnd('\r', '\n');
+
+        // 6. Assert base64 lines <= 76 characters, including multi-chunk concatenation
+        string[] base64Lines = trimmedPayload.Length == 0
+            ? Array.Empty<string>()
+            : trimmedPayload.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+        Assert.All(base64Lines, line =>
+        {
+            Assert.NotEmpty(line);
+            Assert.True(line.Length <= 76,
+                $"Base64 line length must not exceed 76 characters, but was {line.Length}: '{line}'");
+        });
+
+        // 7. Decode with Convert.FromBase64String and compare every input byte
+        string combinedBase64 = string.Concat(base64Lines);
+        byte[] decodedBytes = Convert.FromBase64String(combinedBase64);
+
+        Assert.Equal(expectedBytes, decodedBytes);
+    }
+
+    [Fact]
+    public void AssertAttachmentDecodesCorrectly_Fails_WhenPayloadIsZeroFilled()
+    {
+        var expectedBytes = CreateDeterministicPayload(100);
+        var email = new Email
+        {
+            To = "test@example.com",
+            From = "sender@example.com",
+            Subject = "Corruption Test",
+            SentDate = new DateTime(2024, 1, 1),
+            Body = "Test",
+        };
+        var corruptedAttachment = new EmailAttachment
+        {
+            FileName = "corrupted.bin",
+            Content = new byte[100],
+        };
+        var corruptedEml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, corruptedAttachment));
+
+        Assert.ThrowsAny<XunitException>(() =>
+            AssertAttachmentDecodesCorrectly(corruptedEml, expectedBytes));
+    }
+
+    [Fact]
+    public void AssertAttachmentDecodesCorrectly_Fails_WhenChunkIsDropped()
+    {
+        var expectedBytes = CreateDeterministicPayload(58368 * 2);
+        var email = new Email
+        {
+            To = "test@example.com",
+            From = "sender@example.com",
+            Subject = "Dropped Chunk Test",
+            SentDate = new DateTime(2024, 1, 1),
+            Body = "Test",
+        };
+        var corruptedAttachment = new EmailAttachment
+        {
+            FileName = "dropped.bin",
+            Content = CreateDeterministicPayload(58368),
+        };
+        var corruptedEml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, corruptedAttachment));
+
+        Assert.ThrowsAny<XunitException>(() =>
+            AssertAttachmentDecodesCorrectly(corruptedEml, expectedBytes));
+    }
+
+    [Fact]
+    public void AssertAttachmentDecodesCorrectly_Fails_WhenChunkIsRepeated()
+    {
+        const int chunkSize = 58368;
+        var expectedBytes = CreateDeterministicPayload(chunkSize * 2);
+        var email = new Email
+        {
+            To = "test@example.com",
+            From = "sender@example.com",
+            Subject = "Repeated Chunk Test",
+            SentDate = new DateTime(2024, 1, 1),
+            Body = "Test",
+        };
+        // Corrupted attachment duplicates chunk 1 into chunk 2, keeping the same 116,736-byte total length
+        var corruptedBytes = new byte[chunkSize * 2];
+        Array.Copy(expectedBytes, 0, corruptedBytes, 0, chunkSize);
+        Array.Copy(expectedBytes, 0, corruptedBytes, chunkSize, chunkSize);
+
+        var corruptedAttachment = new EmailAttachment
+        {
+            FileName = "repeated.bin",
+            Content = corruptedBytes,
+        };
+        var corruptedEml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, corruptedAttachment));
+
+        Assert.ThrowsAny<XunitException>(() =>
+            AssertAttachmentDecodesCorrectly(corruptedEml, expectedBytes));
+    }
+
+    [Fact]
+    public void AssertAttachmentDecodesCorrectly_Fails_WhenClosingBoundaryIsMissing()
+    {
+        var expectedBytes = CreateDeterministicPayload(10);
+        var email = new Email
+        {
+            To = "test@example.com",
+            From = "sender@example.com",
+            Subject = "Missing Boundary Test",
+            SentDate = new DateTime(2024, 1, 1),
+            Body = "Test",
+        };
+        var attachment = new EmailAttachment
+        {
+            FileName = "data.bin",
+            Content = expectedBytes,
+        };
+        var eml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, attachment));
+
+        var boundaryMatch = Regex.Match(eml, @"boundary=""([^""]+)""", RegexOptions.None, TimeSpan.FromSeconds(2));
+        Assert.True(boundaryMatch.Success);
+        string closingBoundary = $"--{boundaryMatch.Groups[1].Value}--";
+        int lastBoundaryIndex = eml.LastIndexOf(closingBoundary, StringComparison.Ordinal);
+        Assert.True(lastBoundaryIndex >= 0);
+        var corruptedEml = eml.Remove(lastBoundaryIndex, closingBoundary.Length);
+
+        Assert.ThrowsAny<XunitException>(() =>
+            AssertAttachmentDecodesCorrectly(corruptedEml, expectedBytes));
+    }
+
+    [Fact]
+    public void AssertAttachmentDecodesCorrectly_Fails_WhenBase64LineExceeds76Characters()
+    {
+        var expectedBytes = CreateDeterministicPayload(100);
+        var email = new Email
+        {
+            To = "test@example.com",
+            From = "sender@example.com",
+            Subject = "Line Length Test",
+            SentDate = new DateTime(2024, 1, 1),
+            Body = "Test",
+        };
+        var attachment = new EmailAttachment
+        {
+            FileName = "data.bin",
+            Content = expectedBytes,
+        };
+        var eml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, attachment));
+
+        var lineMatch = Regex.Match(
+            eml,
+            @"([A-Za-z0-9+/]{76})\r\n([A-Za-z0-9+/=]+)",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(2));
+        Assert.True(lineMatch.Success, "Expected multi-line base64 payload with a 76-character line followed by CRLF.");
+        var corruptedEml = eml.Remove(lineMatch.Groups[1].Index + 76, 2);
+
+        Assert.ThrowsAny<XunitException>(() =>
+            AssertAttachmentDecodesCorrectly(corruptedEml, expectedBytes));
     }
 
     [Fact]
@@ -369,6 +645,8 @@ public class EmailSerializerTests
         Assert.NotNull(result);
         var content = Encoding.UTF8.GetString(result);
         Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
+
+        AssertAttachmentDecodesCorrectly(content, attachment.Content);
     }
 
     [Fact]
