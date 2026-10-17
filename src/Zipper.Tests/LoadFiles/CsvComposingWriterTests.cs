@@ -1,6 +1,7 @@
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
+using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
 
@@ -275,28 +276,61 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
                     Index = 1,
                     FolderNumber = 1,
                     FileName = "doc1.eml",
-                    FilePathInZip = "folder/doc1.eml"
+                    FilePathInZip = "folder/doc1.eml",
                 },
                 Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
-                DataLength = 100
-            }
+                DataLength = 100,
+            },
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 2,
+                    FolderNumber = 1,
+                    FileName = "doc2.eml",
+                    FilePathInZip = "folder/doc2.eml",
+                },
+                DataLength = 100,
+            },
         };
 
         var content = await this.CaptureCsvOutput(request, files);
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(3, lines.Length);
-        Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
-        Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
-        Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
+        // Cardinality: 1 header + 2 parent records + 1 attachment record = 4 rows
+        Assert.Equal(4, lines.Length);
 
-        var parentLine = lines[1];
-        Assert.Contains("DOC00000001", parentLine, StringComparison.Ordinal);
-        Assert.Contains("DOC00000001_A001", parentLine, StringComparison.Ordinal);
+        var headers = DelimitedTestParser.ParseLine(lines[0], ',', '"');
+        Assert.Contains("CONTROL NUMBER", headers);
+        Assert.Contains("BEGATTACH", headers);
+        Assert.Contains("ENDATTACH", headers);
+        Assert.Contains("PARENTDOCID", headers);
+        Assert.DoesNotContain("BEGATTY", headers);
+        Assert.DoesNotContain("ENDATTY", headers);
 
-        var childLine = lines[2];
-        Assert.Contains("DOC00000001_A001", childLine, StringComparison.Ordinal);
-        Assert.Contains("DOC00000001", childLine, StringComparison.Ordinal);
+        var parent1 = DelimitedTestParser.ParseRecord(headers, lines[1], ',', '"');
+        var child1 = DelimitedTestParser.ParseRecord(headers, lines[2], ',', '"');
+        var parent2 = DelimitedTestParser.ParseRecord(headers, lines[3], ',', '"');
+
+        // Parent 1 (with attachment)
+        Assert.Equal("DOC00000001", parent1["CONTROL NUMBER"]);
+        Assert.Equal("DOC00000001", parent1["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", parent1["ENDATTACH"]);
+        Assert.Empty(parent1["PARENTDOCID"]);
+
+        // Child 1 (attachment of Parent 1)
+        Assert.Equal("DOC00000001_A001", child1["CONTROL NUMBER"]);
+        Assert.Equal("DOC00000001", child1["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A001", child1["ENDATTACH"]);
+        Assert.Equal("DOC00000001", child1["PARENTDOCID"]);
+        // Child must not self-parent: PARENTDOCID points to parent, not child's own Control Number
+        Assert.NotEqual(child1["CONTROL NUMBER"], child1["PARENTDOCID"]);
+
+        // Parent 2 (without attachment: no child record, no spurious parent/child links)
+        Assert.Equal("DOC00000002", parent2["CONTROL NUMBER"]);
+        Assert.Equal("DOC00000002", parent2["BEGATTACH"]);
+        Assert.Equal("DOC00000002", parent2["ENDATTACH"]);
+        Assert.Empty(parent2["PARENTDOCID"]);
     }
 
     [Fact]
