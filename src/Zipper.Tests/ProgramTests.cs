@@ -11,12 +11,6 @@ public class ProgramTests : WorkingDirectoryTestBase
         return exitCode;
     }
 
-    private static async Task<(int ExitCode, string Output)> RunWithRedirectedConsoleAndCapture(Func<Task<int>> action)
-    {
-        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(action).ConfigureAwait(false);
-        return (exitCode, stdout + stderr);
-    }
-
     [Fact]
     public async Task Main_WithUnknownHelpFlag_ReturnsErrorCode()
     {
@@ -141,19 +135,131 @@ public class ProgramTests : WorkingDirectoryTestBase
         }
     }
 
+    private const string BenchmarkPassVerdictMarker = "=== Overall Benchmark Status: ✓ PASS ===";
+    private const string BenchmarkFailVerdictMarker = "=== Overall Benchmark Status: ✗ FAIL ===";
+    private const string BenchmarkSuiteCompleteMarker = "=== Benchmark Suite Complete ===";
+    private const string BenchmarkHeadingMarker = "=== Performance Benchmark Suite ===";
+    private const string BenchmarkErrorMarker = "Benchmark error:";
+
+    private static void AssertBenchmarkExecutionContract(int exitCode, string stdout, string stderr)
+    {
+        Assert.Contains(BenchmarkHeadingMarker, stdout, StringComparison.Ordinal);
+        Assert.Contains(BenchmarkSuiteCompleteMarker, stdout, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(stdout, BenchmarkSuiteCompleteMarker));
+
+        int passVerdictCount = CountOccurrences(stdout, BenchmarkPassVerdictMarker);
+        int failVerdictCount = CountOccurrences(stdout, BenchmarkFailVerdictMarker);
+        Assert.Equal(1, passVerdictCount + failVerdictCount);
+
+        int headingIndex = stdout.IndexOf(BenchmarkHeadingMarker, StringComparison.Ordinal);
+        int verdictIndex = passVerdictCount == 1
+            ? stdout.IndexOf(BenchmarkPassVerdictMarker, StringComparison.Ordinal)
+            : stdout.IndexOf(BenchmarkFailVerdictMarker, StringComparison.Ordinal);
+        int completeIndex = stdout.IndexOf(BenchmarkSuiteCompleteMarker, StringComparison.Ordinal);
+
+        Assert.True(headingIndex >= 0 && headingIndex < verdictIndex && verdictIndex < completeIndex,
+            "Expected benchmark markers in sequential order: heading -> overall verdict -> suite complete.");
+
+        int expectedExitCode = passVerdictCount == 1 ? 0 : 1;
+        Assert.Equal(expectedExitCode, exitCode);
+
+        Assert.DoesNotContain(BenchmarkErrorMarker, stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(BenchmarkErrorMarker, stderr, StringComparison.Ordinal);
+        Assert.Empty(stderr);
+    }
+
+    private static int CountOccurrences(string text, string pattern)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(pattern, index, StringComparison.Ordinal)) != -1)
+        {
+            count++;
+            index += pattern.Length;
+        }
+
+        return count;
+    }
+
+    [Theory]
+    [InlineData(0, BenchmarkPassVerdictMarker)]
+    [InlineData(1, BenchmarkFailVerdictMarker)]
+    public void AssertBenchmarkExecutionContract_WithLegitimateCompletedVerdict_Succeeds(int exitCode, string verdictMarker)
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n{verdictMarker}\n{BenchmarkSuiteCompleteMarker}\n";
+        string stderr = string.Empty;
+
+        AssertBenchmarkExecutionContract(exitCode, stdout, stderr);
+    }
+
+    [Theory]
+    [InlineData(1, BenchmarkPassVerdictMarker)]
+    [InlineData(0, BenchmarkFailVerdictMarker)]
+    public void AssertBenchmarkExecutionContract_WithContradictoryExitCode_Throws(int exitCode, string verdictMarker)
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n{verdictMarker}\n{BenchmarkSuiteCompleteMarker}\n";
+        string stderr = string.Empty;
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(exitCode, stdout, stderr));
+    }
+
+    [Fact]
+    public void AssertBenchmarkExecutionContract_WithExceptionAfterHeading_Throws()
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n";
+        string stderr = "\nBenchmark error: System.InvalidOperationException: benchmark failure\n";
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(1, stdout, stderr));
+    }
+
+    [Fact]
+    public void AssertBenchmarkExecutionContract_WithoutCompletionMarker_Throws()
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n{BenchmarkPassVerdictMarker}\n";
+        string stderr = string.Empty;
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(0, stdout, stderr));
+    }
+
+    [Fact]
+    public void AssertBenchmarkExecutionContract_WithMultipleVerdicts_Throws()
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n{BenchmarkPassVerdictMarker}\n{BenchmarkFailVerdictMarker}\n{BenchmarkSuiteCompleteMarker}\n";
+        string stderr = string.Empty;
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(0, stdout, stderr));
+    }
+
+    [Fact]
+    public void AssertBenchmarkExecutionContract_WithUnexpectedStderr_Throws()
+    {
+        string stdout = $"{BenchmarkHeadingMarker}\n{BenchmarkPassVerdictMarker}\n{BenchmarkSuiteCompleteMarker}\n";
+        string stderr = "Warning: unexpected diagnostic\n";
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(0, stdout, stderr));
+    }
+
+    [Fact]
+    public void AssertBenchmarkExecutionContract_WithOutOfOrderMarkers_Throws()
+    {
+        string stdout = $"{BenchmarkSuiteCompleteMarker}\n{BenchmarkHeadingMarker}\n{BenchmarkPassVerdictMarker}\n";
+        string stderr = string.Empty;
+
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => AssertBenchmarkExecutionContract(0, stdout, stderr));
+    }
+
     [Fact]
     public async Task Main_WithBenchmarkFlag_RunsAndReturnsValidExitCode()
     {
         // Arrange
-        string[] args = { "--benchmark" };
+        string[] args = ["--benchmark"];
 
         // Act
-        var (exitCode, output) = await RunWithRedirectedConsoleAndCapture(() => Program.Main(args));
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
 
         // Assert: 0 = all metrics passed, 1 = some metrics failed (timing-dependent on CI runners).
-        // Both are valid outcomes; verify the benchmark suite actually ran (not a crash).
-        Assert.True(exitCode is 0 or 1, $"Expected exit code 0 or 1, got {exitCode}");
-        Assert.Contains("Benchmark Suite", output, StringComparison.Ordinal);
+        // Require benchmark suite completion without errors and exit code agreement with the overall verdict.
+        AssertBenchmarkExecutionContract(exitCode, stdout, stderr);
     }
 
     [Fact]
@@ -183,10 +289,9 @@ public class ProgramTests : WorkingDirectoryTestBase
     [Fact]
     public async Task Main_WithBenchmarkAndUnknownFlag_BypassesValidationAndRunsBenchmark()
     {
-        string[] args = { "--benchmark", "--unknown-flag" };
-        var (exitCode, output) = await RunWithRedirectedConsoleAndCapture(() => Program.Main(args));
-        Assert.True(exitCode is 0 or 1, $"Expected exit code 0 or 1, got {exitCode}");
-        Assert.Contains("Benchmark Suite", output, StringComparison.Ordinal);
+        string[] args = ["--benchmark", "--unknown-flag"];
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+        AssertBenchmarkExecutionContract(exitCode, stdout, stderr);
     }
 
     [Fact]
