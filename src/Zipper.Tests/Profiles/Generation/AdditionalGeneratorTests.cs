@@ -88,6 +88,14 @@ public class AdditionalGeneratorTests
         var genExp = new NumberGenerator(colExp);
         var expVal = int.Parse(genExp.Generate(context), System.Globalization.CultureInfo.InvariantCulture);
         Assert.InRange(expVal, 50, 150);
+
+        var expSamples = Enumerable.Range(0, 500)
+            .Select(_ => int.Parse(genExp.Generate(context), System.Globalization.CultureInfo.InvariantCulture))
+            .ToList();
+        Assert.All(expSamples, v => Assert.InRange(v, 50, 150));
+        int lowerHalfCount = expSamples.Count(v => v <= 100);
+        Assert.True(lowerHalfCount > 325, $"Exponential distribution should exhibit low-end bias (>325 of 500 in lower half [50..100]), got {lowerHalfCount}");
+        Assert.True(expSamples.Distinct().Count() >= 20, "Exponential distribution should produce varied values across the range");
     }
 
     [Fact]

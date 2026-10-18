@@ -225,3 +225,11 @@
 - **telemetry**: host=antigravity mode=branch specialists=4 bundle=~11000c
 - **lessons**: When generating test payloads for chunk-boundary testing, ensure the generator's period exceeds the chunk size (and is coprime to chunk boundaries) so chunk offset advancement defects cannot be masked by cyclic repetition.
 - **suppressions**: none
+
+### 2026-10-18 antigravity:branch:feat/ISSUE-1127-test-distinguish-numeric-gaussian-and-ex
+
+- **findings**: 4 (0 ACTION, 4 INFO across 4 specialists). 1 test-design note on tail clamping elevating Q4, 3 testing gaps (distinct check in AdditionalGeneratorTests, Min==Max test across distributions, negative range test).
+- **outcome**: accepted 2 findings (added distinct count check on expSamples in AdditionalGeneratorTests, expanded Min==Max test in NumberGeneratorTests to Theory covering all distributions). All 3,120 unit tests and 78 analyzer tests passed.
+- **telemetry**: host=antigravity mode=branch specialists=4 bundle=~5500c
+- **lessons**: Statistical distribution tests benefit from checking distinct count to ensure constant mutants (even when in lower half or bounded) are rejected.
+- **suppressions**: none
