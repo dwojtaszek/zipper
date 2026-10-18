@@ -36,14 +36,17 @@ dotnet run --project src/Zipper.csproj -- --type pdf --count 100 --output-path .
 
 Zipper has unit tests, analyzer tests, and end-to-end (E2E) smoke tests.
 
-### Unit & Analyzer Tests
+### Unit, Property-Based & Analyzer Tests
 
-Run unit tests before every commit:
+Run unit and property-based tests before every commit:
 
 ```bash
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "Category=Property"
 dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj
 ```
+
+See [docs/property-based-testing.md](property-based-testing.md) for when to write or update `FsCheck.Xunit` property-based tests, recommended generator patterns, and anti-patterns to avoid.
 
 ### Formatting Check
 
@@ -95,6 +98,7 @@ To install pre-commit hooks that format code and run unit tests on every commit:
 Before contributing code changes, please review key design documents:
 - **`AGENTS.md`** — Development principles, workflow, and critical rules
 - **`docs/architecture.md`** — System structure, architecture invariants, and load-file pipeline design
+- **`docs/property-based-testing.md`** — Property-based testing approach, patterns, and anti-patterns (`FsCheck.Xunit`)
 - **`UBIQUITOUS_LANGUAGE.md`** — Canonical domain terms (must be followed in code, comments, and PRs)
 - **`Requirements.md`** — Immutable requirement specifications (`REQ-XXX`, `FR-XXX`)
 

@@ -42,3 +42,17 @@ Minor shared logic (e.g., a few lines of shared constructor parse logic in `Date
 ## 5. Already-covered test gaps
 
 Before flagging missing test coverage for specific exception paths (e.g., `NotImplementedException` or `ArgumentException`), ensure existing tests (like `GenerateContent_WithPptx_ShouldThrowNotImplementedException` or `ResolveSecurePath_WithEmbeddedNullCharacter_ReturnsNull`) don't already assert these paths.
+
+## 6. Property-based tests (`src/Zipper.Tests/Properties/`)
+
+See [docs/property-based-testing.md](property-based-testing.md) for the full guide. When reviewing `[Property]` tests:
+
+- **Flag as defects (must fix):**
+  - Calling `Math.Abs(int)` on an FsCheck-generated `int` without casting to `long` first (throws `OverflowException` when shrunk to `int.MinValue`).
+  - Copying production logic into a private test helper instead of invoking the real production type/seam.
+  - Creating/deleting temporary directories per iteration inside a `[Property]` method instead of reusing a class-level `IDisposable` temp root.
+  - Unconstrained primitive arbitraries where guard clauses discard most generated inputs.
+- **Do NOT flag (deliberate patterns):**
+  - `#pragma warning disable CA5394` in property tests that exercise `Distributions`, `ChaosSampler`, or `DataGenerator`: those production APIs require `System.Random` for deterministic seeded replay (`REQ-075`).
+  - Returning `bool` or `FsCheck.Property` instead of `void` with `Assert.*`: both are idiomatic `FsCheck.Xunit` styles (`Property` with `.Label(...)` is preferred when counterexample diagnostics need context).
+
