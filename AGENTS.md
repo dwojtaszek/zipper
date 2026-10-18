@@ -29,8 +29,9 @@
 - Fix all tests that fail, even if your change didn't break them.
 - Always root cause bugs. Never fix just the symptom. Never implement a workaround.
 - If you cannot find the root cause, stop and compile what you've learned.
+- **Property-Based Testing (`FsCheck.Xunit`):** When adding or modifying serializers/parsers, path/metadata sanitizers, Bates/distribution/volume planners, Chaos Engine appliers, or manifest comparison logic, add or update `[Property]` tests in `src/Zipper.Tests/Properties/` following [docs/property-based-testing.md](docs/property-based-testing.md). Verify real production seams (never copy-paste production logic into test helpers), use `Math.Abs((long)seed)` to avoid `int.MinValue` overflow during shrinking, and keep each property's 100 cases under 500 ms.
 
-**See also:** `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
+**See also:** [docs/property-based-testing.md](docs/property-based-testing.md), `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
 
 ### Runtime Capabilities
 
@@ -80,7 +81,8 @@ dotnet publish -c Release               # Publish
 dotnet run --project src/Zipper.csproj -- [args]  # Run
 
 # Tests
-dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # Unit tests (must pass before commit)
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # Unit + property-based tests (must pass before commit)
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "Category=Property" # Property-based tests only (FsCheck.Xunit)
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"  # Single test class
 dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # Analyzer tests (must pass when touching src/Zipper.Analyzers/)
 bash tests/run-mutation-smoke.sh                                             # Mutation smoke on changed source lines (must pass before push)
@@ -416,7 +418,7 @@ Individual file generators (`EmlFileGenerator.cs`, `TiffFileGenerator.cs`, `Offi
 ### Test Naming Convention
 
 Test classes and methods follow the pattern:
-- **Class:** `{Subject}Tests` (e.g., `BatesSequenceTests`, `ChaosEngineTests`)
+- **Class:** `{Subject}Tests` (e.g., `BatesSequenceTests`, `ChaosEngineTests`) or `{Domain}PropertyTests` in `src/Zipper.Tests/Properties/`
 - **Method:** `{Method}_{Scenario}_{Expected}` (e.g., `Generate_WithCustomPrefix_ShouldIncludePrefix`)
 
-This convention is enforced by code review and the existing test corpus. All new tests must follow it.
+This convention is enforced by code review and the existing test corpus. All new unit and `[Property]` tests must follow it (see [docs/property-based-testing.md](docs/property-based-testing.md)).
