@@ -1,5 +1,5 @@
 #!/bin/bash
-# Pre-push git hook — unit tests + basic E2E smoke suite.
+# Pre-push git hook — unit tests + mutation smoke + basic E2E smoke suite.
 # Installs to: $(git rev-parse --git-common-dir)/hooks/pre-push
 #
 # Skips unit tests if the post-commit hook wrote a success marker within the
@@ -11,13 +11,18 @@ set -u
 
 SKIP_WINDOW_SECONDS=600
 
-echo "┌─────────────────────────────────────────────┐"
-echo "│  Pre-push: Unit Tests + Basic E2E Smoke     │"
-echo "└─────────────────────────────────────────────┘"
+echo "┌──────────────────────────────────────────────────────────┐"
+echo "│  Pre-push: Unit Tests + Mutation Smoke + Basic E2E Smoke │"
+echo "└──────────────────────────────────────────────────────────┘"
 
 if ! command -v dotnet >/dev/null 2>&1; then
     echo "⚠ dotnet not found; skipping pre-push checks."
     exit 0
+fi
+
+if [[ -z "${DOTNET_ROOT:-}" ]]; then
+    _DOTNET_BIN=$(readlink -f "$(command -v dotnet)" 2>/dev/null || command -v dotnet)
+    export DOTNET_ROOT="$(dirname "$_DOTNET_BIN")"
 fi
 
 # ──────────────────────────────────────────────────
@@ -62,7 +67,28 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
 fi
 
 # ──────────────────────────────────────────────────
-# 2. Basic E2E smoke suite
+# 2. Mutation smoke (changed source files only) — hard gate
+# ──────────────────────────────────────────────────
+echo ""
+echo "▶ Running mutation smoke on changed files..."
+if [[ -f "./tests/run-mutation-smoke.sh" ]]; then
+    if ! bash ./tests/run-mutation-smoke.sh; then
+        echo ""
+        echo "❌ Mutation smoke found surviving mutants. Push aborted."
+        echo "   Run 'bash tests/run-mutation-smoke.sh' for details."
+        echo "   Add targeted unit tests in src/Zipper.Tests/ to kill surviving mutants."
+        echo "   To bypass all: git push --no-verify"
+        exit 1
+    fi
+    echo "✓ Mutation smoke passed"
+else
+    echo "❌ tests/run-mutation-smoke.sh not found. Push aborted."
+    echo "   The mutation smoke script is required for pre-push checks."
+    exit 1
+fi
+
+# ──────────────────────────────────────────────────
+# 3. Basic E2E smoke suite
 # ──────────────────────────────────────────────────
 echo ""
 echo "▶ Running basic E2E smoke tests..."

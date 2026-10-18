@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+if [[ -z "${DOTNET_ROOT:-}" ]] && command -v dotnet >/dev/null 2>&1; then
+    _DOTNET_BIN=$(readlink -f "$(command -v dotnet)" 2>/dev/null || command -v dotnet)
+    export DOTNET_ROOT="$(dirname "$_DOTNET_BIN")"
+fi
+
 # --- Configuration ---
 
 TEST_OUTPUT_DIR="./results/e2e-basic"

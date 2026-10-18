@@ -379,8 +379,20 @@ class BabysitPromptTests(unittest.TestCase):
             branch="fix/ISSUE-1117-test",
             pr_create_err="CodeRabbit found 1 issue",
         )
-        self.assertIn("CRITICAL: Direct PR creation failed with the following errors/review findings.", prompt)
+        self.assertIn("<gate-error-data>", prompt)
         self.assertIn("CodeRabbit found 1 issue", prompt)
+
+    def test_buildBabysitPrompt_withMutationSmokeError_injectsMutationGuidance(self):
+        prompt = runner._build_babysit_prompt(
+            issue_number="1117",
+            issue_title="test: cancellation",
+            safe_body="Repro details",
+            branch="fix/ISSUE-1117-test",
+            pr_create_err="❌ Mutation smoke found surviving mutants. Push aborted.",
+        )
+        self.assertIn("CRITICAL MUTATION SMOKE GATE FAILURE:", prompt)
+        self.assertIn("run-mutation-smoke.sh", prompt)
+        self.assertIn("SKIP_MUTATION_SMOKE is forbidden", prompt)
 
 
 class WipCommitTests(unittest.TestCase):
