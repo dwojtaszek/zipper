@@ -12,7 +12,7 @@ flowchart TD
         edit["Edit code"]
         precommit["pre-commit:<br/>format staged .cs + unit tests<br/>(docs-only short-circuit)"]
         postcommit["post-commit:<br/>write pre-commit.ok marker"]
-        prepush["pre-push:<br/>unit tests (skip if marker fresh)<br/>+ basic E2E smoke"]
+        prepush["pre-push:<br/>unit tests (skip if marker fresh)<br/>+ mutation smoke (changed files)<br/>+ basic E2E smoke"]
         edit --> precommit --> postcommit --> prepush
     end
 
@@ -66,9 +66,9 @@ Version-controlled in [`.github/hooks/`](../.github/hooks/), installed with `./s
 |------|---------|------|
 | `pre-commit` | `git commit` | Short-circuits if every staged file is docs (`*.md`, `docs/`). Else stashes unstaged changes, runs `dotnet format` on staged `*.cs`, runs all unit tests. |
 | `post-commit` | after commit object exists | Writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
-| `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`). |
+| `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh`, hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`). |
 
-Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Full E2E + coverage run in CI only.
+Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Mutation smoke is a hard pre-push gate (surviving mutants must be killed by adding unit tests). Full E2E + coverage checks run in CI; full mutation analysis runs weekly.
 
 ### 2. PR Checks — [`pr.yml`](../.github/workflows/pr.yml)
 
