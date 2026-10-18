@@ -1527,20 +1527,27 @@ _WIP_CONTINUATIONS: set[str] = set()
 
 
 def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
-                                issue_number: str, reviewed_head: str) -> tuple[int, str, int]:
+                                reviewed_head: str) -> tuple[int, str, int]:
     """Reconcile active worktree with authorized remote PR head.
 
     Returns (local_code, local_head, ancestor_code).
     """
     short_head = reviewed_head[:8]
-    # Ensure remote commits are available locally before inspecting ancestry
-    run_cmd(["git", "fetch", "origin", branch], cwd=wt_path)
-
     local_code, local_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
     if local_code != 0:
         return local_code, local_head, 1
-
     local_head = local_head.strip()
+
+    # Ensure remote commits are available locally before inspecting ancestry
+    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin", branch], cwd=wt_path)
+    head_code, _, _ = run_cmd(["git", "cat-file", "-e", f"{reviewed_head}^{{commit}}"], cwd=wt_path)
+    if head_code != 0:
+        # Unresolvable authorized head: block without touching the worktree
+        if fetch_code != 0:
+            print(f"[babysit] git fetch origin {branch} failed (exit {fetch_code}): {fetch_err.strip()}")
+        print(f"[babysit] Authorized head {short_head} is not present locally; cannot reconcile worktree {wt_path}.")
+        return 1, local_head, 1
+
     if local_head == reviewed_head:
         return 0, local_head, 0
 
@@ -1567,6 +1574,7 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
                 return 0, reviewed_head, 0
 
     # Local has diverged commits: attempt clean rebase onto authorized head
+    pre_code, pre_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
     rb_code, _, _ = run_cmd(["git", "rebase", reviewed_head], cwd=wt_path)
     if rb_code == 0:
         local_code, new_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
@@ -1576,10 +1584,20 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
             return 0, new_head.strip(), 0
 
     # Rebase conflicted: abort rebase, protect local commits, and keep blocked from merging
-    run_cmd(["git", "rebase", "--abort"], cwd=wt_path)
+    abort_code, _, abort_err = run_cmd(["git", "rebase", "--abort"], cwd=wt_path)
+    if abort_code != 0:
+        print(f"[babysit] rebase --abort failed: {abort_err.strip()}")
     ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
     backup_branch = f"runner-backup-{branch}-{ts}"
-    b_code, _, _ = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=wt_path)
+    # A failed abort leaves HEAD detached at the upstream commit: pin the pre-rebase tip instead.
+    backup_ref = pre_head.strip() if pre_code == 0 and pre_head.strip() else "HEAD"
+    b_code, _, _ = run_cmd(["git", "branch", backup_branch, backup_ref], cwd=wt_path)
+    if abort_code != 0 and b_code == 0:
+        # Left mid-rebase, HEAD detached at the authorized head, the next tick would
+        # misread the worktree as in sync. The commits are pinned on the backup branch.
+        reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", backup_ref], cwd=wt_path)
+        if reset_code != 0:
+            print(f"[babysit] Could not restore worktree after failed abort: {reset_err.strip()}")
     if b_code == 0:
         print(f"[babysit] Rebase conflicted. Protected local commits on {backup_branch}.")
         if _should_send_rate_limited(f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}"):
@@ -1937,7 +1955,7 @@ def babysit_active_worktrees():
             continue
         reviewed_head = authorized["head"]["sha"]
         local_code, local_head, ancestor_code = _reconcile_active_worktree(
-            wt_path, branch, pr_number, str(issue_number), reviewed_head
+            wt_path, branch, pr_number, reviewed_head
         )
         pending = _load_coderabbit_gate_state(pr_number)
         resume_local_progress = (
@@ -2004,6 +2022,7 @@ def babysit_active_worktrees():
                         f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
                         f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
                         f"resolve all findings, commit, and push updates.\n"
+                        f"\nReview gate failure detail:\n{cr_err}\n"
                     )
             if not _is_coderabbit_gate_failed(pr_number):
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
