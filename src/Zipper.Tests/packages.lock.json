@@ -8,6 +8,17 @@
         "resolved": "10.1.0",
         "contentHash": "SlYCIHnBYxINSUpR75SiM5JEmnx11pqT+Ac/C/fUqTTA0dLPl9eYzmFXKKuxmQhL3ZdTQl4PBD3YdAxAauaKLQ=="
       },
+      "FsCheck.Xunit": {
+        "type": "Direct",
+        "requested": "[3.5.0, )",
+        "resolved": "3.5.0",
+        "contentHash": "MMFnx11dAJWIiHuFFhoMqjl7RZct4oGz0tJncNNQN1Hyac9lRQT5W6zysf6S2gQ09TEq0+R1AAyBQ/qohyHFQA==",
+        "dependencies": {
+          "FSharp.Core": "5.0.2",
+          "FsCheck": "[3.5.0]",
+          "xunit.extensibility.execution": "[2.4.1, 3.0.0)"
+        }
+      },
       "JunitXml.TestLogger": {
         "type": "Direct",
         "requested": "[8.0.0, )",
@@ -118,6 +129,19 @@
         "type": "Transitive",
         "resolved": "1.1.0",
         "contentHash": "R3BVHPs9O+RkExbZYTGT0+9HLbi8ZrNij1Yziyw6znd3J7P3uoIR07uwTLGOogtz1p6+0sna66eBoXu7tBiVQA=="
+      },
+      "FsCheck": {
+        "type": "Transitive",
+        "resolved": "3.5.0",
+        "contentHash": "olekPbZ9M09t1qRK6yXfzvyA/eiLFXK2obJ0BAkk7reEoohbO/6ac8ISbCD3murRnQbwT04TUZKT3boFDUe4kw==",
+        "dependencies": {
+          "FSharp.Core": "5.0.2"
+        }
+      },
+      "FSharp.Core": {
+        "type": "Transitive",
+        "resolved": "5.0.2",
+        "contentHash": "DpcajqENgb3VXaHw1FKfVS+TWwEzck1PCajqLwBAVrtd1lfxd7T8JISVZBdV1mX9+2g48+tIgpNaVJWObdMrBw=="
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",

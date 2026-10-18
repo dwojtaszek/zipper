@@ -276,6 +276,56 @@ jobs:
             '''))"
           fi
 
+      - name: Property-based test gate & summary (Linux)
+        if: matrix.coverage == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c "from textwrap import dedent; exec(dedent('''
+          import os, sys, xml.etree.ElementTree as ET
+          from collections import defaultdict
+          xml_path = next((p for p in ['TestResults/test-results.xml', 'src/Zipper.Tests/TestResults/test-results.xml'] if os.path.exists(p)), None)
+          if not xml_path:
+              print('ERROR: test-results.xml not found.', file=sys.stderr)
+              sys.exit(1)
+          tree = ET.parse(xml_path)
+          suites = defaultdict(lambda: [0, 0, 0.0, 0])
+          for t in tree.iter('testcase'):
+              cls = t.get('classname', '')
+              if cls.startswith('Zipper.Tests.Properties.'):
+                  short = cls.split('.')[-1]
+                  suites[short][0] += 1
+                  if t.find('failure') is not None or t.find('error') is not None:
+                      suites[short][1] += 1
+                  elif t.find('skipped') is not None:
+                      suites[short][3] += 1
+                  suites[short][2] += float(t.get('time', 0))
+          total = sum(v[0] for v in suites.values())
+          failed = sum(v[1] for v in suites.values())
+          skipped = sum(v[3] for v in suites.values())
+          passed = total - failed - skipped
+          secs = sum(v[2] for v in suites.values())
+          print(f'Property-based tests (FsCheck.Xunit): {passed}/{total} passing properties (~{passed * 100} cases at MaxTest=100) in {secs:.2f}s (failed: {failed}, skipped: {skipped})')
+          for name, (cnt, fl, tm, sk) in sorted(suites.items()):
+              print(f'  - {name}: {cnt - fl - sk}/{cnt} passing ({tm:.2f}s, failed={fl}, skipped={sk})')
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary_path:
+              bt = chr(96)
+              with open(summary_path, 'a', encoding='utf-8') as f:
+                  print('### Property-Based Tests (FsCheck.Xunit)', file=f)
+                  print('', file=f)
+                  print('| Suite | Passing / Total | Configured Cases (MaxTest=100) | Duration (s) |', file=f)
+                  print('|-------|----------------:|-------------------------------:|-------------:|', file=f)
+                  for name, (cnt, fl, tm, sk) in sorted(suites.items()):
+                      ps = cnt - fl - sk
+                      print(f'| {bt}{name}{bt} | {ps} / {cnt} | {ps * 100} | {tm:.2f} |', file=f)
+                  print(f'| **Total** | **{passed} / {total}** | **{passed * 100}** | **{secs:.2f}** |', file=f)
+                  print('', file=f)
+          if passed < 40 or failed > 0:
+              print(f'ERROR: Expected >= 40 passing property tests, got passed={passed}, total={total}, failed={failed}, skipped={skipped}', file=sys.stderr)
+              sys.exit(1)
+          '''))"
+
       - name: Coverage report + 80% gate (Linux)
         if: matrix.coverage == true
         uses: ./.github/actions/coverage-gate

@@ -80,7 +80,8 @@ dotnet publish -c Release               # Publish
 dotnet run --project src/Zipper.csproj -- [args]  # Run
 
 # Tests
-dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # Unit tests (must pass before commit)
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj                              # Unit + property-based tests (must pass before commit)
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "Category=Property" # Property-based tests only (FsCheck.Xunit)
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"  # Single test class
 dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # Analyzer tests (must pass when touching src/Zipper.Analyzers/)
 bash tests/run-mutation-smoke.sh                                             # Mutation smoke on changed source lines (must pass before push)
