@@ -225,6 +225,22 @@ public class ArchiveTestCaseSemanticsTests
     }
 
     [Theory]
+    [InlineData("list")]
+    [InlineData("read-entry")]
+    [InlineData("integrity-check")]
+    [InlineData("extract")]
+    public void Validate_MissingRequiredOperation_IsRejected(string omittedOperation)
+    {
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Expectations = [.. ArchiveTestJsonTests.ValidEmptyCase().Expectations.Where(e => e.Operation != omittedOperation)],
+        };
+
+        var errors = ArchiveTestCaseSemantics.Validate(testCase);
+        Assert.Contains(errors, error => error.Contains($"expectations must declare operation '{omittedOperation}'", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData(-1, 0, "localHeaderMethod must be between 0 and 65535")]
     [InlineData(65536, 0, "localHeaderMethod must be between 0 and 65535")]
     [InlineData(0, -1, "centralDirectoryMethod must be between 0 and 65535")]

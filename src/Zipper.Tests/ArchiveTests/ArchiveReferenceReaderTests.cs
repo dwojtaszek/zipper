@@ -257,6 +257,64 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 
         Assert.Equal(caseKey, testCase.CaseKey);
 
+        var extractDir = Path.Combine(TempDir, caseKey + "-extract");
+        ExecuteReaderOperations(testCase, archiveBytes, extractDir);
+    }
+
+    [Theory]
+    [InlineData("list")]
+    [InlineData("read-entry")]
+    [InlineData("integrity-check")]
+    [InlineData("extract")]
+    public async Task ReadOperations_MissingRequiredOperation_FailsContractBeforeReaderExecution(string omittedOperation)
+    {
+        var destination = Path.Combine(TempDir, "omitted-" + omittedOperation);
+        await ArchiveTestSuiteGenerator.GenerateAsync(
+            ArchiveTestRequest.Create(["valid-stored"], seed: 42, outputPath: destination),
+            CancellationToken.None);
+
+        var jsonPath = Directory.GetFiles(destination, "*.json").Single();
+        var zipPath = Path.ChangeExtension(jsonPath, ".zip");
+        var testCase = ArchiveTestJson.Parse(await File.ReadAllBytesAsync(jsonPath));
+        var archiveBytes = await File.ReadAllBytesAsync(zipPath);
+
+        var mutilatedCase = testCase with
+        {
+            Expectations = [.. testCase.Expectations.Where(e => e.Operation != omittedOperation)],
+        };
+
+        var extractDir = Path.Combine(TempDir, "extract-" + omittedOperation);
+        Assert.Throws<Xunit.Sdk.EqualException>(() =>
+            ExecuteReaderOperations(mutilatedCase, archiveBytes, extractDir));
+
+        Assert.False(Directory.Exists(extractDir), "Reader execution must not proceed after contract failure");
+    }
+
+    private static readonly string[] RequiredOperations =
+    [
+        "extract",
+        "integrity-check",
+        "list",
+        "read-entry",
+    ];
+
+    private static void AssertDeclaredOperations(ArchiveTestCase testCase)
+    {
+        var declaredOperations = testCase.Expectations
+            .Select(e => e.Operation)
+            .Distinct()
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(
+            RequiredOperations.Order(StringComparer.Ordinal),
+            declaredOperations.Order(StringComparer.Ordinal));
+    }
+
+    private void ExecuteReaderOperations(
+        ArchiveTestCase testCase, byte[] archiveBytes, string extractDir)
+    {
+        AssertDeclaredOperations(testCase);
+
         var outcomes = new List<ReaderOutcome>();
         var expectedOperations = testCase.Expectations
             .Where(e => e.Platform is null)
@@ -281,7 +339,6 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         if (extractExpected)
         {
             // Required positive control: real extraction into a fresh owned directory.
-            var extractDir = Path.Combine(TempDir, caseKey + "-extract");
             Directory.CreateDirectory(extractDir);
             var extract = NormalizeExtract(archiveBytes, testCase, extractDir);
             outcomes.Add(new ReaderOutcome("extract", extract,
@@ -292,7 +349,7 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         foreach (var outcome in outcomes)
         {
             Assert.True(!outcome.Applicable || outcome.Allowed,
-                $"case '{caseKey}': .NET reader outcome '{outcome.NormalizedOutcome}' for " +
+                $"case '{testCase.CaseKey}': .NET reader outcome '{outcome.NormalizedOutcome}' for " +
                 $"'{outcome.Operation}' is outside the allowed outcomes");
         }
 
@@ -301,9 +358,9 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         // have a recorded outcome — a silent skip cannot satisfy a required gate.
         var mustRun = expectedOperations
             .Where(op => op != "extract" || testCase.Classification == "valid")
-            .ToList();
+            .ToHashSet(StringComparer.Ordinal);
         var ran = outcomes.Select(o => o.Operation).ToHashSet(StringComparer.Ordinal);
-        Assert.Subset(ran, mustRun.ToHashSet(StringComparer.Ordinal));
+        Assert.Subset(ran, mustRun);
     }
 
     [Fact]

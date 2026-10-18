@@ -101,7 +101,7 @@ internal static class ArchiveTestCaseSemantics
     private static readonly string[] Classifications = ["valid", "malformed", "policy-sensitive"];
     private static readonly string[] Kinds = ["file", "directory"];
     private static readonly string[] PayloadCodecs = ["stored", "deflate", "deflate64", "bzip2", "unknown"];
-    private static readonly string[] Operations = ["list", "read-entry", "integrity-check", "extract"];
+    internal static readonly string[] Operations = ["list", "read-entry", "integrity-check", "extract"];
     private static readonly string[] Structures =
     [
         "local-header", "file-data", "data-descriptor", "central-header", "central-directory", "eocd", "zip64-eocd", "zip64-locator", "comment", "whole-archive"
@@ -305,6 +305,7 @@ internal static class ArchiveTestCaseSemantics
             errors.Add("expectations must contain at least one operation record");
         }
 
+        var declaredOperations = new HashSet<string>(StringComparer.Ordinal);
         foreach (var expectation in testCase.Expectations!)
         {
             if (expectation is null)
@@ -313,9 +314,13 @@ internal static class ArchiveTestCaseSemantics
                 continue;
             }
 
-            if (!Operations.Contains(expectation.Operation ?? string.Empty, StringComparer.Ordinal))
+            if (expectation.Operation is null || !Operations.Contains(expectation.Operation, StringComparer.Ordinal))
             {
                 errors.Add($"unknown operation '{expectation.Operation}'");
+            }
+            else
+            {
+                declaredOperations.Add(expectation.Operation);
             }
 
             if (string.IsNullOrEmpty(expectation.Profile))
@@ -327,6 +332,11 @@ internal static class ArchiveTestCaseSemantics
             {
                 errors.Add($"operation '{expectation.Operation}': allowedOutcomes must not be empty");
             }
+        }
+
+        foreach (var operation in Operations.Where(op => !declaredOperations.Contains(op)))
+        {
+            errors.Add($"expectations must declare operation '{operation}'");
         }
 
         if (testCase.AdapterChecks is not null)
