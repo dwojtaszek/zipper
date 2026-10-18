@@ -98,6 +98,7 @@ REQ-083	unit	CliPipelineTests.ValidateAndParseArguments_WithDelimiterOverride_Sh
 REQ-084	unit	DelimiterModuleTests.TryBuild_DelimiterOverride_OverridesPreset	Custom flags override --dat-delimiters preset
 REQ-085	unit	DatComposingWriterTests.WriteAsync_DefaultDelimiters_UseNonPrintingChars	Default delimiter values ASCII 20/254/174
 REQ-086	unit	DatComposingWriterTests.WriteAsync_SanitizeField_ReplacesWindowsNewline	Newline replacement in field values
+REQ-086	unit	ConcordanceSerializerTests.RenderRecord_PreservesEmbeddedNewlinesIntact	Concordance preserves embedded newlines in field values
 REQ-087	unit	CliModuleSetTests.Parse_LoadfileOnlyArgs_ParsesCorrectly	--loadfile-only argument
 REQ-088	unit	LoadFileModuleTests.TryBuild_LoadfileOnly_WithCsvFormat_ReturnsFalse	Loadfile-only rejects non-dat/opt formats
 REQ-089	unit	CrossCuttingRulesTests.Validate_LoadfileOnly_WithoutType_ReturnsTrue	--type optional, defaults pdf

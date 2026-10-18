@@ -64,7 +64,7 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | **Delimiter** | A special character marking boundaries in a **Concordance DAT** format. Types: **Column Delimiter**, **Quote Delimiter**, **Newline Delimiter**, **Multi-Value Delimiter**, **Nested Delimiter**. | Separator, boundary marker |
 | **Column Delimiter** | The character separating fields in a **Concordance DAT**. Default: ASCII 20 (DC4). | Field separator |
 | **Quote Delimiter** | The character used to enclose field values containing **Column Delimiter** characters in a **Concordance DAT**. Default: ASCII 254 (Thorn). When the **Quote Delimiter** appears within a field value, it is escaped (doubled). | Text qualifier, quote character |
-| **Newline Delimiter** | The character replacing actual newlines (`\n`, `\r`, `\r\n`) within **Metadata** values in a **Concordance DAT**. Default: ASCII 174 (®). Prevents **Load File** corruption. | Newline replacement, line-break escape |
+| **Newline Delimiter** | The character replacing actual newlines (`\n`, `\r`, `\r\n`) within **Metadata** values in a **Concordance DAT** (`dat` format). Default: ASCII 174 (®). Prevents **Load File** corruption. Not used in Concordance database-import (`concordance` format), which preserves embedded newlines within quote qualifiers. | Newline replacement, line-break escape |
 | **Extracted Text** | A companion `.txt` file for each **Native File**, containing placeholder text. Optional, controlled by `--with-text`. The **Load File** includes a **Text Path** column. | Text file, OCR text, content file |
 | **Text Path** | The relative path to an **Extracted Text** file within the **Archive**. | Text file reference, text location |
 

@@ -510,7 +510,7 @@ Based on the above research, the following requirements apply to the Zipper Load
   - Column delimiter: ASCII 20 (Concordance standard)
   - Quote delimiter: ASCII 254 (Concordance standard)
   - Newline delimiter: ASCII 174 (Concordance standard)
-- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption across all DAT-family writers (including `dat` and `concordance` formats).
+- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption in DAT format (`dat`). In Concordance format (`concordance`), fields are fully quote-wrapped and embedded newlines (`\r`, `\n`, `\r\n`) are preserved intact within field values without newline replacement.
 
 ### 8.7 Concordance (Database Import) Format Specification
 
@@ -523,6 +523,7 @@ The `concordance` format (`--load-file-format concordance`) is a **distinct** da
 - **Quote/Text Qualifier**: ASCII 254 (þ), applied to **every** field (unlike `dat`, which qualifies selectively)
 - **Header Row**: Present; field names UPPERCASE, no spaces, each quote-wrapped
 - **In-field quote escaping**: Embedded quote characters are doubled (DAT-style escaping)
+- **Embedded Newlines**: Preserved intact within quote-wrapped field values (`\r`, `\n`, `\r\n` are not replaced with a newline delimiter; Concordance loaders support multiline fields within text qualifiers)
 
 #### Conditional Column Ordering
 **Concordance Standard mode:** BEGATTY (always, empty), ENDATTY (always, empty), CONTROLNUMBER, PATH, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, COMPRESSION_METHOD, [if eml] TO, FROM, SUBJECT, SENTDATE, ATTACHMENT, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH

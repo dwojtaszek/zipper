@@ -1,3 +1,4 @@
+using System.Text;
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
@@ -422,6 +423,95 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
         Assert.Equal("DOC00000002", parent2["BEGATTACH"]);
         Assert.Equal("DOC00000002", parent2["ENDATTACH"]);
         Assert.Empty(parent2["PARENTDOCID"]);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithEmbeddedNewlinesInFieldValues_PreservesNewlinesIntactWithoutSanitization()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { NewlineDelimiter = "\u00ae" },
+        };
+        var files = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FolderName = "folder_001",
+                    FileName = "00000001.pdf",
+                    FilePathInZip = "line1\r\nline2_unix\nline3_cr\rline4.pdf",
+                },
+                Data = Encoding.UTF8.GetBytes("content"),
+                DataLength = 7,
+            },
+        };
+
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Concordance);
+        var outputPath = Path.Combine(this.TempDir, "newline_test.dat");
+
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, files);
+        }
+
+        var content = await File.ReadAllTextAsync(outputPath);
+
+        // Concordance contract: embedded newlines within fields are preserved intact (not replaced with ®)
+        Assert.DoesNotContain("\u00ae", content, StringComparison.Ordinal);
+        Assert.Contains("þline1\r\nline2_unix\nline3_cr\rline4.pdfþ", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithEmbeddedNewlinesAndCustomDelimiters_PreservesNewlinesAndEscapesCustomQuote()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig
+            {
+                ColumnDelimiter = "|",
+                QuoteDelimiter = "'",
+                NewlineDelimiter = "\u00ae",
+            },
+        };
+        var files = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FolderName = "folder_001",
+                    FileName = "00000001.pdf",
+                    FilePathInZip = "folder/file_with_'quote\r\nand_newline.pdf",
+                },
+                Data = Encoding.UTF8.GetBytes("content"),
+                DataLength = 7,
+            },
+        };
+
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Concordance);
+        var outputPath = Path.Combine(this.TempDir, "custom_newline_test.dat");
+
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, files);
+        }
+
+        var content = await File.ReadAllTextAsync(outputPath);
+
+        // Custom quote is doubled (' -> ''), newlines preserved intact, newline delimiter not used, custom column used
+        Assert.DoesNotContain("\u00ae", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u00fe", content, StringComparison.Ordinal);
+        Assert.Contains("'folder/file_with_''quote\r\nand_newline.pdf'", content, StringComparison.Ordinal);
+        Assert.Contains("|", content, StringComparison.Ordinal);
     }
 }
 
