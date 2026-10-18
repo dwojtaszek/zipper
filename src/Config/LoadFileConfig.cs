@@ -10,5 +10,5 @@ public record LoadFileConfig
 
     public DistributionType Distribution { get; init; } = DistributionType.Proportional;
 
-    public int AttachmentRate { get; init; }
+    public double AttachmentRate { get; init; }
 }
