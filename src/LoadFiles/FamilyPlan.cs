@@ -94,7 +94,7 @@ internal static class FamilyPlan
         _ = random.NextDouble() <= GetReplyToProbability(selectedCategory);
     }
 
-    private static int GetTemplatesCountForCategory(EmailCategory category)
+    internal static int GetTemplatesCountForCategory(EmailCategory category)
     {
         return category switch
         {
