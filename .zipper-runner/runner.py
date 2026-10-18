@@ -959,6 +959,14 @@ def _coderabbit_gate_path(pr_number: int) -> str:
     return os.path.join(STATE_DIR, f"pr-{pr_number}-coderabbit-gate.json")
 
 
+def _load_coderabbit_gate_state(pr_number: int) -> dict:
+    try:
+        with open(_coderabbit_gate_path(pr_number)) as stream:
+            return json.load(stream)
+    except (OSError, ValueError):
+        return {}
+
+
 def _record_coderabbit_gate_failure(pr_number: int, branch: str, error: str, completion_ready: bool = True) -> None:
     os.makedirs(STATE_DIR, exist_ok=True)
     state = {
@@ -1340,7 +1348,7 @@ def _count_review_threads(pr_number: int, review_output: str | None = None) -> i
 def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int,
                                  issue_number: str, expected_head: str, completion_head: str) -> bool:
     if _latest_commit_is_wip(wt_path):
-        _record_coderabbit_gate_failure(pr_number, branch, "Completion remains a local WIP checkpoint", False)
+        _record_coderabbit_gate_failure(pr_number, branch, "Completion remains a local WIP checkpoint", completion_ready=False)
         return False
     remote_code, remote, _ = run_cmd(["git", "ls-remote", "origin", f"refs/heads/{branch}"], cwd=wt_path)
     local_code, local, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
@@ -1348,7 +1356,7 @@ def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int,
     if (remote_code != 0 or not remote.split() or remote.split()[0] != expected_head
             or local_code != 0 or local.strip() != completion_head
             or ancestor_code != 0 or not _worktree_is_clean(wt_path)):
-        _record_coderabbit_gate_failure(pr_number, branch, "Authorized remote head changed or local completion is not a clean descendant")
+        _record_coderabbit_gate_failure(pr_number, branch, "Authorized remote head changed or local completion is not a clean descendant", completion_ready=False)
         print("[authorization] Completion kept local; captured remote head no longer matches.")
         return False
     review_ok, review_error = _run_coderabbit_pre_pr_check(wt_path)
@@ -1516,6 +1524,72 @@ def _sync_main_after_merge() -> bool:
 
 
 _WIP_CONTINUATIONS: set[str] = set()
+
+
+def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
+                                issue_number: str, reviewed_head: str) -> tuple[int, str, int]:
+    """Reconcile active worktree with authorized remote PR head.
+
+    Returns (local_code, local_head, ancestor_code).
+    """
+    short_head = reviewed_head[:8]
+    # Ensure remote commits are available locally before inspecting ancestry
+    run_cmd(["git", "fetch", "origin", branch], cwd=wt_path)
+
+    local_code, local_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    if local_code != 0:
+        return local_code, local_head, 1
+
+    local_head = local_head.strip()
+    if local_head == reviewed_head:
+        return 0, local_head, 0
+
+    ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", reviewed_head, "HEAD"], cwd=wt_path)
+    if ancestor_code == 0:
+        # Local HEAD is ahead of reviewed_head (recorded runner completion)
+        return local_code, local_head, 0
+
+    if not _worktree_is_clean(wt_path):
+        # Dirty worktree: never mutate or rebase over uncommitted changes
+        return local_code, local_head, ancestor_code
+
+    if DRY_RUN:
+        print(f"[DRY RUN] Would reconcile worktree {wt_path} with PR #{pr_number} head {short_head}.")
+        return local_code, local_head, ancestor_code
+
+    behind_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", "HEAD", reviewed_head], cwd=wt_path)
+    if behind_code == 0:
+        print(f"[babysit] Clean local worktree was behind PR #{pr_number} head. Fast-forwarding to {short_head}.")
+        reset_code, _, _ = run_cmd(["git", "reset", "--hard", reviewed_head], cwd=wt_path)
+        if reset_code == 0:
+            local_code, new_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+            if local_code == 0 and new_head.strip() == reviewed_head:
+                return 0, reviewed_head, 0
+
+    # Local has diverged commits: attempt clean rebase onto authorized head
+    rb_code, _, _ = run_cmd(["git", "rebase", reviewed_head], cwd=wt_path)
+    if rb_code == 0:
+        local_code, new_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+        if local_code == 0:
+            print(f"[babysit] Rebased diverged local commits onto PR #{pr_number} head {short_head}.")
+            _record_coderabbit_gate_failure(pr_number, branch, "Rebased local completion awaiting review", completion_ready=True)
+            return 0, new_head.strip(), 0
+
+    # Rebase conflicted: abort rebase, protect local commits, and keep blocked from merging
+    run_cmd(["git", "rebase", "--abort"], cwd=wt_path)
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    backup_branch = f"runner-backup-{branch}-{ts}"
+    b_code, _, _ = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=wt_path)
+    if b_code == 0:
+        print(f"[babysit] Rebase conflicted. Protected local commits on {backup_branch}.")
+        if _should_send_rate_limited(f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}"):
+            send_email(
+                f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}",
+                f"<h3>Local worktree for PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has rebase conflicts with remote head {short_head}.</h3>"
+                f"<p>Local commits were preserved on backup branch <code>{backup_branch}</code>. Automatic merge is blocked until resolved.</p>"
+            )
+
+    return local_code, local_head, 1
 
 
 def babysit_active_worktrees():
@@ -1862,29 +1936,30 @@ def babysit_active_worktrees():
         if not authorized:
             continue
         reviewed_head = authorized["head"]["sha"]
-        local_code, local_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
-        try:
-            with open(_coderabbit_gate_path(pr_number)) as stream:
-                pending = json.load(stream)
-        except (OSError, ValueError):
-            pending = {}
+        local_code, local_head, ancestor_code = _reconcile_active_worktree(
+            wt_path, branch, pr_number, str(issue_number), reviewed_head
+        )
+        pending = _load_coderabbit_gate_state(pr_number)
         resume_local_progress = (
             local_code == 0 and pending.get("branch") == branch
-            and pending.get("local_head") == local_head.strip()
+            and pending.get("local_head") == local_head
             and pending.get("completion_ready") is False
         )
-        if local_code != 0 or local_head.strip() != reviewed_head:
-            # Only a recorded runner-owned completion may be ahead of the
-            # authorized remote head. Arbitrary local divergence stays blocked.
-            ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", reviewed_head, "HEAD"], cwd=wt_path)
+        if local_code != 0 or local_head != reviewed_head:
             if (local_code != 0 or pending.get("branch") != branch
-                    or pending.get("local_head") != local_head.strip()
+                    or pending.get("local_head") != local_head
                     or ancestor_code != 0):
+                if _should_send_rate_limited(f"[Runner] Divergence Alert: PR #{pr_number}"):
+                    send_email(
+                        f"[Runner] Divergence Alert: PR #{pr_number}",
+                        f"<h3>Local worktree for PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> (Issue #{issue_number}) does not match authorized head {reviewed_head[:8]}.</h3>"
+                        f"<p>Worktree has uncommitted modifications or divergence that could not be reconciled automatically. Manual intervention required.</p>"
+                    )
                 print(f"[authorization] Local worktree does not match PR #{pr_number} head. Waiting.")
                 continue
             if pending.get("completion_ready", True) and _worktree_is_clean(wt_path):
-                if _publish_reviewed_completion(wt_path, branch, pr_number, issue_number, reviewed_head, local_head.strip()):
-                    _save_pr_state(issue_number, str(pr_number), branch, local_head.strip())
+                if _publish_reviewed_completion(wt_path, branch, pr_number, str(issue_number), reviewed_head, local_head):
+                    _save_pr_state(str(issue_number), str(pr_number), branch, local_head)
                     print(f"[babysit] Retained completion published for PR #{pr_number}; waiting for current CI.")
                     continue
             resume_local_progress = True
@@ -1920,13 +1995,17 @@ def babysit_active_worktrees():
 
         if ci_status == "SUCCESS":
             if _is_coderabbit_gate_failed(pr_number):
-                print(f"Local CodeRabbit review gate is FAILED for PR #{pr_number}. Triggering babysit.")
-                prompt = (
-                    f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
-                    f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
-                    f"resolve all findings, commit, and push updates.\n"
-                )
-            else:
+                cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
+                if cr_ok:
+                    _clear_coderabbit_gate_failure(pr_number)
+                else:
+                    print(f"Local CodeRabbit review gate is FAILED for PR #{pr_number}. Triggering babysit.")
+                    prompt = (
+                        f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
+                        f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
+                        f"resolve all findings, commit, and push updates.\n"
+                    )
+            if not _is_coderabbit_gate_failed(pr_number):
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
                 review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path)
                 if review_code != 0:
