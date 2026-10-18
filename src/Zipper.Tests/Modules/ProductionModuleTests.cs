@@ -136,6 +136,29 @@ public class ProductionModuleTests
     }
 
     [Fact]
+    public void TryBuild_VolumeSizeOneWithSet_ReturnsTrue()
+    {
+        Assert.True(TryBuild(new[] { "--production-set", null, "--volume-size", "1" }, out var config));
+        Assert.Equal(1, config.VolumeSize);
+    }
+
+    [Theory]
+    [InlineData("NaNMB")]
+    [InlineData("InfinityGB")]
+    [InlineData("-InfinityMB")]
+    [InlineData("9999999999999GB")]
+    [InlineData("9999999999999")]
+    public void TryApply_VolumeSizeInvalidValues_ReturnsFalse(string invalidValue)
+    {
+        var module = new ProductionModule();
+        var error = CaptureError(() =>
+        {
+            Assert.False(module.TryApply("--volume-size", invalidValue));
+        });
+        Assert.Contains($"Error: Invalid value for --volume-size: '{invalidValue}'", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuild_SupplementalWithoutSet_ReturnsFalse()
     {
         var error = CaptureError(() =>
@@ -546,6 +569,7 @@ public class ProductionModuleTests
     public void GenerateProductionIds_TrailingDigit_IncrementsWithWidth()
     {
         Assert.Equal(new[] { "PROD001", "PROD002", "PROD003" }, ProductionModule.GenerateProductionIds("PROD001", 3));
+        Assert.Equal(new[] { "001", "002", "003" }, ProductionModule.GenerateProductionIds("001", 3));
     }
 
     [Fact]

@@ -58,6 +58,18 @@ public sealed class LoadFileSerializationPropertyTests
             Assert.Equal(expectedValues[i], parsedFields[i]);
             Assert.Equal(expectedValues[i], parsedMap[input.Columns[i]]);
         }
+
+        // Verify DatLineParser unescapes doubled QuoteDelimiter sequences inside quoted fields.
+        var quoteStr = input.QuoteDelimiter.ToString();
+        var doubledQuoteStr = string.Concat(quoteStr, quoteStr);
+        var valuesWithEmbeddedQuotes = expectedValues
+            .Select((v, idx) => $"{v}{quoteStr}q{idx.ToString(CultureInfo.InvariantCulture)}")
+            .ToArray();
+        var doubledQuotedLine = string.Join(
+            input.ColumnDelimiter,
+            valuesWithEmbeddedQuotes.Select(v => $"{quoteStr}{v.Replace(quoteStr, doubledQuoteStr, StringComparison.Ordinal)}{quoteStr}"));
+        var parsedDoubledQuotes = DatLineParser.Parse(doubledQuotedLine, input.ColumnDelimiter, input.QuoteDelimiter);
+        Assert.Equal(valuesWithEmbeddedQuotes, parsedDoubledQuotes);
     }
 
     [Property]
@@ -65,9 +77,6 @@ public sealed class LoadFileSerializationPropertyTests
     {
         var newlineToken = input.NewlineDelimiter.ToString();
         var serializer = new DatSerializer(input.ColumnDelimiter, input.QuoteDelimiter, newlineToken);
-
-        Assert.Equal("DAT", serializer.FormatName);
-        Assert.Equal(".dat", serializer.FileExtension);
 
         var renderedStandardHeader = serializer.RenderHeader(input.Columns);
         var parsedStandardHeader = DatLineParser.Parse(renderedStandardHeader, input.ColumnDelimiter, input.QuoteDelimiter);
@@ -156,8 +165,6 @@ public sealed class LoadFileSerializationPropertyTests
             .ToArray();
 
         var serializer = new CsvSerializer();
-        Assert.Equal("CSV", serializer.FormatName);
-        Assert.Equal(".csv", serializer.FileExtension);
 
         var headerLine = serializer.RenderHeader(input.Columns);
         var parsedHeaders = DelimitedTestParser.ParseLine(headerLine, ',', '"');
@@ -231,8 +238,6 @@ public sealed class LoadFileSerializationPropertyTests
     public void OptSerializer_RenderRecordAndHeader_ShouldPreserveCommaSeparatedFields(DelimitedRecordPropertyInput input)
     {
         var serializer = new OptSerializer();
-        Assert.Equal("OPT", serializer.FormatName);
-        Assert.Equal(".opt", serializer.FileExtension);
         Assert.Equal(string.Empty, serializer.RenderHeader(input.Columns));
 
         var sanitizedValues = input.Values
@@ -268,8 +273,6 @@ public sealed class LoadFileSerializationPropertyTests
         };
 
         var serializer = new ConcordanceSerializer(request);
-        Assert.Equal("CONCORDANCE", serializer.FormatName);
-        Assert.Equal(".dat", serializer.FileExtension);
 
         var renderedHeader = serializer.RenderHeader(input.Columns);
         Assert.StartsWith(input.QuoteDelimiter.ToString(), renderedHeader, StringComparison.Ordinal);
@@ -359,6 +362,26 @@ public sealed class LoadFileSerializationPropertyTests
         var unknownName = $"UNKNOWN_ENCODING_{unknownSeed.ToString(CultureInfo.InvariantCulture)}_{unchecked((uint)casingMask).ToString("X8", CultureInfo.InvariantCulture)}";
         Assert.Null(EncodingHelper.GetEncoding(unknownName));
         Assert.Equal(Encoding.UTF8.CodePage, EncodingHelper.GetEncodingOrDefault(unknownName).CodePage);
+    }
+
+    [Fact]
+    public void Serializers_FormatNameAndFileExtension_ShouldMatchCanonicalMetadata()
+    {
+        var dat = new DatSerializer(',', '"', "\n");
+        Assert.Equal("DAT", dat.FormatName);
+        Assert.Equal(".dat", dat.FileExtension);
+
+        var csv = new CsvSerializer();
+        Assert.Equal("CSV", csv.FormatName);
+        Assert.Equal(".csv", csv.FileExtension);
+
+        var opt = new OptSerializer();
+        Assert.Equal("OPT", opt.FormatName);
+        Assert.Equal(".opt", opt.FileExtension);
+
+        var concordance = new ConcordanceSerializer(new FileGenerationRequest());
+        Assert.Equal("CONCORDANCE", concordance.FormatName);
+        Assert.Equal(".dat", concordance.FileExtension);
     }
 
     private static void AssertShortRecordPadsEmptyFields(

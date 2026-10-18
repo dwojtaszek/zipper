@@ -63,12 +63,12 @@ public sealed class ExampleDomainPropertyTests
     public Property Parse_SerializedValue_ShouldRoundTrip(BatesPropertyInput input)
     {
         // Arrange & Act against real production types
-        var formatted = BatesNumber.Format(input.Prefix, input.StartNumber, input.Digits);
+        var formatted = BatesNumber.Format(input.Prefix, input.Start, input.Digits);
         var parsed = BatesNumber.Parse(formatted);
 
         // Assert exact behavioral contract
         return (parsed.Prefix == input.Prefix
-            && parsed.Number == input.StartNumber
+            && parsed.Number == input.Start
             && parsed.Digits == input.Digits)
             .Label($"Expected round-trip for '{formatted}', got ({parsed.Prefix}, {parsed.Number}, {parsed.Digits})");
     }
@@ -87,18 +87,18 @@ Generate valid-by-construction domain inputs using `Gen.Choose`, `Gen.Elements`,
 [StructLayout(LayoutKind.Auto)]
 public readonly record struct BatesPropertyInput(
     string Prefix,
+    long Start,
     int Digits,
-    long StartNumber,
     int Count);
 
-public static Arbitrary<BatesPropertyInput> BatesInput()
+public static Arbitrary<BatesPropertyInput> BatesPropertyInputArb()
 {
     var gen =
-        from prefix in PrefixGen
-        from digits in Gen.Choose(4, 12)
-        from start in Gen.Choose(1, 500_000).Select(i => (long)i)
+        from prefix in Gen.Elements(SamplePrefixes)
+        from start in Gen.Choose(0, 500_000).Select(x => (long)x)
+        from digits in Gen.Choose(1, 12)
         from count in Gen.Choose(1, 250)
-        select new BatesPropertyInput(prefix, digits, start, count);
+        select new BatesPropertyInput(prefix, start, digits, count);
 
     return Arb.From(gen, ShrinkBatesInput);
 }

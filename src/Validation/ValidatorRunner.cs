@@ -212,8 +212,9 @@ public sealed class ValidatorRunner
 
     private static void ValidateBates(string value, BatesNumberConfig bates, ref long? previousBates, string loadFilePath, long lineNumber, ValidationResult result)
     {
+        long current = 0;
         if (!value.StartsWith(bates.Prefix, StringComparison.Ordinal) ||
-            !long.TryParse(value[bates.Prefix.Length..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var current))
+            !long.TryParse(value[bates.Prefix.Length..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out current))
             return;
 
         if (previousBates.HasValue && current != previousBates.Value + bates.Increment)

@@ -21,10 +21,6 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
 {
     private static readonly SearchValues<char> InvalidSourcePathChars = SearchValues.Create("<>|\"?*:");
 
-    private static readonly string[] AmbiguousCsvHeaders = ["FilePath", "FileType", "ControlNumber", "DocId"];
-
-    private static readonly string[] DuplicateMetadataCsvHeaders = ["FilePath", "FileType", "Custodian_Name", "custodian-name"];
-
     private static readonly string[] AsciiReservedDeviceNames =
     [
         "CON", "PRN", "AUX", "NUL",
@@ -75,7 +71,6 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
     private readonly string tempRoot;
     private readonly string sharedBaseDir;
     private int iterationCounter;
-    private bool verifiedConstantPathEdgeCases;
 
     public PathAndSourceInputPropertyTests()
     {
@@ -158,26 +153,19 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
     {
         var baseDir = this.sharedBaseDir;
 
-        if (!this.verifiedConstantPathEdgeCases)
-        {
-            this.verifiedConstantPathEdgeCases = true;
-
-            // Null, empty, whitespace, and embedded-null paths are rejected.
-            Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(null, baseDir)));
-            Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(string.Empty, baseDir)));
-            Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath("   ", baseDir)));
-            Assert.False(PathValidator.IsPathSafe(string.Empty, baseDir));
-            Assert.False(PathValidator.IsPathSafe("   ", baseDir));
-
-            var nullCharPath = string.Concat(baseDir, Path.DirectorySeparatorChar, "bad\0segment");
-            Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(nullCharPath, baseDir)));
-            Assert.False(PathValidator.IsPathSafe(nullCharPath, baseDir));
-        }
-
         // Safe multi-segment child path resolves under baseDir.
         var seg1 = BuildSafeSegment(input.RawText, input.ReplacementChar, segmentSeed);
         var seg2 = BuildSafeSegment(input.RawText, input.ReplacementChar, (byte)(segmentSeed + 1));
         var childPath = Path.Combine(baseDir, seg1, seg2);
+
+        // Null byte at index 0 of the relative segment or path is rejected.
+        var leadingNullPath = string.Concat("\0", seg1);
+        Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(leadingNullPath, baseDir)));
+        Assert.False(PathValidator.IsPathSafe(leadingNullPath, baseDir));
+
+        var embeddedNullPath = Path.Combine(baseDir, string.Concat("\0", seg1));
+        Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(embeddedNullPath, baseDir)));
+        Assert.False(PathValidator.IsPathSafe(embeddedNullPath, baseDir));
 
         var resolvedChild = PathValidator.ResolveSecurePath(childPath, baseDir);
         Assert.NotNull(resolvedChild);
@@ -201,6 +189,17 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
         var siblingPrefixPath = string.Concat(baseDir, "-", seg1);
         Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(siblingPrefixPath, baseDir)));
         Assert.False(PathValidator.IsPathSafe(siblingPrefixPath, baseDir));
+    }
+
+    [Fact]
+    public void PathValidator_ResolveSecurePathAndIsPathSafe_ShouldRejectNullAndWhitespacePaths()
+    {
+        var baseDir = this.sharedBaseDir;
+        Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(null!, baseDir)));
+        Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath(string.Empty, baseDir)));
+        Assert.Null(ReceiveQuietly(() => PathValidator.ResolveSecurePath("   ", baseDir)));
+        Assert.False(PathValidator.IsPathSafe(string.Empty, baseDir));
+        Assert.False(PathValidator.IsPathSafe("   ", baseDir));
     }
 
     [Property]
@@ -276,7 +275,9 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
             Assert.False(part.EndsWith(' '));
         }
 
-        // Rooted, UNC, drive-qualified, and parent-traversal variants must be rejected.
+        // Rooted, UNC, drive-qualified, leading-invalid-char, and parent-traversal variants must be rejected.
+        Assert.False(SourcePathSanitizer.TryNormalize(string.Concat(":", normalized), out _, out var colonErr));
+        Assert.Contains("':'", colonErr, StringComparison.Ordinal);
         Assert.False(SourcePathSanitizer.TryNormalize(string.Concat("/", normalized), out _, out _));
         Assert.False(SourcePathSanitizer.TryNormalize(string.Concat("\\\\server\\share\\", normalized), out _, out _));
         Assert.False(SourcePathSanitizer.TryNormalize(string.Concat("C:\\", normalized), out _, out _));
@@ -527,11 +528,25 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
         Assert.Equal("Custodian Name", metaCol.Name);
 
         // Conflicting aliases (both ControlNumber and DocId) must be rejected.
-        Assert.False(SourceRecordIntake.TryMapCsvColumns(AmbiguousCsvHeaders, out _, out var ambiguousErr));
+        var ambiguousHeaders = new[]
+        {
+            filePathHeader,
+            fileTypeHeader,
+            ApplyCaseMask("Control_Number", caseMask),
+            ApplyCaseMask("Doc-Id", caseMask),
+        };
+        Assert.False(SourceRecordIntake.TryMapCsvColumns(ambiguousHeaders, out _, out var ambiguousErr));
         Assert.False(string.IsNullOrEmpty(ambiguousErr));
 
         // Duplicate normalized metadata headers must be rejected.
-        Assert.False(SourceRecordIntake.TryMapCsvColumns(DuplicateMetadataCsvHeaders, out _, out var dupMetaErr));
+        var duplicateMetadataHeaders = new[]
+        {
+            filePathHeader,
+            fileTypeHeader,
+            ApplyCaseMask("Custodian_Name", caseMask),
+            ApplyCaseMask("custodian-name", (byte)~caseMask),
+        };
+        Assert.False(SourceRecordIntake.TryMapCsvColumns(duplicateMetadataHeaders, out _, out var dupMetaErr));
         Assert.False(string.IsNullOrEmpty(dupMetaErr));
     }
 
@@ -599,14 +614,26 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
         Assert.True(char.IsUpper(pascal[0]));
         Assert.Equal(pascal, NamingConventionHelper.ToPascalCase(fieldName));
 
+        // Acronym-prefixed field names split camel/acronym boundaries accurately in PascalCase and snake_case.
+        var acronymField = string.Concat("DocID_", secondToken);
+        Assert.Equal(string.Concat("DocId", NamingConventionHelper.ToPascalCase(secondToken)), NamingConventionHelper.ApplyConvention(acronymField, "PascalCase"));
+        Assert.Equal(string.Concat("doc_id_", secondToken.ToLowerInvariant()), NamingConventionHelper.ApplyConvention(acronymField, "snake_case"));
+
         // Unknown or null convention preserves original field name.
         Assert.Equal(fieldName, NamingConventionHelper.ApplyConvention(fieldName, null));
         Assert.Equal(fieldName, NamingConventionHelper.ApplyConvention(fieldName, " unrecognized "));
+    }
 
-        // Empty or whitespace input is preserved verbatim.
-        var whitespaceOrEmpty = string.IsNullOrWhiteSpace(input.RawText) ? (input.RawText ?? string.Empty) : "   ";
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("\t\n")]
+    public void NamingConventionHelper_ApplyConvention_ShouldPreserveEmptyAndWhitespaceInput(string whitespaceOrEmpty)
+    {
         Assert.Equal(whitespaceOrEmpty, NamingConventionHelper.ApplyConvention(whitespaceOrEmpty, "PascalCase"));
         Assert.Equal(whitespaceOrEmpty, NamingConventionHelper.ApplyConvention(whitespaceOrEmpty, "snake_case"));
+        Assert.Equal(whitespaceOrEmpty, NamingConventionHelper.ApplyConvention(whitespaceOrEmpty, "UPPERCASE"));
+        Assert.Equal(whitespaceOrEmpty, NamingConventionHelper.ApplyConvention(whitespaceOrEmpty, "lowercase"));
     }
 
     private static bool TryValidateProductionIdSegment(string segment)

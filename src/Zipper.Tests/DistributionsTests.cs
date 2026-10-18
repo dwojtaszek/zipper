@@ -80,4 +80,58 @@ public class DistributionsTests
         Assert.Throws<ArgumentException>(() =>
             Distributions.GetFolderNumber(1, 100, 10, unknown));
     }
+
+    [Fact]
+    public void Proportional_WithBoundaryFileIndices_ReturnsExpectedFolder()
+    {
+        Assert.Equal(1, Distributions.Proportional(1, 5));
+        Assert.Equal(5, Distributions.Proportional(5, 5));
+        Assert.Equal(1, Distributions.Proportional(6, 5));
+        Assert.Equal(1, Distributions.GetFolderNumber(1, 1, 5, DistributionType.Proportional));
+    }
+
+    [Fact]
+    public void Gaussian_WithSingleTotalFile_ReturnsFirstFolder()
+    {
+        Assert.Equal(1, Distributions.Gaussian(1, 1, 10));
+        Assert.Equal(1, Distributions.GetFolderNumber(1, 1, 10, DistributionType.Gaussian));
+    }
+
+    [Fact]
+    public void Gaussian_SampleMean_CentersNearHalfTotalFolders()
+    {
+        const int totalFolders = 20;
+        const int totalFiles = 10000;
+
+        double sum = 0;
+        for (int i = 1; i <= totalFiles; i++)
+        {
+            sum += Distributions.Gaussian(i, totalFiles, totalFolders);
+        }
+
+        double mean = sum / totalFiles;
+        Assert.InRange(mean, 9.7, 10.3);
+    }
+
+    [Fact]
+    public void Exponential_FirstQuarterFolders_ReceivesExpectedShareOfFiles()
+    {
+        Assert.Equal(1, Distributions.Exponential(1, 1, 10));
+
+        const int totalFolders = 20;
+        const int totalFiles = 10000;
+        int firstQuarterCutoff = totalFolders / 4;
+        int firstQuarterCount = 0;
+
+        for (int i = 1; i <= totalFiles; i++)
+        {
+            if (Distributions.Exponential(i, totalFiles, totalFolders) <= firstQuarterCutoff)
+            {
+                firstQuarterCount++;
+            }
+        }
+
+        double share = (double)firstQuarterCount / totalFiles;
+        Assert.InRange(share, 0.35, 0.55);
+    }
 }

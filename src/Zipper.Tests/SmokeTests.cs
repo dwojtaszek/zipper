@@ -344,4 +344,236 @@ public class SmokeTests : WorkingDirectoryTestBase
             }
         }
     }
+
+    [Fact]
+    public async Task Main_WithCollectionMetadata_EmitsCollectionMetadataColumnsAndValues()
+    {
+        // REQ-183: --with-collection-metadata adds five collection metadata columns in Standard mode and is deterministic per --seed.
+        var tempDir1 = Path.Combine(this.TempDir, $"zipper_s42a_{Guid.NewGuid():N}");
+        var tempDir2 = Path.Combine(this.TempDir, $"zipper_s42b_{Guid.NewGuid():N}");
+        var tempDir3 = Path.Combine(this.TempDir, $"zipper_s99_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir1);
+        Directory.CreateDirectory(tempDir2);
+        Directory.CreateDirectory(tempDir3);
+
+        try
+        {
+            var result1 = await Program.Main(new[]
+            {
+                "--type", "pdf",
+                "--count", "5",
+                "--output-path", tempDir1,
+                "--with-collection-metadata",
+                "--seed", "42",
+            });
+            var result2 = await Program.Main(new[]
+            {
+                "--type", "pdf",
+                "--count", "5",
+                "--output-path", tempDir2,
+                "--with-collection-metadata",
+                "--seed", "42",
+            });
+            var result3 = await Program.Main(new[]
+            {
+                "--type", "pdf",
+                "--count", "5",
+                "--output-path", tempDir3,
+                "--with-collection-metadata",
+                "--seed", "99",
+            });
+
+            Assert.Equal(0, result1);
+            Assert.Equal(0, result2);
+            Assert.Equal(0, result3);
+
+            var datFile1 = Assert.Single(Directory.GetFiles(tempDir1, "*.dat"));
+            var datFile2 = Assert.Single(Directory.GetFiles(tempDir2, "*.dat"));
+            var datFile3 = Assert.Single(Directory.GetFiles(tempDir3, "*.dat"));
+
+            var content1 = await File.ReadAllTextAsync(datFile1);
+            var content2 = await File.ReadAllTextAsync(datFile2);
+            var content3 = await File.ReadAllTextAsync(datFile3);
+
+            Assert.Equal(content1, content2);
+            Assert.NotEqual(content1, content3);
+
+            var lines = content1.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(6, lines.Length);
+
+            var header = lines[0];
+            Assert.Contains("Data Source", header, StringComparison.Ordinal);
+            Assert.Contains("Collection Date", header, StringComparison.Ordinal);
+            Assert.Contains("De-Nisted", header, StringComparison.Ordinal);
+            Assert.Contains("Dedupe Group ID", header, StringComparison.Ordinal);
+            Assert.Contains("Processing Status", header, StringComparison.Ordinal);
+
+            Assert.Contains("GRP", lines[1], StringComparison.Ordinal);
+            Assert.Contains("2024-", lines[1], StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir1))
+            {
+                Directory.Delete(tempDir1, true);
+            }
+
+            if (Directory.Exists(tempDir2))
+            {
+                Directory.Delete(tempDir2, true);
+            }
+
+            if (Directory.Exists(tempDir3))
+            {
+                Directory.Delete(tempDir3, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Main_TypesSinglePdf100_MatchesSingleTypePdfOutput()
+    {
+        // REQ-192: --types pdf:100 produces equivalent archive entries and Load File rows to --type pdf with the same seed.
+        var singleDir = Path.Combine(this.TempDir, $"zipper_single_{Guid.NewGuid():N}");
+        var mixedDir = Path.Combine(this.TempDir, $"zipper_mixed_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(singleDir);
+        Directory.CreateDirectory(mixedDir);
+
+        try
+        {
+            var singleResult = await Program.Main(new[]
+            {
+                "--type", "pdf",
+                "--count", "5",
+                "--output-path", singleDir,
+                "--with-metadata",
+                "--seed", "42",
+            });
+            var mixedResult = await Program.Main(new[]
+            {
+                "--types", "pdf:100",
+                "--count", "5",
+                "--output-path", mixedDir,
+                "--with-metadata",
+                "--seed", "42",
+            });
+
+            Assert.Equal(0, singleResult);
+            Assert.Equal(0, mixedResult);
+
+            var singleDat = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(singleDir, "*.dat")));
+            var mixedDat = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(mixedDir, "*.dat")));
+            Assert.Equal(singleDat, mixedDat);
+
+            using var singleZip = System.IO.Compression.ZipFile.OpenRead(Assert.Single(Directory.GetFiles(singleDir, "*.zip")));
+            using var mixedZip = System.IO.Compression.ZipFile.OpenRead(Assert.Single(Directory.GetFiles(mixedDir, "*.zip")));
+
+            var singleEntries = singleZip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal).ToList();
+            var mixedEntries = mixedZip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal).ToList();
+            Assert.Equal(singleEntries.Count, mixedEntries.Count);
+
+            for (int i = 0; i < singleEntries.Count; i++)
+            {
+                Assert.Equal(singleEntries[i].FullName, mixedEntries[i].FullName);
+                Assert.Equal(singleEntries[i].Length, mixedEntries[i].Length);
+
+                using var singleStream = singleEntries[i].Open();
+                using var mixedStream = mixedEntries[i].Open();
+                using var singleBuffer = new MemoryStream();
+                using var mixedBuffer = new MemoryStream();
+                await singleStream.CopyToAsync(singleBuffer);
+                await mixedStream.CopyToAsync(mixedBuffer);
+                Assert.Equal(singleBuffer.ToArray(), mixedBuffer.ToArray());
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(singleDir))
+            {
+                Directory.Delete(singleDir, true);
+            }
+
+            if (Directory.Exists(mixedDir))
+            {
+                Directory.Delete(mixedDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Main_WithMultipleLoadFileFormats_GeneratesAllRequestedFormatsAndAuditSidecars()
+    {
+        // REQ-038: --load-file-formats emits every requested Load File format conforming to format specifications and its audit sidecar.
+        var tempDir = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
+        var concordanceDir = Path.Combine(this.TempDir, $"zipper_conc_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        Directory.CreateDirectory(concordanceDir);
+
+        try
+        {
+            var args = new[]
+            {
+                "--type", "pdf",
+                "--count", "4",
+                "--output-path", tempDir,
+                "--load-file-formats", "dat,opt,csv,edrm-xml",
+                "--seed", "42",
+            };
+
+            var result = await Program.Main(args);
+            Assert.Equal(0, result);
+
+            var datFile = Assert.Single(Directory.GetFiles(tempDir, "*.dat"));
+            var optFile = Assert.Single(Directory.GetFiles(tempDir, "*.opt"));
+            var csvFile = Assert.Single(Directory.GetFiles(tempDir, "*.csv"));
+            var xmlFile = Assert.Single(Directory.GetFiles(tempDir, "*.xml"));
+
+            var datContent = await File.ReadAllTextAsync(datFile);
+            Assert.Contains('\u0014', datContent);
+            Assert.Contains('\u00FE', datContent);
+            Assert.Contains("Control Number", datContent, StringComparison.Ordinal);
+
+            var optLines = (await File.ReadAllLinesAsync(optFile)).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+            Assert.Equal(4, optLines.Length);
+            Assert.All(optLines, line => Assert.Equal(7, line.Split(',').Length));
+
+            var csvLines = (await File.ReadAllLinesAsync(csvFile)).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+            Assert.Equal(5, csvLines.Length);
+            Assert.Contains("CONTROL NUMBER", csvLines[0], StringComparison.OrdinalIgnoreCase);
+
+            var xmlDoc = System.Xml.Linq.XDocument.Load(xmlFile);
+            Assert.Equal("Root", xmlDoc.Root?.Name.LocalName);
+            Assert.Equal(4, xmlDoc.Root?.Descendants().Count(e => e.Name.LocalName == "Document"));
+
+            var auditFiles = Directory.GetFiles(tempDir, "*_properties.json");
+            Assert.Equal(4, auditFiles.Length);
+
+            var concordanceResult = await Program.Main(new[]
+            {
+                "--type", "pdf",
+                "--count", "4",
+                "--output-path", concordanceDir,
+                "--load-file-format", "concordance",
+                "--seed", "42",
+            });
+            Assert.Equal(0, concordanceResult);
+            var concordanceFile = Assert.Single(Directory.GetFiles(concordanceDir, "*.dat"));
+            var concordanceLines = (await File.ReadAllLinesAsync(concordanceFile)).Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
+            Assert.Equal(5, concordanceLines.Length);
+            Assert.StartsWith("\u00FEBEGATTY\u00FE\u0014\u00FEENDATTY\u00FE", concordanceLines[0], StringComparison.Ordinal);
+            Assert.Single(Directory.GetFiles(concordanceDir, "*_properties.json"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+
+            if (Directory.Exists(concordanceDir))
+            {
+                Directory.Delete(concordanceDir, true);
+            }
+        }
+    }
 }
